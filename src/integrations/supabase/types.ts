@@ -14,6 +14,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      contracts: {
+        Row: {
+          created_at: string | null
+          effective_date: string | null
+          expiration_date: string | null
+          group_id: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          payer_id: string | null
+          state: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          effective_date?: string | null
+          expiration_date?: string | null
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          payer_id?: string | null
+          state: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          effective_date?: string | null
+          expiration_date?: string | null
+          group_id?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          payer_id?: string | null
+          state?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "provider_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       facilities: {
         Row: {
           city: string | null
@@ -107,6 +168,96 @@ export type Database = {
           },
         ]
       }
+      mso_routing_rules: {
+        Row: {
+          created_at: string | null
+          id: string
+          mso_id: string | null
+          notes: string | null
+          org_id: string
+          payer_id: string | null
+          route_type: string
+          specialty: string
+          state: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          mso_id?: string | null
+          notes?: string | null
+          org_id: string
+          payer_id?: string | null
+          route_type: string
+          specialty?: string
+          state: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          mso_id?: string | null
+          notes?: string | null
+          org_id?: string
+          payer_id?: string | null
+          route_type?: string
+          specialty?: string
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mso_routing_rules_mso_id_fkey"
+            columns: ["mso_id"]
+            isOneToOne: false
+            referencedRelation: "msos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mso_routing_rules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mso_routing_rules_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      msos: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          org_id: string
+          portal_url: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          org_id: string
+          portal_url?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          portal_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "msos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -124,6 +275,68 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      payers: {
+        Row: {
+          avg_decision_days: number | null
+          caqh_pull_deadline_days: number | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          org_id: string
+          payer_billing_id: string | null
+          portal_url: string | null
+          prior_auth_vendor: string | null
+          provider_type_path: string | null
+          provisional_billing_allowed: boolean | null
+          provisional_billing_notes: string | null
+          retro_billing_allowed: boolean | null
+          retro_billing_window_days: number | null
+        }
+        Insert: {
+          avg_decision_days?: number | null
+          caqh_pull_deadline_days?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          org_id: string
+          payer_billing_id?: string | null
+          portal_url?: string | null
+          prior_auth_vendor?: string | null
+          provider_type_path?: string | null
+          provisional_billing_allowed?: boolean | null
+          provisional_billing_notes?: string | null
+          retro_billing_allowed?: boolean | null
+          retro_billing_window_days?: number | null
+        }
+        Update: {
+          avg_decision_days?: number | null
+          caqh_pull_deadline_days?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          org_id?: string
+          payer_billing_id?: string | null
+          portal_url?: string | null
+          prior_auth_vendor?: string | null
+          provider_type_path?: string | null
+          provisional_billing_allowed?: boolean | null
+          provisional_billing_notes?: string | null
+          retro_billing_allowed?: boolean | null
+          retro_billing_window_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -145,6 +358,52 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      provider_facility_assignments: {
+        Row: {
+          created_at: string | null
+          facility_id: string | null
+          id: string
+          org_id: string
+          provider_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          facility_id?: string | null
+          id?: string
+          org_id: string
+          provider_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          facility_id?: string | null
+          id?: string
+          org_id?: string
+          provider_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_facility_assignments_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_facility_assignments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_facility_assignments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       provider_groups: {
         Row: {
@@ -183,6 +442,183 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      providers: {
+        Row: {
+          caqh_id: string | null
+          caqh_last_attested_date: string | null
+          created_at: string | null
+          credentials: string | null
+          date_of_birth: string | null
+          dea_number: string | null
+          degree: string | null
+          email: string | null
+          first_name: string
+          graduation_date: string | null
+          group_id: string | null
+          home_city: string | null
+          home_state: string | null
+          home_street: string | null
+          home_zip: string | null
+          id: string
+          is_new_grad: boolean | null
+          last_name: string
+          malpractice_carrier: string | null
+          malpractice_coverage_end: string | null
+          malpractice_coverage_start: string | null
+          malpractice_policy_number: string | null
+          npi: string | null
+          org_id: string
+          phone: string | null
+          school_name: string | null
+          specialty: string | null
+          ssn_last4: string | null
+          start_date: string | null
+          status: string
+          taxonomy_code: string | null
+          terminated_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          caqh_id?: string | null
+          caqh_last_attested_date?: string | null
+          created_at?: string | null
+          credentials?: string | null
+          date_of_birth?: string | null
+          dea_number?: string | null
+          degree?: string | null
+          email?: string | null
+          first_name: string
+          graduation_date?: string | null
+          group_id?: string | null
+          home_city?: string | null
+          home_state?: string | null
+          home_street?: string | null
+          home_zip?: string | null
+          id?: string
+          is_new_grad?: boolean | null
+          last_name: string
+          malpractice_carrier?: string | null
+          malpractice_coverage_end?: string | null
+          malpractice_coverage_start?: string | null
+          malpractice_policy_number?: string | null
+          npi?: string | null
+          org_id: string
+          phone?: string | null
+          school_name?: string | null
+          specialty?: string | null
+          ssn_last4?: string | null
+          start_date?: string | null
+          status?: string
+          taxonomy_code?: string | null
+          terminated_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          caqh_id?: string | null
+          caqh_last_attested_date?: string | null
+          created_at?: string | null
+          credentials?: string | null
+          date_of_birth?: string | null
+          dea_number?: string | null
+          degree?: string | null
+          email?: string | null
+          first_name?: string
+          graduation_date?: string | null
+          group_id?: string | null
+          home_city?: string | null
+          home_state?: string | null
+          home_street?: string | null
+          home_zip?: string | null
+          id?: string
+          is_new_grad?: boolean | null
+          last_name?: string
+          malpractice_carrier?: string | null
+          malpractice_coverage_end?: string | null
+          malpractice_coverage_start?: string | null
+          malpractice_policy_number?: string | null
+          npi?: string | null
+          org_id?: string
+          phone?: string | null
+          school_name?: string | null
+          specialty?: string | null
+          ssn_last4?: string | null
+          start_date?: string | null
+          status?: string
+          taxonomy_code?: string | null
+          terminated_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "providers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "provider_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "providers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      state_licenses: {
+        Row: {
+          created_at: string | null
+          expiration_date: string | null
+          id: string
+          issue_date: string | null
+          license_number: string | null
+          license_type: string | null
+          org_id: string
+          provider_id: string | null
+          state: string
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          expiration_date?: string | null
+          id?: string
+          issue_date?: string | null
+          license_number?: string | null
+          license_type?: string | null
+          org_id: string
+          provider_id?: string | null
+          state: string
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          expiration_date?: string | null
+          id?: string
+          issue_date?: string | null
+          license_number?: string | null
+          license_type?: string | null
+          org_id?: string
+          provider_id?: string | null
+          state?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "state_licenses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "state_licenses_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
             referencedColumns: ["id"]
           },
         ]
