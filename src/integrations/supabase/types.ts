@@ -14,8 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action_type: string
+          after: Json | null
+          before: Json | null
+          created_at: string | null
+          description: string | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          org_id: string
+          ts: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action_type: string
+          after?: Json | null
+          before?: Json | null
+          created_at?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          org_id: string
+          ts?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action_type?: string
+          after?: Json | null
+          before?: Json | null
+          created_at?: string | null
+          description?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          org_id?: string
+          ts?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contracts: {
         Row: {
+          contracting_status_id: string | null
           created_at: string | null
           effective_date: string | null
           expiration_date: string | null
@@ -28,6 +82,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          contracting_status_id?: string | null
           created_at?: string | null
           effective_date?: string | null
           expiration_date?: string | null
@@ -40,6 +95,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          contracting_status_id?: string | null
           created_at?: string | null
           effective_date?: string | null
           expiration_date?: string | null
@@ -52,6 +108,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "contracts_contracting_status_id_fkey"
+            columns: ["contracting_status_id"]
+            isOneToOne: false
+            referencedRelation: "status_configs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contracts_group_id_fkey"
             columns: ["group_id"]
@@ -71,6 +134,136 @@ export type Database = {
             columns: ["payer_id"]
             isOneToOne: false
             referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credential_cases: {
+        Row: {
+          approved_date: string | null
+          assigned_to: string | null
+          confirmed_effective_date: string | null
+          created_at: string | null
+          created_by: string | null
+          credentialing_status_id: string | null
+          expected_effective_date: string | null
+          facility_id: string | null
+          group_id: string | null
+          id: string
+          mso_id: string | null
+          org_id: string
+          payer_id: string
+          provider_id: string
+          specialty: string | null
+          state: string
+          submitted_date: string | null
+          termination_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          approved_date?: string | null
+          assigned_to?: string | null
+          confirmed_effective_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credentialing_status_id?: string | null
+          expected_effective_date?: string | null
+          facility_id?: string | null
+          group_id?: string | null
+          id?: string
+          mso_id?: string | null
+          org_id: string
+          payer_id: string
+          provider_id: string
+          specialty?: string | null
+          state: string
+          submitted_date?: string | null
+          termination_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          approved_date?: string | null
+          assigned_to?: string | null
+          confirmed_effective_date?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          credentialing_status_id?: string | null
+          expected_effective_date?: string | null
+          facility_id?: string | null
+          group_id?: string | null
+          id?: string
+          mso_id?: string | null
+          org_id?: string
+          payer_id?: string
+          provider_id?: string
+          specialty?: string | null
+          state?: string
+          submitted_date?: string | null
+          termination_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credential_cases_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_credentialing_status_id_fkey"
+            columns: ["credentialing_status_id"]
+            isOneToOne: false
+            referencedRelation: "status_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "provider_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_mso_id_fkey"
+            columns: ["mso_id"]
+            isOneToOne: false
+            referencedRelation: "msos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credential_cases_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
             referencedColumns: ["id"]
           },
         ]
@@ -251,6 +444,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "msos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notes: {
+        Row: {
+          author_id: string | null
+          content: string
+          created_at: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          content: string
+          created_at?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          org_id: string
+        }
+        Update: {
+          author_id?: string | null
+          content?: string
+          created_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notes_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -569,6 +807,67 @@ export type Database = {
           },
         ]
       }
+      sop_templates: {
+        Row: {
+          created_at: string | null
+          group_id: string | null
+          id: string
+          name: string
+          org_id: string
+          payer_id: string | null
+          specialty: string | null
+          state: string | null
+          task_definitions: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          name: string
+          org_id: string
+          payer_id?: string | null
+          specialty?: string | null
+          state?: string | null
+          task_definitions?: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          name?: string
+          org_id?: string
+          payer_id?: string | null
+          specialty?: string | null
+          state?: string | null
+          task_definitions?: Json
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sop_templates_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "provider_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sop_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sop_templates_payer_id_fkey"
+            columns: ["payer_id"]
+            isOneToOne: false
+            referencedRelation: "payers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       state_licenses: {
         Row: {
           created_at: string | null
@@ -619,6 +918,255 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      status_configs: {
+        Row: {
+          color: string
+          created_at: string | null
+          id: string
+          label: string
+          org_id: string
+          required_fields: Json | null
+          sort_order: number
+          track: string
+        }
+        Insert: {
+          color: string
+          created_at?: string | null
+          id?: string
+          label: string
+          org_id: string
+          required_fields?: Json | null
+          sort_order: number
+          track: string
+        }
+        Update: {
+          color?: string
+          created_at?: string | null
+          id?: string
+          label?: string
+          org_id?: string
+          required_fields?: Json | null
+          sort_order?: number
+          track?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "status_configs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      status_history: {
+        Row: {
+          case_id: string | null
+          changed_at: string | null
+          changed_by: string | null
+          contract_id: string | null
+          created_at: string | null
+          from_status_id: string | null
+          id: string
+          metadata: Json | null
+          org_id: string
+          to_status_id: string | null
+          track: string
+        }
+        Insert: {
+          case_id?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
+          contract_id?: string | null
+          created_at?: string | null
+          from_status_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id: string
+          to_status_id?: string | null
+          track: string
+        }
+        Update: {
+          case_id?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
+          contract_id?: string | null
+          created_at?: string | null
+          from_status_id?: string | null
+          id?: string
+          metadata?: Json | null
+          org_id?: string
+          to_status_id?: string | null
+          track?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "status_history_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "credential_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "status_history_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "status_history_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "status_history_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          case_id: string | null
+          completed_date: string | null
+          created_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          is_auto_generated: boolean | null
+          org_id: string
+          provider_id: string | null
+          sop_content: Json | null
+          sort_order: number | null
+          status: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          completed_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_auto_generated?: boolean | null
+          org_id: string
+          provider_id?: string | null
+          sop_content?: Json | null
+          sort_order?: number | null
+          status?: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          completed_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_auto_generated?: boolean | null
+          org_id?: string
+          provider_id?: string | null
+          sop_content?: Json | null
+          sort_order?: number | null
+          status?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "credential_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      touches: {
+        Row: {
+          case_id: string
+          coordinator_id: string | null
+          created_at: string | null
+          id: string
+          next_follow_up_date: string | null
+          notes: string | null
+          org_id: string
+          outcome: string
+          source: string | null
+          touch_date: string
+          touch_type: string
+        }
+        Insert: {
+          case_id: string
+          coordinator_id?: string | null
+          created_at?: string | null
+          id?: string
+          next_follow_up_date?: string | null
+          notes?: string | null
+          org_id: string
+          outcome: string
+          source?: string | null
+          touch_date: string
+          touch_type: string
+        }
+        Update: {
+          case_id?: string
+          coordinator_id?: string | null
+          created_at?: string | null
+          id?: string
+          next_follow_up_date?: string | null
+          notes?: string | null
+          org_id?: string
+          outcome?: string
+          source?: string | null
+          touch_date?: string
+          touch_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "touches_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "credential_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "touches_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "touches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
