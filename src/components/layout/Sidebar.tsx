@@ -14,22 +14,29 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-const mainNav = [
+type NavLink = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+};
+
+const mainNav: NavLink[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/providers', label: 'Providers', icon: Users },
   { to: '/cases', label: 'Cases', icon: FileStack },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
-] as const;
+];
 
-const adminNav = [
+const adminNav: NavLink[] = [
   { to: '/admin/statuses', label: 'Statuses', icon: CheckCircle2 },
   { to: '/admin/templates', label: 'Templates', icon: FileText },
   { to: '/admin/mso-routing', label: 'MSO Routing', icon: Network },
   { to: '/admin/payers', label: 'Payers', icon: Building2 },
   { to: '/admin/audit', label: 'Audit Log', icon: FileStack },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
-] as const;
+];
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
