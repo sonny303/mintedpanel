@@ -9,38 +9,320 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TasksRouteImport } from './routes/tasks'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as ProvidersRouteImport } from './routes/providers'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TasksIndexRouteImport } from './routes/tasks.index'
+import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
+import { Route as CasesIndexRouteImport } from './routes/cases.index'
+import { Route as TasksIdRouteImport } from './routes/tasks.$id'
+import { Route as ProvidersNewRouteImport } from './routes/providers.new'
+import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as CasesIdRouteImport } from './routes/cases.$id'
+import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
+import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminPayersRouteImport } from './routes/admin.payers'
+import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
+import { Route as AdminAuditRouteImport } from './routes/admin.audit'
+import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
+import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersRoute = ProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CasesRoute = CasesRouteImport.update({
+  id: '/cases',
+  path: '/cases',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TasksIndexRoute = TasksIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TasksRoute,
+} as any)
+const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const CasesIndexRoute = CasesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CasesRoute,
+} as any)
+const TasksIdRoute = TasksIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => TasksRoute,
+} as any)
+const ProvidersNewRoute = ProvidersNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const ProvidersIdRoute = ProvidersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const CasesIdRoute = CasesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CasesRoute,
+} as any)
+const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
+  id: '/admin/templates',
+  path: '/admin/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminStatusesRoute = AdminStatusesRouteImport.update({
+  id: '/admin/statuses',
+  path: '/admin/statuses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminPayersRoute = AdminPayersRouteImport.update({
+  id: '/admin/payers',
+  path: '/admin/payers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
+  id: '/admin/mso-routing',
+  path: '/admin/mso-routing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/admin/audit',
+  path: '/admin/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
+const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cases': typeof CasesRouteWithChildren
+  '/login': typeof LoginRoute
+  '/providers': typeof ProvidersRouteWithChildren
+  '/reports': typeof ReportsRoute
+  '/tasks': typeof TasksRouteWithChildren
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payers': typeof AdminPayersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/statuses': typeof AdminStatusesRoute
+  '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/cases/$id': typeof CasesIdRoute
+  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/new': typeof ProvidersNewRoute
+  '/tasks/$id': typeof TasksIdRoute
+  '/cases/': typeof CasesIndexRoute
+  '/providers/': typeof ProvidersIndexRoute
+  '/tasks/': typeof TasksIndexRoute
+  '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates/': typeof AdminTemplatesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/reports': typeof ReportsRoute
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payers': typeof AdminPayersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/statuses': typeof AdminStatusesRoute
+  '/cases/$id': typeof CasesIdRoute
+  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/new': typeof ProvidersNewRoute
+  '/tasks/$id': typeof TasksIdRoute
+  '/cases': typeof CasesIndexRoute
+  '/providers': typeof ProvidersIndexRoute
+  '/tasks': typeof TasksIndexRoute
+  '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates': typeof AdminTemplatesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cases': typeof CasesRouteWithChildren
+  '/login': typeof LoginRoute
+  '/providers': typeof ProvidersRouteWithChildren
+  '/reports': typeof ReportsRoute
+  '/tasks': typeof TasksRouteWithChildren
+  '/admin/audit': typeof AdminAuditRoute
+  '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payers': typeof AdminPayersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/statuses': typeof AdminStatusesRoute
+  '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/cases/$id': typeof CasesIdRoute
+  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/new': typeof ProvidersNewRoute
+  '/tasks/$id': typeof TasksIdRoute
+  '/cases/': typeof CasesIndexRoute
+  '/providers/': typeof ProvidersIndexRoute
+  '/tasks/': typeof TasksIndexRoute
+  '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates/': typeof AdminTemplatesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/cases'
+    | '/login'
+    | '/providers'
+    | '/reports'
+    | '/tasks'
+    | '/admin/audit'
+    | '/admin/mso-routing'
+    | '/admin/payers'
+    | '/admin/settings'
+    | '/admin/statuses'
+    | '/admin/templates'
+    | '/cases/$id'
+    | '/providers/$id'
+    | '/providers/new'
+    | '/tasks/$id'
+    | '/cases/'
+    | '/providers/'
+    | '/tasks/'
+    | '/admin/templates/$id'
+    | '/admin/templates/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/reports'
+    | '/admin/audit'
+    | '/admin/mso-routing'
+    | '/admin/payers'
+    | '/admin/settings'
+    | '/admin/statuses'
+    | '/cases/$id'
+    | '/providers/$id'
+    | '/providers/new'
+    | '/tasks/$id'
+    | '/cases'
+    | '/providers'
+    | '/tasks'
+    | '/admin/templates/$id'
+    | '/admin/templates'
+  id:
+    | '__root__'
+    | '/'
+    | '/cases'
+    | '/login'
+    | '/providers'
+    | '/reports'
+    | '/tasks'
+    | '/admin/audit'
+    | '/admin/mso-routing'
+    | '/admin/payers'
+    | '/admin/settings'
+    | '/admin/statuses'
+    | '/admin/templates'
+    | '/cases/$id'
+    | '/providers/$id'
+    | '/providers/new'
+    | '/tasks/$id'
+    | '/cases/'
+    | '/providers/'
+    | '/tasks/'
+    | '/admin/templates/$id'
+    | '/admin/templates/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CasesRoute: typeof CasesRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  ProvidersRoute: typeof ProvidersRouteWithChildren
+  ReportsRoute: typeof ReportsRoute
+  TasksRoute: typeof TasksRouteWithChildren
+  AdminAuditRoute: typeof AdminAuditRoute
+  AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
+  AdminPayersRoute: typeof AdminPayersRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminStatusesRoute: typeof AdminStatusesRoute
+  AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers': {
+      id: '/providers'
+      path: '/providers'
+      fullPath: '/providers'
+      preLoaderRoute: typeof ProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cases': {
+      id: '/cases'
+      path: '/cases'
+      fullPath: '/cases'
+      preLoaderRoute: typeof CasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +330,181 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tasks/': {
+      id: '/tasks/'
+      path: '/'
+      fullPath: '/tasks/'
+      preLoaderRoute: typeof TasksIndexRouteImport
+      parentRoute: typeof TasksRoute
+    }
+    '/providers/': {
+      id: '/providers/'
+      path: '/'
+      fullPath: '/providers/'
+      preLoaderRoute: typeof ProvidersIndexRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/cases/': {
+      id: '/cases/'
+      path: '/'
+      fullPath: '/cases/'
+      preLoaderRoute: typeof CasesIndexRouteImport
+      parentRoute: typeof CasesRoute
+    }
+    '/tasks/$id': {
+      id: '/tasks/$id'
+      path: '/$id'
+      fullPath: '/tasks/$id'
+      preLoaderRoute: typeof TasksIdRouteImport
+      parentRoute: typeof TasksRoute
+    }
+    '/providers/new': {
+      id: '/providers/new'
+      path: '/new'
+      fullPath: '/providers/new'
+      preLoaderRoute: typeof ProvidersNewRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/providers/$id': {
+      id: '/providers/$id'
+      path: '/$id'
+      fullPath: '/providers/$id'
+      preLoaderRoute: typeof ProvidersIdRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/cases/$id': {
+      id: '/cases/$id'
+      path: '/$id'
+      fullPath: '/cases/$id'
+      preLoaderRoute: typeof CasesIdRouteImport
+      parentRoute: typeof CasesRoute
+    }
+    '/admin/templates': {
+      id: '/admin/templates'
+      path: '/admin/templates'
+      fullPath: '/admin/templates'
+      preLoaderRoute: typeof AdminTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/statuses': {
+      id: '/admin/statuses'
+      path: '/admin/statuses'
+      fullPath: '/admin/statuses'
+      preLoaderRoute: typeof AdminStatusesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/payers': {
+      id: '/admin/payers'
+      path: '/admin/payers'
+      fullPath: '/admin/payers'
+      preLoaderRoute: typeof AdminPayersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/mso-routing': {
+      id: '/admin/mso-routing'
+      path: '/admin/mso-routing'
+      fullPath: '/admin/mso-routing'
+      preLoaderRoute: typeof AdminMsoRoutingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/audit': {
+      id: '/admin/audit'
+      path: '/admin/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/templates/': {
+      id: '/admin/templates/'
+      path: '/'
+      fullPath: '/admin/templates/'
+      preLoaderRoute: typeof AdminTemplatesIndexRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
+    '/admin/templates/$id': {
+      id: '/admin/templates/$id'
+      path: '/$id'
+      fullPath: '/admin/templates/$id'
+      preLoaderRoute: typeof AdminTemplatesIdRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
   }
 }
 
+interface CasesRouteChildren {
+  CasesIdRoute: typeof CasesIdRoute
+  CasesIndexRoute: typeof CasesIndexRoute
+}
+
+const CasesRouteChildren: CasesRouteChildren = {
+  CasesIdRoute: CasesIdRoute,
+  CasesIndexRoute: CasesIndexRoute,
+}
+
+const CasesRouteWithChildren = CasesRoute._addFileChildren(CasesRouteChildren)
+
+interface ProvidersRouteChildren {
+  ProvidersIdRoute: typeof ProvidersIdRoute
+  ProvidersNewRoute: typeof ProvidersNewRoute
+  ProvidersIndexRoute: typeof ProvidersIndexRoute
+}
+
+const ProvidersRouteChildren: ProvidersRouteChildren = {
+  ProvidersIdRoute: ProvidersIdRoute,
+  ProvidersNewRoute: ProvidersNewRoute,
+  ProvidersIndexRoute: ProvidersIndexRoute,
+}
+
+const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
+  ProvidersRouteChildren,
+)
+
+interface TasksRouteChildren {
+  TasksIdRoute: typeof TasksIdRoute
+  TasksIndexRoute: typeof TasksIndexRoute
+}
+
+const TasksRouteChildren: TasksRouteChildren = {
+  TasksIdRoute: TasksIdRoute,
+  TasksIndexRoute: TasksIndexRoute,
+}
+
+const TasksRouteWithChildren = TasksRoute._addFileChildren(TasksRouteChildren)
+
+interface AdminTemplatesRouteChildren {
+  AdminTemplatesIdRoute: typeof AdminTemplatesIdRoute
+  AdminTemplatesIndexRoute: typeof AdminTemplatesIndexRoute
+}
+
+const AdminTemplatesRouteChildren: AdminTemplatesRouteChildren = {
+  AdminTemplatesIdRoute: AdminTemplatesIdRoute,
+  AdminTemplatesIndexRoute: AdminTemplatesIndexRoute,
+}
+
+const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
+  AdminTemplatesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CasesRoute: CasesRouteWithChildren,
+  LoginRoute: LoginRoute,
+  ProvidersRoute: ProvidersRouteWithChildren,
+  ReportsRoute: ReportsRoute,
+  TasksRoute: TasksRouteWithChildren,
+  AdminAuditRoute: AdminAuditRoute,
+  AdminMsoRoutingRoute: AdminMsoRoutingRoute,
+  AdminPayersRoute: AdminPayersRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminStatusesRoute: AdminStatusesRoute,
+  AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

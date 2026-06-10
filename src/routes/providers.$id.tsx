@@ -1,10 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/providers/$id')({
   component: Page,
 });
 
 function Page() {
-  return <PageHeader title="Dashboard" />;
+  const { id } = Route.useParams();
+  return <PageHeader title={`Provider ${id}`} />;
 }
