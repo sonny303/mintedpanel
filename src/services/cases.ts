@@ -82,7 +82,26 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     .eq('entity_id', id)
     .order('created_at', { ascending: false });
   if (notesError) throw notesError;
-  const merged = { ...(data as Record<string, unknown>), notes: notesData ?? [] };
+  const rawNotes = notesData ?? [];
+  const authorIds = Array.from(
+    new Set(rawNotes.map((n) => n.author_id).filter((v): v is string => Boolean(v))),
+  );
+  const profileNames = new Map<string, string | null>();
+  if (authorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', authorIds);
+    for (const p of profs ?? []) {
+      const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
+      profileNames.set(p.id as string, name);
+    }
+  }
+  const notesWithAuthor = rawNotes.map((n) => ({
+    ...n,
+    author_name: n.author_id ? profileNames.get(n.author_id as string) ?? null : null,
+  }));
+  const merged = { ...(data as Record<string, unknown>), notes: notesWithAuthor };
   return camelizeRow<CaseDetail>(merged);
 }
 

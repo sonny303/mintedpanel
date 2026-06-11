@@ -228,6 +228,7 @@ export interface Note {
   entityId: string;
   content: string;
   authorId: string | null;
+  authorName?: string | null;
   createdAt: string;
 }
 

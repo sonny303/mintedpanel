@@ -27,12 +27,13 @@ export async function getTouches(caseId: string): Promise<Touch[]> {
 
 export async function logTouch(caseId: string, input: TouchInput): Promise<Touch> {
   const orgId = requireActiveOrg();
+  const source = 'manual' as const;
   const payload = {
     ...snakeizeRow<Record<string, unknown>>(input),
     org_id: orgId,
     case_id: caseId,
-    coordinator_id: currentUserId(),
-    source: 'manual' as const,
+    coordinator_id: source === 'manual' ? currentUserId() : null,
+    source,
   };
   const { data, error } = await supabase
     .from('touches')
