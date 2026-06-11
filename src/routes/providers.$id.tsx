@@ -301,7 +301,7 @@ function CasesPanel({
               <Th>Payer</Th>
               <Th>State</Th>
               <Th>Credentialing</Th>
-              <Th>Contracting</Th>
+              <Th>Group Contract</Th>
               <Th>Submitted</Th>
               <Th className="text-right">Days open</Th>
             </tr>
@@ -336,10 +336,9 @@ function CasesPanel({
                   ? statusById.get(contract.contractingStatusId)
                   : null;
                 const mso = c.msoId ? msoById.get(c.msoId) : null;
-                const daysOpen = differenceInDays(
-                  new Date(),
-                  parseISO(c.createdAt),
-                );
+                const daysOpen = c.submittedDate
+                  ? differenceInDays(new Date(), parseISO(c.submittedDate))
+                  : null;
 
                 return (
                   <tr
@@ -384,7 +383,7 @@ function CasesPanel({
                       {fmtDate(c.submittedDate)}
                     </td>
                     <td className="px-3 text-right text-foreground tabular-nums">
-                      {daysOpen}d
+                      {daysOpen !== null ? `${daysOpen}d` : '—'}
                     </td>
                   </tr>
                 );
