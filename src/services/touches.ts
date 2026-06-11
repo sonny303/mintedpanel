@@ -1,6 +1,6 @@
 // Touches: append-only contact log per case. Reads filter by org; the insert
 // also writes an audit_log row with action_type 'TOUCH_LOGGED'.
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type { Touch, TouchOutcome, TouchType } from '@/types';

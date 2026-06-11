@@ -1,7 +1,7 @@
 // Internal helper that every mutating service uses to append a row to
 // audit_log. Pulls active org and user identity from the auth store.
 
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { useAuthStore } from '@/lib/auth-store';
 import type { AuditActionType } from '@/types';
 

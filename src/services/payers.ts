@@ -1,5 +1,5 @@
 // Payer CRUD (org-scoped) with audit on writes.
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { requireActiveOrg, writeAudit } from '@/lib/audit';
 import type { Payer } from '@/types';

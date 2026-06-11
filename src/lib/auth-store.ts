@@ -2,7 +2,7 @@
 // Persists active org choice in memory only; defaults to first membership on load.
 import { create } from "zustand";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/externalClient";
 
 export type AppRole = "specialist" | "billing" | "admin";
 

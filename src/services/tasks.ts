@@ -1,6 +1,6 @@
 // Tasks and SOP step completion. completeSOPStep enforces ordered completion:
 // a step can only be marked complete when every lower-order step is done.
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type { SOPStep, Task, TaskStatus } from '@/types';

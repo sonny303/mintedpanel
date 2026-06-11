@@ -1,6 +1,6 @@
 // Contracts: list/get/create plus contracting-track status updates that
 // append status_history (track 'contracting') and audit_log.
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type { Contract } from '@/types';
