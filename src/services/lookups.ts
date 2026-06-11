@@ -1,9 +1,9 @@
 // Read-only lookup queries used by list screens: provider groups for the
-// active org, a coordinator (profile) map, and provider state licenses.
+// active org, coordinators, state licenses, mso routing rules, plus notes.
 import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
-import { requireActiveOrg } from '@/lib/audit';
-import type { Facility, Profile, ProviderGroup } from '@/types';
+import { camelizeRow, snakeizeRow } from '@/lib/case';
+import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
+import type { Facility, MsoRoutingRule, Note, NoteEntityType, Profile, ProviderGroup } from '@/types';
 
 export interface StateLicense {
   id: string;
@@ -72,4 +72,55 @@ export async function getCoordinators(): Promise<Profile[]> {
     .in('id', ids);
   if (error) throw error;
   return camelizeRow<Profile[]>(data ?? []);
+}
+
+export async function getMsoRoutingRule(
+  payerId: string,
+  state: string,
+  specialty: string | null,
+): Promise<MsoRoutingRule | null> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from('mso_routing_rules')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('payer_id', payerId)
+    .eq('state', state);
+  if (error) throw error;
+  const rows = camelizeRow<MsoRoutingRule[]>(data ?? []);
+  // Prefer specialty match; fall back to wildcard '' / 'any'
+  const specMatch = specialty
+    ? rows.find((r) => r.specialty === specialty)
+    : null;
+  return specMatch ?? rows.find((r) => !r.specialty || r.specialty === 'any' || r.specialty === '') ?? rows[0] ?? null;
+}
+
+export interface CreateNoteInput {
+  entityType: NoteEntityType;
+  entityId: string;
+  content: string;
+}
+
+export async function createNote(input: CreateNoteInput): Promise<Note> {
+  const orgId = requireActiveOrg();
+  const payload = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    org_id: orgId,
+    author_id: currentUserId(),
+  };
+  const { data, error } = await supabase
+    .from('notes')
+    .insert(payload as never)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const created = camelizeRow<Note>(data);
+  await writeAudit({
+    actionType: 'CREATE',
+    entityType: 'note',
+    entityId: created.id,
+    after: created,
+    description: `Added note to ${created.entityType}`,
+  });
+  return created;
 }
