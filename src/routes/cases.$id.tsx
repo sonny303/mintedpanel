@@ -9,7 +9,7 @@ import {
   CheckCircle2,
   Circle,
   ExternalLink,
-  Fax,
+  Printer,
   Globe,
   Lock,
   Mail,
@@ -61,7 +61,7 @@ const TOUCH_TYPE_ICON: Record<TouchType, typeof Phone> = {
   call: Phone,
   email: Mail,
   portal: Globe,
-  fax: Fax,
+  fax: Printer,
 };
 
 const TOUCH_TYPE_LABEL: Record<TouchType, string> = {
