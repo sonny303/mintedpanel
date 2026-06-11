@@ -330,11 +330,16 @@ function TaskDetailPage() {
         {/* SOP Steps */}
         <Card className="shadow-none border-[#E8E5E0]">
           <CardContent className="p-0 divide-y divide-[#E8E5E0]">
-            {steps.length === 0 ? (
+            {!sopIsValid ? (
+              <div className="m-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                SOP steps could not be read for this task.
+              </div>
+            ) : steps.length === 0 ? (
               <div className="p-6 text-[14px] text-muted-foreground">
                 No SOP steps defined for this task.
               </div>
             ) : (
+
               steps.map((step, index) => {
                 const isChecked = step.isCompleted;
                 const isActive = !isChecked && index === firstIncompleteIndex;
