@@ -2,7 +2,12 @@
 // org-scoped via the active org id from the auth store.
 import { useQuery } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { getCoordinators, getFacilities, getProviderGroups } from '@/services/lookups';
+import {
+  getCoordinators,
+  getFacilities,
+  getProviderGroups,
+  getStateLicensesByProvider,
+} from '@/services/lookups';
 
 export function useFacilities(groupId?: string | null) {
   const orgId = useActiveOrgId() ?? 'no-org';
@@ -28,5 +33,14 @@ export function useCoordinators() {
     queryKey: ['coordinators', orgId] as const,
     queryFn: () => getCoordinators(),
     enabled: orgId !== 'no-org',
+  });
+}
+
+export function useStateLicensesByProvider(providerId: string | undefined) {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['state-licenses', orgId, providerId ?? ''] as const,
+    queryFn: () => getStateLicensesByProvider(providerId as string),
+    enabled: orgId !== 'no-org' && Boolean(providerId),
   });
 }
