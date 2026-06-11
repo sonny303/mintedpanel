@@ -879,16 +879,30 @@ function ChangeStatusDialog({
           </div>
 
           {requiredFields.map((f) => (
-            <div key={f} className="space-y-1.5">
+            <div key={f.key} className="space-y-1.5">
               <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {f.replace(/_/g, ' ')}
+                {f.label ?? f.key.replace(/_/g, ' ')}
               </Label>
-              <Input
-                type={/date|effective/i.test(f) ? 'date' : 'text'}
-                value={fieldValues[f] ?? ''}
-                onChange={(e) => setFieldValues((prev) => ({ ...prev, [f]: e.target.value }))}
-                className="h-9"
-              />
+              {f.type === 'select' && f.options ? (
+                <Select
+                  value={fieldValues[f.key] ?? ''}
+                  onValueChange={(v) => setFieldValues((prev) => ({ ...prev, [f.key]: v }))}
+                >
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {f.options.map((o) => (
+                      <SelectItem key={o} value={o}>{o}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type={f.type === 'date' || /date|effective/i.test(f.key) ? 'date' : 'text'}
+                  value={fieldValues[f.key] ?? ''}
+                  onChange={(e) => setFieldValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  className="h-9"
+                />
+              )}
             </div>
           ))}
 
