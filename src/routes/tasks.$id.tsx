@@ -1,11 +1,502 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { PageHeader } from '@/components/layout/PageHeader';
+// Task detail at /tasks/$id. SOP step runner that coordinators use side-by-side
+// with a payer portal: ordered step lock, copy buttons for data fields, notes.
+import { useEffect, useMemo, useState } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { format, parseISO } from 'date-fns';
+import {
+  Calendar,
+  CheckCircle2,
+  Lock,
+  MessageSquare,
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { toast } from 'sonner';
+import { CopyButton } from '@/components/CopyButton';
+import { supabase } from '@/integrations/supabase/externalClient';
+import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from '@/hooks/useTasks';
+import { useCase } from '@/hooks/useCases';
+import { useCreateNote } from '@/hooks/useLookups';
+import { useActiveOrgId, useRole } from '@/lib/auth-store';
+import type { SOPStep, TaskStatus } from '@/types';
 
 export const Route = createFileRoute('/tasks/$id')({
-  component: Page,
+  component: TaskDetailPage,
 });
 
-function Page() {
+interface DataField {
+  label: string;
+  value: string;
+}
+
+interface NoteRow {
+  id: string;
+  content: string;
+  createdAt: string;
+  authorId: string | null;
+  authorName: string | null;
+}
+
+function fmtDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  try {
+    return format(parseISO(value), 'MMM dd, yyyy');
+  } catch {
+    return value;
+  }
+}
+
+function fmtDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  try {
+    return format(parseISO(value), 'MMM dd, yyyy · h:mm a');
+  } catch {
+    return value;
+  }
+}
+
+function initialsOf(name: string | null | undefined): string {
+  if (!name) return '··';
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase() || '··';
+}
+
+function readDataFields(step: SOPStep): DataField[] {
+  const raw = (step as unknown as { dataFields?: unknown; data_fields?: unknown });
+  const candidate = raw.dataFields ?? raw.data_fields;
+  if (!Array.isArray(candidate)) return [];
+  const out: DataField[] = [];
+  for (const item of candidate) {
+    if (item && typeof item === 'object') {
+      const o = item as Record<string, unknown>;
+      const label = typeof o.label === 'string' ? o.label : null;
+      const value = o.value == null ? null : String(o.value);
+      if (label && value !== null) out.push({ label, value });
+    }
+  }
+  return out;
+}
+
+function useTaskNotes(taskId: string | undefined) {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['task-notes', orgId, taskId ?? ''] as const,
+    enabled: orgId !== 'no-org' && Boolean(taskId),
+    queryFn: async (): Promise<NoteRow[]> => {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('id, content, created_at, author_id')
+        .eq('entity_type', 'task')
+        .eq('entity_id', taskId as string)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const rows = data ?? [];
+      const authorIds = Array.from(
+        new Set(rows.map((r) => r.author_id).filter((v): v is string => Boolean(v))),
+      );
+      const nameMap = new Map<string, string | null>();
+      if (authorIds.length > 0) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', authorIds);
+        for (const p of profs ?? []) {
+          const name =
+            (p.full_name as string | null) ?? (p.email as string | null) ?? null;
+          nameMap.set(p.id as string, name);
+        }
+      }
+      return rows.map((r) => ({
+        id: r.id as string,
+        content: r.content as string,
+        createdAt: r.created_at as string,
+        authorId: (r.author_id as string | null) ?? null,
+        authorName: r.author_id ? nameMap.get(r.author_id as string) ?? null : null,
+      }));
+    },
+  });
+}
+
+function TaskDetailPage() {
   const { id } = Route.useParams();
-  return <PageHeader title={`Task ${id}`} />;
+  const navigate = useNavigate();
+  const role = useRole();
+  const canEdit = role !== 'billing';
+
+  const taskQ = useTask(id);
+  const task = taskQ.data ?? null;
+  const caseQ = useCase(task?.caseId ?? undefined);
+  const notesQ = useTaskNotes(id);
+
+  const completeStepM = useCompleteSOPStep();
+  const updateStatusM = useUpdateTaskStatus();
+  const createNoteM = useCreateNote();
+
+  const [noteDraft, setNoteDraft] = useState('');
+
+  const steps = useMemo<SOPStep[]>(
+    () => (task?.sopContent ?? []).slice().sort((a, b) => a.order - b.order),
+    [task?.sopContent],
+  );
+  const completedCount = steps.filter((s) => s.isCompleted).length;
+  const totalSteps = steps.length;
+  const allComplete = totalSteps > 0 && completedCount === totalSteps;
+  const firstIncompleteIndex = steps.findIndex((s) => !s.isCompleted);
+
+  // Auto-complete the task once all steps are checked off.
+  useEffect(() => {
+    if (!task) return;
+    if (allComplete && task.status !== 'completed' && !updateStatusM.isPending) {
+      updateStatusM.mutate({ id: task.id, status: 'completed' });
+    }
+  }, [allComplete, task, updateStatusM]);
+
+  if (taskQ.isLoading) {
+    return (
+      <div className="max-w-[860px] mx-auto space-y-4">
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-2 w-full" />
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+  if (taskQ.isError) {
+    return (
+      <div className="max-w-[860px] mx-auto space-y-3">
+        <h1 className="text-[20px] font-semibold">Something went wrong loading this task</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => taskQ.refetch()}>Retry</Button>
+          <Button variant="outline" onClick={() => navigate({ to: '/tasks' })}>Back to tasks</Button>
+        </div>
+      </div>
+    );
+  }
+  if (!task) {
+    return (
+      <div className="max-w-[860px] mx-auto space-y-3">
+        <h1 className="text-[20px] font-semibold">Task not found</h1>
+        <Button variant="outline" onClick={() => navigate({ to: '/tasks' })}>Back to tasks</Button>
+      </div>
+    );
+  }
+
+  const c = caseQ.data ?? null;
+  const providerName = c?.provider
+    ? `${c.provider.firstName} ${c.provider.lastName}`
+    : null;
+  const payerName = c?.payer?.name ?? null;
+  const stateCode = c?.state ?? null;
+
+  const handleToggleStep = (stepIndex: number, checked: boolean) => {
+    if (!checked) return; // ordered, no uncheck
+    if (stepIndex !== firstIncompleteIndex) return;
+    const step = steps[stepIndex];
+    if (!step) return;
+    completeStepM.mutate(
+      { taskId: task.id, stepId: step.id },
+      {
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Could not complete step'),
+      },
+    );
+  };
+
+  const handleStatusChange = (next: string) => {
+    if (!canEdit) return;
+    updateStatusM.mutate(
+      { id: task.id, status: next as TaskStatus },
+      {
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Could not update status'),
+      },
+    );
+  };
+
+  const handleAddNote = () => {
+    const content = noteDraft.trim();
+    if (!content) return;
+    createNoteM.mutate(
+      { entityType: 'task', entityId: task.id, content },
+      {
+        onSuccess: () => {
+          setNoteDraft('');
+          notesQ.refetch();
+        },
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Could not add note'),
+      },
+    );
+  };
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="max-w-[860px] mx-auto space-y-6">
+        {/* Header */}
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-[20px] font-semibold text-foreground">{task.title}</h1>
+              {c ? (
+                <p className="text-[14px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                  <Link
+                    to="/cases/$id"
+                    params={{ id: c.id }}
+                    className="hover:text-foreground hover:underline underline-offset-4"
+                  >
+                    {providerName ?? 'Provider'}
+                  </Link>
+                  <span className="text-border">•</span>
+                  <span>{payerName ?? '—'}</span>
+                  <span className="text-border">•</span>
+                  <span>{stateCode ?? '—'}</span>
+                </p>
+              ) : task.caseId ? (
+                <p className="text-[14px] text-muted-foreground mt-1">Loading case…</p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span className="tabular-nums">Due {fmtDate(task.dueDate)}</span>
+              </div>
+              <Select
+                value={task.status}
+                onValueChange={handleStatusChange}
+                disabled={!canEdit || updateStatusM.isPending}
+              >
+                <SelectTrigger className="w-[150px] h-8 text-[13px] shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="not_started">Not started</SelectItem>
+                  <SelectItem value="in_progress">In progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="flex items-center gap-3 text-[12px] text-muted-foreground">
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1B4D3E] transition-all"
+                style={{
+                  width: totalSteps > 0 ? `${(completedCount / totalSteps) * 100}%` : '0%',
+                }}
+              />
+            </div>
+            <span className="tabular-nums font-medium text-foreground">
+              {completedCount} / {totalSteps} steps
+            </span>
+          </div>
+        </div>
+
+        {/* Success banner */}
+        {allComplete ? (
+          <div className="flex items-center gap-2 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-3 py-2 text-[13px] text-[#065F46]">
+            <CheckCircle2 className="h-4 w-4" />
+            All steps complete. Task marked completed.
+          </div>
+        ) : null}
+
+        {/* SOP Steps */}
+        <Card className="shadow-none border-[#E8E5E0]">
+          <CardContent className="p-0 divide-y divide-[#E8E5E0]">
+            {steps.length === 0 ? (
+              <div className="p-6 text-[14px] text-muted-foreground">
+                No SOP steps defined for this task.
+              </div>
+            ) : (
+              steps.map((step, index) => {
+                const isChecked = step.isCompleted;
+                const isActive = !isChecked && index === firstIncompleteIndex;
+                const isLocked = !isChecked && !isActive;
+                const fields = readDataFields(step);
+                const stepNumber = index + 1;
+                const blockingStep = firstIncompleteIndex + 1;
+
+                return (
+                  <div
+                    key={step.id}
+                    className={`p-4 flex gap-4 ${isLocked ? 'opacity-60' : ''} ${
+                      isActive ? 'bg-[#1B4D3E]/[0.03]' : ''
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-2 flex-shrink-0 pt-0.5">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold tabular-nums ${
+                          isChecked
+                            ? 'bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]'
+                            : isActive
+                              ? 'bg-[#1B4D3E] text-white'
+                              : 'bg-muted text-muted-foreground border border-[#E8E5E0]'
+                        }`}
+                      >
+                        {isChecked ? <CheckCircle2 className="h-4 w-4" /> : stepNumber}
+                      </span>
+
+                      {isLocked ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                              <Checkbox
+                                checked={false}
+                                disabled
+                                aria-label={`Locked — complete step ${blockingStep} first`}
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Complete step {blockingStep} first
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Checkbox
+                          checked={isChecked}
+                          disabled={
+                            isChecked ||
+                            !isActive ||
+                            !canEdit ||
+                            completeStepM.isPending
+                          }
+                          onCheckedChange={(v) => handleToggleStep(index, Boolean(v))}
+                          aria-label={`Mark step ${stepNumber} complete`}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <p
+                          className={`text-[14px] leading-relaxed ${
+                            isChecked ? 'text-muted-foreground' : 'text-foreground font-medium'
+                          }`}
+                        >
+                          {step.label}
+                        </p>
+                        {isLocked ? (
+                          <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />
+                        ) : null}
+                      </div>
+                      {step.detail ? (
+                        <p className="text-[13px] text-muted-foreground leading-relaxed">
+                          {step.detail}
+                        </p>
+                      ) : null}
+
+                      {fields.length > 0 ? (
+                        <div className="bg-[#F9FAFB] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
+                          {fields.map((field, fi) => (
+                            <div
+                              key={`${field.label}-${fi}`}
+                              className="flex items-center justify-between gap-4 px-3 py-2"
+                            >
+                              <span className="text-[12px] uppercase tracking-wide text-muted-foreground font-semibold w-24 flex-shrink-0">
+                                {field.label}
+                              </span>
+                              <span className="text-[14px] font-medium tabular-nums flex-1 truncate">
+                                {field.value}
+                              </span>
+                              <CopyButton value={field.value} label={field.label} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Notes Thread */}
+        <Card className="shadow-none border-[#E8E5E0]">
+          <div className="p-4 pb-2 border-b border-[#E8E5E0] flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-[14px] font-semibold">Notes</h2>
+          </div>
+          <CardContent className="p-4 space-y-4">
+            {notesQ.isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : notesQ.isError ? (
+              <p className="text-[13px] text-muted-foreground">Could not load notes.</p>
+            ) : (notesQ.data ?? []).length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">No notes yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {(notesQ.data ?? []).map((n) => (
+                  <div key={n.id} className="flex gap-3">
+                    <div className="h-7 w-7 rounded-full bg-[#1B4D3E]/10 border border-[#1B4D3E]/20 flex items-center justify-center text-[#1B4D3E] font-medium text-[11px] flex-shrink-0">
+                      {initialsOf(n.authorName)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-[12px]">
+                        <span className="font-semibold text-foreground">
+                          {n.authorName ?? '—'}
+                        </span>
+                        <span className="text-muted-foreground tabular-nums">
+                          {fmtDateTime(n.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-[14px] text-foreground mt-0.5 leading-relaxed whitespace-pre-wrap">
+                        {n.content}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {canEdit ? (
+              <div className="pt-2 border-t border-[#E8E5E0] space-y-2">
+                <Textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder="Add a note for this task…"
+                  className="min-h-[72px] text-[14px] shadow-none resize-none"
+                  aria-label="Add a note"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={handleAddNote}
+                    disabled={!noteDraft.trim() || createNoteM.isPending}
+                  >
+                    {createNoteM.isPending ? 'Saving…' : 'Add note'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
+  );
 }
