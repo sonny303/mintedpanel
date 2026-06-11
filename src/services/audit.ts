@@ -1,5 +1,5 @@
 // Audit log reads (insertion happens inside other services via writeAudit).
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow } from '@/lib/case';
 import { requireActiveOrg } from '@/lib/audit';
 import type { AuditActionType, AuditLogEntry } from '@/types';

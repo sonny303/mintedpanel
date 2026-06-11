@@ -2,7 +2,7 @@
 // notes/status history), create, and credentialing-track status changes that
 // also append status_history and audit_log.
 
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type {
