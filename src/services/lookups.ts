@@ -1,9 +1,34 @@
 // Read-only lookup queries used by list screens: provider groups for the
-// active org, and a coordinator (profile) map keyed by user id.
+// active org, a coordinator (profile) map, and provider state licenses.
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow } from '@/lib/case';
 import { requireActiveOrg } from '@/lib/audit';
 import type { Facility, Profile, ProviderGroup } from '@/types';
+
+export interface StateLicense {
+  id: string;
+  orgId: string;
+  providerId: string | null;
+  state: string;
+  licenseNumber: string | null;
+  licenseType: string | null;
+  issueDate: string | null;
+  expirationDate: string | null;
+  status: string | null;
+  createdAt: string | null;
+}
+
+export async function getStateLicensesByProvider(providerId: string): Promise<StateLicense[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from('state_licenses')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('provider_id', providerId)
+    .order('state', { ascending: true });
+  if (error) throw error;
+  return camelizeRow<StateLicense[]>(data ?? []);
+}
 
 export async function getFacilities(groupId?: string | null): Promise<Facility[]> {
   const orgId = requireActiveOrg();
