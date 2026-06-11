@@ -79,10 +79,14 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
   const existing = await getTask(taskId);
   if (!existing) throw new Error('Task not found');
 
-  const target = existing.sopContent.find((step) => step.id === stepId);
+  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent)
+    ? existing.sopContent
+    : [];
+
+  const target = currentSteps.find((step) => step.id === stepId);
   if (!target) throw new Error('Step not found on task');
 
-  const blocker = existing.sopContent.find(
+  const blocker = currentSteps.find(
     (step) => step.order < target.order && !step.isCompleted,
   );
   if (blocker) {
@@ -91,11 +95,12 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
 
   const userId = currentUserId();
   const now = new Date().toISOString();
-  const nextSteps: SOPStep[] = existing.sopContent.map((step) =>
+  const nextSteps: SOPStep[] = currentSteps.map((step) =>
     step.id === stepId
       ? { ...step, isCompleted: true, completedAt: now, completedBy: userId }
       : step,
   );
+
   const allDone = nextSteps.every((s) => s.isCompleted);
   const patch: Record<string, unknown> = {
     sop_content: nextSteps as unknown as never,
