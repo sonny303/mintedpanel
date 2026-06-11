@@ -301,7 +301,7 @@ function CasesPanel({
               <Th>Payer</Th>
               <Th>State</Th>
               <Th>Credentialing</Th>
-              <Th>Contracting</Th>
+              <Th>Group Contract</Th>
               <Th>Submitted</Th>
               <Th className="text-right">Days open</Th>
             </tr>
