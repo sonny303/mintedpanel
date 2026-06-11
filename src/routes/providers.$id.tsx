@@ -383,7 +383,7 @@ function CasesPanel({
                       {fmtDate(c.submittedDate)}
                     </td>
                     <td className="px-3 text-right text-foreground tabular-nums">
-                      {daysOpen}d
+                      {daysOpen !== null ? `${daysOpen}d` : '—'}
                     </td>
                   </tr>
                 );
