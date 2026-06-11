@@ -68,7 +68,6 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
        credentialing_status:status_configs(*),
        tasks(*),
        touches(*),
-       notes(*),
        status_history(*)`,
     )
     .eq('id', id)
@@ -76,8 +75,17 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return camelizeRow<CaseDetail>(data);
+  const { data: notesData, error: notesError } = await supabase
+    .from('notes')
+    .select('*')
+    .eq('entity_type', 'case')
+    .eq('entity_id', id)
+    .order('created_at', { ascending: false });
+  if (notesError) throw notesError;
+  const merged = { ...(data as Record<string, unknown>), notes: notesData ?? [] };
+  return camelizeRow<CaseDetail>(merged);
 }
+
 
 export async function createCase(input: CaseInput): Promise<CredentialCase> {
   const orgId = requireActiveOrg();
