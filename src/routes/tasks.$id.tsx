@@ -153,10 +153,15 @@ function TaskDetailPage() {
 
   const [noteDraft, setNoteDraft] = useState('');
 
+  const sopIsValid = Array.isArray(task?.sopContent);
   const steps = useMemo<SOPStep[]>(
-    () => (task?.sopContent ?? []).slice().sort((a, b) => a.order - b.order),
+    () =>
+      Array.isArray(task?.sopContent)
+        ? task!.sopContent.slice().sort((a, b) => a.order - b.order)
+        : [],
     [task?.sopContent],
   );
+
   const completedCount = steps.filter((s) => s.isCompleted).length;
   const totalSteps = steps.length;
   const allComplete = totalSteps > 0 && completedCount === totalSteps;
