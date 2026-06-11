@@ -38,8 +38,12 @@ const adminNav: NavLink[] = [
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
+import { useRole } from '@/lib/auth-store';
+
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const role = useRole();
+  const showAdmin = role === 'admin';
 
   const isActive = (to: string, exact?: boolean) =>
     exact ? pathname === to : pathname === to || pathname.startsWith(to + '/');
@@ -81,32 +85,36 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="px-5">
-          <Separator />
-        </div>
+        {showAdmin ? (
+          <>
+            <div className="px-5">
+              <Separator />
+            </div>
 
-        <div className="px-2">
-          <h3 className="px-3 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)] mb-2">
-            Admin
-          </h3>
-          <nav className="space-y-0.5" aria-label="Admin">
-            {adminNav.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  aria-current={active ? 'page' : undefined}
-                  className={itemClass(active)}
-                >
-                  <Icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+            <div className="px-2">
+              <h3 className="px-3 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--text-muted)] mb-2">
+                Admin
+              </h3>
+              <nav className="space-y-0.5" aria-label="Admin">
+                {adminNav.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.to);
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      aria-current={active ? 'page' : undefined}
+                      className={itemClass(active)}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          </>
+        ) : null}
       </div>
     </aside>
   );
