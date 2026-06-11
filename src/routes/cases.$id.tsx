@@ -166,7 +166,18 @@ function CaseDetailPage() {
       </div>
     );
   }
-  if (caseQ.isError || !c) {
+  if (caseQ.isError) {
+    return (
+      <div>
+        <PageHeader title="Something went wrong loading this case" />
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => caseQ.refetch()}>Retry</Button>
+          <Button variant="outline" onClick={() => navigate({ to: '/cases' })}>Back to cases</Button>
+        </div>
+      </div>
+    );
+  }
+  if (!c) {
     return (
       <div>
         <PageHeader title="Case not found" />
@@ -174,6 +185,7 @@ function CaseDetailPage() {
       </div>
     );
   }
+
 
   const providerName = c.provider
     ? `${c.provider.firstName} ${c.provider.lastName}${c.provider.credentials ? `, ${c.provider.credentials}` : ''}`
