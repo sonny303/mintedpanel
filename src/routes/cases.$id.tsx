@@ -781,6 +781,29 @@ function AddNoteForm({
   );
 }
 
+interface FieldDescriptor {
+  key: string;
+  type?: string;
+  label?: string;
+  options?: string[];
+}
+
+function normalizeRequiredField(f: unknown): FieldDescriptor {
+  if (typeof f === 'string') return { key: f };
+  if (f && typeof f === 'object') {
+    const o = f as Record<string, unknown>;
+    return {
+      key: typeof o.key === 'string' ? o.key : String(o.key ?? ''),
+      type: typeof o.type === 'string' ? o.type : undefined,
+      label: typeof o.label === 'string' ? o.label : undefined,
+      options: Array.isArray(o.options)
+        ? (o.options.filter((x): x is string => typeof x === 'string'))
+        : undefined,
+    };
+  }
+  return { key: '' };
+}
+
 interface ChangeStatusDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -816,8 +839,8 @@ function ChangeStatusDialog({
   const isActiveTarget = (target?.label ?? '').toLowerCase() === 'active';
   const needsContractWarning = isActiveTarget && !contractIsExecuted;
 
-  const requiredFields = target?.requiredFields ?? [];
-  const missing = requiredFields.some((f) => !(fieldValues[f] ?? '').trim());
+  const requiredFields = ((target?.requiredFields ?? []) as unknown[]).map(normalizeRequiredField);
+  const missing = requiredFields.some((f) => !(fieldValues[f.key] ?? '').trim());
   const canSave = Boolean(target) && !missing && (!needsContractWarning || warningAck);
 
   return (
@@ -856,16 +879,30 @@ function ChangeStatusDialog({
           </div>
 
           {requiredFields.map((f) => (
-            <div key={f} className="space-y-1.5">
+            <div key={f.key} className="space-y-1.5">
               <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {f.replace(/_/g, ' ')}
+                {f.label ?? f.key.replace(/_/g, ' ')}
               </Label>
-              <Input
-                type={/date|effective/i.test(f) ? 'date' : 'text'}
-                value={fieldValues[f] ?? ''}
-                onChange={(e) => setFieldValues((prev) => ({ ...prev, [f]: e.target.value }))}
-                className="h-9"
-              />
+              {f.type === 'select' && f.options ? (
+                <Select
+                  value={fieldValues[f.key] ?? ''}
+                  onValueChange={(v) => setFieldValues((prev) => ({ ...prev, [f.key]: v }))}
+                >
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {f.options.map((o) => (
+                      <SelectItem key={o} value={o}>{o}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  type={f.type === 'date' || /date|effective/i.test(f.key) ? 'date' : 'text'}
+                  value={fieldValues[f.key] ?? ''}
+                  onChange={(e) => setFieldValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  className="h-9"
+                />
+              )}
             </div>
           ))}
 
@@ -900,7 +937,7 @@ function ChangeStatusDialog({
             onClick={() => {
               if (!target) return;
               const metadata: Record<string, unknown> = {};
-              requiredFields.forEach((f) => { metadata[f] = fieldValues[f]; });
+              requiredFields.forEach((f) => { metadata[f.key] = fieldValues[f.key]; });
               onSave({
                 statusId: target.id,
                 metadata,
