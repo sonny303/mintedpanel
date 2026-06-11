@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/layout/AppShell";
+import { useAuthStore } from "@/lib/auth-store";
 
 function NotFoundComponent() {
   return (
@@ -121,6 +122,33 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAuthRoute = pathname === "/login";
+  const router = useRouter();
+  const init = useAuthStore((s) => s.init);
+  const initialized = useAuthStore((s) => s.initialized);
+  const session = useAuthStore((s) => s.session);
+
+  useEffect(() => {
+    void init();
+  }, [init]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    if (!session && !isAuthRoute) {
+      router.navigate({ to: "/login", replace: true });
+    }
+  }, [initialized, session, isAuthRoute, router]);
+
+  if (!initialized) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-background text-[13px] text-muted-foreground">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!session && !isAuthRoute) {
+    return null;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
