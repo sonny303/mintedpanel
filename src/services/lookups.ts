@@ -3,7 +3,20 @@
 import { supabase } from '@/integrations/supabase/client';
 import { camelizeRow } from '@/lib/case';
 import { requireActiveOrg } from '@/lib/audit';
-import type { Profile, ProviderGroup } from '@/types';
+import type { Facility, Profile, ProviderGroup } from '@/types';
+
+export async function getFacilities(groupId?: string | null): Promise<Facility[]> {
+  const orgId = requireActiveOrg();
+  let query = supabase
+    .from('facilities')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('name', { ascending: true });
+  if (groupId) query = query.eq('group_id', groupId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return camelizeRow<Facility[]>(data ?? []);
+}
 
 export async function getProviderGroups(): Promise<ProviderGroup[]> {
   const orgId = requireActiveOrg();
