@@ -781,6 +781,29 @@ function AddNoteForm({
   );
 }
 
+interface FieldDescriptor {
+  key: string;
+  type?: string;
+  label?: string;
+  options?: string[];
+}
+
+function normalizeRequiredField(f: unknown): FieldDescriptor {
+  if (typeof f === 'string') return { key: f };
+  if (f && typeof f === 'object') {
+    const o = f as Record<string, unknown>;
+    return {
+      key: typeof o.key === 'string' ? o.key : String(o.key ?? ''),
+      type: typeof o.type === 'string' ? o.type : undefined,
+      label: typeof o.label === 'string' ? o.label : undefined,
+      options: Array.isArray(o.options)
+        ? (o.options.filter((x): x is string => typeof x === 'string'))
+        : undefined,
+    };
+  }
+  return { key: '' };
+}
+
 interface ChangeStatusDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
