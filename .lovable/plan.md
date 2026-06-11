@@ -1,57 +1,52 @@
-## Heads up: Cloud isn't connected yet
+## Provider List at /providers
 
-I checked the project and there's no Supabase integration wired in (no `src/integrations/supabase/`, no `supabase/` folder, no database env vars). Before any migration can run, I need to enable Lovable Cloud — that provisions the backend and creates the integration files.
+Replace the placeholder in `src/routes/providers.index.tsx` with the full list per the screenshot. Parent `providers.tsx` stays as `<Outlet />`.
 
-## Step 1 — Enable Lovable Cloud
+### Data sources (hooks only)
+- `useProviders({ groupId, state, payerId, status, search })` — already filters server-side; debounce search input (300ms) before passing.
+- `useCases({})` — fetch all org cases once; group by `providerId` to render a Payer Status pill per case.
+- `useStatusConfigs('credentialing')` — map `case.credentialingStatusId` → color (gray/blue/amber/teal/green/red) for each pill.
+- `usePayers()` — payer name lookup for pill labels and the Payer filter dropdown.
+- New `useProviderGroups()` — for the Group badge text and the Group filter dropdown.
+- New `useCoordinators()` — resolve `case.assignedTo` user id → profile `fullName` for the Coordinator column.
 
-Calls the Cloud enable tool. This provisions the database, auth, and the typed Supabase clients (`@/integrations/supabase/client`, `client.server`, `auth-middleware`).
+State filter options: distinct states from providers' `homeState`. Status filter options: `onboarding | active | terminated`.
 
-## Step 2 — Migration: `0001_init_orgs_and_membership.sql`
+### New files (2)
+1. `src/services/lookups.ts` — `getProviderGroups()` and `getCoordinators()` (selects `id, full_name` from `profiles` for ids referenced by cases.assigned_to in the active org). Both org-scoped, no audit (read-only).
+2. `src/hooks/useLookups.ts` — `useProviderGroups()`, `useCoordinators()` TanStack Query hooks keyed by org.
 
-Single migration creating the multi-tenant foundation.
+### Modified file (1)
+3. `src/routes/providers.index.tsx` — full implementation.
 
-### Tables (all in `public`, snake_case)
+### Layout (matches screenshot)
+- `PageHeader` "Providers" with right-side `{n} providers` count.
+- Toolbar row: search input (Search icon, "Search name or NPI...", debounced), 4 shadcn `Select` filters (All Groups / All States / All Payers / All Statuses), spacer, primary `Button` "Add provider" → `navigate({ to: '/providers/new' })`. Button hidden when `useRole() === 'billing'`.
+- Custom `<table>` (NOT shared DataTable):
+  - `<thead>`: `text-xs uppercase tracking-wider text-muted-foreground`, columns: Provider, Group, State, Payer Statuses, CAQH (right-aligned), Coordinator.
+  - `<tbody>` rows: `h-10`, `px-3` cells, `hover:bg-muted/40 cursor-pointer`, `onClick` → `navigate({ to: '/providers/$id', params: { id } })`. `border-b border-border`.
+  - Terminated rows: wrap row in `opacity-60`; Payer Statuses cell shows single gray `StatusPill` "Terminated" (override pills).
 
-- `organizations` — `id`, `name`, `created_at`
-- `profiles` — `id` (FK → `auth.users` on delete cascade), `full_name`, `email`, `created_at`
-- `memberships` — `id`, `org_id` → orgs, `user_id` → profiles, `role` check-constrained to `specialist|billing|admin`, `created_at`, unique `(org_id, user_id)`
-- `provider_groups` — `id`, `org_id`, `name`, `tin`, `npi_type2`, `states text[]`, `is_active default true`, `created_at`
-- `facilities` — `id`, `org_id`, `group_id` → provider_groups, `name`, `street`, `city`, `state`, `zip`, `is_active`, `created_at`
+### Cell rendering
+- **Provider**: `<div class="font-medium">{firstName} {lastName}<span class="text-muted-foreground">, {credentials}</span></div><div class="text-xs text-muted-foreground tabular-nums">{npi ?? '—'}</div>`
+- **Group**: small bordered pill, `whitespace-nowrap`, text = group name or `—`.
+- **State**: `provider.homeState` or `—`.
+- **Payer Statuses**: flex-wrap of `StatusPill` per case for this provider; label = payer name; color from status config color → mapped to StatusPill color enum (`gray|blue|amber|teal|green|red`). Empty if no cases.
+- **CAQH**: `differenceInDays(now, caqhLastAttestedDate)` via date-fns. `null` → `<span class="text-muted-foreground">—</span>`. `<90`: muted text. `90–109`: amber. `≥110`: red. Always `tabular-nums`, suffix `d`.
+- **Coordinator**: most recent case's `assignedTo` resolved via coordinator map → `fullName`, else `—`.
 
-All FKs on `org_id` reference `organizations(id)`. Every public table gets:
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO authenticated;
-GRANT ALL ON public.<table> TO service_role;
-```
-No `anon` grants (every policy is auth-scoped).
+### States
+- Loading: 8 skeleton rows of `<Skeleton class="h-4">` per column.
+- Error: centered card with message + Retry button calling `refetch()`.
+- Empty (no providers at all): "No providers yet" + "Add provider" CTA (hidden for billing).
+- Empty after filter/search: "No providers match these filters" with "Clear filters" link.
 
-### Helper functions (security definer, stable, `search_path=public`)
+### Tokens & rules
+- All colors via existing semantic tokens / StatusPill enum. No hardcoded hex in JSX.
+- Borders `border-border` (already #E8E5E0). No shadows.
+- Icons `h-4 w-4`. Spacing multiples of 4.
+- Named exports only; 2-line file header comment on each new file; no `any`, no `console.log`.
 
-- `public.user_org_ids() returns setof uuid` — `select org_id from memberships where user_id = auth.uid()`
-- `public.user_role(p_org uuid) returns text` — role for `auth.uid()` in `p_org`
-
-### RLS (enabled on every table)
-
-- `organizations`: SELECT where `id in (select user_org_ids())`
-- `profiles`: SELECT `id = auth.uid()`; UPDATE `id = auth.uid()`
-- `memberships`: SELECT where `org_id in (select user_org_ids())`
-- `provider_groups`, `facilities`:
-  - SELECT where `org_id in (select user_org_ids())`
-  - INSERT WITH CHECK `org_id in (select user_org_ids()) AND user_role(org_id) in ('specialist','admin')`
-  - UPDATE USING/WITH CHECK same as INSERT
-- No DELETE policies anywhere.
-
-### Signup trigger
-
-`handle_new_user()` security definer function + `on_auth_user_created` trigger on `auth.users` AFTER INSERT, inserting `(id, email, raw_user_meta_data->>'full_name')` into `profiles`.
-
-## What I will NOT do
-
-- No UI changes
-- No seed data
-- No edits to existing tables (none exist)
-- No self-testing — you'll verify in the Supabase table editor
-
-## Open question
-
-Should `profiles.email` be unique? Spec doesn't say. I'll leave it non-unique (matches Supabase convention since `auth.users.email` is already the source of truth) unless you want it unique.
+### Out of scope
+- No changes to layout, sidebar, other routes, or existing services.
+- `/providers/new` and `/providers/$id` already exist as placeholders; not touched.
