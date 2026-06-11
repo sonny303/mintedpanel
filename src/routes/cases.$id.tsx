@@ -937,7 +937,7 @@ function ChangeStatusDialog({
             onClick={() => {
               if (!target) return;
               const metadata: Record<string, unknown> = {};
-              requiredFields.forEach((f) => { metadata[f] = fieldValues[f]; });
+              requiredFields.forEach((f) => { metadata[f.key] = fieldValues[f.key]; });
               onSave({
                 statusId: target.id,
                 metadata,
