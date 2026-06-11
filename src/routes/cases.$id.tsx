@@ -839,8 +839,8 @@ function ChangeStatusDialog({
   const isActiveTarget = (target?.label ?? '').toLowerCase() === 'active';
   const needsContractWarning = isActiveTarget && !contractIsExecuted;
 
-  const requiredFields = target?.requiredFields ?? [];
-  const missing = requiredFields.some((f) => !(fieldValues[f] ?? '').trim());
+  const requiredFields = ((target?.requiredFields ?? []) as unknown[]).map(normalizeRequiredField);
+  const missing = requiredFields.some((f) => !(fieldValues[f.key] ?? '').trim());
   const canSave = Boolean(target) && !missing && (!needsContractWarning || warningAck);
 
   return (
