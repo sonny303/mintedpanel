@@ -597,7 +597,8 @@ function CaseDetailPage() {
                       <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                         <span className="font-medium inline-flex items-center gap-1">
                           <User className="w-3 h-3" />
-                          {n.authorId ?? 'Unknown'}
+                          {n.authorName ?? '—'}
+
                         </span>
                         <span className="tabular-nums">{fmtDateTime(n.createdAt)}</span>
                       </div>
