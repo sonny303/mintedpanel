@@ -336,10 +336,9 @@ function CasesPanel({
                   ? statusById.get(contract.contractingStatusId)
                   : null;
                 const mso = c.msoId ? msoById.get(c.msoId) : null;
-                const daysOpen = differenceInDays(
-                  new Date(),
-                  parseISO(c.createdAt),
-                );
+                const daysOpen = c.submittedDate
+                  ? differenceInDays(new Date(), parseISO(c.submittedDate))
+                  : null;
 
                 return (
                   <tr
