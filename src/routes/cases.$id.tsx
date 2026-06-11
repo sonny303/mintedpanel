@@ -48,7 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { toast } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusPill, type StatusColor } from '@/components/StatusPill';
 import { CopyButton } from '@/components/CopyButton';
