@@ -2,7 +2,16 @@
 // org-scoped via the active org id from the auth store.
 import { useQuery } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { getCoordinators, getProviderGroups } from '@/services/lookups';
+import { getCoordinators, getFacilities, getProviderGroups } from '@/services/lookups';
+
+export function useFacilities(groupId?: string | null) {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['facilities', orgId, groupId ?? 'all'] as const,
+    queryFn: () => getFacilities(groupId),
+    enabled: orgId !== 'no-org',
+  });
+}
 
 export function useProviderGroups() {
   const orgId = useActiveOrgId() ?? 'no-org';
