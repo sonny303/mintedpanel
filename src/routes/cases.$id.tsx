@@ -488,11 +488,8 @@ function CaseDetailPage() {
                 <dl className="space-y-3 text-[13px]">
                   <Row label="Submitted" value={<span className="tabular-nums">{fmtDate(c.submittedDate)}</span>} />
                   <Row label="Expected effective" value={<span className="tabular-nums">{fmtDate(c.expectedEffectiveDate)}</span>} />
-                  <Row label="Confirmed effective" value={
-                    c.confirmedEffectiveDate
-                      ? <span className="tabular-nums">{fmtDate(c.confirmedEffectiveDate)}</span>
-                      : <span className="text-muted-foreground italic">Pending</span>
-                  }/>
+                  <Row label="Confirmed effective" value={<span className="tabular-nums">{fmtDate(c.confirmedEffectiveDate)}</span>} />
+
                   <Row label="Days open" value={
                     <span className="tabular-nums">{daysOpen !== null ? `${daysOpen}d` : '—'}</span>
                   }/>
