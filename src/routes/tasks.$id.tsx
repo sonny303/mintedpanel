@@ -410,21 +410,18 @@ function TaskDetailPage() {
                     <div className="flex-1 min-w-0 space-y-3">
                       <div className="flex items-start gap-2">
                         <p
-                          className={`text-[14px] leading-relaxed ${
+                          className={`text-[14px] leading-[1.6] ${
                             isChecked ? 'text-muted-foreground' : 'text-foreground font-medium'
                           }`}
                         >
-                          {step.label}
+                          {readInstruction(step)}
                         </p>
                         {isLocked ? (
                           <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />
                         ) : null}
                       </div>
-                      {step.detail ? (
-                        <p className="text-[13px] text-muted-foreground leading-relaxed">
-                          {step.detail}
-                        </p>
-                      ) : null}
+
+
 
                       {fields.length > 0 ? (
                         <div className="bg-[#F9FAFB] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
