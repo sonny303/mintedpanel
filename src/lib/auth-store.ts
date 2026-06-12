@@ -1,6 +1,7 @@
 // Auth + org state: holds session, memberships, active org, and role selector.
-// Persists active org choice in memory only; defaults to first membership on load.
+// Persists active org choice in localStorage so the selection survives navigation and reloads.
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 
