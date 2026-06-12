@@ -80,18 +80,27 @@ function initialsOf(name: string | null | undefined): string {
   return (first + last).toUpperCase() || '··';
 }
 
+function readInstruction(step: SOPStep): string {
+  const raw = step as unknown as { instruction?: unknown; label?: unknown };
+  if (typeof raw.instruction === 'string') return raw.instruction;
+  if (typeof raw.label === 'string') return raw.label;
+  return '';
+}
+
 function readDataFields(step: SOPStep): DataField[] {
-  const raw = (step as unknown as { dataFields?: unknown; data_fields?: unknown });
+  const raw = step as unknown as { dataFields?: unknown; data_fields?: unknown };
   const candidate = raw.dataFields ?? raw.data_fields;
   if (!Array.isArray(candidate)) return [];
   const out: DataField[] = [];
   for (const item of candidate) {
-    if (item && typeof item === 'object') {
-      const o = item as Record<string, unknown>;
-      const label = typeof o.label === 'string' ? o.label : null;
-      const value = o.value == null ? null : String(o.value);
-      if (label && value !== null) out.push({ label, value });
-    }
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const label = typeof o.label === 'string' && o.label.trim() !== '' ? o.label : null;
+    if (label === null) continue;
+    if (o.value === null || o.value === undefined) continue;
+    const value = String(o.value);
+    if (value === '') continue;
+    out.push({ label, value });
   }
   return out;
 }
@@ -401,21 +410,18 @@ function TaskDetailPage() {
                     <div className="flex-1 min-w-0 space-y-3">
                       <div className="flex items-start gap-2">
                         <p
-                          className={`text-[14px] leading-relaxed ${
+                          className={`text-[14px] leading-[1.6] ${
                             isChecked ? 'text-muted-foreground' : 'text-foreground font-medium'
                           }`}
                         >
-                          {step.label}
+                          {readInstruction(step)}
                         </p>
                         {isLocked ? (
                           <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />
                         ) : null}
                       </div>
-                      {step.detail ? (
-                        <p className="text-[13px] text-muted-foreground leading-relaxed">
-                          {step.detail}
-                        </p>
-                      ) : null}
+
+
 
                       {fields.length > 0 ? (
                         <div className="bg-[#F9FAFB] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
