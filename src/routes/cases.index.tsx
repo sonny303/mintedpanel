@@ -510,11 +510,14 @@ function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
       }`
     : '—';
 
+  const isTerminated = provider?.status === 'terminated';
+
   return (
     <tr
       onClick={onOpen}
-      className="border-b border-border h-10 cursor-pointer hover:bg-muted/40"
+      className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
     >
+
       <td className="px-3 py-1.5">
         <div className="font-medium text-foreground leading-tight">{providerName}</div>
         <div className="text-[12px] text-muted-foreground leading-tight">
