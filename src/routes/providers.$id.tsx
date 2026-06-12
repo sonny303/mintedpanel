@@ -15,13 +15,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useProvider } from '@/hooks/useProviders';
+import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+
 import type {
   Contract,
   CredentialCase,
