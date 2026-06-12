@@ -1,6 +1,6 @@
 // Provider detail at /providers/$id. Shows the provider header, cases table
 // on the left, and identity/licenses/employment/CAQH cards on the right.
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Pencil, Plus, XCircle } from 'lucide-react';
@@ -21,6 +21,7 @@ import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
+import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import type {
   Contract,
   CredentialCase,
@@ -74,6 +75,7 @@ function ProviderDetailPage() {
   const navigate = useNavigate();
   const role = useRole();
   const canEdit = role !== 'billing';
+  const [newCaseOpen, setNewCaseOpen] = useState(false);
 
   const providerQ = useProvider(id);
   const casesQ = useCases({ providerId: id });
@@ -150,6 +152,13 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
         canEdit={canEdit}
+        onNewCase={() => setNewCaseOpen(true)}
+      />
+      <NewCaseModal
+        open={newCaseOpen}
+        onOpenChange={setNewCaseOpen}
+        provider={provider}
+        group={group}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
@@ -181,9 +190,10 @@ interface HeaderProps {
   provider: Provider;
   group: ProviderGroup | null;
   canEdit: boolean;
+  onNewCase: () => void;
 }
 
-function Header({ provider, group, canEdit }: HeaderProps) {
+function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
   const name = `${provider.firstName} ${provider.lastName}${
     provider.credentials ? `, ${provider.credentials}` : ''
   }`;
@@ -229,17 +239,10 @@ function Header({ provider, group, canEdit }: HeaderProps) {
               </TooltipTrigger>
               <TooltipContent>Coming in a later step</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0}>
-                  <Button size="sm" disabled className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    New case
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming in a later step</TooltipContent>
-            </Tooltip>
+            <Button size="sm" className="gap-2" onClick={onNewCase}>
+              <Plus className="h-4 w-4" />
+              New case
+            </Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span tabIndex={0}>
