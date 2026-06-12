@@ -190,9 +190,10 @@ interface HeaderProps {
   provider: Provider;
   group: ProviderGroup | null;
   canEdit: boolean;
+  onNewCase: () => void;
 }
 
-function Header({ provider, group, canEdit }: HeaderProps) {
+function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
   const name = `${provider.firstName} ${provider.lastName}${
     provider.credentials ? `, ${provider.credentials}` : ''
   }`;
