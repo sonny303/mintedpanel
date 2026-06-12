@@ -88,9 +88,12 @@ function ProviderDetailPage() {
   const navigate = useNavigate();
   const role = useRole();
   const canEdit = role !== 'billing';
+  const canTerminate = role === 'specialist' || role === 'admin';
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+  const [terminateOpen, setTerminateOpen] = useState(false);
 
   const providerQ = useProvider(id);
+
   const casesQ = useCases({ providerId: id });
   const contractsQ = useContracts();
   const payersQ = usePayers();
