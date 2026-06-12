@@ -152,6 +152,13 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
         canEdit={canEdit}
+        onNewCase={() => setNewCaseOpen(true)}
+      />
+      <NewCaseModal
+        open={newCaseOpen}
+        onOpenChange={setNewCaseOpen}
+        provider={provider}
+        group={group}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
