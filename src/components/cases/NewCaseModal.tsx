@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { supabase } from '@/integrations/supabase/externalClient';
+import { getMsoRoutingRule } from '@/services/lookups';
 import { useCases, useCreateCase } from '@/hooks/useCases';
 import {
   useCoordinators,
