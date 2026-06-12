@@ -502,6 +502,7 @@ interface PayerPreviewRowProps {
   state: string;
   providerId: string;
   groupId: string | null;
+  specialty: string | null;
   existingCases: { payerId: string; state: string; id: string }[];
 }
 
@@ -509,10 +510,11 @@ function PayerPreviewRow({
   payer,
   state,
   groupId,
+  specialty,
   existingCases,
 }: PayerPreviewRowProps) {
   const navigate = useNavigate();
-  const ruleQ = useMsoRoutingRule(payer.id, state, null);
+  const ruleQ = useMsoRoutingRule(payer.id, state, specialty);
   const msosQ = useMsos();
   const orgId = useActiveOrgId();
 
