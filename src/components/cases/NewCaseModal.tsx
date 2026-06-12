@@ -465,6 +465,7 @@ export function NewCaseModal({
                     state={state}
                     providerId={provider.id}
                     groupId={provider.groupId ?? null}
+                    specialty={provider.specialty ?? null}
                     existingCases={existingCasesQ.data ?? []}
                   />
                 );
