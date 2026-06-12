@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { supabase } from '@/integrations/supabase/externalClient';
+import { getMsoRoutingRule } from '@/services/lookups';
 import { useCases, useCreateCase } from '@/hooks/useCases';
 import {
   useCoordinators,
@@ -217,6 +218,17 @@ export function NewCaseModal({
     return m;
   }, [payersQ.data]);
 
+  const duplicatePayerIds = useMemo(() => {
+    if (!state) return new Set<string>();
+    const ec = existingCasesQ.data ?? [];
+    return new Set(
+      selectedPayerIds.filter((pid) =>
+        ec.some((c) => c.payerId === pid && c.state === state),
+      ),
+    );
+  }, [existingCasesQ.data, selectedPayerIds, state]);
+  const creatableCount = selectedPayerIds.length - duplicatePayerIds.size;
+
   function togglePayer(id: string) {
     setSelectedPayerIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
@@ -257,17 +269,13 @@ export function NewCaseModal({
         continue;
       }
 
-      const { data: ruleRows } = await supabase
-        .from('mso_routing_rules')
-        .select('*')
-        .eq('org_id', orgId)
-        .eq('payer_id', payerId)
-        .eq('state', state);
-      const rule = (ruleRows ?? [])[0] as
-        | { route_type: string; mso_id: string | null }
-        | undefined;
+      const rule = await getMsoRoutingRule(
+        payerId,
+        state,
+        provider.specialty ?? null,
+      );
       const msoId =
-        rule?.route_type === 'mso' ? rule.mso_id ?? null : null;
+        rule?.routeType === 'mso' ? rule.msoId ?? null : null;
       const mso = msoId ? (msosQ.data ?? []).find((m) => m.id === msoId) ?? null : null;
 
       let caseRow;
@@ -457,6 +465,7 @@ export function NewCaseModal({
                     state={state}
                     providerId={provider.id}
                     groupId={provider.groupId ?? null}
+                    specialty={provider.specialty ?? null}
                     existingCases={existingCasesQ.data ?? []}
                   />
                 );
@@ -475,12 +484,12 @@ export function NewCaseModal({
               submitting ||
               !!providerLevelBlock ||
               !state ||
-              selectedPayerIds.length === 0
+              creatableCount === 0
             }
           >
             {submitting
               ? 'Creating…'
-              : `Create ${selectedPayerIds.length || ''} case${selectedPayerIds.length === 1 ? '' : 's'}`.trim()}
+              : `Create ${creatableCount} case${creatableCount === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -493,6 +502,7 @@ interface PayerPreviewRowProps {
   state: string;
   providerId: string;
   groupId: string | null;
+  specialty: string | null;
   existingCases: { payerId: string; state: string; id: string }[];
 }
 
@@ -500,10 +510,11 @@ function PayerPreviewRow({
   payer,
   state,
   groupId,
+  specialty,
   existingCases,
 }: PayerPreviewRowProps) {
   const navigate = useNavigate();
-  const ruleQ = useMsoRoutingRule(payer.id, state, null);
+  const ruleQ = useMsoRoutingRule(payer.id, state, specialty);
   const msosQ = useMsos();
   const orgId = useActiveOrgId();
 
