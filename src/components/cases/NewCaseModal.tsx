@@ -258,17 +258,13 @@ export function NewCaseModal({
         continue;
       }
 
-      const { data: ruleRows } = await supabase
-        .from('mso_routing_rules')
-        .select('*')
-        .eq('org_id', orgId)
-        .eq('payer_id', payerId)
-        .eq('state', state);
-      const rule = (ruleRows ?? [])[0] as
-        | { route_type: string; mso_id: string | null }
-        | undefined;
+      const rule = await getMsoRoutingRule(
+        payerId,
+        state,
+        provider.specialty ?? null,
+      );
       const msoId =
-        rule?.route_type === 'mso' ? rule.mso_id ?? null : null;
+        rule?.routeType === 'mso' ? rule.msoId ?? null : null;
       const mso = msoId ? (msosQ.data ?? []).find((m) => m.id === msoId) ?? null : null;
 
       let caseRow;
