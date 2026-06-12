@@ -1,6 +1,6 @@
 // Provider detail at /providers/$id. Shows the provider header, cases table
 // on the left, and identity/licenses/employment/CAQH cards on the right.
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, format, parseISO } from 'date-fns';
 import { Pencil, Plus, XCircle } from 'lucide-react';
