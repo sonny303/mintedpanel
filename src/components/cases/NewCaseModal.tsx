@@ -521,11 +521,12 @@ function PayerPreviewRow({
   const [contractStatus, setContractStatus] = useState<'loading' | 'present' | 'missing'>(
     'loading',
   );
-  useMemo(() => {
+  useEffect(() => {
     if (!groupId || !orgId) {
       setContractStatus('missing');
       return;
     }
+    setContractStatus('loading');
     void supabase
       .from('contracts')
       .select('id')
