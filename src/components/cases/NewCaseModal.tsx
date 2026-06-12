@@ -1,7 +1,7 @@
 // Modal that creates one credential case per selected payer for a provider,
 // runs the new grad / license / duplicate gates, and seeds SOP tasks from
 // matching sop_templates when one exists.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
