@@ -108,8 +108,26 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
 
 export async function createCase(input: CaseInput): Promise<CredentialCase> {
   const orgId = requireActiveOrg();
+  let credentialingStatusId = input.credentialingStatusId ?? null;
+  if (!credentialingStatusId) {
+    const { data: statuses, error: statusErr } = await supabase
+      .from('status_configs')
+      .select('id, sort_order')
+      .eq('org_id', orgId)
+      .eq('track', 'credentialing')
+      .order('sort_order', { ascending: true })
+      .limit(1);
+    if (statusErr) throw statusErr;
+    const first = (statuses ?? [])[0];
+    if (!first) {
+      throw new Error(
+        'No credentialing status configured for this organization. Add at least one credentialing status before creating cases.',
+      );
+    }
+    credentialingStatusId = first.id as string;
+  }
   const payload = {
-    ...snakeizeRow<Record<string, unknown>>(input),
+    ...snakeizeRow<Record<string, unknown>>({ ...input, credentialingStatusId }),
     org_id: orgId,
     created_by: currentUserId(),
   };
