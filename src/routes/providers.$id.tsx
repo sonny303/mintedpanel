@@ -239,17 +239,10 @@ function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
               </TooltipTrigger>
               <TooltipContent>Coming in a later step</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0}>
-                  <Button size="sm" disabled className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    New case
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming in a later step</TooltipContent>
-            </Tooltip>
+            <Button size="sm" className="gap-2" onClick={onNewCase}>
+              <Plus className="h-4 w-4" />
+              New case
+            </Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span tabIndex={0}>
