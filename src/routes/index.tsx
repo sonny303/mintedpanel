@@ -422,6 +422,3 @@ function KpiCard({
     </div>
   );
 }
-
-// date-fns format imported lazily via inline import would break SSR; use top-level.
-import { format } from 'date-fns';
