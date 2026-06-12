@@ -103,15 +103,16 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "openpanel-active-org",
-      storage: createJSONStorage(() =>
-        typeof window === "undefined"
-          ? ({
-              getItem: () => null,
-              setItem: () => undefined,
-              removeItem: () => undefined,
-            } as Storage)
-          : window.localStorage,
-      ),
+      storage: createJSONStorage(() => {
+        if (typeof window === "undefined") {
+          return {
+            getItem: () => null,
+            setItem: () => undefined,
+            removeItem: () => undefined,
+          };
+        }
+        return window.localStorage;
+      }),
       partialize: (state) => ({ activeOrgId: state.activeOrgId }),
     },
   ),
