@@ -483,12 +483,12 @@ export function NewCaseModal({
               submitting ||
               !!providerLevelBlock ||
               !state ||
-              selectedPayerIds.length === 0
+              creatableCount === 0
             }
           >
             {submitting
               ? 'Creating…'
-              : `Create ${selectedPayerIds.length || ''} case${selectedPayerIds.length === 1 ? '' : 's'}`.trim()}
+              : `Create ${creatableCount} case${creatableCount === 1 ? '' : 's'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
