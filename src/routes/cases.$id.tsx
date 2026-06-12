@@ -286,6 +286,15 @@ function CaseDetailPage() {
           </div>
         </div>
 
+        {/* Terminated provider banner */}
+        {c.provider?.status === 'terminated' ? (
+          <div className="border border-border bg-[#F3F4F6] text-[#9CA3AF] rounded-md p-3 text-[13px]">
+            Provider terminated {fmtDate(c.provider.terminatedDate)} — termination tasks generated.
+          </div>
+        ) : null}
+
+
+
         {/* MSO callout */}
         {c.mso ? (
           <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-md p-3">

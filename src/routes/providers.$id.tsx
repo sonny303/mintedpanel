@@ -15,13 +15,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useProvider } from '@/hooks/useProviders';
+import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+
 import type {
   Contract,
   CredentialCase,
@@ -75,9 +88,12 @@ function ProviderDetailPage() {
   const navigate = useNavigate();
   const role = useRole();
   const canEdit = role !== 'billing';
+  const canTerminate = role === 'specialist' || role === 'admin';
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+  const [terminateOpen, setTerminateOpen] = useState(false);
 
   const providerQ = useProvider(id);
+
   const casesQ = useCases({ providerId: id });
   const contractsQ = useContracts();
   const payersQ = usePayers();
@@ -152,7 +168,9 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
         canEdit={canEdit}
+        canTerminate={canTerminate}
         onNewCase={() => setNewCaseOpen(true)}
+        onTerminate={() => setTerminateOpen(true)}
       />
       <NewCaseModal
         open={newCaseOpen}
@@ -160,6 +178,12 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
       />
+      <TerminateProviderDialog
+        open={terminateOpen}
+        onOpenChange={setTerminateOpen}
+        provider={provider}
+      />
+
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
         <div className="lg:col-span-3">
@@ -186,17 +210,21 @@ function ProviderDetailPage() {
   );
 }
 
+
 interface HeaderProps {
   provider: Provider;
   group: ProviderGroup | null;
   canEdit: boolean;
+  canTerminate: boolean;
   onNewCase: () => void;
+  onTerminate: () => void;
 }
 
-function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
+function Header({ provider, group, canEdit, canTerminate, onNewCase, onTerminate }: HeaderProps) {
   const name = `${provider.firstName} ${provider.lastName}${
     provider.credentials ? `, ${provider.credentials}` : ''
   }`;
+  const isTerminated = provider.status === 'terminated';
 
   return (
     <div className="pb-4 mb-2 border-b border-border">
@@ -223,6 +251,14 @@ function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
             <IdField label="CAQH" value={provider.caqhId} />
             <span className="text-border">·</span>
             <IdField label="Taxonomy" value={provider.taxonomyCode} />
+            {isTerminated && provider.terminatedDate ? (
+              <>
+                <span className="text-border">·</span>
+                <span className="text-[#9CA3AF]">
+                  Terminated {fmtDate(provider.terminatedDate)}
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -239,25 +275,113 @@ function Header({ provider, group, canEdit, onNewCase }: HeaderProps) {
               </TooltipTrigger>
               <TooltipContent>Coming in a later step</TooltipContent>
             </Tooltip>
-            <Button size="sm" className="gap-2" onClick={onNewCase}>
+            <Button size="sm" className="gap-2" onClick={onNewCase} disabled={isTerminated}>
               <Plus className="h-4 w-4" />
               New case
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0}>
-                  <Button variant="outline" size="sm" disabled className="gap-2">
-                    <XCircle className="h-4 w-4" />
-                    Terminate provider
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming in a later step</TooltipContent>
-            </Tooltip>
+            {canTerminate ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={onTerminate}
+                disabled={isTerminated}
+              >
+                <XCircle className="h-4 w-4" />
+                {isTerminated ? 'Terminated' : 'Terminate provider'}
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>
     </div>
+  );
+}
+
+interface TerminateProviderDialogProps {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  provider: Provider;
+}
+
+function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProviderDialogProps) {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [terminationDate, setTerminationDate] = useState<string>(today);
+  const [reason, setReason] = useState<string>('');
+  const terminateM = useTerminateProvider(provider.id);
+  const canSubmit = Boolean(terminationDate) && !terminateM.isPending;
+
+  async function handleConfirm(): Promise<void> {
+    try {
+      const result = await terminateM.mutateAsync({
+        terminationDate,
+        reason: reason.trim() ? reason.trim() : null,
+      });
+      toast.success(
+        result.tasksCreated > 0
+          ? `Provider terminated. ${result.tasksCreated} termination task${result.tasksCreated === 1 ? '' : 's'} created.`
+          : 'Provider terminated.',
+      );
+      onOpenChange(false);
+      setReason('');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) {
+          setTerminationDate(today);
+          setReason('');
+        }
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Terminate provider</DialogTitle>
+          <DialogDescription>
+            This sets the provider to Terminated and creates a termination task for every
+            active case. It does not delete anything.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Termination date
+            </Label>
+            <Input
+              type="date"
+              value={terminationDate}
+              onChange={(e) => setTerminationDate(e.target.value)}
+              className="h-9 text-[13px]"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Reason
+            </Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Optional context for the termination"
+              className="min-h-[80px] text-[13px] resize-none"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={terminateM.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={!canSubmit}>
+            {terminateM.isPending ? 'Terminating…' : 'Terminate provider'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -267,6 +391,7 @@ function IdField({ label, value }: { label: string; value: string | null }) {
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
+
       <span className="text-foreground tabular-nums">{value ?? '—'}</span>
       {value ? <CopyButton value={value} label={label} /> : null}
     </div>

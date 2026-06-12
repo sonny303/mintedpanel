@@ -121,6 +121,20 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
     .single();
   if (error) throw error;
   const after = camelizeRow<Task>(data);
+
+  if (
+    allDone &&
+    after.caseId &&
+    after.title.toLowerCase().startsWith('submit termination')
+  ) {
+    await supabase
+      .from('credential_cases')
+      .update({ termination_date: now.slice(0, 10) } as never)
+      .eq('id', after.caseId)
+      .eq('org_id', orgId)
+      .is('termination_date', null);
+  }
+
   await writeAudit({
     actionType: 'UPDATE',
     entityType: 'task',

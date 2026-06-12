@@ -6,10 +6,13 @@ import {
   createProvider,
   getProvider,
   getProviders,
+  terminateProvider,
   updateProvider,
   type ProviderFilters,
   type ProviderInput,
+  type TerminateProviderInput,
 } from '@/services/providers';
+
 
 export function useProviders(filters: ProviderFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
@@ -48,6 +51,22 @@ export function useUpdateProvider(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['providers', orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
+    },
+  });
+}
+
+export function useTerminateProvider(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useMutation({
+    mutationFn: (input: Omit<TerminateProviderInput, 'providerId'>) =>
+      terminateProvider({ ...input, providerId: id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['providers', orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
+      qc.invalidateQueries({ queryKey: ['cases', orgId] });
+      qc.invalidateQueries({ queryKey: ['tasks', orgId] });
+      qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
     },
   });
 }
