@@ -383,7 +383,7 @@ function TaskQueuePage() {
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
+function Th({ children }: { children: ReactNode }) {
   return (
     <th className="text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9">
       {children}
