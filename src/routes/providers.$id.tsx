@@ -168,7 +168,9 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
         canEdit={canEdit}
+        canTerminate={canTerminate}
         onNewCase={() => setNewCaseOpen(true)}
+        onTerminate={() => setTerminateOpen(true)}
       />
       <NewCaseModal
         open={newCaseOpen}
@@ -176,6 +178,12 @@ function ProviderDetailPage() {
         provider={provider}
         group={group}
       />
+      <TerminateProviderDialog
+        open={terminateOpen}
+        onOpenChange={setTerminateOpen}
+        provider={provider}
+      />
+
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
         <div className="lg:col-span-3">
