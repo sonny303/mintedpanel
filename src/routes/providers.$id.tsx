@@ -210,12 +210,6 @@ function ProviderDetailPage() {
   );
 }
 
-interface HeaderProps {
-  provider: Provider;
-  group: ProviderGroup | null;
-  canEdit: boolean;
-  onNewCase: () => void;
-}
 
 interface HeaderProps {
   provider: Provider;
