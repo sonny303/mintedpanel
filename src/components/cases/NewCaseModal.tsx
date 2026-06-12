@@ -218,6 +218,17 @@ export function NewCaseModal({
     return m;
   }, [payersQ.data]);
 
+  const duplicatePayerIds = useMemo(() => {
+    if (!state) return new Set<string>();
+    const ec = existingCasesQ.data ?? [];
+    return new Set(
+      selectedPayerIds.filter((pid) =>
+        ec.some((c) => c.payerId === pid && c.state === state),
+      ),
+    );
+  }, [existingCasesQ.data, selectedPayerIds, state]);
+  const creatableCount = selectedPayerIds.length - duplicatePayerIds.size;
+
   function togglePayer(id: string) {
     setSelectedPayerIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
