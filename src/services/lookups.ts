@@ -80,19 +80,36 @@ export async function getMsoRoutingRule(
   specialty: string | null,
 ): Promise<MsoRoutingRule | null> {
   const orgId = requireActiveOrg();
+  // mso_routing_rules stores 'All' as a wildcard for both state and specialty.
+  // Pull rows for the exact state OR the wildcard, then rank in JS.
   const { data, error } = await supabase
     .from('mso_routing_rules')
     .select('*')
     .eq('org_id', orgId)
     .eq('payer_id', payerId)
-    .eq('state', state);
+    .in('state', [state, 'All']);
   if (error) throw error;
   const rows = camelizeRow<MsoRoutingRule[]>(data ?? []);
-  // Prefer specialty match; fall back to wildcard '' / 'any'
-  const specMatch = specialty
-    ? rows.find((r) => r.specialty === specialty)
-    : null;
-  return specMatch ?? rows.find((r) => !r.specialty || r.specialty === 'any' || r.specialty === '') ?? rows[0] ?? null;
+  const isAll = (v: string | null | undefined): boolean =>
+    !v || v.toLowerCase() === 'all';
+  const eq = (a: string | null | undefined, b: string | null | undefined): boolean =>
+    (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+  const score = (r: MsoRoutingRule): number => {
+    const stateExact = eq(r.state, state);
+    const stateWild = isAll(r.state);
+    const specExact = specialty ? eq(r.specialty, specialty) : false;
+    const specWild = isAll(r.specialty);
+    if (stateExact && specExact) return 4;
+    if (stateExact && specWild) return 3;
+    if (stateWild && specExact) return 2;
+    if (stateWild && specWild) return 1;
+    return 0;
+  };
+  const ranked = rows
+    .map((r) => ({ r, s: score(r) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s);
+  return ranked[0]?.r ?? null;
 }
 
 export interface CreateNoteInput {
