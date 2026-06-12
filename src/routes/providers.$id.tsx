@@ -21,6 +21,7 @@ import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
+import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import type {
   Contract,
   CredentialCase,
