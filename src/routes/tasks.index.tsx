@@ -1,6 +1,6 @@
 // Task queue at /tasks. Summary strip + filters + table of open tasks across
 // the active org. Click a row to open the task detail runner.
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   differenceInCalendarDays,
