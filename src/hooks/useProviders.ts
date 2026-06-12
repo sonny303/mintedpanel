@@ -54,3 +54,19 @@ export function useUpdateProvider(id: string) {
     },
   });
 }
+
+export function useTerminateProvider(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useMutation({
+    mutationFn: (input: Omit<TerminateProviderInput, 'providerId'>) =>
+      terminateProvider({ ...input, providerId: id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['providers', orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
+      qc.invalidateQueries({ queryKey: ['cases', orgId] });
+      qc.invalidateQueries({ queryKey: ['tasks', orgId] });
+      qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
+    },
+  });
+}
