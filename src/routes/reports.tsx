@@ -130,10 +130,9 @@ function ReportsPage() {
           <TabsTrigger value="matrix">Enrollment Matrix</TabsTrigger>
         </TabsList>
         <TabsContent value="summary" className="pt-4">
-          <div className="border border-border rounded-md p-12 text-center text-[14px] text-muted-foreground">
-            Summary report coming soon.
-          </div>
+          <SummaryTab />
         </TabsContent>
+
         <TabsContent value="contracts" className="pt-4">
           <ContractsTab />
         </TabsContent>
