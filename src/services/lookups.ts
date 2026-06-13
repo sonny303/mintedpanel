@@ -81,7 +81,8 @@ export async function getMsoRoutingRule(
 ): Promise<MsoRoutingRule | null> {
   const orgId = requireActiveOrg();
   // mso_routing_rules stores 'All' as a wildcard for both state and specialty.
-  // Pull rows for the exact state OR the wildcard, then rank in JS.
+  // Pull rows for the exact state OR the wildcard, then rank in JS so that the
+  // most specific rule wins (specialty > state). Ties break by most recently created.
   const { data, error } = await supabase
     .from('mso_routing_rules')
     .select('*')
@@ -94,21 +95,30 @@ export async function getMsoRoutingRule(
     !v || v.toLowerCase() === 'all';
   const eq = (a: string | null | undefined, b: string | null | undefined): boolean =>
     (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+  const matches = (r: MsoRoutingRule): boolean => {
+    const stateOk = isAll(r.state) || eq(r.state, state);
+    const specOk =
+      isAll(r.specialty) || (specialty !== null && eq(r.specialty, specialty));
+    return stateOk && specOk;
+  };
   const score = (r: MsoRoutingRule): number => {
-    const stateExact = eq(r.state, state);
-    const stateWild = isAll(r.state);
-    const specExact = specialty ? eq(r.specialty, specialty) : false;
-    const specWild = isAll(r.specialty);
-    if (stateExact && specExact) return 4;
-    if (stateExact && specWild) return 3;
-    if (stateWild && specExact) return 2;
-    if (stateWild && specWild) return 1;
-    return 0;
+    let s = 0;
+    if (!isAll(r.specialty) && specialty !== null && eq(r.specialty, specialty)) {
+      s += 2;
+    }
+    if (!isAll(r.state) && eq(r.state, state)) {
+      s += 1;
+    }
+    return s;
+  };
+  const createdMs = (r: MsoRoutingRule): number => {
+    const raw = (r as unknown as { createdAt?: string | null }).createdAt;
+    return raw ? new Date(raw).getTime() : 0;
   };
   const ranked = rows
+    .filter(matches)
     .map((r) => ({ r, s: score(r) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s);
+    .sort((a, b) => (b.s - a.s) || (createdMs(b.r) - createdMs(a.r)));
   return ranked[0]?.r ?? null;
 }
 
