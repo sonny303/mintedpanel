@@ -515,6 +515,11 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
             />
           </div>
         </div>
+        {submitError && (
+          <div className="border border-[#FECACA] bg-[#FEF2F2] text-[#DC2626] text-[13px] rounded-md px-3 py-2">
+            {submitError}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
@@ -527,6 +532,7 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
             {rule ? 'Save changes' : 'Add rule'}
           </Button>
         </DialogFooter>
+
       </DialogContent>
     </Dialog>
   );
