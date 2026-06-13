@@ -26,7 +26,7 @@ import { useProviderGroups } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
 import type { SOPTaskDefinition, SOPTemplate } from '@/types';
 
-type EditableTemplate = SOPTemplate & { isArchived?: boolean };
+type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
 
 interface DataField {
   label: string;
@@ -163,7 +163,7 @@ function TemplateEditor() {
     setSpecialty(tpl.specialty ?? '');
     setGroupId(tpl.groupId ?? 'none');
     setTasks(toEditable(tpl.taskDefinitions));
-    setIsArchived(Boolean(tpl.isArchived));
+    setIsArchived(Boolean(tpl.archived ?? tpl.isArchived ?? false));
     setDirty(false);
   }, [tpl]);
 
@@ -366,7 +366,7 @@ function TemplateEditor() {
         specialty: specialty.trim() || null,
         groupId: groupId === 'none' ? null : groupId,
         taskDefinitions: fromEditable(tasks),
-        isArchived,
+        archived: isArchived,
       });
       setDirty(false);
       toast.success('Template saved');
@@ -386,7 +386,7 @@ function TemplateEditor() {
         specialty: specialty.trim() || null,
         groupId: groupId === 'none' ? null : groupId,
         taskDefinitions: fromEditable(tasks),
-        isArchived: false,
+        archived: false,
       });
       toast.success('Template duplicated');
       navigate({ to: '/admin/templates/$id', params: { id: created.id } });
@@ -401,7 +401,7 @@ function TemplateEditor() {
     const next = !isArchived;
     setIsArchived(next);
     try {
-      await updateMut.mutateAsync({ isArchived: next });
+      await updateMut.mutateAsync({ archived: next });
       toast.success(next ? 'Template archived' : 'Template restored');
     } catch (err) {
       setIsArchived(!next);

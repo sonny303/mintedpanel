@@ -11,9 +11,14 @@ import { Input } from '@/components/ui/input';
 import { useCreateTemplate, usePayers, useTemplates } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
+import { cn } from '@/lib/utils';
 import type { SOPTemplate } from '@/types';
 
-type TemplateRow = SOPTemplate & { isArchived?: boolean };
+type TemplateRow = SOPTemplate & { archived?: boolean; isArchived?: boolean };
+
+function isTemplateArchived(template: TemplateRow): boolean {
+  return Boolean(template.archived ?? template.isArchived ?? false);
+}
 
 export const Route = createFileRoute('/admin/templates/')({
   component: TemplatesIndex,
@@ -46,7 +51,7 @@ function TemplatesIndex() {
     const all = (templatesQ.data ?? []) as TemplateRow[];
     const term = search.trim().toLowerCase();
     return all
-      .filter((t) => (showArchived ? true : !t.isArchived))
+      .filter((t) => (showArchived ? true : !isTemplateArchived(t)))
       .filter((t) => (term ? t.name.toLowerCase().includes(term) : true));
   }, [templatesQ.data, search, showArchived]);
 
@@ -138,7 +143,10 @@ function TemplatesIndex() {
               rows.map((t) => (
                 <tr
                   key={t.id}
-                  className="border-t border-[#E8E5E0] hover:bg-muted/40 cursor-pointer"
+                  className={cn(
+                    'border-t border-[#E8E5E0] hover:bg-muted/40 cursor-pointer',
+                    isTemplateArchived(t) ? 'opacity-70' : undefined,
+                  )}
                   onClick={() => navigate({ to: '/admin/templates/$id', params: { id: t.id } })}
                 >
                   <td className="px-3 h-10 text-sm">
@@ -150,7 +158,7 @@ function TemplatesIndex() {
                     >
                       {t.name}
                     </Link>
-                    {t.isArchived ? (
+                    {isTemplateArchived(t) ? (
                       <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
                         Archived
                       </span>
