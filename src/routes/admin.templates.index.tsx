@@ -4,6 +4,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,11 +52,17 @@ function TemplatesIndex() {
 
   async function handleNew() {
     if (!canEdit) return;
-    const created = await createMut.mutateAsync({
-      name: 'Untitled template',
-      taskDefinitions: [],
-    });
-    navigate({ to: '/admin/templates/$id', params: { id: created.id } });
+    try {
+      const created = await createMut.mutateAsync({
+        name: 'Untitled template',
+        taskDefinitions: [],
+      });
+      toast.success('Template created');
+      navigate({ to: '/admin/templates/$id', params: { id: created.id } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not create template';
+      toast.error(msg);
+    }
   }
 
   return (

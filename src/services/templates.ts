@@ -63,7 +63,7 @@ export async function updateTemplate(
 ): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
   const before = await getTemplate(id);
-  const payload = snakeizeRow<Record<string, unknown>>(patch);
+  const payload = { ...snakeizeRow<Record<string, unknown>>(patch), org_id: orgId };
   const { data, error } = await supabase
     .from('sop_templates')
     .update(payload as never)

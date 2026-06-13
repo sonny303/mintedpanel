@@ -155,7 +155,10 @@ function pickTemplate(
   state: string,
   groupId: string | null,
 ): SOPTemplate | null {
-  const exact = templates.find(
+  const active = templates.filter(
+    (t) => !(t as SOPTemplate & { isArchived?: boolean }).isArchived,
+  );
+  const exact = active.find(
     (t) =>
       t.payerId === payerId &&
       t.state === state &&
@@ -163,7 +166,7 @@ function pickTemplate(
   );
   if (exact) return exact;
   return (
-    templates.find((t) => t.payerId === payerId && t.state === state) ?? null
+    active.find((t) => t.payerId === payerId && t.state === state) ?? null
   );
 }
 
