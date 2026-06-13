@@ -175,7 +175,7 @@ interface TrackSectionProps {
 function TrackSection({
   title,
   description,
-  track: _track,
+  track,
   statuses,
   loading,
   inUse,
@@ -183,7 +183,8 @@ function TrackSection({
   onAdd,
   onEdit,
 }: TrackSectionProps) {
-  const updateM = useUpdateStatusConfig('');
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
   const [dragId, setDragId] = useState<string | null>(null);
 
   const sorted = useMemo(
@@ -208,24 +209,19 @@ function TrackSection({
 
     try {
       await Promise.all(
-        updates.map((u) =>
-          updateM.mutateAsync.call(
-            { ...updateM, mutationFn: undefined } as never,
-            { sortOrder: u.sortOrder } as never,
-          ),
-        ),
+        updates.map((u) => updateStatusConfig(u.id, { sortOrder: u.sortOrder })),
       );
-    } catch {
-      // Fallback: import-friendly path below if call() shape doesn't work
+      qc.invalidateQueries({ queryKey: ['status-configs', orgId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Reorder failed.');
     }
   }
 
-  // The proxy above on updateM.mutateAsync may not bind id properly.
-  // Use direct service mutation instead via inline approach:
   return (
     <ReorderableSection
       title={title}
       description={description}
+      track={track}
       statuses={sorted}
       loading={loading}
       inUse={inUse}
@@ -234,10 +230,10 @@ function TrackSection({
       onEdit={onEdit}
       dragId={dragId}
       setDragId={setDragId}
-      reorder={async (fromId, toId) => {
-        await reorder(fromId, toId);
-      }}
+      reorder={reorder}
     />
+  );
+}
   );
 }
 
