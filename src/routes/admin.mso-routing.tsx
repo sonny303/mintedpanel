@@ -72,9 +72,12 @@ function useRoutingRules() {
 
 function useSaveRule() {
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId();
   return useMutation({
     mutationFn: async (args: { id: string | null; input: RuleInput }) => {
+      if (!orgId) {
+        throw new Error('No active organization selected.');
+      }
       const payload = {
         org_id: orgId,
         payer_id: args.input.payerId,
@@ -99,7 +102,7 @@ function useSaveRule() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mso-routing-rules', orgId] });
+      qc.invalidateQueries({ queryKey: ['mso-routing-rules', orgId ?? 'no-org'] });
     },
   });
 }
