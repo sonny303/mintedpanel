@@ -812,6 +812,7 @@ export type Database = {
           created_at: string | null
           group_id: string | null
           id: string
+          is_archived: boolean
           name: string
           org_id: string
           payer_id: string | null
@@ -824,6 +825,7 @@ export type Database = {
           created_at?: string | null
           group_id?: string | null
           id?: string
+          is_archived?: boolean
           name: string
           org_id: string
           payer_id?: string | null
@@ -836,6 +838,7 @@ export type Database = {
           created_at?: string | null
           group_id?: string | null
           id?: string
+          is_archived?: boolean
           name?: string
           org_id?: string
           payer_id?: string | null
