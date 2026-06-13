@@ -234,8 +234,7 @@ function TrackSection({
     />
   );
 }
-  );
-}
+
 
 interface ReorderableSectionProps extends TrackSectionProps {
   dragId: string | null;
