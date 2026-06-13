@@ -134,6 +134,7 @@ function ReportsPage() {
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="contracts">Contracts</TabsTrigger>
           <TabsTrigger value="matrix">Enrollment Matrix</TabsTrigger>
+          <TabsTrigger value="roster">Roster</TabsTrigger>
         </TabsList>
         <TabsContent value="summary" className="pt-4">
           <SummaryTab />
@@ -144,6 +145,9 @@ function ReportsPage() {
         </TabsContent>
         <TabsContent value="matrix" className="pt-4">
           <EnrollmentMatrixTab />
+        </TabsContent>
+        <TabsContent value="roster" className="pt-4">
+          <RosterTab />
         </TabsContent>
       </Tabs>
     </div>
