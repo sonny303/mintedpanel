@@ -62,13 +62,19 @@ import type { Contract, CredentialCase, StatusConfig, Touch } from '@/types';
 
 
 interface ReportsSearch {
-  tab?: 'summary' | 'contracts' | 'matrix';
+  tab?: 'summary' | 'contracts' | 'matrix' | 'roster';
 }
 
 export const Route = createFileRoute('/reports')({
   validateSearch: (s: Record<string, unknown>): ReportsSearch => {
     const tab = s.tab;
-    if (tab === 'contracts' || tab === 'matrix' || tab === 'summary') return { tab };
+    if (
+      tab === 'contracts' ||
+      tab === 'matrix' ||
+      tab === 'summary' ||
+      tab === 'roster'
+    )
+      return { tab };
     return {};
   },
   component: ReportsPage,
@@ -128,6 +134,7 @@ function ReportsPage() {
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="contracts">Contracts</TabsTrigger>
           <TabsTrigger value="matrix">Enrollment Matrix</TabsTrigger>
+          <TabsTrigger value="roster">Roster</TabsTrigger>
         </TabsList>
         <TabsContent value="summary" className="pt-4">
           <SummaryTab />
@@ -138,6 +145,9 @@ function ReportsPage() {
         </TabsContent>
         <TabsContent value="matrix" className="pt-4">
           <EnrollmentMatrixTab />
+        </TabsContent>
+        <TabsContent value="roster" className="pt-4">
+          <RosterTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -1383,3 +1393,415 @@ function SummaryTab() {
   );
 }
 
+
+// ──────────────────────────────────────────────────────────────────────────
+// Roster tab — payer roster CSV builder
+// ──────────────────────────────────────────────────────────────────────────
+
+interface RosterRow {
+  lastName: string;
+  firstName: string;
+  credentials: string;
+  npi: string;
+  groupNpi: string;
+  tin: string;
+  taxonomyCode: string;
+  facilityName: string;
+  facilityAddress: string;
+  state: string;
+  licenseNumber: string;
+  licenseExpiration: string;
+  caqhId: string;
+  credentialingStatus: string;
+  effectiveDate: string;
+}
+
+interface RosterAux {
+  assignments: { providerId: string; facilityId: string }[];
+  facilities: { id: string; name: string; street: string | null; city: string | null; state: string | null; zip: string | null }[];
+  licenses: { providerId: string; state: string; licenseNumber: string | null; expirationDate: string | null }[];
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'roster';
+}
+
+function formatAddress(f: RosterAux['facilities'][number] | undefined): string {
+  if (!f) return '';
+  const parts = [f.street, [f.city, f.state].filter(Boolean).join(', '), f.zip]
+    .filter((p) => p && String(p).trim().length > 0);
+  return parts.join(' • ');
+}
+
+function RosterTab() {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  const groupsQ = useProviderGroups();
+  const payersQ = usePayers();
+  const statusesQ = useStatusConfigs('credentialing');
+  const providersQ = useProviders();
+  const casesQ = useCases();
+
+  const [groupId, setGroupId] = useState<string>('');
+  const [payerId, setPayerId] = useState<string>('');
+  const [stateSel, setStateSel] = useState<string>(ALL);
+  const [generated, setGenerated] = useState<{
+    groupId: string;
+    payerId: string;
+    state: string | null;
+  } | null>(null);
+
+  const canGenerate = Boolean(groupId) && Boolean(payerId);
+
+  const states = useMemo(() => {
+    const s = new Set<string>();
+    (casesQ.data ?? []).forEach((c) => {
+      if (!payerId || c.payerId === payerId) {
+        if (c.state) s.add(c.state);
+      }
+    });
+    return Array.from(s).sort();
+  }, [casesQ.data, payerId]);
+
+  const groupById = useMemo(
+    () => new Map((groupsQ.data ?? []).map((g) => [g.id, g])),
+    [groupsQ.data],
+  );
+  const payerById = useMemo(
+    () => new Map((payersQ.data ?? []).map((p) => [p.id, p])),
+    [payersQ.data],
+  );
+  const statusById = useMemo(
+    () => new Map((statusesQ.data ?? []).map((s) => [s.id, s])),
+    [statusesQ.data],
+  );
+
+  // Cases for the generated selection
+  const matchingCases = useMemo(() => {
+    if (!generated) return [];
+    return (casesQ.data ?? []).filter((c) => {
+      if (c.payerId !== generated.payerId) return false;
+      if (c.groupId !== generated.groupId) return false;
+      if (generated.state && c.state !== generated.state) return false;
+      return true;
+    });
+  }, [casesQ.data, generated]);
+
+  const providerIds = useMemo(
+    () => Array.from(new Set(matchingCases.map((c) => c.providerId))),
+    [matchingCases],
+  );
+
+  // Aux data: facility assignments, facilities, state licenses
+  const auxQ = useQuery<RosterAux>({
+    queryKey: ['roster-aux', orgId, providerIds],
+    enabled: orgId !== 'no-org' && providerIds.length > 0,
+    queryFn: async () => {
+      const [aRes, lRes] = await Promise.all([
+        supabase
+          .from('provider_facility_assignments')
+          .select('provider_id, facility_id')
+          .eq('org_id', orgId)
+          .in('provider_id', providerIds),
+        supabase
+          .from('state_licenses')
+          .select('provider_id, state, license_number, expiration_date')
+          .eq('org_id', orgId)
+          .in('provider_id', providerIds),
+      ]);
+      if (aRes.error) throw aRes.error;
+      if (lRes.error) throw lRes.error;
+      const assignments = (aRes.data ?? []).map((r) => ({
+        providerId: r.provider_id as string,
+        facilityId: r.facility_id as string,
+      }));
+      const facilityIds = Array.from(new Set(assignments.map((a) => a.facilityId).filter(Boolean)));
+      const matchingCaseFacilityIds = Array.from(
+        new Set(matchingCases.map((c) => c.facilityId).filter((v): v is string => Boolean(v))),
+      );
+      const allFacilityIds = Array.from(new Set([...facilityIds, ...matchingCaseFacilityIds]));
+      let facilities: RosterAux['facilities'] = [];
+      if (allFacilityIds.length > 0) {
+        const fRes = await supabase
+          .from('facilities')
+          .select('id, name, street, city, state, zip')
+          .eq('org_id', orgId)
+          .in('id', allFacilityIds);
+        if (fRes.error) throw fRes.error;
+        facilities = camelizeRow<RosterAux['facilities']>(fRes.data ?? []);
+      }
+      const licenses = (lRes.data ?? []).map((r) => ({
+        providerId: r.provider_id as string,
+        state: r.state as string,
+        licenseNumber: (r.license_number as string | null) ?? null,
+        expirationDate: (r.expiration_date as string | null) ?? null,
+      }));
+      return { assignments, facilities, licenses };
+    },
+  });
+
+  const rows: RosterRow[] = useMemo(() => {
+    if (!generated) return [];
+    const providerById = new Map(
+      (providersQ.data ?? []).map((p) => [p.id, p]),
+    );
+    const group = groupById.get(generated.groupId);
+    const aux = auxQ.data;
+    const facilityById = new Map((aux?.facilities ?? []).map((f) => [f.id, f]));
+    const assignmentByProvider = new Map<string, string>();
+    (aux?.assignments ?? []).forEach((a) => {
+      if (!assignmentByProvider.has(a.providerId)) {
+        assignmentByProvider.set(a.providerId, a.facilityId);
+      }
+    });
+
+    return matchingCases
+      .map((cs) => {
+        const p = providerById.get(cs.providerId);
+        if (!p) return null;
+        const status = cs.credentialingStatusId
+          ? statusById.get(cs.credentialingStatusId)
+          : null;
+        const facilityId = cs.facilityId ?? assignmentByProvider.get(p.id) ?? null;
+        const facility = facilityId ? facilityById.get(facilityId) : undefined;
+        const license = (aux?.licenses ?? []).find(
+          (l) => l.providerId === p.id && l.state === cs.state,
+        );
+        const eff = cs.confirmedEffectiveDate ?? cs.expectedEffectiveDate ?? null;
+        return {
+          lastName: p.lastName,
+          firstName: p.firstName,
+          credentials: p.credentials ?? '',
+          npi: p.npi ?? '',
+          groupNpi: group?.npiType2 ?? '',
+          tin: group?.tin ?? '',
+          taxonomyCode: p.taxonomyCode ?? '',
+          facilityName: facility?.name ?? '',
+          facilityAddress: formatAddress(facility),
+          state: cs.state,
+          licenseNumber: license?.licenseNumber ?? '',
+          licenseExpiration: license?.expirationDate
+            ? format(parseISO(license.expirationDate), 'yyyy-MM-dd')
+            : '',
+          caqhId: p.caqhId ?? '',
+          credentialingStatus: status?.label ?? '',
+          effectiveDate: eff ? format(parseISO(eff), 'yyyy-MM-dd') : '',
+        } satisfies RosterRow;
+      })
+      .filter((r): r is RosterRow => r !== null)
+      .sort((a, b) => a.lastName.localeCompare(b.lastName));
+  }, [generated, providersQ.data, matchingCases, groupById, statusById, auxQ.data]);
+
+  const loading =
+    !!generated &&
+    (casesQ.isLoading || providersQ.isLoading || statusesQ.isLoading || auxQ.isLoading);
+
+  function handleGenerate() {
+    if (!canGenerate) return;
+    setGenerated({
+      groupId,
+      payerId,
+      state: stateSel === ALL ? null : stateSel,
+    });
+  }
+
+  function handleDownload() {
+    if (!generated || rows.length === 0) return;
+    const group = groupById.get(generated.groupId);
+    const payer = payerById.get(generated.payerId);
+    const filename = `openpanel-roster-${slugify(group?.name ?? 'group')}-${slugify(payer?.name ?? 'payer')}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const header = [
+      'Last name',
+      'First name',
+      'Credentials',
+      'NPI (Type 1)',
+      'Group NPI (Type 2)',
+      'TIN',
+      'Taxonomy code',
+      'Primary facility name',
+      'Primary facility address',
+      'State',
+      'License number',
+      'License expiration',
+      'CAQH ID',
+      'Credentialing status',
+      'Effective date',
+    ];
+    downloadCsv(filename, [
+      header,
+      ...rows.map((r) => [
+        r.lastName,
+        r.firstName,
+        r.credentials,
+        r.npi,
+        r.groupNpi,
+        r.tin,
+        r.taxonomyCode,
+        r.facilityName,
+        r.facilityAddress,
+        r.state,
+        r.licenseNumber,
+        r.licenseExpiration,
+        r.caqhId,
+        r.credentialingStatus,
+        r.effectiveDate,
+      ]),
+    ]);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="border border-[#E8E5E0] rounded-md bg-white p-4 space-y-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Provider group <span className="text-[#DC2626]">*</span>
+            </Label>
+            <Select value={groupId} onValueChange={setGroupId}>
+              <SelectTrigger className="h-9 w-[240px]">
+                <SelectValue placeholder="Select group" />
+              </SelectTrigger>
+              <SelectContent>
+                {(groupsQ.data ?? []).map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Payer <span className="text-[#DC2626]">*</span>
+            </Label>
+            <Select value={payerId} onValueChange={setPayerId}>
+              <SelectTrigger className="h-9 w-[240px]">
+                <SelectValue placeholder="Select payer" />
+              </SelectTrigger>
+              <SelectContent>
+                {(payersQ.data ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+              State
+            </Label>
+            <Select value={stateSel} onValueChange={setStateSel}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue placeholder="All states" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All states</SelectItem>
+                {states.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            disabled={!canGenerate}
+            onClick={handleGenerate}
+            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+          >
+            Generate roster
+          </Button>
+          {generated && rows.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleDownload}
+              className="h-9 ml-auto"
+            >
+              <Download className="h-4 w-4 mr-1" /> Download CSV
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {!generated ? (
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center text-[13px] text-muted-foreground">
+          Choose a provider group and payer, then generate the roster.
+        </div>
+      ) : loading ? (
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center text-[13px] text-muted-foreground">
+          No providers in this group have a case for the selected payer
+          {generated.state ? ` in ${generated.state}` : ''}.
+        </div>
+      ) : (
+        <div className="border border-[#E8E5E0] rounded-md bg-white overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[#E8E5E0] text-xs uppercase tracking-wider text-muted-foreground bg-[#FAFAF9]">
+                <th className="text-left px-3 h-10 font-medium">Last name</th>
+                <th className="text-left px-3 h-10 font-medium">First name</th>
+                <th className="text-left px-3 h-10 font-medium">Credentials</th>
+                <th className="text-left px-3 h-10 font-medium">NPI (Type 1)</th>
+                <th className="text-left px-3 h-10 font-medium">Group NPI (Type 2)</th>
+                <th className="text-left px-3 h-10 font-medium">TIN</th>
+                <th className="text-left px-3 h-10 font-medium">Taxonomy</th>
+                <th className="text-left px-3 h-10 font-medium">Primary facility</th>
+                <th className="text-left px-3 h-10 font-medium">State</th>
+                <th className="text-left px-3 h-10 font-medium">License #</th>
+                <th className="text-left px-3 h-10 font-medium">License exp.</th>
+                <th className="text-left px-3 h-10 font-medium">CAQH ID</th>
+                <th className="text-left px-3 h-10 font-medium">Credentialing status</th>
+                <th className="text-left px-3 h-10 font-medium">Effective date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={`${r.lastName}-${r.firstName}-${r.state}-${i}`}
+                  className="border-b border-[#E8E5E0] last:border-b-0 h-10 hover:bg-[#FAFAF9]"
+                >
+                  <td className="px-3">{r.lastName}</td>
+                  <td className="px-3">{r.firstName}</td>
+                  <td className="px-3">{r.credentials || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.npi || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.groupNpi || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.tin || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.taxonomyCode || '—'}</td>
+                  <td className="px-3">
+                    {r.facilityName ? (
+                      <div className="flex flex-col leading-tight">
+                        <span>{r.facilityName}</span>
+                        {r.facilityAddress && (
+                          <span className="text-muted-foreground text-[11px]">
+                            {r.facilityAddress}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-3">{r.state}</td>
+                  <td className="px-3 tabular-nums">{r.licenseNumber || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.licenseExpiration || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.caqhId || '—'}</td>
+                  <td className="px-3">{r.credentialingStatus || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.effectiveDate || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
