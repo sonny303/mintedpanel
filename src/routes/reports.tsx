@@ -44,7 +44,7 @@ import { useProviders } from '@/hooks/useProviders';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
-import type { Contract, StatusConfig } from '@/types';
+import type { Contract, CredentialCase, StatusConfig } from '@/types';
 
 interface ReportsSearch {
   tab?: 'summary' | 'contracts' | 'matrix';
@@ -675,15 +675,17 @@ function EnrollmentMatrixTab() {
 
   // providerId → payerId → cases[]
   const cellMap = useMemo(() => {
-    const m = new Map<string, Map<string, typeof casesQ.data extends (infer T)[] | undefined ? T : never[]>>();
-    const cases = casesQ.data ?? [];
-    cases.forEach((c) => {
+    const m = new Map<string, Map<string, CredentialCase[]>>();
+    (casesQ.data ?? []).forEach((c) => {
       if (stateFilter !== ALL && c.state !== stateFilter) return;
-      if (!m.has(c.providerId)) m.set(c.providerId, new Map());
-      const inner = m.get(c.providerId)!;
-      const arr = (inner.get(c.payerId) ?? []) as typeof cases;
+      let inner = m.get(c.providerId);
+      if (!inner) {
+        inner = new Map<string, CredentialCase[]>();
+        m.set(c.providerId, inner);
+      }
+      const arr = inner.get(c.payerId) ?? [];
       arr.push(c);
-      inner.set(c.payerId, arr as never);
+      inner.set(c.payerId, arr);
     });
     return m;
   }, [casesQ.data, stateFilter]);
@@ -773,10 +775,7 @@ function EnrollmentMatrixTab() {
                         </Link>
                       </td>
                       {payers.map((p) => {
-                        const cellCases = (row?.get(p.id) ?? []) as ReturnType<
-                          typeof useCases
-                        >['data'];
-                        const list = Array.isArray(cellCases) ? cellCases : [];
+                        const list = row?.get(p.id) ?? [];
                         if (list.length === 0) {
                           return (
                             <td
