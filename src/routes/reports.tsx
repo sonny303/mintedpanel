@@ -62,13 +62,19 @@ import type { Contract, CredentialCase, StatusConfig, Touch } from '@/types';
 
 
 interface ReportsSearch {
-  tab?: 'summary' | 'contracts' | 'matrix';
+  tab?: 'summary' | 'contracts' | 'matrix' | 'roster';
 }
 
 export const Route = createFileRoute('/reports')({
   validateSearch: (s: Record<string, unknown>): ReportsSearch => {
     const tab = s.tab;
-    if (tab === 'contracts' || tab === 'matrix' || tab === 'summary') return { tab };
+    if (
+      tab === 'contracts' ||
+      tab === 'matrix' ||
+      tab === 'summary' ||
+      tab === 'roster'
+    )
+      return { tab };
     return {};
   },
   component: ReportsPage,
