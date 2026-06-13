@@ -368,6 +368,7 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
   const [msoId, setMsoId] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const key = rule?.id ?? (open ? 'new' : null);
   if (open && key !== hydratedFor) {
@@ -377,21 +378,23 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
     setRouteType((rule?.routeType as 'direct' | 'mso') ?? 'direct');
     setMsoId(rule?.msoId ?? '');
     setNotes(rule?.notes ?? '');
+    setSubmitError(null);
     setHydratedFor(key);
   }
   if (!open && hydratedFor !== null) setHydratedFor(null);
 
   async function handleSubmit() {
+    setSubmitError(null);
     if (!payerId) {
-      toast.error('Payer is required.');
+      setSubmitError('Payer is required.');
       return;
     }
     if (!state.trim()) {
-      toast.error('State is required.');
+      setSubmitError('State is required.');
       return;
     }
     if (routeType === 'mso' && !msoId) {
-      toast.error('MSO is required for MSO route type.');
+      setSubmitError('MSO is required for MSO route type.');
       return;
     }
     try {
@@ -409,12 +412,15 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
       toast.success(rule ? 'Rule updated.' : 'Rule added.');
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed.');
+      const msg = err instanceof Error ? err.message : 'Save failed.';
+      setSubmitError(msg);
+      toast.error(msg);
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{rule ? 'Edit routing rule' : 'Add routing rule'}</DialogTitle>
