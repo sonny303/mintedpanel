@@ -1,0 +1,2 @@
+ALTER TABLE public.sop_templates ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS sop_templates_org_archived_idx ON public.sop_templates (org_id, is_archived);
