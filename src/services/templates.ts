@@ -11,6 +11,7 @@ export interface TemplateInput {
   specialty?: string | null;
   payerId?: string | null;
   taskDefinitions: SOPTaskDefinition[];
+  isArchived?: boolean;
 }
 
 export async function listTemplates(): Promise<SOPTemplate[]> {
