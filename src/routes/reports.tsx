@@ -1,9 +1,20 @@
-// Reports at /reports — three tabs: Summary (placeholder), Contracts
-// (group + payer + state workflow), Enrollment Matrix (providers × payers).
+// Reports at /reports — three tabs: Summary (manager overview),
+// Contracts (group + payer + state workflow), Enrollment Matrix (providers × payers).
 import { useMemo, useState } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { format, parseISO } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
+import { Download, Plus } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,10 +52,14 @@ import {
 } from '@/hooks/useContracts';
 import { useCases } from '@/hooks/useCases';
 import { useProviders } from '@/hooks/useProviders';
+import { useTasks } from '@/hooks/useTasks';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
-import type { Contract, CredentialCase, StatusConfig } from '@/types';
+import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
+import { useRole, useActiveOrgId } from '@/lib/auth-store';
+import { supabase } from '@/integrations/supabase/externalClient';
+import { camelizeRow } from '@/lib/case';
+import type { Contract, CredentialCase, StatusConfig, Touch } from '@/types';
+
 
 interface ReportsSearch {
   tab?: 'summary' | 'contracts' | 'matrix';
