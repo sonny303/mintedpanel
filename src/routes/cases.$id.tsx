@@ -9,7 +9,7 @@ import {
   Check,
   CheckCircle2,
   Circle,
-  Clipboard,
+  Copy,
   ExternalLink,
   Globe,
   History,
@@ -264,7 +264,7 @@ function CaseDetailPage() {
                   {copiedEmailToken ? (
                     <Check className="w-3.5 h-3.5 text-[#059669]" />
                   ) : (
-                    <Clipboard className="w-3.5 h-3.5" />
+                    <Copy className="w-3.5 h-3.5" />
                   )}
                 </button>
               </p>
