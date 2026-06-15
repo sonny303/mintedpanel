@@ -6,8 +6,10 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   Calendar,
+  Check,
   CheckCircle2,
   Circle,
+  Clipboard,
   ExternalLink,
   Globe,
   History,
