@@ -511,6 +511,12 @@ function CaseDetailPage() {
                   <Row label="Coordinator" value={coordinatorName} />
                   <Row label="Group" value={c.group?.name ?? '—'} />
                   <Row label="Facility" value={c.facility?.name ?? '—'} />
+                  {c.caseEmailToken && (
+                    <>
+                      <Separator className="my-2" />
+                      <IdRow label="Forwarding ID" value={c.caseEmailToken} />
+                    </>
+                  )}
                 </dl>
               </CardContent>
             </Card>
