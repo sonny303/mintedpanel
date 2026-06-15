@@ -164,6 +164,7 @@ export interface CredentialCase {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  caseEmailToken: string | null;
 }
 
 export interface Contract {
