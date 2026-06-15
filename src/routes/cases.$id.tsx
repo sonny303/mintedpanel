@@ -141,6 +141,15 @@ function CaseDetailPage() {
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [addTouchOpen, setAddTouchOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
+  const [copiedEmailToken, setCopiedEmailToken] = useState(false);
+
+  const handleCopyToken = () => {
+    if (c?.caseEmailToken) {
+      navigator.clipboard.writeText(c.caseEmailToken).catch(() => {});
+      setCopiedEmailToken(true);
+      setTimeout(() => setCopiedEmailToken(false), 2000);
+    }
+  };
 
   const statusById = useMemo(() => {
     const m = new Map<string, StatusConfig>();
