@@ -126,7 +126,9 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLandingRoute = pathname === "/landing";
   const isAuthRoute = pathname === "/login";
+  const isPublicRoute = isAuthRoute || isLandingRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
@@ -138,10 +140,10 @@ function RootComponent() {
 
   useEffect(() => {
     if (!initialized) return;
-    if (!session && !isAuthRoute) {
+    if (!session && !isPublicRoute) {
       router.navigate({ to: "/login", replace: true });
     }
-  }, [initialized, session, isAuthRoute, router]);
+  }, [initialized, session, isPublicRoute, router]);
 
   if (!initialized) {
     return (
@@ -151,13 +153,13 @@ function RootComponent() {
     );
   }
 
-  if (!session && !isAuthRoute) {
+  if (!session && !isPublicRoute) {
     return null;
   }
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthRoute ? <Outlet /> : <AppShell><Outlet /></AppShell>}
+      {isPublicRoute ? <Outlet /> : <AppShell><Outlet /></AppShell>}
     </QueryClientProvider>
   );
 }
