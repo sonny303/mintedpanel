@@ -322,6 +322,63 @@ export type Database = {
           },
         ]
       }
+      group_insurance_policies: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          insurance_type: string
+          insurer_name: string
+          notes: string | null
+          org_id: string
+          policy_end_date: string
+          policy_number: string
+          policy_start_date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          insurance_type: string
+          insurer_name: string
+          notes?: string | null
+          org_id: string
+          policy_end_date: string
+          policy_number: string
+          policy_start_date: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          insurance_type?: string
+          insurer_name?: string
+          notes?: string | null
+          org_id?: string
+          policy_end_date?: string
+          policy_number?: string
+          policy_start_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_insurance_policies_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "provider_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_insurance_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
