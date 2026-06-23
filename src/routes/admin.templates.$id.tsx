@@ -50,21 +50,34 @@ interface EditableTask {
   steps: EditableStep[];
 }
 
-const ALLOWED_TOKENS = [
-  'provider.npi',
-  'provider.caqhId',
-  'provider.taxonomyCode',
-  'provider.firstName',
-  'provider.lastName',
-  'provider.email',
-  'provider.licenseNumber',
-  'group.tin',
-  'group.npiType2',
-  'group.name',
-  'facility.name',
-  'facility.address',
-  'mso.portalUrl',
-] as const;
+interface SopFieldToken {
+  token: string;
+  table: string;
+  column: string;
+}
+
+const TOKEN_GROUP_LABELS: Record<string, string> = {
+  provider: 'Provider',
+  group: 'Group',
+  facility: 'Facility',
+  mso: 'MSO',
+  group_insurance: 'Group Insurance',
+};
+
+const TOKEN_GROUP_ORDER = ['provider', 'group', 'facility', 'mso', 'group_insurance'];
+
+function useSopFieldTokens() {
+  return useQuery({
+    queryKey: ['sop-field-tokens'] as const,
+    queryFn: async (): Promise<SopFieldToken[]> => {
+      const { data, error } = await supabase.rpc('get_sop_field_tokens' as never);
+      if (error) throw error;
+      return (data ?? []) as SopFieldToken[];
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
