@@ -2,7 +2,9 @@
 // reorderable SOP steps and closed token data fields, plus live preview.
 import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Copy, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
