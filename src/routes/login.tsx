@@ -46,7 +46,7 @@ function LoginPage() {
         className="hidden md:flex flex-col justify-between p-12 text-white"
         style={{ backgroundColor: "#1B4D3E" }}
       >
-        <div className="text-[28px] font-semibold tracking-tight">OpenPanel</div>
+        <div className="text-[28px] font-semibold tracking-tight whitespace-pre-line">{"Minted Panel\nCredentialing"}</div>
         <div className="text-[14px] text-white/70 max-w-xs">
           Credentialing operations for allied health organizations.
         </div>
