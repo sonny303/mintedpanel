@@ -330,7 +330,7 @@ function TemplateEditor() {
                       ...s,
                       dataFields: [
                         ...s.dataFields,
-                        { label: '', token: ALLOWED_TOKENS[0] },
+                        { label: '', token: firstToken },
                       ],
                     }
                   : s,
