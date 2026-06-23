@@ -1236,6 +1236,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_sop_field_tokens: { Args: never; Returns: Json }
       user_org_ids: { Args: never; Returns: string[] }
       user_role: { Args: { p_org: string }; Returns: string }
     }
