@@ -119,7 +119,7 @@ function toEditable(defs: SOPTaskDefinition[] | null | undefined): EditableTask[
         label: raw.label ?? '',
         detail: raw.detail ?? '',
         dataFields: (raw.dataFields ?? []).filter((f) =>
-          (ALLOWED_TOKENS as readonly string[]).includes(f.token),
+          typeof f.token === 'string' && f.token.includes('.'),
         ),
       };
     }),
