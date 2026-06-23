@@ -2,7 +2,9 @@
 // reorderable SOP steps and closed token data fields, plus live preview.
 import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Copy, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -48,21 +50,34 @@ interface EditableTask {
   steps: EditableStep[];
 }
 
-const ALLOWED_TOKENS = [
-  'provider.npi',
-  'provider.caqhId',
-  'provider.taxonomyCode',
-  'provider.firstName',
-  'provider.lastName',
-  'provider.email',
-  'provider.licenseNumber',
-  'group.tin',
-  'group.npiType2',
-  'group.name',
-  'facility.name',
-  'facility.address',
-  'mso.portalUrl',
-] as const;
+interface SopFieldToken {
+  token: string;
+  table: string;
+  column: string;
+}
+
+const TOKEN_GROUP_LABELS: Record<string, string> = {
+  provider: 'Provider',
+  group: 'Group',
+  facility: 'Facility',
+  mso: 'MSO',
+  group_insurance: 'Group Insurance',
+};
+
+const TOKEN_GROUP_ORDER = ['provider', 'group', 'facility', 'mso', 'group_insurance'];
+
+function useSopFieldTokens() {
+  return useQuery({
+    queryKey: ['sop-field-tokens'] as const,
+    queryFn: async (): Promise<SopFieldToken[]> => {
+      const { data, error } = await supabase.rpc('get_sop_field_tokens' as never);
+      if (error) throw error;
+      return (data ?? []) as SopFieldToken[];
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
@@ -104,7 +119,7 @@ function toEditable(defs: SOPTaskDefinition[] | null | undefined): EditableTask[
         label: raw.label ?? '',
         detail: raw.detail ?? '',
         dataFields: (raw.dataFields ?? []).filter((f) =>
-          (ALLOWED_TOKENS as readonly string[]).includes(f.token),
+          typeof f.token === 'string' && f.token.includes('.'),
         ),
       };
     }),
@@ -121,7 +136,7 @@ function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
       label: s.label,
       detail: s.detail,
       dataFields: s.dataFields.filter((f) =>
-        (ALLOWED_TOKENS as readonly string[]).includes(f.token),
+        typeof f.token === 'string' && f.token.includes('.'),
       ),
     })) as SOPTaskDefinition['steps'],
   }));
@@ -141,6 +156,23 @@ function TemplateEditor() {
   const groupsQ = useProviderGroups();
   const updateMut = useUpdateTemplate(id);
   const createMut = useCreateTemplate();
+  const tokensQ = useSopFieldTokens();
+  const tokens = tokensQ.data ?? [];
+  const groupedTokens = useMemo(() => {
+    const map = new Map<string, SopFieldToken[]>();
+    for (const t of tokens) {
+      const prefix = t.token.split('.')[0];
+      const arr = map.get(prefix) ?? [];
+      arr.push(t);
+      map.set(prefix, arr);
+    }
+    return TOKEN_GROUP_ORDER.filter((p) => map.has(p)).map((p) => ({
+      prefix: p,
+      label: TOKEN_GROUP_LABELS[p] ?? p,
+      items: map.get(p) ?? [],
+    }));
+  }, [tokens]);
+  const firstToken = tokens[0]?.token ?? 'provider.npi';
 
   const tpl = tplQ.data as EditableTemplate | undefined;
 
@@ -298,7 +330,7 @@ function TemplateEditor() {
                       ...s,
                       dataFields: [
                         ...s.dataFields,
-                        { label: '', token: ALLOWED_TOKENS[0] },
+                        { label: '', token: firstToken },
                       ],
                     }
                   : s,
@@ -728,10 +760,17 @@ function TemplateEditor() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {ALLOWED_TOKENS.map((tk) => (
-                                          <SelectItem key={tk} value={tk}>
-                                            {tk}
-                                          </SelectItem>
+                                        {groupedTokens.map((grp) => (
+                                          <div key={grp.prefix}>
+                                            <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                                              {grp.label}
+                                            </div>
+                                            {grp.items.map((t) => (
+                                              <SelectItem key={t.token} value={t.token}>
+                                                {t.token}
+                                              </SelectItem>
+                                            ))}
+                                          </div>
                                         ))}
                                       </SelectContent>
                                     </Select>
