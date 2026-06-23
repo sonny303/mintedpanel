@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -440,6 +441,11 @@ function OrganizationTab() {
                     ))}
                   </ul>
                 )}
+                {g.id !== '__none__' ? (
+                  <div className="mt-4">
+                    <InsurancePoliciesSection groupId={g.id} canEdit={canEdit} />
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -875,5 +881,313 @@ function TeamTab() {
         </table>
       </div>
     </div>
+  );
+}
+
+/* --------------------------- Insurance Policies --------------------------- */
+
+type InsuranceType = 'professional_liability' | 'general_liability';
+
+interface InsurancePolicy {
+  id: string;
+  orgId: string;
+  groupId: string;
+  insuranceType: InsuranceType;
+  insurerName: string;
+  policyNumber: string;
+  policyStartDate: string;
+  policyEndDate: string;
+  notes: string | null;
+}
+
+function useGroupInsurancePolicies(groupId: string) {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['group-insurance-policies', orgId, groupId] as const,
+    queryFn: async (): Promise<InsurancePolicy[]> => {
+      const { data, error } = await supabase
+        .from('group_insurance_policies' as never)
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('group_id', groupId)
+        .order('policy_end_date', { ascending: false });
+      if (error) throw error;
+      return camelizeRow<InsurancePolicy[]>((data ?? []) as never);
+    },
+    enabled: orgId !== 'no-org' && Boolean(groupId),
+  });
+}
+
+function insuranceTypeLabel(t: InsuranceType): string {
+  return t === 'professional_liability' ? 'Professional Liability' : 'General Liability';
+}
+
+function policyStatus(start: string, end: string): { label: string; cls: string } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const s = new Date(start);
+  const e = new Date(end);
+  if (today < s) {
+    return {
+      label: 'Future',
+      cls: 'bg-[#F5F5F4] text-[#9CA3AF] border-[#E8E5E0]',
+    };
+  }
+  if (today > e) {
+    return {
+      label: 'Expired',
+      cls: 'bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]',
+    };
+  }
+  return {
+    label: 'Active',
+    cls: 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]',
+  };
+}
+
+function InsurancePoliciesSection({
+  groupId,
+  canEdit,
+}: {
+  groupId: string;
+  canEdit: boolean;
+}) {
+  const policiesQ = useGroupInsurancePolicies(groupId);
+  const [modal, setModal] = useState<{ policy: InsurancePolicy | null } | null>(null);
+
+  return (
+    <div className="border border-[#E8E5E0] rounded-md bg-white">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#E8E5E0]">
+        <div className="text-[13px] font-semibold">Insurance Policies</div>
+        {canEdit && (
+          <Button
+            size="sm"
+            onClick={() => setModal({ policy: null })}
+            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-7 text-[11px] px-2"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy
+          </Button>
+        )}
+      </div>
+      {policiesQ.isLoading ? (
+        <div className="p-4 text-[12px] text-muted-foreground">Loading…</div>
+      ) : (policiesQ.data ?? []).length === 0 ? (
+        <div className="p-4 text-[12px] text-muted-foreground">
+          No insurance policies. Add a policy to track group coverage.
+        </div>
+      ) : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
+              {['Type', 'Insurer', 'Policy #', 'Start Date', 'End Date', 'Status'].map(
+                (h, i) => (
+                  <th
+                    key={i}
+                    className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {(policiesQ.data ?? []).map((p) => {
+              const status = policyStatus(p.policyStartDate, p.policyEndDate);
+              return (
+                <tr
+                  key={p.id}
+                  onClick={() => canEdit && setModal({ policy: p })}
+                  className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${
+                    canEdit ? 'cursor-pointer' : ''
+                  }`}
+                >
+                  <td className="px-3 h-10 align-middle">{insuranceTypeLabel(p.insuranceType)}</td>
+                  <td className="px-3 h-10 align-middle font-medium">{p.insurerName}</td>
+                  <td className="px-3 h-10 align-middle text-muted-foreground">
+                    {p.policyNumber}
+                  </td>
+                  <td className="px-3 h-10 align-middle text-muted-foreground">
+                    {format(new Date(p.policyStartDate), 'MMM d, yyyy')}
+                  </td>
+                  <td className="px-3 h-10 align-middle text-muted-foreground">
+                    {format(new Date(p.policyEndDate), 'MMM d, yyyy')}
+                  </td>
+                  <td className="px-3 h-10 align-middle">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border ${status.cls}`}
+                    >
+                      {status.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {modal ? (
+        <InsurancePolicyEditModal
+          groupId={groupId}
+          policy={modal.policy}
+          onClose={() => setModal(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function InsurancePolicyEditModal({
+  groupId,
+  policy,
+  onClose,
+}: {
+  groupId: string;
+  policy: InsurancePolicy | null;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId();
+  const [insuranceType, setInsuranceType] = useState<InsuranceType>(
+    policy?.insuranceType ?? 'professional_liability',
+  );
+  const [insurerName, setInsurerName] = useState(policy?.insurerName ?? '');
+  const [policyNumber, setPolicyNumber] = useState(policy?.policyNumber ?? '');
+  const [startDate, setStartDate] = useState(policy?.policyStartDate ?? '');
+  const [endDate, setEndDate] = useState(policy?.policyEndDate ?? '');
+  const [notes, setNotes] = useState(policy?.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!orgId) throw new Error('No active organization');
+      if (!insurerName.trim()) throw new Error('Insurer name is required');
+      if (!policyNumber.trim()) throw new Error('Policy number is required');
+      if (!startDate) throw new Error('Start date is required');
+      if (!endDate) throw new Error('End date is required');
+      const payload = {
+        org_id: orgId,
+        group_id: groupId,
+        insurance_type: insuranceType,
+        insurer_name: insurerName.trim(),
+        policy_number: policyNumber.trim(),
+        policy_start_date: startDate,
+        policy_end_date: endDate,
+        notes: notes.trim() || null,
+      };
+      if (policy) {
+        const { error: err } = await supabase
+          .from('group_insurance_policies' as never)
+          .update(payload as never)
+          .eq('id', policy.id)
+          .eq('org_id', orgId);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase
+          .from('group_insurance_policies' as never)
+          .insert(payload as never);
+        if (err) throw err;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['group-insurance-policies', orgId ?? 'no-org', groupId],
+      });
+      toast.success(policy ? 'Policy updated' : 'Policy created');
+      onClose();
+    },
+    onError: (e) => {
+      const msg = e instanceof Error ? e.message : 'Save failed';
+      setError(msg);
+      toast.error(msg);
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none">
+        <DialogHeader>
+          <DialogTitle>{policy ? 'Edit policy' : 'Add policy'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-[12px]">Insurance Type</Label>
+            <Select
+              value={insuranceType}
+              onValueChange={(v) => setInsuranceType(v as InsuranceType)}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="professional_liability">Professional Liability</SelectItem>
+                <SelectItem value="general_liability">General Liability</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-[12px]">Insurer Name</Label>
+            <Input
+              value={insurerName}
+              onChange={(e) => setInsurerName(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <div>
+            <Label className="text-[12px]">Policy #</Label>
+            <Input
+              value={policyNumber}
+              onChange={(e) => setPolicyNumber(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-[12px]">Start Date</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div>
+              <Label className="text-[12px]">End Date</Label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+          <div>
+            <Label className="text-[12px]">Notes</Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+            />
+          </div>
+          {error ? (
+            <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
+              {error}
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending}
+            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+          >
+            {mut.isPending ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
