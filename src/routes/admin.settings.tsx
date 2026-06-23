@@ -147,8 +147,8 @@ function AdminSettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Settings"
-        description="Organization, provider groups, facilities, and team."
+        title="Group & Locations"
+        description="Provider groups, facilities, insurance, and team."
       />
       <Tabs defaultValue="organization" className="w-full">
         <TabsList className="bg-[#FAFAF9] border border-[#E8E5E0] rounded-md">
@@ -657,14 +657,14 @@ function FacilityEditModal({
           <div>
             <Label className="text-[12px]">Provider group</Label>
             <Select value={groupId} onValueChange={setGroupId}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
+              <SelectTrigger className="h-9 w-full" title={groups.find((g) => g.id === groupId)?.name ?? 'Unassigned'}>
+                <SelectValue className="truncate" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Unassigned</SelectItem>
                 {groups.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.name}
+                  <SelectItem key={g.id} value={g.id} title={g.name}>
+                    <span className="truncate block max-w-[360px]">{g.name}</span>
                   </SelectItem>
                 ))}
               </SelectContent>

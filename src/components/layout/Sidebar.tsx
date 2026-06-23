@@ -6,7 +6,7 @@ import {
   FileStack,
   CheckSquare,
   BarChart3,
-  Settings,
+  
   Shield,
   FileText,
   Network,
@@ -35,7 +35,7 @@ const adminNav: NavLink[] = [
   { to: '/admin/mso-routing', label: 'MSO Routing', icon: Network },
   { to: '/admin/payers', label: 'Payers', icon: Building2 },
   { to: '/admin/audit', label: 'Audit Log', icon: FileStack },
-  { to: '/admin/settings', label: 'Settings', icon: Settings },
+  { to: '/admin/settings', label: 'Group & Locations', icon: Building2 },
 ];
 
 import { useRole } from '@/lib/auth-store';
