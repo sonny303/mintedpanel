@@ -6,7 +6,7 @@ import {
   FileStack,
   CheckSquare,
   BarChart3,
-  Settings,
+  Settings as SettingsIcon,
   Shield,
   FileText,
   Network,
