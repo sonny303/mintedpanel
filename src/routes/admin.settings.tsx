@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronDown } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -479,12 +481,46 @@ function GroupEditModal({
 }) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId();
+  const g = (group ?? {}) as Record<string, unknown>;
+  const initStr = (k: string) => (typeof g[k] === 'string' ? (g[k] as string) : '');
   const [name, setName] = useState(group?.name ?? '');
   const [tin, setTin] = useState(group?.tin ?? '');
   const [npi, setNpi] = useState(group?.npiType2 ?? '');
   const [states, setStates] = useState<string>(group?.states?.join(', ') ?? '');
   const [active, setActive] = useState<boolean>(group?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
+
+  const [billStreet, setBillStreet] = useState(initStr('billingStreet'));
+  const [billCity, setBillCity] = useState(initStr('billingCity'));
+  const [billState, setBillState] = useState(initStr('billingState'));
+  const [billZip, setBillZip] = useState(initStr('billingZip'));
+
+  const [corrStreet, setCorrStreet] = useState(initStr('correspondenceStreet'));
+  const [corrCity, setCorrCity] = useState(initStr('correspondenceCity'));
+  const [corrState, setCorrState] = useState(initStr('correspondenceState'));
+  const [corrZip, setCorrZip] = useState(initStr('correspondenceZip'));
+
+  const initialSame =
+    Boolean(group) &&
+    (initStr('correspondenceStreet') !== '' || initStr('correspondenceCity') !== '') &&
+    initStr('correspondenceStreet') === initStr('billingStreet') &&
+    initStr('correspondenceCity') === initStr('billingCity') &&
+    initStr('correspondenceState') === initStr('billingState') &&
+    initStr('correspondenceZip') === initStr('billingZip');
+  const [sameAsBilling, setSameAsBilling] = useState<boolean>(initialSame);
+
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [corrOpen, setCorrOpen] = useState(false);
+
+  const onToggleSame = (v: boolean) => {
+    setSameAsBilling(v);
+    if (v) {
+      setCorrStreet(billStreet);
+      setCorrCity(billCity);
+      setCorrState(billState);
+      setCorrZip(billZip);
+    }
+  };
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -494,6 +530,10 @@ function GroupEditModal({
         .split(',')
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean);
+      const cs = sameAsBilling ? billStreet : corrStreet;
+      const cc = sameAsBilling ? billCity : corrCity;
+      const cst = sameAsBilling ? billState : corrState;
+      const cz = sameAsBilling ? billZip : corrZip;
       const payload = {
         org_id: orgId,
         name: name.trim(),
@@ -501,6 +541,14 @@ function GroupEditModal({
         npi_type2: npi.trim() || null,
         states: stateArr.length > 0 ? stateArr : null,
         is_active: active,
+        billing_street: billStreet.trim() || null,
+        billing_city: billCity.trim() || null,
+        billing_state: billState || null,
+        billing_zip: billZip.trim() || null,
+        correspondence_street: cs.trim() || null,
+        correspondence_city: cc.trim() || null,
+        correspondence_state: cst || null,
+        correspondence_zip: cz.trim() || null,
       };
       if (group) {
         const { error } = await supabase
@@ -528,36 +576,135 @@ function GroupEditModal({
     },
   });
 
+  const renderStateSelect = (value: string, onChange: (v: string) => void, disabled = false) => (
+    <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="h-9 rounded-[4px]">
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        {US_STATES.map((s) => (
+          <SelectItem key={s} value={s}>{s}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const sectionTriggerCls =
+    'flex w-full items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2 text-[13px] font-medium hover:bg-[#FAFAF9] [&[data-state=open]>svg]:rotate-180';
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none">
+      <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{group ? 'Edit provider group' : 'Add provider group'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <Label className="text-[12px]">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
+            <Label className="text-[12px] uppercase tracking-wider">Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 rounded-[4px]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-[12px]">TIN</Label>
-              <Input value={tin} onChange={(e) => setTin(e.target.value)} className="h-9" />
+              <Label className="text-[12px] uppercase tracking-wider">TIN</Label>
+              <Input value={tin} onChange={(e) => setTin(e.target.value)} className="h-9 rounded-[4px]" />
             </div>
             <div>
-              <Label className="text-[12px]">Group NPI</Label>
-              <Input value={npi} onChange={(e) => setNpi(e.target.value)} className="h-9" />
+              <Label className="text-[12px] uppercase tracking-wider">Group NPI</Label>
+              <Input value={npi} onChange={(e) => setNpi(e.target.value)} className="h-9 rounded-[4px]" />
             </div>
           </div>
           <div>
-            <Label className="text-[12px]">States (comma separated)</Label>
+            <Label className="text-[12px] uppercase tracking-wider">States (comma separated)</Label>
             <Input
               value={states}
               onChange={(e) => setStates(e.target.value)}
               placeholder="TX, CA, NY"
-              className="h-9"
+              className="h-9 rounded-[4px]"
             />
           </div>
+
+          <Collapsible open={billingOpen} onOpenChange={setBillingOpen}>
+            <CollapsibleTrigger className={sectionTriggerCls}>
+              <span>Billing address</span>
+              <ChevronDown className="h-4 w-4 text-[#6B7280] transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3 space-y-3">
+              <p className="text-[12px] text-[#6B7280]">Where payers send checks and EOBs.</p>
+              <div>
+                <Label className="text-[12px] uppercase tracking-wider">Street</Label>
+                <Input value={billStreet} onChange={(e) => setBillStreet(e.target.value)} className="h-9 rounded-[4px]" />
+              </div>
+              <div className="grid grid-cols-[1fr_120px_120px] gap-3">
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">City</Label>
+                  <Input value={billCity} onChange={(e) => setBillCity(e.target.value)} className="h-9 rounded-[4px]" />
+                </div>
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">State</Label>
+                  {renderStateSelect(billState, setBillState)}
+                </div>
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">Zip</Label>
+                  <Input value={billZip} onChange={(e) => setBillZip(e.target.value)} className="h-9 rounded-[4px]" />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          <Collapsible open={corrOpen} onOpenChange={setCorrOpen}>
+            <CollapsibleTrigger className={sectionTriggerCls}>
+              <span>Correspondence address</span>
+              <ChevronDown className="h-4 w-4 text-[#6B7280] transition-transform" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3 space-y-3">
+              <p className="text-[12px] text-[#6B7280]">Where payers send credentialing mail.</p>
+              <label className="flex items-center gap-2 text-[13px]">
+                <Checkbox
+                  checked={sameAsBilling}
+                  onCheckedChange={(v) => onToggleSame(v === true)}
+                />
+                <span>Same as billing address</span>
+              </label>
+              <div>
+                <Label className="text-[12px] uppercase tracking-wider">Street</Label>
+                <Input
+                  value={sameAsBilling ? billStreet : corrStreet}
+                  onChange={(e) => setCorrStreet(e.target.value)}
+                  disabled={sameAsBilling}
+                  className="h-9 rounded-[4px]"
+                />
+              </div>
+              <div className="grid grid-cols-[1fr_120px_120px] gap-3">
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">City</Label>
+                  <Input
+                    value={sameAsBilling ? billCity : corrCity}
+                    onChange={(e) => setCorrCity(e.target.value)}
+                    disabled={sameAsBilling}
+                    className="h-9 rounded-[4px]"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">State</Label>
+                  {renderStateSelect(
+                    sameAsBilling ? billState : corrState,
+                    setCorrState,
+                    sameAsBilling,
+                  )}
+                </div>
+                <div>
+                  <Label className="text-[12px] uppercase tracking-wider">Zip</Label>
+                  <Input
+                    value={sameAsBilling ? billZip : corrZip}
+                    onChange={(e) => setCorrZip(e.target.value)}
+                    disabled={sameAsBilling}
+                    className="h-9 rounded-[4px]"
+                  />
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
           <div className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
             <div className="text-[13px] font-medium">Active</div>
             <Switch checked={active} onCheckedChange={setActive} />
