@@ -156,6 +156,23 @@ function TemplateEditor() {
   const groupsQ = useProviderGroups();
   const updateMut = useUpdateTemplate(id);
   const createMut = useCreateTemplate();
+  const tokensQ = useSopFieldTokens();
+  const tokens = tokensQ.data ?? [];
+  const groupedTokens = useMemo(() => {
+    const map = new Map<string, SopFieldToken[]>();
+    for (const t of tokens) {
+      const prefix = t.token.split('.')[0];
+      const arr = map.get(prefix) ?? [];
+      arr.push(t);
+      map.set(prefix, arr);
+    }
+    return TOKEN_GROUP_ORDER.filter((p) => map.has(p)).map((p) => ({
+      prefix: p,
+      label: TOKEN_GROUP_LABELS[p] ?? p,
+      items: map.get(p) ?? [],
+    }));
+  }, [tokens]);
+  const firstToken = tokens[0]?.token ?? 'provider.npi';
 
   const tpl = tplQ.data as EditableTemplate | undefined;
 
