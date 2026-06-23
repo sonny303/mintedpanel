@@ -2,7 +2,7 @@
 @source "../src";
 @import "tw-animate-css";
 
-/* OpenPanel — Light mode only */
+/* Minted Panel — Light mode only */
 
 @theme inline {
   --font-sans:
