@@ -441,6 +441,11 @@ function OrganizationTab() {
                     ))}
                   </ul>
                 )}
+                {g.id !== '__none__' ? (
+                  <div className="mt-4">
+                    <InsurancePoliciesSection groupId={g.id} canEdit={canEdit} />
+                  </div>
+                ) : null}
               </div>
             );
           })}
