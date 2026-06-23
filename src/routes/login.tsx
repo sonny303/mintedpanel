@@ -1,4 +1,4 @@
-// Login page: OpenPanel wordmark on the deep-green left panel, email + password
+// Login page: Minted Panel wordmark on the deep-green left panel, email + password
 // form on the right. Shows an inline error on bad credentials.
 import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
