@@ -147,8 +147,8 @@ function AdminSettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Settings"
-        description="Organization, provider groups, facilities, and team."
+        title="Group & Locations"
+        description="Provider groups, facilities, insurance, and team."
       />
       <Tabs defaultValue="organization" className="w-full">
         <TabsList className="bg-[#FAFAF9] border border-[#E8E5E0] rounded-md">
