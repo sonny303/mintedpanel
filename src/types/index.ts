@@ -1,4 +1,4 @@
-// Domain types for OpenPanel. App code uses camelCase; database rows are
+// Domain types for Minted Panel. App code uses camelCase; database rows are
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 
 export type AppRole = 'specialist' | 'billing' | 'admin';

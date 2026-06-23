@@ -380,7 +380,7 @@ function Step1({ form, update, errors }: StepProps) {
       <Field
         label="SSN last 4"
         error={errors.ssnLast4}
-        helper="Last 4 only — OpenPanel never stores full SSNs"
+        helper="Last 4 only — Minted Panel never stores full SSNs"
       >
         <div className="flex items-center gap-2">
           <span className="select-none font-mono text-sm text-muted-foreground">xxx-xx-</span>

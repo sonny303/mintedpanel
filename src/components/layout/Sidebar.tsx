@@ -62,7 +62,7 @@ export function Sidebar() {
           <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center">
             <Shield className="w-4 h-4 text-white" />
           </div>
-          OpenPanel
+          Minted Panel Cre
         </div>
       </div>
 

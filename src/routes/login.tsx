@@ -1,4 +1,4 @@
-// Login page: OpenPanel wordmark on the deep-green left panel, email + password
+// Login page: Minted Panel wordmark on the deep-green left panel, email + password
 // form on the right. Shows an inline error on bad credentials.
 import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
@@ -46,7 +46,7 @@ function LoginPage() {
         className="hidden md:flex flex-col justify-between p-12 text-white"
         style={{ backgroundColor: "#1B4D3E" }}
       >
-        <div className="text-[28px] font-semibold tracking-tight">OpenPanel</div>
+        <div className="text-[28px] font-semibold tracking-tight whitespace-pre-line">{"Minted Panel\nCredentialing"}</div>
         <div className="text-[14px] text-white/70 max-w-xs">
           Credentialing operations for allied health organizations.
         </div>
@@ -59,7 +59,7 @@ function LoginPage() {
               Sign in
             </h1>
             <p className="mt-1 text-[14px] text-muted-foreground">
-              Use your OpenPanel credentials.
+              Use your Minted Panel credentials.
             </p>
           </div>
 
