@@ -136,7 +136,7 @@ function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
       label: s.label,
       detail: s.detail,
       dataFields: s.dataFields.filter((f) =>
-        (ALLOWED_TOKENS as readonly string[]).includes(f.token),
+        typeof f.token === 'string' && f.token.includes('.'),
       ),
     })) as SOPTaskDefinition['steps'],
   }));
