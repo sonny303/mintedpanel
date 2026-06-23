@@ -59,7 +59,7 @@ function LoginPage() {
               Sign in
             </h1>
             <p className="mt-1 text-[14px] text-muted-foreground">
-              Use your OpenPanel credentials.
+              Use your Minted Panel credentials.
             </p>
           </div>
 
