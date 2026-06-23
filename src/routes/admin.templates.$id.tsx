@@ -760,10 +760,17 @@ function TemplateEditor() {
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {ALLOWED_TOKENS.map((tk) => (
-                                          <SelectItem key={tk} value={tk}>
-                                            {tk}
-                                          </SelectItem>
+                                        {groupedTokens.map((grp) => (
+                                          <div key={grp.prefix}>
+                                            <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                                              {grp.label}
+                                            </div>
+                                            {grp.items.map((t) => (
+                                              <SelectItem key={t.token} value={t.token}>
+                                                {t.token}
+                                              </SelectItem>
+                                            ))}
+                                          </div>
                                         ))}
                                       </SelectContent>
                                     </Select>
