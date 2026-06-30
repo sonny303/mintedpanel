@@ -100,7 +100,7 @@ function ProviderDetailPage() {
   const msosQ = useMsos();
   const statusesQ = useStatusConfigs();
   const groupsQ = useProviderGroups();
-  const licensesQ = useStateLicensesByProvider(id);
+  
 
   const payerById = useMemo(() => {
     const m = new Map<string, Payer>();
