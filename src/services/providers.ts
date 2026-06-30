@@ -143,6 +143,78 @@ export async function updateProvider(
   return after;
 }
 
+export interface LicenseInput {
+  state: string;
+  licenseNumber: string | null;
+  licenseType: string | null;
+  issueDate: string | null;
+  expirationDate: string | null;
+}
+
+export interface UpdateProviderWithLicensesInput {
+  patch: Partial<ProviderInput>;
+  licenses: LicenseInput[];
+}
+
+export async function updateProviderWithLicenses(
+  id: string,
+  input: UpdateProviderWithLicensesInput,
+): Promise<Provider> {
+  const orgId = requireActiveOrg();
+  const before = await getProvider(id);
+  const { data: licsBefore } = await supabase
+    .from('state_licenses')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('provider_id', id);
+
+  const payload = snakeizeRow<Record<string, unknown>>(input.patch);
+  const { data, error } = await supabase
+    .from('providers')
+    .update(payload as never)
+    .eq('id', id)
+    .eq('org_id', orgId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<Provider>(data);
+
+  const { error: delErr } = await supabase
+    .from('state_licenses')
+    .delete()
+    .eq('org_id', orgId)
+    .eq('provider_id', id);
+  if (delErr) throw delErr;
+
+  const rows = input.licenses
+    .filter((l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType)
+    .map((l) => ({
+      org_id: orgId,
+      provider_id: id,
+      state: l.state || '',
+      license_number: l.licenseNumber,
+      license_type: l.licenseType,
+      issue_date: l.issueDate,
+      expiration_date: l.expirationDate,
+    }));
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from('state_licenses').insert(rows as never);
+    if (insErr) throw insErr;
+  }
+
+  await writeAudit({
+    actionType: 'UPDATE',
+    entityType: 'provider',
+    entityId: id,
+    before: { provider: before, licenses: licsBefore ?? [] },
+    after: { provider: after, licenses: rows },
+    description: `Updated provider ${after.firstName} ${after.lastName}`,
+  });
+
+  return after;
+}
+
+
 const TERMINATION_ACTIVE_LABELS = ['active', 'approved, pending effective date'];
 
 function buildTerminationSteps(): {
