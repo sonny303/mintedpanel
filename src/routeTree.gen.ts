@@ -21,7 +21,6 @@ import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
-import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
@@ -29,6 +28,7 @@ import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
+import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
@@ -93,11 +93,6 @@ const ProvidersNewRoute = ProvidersNewRouteImport.update({
   path: '/new',
   getParentRoute: () => ProvidersRoute,
 } as any)
-const ProvidersIdRoute = ProvidersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => ProvidersRoute,
-} as any)
 const CasesIdRoute = CasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -133,15 +128,20 @@ const AdminAuditRoute = AdminAuditRouteImport.update({
   path: '/admin/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
+  id: '/$id/',
+  path: '/$id/',
+  getParentRoute: () => ProvidersRoute,
+} as any)
 const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminTemplatesRoute,
 } as any)
 const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
-  getParentRoute: () => ProvidersIdRoute,
+  id: '/$id/edit',
+  path: '/$id/edit',
+  getParentRoute: () => ProvidersRoute,
 } as any)
 const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
   id: '/$id',
@@ -164,7 +164,6 @@ export interface FileRoutesByFullPath {
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
@@ -173,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/providers/$id/': typeof ProvidersIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -185,7 +185,6 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
@@ -194,6 +193,7 @@ export interface FileRoutesByTo {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
+  '/providers/$id': typeof ProvidersIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -211,7 +211,6 @@ export interface FileRoutesById {
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
@@ -220,6 +219,7 @@ export interface FileRoutesById {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/providers/$id/': typeof ProvidersIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -238,7 +238,6 @@ export interface FileRouteTypes {
     | '/admin/statuses'
     | '/admin/templates'
     | '/cases/$id'
-    | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases/'
@@ -247,6 +246,7 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates/'
+    | '/providers/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -259,7 +259,6 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/statuses'
     | '/cases/$id'
-    | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases'
@@ -268,6 +267,7 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates'
+    | '/providers/$id'
   id:
     | '__root__'
     | '/'
@@ -284,7 +284,6 @@ export interface FileRouteTypes {
     | '/admin/statuses'
     | '/admin/templates'
     | '/cases/$id'
-    | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases/'
@@ -293,6 +292,7 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates/'
+    | '/providers/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -397,13 +397,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersNewRouteImport
       parentRoute: typeof ProvidersRoute
     }
-    '/providers/$id': {
-      id: '/providers/$id'
-      path: '/$id'
-      fullPath: '/providers/$id'
-      preLoaderRoute: typeof ProvidersIdRouteImport
-      parentRoute: typeof ProvidersRoute
-    }
     '/cases/$id': {
       id: '/cases/$id'
       path: '/$id'
@@ -453,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/providers/$id/': {
+      id: '/providers/$id/'
+      path: '/$id'
+      fullPath: '/providers/$id/'
+      preLoaderRoute: typeof ProvidersIdIndexRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
     '/admin/templates/': {
       id: '/admin/templates/'
       path: '/'
@@ -462,10 +462,10 @@ declare module '@tanstack/react-router' {
     }
     '/providers/$id/edit': {
       id: '/providers/$id/edit'
-      path: '/edit'
+      path: '/$id/edit'
       fullPath: '/providers/$id/edit'
       preLoaderRoute: typeof ProvidersIdEditRouteImport
-      parentRoute: typeof ProvidersIdRoute
+      parentRoute: typeof ProvidersRoute
     }
     '/admin/templates/$id': {
       id: '/admin/templates/$id'
@@ -489,28 +489,18 @@ const CasesRouteChildren: CasesRouteChildren = {
 
 const CasesRouteWithChildren = CasesRoute._addFileChildren(CasesRouteChildren)
 
-interface ProvidersIdRouteChildren {
-  ProvidersIdEditRoute: typeof ProvidersIdEditRoute
-}
-
-const ProvidersIdRouteChildren: ProvidersIdRouteChildren = {
-  ProvidersIdEditRoute: ProvidersIdEditRoute,
-}
-
-const ProvidersIdRouteWithChildren = ProvidersIdRoute._addFileChildren(
-  ProvidersIdRouteChildren,
-)
-
 interface ProvidersRouteChildren {
-  ProvidersIdRoute: typeof ProvidersIdRouteWithChildren
   ProvidersNewRoute: typeof ProvidersNewRoute
   ProvidersIndexRoute: typeof ProvidersIndexRoute
+  ProvidersIdEditRoute: typeof ProvidersIdEditRoute
+  ProvidersIdIndexRoute: typeof ProvidersIdIndexRoute
 }
 
 const ProvidersRouteChildren: ProvidersRouteChildren = {
-  ProvidersIdRoute: ProvidersIdRouteWithChildren,
   ProvidersNewRoute: ProvidersNewRoute,
   ProvidersIndexRoute: ProvidersIndexRoute,
+  ProvidersIdEditRoute: ProvidersIdEditRoute,
+  ProvidersIdIndexRoute: ProvidersIdIndexRoute,
 }
 
 const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(

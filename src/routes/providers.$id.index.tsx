@@ -46,7 +46,7 @@ import type {
   StatusConfig,
 } from '@/types';
 
-export const Route = createFileRoute('/providers/$id')({
+export const Route = createFileRoute('/providers/$id/')({
   component: ProviderDetailPage,
 });
 
