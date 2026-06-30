@@ -137,7 +137,8 @@ function AdminPayersPage() {
                 (payersQ.data ?? []).map((p) => (
                   <tr
                     key={p.id}
-                    className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
+                    onClick={() => canEdit && setEditing({ payer: p })}
+                    className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${canEdit ? 'cursor-pointer' : ''}`}
                   >
                     <td className="px-3 h-10 align-middle font-medium">{p.name}</td>
                     <td className="px-3 h-10 align-middle">
