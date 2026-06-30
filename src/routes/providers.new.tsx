@@ -119,29 +119,12 @@ type Errors = Partial<Record<string, string>>;
 function validateStep(step: number, f: FormState): Errors {
   const e: Errors = {};
   if (step === 1) {
-    if (!f.firstName.trim()) e.firstName = 'Required';
-    if (!f.lastName.trim()) e.lastName = 'Required';
     if (f.ssnLast4 && !/^\d{4}$/.test(f.ssnLast4)) e.ssnLast4 = 'Enter exactly 4 digits';
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = 'Invalid email';
   }
   if (step === 2) {
-    if (!/^1\d{9}$/.test(f.npi)) e.npi = 'NPI must be 10 digits and start with 1';
+    if (f.npi && !/^1\d{9}$/.test(f.npi)) e.npi = 'NPI must be 10 digits and start with 1';
     if (!f.isNewGrad && f.caqhId && !/^\d{8}$/.test(f.caqhId)) e.caqhId = 'CAQH must be 8 digits';
-    if (!f.taxonomyCode.trim()) e.taxonomyCode = 'Required';
-  }
-  if (step === 3) {
-    if (f.licenses.length === 0) e.licenses = 'At least one license required';
-    f.licenses.forEach((l, i) => {
-      if (!l.state) e[`lic-${i}-state`] = 'Required';
-      if (!l.number.trim()) e[`lic-${i}-number`] = 'Required';
-      if (!l.type) e[`lic-${i}-type`] = 'Required';
-      if (!l.issueDate) e[`lic-${i}-issueDate`] = 'Required';
-      if (!l.expirationDate) e[`lic-${i}-expirationDate`] = 'Required';
-    });
-  }
-  if (step === 4) {
-    if (!f.groupId) e.groupId = 'Required';
-    if (!f.startDate) e.startDate = 'Required';
   }
   return e;
 }
