@@ -121,8 +121,9 @@ function EditPage() {
       licenses,
     });
     toast.success('Provider updated');
-    navigate({ to: '/providers/$id', params: { id }, search: { saved: 1 } as never });
+    navigate({ to: '/providers/$id', params: { id } });
   };
+
 
   if (role === 'billing') return null;
 
