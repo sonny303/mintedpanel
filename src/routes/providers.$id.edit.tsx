@@ -10,11 +10,11 @@ import { useProvider, useUpdateProviderWithLicenses } from '@/hooks/useProviders
 import { useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
 import {
-  ProviderForm,
   emptyProviderFormState,
   type ProviderFormState,
   type LicenseRow,
 } from '@/components/providers/ProviderForm';
+import { EditProviderForm } from '@/components/providers/EditProviderForm';
 import type { LicenseInput } from '@/services/providers';
 
 export const Route = createFileRoute('/providers/$id/edit')({
@@ -145,10 +145,8 @@ function EditPage() {
   return (
     <div className="max-w-4xl">
       <PageHeader title={`Edit ${name}`} description="Update provider details." />
-      <ProviderForm
+      <EditProviderForm
         initial={initial}
-        submitLabel="Save changes"
-        pendingLabel="Saving…"
         isPending={update.isPending}
         onSubmit={onSubmit}
         onCancel={() => navigate({ to: '/providers/$id', params: { id } })}
