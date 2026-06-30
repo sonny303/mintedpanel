@@ -169,9 +169,11 @@ function ProviderDetailPage() {
         group={group}
         canEdit={canEdit}
         canTerminate={canTerminate}
+        onEdit={() => navigate({ to: '/providers/$id/edit', params: { id: provider.id } })}
         onNewCase={() => setNewCaseOpen(true)}
         onTerminate={() => setTerminateOpen(true)}
       />
+
       <NewCaseModal
         open={newCaseOpen}
         onOpenChange={setNewCaseOpen}
@@ -216,11 +218,13 @@ interface HeaderProps {
   group: ProviderGroup | null;
   canEdit: boolean;
   canTerminate: boolean;
+  onEdit: () => void;
   onNewCase: () => void;
   onTerminate: () => void;
 }
 
-function Header({ provider, group, canEdit, canTerminate, onNewCase, onTerminate }: HeaderProps) {
+function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onTerminate }: HeaderProps) {
+
   const name = `${provider.firstName} ${provider.lastName}${
     provider.credentials ? `, ${provider.credentials}` : ''
   }`;
@@ -264,17 +268,16 @@ function Header({ provider, group, canEdit, canTerminate, onNewCase, onTerminate
 
         {canEdit ? (
           <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0}>
-                  <Button variant="outline" size="sm" disabled className="gap-2">
-                    <Pencil className="h-4 w-4" />
-                    Edit provider
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming in a later step</TooltipContent>
-            </Tooltip>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={onEdit}
+            >
+              <Pencil className="h-4 w-4" />
+              Edit provider
+            </Button>
+
             <Button size="sm" className="gap-2" onClick={onNewCase} disabled={isTerminated}>
               <Plus className="h-4 w-4" />
               New case

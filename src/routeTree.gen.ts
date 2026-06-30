@@ -30,6 +30,7 @@ import { Route as AdminPayersRouteImport } from './routes/admin.payers'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
+import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 
 const TasksRoute = TasksRouteImport.update({
@@ -137,6 +138,11 @@ const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminTemplatesRoute,
 } as any)
+const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => ProvidersIdRoute,
+} as any)
 const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -158,13 +164,14 @@ export interface FileRoutesByFullPath {
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -178,13 +185,14 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/tasks': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
 }
 export interface FileRoutesById {
@@ -203,13 +211,14 @@ export interface FileRoutesById {
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
-  '/providers/$id': typeof ProvidersIdRoute
+  '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
 }
 export interface FileRouteTypes {
@@ -236,6 +245,7 @@ export interface FileRouteTypes {
     | '/providers/'
     | '/tasks/'
     | '/admin/templates/$id'
+    | '/providers/$id/edit'
     | '/admin/templates/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -256,6 +266,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/tasks'
     | '/admin/templates/$id'
+    | '/providers/$id/edit'
     | '/admin/templates'
   id:
     | '__root__'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/providers/'
     | '/tasks/'
     | '/admin/templates/$id'
+    | '/providers/$id/edit'
     | '/admin/templates/'
   fileRoutesById: FileRoutesById
 }
@@ -448,6 +460,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTemplatesIndexRouteImport
       parentRoute: typeof AdminTemplatesRoute
     }
+    '/providers/$id/edit': {
+      id: '/providers/$id/edit'
+      path: '/edit'
+      fullPath: '/providers/$id/edit'
+      preLoaderRoute: typeof ProvidersIdEditRouteImport
+      parentRoute: typeof ProvidersIdRoute
+    }
     '/admin/templates/$id': {
       id: '/admin/templates/$id'
       path: '/$id'
@@ -470,14 +489,26 @@ const CasesRouteChildren: CasesRouteChildren = {
 
 const CasesRouteWithChildren = CasesRoute._addFileChildren(CasesRouteChildren)
 
+interface ProvidersIdRouteChildren {
+  ProvidersIdEditRoute: typeof ProvidersIdEditRoute
+}
+
+const ProvidersIdRouteChildren: ProvidersIdRouteChildren = {
+  ProvidersIdEditRoute: ProvidersIdEditRoute,
+}
+
+const ProvidersIdRouteWithChildren = ProvidersIdRoute._addFileChildren(
+  ProvidersIdRouteChildren,
+)
+
 interface ProvidersRouteChildren {
-  ProvidersIdRoute: typeof ProvidersIdRoute
+  ProvidersIdRoute: typeof ProvidersIdRouteWithChildren
   ProvidersNewRoute: typeof ProvidersNewRoute
   ProvidersIndexRoute: typeof ProvidersIndexRoute
 }
 
 const ProvidersRouteChildren: ProvidersRouteChildren = {
-  ProvidersIdRoute: ProvidersIdRoute,
+  ProvidersIdRoute: ProvidersIdRouteWithChildren,
   ProvidersNewRoute: ProvidersNewRoute,
   ProvidersIndexRoute: ProvidersIndexRoute,
 }
