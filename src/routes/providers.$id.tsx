@@ -203,7 +203,7 @@ function ProviderDetailPage() {
 
         <div className="lg:col-span-2 space-y-4">
           <IdentityCard provider={provider} />
-          <LicensesCard licenses={licensesQ.data ?? []} loading={licensesQ.isLoading} />
+          <LicensesCard provider={provider} />
           <EmploymentCard provider={provider} />
           <CaqhCard provider={provider} />
         </div>
