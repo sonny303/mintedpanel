@@ -19,7 +19,7 @@ import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups, useStateLicensesByProvider } from '@/hooks/useLookups';
+import { useProviderGroups } from '@/hooks/useLookups';
 import { useRole } from '@/lib/auth-store';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import {
