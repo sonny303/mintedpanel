@@ -272,7 +272,7 @@ function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onT
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => navigate({ to: '/providers/$id/edit', params: { id: provider.id } })}
+              onClick={onEdit}
             >
               <Pencil className="h-4 w-4" />
               Edit provider
