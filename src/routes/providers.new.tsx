@@ -211,7 +211,7 @@ function Page() {
     <div className="max-w-4xl">
       <PageHeader
         title="Add provider"
-        description="Enter provider details. All steps are required before submission."
+        description="Enter provider details. All fields are optional — save with as little or as much as you have."
         actions={
           <Button variant="outline" onClick={() => navigate({ to: '/providers' })}>
             Cancel
