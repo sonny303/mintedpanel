@@ -547,56 +547,67 @@ function IdentityCard({ provider }: { provider: Provider }) {
   );
 }
 
-interface LicensesProps {
-  licenses: import('@/services/lookups').StateLicense[];
-  loading: boolean;
-}
-
-function LicensesCard({ licenses, loading }: LicensesProps) {
+function LicensesCard({ provider }: { provider: Provider }) {
+  const number = provider.licenseNumber;
+  if (!number) {
+    return (
+      <Card title="Licenses">
+        <div className="text-[13px] text-muted-foreground">No licenses on file</div>
+      </Card>
+    );
+  }
+  const exp = provider.licenseExpirationDate;
+  let expiringSoon = false;
+  let expired = false;
+  if (exp) {
+    const diffMs = parseISO(exp).getTime() - Date.now();
+    const days = diffMs / (1000 * 60 * 60 * 24);
+    expired = days < 0;
+    expiringSoon = !expired && days <= 60;
+  }
   return (
     <Card title="Licenses">
-      {loading ? (
-        <Skeleton className="h-12 w-full" />
-      ) : licenses.length === 0 ? (
-        <div className="text-[13px] text-muted-foreground">No licenses on file</div>
-      ) : (
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border">
-              <Th>State</Th>
-              <Th>Number</Th>
-              <Th>Type</Th>
-              <Th>Expires</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {licenses.map((l) => {
-              const expired = l.expirationDate
-                ? parseISO(l.expirationDate).getTime() < Date.now()
-                : false;
-              return (
-                <tr key={l.id} className="border-b border-border last:border-0 h-10">
-                  <td className="px-3 text-foreground">{l.state}</td>
-                  <td className="px-3 text-foreground tabular-nums">
-                    {l.licenseNumber ?? '—'}
-                  </td>
-                  <td className="px-3 text-foreground">{l.licenseType ?? '—'}</td>
-                  <td
-                    className={`px-3 tabular-nums ${
-                      expired ? 'text-[#DC2626] font-medium' : 'text-foreground'
-                    }`}
-                  >
-                    {fmtDate(l.expirationDate)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="border-b border-border">
+            <Th>State</Th>
+            <Th>Number</Th>
+            <Th>Issued</Th>
+            <Th>Expires</Th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-border last:border-0 h-10">
+            <td className="px-3 text-foreground">{provider.licenseState ?? '—'}</td>
+            <td className="px-3 text-foreground tabular-nums">{number}</td>
+            <td className="px-3 text-foreground tabular-nums">
+              {fmtDate(provider.licenseIssueDate)}
+            </td>
+            <td className="px-3 tabular-nums">
+              <span
+                className={
+                  expired
+                    ? 'text-[#DC2626] font-medium'
+                    : expiringSoon
+                      ? 'text-[#D97706] font-medium'
+                      : 'text-foreground'
+                }
+              >
+                {fmtDate(exp)}
+              </span>
+              {expired ? (
+                <StatusPill status="red" label="Expired" className="ml-2" />
+              ) : expiringSoon ? (
+                <StatusPill status="amber" label="Expiring soon" className="ml-2" />
+              ) : null}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </Card>
   );
 }
+
 
 function EmploymentCard({ provider }: { provider: Provider }) {
   return (
