@@ -200,7 +200,7 @@ function AdminPayersPage() {
                         '—'
                       )}
                     </td>
-                    <td className="px-3 h-10 align-middle text-right">
+                    <td className="px-3 h-10 align-middle text-right" onClick={(e) => e.stopPropagation()}>
                       {canEdit && (
                         <Button
                           variant="outline"
