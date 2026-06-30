@@ -768,8 +768,16 @@ function Step5({ form, jumpTo }: { form: FormState; jumpTo: (s: number) => void 
     </div>
   );
 
+  const displayName = `${form.firstName} ${form.lastName}`.trim() || 'Unnamed provider';
+
   return (
     <div className="space-y-4">
+      <div className="rounded-md border border-border px-4 py-3">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Review
+        </p>
+        <p className="mt-1 text-sm font-medium text-foreground">{displayName}</p>
+      </div>
       <Section title="Personal" step={1}>
         <Row label="Name" value={`${form.firstName} ${form.lastName}`.trim()} />
         <Row label="Credentials" value={form.credentials} />
