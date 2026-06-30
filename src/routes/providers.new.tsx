@@ -119,29 +119,12 @@ type Errors = Partial<Record<string, string>>;
 function validateStep(step: number, f: FormState): Errors {
   const e: Errors = {};
   if (step === 1) {
-    if (!f.firstName.trim()) e.firstName = 'Required';
-    if (!f.lastName.trim()) e.lastName = 'Required';
     if (f.ssnLast4 && !/^\d{4}$/.test(f.ssnLast4)) e.ssnLast4 = 'Enter exactly 4 digits';
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = 'Invalid email';
   }
   if (step === 2) {
-    if (!/^1\d{9}$/.test(f.npi)) e.npi = 'NPI must be 10 digits and start with 1';
+    if (f.npi && !/^1\d{9}$/.test(f.npi)) e.npi = 'NPI must be 10 digits and start with 1';
     if (!f.isNewGrad && f.caqhId && !/^\d{8}$/.test(f.caqhId)) e.caqhId = 'CAQH must be 8 digits';
-    if (!f.taxonomyCode.trim()) e.taxonomyCode = 'Required';
-  }
-  if (step === 3) {
-    if (f.licenses.length === 0) e.licenses = 'At least one license required';
-    f.licenses.forEach((l, i) => {
-      if (!l.state) e[`lic-${i}-state`] = 'Required';
-      if (!l.number.trim()) e[`lic-${i}-number`] = 'Required';
-      if (!l.type) e[`lic-${i}-type`] = 'Required';
-      if (!l.issueDate) e[`lic-${i}-issueDate`] = 'Required';
-      if (!l.expirationDate) e[`lic-${i}-expirationDate`] = 'Required';
-    });
-  }
-  if (step === 4) {
-    if (!f.groupId) e.groupId = 'Required';
-    if (!f.startDate) e.startDate = 'Required';
   }
   return e;
 }
@@ -198,13 +181,13 @@ function Page() {
       homeCity: form.homeCity.trim() || null,
       homeState: form.homeState || null,
       homeZip: form.homeZip.trim() || null,
-      npi: form.npi,
+      npi: form.npi || null,
       caqhId: form.isNewGrad ? null : form.caqhId || null,
       caqhLastAttestedDate: form.caqhLastAttestedDate || null,
-      taxonomyCode: form.taxonomyCode.trim(),
+      taxonomyCode: form.taxonomyCode.trim() || null,
       deaNumber: form.deaNumber.trim() || null,
       isNewGrad: form.isNewGrad,
-      groupId: form.groupId,
+      groupId: form.groupId || null,
       specialty: form.specialty.trim() || null,
       startDate: form.startDate || null,
       degree: form.degree.trim() || null,
@@ -228,7 +211,7 @@ function Page() {
     <div className="max-w-4xl">
       <PageHeader
         title="Add provider"
-        description="Enter provider details. All steps are required before submission."
+        description="Enter provider details. All fields are optional — save with as little or as much as you have."
         actions={
           <Button variant="outline" onClick={() => navigate({ to: '/providers' })}>
             Cancel
@@ -785,8 +768,16 @@ function Step5({ form, jumpTo }: { form: FormState; jumpTo: (s: number) => void 
     </div>
   );
 
+  const displayName = `${form.firstName} ${form.lastName}`.trim() || 'Unnamed provider';
+
   return (
     <div className="space-y-4">
+      <div className="rounded-md border border-border px-4 py-3">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Review
+        </p>
+        <p className="mt-1 text-sm font-medium text-foreground">{displayName}</p>
+      </div>
       <Section title="Personal" step={1}>
         <Row label="Name" value={`${form.firstName} ${form.lastName}`.trim()} />
         <Row label="Credentials" value={form.credentials} />
