@@ -91,8 +91,13 @@ export interface Provider {
   malpracticePolicyNumber: string | null;
   malpracticeCoverageStart: string | null;
   malpracticeCoverageEnd: string | null;
+  licenseNumber: string | null;
+  licenseState: string | null;
+  licenseIssueDate: string | null;
+  licenseExpirationDate: string | null;
   createdAt: string;
   updatedAt: string;
+
 }
 
 export interface Payer {
