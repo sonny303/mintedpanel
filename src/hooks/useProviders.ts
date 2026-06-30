@@ -58,6 +58,21 @@ export function useUpdateProvider(id: string) {
   });
 }
 
+export function useUpdateProviderWithLicenses(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useMutation({
+    mutationFn: (input: UpdateProviderWithLicensesInput) => updateProviderWithLicenses(id, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['providers', orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
+      qc.invalidateQueries({ queryKey: ['state-licenses', orgId, id] });
+      qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
+    },
+  });
+}
+
+
 export function useTerminateProvider(id: string) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? 'no-org';
