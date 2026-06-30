@@ -218,11 +218,13 @@ interface HeaderProps {
   group: ProviderGroup | null;
   canEdit: boolean;
   canTerminate: boolean;
+  onEdit: () => void;
   onNewCase: () => void;
   onTerminate: () => void;
 }
 
-function Header({ provider, group, canEdit, canTerminate, onNewCase, onTerminate }: HeaderProps) {
+function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onTerminate }: HeaderProps) {
+
   const name = `${provider.firstName} ${provider.lastName}${
     provider.credentials ? `, ${provider.credentials}` : ''
   }`;
