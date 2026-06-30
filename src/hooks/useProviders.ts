@@ -8,10 +8,13 @@ import {
   getProviders,
   terminateProvider,
   updateProvider,
+  updateProviderWithLicenses,
   type ProviderFilters,
   type ProviderInput,
   type TerminateProviderInput,
+  type UpdateProviderWithLicensesInput,
 } from '@/services/providers';
+
 
 
 export function useProviders(filters: ProviderFilters = {}) {
