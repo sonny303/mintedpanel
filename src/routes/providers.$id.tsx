@@ -169,9 +169,11 @@ function ProviderDetailPage() {
         group={group}
         canEdit={canEdit}
         canTerminate={canTerminate}
+        onEdit={() => navigate({ to: '/providers/$id/edit', params: { id: provider.id } })}
         onNewCase={() => setNewCaseOpen(true)}
         onTerminate={() => setTerminateOpen(true)}
       />
+
       <NewCaseModal
         open={newCaseOpen}
         onOpenChange={setNewCaseOpen}
