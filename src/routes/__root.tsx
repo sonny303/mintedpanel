@@ -128,7 +128,8 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isLandingRoute = pathname === "/landing";
   const isAuthRoute = pathname === "/login";
-  const isPublicRoute = isAuthRoute || isLandingRoute;
+  const isRootRoute = pathname === "/";
+  const isPublicRoute = isAuthRoute || isLandingRoute || isRootRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
