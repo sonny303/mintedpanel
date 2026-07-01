@@ -3,7 +3,7 @@ import { FileText, Handshake, RefreshCw, Map, AlarmClock, BarChart3 } from 'luci
 import { Eyebrow } from './Eyebrow';
 
 const ITEMS = [
-  { icon: FileText, title: 'Provider Enrollment', copy: 'Initial applications submitted to target payers — commercial, Medicare, and Medicaid — with full document management.' },
+  { icon: FileText, title: 'Provider Enrollment', copy: 'Initial applications submitted to target payers commercial, Medicare, and Medicaid with full document management.' },
   { icon: Handshake, title: 'Payer Contracting', copy: 'We manage payer contracts so your providers stay in-network and billing at the right rates.' },
   { icon: RefreshCw, title: 'CAQH Management', copy: 'Ongoing attestation and updates so providers stay active and never miss a re-attestation.' },
   { icon: Map, title: 'Multi-State Licensing', copy: 'Coordinated state license management as you expand into new markets.' },
@@ -19,7 +19,7 @@ export function ServicesSection() {
         End-to-end credentialing and contracting services
       </h2>
       <p className="mt-4 text-[16px] text-[#6B7280] max-w-3xl">
-        Minted Panel covers the full lifecycle — from enrollment to ongoing maintenance — so
+        Minted Panel covers the full lifecycle from enrollment to ongoing maintenance, so
         nothing falls through the cracks.
       </p>
       <div className="mt-10 grid gap-6 md:grid-cols-2">

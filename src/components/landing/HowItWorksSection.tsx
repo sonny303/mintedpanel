@@ -24,7 +24,7 @@ export function HowItWorksSection() {
         Three steps to fully managed credentialing
       </h2>
       <p className="mt-4 text-[16px] text-[#6B7280] max-w-3xl">
-        Our process keeps your team focused. You share what we need — we handle the rest, from
+        Our process keeps your team focused. You share what we need & we handle the rest, from
         submission to active network status.
       </p>
       <div className="mt-10 grid gap-6 md:grid-cols-3">

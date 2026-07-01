@@ -14,8 +14,7 @@ export function HeroSection() {
           Your providers see patients. We get them on panels.
         </h1>
         <p className="mt-5 text-[17px] leading-relaxed text-[#6B7280] max-w-xl">
-          Minted Panel handles credentialing and contracting for healthcare provider groups —
-          across payers and states — so your team can focus on care.
+          Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Button className="bg-[#1B4D3E] text-white hover:bg-[#163e32] h-11 px-6">
