@@ -240,9 +240,11 @@ function TaskDetailPage() {
 
   const handleStatusChange = (next: string) => {
     if (!canEdit) return;
+    if (next === task.status) return;
     updateStatusM.mutate(
       { id: task.id, status: next as TaskStatus },
       {
+        onSuccess: () => toast.success('Status updated'),
         onError: (err: unknown) =>
           toast.error(err instanceof Error ? err.message : 'Could not update status'),
       },
