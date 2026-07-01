@@ -59,8 +59,9 @@ export function Sidebar() {
     <aside className="w-[220px] flex-shrink-0 border-r border-border bg-card flex flex-col h-full">
       <div className="h-14 flex items-center px-4 bg-primary text-primary-foreground">
         <div className="flex items-center gap-2 font-semibold text-[16px] tracking-tight">
-          <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center">
-            <Shield className="w-4 h-4 text-white" />
+          <div className="w-6 h-6 rounded bg-white flex items-center justify-center">
+            <img src={logoAsset.url} alt="Minted Panel" className="w-5 h-5 object-contain" />
+
           </div>
           Minted Panel Cre
         </div>
