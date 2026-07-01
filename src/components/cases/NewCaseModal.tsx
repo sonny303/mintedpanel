@@ -193,11 +193,81 @@ export function NewCaseModal({
   const existingCasesQ = useCases({ providerId: provider.id });
   const createCase = useCreateCase();
 
+  const activeLicensesQ = useQuery({
+    queryKey: ['state-licenses-active', orgId, provider.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('state_licenses')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('provider_id', provider.id)
+        .eq('status', 'active')
+        .order('expiration_date', { ascending: false });
+      if (error) throw error;
+      return camelizeRow<StateLicense[]>(data ?? []);
+    },
+    enabled: open && orgId !== 'no-org',
+  });
+
+  const assignmentsQ = useQuery({
+    queryKey: ['provider-facility-assignments', orgId, provider.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('provider_facility_assignments')
+        .select('facility_id, is_primary')
+        .eq('org_id', orgId)
+        .eq('provider_id', provider.id);
+      if (error) throw error;
+      return (data ?? []) as { facility_id: string; is_primary: boolean }[];
+    },
+    enabled: open && orgId !== 'no-org',
+  });
+
   const [selectedPayerIds, setSelectedPayerIds] = useState<string[]>([]);
   const [state, setState] = useState<string>('');
   const [facilityId, setFacilityId] = useState<string>(NONE);
   const [coordinatorId, setCoordinatorId] = useState<string>(NONE);
   const [submitting, setSubmitting] = useState(false);
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setDefaultsApplied(false);
+      return;
+    }
+    if (defaultsApplied) return;
+    if (activeLicensesQ.isLoading || assignmentsQ.isLoading) return;
+
+    if (!state) {
+      const active = activeLicensesQ.data ?? [];
+      if (active.length > 0) {
+        setState(active[0].state);
+      }
+    }
+
+    if (facilityId === NONE) {
+      const assignments = assignmentsQ.data ?? [];
+      if (assignments.length === 1) {
+        setFacilityId(assignments[0].facility_id);
+      } else if (assignments.length > 1) {
+        const primary = assignments.find((a) => a.is_primary);
+        if (primary) {
+          setFacilityId(primary.facility_id);
+        }
+      }
+    }
+
+    setDefaultsApplied(true);
+  }, [
+    open,
+    defaultsApplied,
+    activeLicensesQ.isLoading,
+    activeLicensesQ.data,
+    assignmentsQ.isLoading,
+    assignmentsQ.data,
+    state,
+    facilityId,
+  ]);
 
   const licenses = licensesQ.data ?? [];
   const activeLicenses = useMemo(
