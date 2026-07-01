@@ -1,8 +1,8 @@
 // Hero section: eyebrow, headline, subtext, two CTAs, and abstract graphic.
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
-import { HeroGraphic } from './HeroGraphic';
 import { Eyebrow } from './Eyebrow';
+import heroAsset from '@/assets/provider-hero.png.asset.json';
 
 export function HeroSection() {
   const navigate = useNavigate();
@@ -31,7 +31,7 @@ export function HeroSection() {
         </div>
       </div>
       <div className="flex justify-center md:justify-end">
-        <HeroGraphic className="w-full max-w-[480px] h-auto" />
+        <img src={heroAsset.url} alt="Clinician evaluating a patient" className="w-full max-w-[480px] h-auto" />
       </div>
     </section>
   );
