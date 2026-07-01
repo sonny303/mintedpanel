@@ -196,6 +196,7 @@ export function NewCaseModal({
   const activeLicensesQ = useQuery({
     queryKey: ['state-licenses-active', orgId, provider.id],
     queryFn: async () => {
+      if (!orgId) return [];
       const { data, error } = await supabase
         .from('state_licenses')
         .select('*')
@@ -206,12 +207,13 @@ export function NewCaseModal({
       if (error) throw error;
       return camelizeRow<StateLicense[]>(data ?? []);
     },
-    enabled: open && orgId !== 'no-org',
+    enabled: open && Boolean(orgId),
   });
 
   const assignmentsQ = useQuery({
     queryKey: ['provider-facility-assignments', orgId, provider.id],
     queryFn: async () => {
+      if (!orgId) return [];
       const { data, error } = await supabase
         .from('provider_facility_assignments')
         .select('facility_id, is_primary')
@@ -220,7 +222,7 @@ export function NewCaseModal({
       if (error) throw error;
       return (data ?? []) as { facility_id: string; is_primary: boolean }[];
     },
-    enabled: open && orgId !== 'no-org',
+    enabled: open && Boolean(orgId),
   });
 
   const [selectedPayerIds, setSelectedPayerIds] = useState<string[]>([]);
