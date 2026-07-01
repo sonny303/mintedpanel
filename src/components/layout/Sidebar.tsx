@@ -1,5 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { Separator } from '@/components/ui/separator';
+import logoAsset from '@/assets/mpc-logo.png.asset.json';
+
 import {
   LayoutDashboard,
   Users,
