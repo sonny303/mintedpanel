@@ -1,47 +1,42 @@
 // Modal that creates one credential case per selected payer for a provider,
 // runs the new grad / license / duplicate gates, and seeds SOP tasks from
 // matching sop_templates when one exists.
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { StatusPill } from '@/components/StatusPill';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { getMsoRoutingRule } from '@/services/lookups';
-import { useCases, useCreateCase } from '@/hooks/useCases';
+} from "@/components/ui/select";
+import { StatusPill } from "@/components/StatusPill";
+import { supabase } from "@/integrations/supabase/externalClient";
+import { camelizeRow } from "@/lib/case";
+import { getMsoRoutingRule, type StateLicense } from "@/services/lookups";
+import { useCases, useCreateCase } from "@/hooks/useCases";
 import {
   useCoordinators,
   useFacilities,
   useMsoRoutingRule,
   useStateLicensesByProvider,
-} from '@/hooks/useLookups';
-import { useMsos, usePayers, useTemplates } from '@/hooks/useAdmin';
-import { useActiveOrgId } from '@/lib/auth-store';
-import type {
-  Mso,
-  Payer,
-  Provider,
-  ProviderGroup,
-  SOPTemplate,
-} from '@/types';
+} from "@/hooks/useLookups";
+import { useMsos, usePayers, useTemplates } from "@/hooks/useAdmin";
+import { useActiveOrgId } from "@/lib/auth-store";
+import type { Mso, Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 interface NewCaseModalProps {
   open: boolean;
@@ -50,7 +45,7 @@ interface NewCaseModalProps {
   group: ProviderGroup | null;
 }
 
-const NONE = '__none__';
+const NONE = "__none__";
 
 interface ResolvedStep {
   id: string;
@@ -71,7 +66,7 @@ interface ResolvedTask {
 const TOKEN_RE = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
 
 function interpolate(input: string, tokens: Record<string, string>): string {
-  return input.replace(TOKEN_RE, (_, k: string) => tokens[k] ?? '');
+  return input.replace(TOKEN_RE, (_, k: string) => tokens[k] ?? "");
 }
 
 function offsetDate(days: number): string {
@@ -87,18 +82,18 @@ function buildTokenMap(
   licenseNumber: string | null,
 ): Record<string, string> {
   return {
-    'provider.npi': provider.npi ?? '',
-    'provider.caqhId': provider.caqhId ?? '',
-    'provider.caqhLastAttestedDate': provider.caqhLastAttestedDate ?? '',
-    'provider.taxonomyCode': provider.taxonomyCode ?? '',
-    'provider.firstName': provider.firstName,
-    'provider.lastName': provider.lastName,
-    'provider.email': provider.email ?? '',
-    'provider.licenseNumber': licenseNumber ?? '',
-    'group.tin': group?.tin ?? '',
-    'group.npiType2': group?.npiType2 ?? '',
-    'group.name': group?.name ?? '',
-    'mso.portalUrl': mso?.portalUrl ?? '',
+    "provider.npi": provider.npi ?? "",
+    "provider.caqhId": provider.caqhId ?? "",
+    "provider.caqhLastAttestedDate": provider.caqhLastAttestedDate ?? "",
+    "provider.taxonomyCode": provider.taxonomyCode ?? "",
+    "provider.firstName": provider.firstName,
+    "provider.lastName": provider.lastName,
+    "provider.email": provider.email ?? "",
+    "provider.licenseNumber": licenseNumber ?? "",
+    "group.tin": group?.tin ?? "",
+    "group.npiType2": group?.npiType2 ?? "",
+    "group.name": group?.name ?? "",
+    "mso.portalUrl": mso?.portalUrl ?? "",
   };
 }
 
@@ -114,10 +109,7 @@ interface RawDef {
   sopStepTemplates?: RawStep[];
 }
 
-function resolveRawTemplate(
-  template: SOPTemplate,
-  tokens: Record<string, string>,
-): ResolvedTask[] {
+function resolveRawTemplate(template: SOPTemplate, tokens: Record<string, string>): ResolvedTask[] {
   const defs = (template.taskDefinitions ?? []) as unknown as RawDef[];
   return defs.map((def, idx) => {
     const rawSteps = def.sopStepTemplates ?? [];
@@ -126,23 +118,22 @@ function resolveRawTemplate(
       const dataFields = tokensList
         .map((tok) => ({
           label: tok,
-          value: tokens[tok] ?? '',
+          value: tokens[tok] ?? "",
           copyable: true,
         }))
         .filter((f) => f.label && f.value);
       return {
         id: `step-${sIdx}`,
         order: sIdx,
-        instruction: interpolate(s.step ?? '', tokens),
+        instruction: interpolate(s.step ?? "", tokens),
         isCompleted: false,
         dataFields,
       };
     });
     return {
-      title: interpolate(def.title ?? 'Task', tokens),
+      title: interpolate(def.title ?? "Task", tokens),
       description: def.description ? interpolate(def.description, tokens) : null,
-      dueDate:
-        typeof def.dayOffset === 'number' ? offsetDate(def.dayOffset) : null,
+      dueDate: typeof def.dayOffset === "number" ? offsetDate(def.dayOffset) : null,
       sortOrder: def.sortOrder ?? idx,
       steps,
     };
@@ -155,30 +146,19 @@ function pickTemplate(
   state: string,
   groupId: string | null,
 ): SOPTemplate | null {
-  const active = templates.filter(
-    (t) => {
-      const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
-      return !Boolean(row.archived ?? row.isArchived ?? false);
-    },
-  );
+  const active = templates.filter((t) => {
+    const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
+    return !Boolean(row.archived ?? row.isArchived ?? false);
+  });
   const exact = active.find(
     (t) =>
-      t.payerId === payerId &&
-      t.state === state &&
-      (t.groupId === groupId || t.groupId === null),
+      t.payerId === payerId && t.state === state && (t.groupId === groupId || t.groupId === null),
   );
   if (exact) return exact;
-  return (
-    active.find((t) => t.payerId === payerId && t.state === state) ?? null
-  );
+  return active.find((t) => t.payerId === payerId && t.state === state) ?? null;
 }
 
-export function NewCaseModal({
-  open,
-  onOpenChange,
-  provider,
-  group,
-}: NewCaseModalProps) {
+export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseModalProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const orgId = useActiveOrgId();
@@ -192,15 +172,87 @@ export function NewCaseModal({
   const existingCasesQ = useCases({ providerId: provider.id });
   const createCase = useCreateCase();
 
+  const activeLicensesQ = useQuery({
+    queryKey: ["state-licenses-active", orgId, provider.id],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from("state_licenses")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("provider_id", provider.id)
+        .eq("status", "active")
+        .order("expiration_date", { ascending: false });
+      if (error) throw error;
+      return camelizeRow<StateLicense[]>(data ?? []);
+    },
+    enabled: open && Boolean(orgId),
+  });
+
+  const assignmentsQ = useQuery({
+    queryKey: ["provider-facility-assignments", orgId, provider.id],
+    queryFn: async () => {
+      if (!orgId) return [];
+      const { data, error } = await supabase
+        .from("provider_facility_assignments")
+        .select("facility_id, is_primary")
+        .eq("org_id", orgId)
+        .eq("provider_id", provider.id);
+      if (error) throw error;
+      return (data ?? []) as { facility_id: string; is_primary: boolean }[];
+    },
+    enabled: open && Boolean(orgId),
+  });
+
   const [selectedPayerIds, setSelectedPayerIds] = useState<string[]>([]);
-  const [state, setState] = useState<string>('');
+  const [state, setState] = useState<string>("");
   const [facilityId, setFacilityId] = useState<string>(NONE);
   const [coordinatorId, setCoordinatorId] = useState<string>(NONE);
   const [submitting, setSubmitting] = useState(false);
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setDefaultsApplied(false);
+      return;
+    }
+    if (defaultsApplied) return;
+    if (activeLicensesQ.isLoading || assignmentsQ.isLoading) return;
+
+    if (!state) {
+      const active = activeLicensesQ.data ?? [];
+      if (active.length > 0) {
+        setState(active[0].state);
+      }
+    }
+
+    if (facilityId === NONE) {
+      const assignments = assignmentsQ.data ?? [];
+      if (assignments.length === 1) {
+        setFacilityId(assignments[0].facility_id);
+      } else if (assignments.length > 1) {
+        const primary = assignments.find((a) => a.is_primary);
+        if (primary) {
+          setFacilityId(primary.facility_id);
+        }
+      }
+    }
+
+    setDefaultsApplied(true);
+  }, [
+    open,
+    defaultsApplied,
+    activeLicensesQ.isLoading,
+    activeLicensesQ.data,
+    assignmentsQ.isLoading,
+    assignmentsQ.data,
+    state,
+    facilityId,
+  ]);
 
   const licenses = licensesQ.data ?? [];
   const activeLicenses = useMemo(
-    () => licenses.filter((l) => (l.status ?? '').toLowerCase() === 'active'),
+    () => licenses.filter((l) => (l.status ?? "").toLowerCase() === "active"),
     [licenses],
   );
   const licensedStates = useMemo(
@@ -210,7 +262,7 @@ export function NewCaseModal({
 
   const providerLevelBlock: string | null = useMemo(() => {
     if (provider.isNewGrad && !provider.caqhId) {
-      return 'CAQH profile required before cases can open. Add the CAQH ID to the provider record first.';
+      return "CAQH profile required before cases can open. Add the CAQH ID to the provider record first.";
     }
     if (state && !activeLicenses.some((l) => l.state === state)) {
       return `No active ${state} license on file.`;
@@ -228,9 +280,7 @@ export function NewCaseModal({
     if (!state) return new Set<string>();
     const ec = existingCasesQ.data ?? [];
     return new Set(
-      selectedPayerIds.filter((pid) =>
-        ec.some((c) => c.payerId === pid && c.state === state),
-      ),
+      selectedPayerIds.filter((pid) => ec.some((c) => c.payerId === pid && c.state === state)),
     );
   }, [existingCasesQ.data, selectedPayerIds, state]);
   const creatableCount = selectedPayerIds.length - duplicatePayerIds.size;
@@ -243,7 +293,7 @@ export function NewCaseModal({
 
   function reset() {
     setSelectedPayerIds([]);
-    setState('');
+    setState("");
     setFacilityId(NONE);
     setCoordinatorId(NONE);
     setSubmitting(false);
@@ -255,8 +305,7 @@ export function NewCaseModal({
     setSubmitting(true);
     const templates = templatesQ.data ?? [];
     const existingCases = existingCasesQ.data ?? [];
-    const licenseNumber =
-      activeLicenses.find((l) => l.state === state)?.licenseNumber ?? null;
+    const licenseNumber = activeLicenses.find((l) => l.state === state)?.licenseNumber ?? null;
     const created: { id: string; payerName: string }[] = [];
     const skipped: { payerName: string; reason: string }[] = [];
     let templateMissingCount = 0;
@@ -264,25 +313,18 @@ export function NewCaseModal({
     for (const payerId of selectedPayerIds) {
       const payer = payerById.get(payerId);
       if (!payer) continue;
-      const dup = existingCases.find(
-        (c) => c.payerId === payerId && c.state === state,
-      );
+      const dup = existingCases.find((c) => c.payerId === payerId && c.state === state);
       if (dup) {
         skipped.push({
           payerName: payer.name,
-          reason: 'Duplicate case exists',
+          reason: "Duplicate case exists",
         });
         continue;
       }
 
-      const rule = await getMsoRoutingRule(
-        payerId,
-        state,
-        provider.specialty ?? null,
-      );
-      const msoId =
-        rule?.routeType === 'mso' ? rule.msoId ?? null : null;
-      const mso = msoId ? (msosQ.data ?? []).find((m) => m.id === msoId) ?? null : null;
+      const rule = await getMsoRoutingRule(payerId, state, provider.specialty ?? null);
+      const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
+      const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
 
       let caseRow;
       try {
@@ -297,16 +339,11 @@ export function NewCaseModal({
           assignedTo: coordinatorId === NONE ? null : coordinatorId,
         });
       } catch {
-        skipped.push({ payerName: payer.name, reason: 'Save failed' });
+        skipped.push({ payerName: payer.name, reason: "Save failed" });
         continue;
       }
 
-      const template = pickTemplate(
-        templates,
-        payerId,
-        state,
-        provider.groupId ?? null,
-      );
+      const template = pickTemplate(templates, payerId, state, provider.groupId ?? null);
       if (!template) {
         templateMissingCount += 1;
       } else {
@@ -320,45 +357,41 @@ export function NewCaseModal({
             title: t.title,
             description: t.description,
             sop_content: t.steps as unknown as never,
-            status: 'not_started' as const,
+            status: "not_started" as const,
             sort_order: t.sortOrder,
             due_date: t.dueDate,
             is_auto_generated: true,
           }));
-          await supabase.from('tasks').insert(payload as never);
+          await supabase.from("tasks").insert(payload as never);
         }
       }
 
       created.push({ id: caseRow.id, payerName: payer.name });
     }
 
-    qc.invalidateQueries({ queryKey: ['cases', orgId] });
-    qc.invalidateQueries({ queryKey: ['tasks', orgId] });
+    qc.invalidateQueries({ queryKey: ["cases", orgId] });
+    qc.invalidateQueries({ queryKey: ["tasks", orgId] });
 
     setSubmitting(false);
 
     if (created.length === 0) {
       const first = skipped[0];
-      toast.error(first ? `${first.payerName}: ${first.reason}` : 'No cases created');
+      toast.error(first ? `${first.payerName}: ${first.reason}` : "No cases created");
       return;
     }
 
     if (templateMissingCount > 0) {
-      toast.message(
-        'No SOP template found for this payer/state — tasks not generated.',
-      );
+      toast.message("No SOP template found for this payer/state — tasks not generated.");
     }
     if (skipped.length > 0) {
-      toast.message(
-        `${skipped.length} payer${skipped.length === 1 ? '' : 's'} skipped`,
-      );
+      toast.message(`${skipped.length} payer${skipped.length === 1 ? "" : "s"} skipped`);
     }
 
     onOpenChange(false);
     reset();
 
     if (created.length === 1) {
-      navigate({ to: '/cases/$id', params: { id: created[0].id } });
+      navigate({ to: "/cases/$id", params: { id: created[0].id } });
     } else {
       toast.success(`${created.length} cases created`);
     }
@@ -386,7 +419,7 @@ export function NewCaseModal({
         <div className="space-y-4">
           <div>
             <Label className="text-[12px]">State</Label>
-            <Select value={state || NONE} onValueChange={(v) => setState(v === NONE ? '' : v)}>
+            <Select value={state || NONE} onValueChange={(v) => setState(v === NONE ? "" : v)}>
               <SelectTrigger className="h-9 mt-1">
                 <SelectValue placeholder="Select a licensed state" />
               </SelectTrigger>
@@ -409,18 +442,20 @@ export function NewCaseModal({
           <div>
             <Label className="text-[12px]">Payers (one case per selected payer)</Label>
             <div className="mt-1 border border-border rounded-md max-h-48 overflow-y-auto">
-              {(payersQ.data ?? []).filter((p) => p.isActive).map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-center gap-2 px-3 h-9 border-b border-border last:border-b-0 cursor-pointer hover:bg-muted/40"
-                >
-                  <Checkbox
-                    checked={selectedPayerIds.includes(p.id)}
-                    onCheckedChange={() => togglePayer(p.id)}
-                  />
-                  <span className="text-[13px]">{p.name}</span>
-                </label>
-              ))}
+              {(payersQ.data ?? [])
+                .filter((p) => p.isActive)
+                .map((p) => (
+                  <label
+                    key={p.id}
+                    className="flex items-center gap-2 px-3 h-9 border-b border-border last:border-b-0 cursor-pointer hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={selectedPayerIds.includes(p.id)}
+                      onCheckedChange={() => togglePayer(p.id)}
+                    />
+                    <span className="text-[13px]">{p.name}</span>
+                  </label>
+                ))}
             </div>
           </div>
 
@@ -486,16 +521,11 @@ export function NewCaseModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={
-              submitting ||
-              !!providerLevelBlock ||
-              !state ||
-              creatableCount === 0
-            }
+            disabled={submitting || !!providerLevelBlock || !state || creatableCount === 0}
           >
             {submitting
-              ? 'Creating…'
-              : `Create ${creatableCount} case${creatableCount === 1 ? '' : 's'}`}
+              ? "Creating…"
+              : `Create ${creatableCount} case${creatableCount === 1 ? "" : "s"}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -524,35 +554,33 @@ function PayerPreviewRow({
   const msosQ = useMsos();
   const orgId = useActiveOrgId();
 
-  const dup = existingCases.find(
-    (c) => c.payerId === payer.id && c.state === state,
-  );
+  const dup = existingCases.find((c) => c.payerId === payer.id && c.state === state);
 
   const rule = ruleQ.data ?? null;
   const mso =
-    rule?.routeType === 'mso' && rule.msoId
-      ? (msosQ.data ?? []).find((m) => m.id === rule.msoId) ?? null
+    rule?.routeType === "mso" && rule.msoId
+      ? ((msosQ.data ?? []).find((m) => m.id === rule.msoId) ?? null)
       : null;
 
   // Inline contract lookup — show amber when missing.
-  const [contractStatus, setContractStatus] = useState<'loading' | 'present' | 'missing'>(
-    'loading',
+  const [contractStatus, setContractStatus] = useState<"loading" | "present" | "missing">(
+    "loading",
   );
   useEffect(() => {
     if (!groupId || !orgId) {
-      setContractStatus('missing');
+      setContractStatus("missing");
       return;
     }
-    setContractStatus('loading');
+    setContractStatus("loading");
     void supabase
-      .from('contracts')
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('group_id', groupId)
-      .eq('payer_id', payer.id)
-      .eq('state', state)
+      .from("contracts")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("group_id", groupId)
+      .eq("payer_id", payer.id)
+      .eq("state", state)
       .maybeSingle()
-      .then(({ data }) => setContractStatus(data ? 'present' : 'missing'));
+      .then(({ data }) => setContractStatus(data ? "present" : "missing"));
   }, [groupId, orgId, payer.id, state]);
 
   return (
@@ -561,20 +589,23 @@ function PayerPreviewRow({
         <div className="font-medium text-foreground truncate">{payer.name}</div>
         <div className="text-[12px] text-muted-foreground mt-0.5">
           {mso ? (
-            <>Routes through {mso.name}{rule?.notes ? ` — ${rule.notes}` : ''}</>
+            <>
+              Routes through {mso.name}
+              {rule?.notes ? ` — ${rule.notes}` : ""}
+            </>
           ) : (
             <>Direct submission</>
           )}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {contractStatus === 'missing' ? (
+        {contractStatus === "missing" ? (
           <StatusPill status="amber" label="No executed contract" />
         ) : null}
         {dup ? (
           <button
             type="button"
-            onClick={() => navigate({ to: '/cases/$id', params: { id: dup.id } })}
+            onClick={() => navigate({ to: "/cases/$id", params: { id: dup.id } })}
             className="inline-flex items-center gap-1 text-[12px] text-[#DC2626] hover:underline"
           >
             Duplicate case <ExternalLink className="h-3 w-3" />

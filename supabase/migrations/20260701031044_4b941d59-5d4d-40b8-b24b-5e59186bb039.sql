@@ -1,0 +1,1 @@
+ALTER TABLE public.provider_facility_assignments ADD COLUMN is_primary boolean DEFAULT false;
