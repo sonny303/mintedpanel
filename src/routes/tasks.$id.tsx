@@ -6,6 +6,8 @@ import { format, parseISO } from 'date-fns';
 import {
   Calendar,
   CheckCircle2,
+  ExternalLink,
+  Loader2,
   Lock,
   MessageSquare,
 } from 'lucide-react';
@@ -238,9 +240,11 @@ function TaskDetailPage() {
 
   const handleStatusChange = (next: string) => {
     if (!canEdit) return;
+    if (next === task.status) return;
     updateStatusM.mutate(
       { id: task.id, status: next as TaskStatus },
       {
+        onSuccess: () => toast.success('Status updated'),
         onError: (err: unknown) =>
           toast.error(err instanceof Error ? err.message : 'Could not update status'),
       },
@@ -268,23 +272,44 @@ function TaskDetailPage() {
       <div className="max-w-[860px] mx-auto space-y-6">
         {/* Header */}
         <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Link
+              to="/tasks"
+              className="hover:text-foreground hover:underline underline-offset-4"
+            >
+              ← Tasks
+            </Link>
+            {task.caseId ? (
+              <>
+                <span className="text-border">/</span>
+                <Link
+                  to="/cases/$id"
+                  params={{ id: task.caseId }}
+                  className="hover:text-foreground hover:underline underline-offset-4"
+                >
+                  ← Back to Case
+                </Link>
+              </>
+            ) : null}
+          </div>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-[20px] font-semibold text-foreground">{task.title}</h1>
               {c ? (
-                <p className="text-[14px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                  <Link
-                    to="/cases/$id"
-                    params={{ id: c.id }}
-                    className="hover:text-foreground hover:underline underline-offset-4"
-                  >
+                <Link
+                  to="/cases/$id"
+                  params={{ id: c.id }}
+                  className="text-[14px] text-muted-foreground mt-1 inline-flex items-center gap-2 flex-wrap hover:text-foreground group"
+                >
+                  <span className="group-hover:underline underline-offset-4">
                     {providerName ?? 'Provider'}
-                  </Link>
+                  </span>
                   <span className="text-border">•</span>
-                  <span>{payerName ?? '—'}</span>
+                  <span className="group-hover:underline underline-offset-4">{payerName ?? '—'}</span>
                   <span className="text-border">•</span>
-                  <span>{stateCode ?? '—'}</span>
-                </p>
+                  <span className="group-hover:underline underline-offset-4">{stateCode ?? '—'}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
               ) : task.caseId ? (
                 <p className="text-[14px] text-muted-foreground mt-1">Loading case…</p>
               ) : null}
@@ -294,6 +319,9 @@ function TaskDetailPage() {
                 <Calendar className="h-4 w-4" />
                 <span className="tabular-nums">Due {fmtDate(task.dueDate)}</span>
               </div>
+              {updateStatusM.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : null}
               <Select
                 value={task.status}
                 onValueChange={handleStatusChange}
