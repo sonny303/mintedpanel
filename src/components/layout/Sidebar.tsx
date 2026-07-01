@@ -6,8 +6,8 @@ import {
   FileStack,
   CheckSquare,
   BarChart3,
-  
-  Shield,
+
+
   FileText,
   Network,
   Building2,
