@@ -1,8 +1,8 @@
 // Hero section: eyebrow, headline, subtext, two CTAs, and abstract graphic.
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
-import { HeroGraphic } from './HeroGraphic';
 import { Eyebrow } from './Eyebrow';
+import heroAsset from '@/assets/provider-hero.png.asset.json';
 
 export function HeroSection() {
   const navigate = useNavigate();
