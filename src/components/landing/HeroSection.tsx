@@ -31,7 +31,7 @@ export function HeroSection() {
         </div>
       </div>
       <div className="flex justify-center md:justify-end">
-        <HeroGraphic className="w-full max-w-[480px] h-auto" />
+        <img src={heroAsset.url} alt="Clinician evaluating a patient" className="w-full max-w-[480px] h-auto" />
       </div>
     </section>
   );
