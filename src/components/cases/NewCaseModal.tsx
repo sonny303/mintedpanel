@@ -3,7 +3,7 @@
 // matching sop_templates when one exists.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import {
@@ -25,7 +25,8 @@ import {
 } from '@/components/ui/select';
 import { StatusPill } from '@/components/StatusPill';
 import { supabase } from '@/integrations/supabase/externalClient';
-import { getMsoRoutingRule } from '@/services/lookups';
+import { camelizeRow } from '@/lib/case';
+import { getMsoRoutingRule, type StateLicense } from '@/services/lookups';
 import { useCases, useCreateCase } from '@/hooks/useCases';
 import {
   useCoordinators,
