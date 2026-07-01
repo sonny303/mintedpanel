@@ -6,6 +6,8 @@ import { format, parseISO } from 'date-fns';
 import {
   Calendar,
   CheckCircle2,
+  ExternalLink,
+  Loader2,
   Lock,
   MessageSquare,
 } from 'lucide-react';
