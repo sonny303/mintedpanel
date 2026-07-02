@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -25,11 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { usePayers, useMsos, useCreateMso, useUpdateMso } from '@/hooks/useAdmin';
-import { useActiveOrgId, useRole } from '@/lib/auth-store';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
+import {
+  usePayers,
+  useMsos,
+  useCreateMso,
+  useUpdateMso,
+  useRoutingRules,
+  useCreateRoutingRule,
+  useUpdateRoutingRule,
+} from '@/hooks/useAdmin';
+import { useRole } from '@/lib/auth-store';
 import type { Mso, MsoRoutingRule } from '@/types';
+import type { RoutingRuleInput } from '@/services/msos';
 
 export const Route = createFileRoute('/admin/mso-routing')({
   component: AdminMsoRoutingPage,
@@ -44,68 +50,6 @@ const US_STATES = [
   'WI','WY','DC',
 ];
 
-interface RuleInput {
-  payerId: string;
-  state: string;
-  specialty: string;
-  routeType: 'direct' | 'mso';
-  msoId: string | null;
-  notes: string | null;
-}
-
-function useRoutingRules() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['mso-routing-rules', orgId] as const,
-    queryFn: async (): Promise<MsoRoutingRule[]> => {
-      const { data, error } = await supabase
-        .from('mso_routing_rules')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('state', { ascending: true });
-      if (error) throw error;
-      return camelizeRow<MsoRoutingRule[]>(data ?? []);
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
-
-function useSaveRule() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
-  return useMutation({
-    mutationFn: async (args: { id: string | null; input: RuleInput }) => {
-      if (!orgId) {
-        throw new Error('No active organization selected.');
-      }
-      const payload = {
-        org_id: orgId,
-        payer_id: args.input.payerId,
-        state: args.input.state,
-        specialty: args.input.specialty,
-        route_type: args.input.routeType,
-        mso_id: args.input.routeType === 'mso' ? args.input.msoId : null,
-        notes: args.input.notes,
-      };
-      if (args.id) {
-        const { error } = await supabase
-          .from('mso_routing_rules')
-          .update(payload as never)
-          .eq('id', args.id)
-          .eq('org_id', orgId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('mso_routing_rules')
-          .insert(payload as never);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mso-routing-rules', orgId ?? 'no-org'] });
-    },
-  });
-}
 
 function AdminMsoRoutingPage() {
   const role = useRole();
@@ -375,7 +319,9 @@ interface RuleModalProps {
 }
 
 function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
-  const saveM = useSaveRule();
+  const createM = useCreateRoutingRule();
+  const updateM = useUpdateRoutingRule(rule?.id ?? '');
+  const saving = createM.isPending || updateM.isPending;
 
   const [payerId, setPayerId] = useState('');
   const [state, setState] = useState('All');
@@ -414,17 +360,19 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
       return;
     }
     try {
-      await saveM.mutateAsync({
-        id: rule?.id ?? null,
-        input: {
-          payerId,
-          state: state.trim(),
-          specialty: specialty.trim() || 'All',
-          routeType,
-          msoId: routeType === 'mso' ? msoId : null,
-          notes: notes.trim() || null,
-        },
-      });
+      const input: RoutingRuleInput = {
+        payerId,
+        state: state.trim(),
+        specialty: specialty.trim() || 'All',
+        routeType,
+        msoId: routeType === 'mso' ? msoId : null,
+        notes: notes.trim() || null,
+      };
+      if (rule?.id) {
+        await updateM.mutateAsync(input);
+      } else {
+        await createM.mutateAsync(input);
+      }
       toast.success(rule ? 'Rule updated.' : 'Rule added.');
       onClose();
     } catch (err) {
@@ -543,7 +491,7 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
           <Button
             onClick={handleSubmit}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
-            disabled={saveM.isPending}
+            disabled={saving}
           >
             {rule ? 'Save changes' : 'Add rule'}
           </Button>

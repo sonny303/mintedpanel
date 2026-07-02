@@ -21,6 +21,13 @@ export const queryKeys = {
   payer: (orgId: string, id: string) => ['payer', orgId, id] as const,
   msos: (orgId: string) => ['msos', orgId] as const,
   mso: (orgId: string, id: string) => ['mso', orgId, id] as const,
+  msoRoutingRules: (orgId: string) => ['mso-routing-rules', orgId] as const,
+  msoRoutingRule: (
+    orgId: string,
+    payerId: string,
+    state: string,
+    specialty: string,
+  ) => ['mso-routing-rule', orgId, payerId, state, specialty] as const,
   templates: (orgId: string) => ['templates', orgId] as const,
   template: (orgId: string, id: string) => ['template', orgId, id] as const,
   statusConfigs: (orgId: string, track?: unknown) =>
