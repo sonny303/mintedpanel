@@ -2,8 +2,14 @@
 // Persists active org choice in localStorage so the selection survives navigation and reloads.
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { QueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
+
+let registeredQueryClient: QueryClient | null = null;
+export function registerQueryClient(client: QueryClient): void {
+  registeredQueryClient = client;
+}
 
 export type AppRole = "specialist" | "billing" | "admin";
 
