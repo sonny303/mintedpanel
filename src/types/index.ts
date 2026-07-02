@@ -286,9 +286,12 @@ export interface SOPTemplate {
   specialty: string | null;
   payerId: string | null;
   taskDefinitions: SOPTaskDefinition[];
+  isArchived: boolean;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
 
 export interface CaseDetail extends CredentialCase {
   provider: Provider | null;

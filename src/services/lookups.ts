@@ -103,8 +103,8 @@ export async function getMsoRoutingRule(
     let score = 0;
     if (ruleSpecialty !== 'All') score += 2;
     if (ruleState !== 'All') score += 1;
-    const createdRaw = (rule as unknown as { createdAt?: string | null }).createdAt;
-    const createdMs = createdRaw ? new Date(createdRaw).getTime() : 0;
+    const createdMs = rule.createdAt ? new Date(rule.createdAt).getTime() : 0;
+
     candidates.push({ rule, score, createdMs });
   }
 

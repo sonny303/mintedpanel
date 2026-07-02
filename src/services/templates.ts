@@ -1,8 +1,13 @@
 // SOP template CRUD (org-scoped, admin-write enforced by RLS) with audit.
+// The archived column is `is_archived`; TemplateInput accepts either alias.
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { requireActiveOrg, writeAudit } from '@/lib/audit';
+import type { Database } from '@/integrations/supabase/types';
 import type { SOPTaskDefinition, SOPTemplate } from '@/types';
+
+type SopTemplateInsert = Database['public']['Tables']['sop_templates']['Insert'];
+type SopTemplateUpdate = Database['public']['Tables']['sop_templates']['Update'];
 
 export interface TemplateInput {
   name: string;
@@ -15,30 +20,21 @@ export interface TemplateInput {
   isArchived?: boolean;
 }
 
-type TemplateWithArchive = SOPTemplate & { archived?: boolean; isArchived?: boolean };
-
 function normalizeTemplate(row: SOPTemplate): SOPTemplate {
-  const source = row as TemplateWithArchive;
-  const archived = Boolean(source.archived ?? source.isArchived ?? false);
-  return { ...row, archived, isArchived: archived } as TemplateWithArchive;
+  const archived = Boolean(row.isArchived ?? row.archived ?? false);
+  return { ...row, archived, isArchived: archived };
 }
 
 function templatePayload(
   input: Partial<TemplateInput>,
   orgId: string,
-  archiveColumn: 'archived' | 'is_archived' = 'archived',
-): Record<string, unknown> {
+): SopTemplateInsert {
   const { archived, isArchived, ...rest } = input;
   const payload = snakeizeRow<Record<string, unknown>>(rest);
   payload.org_id = orgId;
   const archiveValue = archived ?? isArchived;
-  if (archiveValue !== undefined) payload[archiveColumn] = archiveValue;
-  return payload;
-}
-
-function shouldRetryArchivedColumn(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('archived') && message.includes('column');
+  if (archiveValue !== undefined) payload.is_archived = archiveValue;
+  return payload as unknown as SopTemplateInsert;
 }
 
 export async function listTemplates(): Promise<SOPTemplate[]> {
@@ -66,19 +62,11 @@ export async function getTemplate(id: string): Promise<SOPTemplate | null> {
 
 export async function createTemplate(input: TemplateInput): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
-  let result = await supabase
+  const { data, error } = await supabase
     .from('sop_templates')
-    .insert(templatePayload(input, orgId) as never)
+    .insert(templatePayload(input, orgId))
     .select('*')
     .single();
-  if (result.error && shouldRetryArchivedColumn(result.error)) {
-    result = await supabase
-      .from('sop_templates')
-      .insert(templatePayload(input, orgId, 'is_archived') as never)
-      .select('*')
-      .single();
-  }
-  const { data, error } = result;
   if (error) throw error;
   const created = normalizeTemplate(camelizeRow<SOPTemplate>(data));
   await writeAudit({
@@ -97,23 +85,14 @@ export async function updateTemplate(
 ): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
   const before = await getTemplate(id);
-  let result = await supabase
+  const payload = templatePayload(patch, orgId) as unknown as SopTemplateUpdate;
+  const { data, error } = await supabase
     .from('sop_templates')
-    .update(templatePayload(patch, orgId) as never)
+    .update(payload)
     .eq('id', id)
     .eq('org_id', orgId)
     .select('*')
     .single();
-  if (result.error && shouldRetryArchivedColumn(result.error)) {
-    result = await supabase
-      .from('sop_templates')
-      .update(templatePayload(patch, orgId, 'is_archived') as never)
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select('*')
-      .single();
-  }
-  const { data, error } = result;
   if (error) throw error;
   const after = normalizeTemplate(camelizeRow<SOPTemplate>(data));
   await writeAudit({
