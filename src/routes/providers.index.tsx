@@ -35,27 +35,6 @@ const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' },
 ];
 
-function hexToStatusColor(hex: string | null | undefined): StatusColor {
-  switch ((hex ?? '').toUpperCase()) {
-    case '#2563EB': return 'blue';
-    case '#D97706': return 'amber';
-    case '#DC2626':
-    case '#991B1B': return 'red';
-    case '#0891B2': return 'teal';
-    case '#059669': return 'green';
-    default: return 'gray';
-  }
-}
-
-function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
-
 function ProvidersListPage() {
   const navigate = useNavigate();
   const role = useRole();
