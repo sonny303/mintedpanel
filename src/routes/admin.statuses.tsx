@@ -185,6 +185,8 @@ function TrackSection({
   track,
   statuses,
   loading,
+  isError,
+  onRetry,
   inUse,
   canEdit,
   onAdd,
