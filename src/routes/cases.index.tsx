@@ -112,7 +112,21 @@ function CasesListPage() {
     allKeys: ALL_KEYS,
   });
   const visibleCols = prefs.visibleCols;
-  const effectiveSort = prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+  // Local override so header clicks always reorder immediately, even before the
+  // persisted prefs row loads. Persistence still runs via cycleSort in useTablePrefs.
+  const [localSort, setLocalSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const effectiveSort =
+    localSort ?? prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+
+  const handleSort = (key: string) => {
+    setLocalSort((cur) => {
+      const active = cur ?? prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+      const nextDir: 'asc' | 'desc' =
+        active.key === key && active.dir === 'asc' ? 'desc' : 'asc';
+      return { key, dir: nextDir };
+    });
+    cycleSort(key);
+  };
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
