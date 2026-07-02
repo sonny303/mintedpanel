@@ -98,7 +98,7 @@ export function useTablePrefs<ColKey extends string>({
     setState((prev) => ({ ...prev, visibleCols: { ...prev.visibleCols, [key]: visible } }));
   }, []);
 
-  const cycleSort = useCallback((key: ColKey) => {
+  const cycleSort = useCallback((key: string) => {
     setState((prev) => {
       const cur = prev.sort;
       let next: TableSortState | null;
