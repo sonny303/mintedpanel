@@ -985,6 +985,15 @@ function TeamTab() {
                   Loading…
                 </td>
               </tr>
+            ) : membershipsQ.isError ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load members.</div>
+                  <Button variant="outline" size="sm" onClick={() => membershipsQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : (membershipsQ.data ?? []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-muted-foreground">
