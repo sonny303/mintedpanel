@@ -50,68 +50,6 @@ const US_STATES = [
   'WI','WY','DC',
 ];
 
-interface RuleInput {
-  payerId: string;
-  state: string;
-  specialty: string;
-  routeType: 'direct' | 'mso';
-  msoId: string | null;
-  notes: string | null;
-}
-
-function useRoutingRules() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['mso-routing-rules', orgId] as const,
-    queryFn: async (): Promise<MsoRoutingRule[]> => {
-      const { data, error } = await supabase
-        .from('mso_routing_rules')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('state', { ascending: true });
-      if (error) throw error;
-      return camelizeRow<MsoRoutingRule[]>(data ?? []);
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
-
-function useSaveRule() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
-  return useMutation({
-    mutationFn: async (args: { id: string | null; input: RuleInput }) => {
-      if (!orgId) {
-        throw new Error('No active organization selected.');
-      }
-      const payload = {
-        org_id: orgId,
-        payer_id: args.input.payerId,
-        state: args.input.state,
-        specialty: args.input.specialty,
-        route_type: args.input.routeType,
-        mso_id: args.input.routeType === 'mso' ? args.input.msoId : null,
-        notes: args.input.notes,
-      };
-      if (args.id) {
-        const { error } = await supabase
-          .from('mso_routing_rules')
-          .update(payload as never)
-          .eq('id', args.id)
-          .eq('org_id', orgId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('mso_routing_rules')
-          .insert(payload as never);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mso-routing-rules', orgId ?? 'no-org'] });
-    },
-  });
-}
 
 function AdminMsoRoutingPage() {
   const role = useRole();
