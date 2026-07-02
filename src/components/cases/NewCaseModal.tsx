@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { getMsoRoutingRule, type StateLicense } from "@/services/lookups";
 import { createTasksForCase } from "@/services/tasks";
+import { resolveTemplate } from "@/lib/sopResolver";
 import { useCases, useCreateCase } from "@/hooks/useCases";
 import {
   useCoordinators,
