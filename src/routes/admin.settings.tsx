@@ -298,6 +298,15 @@ function OrganizationTab() {
                   Loading…
                 </td>
               </tr>
+            ) : groupsQ.isError ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load provider groups.</div>
+                  <Button variant="outline" size="sm" onClick={() => groupsQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : (groupsQ.data ?? []).length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-muted-foreground">
