@@ -23,9 +23,12 @@ export interface ContractInput {
   notes?: string | null;
 }
 
+const CONTRACT_LIST_COLUMNS =
+  'id, group_id, payer_id, state, contracting_status_id, effective_date, expiration_date, notes, created_at, updated_at';
+
 export async function listContracts(filters: ContractFilters = {}): Promise<Contract[]> {
   const orgId = requireActiveOrg();
-  let query = supabase.from('contracts').select('*').eq('org_id', orgId);
+  let query = supabase.from('contracts').select(CONTRACT_LIST_COLUMNS).eq('org_id', orgId);
   if (filters.groupId) query = query.eq('group_id', filters.groupId);
   if (filters.payerId) query = query.eq('payer_id', filters.payerId);
   if (filters.state) query = query.eq('state', filters.state);
@@ -34,6 +37,7 @@ export async function listContracts(filters: ContractFilters = {}): Promise<Cont
   if (error) throw error;
   return camelizeRow<Contract[]>(data ?? []);
 }
+
 
 export async function getContract(id: string): Promise<Contract | null> {
   const orgId = requireActiveOrg();
