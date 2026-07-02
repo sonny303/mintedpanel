@@ -57,6 +57,14 @@ export async function createContract(input: ContractInput): Promise<Contract> {
     .single();
   if (error) throw error;
   const created = camelizeRow<Contract>(data);
+  if (created.contractingStatusId) {
+    await appendStatusHistory({
+      track: 'contracting',
+      contractId: created.id,
+      fromStatusId: null,
+      toStatusId: created.contractingStatusId,
+    });
+  }
   await writeAudit({
     actionType: 'CREATE',
     entityType: 'contract',
