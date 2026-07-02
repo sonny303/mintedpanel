@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useProviders } from '@/hooks/useProviders';
