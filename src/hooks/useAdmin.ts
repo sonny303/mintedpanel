@@ -126,7 +126,9 @@ export function useRoutingRules() {
     queryKey: queryKeys.msoRoutingRules(orgId),
     queryFn: listRoutingRules,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 function invalidateRoutingRuleCaches(
