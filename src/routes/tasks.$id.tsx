@@ -216,26 +216,31 @@ function TaskDetailPage() {
       <div className="max-w-[860px] mx-auto space-y-6">
         {/* Header */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-2 text-sm text-muted-foreground min-w-0"
+          >
             <Link
               to="/tasks"
               className="hover:text-foreground hover:underline underline-offset-4"
             >
-              ← Tasks
+              Tasks
             </Link>
+            <span className="text-border">/</span>
             {task.caseId ? (
-              <>
-                <span className="text-border">/</span>
-                <Link
-                  to="/cases/$id"
-                  params={{ id: task.caseId }}
-                  className="hover:text-foreground hover:underline underline-offset-4"
-                >
-                  ← Back to Case
-                </Link>
-              </>
-            ) : null}
-          </div>
+              <Link
+                to="/cases/$id"
+                params={{ id: task.caseId }}
+                className="hover:text-foreground hover:underline underline-offset-4 truncate"
+              >
+                {caseLabel}
+              </Link>
+            ) : (
+              <span className="truncate">{caseLabel}</span>
+            )}
+            <span className="text-border">/</span>
+            <span className="text-foreground truncate">{task.title}</span>
+          </nav>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-[20px] font-semibold text-foreground">{task.title}</h1>
@@ -266,10 +271,37 @@ function TaskDetailPage() {
               {updateStatusM.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : null}
+              {task.status !== 'completed' ? (
+                isLocked ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Button
+                          size="sm"
+                          className="h-8 bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
+                          disabled
+                        >
+                          Mark complete
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Complete earlier tasks first</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-8 bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
+                    disabled={!canEdit || updateStatusM.isPending}
+                    onClick={() => handleStatusChange('completed')}
+                  >
+                    Mark complete
+                  </Button>
+                )
+              ) : null}
               <Select
-                value={task.status}
+                value={task.status === 'completed' ? 'completed' : task.status}
                 onValueChange={handleStatusChange}
-                disabled={!canEdit || updateStatusM.isPending}
+                disabled={!canEdit || updateStatusM.isPending || task.status === 'completed'}
               >
                 <SelectTrigger className="w-[150px] h-8 text-[13px] shadow-none">
                   <SelectValue />
@@ -277,8 +309,12 @@ function TaskDetailPage() {
                 <SelectContent>
                   <SelectItem value="not_started">Not started</SelectItem>
                   <SelectItem value="in_progress">In progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="blocked">Blocked</SelectItem>
+                  {task.status === 'completed' ? (
+                    <SelectItem value="completed" disabled>
+                      Completed
+                    </SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             </div>
