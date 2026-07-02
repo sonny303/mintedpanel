@@ -127,6 +127,15 @@ function AdminPayersPage() {
                     Loading…
                   </td>
                 </tr>
+              ) : payersQ.isError ? (
+                <tr>
+                  <td colSpan={11} className="px-3 py-12 text-center">
+                    <div className="text-[13px] text-foreground mb-3">Failed to load payers.</div>
+                    <Button variant="outline" size="sm" onClick={() => payersQ.refetch()}>
+                      Retry
+                    </Button>
+                  </td>
+                </tr>
               ) : (payersQ.data ?? []).length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-10 text-center text-muted-foreground">

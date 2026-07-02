@@ -298,6 +298,15 @@ function OrganizationTab() {
                   Loading…
                 </td>
               </tr>
+            ) : groupsQ.isError ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load provider groups.</div>
+                  <Button variant="outline" size="sm" onClick={() => groupsQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : (groupsQ.data ?? []).length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-muted-foreground">
@@ -976,6 +985,15 @@ function TeamTab() {
                   Loading…
                 </td>
               </tr>
+            ) : membershipsQ.isError ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load members.</div>
+                  <Button variant="outline" size="sm" onClick={() => membershipsQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : (membershipsQ.data ?? []).length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-muted-foreground">
@@ -1118,6 +1136,13 @@ function InsurancePoliciesSection({
       </div>
       {policiesQ.isLoading ? (
         <div className="p-4 text-[12px] text-muted-foreground">Loading…</div>
+      ) : policiesQ.isError ? (
+        <div className="p-6 text-center">
+          <div className="text-[13px] text-foreground mb-3">Failed to load insurance policies.</div>
+          <Button variant="outline" size="sm" onClick={() => policiesQ.refetch()}>
+            Retry
+          </Button>
+        </div>
       ) : (policiesQ.data ?? []).length === 0 ? (
         <div className="p-4 text-[12px] text-muted-foreground">
           No insurance policies. Add a policy to track group coverage.

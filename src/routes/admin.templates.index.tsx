@@ -133,6 +133,15 @@ function TemplatesIndex() {
                   Loading…
                 </td>
               </tr>
+            ) : templatesQ.isError ? (
+              <tr>
+                <td className="px-3 py-12 text-center" colSpan={7}>
+                  <div className="text-[13px] text-foreground mb-3">Failed to load templates.</div>
+                  <Button variant="outline" size="sm" onClick={() => templatesQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td className="px-3 h-10 text-sm text-muted-foreground" colSpan={7}>

@@ -129,6 +129,8 @@ function AdminStatusesPage() {
         track="credentialing"
         statuses={credQ.data ?? []}
         loading={credQ.isLoading}
+        isError={credQ.isError}
+        onRetry={() => credQ.refetch()}
         inUse={credInUse}
         canEdit={canEdit}
         onAdd={() => setEditing({ track: 'credentialing', status: null })}
@@ -141,11 +143,14 @@ function AdminStatusesPage() {
         track="contracting"
         statuses={conQ.data ?? []}
         loading={conQ.isLoading}
+        isError={conQ.isError}
+        onRetry={() => conQ.refetch()}
         inUse={conInUse}
         canEdit={canEdit}
         onAdd={() => setEditing({ track: 'contracting', status: null })}
         onEdit={(s) => setEditing({ track: 'contracting', status: s })}
       />
+
 
       <StatusEditModal
         open={editing !== null}
@@ -166,6 +171,8 @@ interface TrackSectionProps {
   track: StatusTrack;
   statuses: StatusConfig[];
   loading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   inUse: Map<string, number>;
   canEdit: boolean;
   onAdd: () => void;
@@ -178,6 +185,8 @@ function TrackSection({
   track,
   statuses,
   loading,
+  isError,
+  onRetry,
   inUse,
   canEdit,
   onAdd,
@@ -224,6 +233,8 @@ function TrackSection({
       track={track}
       statuses={sorted}
       loading={loading}
+      isError={isError}
+      onRetry={onRetry}
       inUse={inUse}
       canEdit={canEdit}
       onAdd={onAdd}
@@ -247,6 +258,8 @@ function ReorderableSection({
   description,
   statuses,
   loading,
+  isError,
+  onRetry,
   inUse,
   canEdit,
   onAdd,
@@ -275,6 +288,13 @@ function ReorderableSection({
         {loading ? (
           <div className="p-8 text-center text-[13px] text-muted-foreground">
             Loading…
+          </div>
+        ) : isError ? (
+          <div className="p-8 text-center">
+            <div className="text-[13px] text-foreground mb-3">Failed to load statuses.</div>
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
           </div>
         ) : statuses.length === 0 ? (
           <div className="p-8 text-center text-[13px] text-muted-foreground">

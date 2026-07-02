@@ -206,6 +206,15 @@ function ContractsTab() {
   }, [contractsQ.data, groupFilter, payerFilter, statusFilter]);
 
   const loading = contractsQ.isLoading || groupsQ.isLoading || payersQ.isLoading;
+  const isError =
+    contractsQ.isError || groupsQ.isError || payersQ.isError || casesQ.isError || statusesQ.isError;
+  const retry = () => {
+    if (contractsQ.isError) contractsQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (casesQ.isError) casesQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+  };
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -298,6 +307,15 @@ function ContractsTab() {
                 <tr>
                   <td colSpan={9} className="p-3">
                     <Skeleton className="h-8 w-full" />
+                  </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-12 text-center">
+                    <div className="text-[13px] text-foreground mb-3">Failed to load contracts.</div>
+                    <Button variant="outline" size="sm" onClick={retry}>
+                      Retry
+                    </Button>
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
@@ -724,6 +742,27 @@ function EnrollmentMatrixTab() {
     return <Skeleton className="h-64 w-full" />;
   }
 
+  const isError =
+    casesQ.isError || providersQ.isError || payersQ.isError || statusesQ.isError || groupsQ.isError;
+  const retry = () => {
+    if (casesQ.isError) casesQ.refetch();
+    if (providersQ.isError) providersQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+  };
+
+  if (isError) {
+    return (
+      <div className="border border-border rounded-md px-3 py-12 text-center">
+        <div className="text-[13px] text-foreground mb-3">Failed to load enrollment matrix.</div>
+        <Button variant="outline" size="sm" onClick={retry}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="space-y-4">
@@ -1096,6 +1135,37 @@ function SummaryTab() {
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  const isError =
+    casesQ.isError ||
+    tasksQ.isError ||
+    providersQ.isError ||
+    payersQ.isError ||
+    statusesQ.isError ||
+    groupsQ.isError ||
+    coordinatorsQ.isError ||
+    touchesQ.isError;
+  const retry = () => {
+    if (casesQ.isError) casesQ.refetch();
+    if (tasksQ.isError) tasksQ.refetch();
+    if (providersQ.isError) providersQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+    if (coordinatorsQ.isError) coordinatorsQ.refetch();
+    if (touchesQ.isError) touchesQ.refetch();
+  };
+
+  if (isError) {
+    return (
+      <div className="border border-border rounded-md px-3 py-12 text-center">
+        <div className="text-[13px] text-foreground mb-3">Failed to load summary data.</div>
+        <Button variant="outline" size="sm" onClick={retry}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -1736,6 +1806,22 @@ function RosterTab() {
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
+        </div>
+      ) : casesQ.isError || providersQ.isError || statusesQ.isError || auxQ.isError ? (
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center">
+          <div className="text-[13px] text-foreground mb-3">Failed to load roster.</div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (casesQ.isError) casesQ.refetch();
+              if (providersQ.isError) providersQ.refetch();
+              if (statusesQ.isError) statusesQ.refetch();
+              if (auxQ.isError) auxQ.refetch();
+            }}
+          >
+            Retry
+          </Button>
         </div>
       ) : rows.length === 0 ? (
         <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center text-[13px] text-muted-foreground">

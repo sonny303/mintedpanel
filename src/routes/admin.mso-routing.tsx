@@ -220,6 +220,15 @@ function AdminMsoRoutingPage() {
                   Loading…
                 </td>
               </tr>
+            ) : rulesQ.isError ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load routing rules.</div>
+                  <Button variant="outline" size="sm" onClick={() => rulesQ.refetch()}>
+                    Retry
+                  </Button>
+                </td>
+              </tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-10 text-center text-muted-foreground">
@@ -293,6 +302,13 @@ function AdminMsoRoutingPage() {
         {msosQ.isLoading ? (
           <div className="p-6 text-center text-muted-foreground text-[13px]">
             Loading…
+          </div>
+        ) : msosQ.isError ? (
+          <div className="p-8 text-center">
+            <div className="text-[13px] text-foreground mb-3">Failed to load MSOs.</div>
+            <Button variant="outline" size="sm" onClick={() => msosQ.refetch()}>
+              Retry
+            </Button>
           </div>
         ) : (msosQ.data ?? []).length === 0 ? (
           <div className="p-6 text-center text-muted-foreground text-[13px]">
