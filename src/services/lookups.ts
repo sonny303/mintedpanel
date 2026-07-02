@@ -137,15 +137,17 @@ export async function getNotesFor(
   );
   const nameMap = new Map<string, string | null>();
   if (authorIds.length > 0) {
-    const { data: profs } = await supabase
+    const { data: profs, error: profErr } = await supabase
       .from('profiles')
       .select('id, full_name, email')
       .in('id', authorIds);
+    if (profErr) throw profErr;
     for (const p of profs ?? []) {
       const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
       nameMap.set(p.id as string, name);
     }
   }
+
   const merged = rows.map((n) => ({
     ...n,
     author_name: n.author_id ? nameMap.get(n.author_id as string) ?? null : null,
