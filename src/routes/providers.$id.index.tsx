@@ -22,7 +22,7 @@ import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups, useNotes, useCreateNote } from '@/hooks/useLookups';
+import { useProviderGroups, useNotes, useCreateNote, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useCanWrite } from '@/lib/permissions';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import { CaseNotesPanel } from '@/components/cases/CaseNotesPanel';
@@ -551,6 +551,88 @@ function IdentityCard({ provider }: { provider: Provider }) {
 }
 
 function LicensesCard({ provider }: { provider: Provider }) {
+  const licensesQ = useStateLicensesByProvider(provider.id);
+  const rows = licensesQ.data ?? [];
+
+  if (licensesQ.isLoading) {
+    return (
+      <Card title="Licenses">
+        <div className="text-[13px] text-muted-foreground">Loading…</div>
+      </Card>
+    );
+  }
+
+  if (licensesQ.error) {
+    return (
+      <Card title="Licenses">
+        <div className="text-[13px] text-[#DC2626]">
+          Failed to load licenses: {(licensesQ.error as Error).message}
+        </div>
+      </Card>
+    );
+  }
+
+  if (rows.length > 0) {
+    return (
+      <Card title="Licenses">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border">
+              <Th>State</Th>
+              <Th>Number</Th>
+              <Th>Type</Th>
+              <Th>Issued</Th>
+              <Th>Expires</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((l) => {
+              const exp = l.expirationDate;
+              let expired = false;
+              let expiringSoon = false;
+              if (exp) {
+                const days = (parseISO(exp).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+                expired = days < 0;
+                expiringSoon = !expired && days <= 90;
+              }
+              return (
+                <tr key={l.id} className="border-b border-border last:border-0 h-10">
+                  <td className="px-3 text-foreground">{l.state || '—'}</td>
+                  <td className="px-3 text-foreground tabular-nums">
+                    {l.licenseNumber ?? '—'}
+                  </td>
+                  <td className="px-3 text-foreground capitalize">{l.licenseType ?? '—'}</td>
+                  <td className="px-3 text-foreground tabular-nums">{fmtDate(l.issueDate)}</td>
+                  <td className="px-3 tabular-nums">
+                    <span
+                      className={
+                        expired
+                          ? 'text-[#DC2626] font-medium'
+                          : expiringSoon
+                            ? 'text-[#D97706] font-medium'
+                            : 'text-foreground'
+                      }
+                    >
+                      {fmtDate(exp)}
+                    </span>
+                    {expired ? (
+                      <StatusPill status="red" label="Expired" className="ml-2" />
+                    ) : expiringSoon ? (
+                      <StatusPill status="amber" label="Expiring soon" className="ml-2" />
+                    ) : null}
+                  </td>
+                  <td className="px-3 text-foreground capitalize">{l.status ?? '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    );
+  }
+
+  // Fallback to legacy provider columns (only when no state_licenses rows exist).
   const number = provider.licenseNumber;
   if (!number) {
     return (
@@ -560,16 +642,18 @@ function LicensesCard({ provider }: { provider: Provider }) {
     );
   }
   const exp = provider.licenseExpirationDate;
-  let expiringSoon = false;
   let expired = false;
+  let expiringSoon = false;
   if (exp) {
-    const diffMs = parseISO(exp).getTime() - Date.now();
-    const days = diffMs / (1000 * 60 * 60 * 24);
+    const days = (parseISO(exp).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     expired = days < 0;
-    expiringSoon = !expired && days <= 60;
+    expiringSoon = !expired && days <= 90;
   }
   return (
     <Card title="Licenses">
+      <div className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        Legacy record
+      </div>
       <table className="w-full text-[13px]">
         <thead>
           <tr className="border-b border-border">

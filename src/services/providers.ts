@@ -156,6 +156,7 @@ export async function updateProvider(
 }
 
 export interface LicenseInput {
+  id?: string | null;
   state: string;
   licenseNumber: string | null;
   licenseType: string | null;
@@ -258,11 +259,17 @@ export async function updateProviderWithLicenses(
 ): Promise<Provider> {
   const orgId = requireActiveOrg();
   const before = await getProvider(id);
-  const { data: licsBefore } = await supabase
+  const { data: licsBefore, error: licsBeforeErr } = await supabase
     .from('state_licenses')
     .select('*')
     .eq('org_id', orgId)
     .eq('provider_id', id);
+  if (licsBeforeErr) throw licsBeforeErr;
+  const existing = (licsBefore ?? []) as Array<{
+    id: string;
+    state: string | null;
+    license_number: string | null;
+  }>;
 
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   const { data, error } = await supabase
@@ -275,16 +282,24 @@ export async function updateProviderWithLicenses(
   if (error) throw error;
   const after = camelizeRow<Provider>(data);
 
-  const { error: delErr } = await supabase
-    .from('state_licenses')
-    .delete()
-    .eq('org_id', orgId)
-    .eq('provider_id', id);
-  if (delErr) throw delErr;
+  const cleanLicenses = input.licenses.filter(
+    (l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType,
+  );
 
-  const rows: StateLicenseInsert[] = input.licenses
-    .filter((l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType)
-    .map((l) => ({
+  // Match incoming rows to existing rows by id, else by (state + licenseNumber).
+  const existingById = new Map(existing.map((r) => [r.id, r]));
+  const naturalKey = (state: string | null, num: string | null): string =>
+    `${(state ?? '').toUpperCase()}::${(num ?? '').trim()}`;
+  const existingByNatural = new Map(
+    existing.map((r) => [naturalKey(r.state, r.license_number), r]),
+  );
+
+  const matchedIds = new Set<string>();
+  const toUpdate: Array<{ id: string; row: StateLicenseInsert }> = [];
+  const toInsert: StateLicenseInsert[] = [];
+
+  for (const l of cleanLicenses) {
+    const row: StateLicenseInsert = {
       org_id: orgId,
       provider_id: id,
       state: l.state || '',
@@ -292,19 +307,81 @@ export async function updateProviderWithLicenses(
       license_type: l.licenseType,
       issue_date: l.issueDate,
       expiration_date: l.expirationDate,
-    }));
-  if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('state_licenses').insert(rows);
-    if (insErr) throw insErr;
+    };
+    let match: { id: string } | undefined;
+    if (l.id && existingById.has(l.id) && !matchedIds.has(l.id)) {
+      match = existingById.get(l.id);
+    } else {
+      const key = naturalKey(l.state, l.licenseNumber);
+      const cand = existingByNatural.get(key);
+      if (cand && !matchedIds.has(cand.id)) match = cand;
+    }
+    if (match) {
+      matchedIds.add(match.id);
+      toUpdate.push({ id: match.id, row });
+    } else {
+      toInsert.push(row);
+    }
   }
 
+  const toDeleteIds = existing.filter((r) => !matchedIds.has(r.id)).map((r) => r.id);
+
+  // Delete removed rows and verify the delete actually removed them.
+  if (toDeleteIds.length > 0) {
+    const { data: deleted, error: delErr } = await supabase
+      .from('state_licenses')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('provider_id', id)
+      .in('id', toDeleteIds)
+      .select('id');
+    if (delErr) throw delErr;
+    const removed = new Set(((deleted ?? []) as Array<{ id: string }>).map((r) => r.id));
+    const missed = toDeleteIds.filter((did) => !removed.has(did));
+    if (missed.length > 0) {
+      throw new Error(
+        `Failed to remove ${missed.length} license row(s); permissions may have changed.`,
+      );
+    }
+  }
+
+  // Update matched rows.
+  for (const { id: licId, row } of toUpdate) {
+    const { error: updErr } = await supabase
+      .from('state_licenses')
+      .update({
+        state: row.state,
+        license_number: row.license_number,
+        license_type: row.license_type,
+        issue_date: row.issue_date,
+        expiration_date: row.expiration_date,
+      })
+      .eq('id', licId)
+      .eq('org_id', orgId)
+      .eq('provider_id', id);
+    if (updErr) throw updErr;
+  }
+
+  // Insert new rows.
+  if (toInsert.length > 0) {
+    const { error: insErr } = await supabase.from('state_licenses').insert(toInsert);
+    if (insErr) throw insErr;
+  }
 
   await writeAudit({
     actionType: 'UPDATE',
     entityType: 'provider',
     entityId: id,
-    before: { provider: before, licenses: licsBefore ?? [] },
-    after: { provider: after, licenses: rows },
+    before: { provider: before, licenses: existing },
+    after: {
+      provider: after,
+      licenses: cleanLicenses,
+      diff: {
+        updated: toUpdate.length,
+        inserted: toInsert.length,
+        deleted: toDeleteIds.length,
+      },
+    },
     description: `Updated provider ${after.firstName} ${after.lastName}`,
   });
 
