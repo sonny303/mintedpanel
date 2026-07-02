@@ -115,6 +115,43 @@ export function useUpdateMso(id: string) {
   });
 }
 
+
+export function useRoutingRules() {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: queryKeys.msoRoutingRules(orgId),
+    queryFn: listRoutingRules,
+    enabled: orgId !== 'no-org',
+  });
+}
+
+function invalidateRoutingRuleCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  orgId: string,
+) {
+  qc.invalidateQueries({ queryKey: queryKeys.msoRoutingRules(orgId) });
+  // Resolver key family used by useMsoRoutingRule during case creation.
+  qc.invalidateQueries({ queryKey: ['mso-routing-rule'] });
+}
+
+export function useCreateRoutingRule() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useMutation({
+    mutationFn: (input: RoutingRuleInput) => createRoutingRule(input),
+    onSuccess: () => invalidateRoutingRuleCaches(qc, orgId),
+  });
+}
+
+export function useUpdateRoutingRule(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useMutation({
+    mutationFn: (input: RoutingRuleInput) => updateRoutingRule(id, input),
+    onSuccess: () => invalidateRoutingRuleCaches(qc, orgId),
+  });
+}
+
 export function useTemplates() {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
