@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/EmptyState';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -348,7 +349,9 @@ function CaseDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {tasks.length === 0 ? (
-                  <div className="p-6 text-center text-[13px] text-muted-foreground">No tasks yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No tasks yet" />
+                  </div>
                 ) : (
                   <div className="divide-y divide-border">
                     {tasks.map((t, idx) => {
@@ -435,15 +438,15 @@ function CaseDetailPage() {
                   />
                 ) : null}
                 {touches.length === 0 ? (
-                  <div className="p-8 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-3">
-                      <MessageSquare className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <p className="text-[14px] font-medium text-foreground">No touches logged yet</p>
-                    <p className="text-[12px] text-muted-foreground mt-1">
-                      Record calls, emails, and portal updates here.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <MessageSquare className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    }
+                    message="No touches logged yet"
+                    description="Record calls, emails, and portal updates here"
+                  />
                 ) : (
                   <div className="p-4 space-y-6">
                     {touches.map((t, idx) => {
@@ -557,7 +560,9 @@ function CaseDetailPage() {
               </CardHeader>
               <CardContent className="p-4">
                 {statusHistory.length === 0 ? (
-                  <div className="text-[13px] text-muted-foreground">No changes yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No changes yet" />
+                  </div>
                 ) : (
                   <ul className="space-y-3 text-[13px]">
                     {statusHistory.map((h) => {
@@ -620,7 +625,9 @@ function CaseDetailPage() {
                   />
                 ) : null}
                 {notes.length === 0 ? (
-                  <div className="text-[13px] text-muted-foreground">No notes yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No notes yet" />
+                  </div>
                 ) : (
                   notes.map((n) => (
                     <div key={n.id} className="bg-muted/30 p-3 rounded-md border border-border">

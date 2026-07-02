@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useProviders } from '@/hooks/useProviders';
@@ -212,13 +213,7 @@ function ProvidersListPage() {
           </thead>
           <tbody>
             {providersQ.isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-3"><Skeleton className="h-4 w-24" /></td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={8} cols={6} />
             ) : providersQ.isError ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
@@ -233,27 +228,20 @@ function ProvidersListPage() {
             ) : providers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
-                  {hasActiveFilter ? (
-                    <>
-                      <div className="text-[13px] text-muted-foreground mb-3">
-                        No providers match these filters.
-                      </div>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-[13px] text-muted-foreground mb-3">
-                        No providers yet.
-                      </div>
-                      {canEdit ? (
+                  <EmptyState
+                    message={hasActiveFilter ? 'No providers match these filters' : 'No providers yet'}
+                    action={
+                      hasActiveFilter ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : canEdit ? (
                         <Button size="sm" onClick={() => navigate({ to: '/providers/new' })}>
                           Add provider
                         </Button>
-                      ) : null}
-                    </>
-                  )}
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             ) : (

@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useCases } from '@/hooks/useCases';
@@ -380,15 +381,7 @@ function CasesListPage() {
           </thead>
           <tbody>
             {casesQ.isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 8 }).map((__, j) => (
-                    <td key={j} className="px-3">
-                      <Skeleton className="h-4 w-20" />
-                    </td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={8} cols={8} />
             ) : casesQ.isError ? (
               <tr>
                 <td colSpan={8} className="px-3 py-12 text-center">
@@ -402,20 +395,17 @@ function CasesListPage() {
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="px-3 py-12 text-center text-[13px] text-muted-foreground"
-                >
-                  {hasActiveFilter ? (
-                    <>
-                      <div className="mb-3">No cases match these filters.</div>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <>No cases yet</>
-                  )}
+                <td colSpan={8} className="px-3 py-12 text-center">
+                  <EmptyState
+                    message={hasActiveFilter ? 'No cases match these filters' : 'No cases yet'}
+                    action={
+                      hasActiveFilter ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             ) : (

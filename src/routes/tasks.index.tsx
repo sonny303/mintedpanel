@@ -11,7 +11,8 @@ import {
 import { fmtDate } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import {
   Select,
   SelectContent,
@@ -276,15 +277,7 @@ function TaskQueuePage() {
           </thead>
           <tbody>
             {tasksQ.isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-3">
-                      <Skeleton className="h-4 w-20" />
-                    </td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={8} cols={6} />
             ) : tasksQ.isError ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
@@ -298,20 +291,17 @@ function TaskQueuePage() {
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-12 text-center text-[13px] text-muted-foreground"
-                >
-                  {hasActiveFilter ? (
-                    <>
-                      <div className="mb-3">No tasks match these filters.</div>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <>No tasks yet</>
-                  )}
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <EmptyState
+                    message={hasActiveFilter ? 'No tasks match these filters' : 'No tasks yet'}
+                    action={
+                      hasActiveFilter ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             ) : (

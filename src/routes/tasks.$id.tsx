@@ -16,6 +16,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { EmptyState } from '@/components/EmptyState';
 import {
   Select,
   SelectContent,

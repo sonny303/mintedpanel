@@ -7,6 +7,8 @@ import { Pencil, Plus, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
 import { fmtDate } from '@/lib/format';
 import { CopyButton } from '@/components/CopyButton';
@@ -420,19 +422,11 @@ function CasesPanel({
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-3">
-                      <Skeleton className="h-4 w-20" />
-                    </td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={4} cols={6} />
             ) : cases.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center text-[13px] text-muted-foreground">
-                  No cases yet
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <EmptyState message="No cases yet" />
                 </td>
               </tr>
             ) : (
