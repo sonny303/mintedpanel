@@ -1136,6 +1136,13 @@ function InsurancePoliciesSection({
       </div>
       {policiesQ.isLoading ? (
         <div className="p-4 text-[12px] text-muted-foreground">Loading…</div>
+      ) : policiesQ.isError ? (
+        <div className="p-6 text-center">
+          <div className="text-[13px] text-foreground mb-3">Failed to load insurance policies.</div>
+          <Button variant="outline" size="sm" onClick={() => policiesQ.refetch()}>
+            Retry
+          </Button>
+        </div>
       ) : (policiesQ.data ?? []).length === 0 ? (
         <div className="p-4 text-[12px] text-muted-foreground">
           No insurance policies. Add a policy to track group coverage.
