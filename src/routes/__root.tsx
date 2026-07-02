@@ -163,6 +163,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {isPublicRoute ? <Outlet /> : <AppShell><Outlet /></AppShell>}
+      <Toaster />
     </QueryClientProvider>
   );
 }
