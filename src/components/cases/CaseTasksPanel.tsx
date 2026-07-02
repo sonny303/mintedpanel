@@ -125,6 +125,8 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
 
                 const canComplete =
                   canEdit && !locked && t.status !== 'completed';
+                const canReopen = canEdit && t.status === 'completed';
+                const circleInteractive = canComplete || canReopen;
 
                 const row = (
                   <div
@@ -142,16 +144,25 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     <button
                       type="button"
                       className={`flex-shrink-0 -m-1 p-1 rounded ${
-                        canComplete ? 'hover:bg-[#1B4D3E]/10 cursor-pointer' : 'cursor-default'
+                        circleInteractive ? 'hover:bg-[#1B4D3E]/10 cursor-pointer' : 'cursor-default'
                       }`}
                       aria-label={
-                        canComplete ? `Complete ${t.title}` : `Status ${t.status}`
+                        canComplete
+                          ? `Complete ${t.title}`
+                          : canReopen
+                            ? `Reopen ${t.title}`
+                            : `Status ${t.status}`
                       }
-                      disabled={!canComplete || updateStatusM.isPending}
+                      disabled={!circleInteractive || updateStatusM.isPending}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!canComplete) return;
-                        completeWithUndo(t);
+                        if (canComplete) {
+                          completeWithUndo(t);
+                          return;
+                        }
+                        if (canReopen) {
+                          setReopenTask(t);
+                        }
                       }}
                     >
                       {taskStatusIcon(t.status, locked)}
