@@ -40,12 +40,27 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
   const updateStatusM = useUpdateTaskStatus();
   const [drawerTask, setDrawerTask] = useState<{ task: Task; locked: boolean } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
   const completedTasks = tasks.filter((t) => t.status === 'completed').length;
 
   const openDrawer = (task: Task, locked: boolean) => {
     setDrawerTask({ task, locked });
     setDrawerOpen(true);
+  };
+
+  const reopenConfirm = () => {
+    const t = reopenTask;
+    if (!t) return;
+    setReopenTask(null);
+    updateStatusM.mutate(
+      { id: t.id, status: 'in_progress' },
+      {
+        onSuccess: () => toast.success(`Reopened "${t.title}"`),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Could not reopen task'),
+      },
+    );
   };
 
   const completeWithUndo = (task: Task) => {
