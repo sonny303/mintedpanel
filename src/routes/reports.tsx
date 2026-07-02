@@ -916,19 +916,7 @@ function SummaryTab() {
   const statusesQ = useStatusConfigs('credentialing');
   const groupsQ = useProviderGroups();
   const coordinatorsQ = useCoordinators();
-
-  const touchesQ = useQuery({
-    queryKey: ['reports-summary-touches', orgId],
-    enabled: orgId !== 'no-org',
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('touches')
-        .select('*')
-        .eq('org_id', orgId);
-      if (error) throw error;
-      return camelizeRow<Touch[]>(data ?? []);
-    },
-  });
+  const touchesQ = useTouchSummary();
 
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [stateFilter, setStateFilter] = useState<string>(ALL);
