@@ -325,10 +325,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
 
       const rule = await qc.fetchQuery({
         queryKey: ['mso-routing-rule', orgId, payerId, state, provider.specialty ?? ''] as const,
-        queryFn: () =>
-          import('@/services/lookups').then((m) =>
-            m.getMsoRoutingRule(payerId, state, provider.specialty ?? null),
-          ),
+        queryFn: () => getMsoRoutingRule(payerId, state, provider.specialty ?? null),
       });
       const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
       const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
