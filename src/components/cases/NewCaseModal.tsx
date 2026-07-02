@@ -323,7 +323,13 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
         continue;
       }
 
-      const rule = await getMsoRoutingRule(payerId, state, provider.specialty ?? null);
+      const rule = await qc.fetchQuery({
+        queryKey: ['mso-routing-rule', orgId, payerId, state, provider.specialty ?? ''] as const,
+        queryFn: () =>
+          import('@/services/lookups').then((m) =>
+            m.getMsoRoutingRule(payerId, state, provider.specialty ?? null),
+          ),
+      });
       const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
       const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
 
@@ -339,8 +345,9 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
           msoId,
           assignedTo: coordinatorId === NONE ? null : coordinatorId,
         });
-      } catch {
-        skipped.push({ payerName: payer.name, reason: "Save failed" });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Save failed';
+        skipped.push({ payerName: payer.name, reason: message });
         continue;
       }
 
@@ -351,19 +358,17 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
         const tokens = buildTokenMap(provider, group, mso, licenseNumber);
         const tasks = resolveRawTemplate(template, tokens);
         if (tasks.length > 0) {
-          const payload = tasks.map((t) => ({
-            org_id: orgId,
-            case_id: caseRow.id,
-            provider_id: provider.id,
-            title: t.title,
-            description: t.description,
-            sop_content: t.steps as unknown as never,
-            status: "not_started" as const,
-            sort_order: t.sortOrder,
-            due_date: t.dueDate,
-            is_auto_generated: true,
-          }));
-          await supabase.from("tasks").insert(payload as never);
+          await createTasksForCase(
+            tasks.map((t) => ({
+              caseId: caseRow.id,
+              providerId: provider.id,
+              title: t.title,
+              description: t.description,
+              sopContent: t.steps,
+              sortOrder: t.sortOrder,
+              dueDate: t.dueDate,
+            })),
+          );
         }
       }
 
