@@ -448,7 +448,6 @@ function CasesListPage() {
                 <CaseRow
                   key={e.c.id}
                   data={e}
-                  stalledOnly={stalled}
                   onOpen={() =>
                     navigate({ to: '/cases/$id', params: { id: e.c.id } })
                   }
