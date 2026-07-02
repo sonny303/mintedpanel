@@ -127,10 +127,9 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isLandingRoute = pathname === "/landing";
   const isAuthRoute = pathname === "/login";
   const isRootRoute = pathname === "/";
-  const isPublicRoute = isAuthRoute || isLandingRoute || isRootRoute;
+  const isPublicRoute = isAuthRoute || isRootRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
