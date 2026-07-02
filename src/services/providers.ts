@@ -168,6 +168,90 @@ export interface UpdateProviderWithLicensesInput {
   licenses: LicenseInput[];
 }
 
+export interface CreateProviderWithDetailsInput {
+  provider: ProviderInput;
+  licenses: LicenseInput[];
+  facilityIds: string[];
+}
+
+export interface CreateProviderWithDetailsResult {
+  provider: Provider;
+  warnings: string[];
+}
+
+export async function createProviderWithDetails(
+  input: CreateProviderWithDetailsInput,
+): Promise<CreateProviderWithDetailsResult> {
+  const orgId = requireActiveOrg();
+  const payload = { ...snakeizeRow<Record<string, unknown>>(input.provider), org_id: orgId };
+  const { data, error } = await supabase
+    .from('providers')
+    .insert(payload as unknown as ProviderInsert)
+    .select('*')
+    .single();
+  if (error) throw error;
+  const created = camelizeRow<Provider>(data);
+
+  const warnings: string[] = [];
+
+  const licenseRows: StateLicenseInsert[] = input.licenses
+    .filter((l) => l.state && l.state.trim().length > 0)
+    .map((l) => ({
+      org_id: orgId,
+      provider_id: created.id,
+      state: l.state,
+      license_number: l.licenseNumber,
+      license_type: l.licenseType,
+      issue_date: l.issueDate,
+      expiration_date: l.expirationDate,
+      status: 'active',
+    }));
+
+  let insertedLicenses: StateLicenseInsert[] = [];
+  if (licenseRows.length > 0) {
+    const { error: licErr } = await supabase.from('state_licenses').insert(licenseRows);
+    if (licErr) {
+      warnings.push(`Licenses not saved: ${licErr.message}`);
+    } else {
+      insertedLicenses = licenseRows;
+    }
+  }
+
+  const facilityRows = input.facilityIds
+    .filter((id) => id)
+    .map((facilityId) => ({
+      org_id: orgId,
+      provider_id: created.id,
+      facility_id: facilityId,
+    }));
+
+  let insertedFacilityIds: string[] = [];
+  if (facilityRows.length > 0) {
+    const { error: facErr } = await supabase
+      .from('provider_facility_assignments')
+      .insert(facilityRows);
+    if (facErr) {
+      warnings.push(`Facility assignments not saved: ${facErr.message}`);
+    } else {
+      insertedFacilityIds = facilityRows.map((f) => f.facility_id);
+    }
+  }
+
+  await writeAudit({
+    actionType: 'CREATE',
+    entityType: 'provider',
+    entityId: created.id,
+    after: {
+      provider: created,
+      licenses: insertedLicenses,
+      facilityIds: insertedFacilityIds,
+    },
+    description: `Created provider ${created.firstName} ${created.lastName}`,
+  });
+
+  return { provider: created, warnings };
+}
+
 export async function updateProviderWithLicenses(
   id: string,
   input: UpdateProviderWithLicensesInput,
