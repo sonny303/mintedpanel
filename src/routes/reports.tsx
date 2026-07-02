@@ -1807,6 +1807,22 @@ function RosterTab() {
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-8 w-full" />
         </div>
+      ) : casesQ.isError || providersQ.isError || statusesQ.isError || auxQ.isError ? (
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center">
+          <div className="text-[13px] text-foreground mb-3">Failed to load roster.</div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (casesQ.isError) casesQ.refetch();
+              if (providersQ.isError) providersQ.refetch();
+              if (statusesQ.isError) statusesQ.refetch();
+              if (auxQ.isError) auxQ.refetch();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
       ) : rows.length === 0 ? (
         <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center text-[13px] text-muted-foreground">
           No providers in this group have a case for the selected payer
