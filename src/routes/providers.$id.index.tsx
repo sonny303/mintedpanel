@@ -422,15 +422,7 @@ function CasesPanel({
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-3">
-                      <Skeleton className="h-4 w-20" />
-                    </td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={4} cols={6} />
             ) : cases.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center text-[13px] text-muted-foreground">
