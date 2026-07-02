@@ -25,7 +25,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (initialized && session && pathname === "/login") {
-      navigate({ to: "/" });
+      navigate({ to: "/cases" });
     }
   }, [initialized, session, pathname, navigate]);
 
@@ -34,10 +34,10 @@ function LoginPage() {
     setError(null);
     const result = await signIn(email.trim(), password);
     if (result.error) {
-      setError("Invalid email or password");
+      setError(result.error);
       return;
     }
-    navigate({ to: "/" });
+    navigate({ to: "/cases" });
   }
 
   return (
