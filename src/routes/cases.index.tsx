@@ -19,7 +19,7 @@ import { StatusPill, type StatusColor } from '@/components/StatusPill';
 import { useCases } from '@/hooks/useCases';
 import { useProviders } from '@/hooks/useProviders';
 import { useContracts } from '@/hooks/useContracts';
-import { useTouches } from '@/hooks/useTouches';
+import { useLastTouchDates } from '@/hooks/useTouches';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
 import type {
