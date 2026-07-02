@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { useQuery } from '@tanstack/react-query';
+
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,10 +56,9 @@ import { useProviders } from '@/hooks/useProviders';
 import { useTasks } from '@/hooks/useTasks';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
-import { useRole, useActiveOrgId } from '@/lib/auth-store';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
-import type { Contract, CredentialCase, StatusConfig, Touch } from '@/types';
+import { useRosterAux, useTouchSummary } from '@/hooks/useReports';
+import { useRole } from '@/lib/auth-store';
+import type { Contract, CredentialCase, StatusConfig } from '@/types';
 
 
 interface ReportsSearch {
@@ -909,7 +908,6 @@ function downloadCsv(filename: string, rows: (string | number | null | undefined
 }
 
 function SummaryTab() {
-  const orgId = useActiveOrgId() ?? 'no-org';
   const casesQ = useCases();
   const tasksQ = useTasks();
   const providersQ = useProviders();
@@ -917,19 +915,7 @@ function SummaryTab() {
   const statusesQ = useStatusConfigs('credentialing');
   const groupsQ = useProviderGroups();
   const coordinatorsQ = useCoordinators();
-
-  const touchesQ = useQuery({
-    queryKey: ['reports-summary-touches', orgId],
-    enabled: orgId !== 'no-org',
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('touches')
-        .select('*')
-        .eq('org_id', orgId);
-      if (error) throw error;
-      return camelizeRow<Touch[]>(data ?? []);
-    },
-  });
+  const touchesQ = useTouchSummary();
 
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [stateFilter, setStateFilter] = useState<string>(ALL);
@@ -1483,7 +1469,6 @@ function formatAddress(f: RosterAux['facilities'][number] | undefined): string {
 }
 
 function RosterTab() {
-  const orgId = useActiveOrgId() ?? 'no-org';
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
   const statusesQ = useStatusConfigs('credentialing');
@@ -1540,53 +1525,8 @@ function RosterTab() {
     [matchingCases],
   );
 
-  // Aux data: facility assignments, facilities, state licenses
-  const auxQ = useQuery<RosterAux>({
-    queryKey: ['roster-aux', orgId, providerIds],
-    enabled: orgId !== 'no-org' && providerIds.length > 0,
-    queryFn: async () => {
-      const [aRes, lRes] = await Promise.all([
-        supabase
-          .from('provider_facility_assignments')
-          .select('provider_id, facility_id')
-          .eq('org_id', orgId)
-          .in('provider_id', providerIds),
-        supabase
-          .from('state_licenses')
-          .select('provider_id, state, license_number, expiration_date')
-          .eq('org_id', orgId)
-          .in('provider_id', providerIds),
-      ]);
-      if (aRes.error) throw aRes.error;
-      if (lRes.error) throw lRes.error;
-      const assignments = (aRes.data ?? []).map((r) => ({
-        providerId: r.provider_id as string,
-        facilityId: r.facility_id as string,
-      }));
-      const facilityIds = Array.from(new Set(assignments.map((a) => a.facilityId).filter(Boolean)));
-      const matchingCaseFacilityIds = Array.from(
-        new Set(matchingCases.map((c) => c.facilityId).filter((v): v is string => Boolean(v))),
-      );
-      const allFacilityIds = Array.from(new Set([...facilityIds, ...matchingCaseFacilityIds]));
-      let facilities: RosterAux['facilities'] = [];
-      if (allFacilityIds.length > 0) {
-        const fRes = await supabase
-          .from('facilities')
-          .select('id, name, street, city, state, zip')
-          .eq('org_id', orgId)
-          .in('id', allFacilityIds);
-        if (fRes.error) throw fRes.error;
-        facilities = camelizeRow<RosterAux['facilities']>(fRes.data ?? []);
-      }
-      const licenses = (lRes.data ?? []).map((r) => ({
-        providerId: r.provider_id as string,
-        state: r.state as string,
-        licenseNumber: (r.license_number as string | null) ?? null,
-        expirationDate: (r.expiration_date as string | null) ?? null,
-      }));
-      return { assignments, facilities, licenses };
-    },
-  });
+  // Aux data: facility assignments, facilities, state licenses (org-wide)
+  const auxQ = useRosterAux();
 
   const rows: RosterRow[] = useMemo(() => {
     if (!generated) return [];
