@@ -1,7 +1,7 @@
 // Payer, MSO, SOP template, status config, and audit-log query hooks.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { queryKeys } from '@/hooks/queryKeys';
+import { FIVE_MINUTES, queryKeys } from '@/hooks/queryKeys';
 import {
   createPayer,
   getPayer,
