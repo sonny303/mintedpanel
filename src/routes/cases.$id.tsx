@@ -349,7 +349,9 @@ function CaseDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {tasks.length === 0 ? (
-                  <div className="p-6 text-center text-[13px] text-muted-foreground">No tasks yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No tasks yet" />
+                  </div>
                 ) : (
                   <div className="divide-y divide-border">
                     {tasks.map((t, idx) => {
