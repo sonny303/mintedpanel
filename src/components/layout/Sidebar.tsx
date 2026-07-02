@@ -16,14 +16,13 @@ import {
 type NavLink = {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: typeof Users;
   exact?: boolean;
 };
 
 const mainNav: NavLink[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { to: '/providers', label: 'Providers', icon: Users },
   { to: '/cases', label: 'Cases', icon: FileStack },
+  { to: '/providers', label: 'Providers', icon: Users },
   { to: '/tasks', label: 'Tasks', icon: CheckSquare },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
 ];
