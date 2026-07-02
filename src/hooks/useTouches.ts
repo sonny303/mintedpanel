@@ -34,6 +34,7 @@ export function useLogTouch() {
     mutationFn: (vars: LogTouchVars) => logTouch(vars.caseId, vars.input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: queryKeys.touches(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ['touches', orgId, 'last-per-case'] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
       qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
     },
