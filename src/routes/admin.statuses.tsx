@@ -233,6 +233,8 @@ function TrackSection({
       track={track}
       statuses={sorted}
       loading={loading}
+      isError={isError}
+      onRetry={onRetry}
       inUse={inUse}
       canEdit={canEdit}
       onAdd={onAdd}
