@@ -19,7 +19,7 @@ import { StatusPill, type StatusColor } from '@/components/StatusPill';
 import { useCases } from '@/hooks/useCases';
 import { useProviders } from '@/hooks/useProviders';
 import { useContracts } from '@/hooks/useContracts';
-import { useTouches } from '@/hooks/useTouches';
+import { useLastTouchDates } from '@/hooks/useTouches';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
 import type {
@@ -74,6 +74,9 @@ interface EnrichedCase {
   contractStatus: StatusConfig | null;
   coordinator: Profile | null;
   daysOpen: number | null;
+  lastTouchDate: string | null;
+  daysSinceTouch: number | null;
+  isStalled: boolean;
 }
 
 function CasesListPage() {
@@ -98,6 +101,7 @@ function CasesListPage() {
   const contractStatusesQ = useStatusConfigs('contracting');
   const groupsQ = useProviderGroups();
   const coordinatorsQ = useCoordinators();
+  const lastTouchesQ = useLastTouchDates();
 
   const providerById = useMemo(() => {
     const m = new Map<string, Provider>();
@@ -140,6 +144,8 @@ function CasesListPage() {
     return m;
   }, [contractsQ.data]);
 
+  const lastTouchByCase = lastTouchesQ.data;
+
   const enriched: EnrichedCase[] = useMemo(() => {
     return (casesQ.data ?? []).map((c) => {
       const provider = providerById.get(c.providerId) ?? null;
@@ -156,7 +162,24 @@ function CasesListPage() {
       const daysOpen = c.submittedDate
         ? differenceInDays(new Date(), parseISO(c.submittedDate))
         : null;
-      return { c, provider, group, payer, credStatus, contractStatus, coordinator, daysOpen };
+      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
+      const daysSinceTouch = lastTouchDate
+        ? differenceInDays(new Date(), parseISO(lastTouchDate))
+        : null;
+      const isStalled = daysSinceTouch === null ? true : daysSinceTouch >= 14;
+      return {
+        c,
+        provider,
+        group,
+        payer,
+        credStatus,
+        contractStatus,
+        coordinator,
+        daysOpen,
+        lastTouchDate,
+        daysSinceTouch,
+        isStalled,
+      };
     });
   }, [
     casesQ.data,
@@ -166,6 +189,7 @@ function CasesListPage() {
     statusById,
     contractByKey,
     coordinatorById,
+    lastTouchByCase,
   ]);
 
   const states = useMemo(() => {
@@ -217,9 +241,10 @@ function CasesListPage() {
         if (!e.contractStatus || e.contractStatus.id !== contractStatusId) return false;
       }
       if (coordinatorId !== ALL && e.c.assignedTo !== coordinatorId) return false;
+      if (stalled && !e.isStalled) return false;
       return true;
     });
-  }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId]);
+  }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId, stalled]);
 
   // Sort by days open desc default (null at the bottom)
   const sorted = useMemo(() => {
@@ -423,7 +448,6 @@ function CasesListPage() {
                 <CaseRow
                   key={e.c.id}
                   data={e}
-                  stalledOnly={stalled}
                   onOpen={() =>
                     navigate({ to: '/cases/$id', params: { id: e.c.id } })
                   }
@@ -488,21 +512,21 @@ function SummaryStrip({ total, inProgress, awaiting, denied }: SummaryStripProps
 
 interface CaseRowProps {
   data: EnrichedCase;
-  stalledOnly: boolean;
   onOpen: () => void;
 }
 
-function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
-  const { c, provider, group, payer, credStatus, contractStatus, coordinator, daysOpen } =
-    data;
-  const touchesQ = useTouches(c.id);
-  const lastTouchDate = touchesQ.data?.[0]?.touchDate ?? null;
-  const daysSinceTouch = lastTouchDate
-    ? differenceInDays(new Date(), parseISO(lastTouchDate))
-    : null;
-  const isStalled = daysSinceTouch === null ? true : daysSinceTouch >= 14;
-
-  if (stalledOnly && !isStalled) return null;
+function CaseRow({ data, onOpen }: CaseRowProps) {
+  const {
+    c,
+    provider,
+    group,
+    payer,
+    credStatus,
+    contractStatus,
+    coordinator,
+    daysOpen,
+    daysSinceTouch,
+  } = data;
 
   const providerName = provider
     ? `${provider.firstName} ${provider.lastName}${
@@ -517,7 +541,6 @@ function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
       onClick={onOpen}
       className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
     >
-
       <td className="px-3 py-1.5">
         <div className="font-medium text-foreground leading-tight">{providerName}</div>
         <div className="text-[12px] text-muted-foreground leading-tight">
@@ -547,9 +570,7 @@ function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
         )}
       </td>
       <td className="px-3 text-right tabular-nums">
-        {touchesQ.isLoading ? (
-          <span className="text-muted-foreground">…</span>
-        ) : daysSinceTouch === null ? (
+        {daysSinceTouch === null ? (
           <span className="text-muted-foreground">—</span>
         ) : (
           <span
