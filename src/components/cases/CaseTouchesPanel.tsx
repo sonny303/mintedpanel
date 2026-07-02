@@ -131,11 +131,12 @@ export function CaseTouchesPanel({
                       <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium bg-background gap-1 text-muted-foreground">
                         <Icon className="w-3 h-3" /> {TOUCH_TYPE_LABEL[t.touchType]}
                       </Badge>
-                      {t.source === 'email_webhook' && (
+                      {t.source && t.source !== 'manual' ? (
                         <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-medium border border-border bg-muted/30">
-                          via email
+                          email
                         </Badge>
-                      )}
+                      ) : null}
+
                       <span className="text-[13px] text-foreground font-medium">
                         · {OUTCOME_LABEL[t.outcome] ?? t.outcome}
                       </span>

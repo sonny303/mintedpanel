@@ -10,7 +10,9 @@ import {
 } from '@/components/ui/tooltip';
 import { EmptyState } from '@/components/EmptyState';
 import { CheckCircle2, Circle, Lock } from 'lucide-react';
+import { fmtDate } from '@/lib/format';
 import type { Task } from '@/types';
+
 
 function taskStatusIcon(status: Task['status'], locked: boolean) {
   if (locked) return <Lock className="w-4 h-4 text-muted-foreground" />;
@@ -60,13 +62,20 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                 >
                   <div className="flex-shrink-0">{taskStatusIcon(t.status, locked)}</div>
                   <div
-                    className={`flex-1 ${
+                    className={`flex-1 min-w-0 ${
                       t.status === 'completed'
-                        ? 'text-muted-foreground line-through'
+                        ? 'text-muted-foreground'
                         : 'text-foreground font-medium'
                     }`}
                   >
-                    {t.title}
+                    <div className={t.status === 'completed' ? 'line-through' : ''}>
+                      {t.title}
+                    </div>
+                    {t.status === 'completed' && t.completedDate ? (
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Completed {fmtDate(t.completedDate)}
+                      </div>
+                    ) : null}
                   </div>
                   <span
                     className={`w-20 text-right tabular-nums text-[12px] ${
@@ -76,6 +85,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     {t.dueDate ? format(parseISO(t.dueDate), 'MMM dd') : 'TBD'}
                   </span>
                 </div>
+
               );
               return locked ? (
                 <Tooltip key={t.id}>
