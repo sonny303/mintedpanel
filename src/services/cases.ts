@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/externalClient';
 import { getNotesFor } from '@/services/lookups';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
+import type { Database, Json } from '@/integrations/supabase/types';
 import type {
   CaseDetail,
   Contract,
@@ -15,6 +16,10 @@ import type {
   Task,
   Touch,
 } from '@/types';
+
+type CredentialCaseInsert = Database['public']['Tables']['credential_cases']['Insert'];
+type CredentialCaseUpdate = Database['public']['Tables']['credential_cases']['Update'];
+
 
 export interface CaseFilters {
   providerId?: string;
@@ -139,7 +144,7 @@ export async function appendStatusHistory(input: AppendStatusHistoryInput): Prom
     track: input.track,
     from_status_id: input.fromStatusId,
     to_status_id: input.toStatusId,
-    metadata: (input.metadata ?? {}) as never,
+    metadata: (input.metadata ?? {}) as Json,
     changed_by: currentUserId(),
   });
   if (error) throw error;
@@ -172,9 +177,10 @@ export async function createCase(input: CaseInput): Promise<CredentialCase> {
   };
   const { data, error } = await supabase
     .from('credential_cases')
-    .insert(payload as never)
+    .insert(payload as unknown as CredentialCaseInsert)
     .select('*')
     .single();
+
   if (error) throw error;
   const created = camelizeRow<CredentialCase>(data);
   await appendStatusHistory({
@@ -217,11 +223,12 @@ export async function updateCaseStatus(
 
   const { data: updated, error: updErr } = await supabase
     .from('credential_cases')
-    .update(patch as never)
+    .update(patch as unknown as CredentialCaseUpdate)
     .eq('id', caseId)
     .eq('org_id', orgId)
     .select('*')
     .single();
+
   if (updErr) throw updErr;
 
   await appendStatusHistory({

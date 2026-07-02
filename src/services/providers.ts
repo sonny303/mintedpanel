@@ -2,7 +2,14 @@
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { requireActiveOrg, writeAudit } from '@/lib/audit';
+import type { Database, Json } from '@/integrations/supabase/types';
 import type { Provider, ProviderStatus } from '@/types';
+
+type ProviderInsert = Database['public']['Tables']['providers']['Insert'];
+type ProviderUpdate = Database['public']['Tables']['providers']['Update'];
+type StateLicenseInsert = Database['public']['Tables']['state_licenses']['Insert'];
+type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
+
 
 export interface ProviderFilters {
   groupId?: string;
@@ -105,7 +112,7 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
   const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
   const { data, error } = await supabase
     .from('providers')
-    .insert(payload as never)
+    .insert(payload as unknown as ProviderInsert)
     .select('*')
     .single();
   if (error) throw error;
@@ -129,7 +136,8 @@ export async function updateProvider(
   const payload = snakeizeRow<Record<string, unknown>>(patch);
   const { data, error } = await supabase
     .from('providers')
-    .update(payload as never)
+    .update(payload as unknown as ProviderUpdate)
+
     .eq('id', id)
     .eq('org_id', orgId)
     .select('*')
@@ -175,7 +183,7 @@ export async function updateProviderWithLicenses(
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   const { data, error } = await supabase
     .from('providers')
-    .update(payload as never)
+    .update(payload as unknown as ProviderUpdate)
     .eq('id', id)
     .eq('org_id', orgId)
     .select('*')
@@ -190,7 +198,7 @@ export async function updateProviderWithLicenses(
     .eq('provider_id', id);
   if (delErr) throw delErr;
 
-  const rows = input.licenses
+  const rows: StateLicenseInsert[] = input.licenses
     .filter((l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType)
     .map((l) => ({
       org_id: orgId,
@@ -202,9 +210,10 @@ export async function updateProviderWithLicenses(
       expiration_date: l.expirationDate,
     }));
   if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('state_licenses').insert(rows as never);
+    const { error: insErr } = await supabase.from('state_licenses').insert(rows);
     if (insErr) throw insErr;
   }
+
 
   await writeAudit({
     actionType: 'UPDATE',
@@ -296,13 +305,13 @@ export async function terminateProvider(
   }
 
   const dueDate = addDaysISO(input.terminationDate, 14);
-  const taskRows = activeCases.map((cs) => ({
+  const taskRows: TaskInsert[] = activeCases.map((cs) => ({
     org_id: orgId,
     case_id: cs.id,
     provider_id: input.providerId,
     title: `Submit termination to ${payerNameById.get(cs.payer_id) ?? 'payer'} — ${cs.state}`,
     description: input.reason ?? null,
-    sop_content: buildTerminationSteps() as never,
+    sop_content: buildTerminationSteps() as unknown as Json,
     status: 'not_started',
     sort_order: 999,
     due_date: dueDate,
@@ -310,19 +319,24 @@ export async function terminateProvider(
   }));
 
   if (taskRows.length > 0) {
-    const { error: insErr } = await supabase.from('tasks').insert(taskRows as never);
+    const { error: insErr } = await supabase.from('tasks').insert(taskRows);
     if (insErr) throw insErr;
   }
 
+  const providerUpdate: ProviderUpdate = {
+    status: 'terminated',
+    terminated_date: input.terminationDate,
+  };
   const { data: updated, error: updErr } = await supabase
     .from('providers')
-    .update({ status: 'terminated', terminated_date: input.terminationDate } as never)
+    .update(providerUpdate)
     .eq('id', input.providerId)
     .eq('org_id', orgId)
     .select('*')
     .single();
   if (updErr) throw updErr;
   const after = camelizeRow<Provider>(updated);
+
 
   await writeAudit({
     actionType: 'TERMINATION',
