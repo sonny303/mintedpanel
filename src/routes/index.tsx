@@ -1,6 +1,8 @@
 // Public marketing landing page for Minted Panel Credentialing.
 // Composed from small section components under src/components/landing/.
-import { createFileRoute } from '@tanstack/react-router';
+// Authenticated users are redirected to /cases before this page renders.
+import { createFileRoute, redirect } from '@tanstack/react-router';
+import { useAuthStore } from '@/lib/auth-store';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { HeroSection } from '@/components/landing/HeroSection';
 import { StatsSection } from '@/components/landing/StatsSection';
@@ -15,6 +17,12 @@ import { FinalCTASection } from '@/components/landing/FinalCTASection';
 import { LandingFooter } from '@/components/landing/LandingFooter';
 
 export const Route = createFileRoute('/')({
+  beforeLoad: () => {
+    const { session } = useAuthStore.getState();
+    if (session) {
+      throw redirect({ to: '/cases', replace: true });
+    }
+  },
   component: LandingPage,
 });
 
