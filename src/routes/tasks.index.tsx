@@ -11,7 +11,8 @@ import {
 import { fmtDate } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import {
   Select,
   SelectContent,
