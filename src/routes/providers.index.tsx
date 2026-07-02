@@ -1,9 +1,10 @@
 // Provider list screen at /providers. Shows per-payer credentialing status,
-// CAQH age, and coordinator; supports search, filters, column sorting, and column visibility.
+// CAQH age, and coordinator; supports search, filters, sorting, column picker,
+// persisted preferences, and infinite scroll.
 import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
-import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,24 +15,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
+import {
+  ColumnPicker,
+  InfiniteScrollSentinel,
+  SortableTh,
+  StaticTh,
+  compareForSort,
+  useInfiniteRows,
+} from '@/components/shared/TableToolkit';
+import { useTablePrefs } from '@/hooks/useTablePrefs';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useProviders } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useStatusConfigs, usePayers } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
 import { useCanWrite } from '@/lib/permissions';
-import { cn } from '@/lib/utils';
 import type { CredentialCase, Payer, Profile, Provider, ProviderGroup, ProviderStatus, StatusConfig } from '@/types';
 
 export const Route = createFileRoute('/providers/')({
@@ -45,14 +46,6 @@ const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' },
 ];
 
-type SortKey = 'provider' | 'group' | 'status' | 'state' | 'coordinator';
-type SortDir = 'asc' | 'desc';
-interface SortState {
-  key: SortKey;
-  dir: SortDir;
-}
-const DEFAULT_SORT: SortState = { key: 'provider', dir: 'asc' };
-
 type ColumnKey = 'provider' | 'group' | 'status' | 'state' | 'payerStatuses' | 'caqh' | 'coordinator';
 const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
   { key: 'provider', label: 'Provider' },
@@ -63,6 +56,7 @@ const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
   { key: 'caqh', label: 'CAQH' },
   { key: 'coordinator', label: 'Coordinator' },
 ];
+const ALL_KEYS = COLUMN_DEFS.map((c) => c.key);
 const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
   provider: true,
   group: true,
@@ -98,8 +92,14 @@ function ProvidersListPage() {
   const [state, setState] = useState<string>(ALL);
   const [payerId, setPayerId] = useState<string>(ALL);
   const [status, setStatus] = useState<string>(ALL);
-  const [sort, setSort] = useState<SortState | null>(null);
-  const [visibleCols, setVisibleCols] = useState<Record<ColumnKey, boolean>>(DEFAULT_VISIBILITY);
+
+  const { state: prefs, setVisible, cycleSort } = useTablePrefs<ColumnKey>({
+    pageKey: 'providers',
+    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: 'provider', dir: 'asc' } },
+    allKeys: ALL_KEYS,
+  });
+  const visibleCols = prefs.visibleCols;
+  const effectiveSort = prefs.sort ?? { key: 'provider', dir: 'asc' as const };
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -187,51 +187,42 @@ function ProvidersListPage() {
     return coordinatorById.get(id)?.fullName ?? null;
   }
 
-  function sortValueFor(p: Provider, key: SortKey): string | null {
+  function sortValueFor(p: Provider, key: string): string | number | null {
     switch (key) {
       case 'provider':
         return (p.lastName || p.firstName || '').trim() || null;
       case 'group':
         return p.groupId ? groupById.get(p.groupId)?.name ?? null : null;
       case 'status':
-        return p.status ? String(STATUS_SORT_RANK[p.status]) : null;
+        return p.status ? STATUS_SORT_RANK[p.status] : null;
       case 'state':
         return p.homeState ?? null;
       case 'coordinator':
         return coordinatorNameFor(p);
+      default:
+        return null;
     }
   }
-
-  const effectiveSort = sort ?? DEFAULT_SORT;
 
   const providers = useMemo(() => {
     const rows = [...(providersQ.data ?? [])];
     const { key, dir } = effectiveSort;
-    const mult = dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
-      const av = sortValueFor(a, key);
-      const bv = sortValueFor(b, key);
-      const aEmpty = !av;
-      const bEmpty = !bv;
-      if (aEmpty && bEmpty) return 0;
-      if (aEmpty) return 1;
-      if (bEmpty) return -1;
-      const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base', numeric: true });
-      if (cmp !== 0) return cmp * mult;
+      const cmp = compareForSort(sortValueFor(a, key), sortValueFor(b, key), dir);
+      if (cmp !== 0) return cmp;
       const at = `${a.lastName} ${a.firstName}`.trim();
       const bt = `${b.lastName} ${b.firstName}`.trim();
       return at.localeCompare(bt, undefined, { sensitivity: 'base' });
     });
     return rows;
-  }, [providersQ.data, effectiveSort, groupById, coordinatorById, casesByProvider]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providersQ.data, effectiveSort.key, effectiveSort.dir, groupById, coordinatorById, casesByProvider]);
 
-  function onSort(key: SortKey) {
-    setSort((prev) => {
-      if (!prev || prev.key !== key) return { key, dir: 'asc' };
-      if (prev.dir === 'asc') return { key, dir: 'desc' };
-      return null;
-    });
-  }
+  const resetKey = `${effectiveSort.key}|${effectiveSort.dir}|${JSON.stringify(filters)}`;
+  const { visible, hasMore, loadingMore, sentinelRef, total } = useInfiniteRows({
+    items: providers,
+    resetKey,
+  });
 
   const visibleCount = COLUMN_DEFS.filter((c) => visibleCols[c.key]).length;
 
@@ -241,7 +232,7 @@ function ProvidersListPage() {
         title="Providers"
         actions={
           <span className="text-[13px] text-muted-foreground tabular-nums">
-            {providersQ.isSuccess ? `${providers.length} providers` : null}
+            {providersQ.isSuccess ? `${total} providers` : null}
           </span>
         }
       />
@@ -298,34 +289,12 @@ function ProvidersListPage() {
         </Select>
 
         <div className="ml-auto flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-9 gap-2">
-                <Columns3 className="h-4 w-4" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Show columns</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {COLUMN_DEFS.map((c) => {
-                const locked = c.key === 'provider';
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={c.key}
-                    checked={visibleCols[c.key]}
-                    disabled={locked}
-                    onCheckedChange={(v) =>
-                      setVisibleCols((prev) => ({ ...prev, [c.key]: Boolean(v) }))
-                    }
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {c.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ColumnPicker
+            columns={COLUMN_DEFS}
+            visible={visibleCols}
+            onChange={setVisible}
+            lockedKeys={['provider']}
+          />
 
           {canEdit ? (
             <Button
@@ -339,26 +308,26 @@ function ProvidersListPage() {
         </div>
       </div>
 
-      <div className="border border-border rounded-md overflow-hidden">
+      <div className="border border-border rounded-md">
         <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
+          <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
+            <tr className="border-b border-border">
               {visibleCols.provider && (
-                <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={onSort} />
+                <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={cycleSort} />
               )}
               {visibleCols.group && (
-                <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={onSort} />
+                <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={cycleSort} />
               )}
               {visibleCols.status && (
-                <SortableTh label="Status" sortKey="status" sort={effectiveSort} onSort={onSort} />
+                <SortableTh label="Status" sortKey="status" sort={effectiveSort} onSort={cycleSort} />
               )}
               {visibleCols.state && (
-                <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={onSort} />
+                <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />
               )}
-              {visibleCols.payerStatuses && <Th>Payer Statuses</Th>}
-              {visibleCols.caqh && <Th className="text-right">CAQH</Th>}
+              {visibleCols.payerStatuses && <StaticTh>Payer Statuses</StaticTh>}
+              {visibleCols.caqh && <StaticTh className="text-right">CAQH</StaticTh>}
               {visibleCols.coordinator && (
-                <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={onSort} />
+                <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={cycleSort} />
               )}
             </tr>
           </thead>
@@ -396,7 +365,7 @@ function ProvidersListPage() {
                 </td>
               </tr>
             ) : (
-              providers.map((p) => (
+              visible.map((p) => (
                 <ProviderRow
                   key={p.id}
                   provider={p}
@@ -412,47 +381,9 @@ function ProvidersListPage() {
             )}
           </tbody>
         </table>
+        <InfiniteScrollSentinel sentinelRef={sentinelRef} hasMore={hasMore} loadingMore={loadingMore} />
       </div>
     </div>
-  );
-}
-
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th
-      className={`text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9 ${className}`}
-    >
-      {children}
-    </th>
-  );
-}
-
-interface SortableThProps {
-  label: string;
-  sortKey: SortKey;
-  sort: SortState;
-  onSort: (key: SortKey) => void;
-}
-
-function SortableTh({ label, sortKey, sort, onSort }: SortableThProps) {
-  const active = sort.key === sortKey;
-  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <th className="text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9">
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="group inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground"
-      >
-        <span>{label}</span>
-        <Icon
-          className={cn(
-            'h-3 w-3',
-            active ? 'text-foreground opacity-100' : 'opacity-0 group-hover:opacity-60',
-          )}
-        />
-      </button>
-    </th>
   );
 }
 
