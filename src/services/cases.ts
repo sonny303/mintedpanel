@@ -185,15 +185,12 @@ export async function updateCaseStatus(
     .single();
   if (updErr) throw updErr;
 
-  await supabase.from('status_history').insert({
-    org_id: orgId,
-    case_id: caseId,
-    contract_id: null,
+  await appendStatusHistory({
     track: 'credentialing',
-    from_status_id: fromStatusId,
-    to_status_id: statusId,
-    metadata: metadata as never,
-    changed_by: currentUserId(),
+    caseId,
+    fromStatusId,
+    toStatusId: statusId,
+    metadata,
   });
 
   await writeAudit({
