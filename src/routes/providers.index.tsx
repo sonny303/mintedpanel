@@ -1,6 +1,6 @@
 // Provider list screen at /providers. Shows per-payer credentialing status,
 // CAQH age, and coordinator; supports search and Group/State/Payer/Status filters.
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
 import { Plus, Search } from 'lucide-react';
@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatusPill, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { useDebounced } from '@/hooks/useDebounced';
 import { useProviders } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useStatusConfigs, usePayers } from '@/hooks/useAdmin';
