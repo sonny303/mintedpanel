@@ -206,6 +206,15 @@ function ContractsTab() {
   }, [contractsQ.data, groupFilter, payerFilter, statusFilter]);
 
   const loading = contractsQ.isLoading || groupsQ.isLoading || payersQ.isLoading;
+  const isError =
+    contractsQ.isError || groupsQ.isError || payersQ.isError || casesQ.isError || statusesQ.isError;
+  const retry = () => {
+    if (contractsQ.isError) contractsQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (casesQ.isError) casesQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+  };
 
   return (
     <TooltipProvider delayDuration={200}>
