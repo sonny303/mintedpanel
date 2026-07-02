@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Copy, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -447,7 +449,13 @@ function TemplateEditor() {
     return (
       <div className="p-6">
         <PageHeader title="Template" />
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="border border-[#E8E5E0] rounded-md">
+          <table className="w-full">
+            <tbody>
+              <TableSkeletonRows rows={8} cols={1} />
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
@@ -597,8 +605,11 @@ function TemplateEditor() {
             </div>
 
             {tasks.length === 0 ? (
-              <div className="rounded-md border border-dashed border-[#E8E5E0] p-6 text-center text-sm text-muted-foreground">
-                No tasks defined. Add a task to start building this template.
+              <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
+                <EmptyState
+                  message="No tasks defined yet"
+                  description="Add a task to start building this template"
+                />
               </div>
             ) : null}
 
@@ -730,7 +741,7 @@ function TemplateEditor() {
                               ) : null}
                             </div>
                             {step.dataFields.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">No data fields.</p>
+                              <EmptyState message="No data fields yet" />
                             ) : (
                               <div className="space-y-2">
                                 {step.dataFields.map((field, i) => (

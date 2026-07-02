@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+
 import { EmptyState } from '@/components/EmptyState';
 import { toast } from 'sonner';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
@@ -1332,8 +1333,8 @@ function SummaryTab() {
           <tbody>
             {approvalRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                  No approved cases in range.
+                <td colSpan={5} className="px-3 py-12">
+                  <EmptyState message="No approved cases in range" />
                 </td>
               </tr>
             ) : (
@@ -1402,8 +1403,8 @@ function SummaryTab() {
           <tbody>
             {coordinatorRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-center py-8 text-muted-foreground">
-                  No coordinator activity in range.
+                <td colSpan={4} className="px-3 py-12">
+                  <EmptyState message="No coordinator activity in range" />
                 </td>
               </tr>
             ) : (

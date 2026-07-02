@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { GripVertical, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -285,19 +287,25 @@ function ReorderableSection({
       </div>
       <div>
         {loading ? (
-          <div className="p-8 text-center text-[13px] text-muted-foreground">
-            Loading…
-          </div>
+          <table className="w-full">
+            <tbody>
+              <TableSkeletonRows rows={6} cols={5} />
+            </tbody>
+          </table>
         ) : isError ? (
           <div className="p-8 text-center">
-            <div className="text-[13px] text-foreground mb-3">Failed to load statuses.</div>
-            <Button variant="outline" size="sm" onClick={onRetry}>
-              Retry
-            </Button>
+            <EmptyState
+              message="Failed to load statuses"
+              action={
+                <Button variant="outline" size="sm" onClick={onRetry}>
+                  Retry
+                </Button>
+              }
+            />
           </div>
         ) : statuses.length === 0 ? (
-          <div className="p-8 text-center text-[13px] text-muted-foreground">
-            No statuses yet.
+          <div className="p-8 text-center">
+            <EmptyState message="No statuses yet" />
           </div>
         ) : (
           statuses.map((s) => {

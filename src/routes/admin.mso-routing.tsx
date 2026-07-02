@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -158,24 +160,24 @@ function AdminMsoRoutingPage() {
           </thead>
           <tbody>
             {rulesQ.isLoading ? (
-              <tr>
-                <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
+              <TableSkeletonRows rows={6} cols={6} />
             ) : rulesQ.isError ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load routing rules.</div>
-                  <Button variant="outline" size="sm" onClick={() => rulesQ.refetch()}>
-                    Retry
-                  </Button>
+                  <EmptyState
+                    message="Failed to load routing rules"
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => rulesQ.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-muted-foreground">
-                  No rules match these filters.
+                <td colSpan={6} className="px-3 py-12">
+                  <EmptyState message="No rules match these filters" />
                 </td>
               </tr>
             ) : (
@@ -243,19 +245,25 @@ function AdminMsoRoutingPage() {
           )}
         </div>
         {msosQ.isLoading ? (
-          <div className="p-6 text-center text-muted-foreground text-[13px]">
-            Loading…
-          </div>
+          <table className="w-full">
+            <tbody>
+              <TableSkeletonRows rows={6} cols={1} />
+            </tbody>
+          </table>
         ) : msosQ.isError ? (
           <div className="p-8 text-center">
-            <div className="text-[13px] text-foreground mb-3">Failed to load MSOs.</div>
-            <Button variant="outline" size="sm" onClick={() => msosQ.refetch()}>
-              Retry
-            </Button>
+            <EmptyState
+              message="Failed to load MSOs"
+              action={
+                <Button variant="outline" size="sm" onClick={() => msosQ.refetch()}>
+                  Retry
+                </Button>
+              }
+            />
           </div>
         ) : (msosQ.data ?? []).length === 0 ? (
-          <div className="p-6 text-center text-muted-foreground text-[13px]">
-            No MSOs yet.
+          <div className="p-8 text-center">
+            <EmptyState message="No MSOs yet" />
           </div>
         ) : (
           (msosQ.data ?? []).map((m) => (
