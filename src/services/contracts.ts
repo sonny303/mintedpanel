@@ -2,7 +2,8 @@
 // append status_history (track 'contracting') and audit_log.
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
+import { requireActiveOrg, writeAudit } from '@/lib/audit';
+import { appendStatusHistory } from '@/services/cases';
 import type { Contract } from '@/types';
 
 export interface ContractFilters {
