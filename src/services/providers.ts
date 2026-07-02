@@ -2,7 +2,14 @@
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { requireActiveOrg, writeAudit } from '@/lib/audit';
+import type { Database, Json } from '@/integrations/supabase/types';
 import type { Provider, ProviderStatus } from '@/types';
+
+type ProviderInsert = Database['public']['Tables']['providers']['Insert'];
+type ProviderUpdate = Database['public']['Tables']['providers']['Update'];
+type StateLicenseInsert = Database['public']['Tables']['state_licenses']['Insert'];
+type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
+
 
 export interface ProviderFilters {
   groupId?: string;
