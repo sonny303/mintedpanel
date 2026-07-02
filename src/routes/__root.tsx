@@ -136,6 +136,10 @@ function RootComponent() {
   const session = useAuthStore((s) => s.session);
 
   useEffect(() => {
+    registerQueryClient(queryClient);
+  }, [queryClient]);
+
+  useEffect(() => {
     void init();
   }, [init]);
 
