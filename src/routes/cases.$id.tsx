@@ -560,7 +560,9 @@ function CaseDetailPage() {
               </CardHeader>
               <CardContent className="p-4">
                 {statusHistory.length === 0 ? (
-                  <div className="text-[13px] text-muted-foreground">No changes yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No changes yet" />
+                  </div>
                 ) : (
                   <ul className="space-y-3 text-[13px]">
                     {statusHistory.map((h) => {
