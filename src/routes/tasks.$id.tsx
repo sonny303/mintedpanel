@@ -155,6 +155,18 @@ function TaskDetailPage() {
     : null;
   const payerName = c?.payer?.name ?? null;
   const stateCode = c?.state ?? null;
+  const caseLabel = c
+    ? [providerName, payerName, stateCode].filter(Boolean).join(' · ') || 'Case'
+    : 'Case';
+
+  // Locked when any earlier task in the same case is not yet completed.
+  const isLocked = (() => {
+    if (!c?.tasks || task.status === 'completed') return false;
+    const ordered = c.tasks.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = ordered.findIndex((t) => t.id === task.id);
+    if (idx <= 0) return false;
+    return ordered.slice(0, idx).some((t) => t.status !== 'completed');
+  })();
 
   const handleToggleStep = (stepIndex: number, checked: boolean) => {
     if (!checked) return; // ordered, no uncheck
