@@ -425,8 +425,8 @@ function CasesPanel({
               <TableSkeletonRows rows={4} cols={6} />
             ) : cases.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center text-[13px] text-muted-foreground">
-                  No cases yet
+                <td colSpan={6} className="px-3 py-12 text-center">
+                  <EmptyState message="No cases yet" />
                 </td>
               </tr>
             ) : (
