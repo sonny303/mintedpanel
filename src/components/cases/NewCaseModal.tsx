@@ -260,8 +260,14 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
       if (!template) {
         templateMissingCount += 1;
       } else {
-        const tokens = buildTokenMap(provider, group, mso, licenseNumber);
-        const tasks = resolveRawTemplate(template, tokens);
+        const tasks = resolveTemplate(
+          template,
+          provider,
+          group,
+          null,
+          mso ? { mso } : null,
+          licenseNumber,
+        );
         if (tasks.length > 0) {
           await createTasksForCase(
             tasks.map((t) => ({
@@ -269,7 +275,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
               providerId: provider.id,
               title: t.title,
               description: t.description,
-              sopContent: t.steps,
+              sopContent: t.sopContent,
               sortOrder: t.sortOrder,
               dueDate: t.dueDate,
             })),
