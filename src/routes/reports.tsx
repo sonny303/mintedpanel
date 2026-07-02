@@ -44,7 +44,8 @@ import {
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { StatusPill, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { fmtDate } from '@/lib/format';
 import {
   useContracts,
   useCreateContract,
@@ -82,32 +83,6 @@ export const Route = createFileRoute('/reports')({
 
 const ALL = '__all__';
 
-function hexToStatusColor(hex: string | null | undefined): StatusColor {
-  switch ((hex ?? '').toUpperCase()) {
-    case '#2563EB':
-      return 'blue';
-    case '#D97706':
-      return 'amber';
-    case '#DC2626':
-    case '#991B1B':
-      return 'red';
-    case '#0891B2':
-      return 'teal';
-    case '#059669':
-      return 'green';
-    default:
-      return 'gray';
-  }
-}
-
-function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  try {
-    return format(parseISO(value), 'MMM dd, yyyy');
-  } catch {
-    return value;
-  }
-}
 
 function isExecutedLabel(label: string | undefined | null): boolean {
   return (label ?? '').toLowerCase().includes('execut');
