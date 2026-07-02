@@ -1,9 +1,9 @@
 // Provider list screen at /providers. Shows per-payer credentialing status,
-// CAQH age, and coordinator; supports search, filters, and column sorting.
+// CAQH age, and coordinator; supports search, filters, column sorting, and column visibility.
 import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Plus, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
@@ -37,13 +45,49 @@ const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' },
 ];
 
-type SortKey = 'provider' | 'group' | 'state' | 'coordinator';
+type SortKey = 'provider' | 'group' | 'status' | 'state' | 'coordinator';
 type SortDir = 'asc' | 'desc';
 interface SortState {
   key: SortKey;
   dir: SortDir;
 }
 const DEFAULT_SORT: SortState = { key: 'provider', dir: 'asc' };
+
+type ColumnKey = 'provider' | 'group' | 'status' | 'state' | 'payerStatuses' | 'caqh' | 'coordinator';
+const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
+  { key: 'provider', label: 'Provider' },
+  { key: 'group', label: 'Group' },
+  { key: 'status', label: 'Status' },
+  { key: 'state', label: 'State' },
+  { key: 'payerStatuses', label: 'Payer Statuses' },
+  { key: 'caqh', label: 'CAQH' },
+  { key: 'coordinator', label: 'Coordinator' },
+];
+const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
+  provider: true,
+  group: true,
+  status: true,
+  state: true,
+  payerStatuses: true,
+  caqh: false,
+  coordinator: true,
+};
+
+const STATUS_LABEL: Record<ProviderStatus, string> = {
+  onboarding: 'Onboarding',
+  active: 'Active',
+  terminated: 'Terminated',
+};
+const STATUS_COLOR: Record<ProviderStatus, 'blue' | 'green' | 'gray'> = {
+  onboarding: 'blue',
+  active: 'green',
+  terminated: 'gray',
+};
+const STATUS_SORT_RANK: Record<ProviderStatus, number> = {
+  onboarding: 0,
+  active: 1,
+  terminated: 2,
+};
 
 function ProvidersListPage() {
   const navigate = useNavigate();
@@ -55,6 +99,7 @@ function ProvidersListPage() {
   const [payerId, setPayerId] = useState<string>(ALL);
   const [status, setStatus] = useState<string>(ALL);
   const [sort, setSort] = useState<SortState | null>(null);
+  const [visibleCols, setVisibleCols] = useState<Record<ColumnKey, boolean>>(DEFAULT_VISIBILITY);
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -148,6 +193,8 @@ function ProvidersListPage() {
         return (p.lastName || p.firstName || '').trim() || null;
       case 'group':
         return p.groupId ? groupById.get(p.groupId)?.name ?? null : null;
+      case 'status':
+        return p.status ? String(STATUS_SORT_RANK[p.status]) : null;
       case 'state':
         return p.homeState ?? null;
       case 'coordinator':
@@ -166,13 +213,11 @@ function ProvidersListPage() {
       const bv = sortValueFor(b, key);
       const aEmpty = !av;
       const bEmpty = !bv;
-      // Empty values always sort to the bottom regardless of direction.
       if (aEmpty && bEmpty) return 0;
       if (aEmpty) return 1;
       if (bEmpty) return -1;
-      const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base' });
+      const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base', numeric: true });
       if (cmp !== 0) return cmp * mult;
-      // Stable tiebreaker by last name then first name.
       const at = `${a.lastName} ${a.firstName}`.trim();
       const bt = `${b.lastName} ${b.firstName}`.trim();
       return at.localeCompare(bt, undefined, { sensitivity: 'base' });
@@ -184,9 +229,11 @@ function ProvidersListPage() {
     setSort((prev) => {
       if (!prev || prev.key !== key) return { key, dir: 'asc' };
       if (prev.dir === 'asc') return { key, dir: 'desc' };
-      return null; // third click clears
+      return null;
     });
   }
+
+  const visibleCount = COLUMN_DEFS.filter((c) => visibleCols[c.key]).length;
 
   return (
     <div>
@@ -250,7 +297,36 @@ function ProvidersListPage() {
           </SelectContent>
         </Select>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-9 gap-2">
+                <Columns3 className="h-4 w-4" />
+                Columns
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Show columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {COLUMN_DEFS.map((c) => {
+                const locked = c.key === 'provider';
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={c.key}
+                    checked={visibleCols[c.key]}
+                    disabled={locked}
+                    onCheckedChange={(v) =>
+                      setVisibleCols((prev) => ({ ...prev, [c.key]: Boolean(v) }))
+                    }
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {c.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {canEdit ? (
             <Button
               onClick={() => navigate({ to: '/providers/new' })}
@@ -267,20 +343,31 @@ function ProvidersListPage() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={onSort} />
-              <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={onSort} />
-              <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={onSort} />
-              <Th>Payer Statuses</Th>
-              <Th className="text-right">CAQH</Th>
-              <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={onSort} />
+              {visibleCols.provider && (
+                <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={onSort} />
+              )}
+              {visibleCols.group && (
+                <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={onSort} />
+              )}
+              {visibleCols.status && (
+                <SortableTh label="Status" sortKey="status" sort={effectiveSort} onSort={onSort} />
+              )}
+              {visibleCols.state && (
+                <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={onSort} />
+              )}
+              {visibleCols.payerStatuses && <Th>Payer Statuses</Th>}
+              {visibleCols.caqh && <Th className="text-right">CAQH</Th>}
+              {visibleCols.coordinator && (
+                <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={onSort} />
+              )}
             </tr>
           </thead>
           <tbody>
             {providersQ.isLoading ? (
-              <TableSkeletonRows rows={8} cols={6} />
+              <TableSkeletonRows rows={8} cols={visibleCount} />
             ) : providersQ.isError ? (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center">
+                <td colSpan={visibleCount} className="px-3 py-12 text-center">
                   <div className="text-[13px] text-foreground mb-3">
                     Failed to load providers.
                   </div>
@@ -291,7 +378,7 @@ function ProvidersListPage() {
               </tr>
             ) : providers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center">
+                <td colSpan={visibleCount} className="px-3 py-12 text-center">
                   <EmptyState
                     message={hasActiveFilter ? 'No providers match these filters' : 'No providers yet'}
                     action={
@@ -318,6 +405,7 @@ function ProvidersListPage() {
                   payerById={payerById}
                   statusById={statusById}
                   coordinatorName={coordinatorNameFor(p)}
+                  visibleCols={visibleCols}
                   onOpen={() => navigate({ to: '/providers/$id', params: { id: p.id } })}
                 />
               ))
@@ -375,10 +463,11 @@ interface RowProps {
   payerById: Map<string, Payer>;
   statusById: Map<string, StatusConfig>;
   coordinatorName: string | null;
+  visibleCols: Record<ColumnKey, boolean>;
   onOpen: () => void;
 }
 
-function ProviderRow({ provider, group, cases, payerById, statusById, coordinatorName, onOpen }: RowProps) {
+function ProviderRow({ provider, group, cases, payerById, statusById, coordinatorName, visibleCols, onOpen }: RowProps) {
   const isTerminated = provider.status === 'terminated';
 
   const caqh = (() => {
@@ -398,50 +487,71 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
       onClick={onOpen}
       className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
     >
-      <td className="px-3 py-1.5">
-        <div className="font-medium text-foreground leading-tight">
-          {provider.firstName} {provider.lastName}
-          {provider.credentials ? (
-            <span className="text-muted-foreground font-normal">, {provider.credentials}</span>
-          ) : null}
-        </div>
-        <div className="text-[12px] text-muted-foreground tabular-nums leading-tight">
-          {provider.npi ?? '—'}
-        </div>
-      </td>
-      <td className="px-3 whitespace-nowrap">
-        {group ? (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border border-border bg-muted text-foreground">
-            {group.name}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="px-3 text-foreground">{provider.homeState ?? '—'}</td>
-      <td className="px-3 py-1.5">
-        {isTerminated ? (
-          <StatusPill status="gray" label="Terminated" />
-        ) : cases.length === 0 ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {cases.map((c) => {
-              const payer = payerById.get(c.payerId);
-              const sc = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
-              return (
-                <StatusPill
-                  key={c.id}
-                  status={hexToStatusColor(sc?.color)}
-                  label={payer?.name ?? 'Payer'}
-                />
-              );
-            })}
+      {visibleCols.provider && (
+        <td className="px-3 py-1.5">
+          <div className="font-medium text-foreground leading-tight">
+            {provider.firstName} {provider.lastName}
+            {provider.credentials ? (
+              <span className="text-muted-foreground font-normal">, {provider.credentials}</span>
+            ) : null}
           </div>
-        )}
-      </td>
-      <td className="px-3 text-right">{caqh}</td>
-      <td className="px-3 text-foreground">{coordinatorName ?? '—'}</td>
+          <div className="text-[12px] text-muted-foreground tabular-nums leading-tight">
+            {provider.npi ?? '—'}
+          </div>
+        </td>
+      )}
+      {visibleCols.group && (
+        <td className="px-3 whitespace-nowrap">
+          {group ? (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border border-border bg-muted text-foreground">
+              {group.name}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      )}
+      {visibleCols.status && (
+        <td className="px-3 py-1.5">
+          {provider.status ? (
+            <StatusPill status={STATUS_COLOR[provider.status]} label={STATUS_LABEL[provider.status]} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      )}
+      {visibleCols.state && (
+        <td className="px-3 text-foreground">{provider.homeState ?? '—'}</td>
+      )}
+      {visibleCols.payerStatuses && (
+        <td className="px-3 py-1.5">
+          {isTerminated ? (
+            <StatusPill status="gray" label="Terminated" />
+          ) : cases.length === 0 ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {cases.map((c) => {
+                const payer = payerById.get(c.payerId);
+                const sc = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
+                return (
+                  <StatusPill
+                    key={c.id}
+                    status={hexToStatusColor(sc?.color)}
+                    label={payer?.name ?? 'Payer'}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </td>
+      )}
+      {visibleCols.caqh && (
+        <td className="px-3 text-right">{caqh}</td>
+      )}
+      {visibleCols.coordinator && (
+        <td className="px-3 text-foreground">{coordinatorName ?? '—'}</td>
+      )}
     </tr>
   );
 }
