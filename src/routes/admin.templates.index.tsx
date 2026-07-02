@@ -2,7 +2,8 @@
 // org with quick metadata and links to the editor; admins can create new ones.
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
-import { format } from 'date-fns';
+import { fmtDate } from '@/lib/format';
+import { useDebounced } from '@/hooks/useDebounced';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -33,6 +34,7 @@ function TemplatesIndex() {
   const groupsQ = useProviderGroups();
   const createMut = useCreateTemplate();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounced(search, 300);
   const [showArchived, setShowArchived] = useState(false);
 
   const payerName = useMemo(() => {
@@ -49,11 +51,11 @@ function TemplatesIndex() {
 
   const rows = useMemo(() => {
     const all = (templatesQ.data ?? []) as TemplateRow[];
-    const term = search.trim().toLowerCase();
+    const term = debouncedSearch.trim().toLowerCase();
     return all
       .filter((t) => (showArchived ? true : !isTemplateArchived(t)))
       .filter((t) => (term ? t.name.toLowerCase().includes(term) : true));
-  }, [templatesQ.data, search, showArchived]);
+  }, [templatesQ.data, debouncedSearch, showArchived]);
 
   async function handleNew() {
     if (!canEdit) return;
@@ -185,7 +187,7 @@ function TemplatesIndex() {
                     {t.taskDefinitions?.length ?? 0}
                   </td>
                   <td className="px-3 h-10 text-sm text-muted-foreground">
-                    {t.updatedAt ? format(new Date(t.updatedAt), 'MMM d, yyyy') : '—'}
+                    {fmtDate(t.updatedAt)}
                   </td>
                 </tr>
               ))

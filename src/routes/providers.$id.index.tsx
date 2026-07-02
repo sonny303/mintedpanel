@@ -7,7 +7,8 @@ import { Pencil, Plus, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatusPill, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { fmtDate } from '@/lib/format';
 import { CopyButton } from '@/components/CopyButton';
 import {
   Tooltip,
@@ -50,17 +51,6 @@ export const Route = createFileRoute('/providers/$id/')({
   component: ProviderDetailPage,
 });
 
-function hexToStatusColor(hex: string | null | undefined): StatusColor {
-  switch ((hex ?? '').toUpperCase()) {
-    case '#2563EB': return 'blue';
-    case '#D97706': return 'amber';
-    case '#DC2626':
-    case '#991B1B': return 'red';
-    case '#0891B2': return 'teal';
-    case '#059669': return 'green';
-    default: return 'gray';
-  }
-}
 
 const PROVIDER_STATUS_LABEL: Record<ProviderStatus, string> = {
   onboarding: 'Onboarding',
@@ -74,14 +64,6 @@ const PROVIDER_STATUS_COLOR: Record<ProviderStatus, StatusColor> = {
   terminated: 'gray',
 };
 
-function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  try {
-    return format(parseISO(value), 'MMM d, yyyy');
-  } catch {
-    return value;
-  }
-}
 
 function ProviderDetailPage() {
   const { id } = Route.useParams();

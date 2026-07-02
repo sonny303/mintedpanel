@@ -1,3 +1,5 @@
+// StatusPill renders a small colored pill for status labels.
+// Also exports hexToStatusColor to map DB hex colors to the pill's semantic color name.
 import React from 'react';
 
 export type StatusColor = 'gray' | 'blue' | 'amber' | 'red' | 'teal' | 'green';
@@ -6,6 +8,24 @@ export interface StatusPillProps {
   status: StatusColor;
   label: string;
   className?: string;
+}
+
+export function hexToStatusColor(hex: string | null | undefined): StatusColor {
+  switch ((hex ?? '').toUpperCase()) {
+    case '#2563EB':
+      return 'blue';
+    case '#D97706':
+      return 'amber';
+    case '#DC2626':
+    case '#991B1B':
+      return 'red';
+    case '#0891B2':
+      return 'teal';
+    case '#059669':
+      return 'green';
+    default:
+      return 'gray';
+  }
 }
 
 export const StatusPill = ({ status, label, className = '' }: StatusPillProps) => {

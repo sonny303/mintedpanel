@@ -5,10 +5,10 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   differenceInCalendarDays,
   endOfWeek,
-  format,
   parseISO,
   startOfWeek,
 } from 'date-fns';
+import { fmtDate } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -339,9 +339,7 @@ function TaskQueuePage() {
                       e.isOverdue ? 'text-[#DC2626] font-medium' : ''
                     }`}
                   >
-                    {e.task.dueDate
-                      ? format(parseISO(e.task.dueDate), 'MMM d, yyyy')
-                      : '—'}
+                    {e.task.dueDate ? fmtDate(e.task.dueDate) : '—'}
                     {e.isOverdue && e.task.dueDate
                       ? ` (${Math.abs(
                           differenceInCalendarDays(parseISO(e.task.dueDate), today),

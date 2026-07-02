@@ -1,6 +1,6 @@
 // Cases list at /cases. One row per credentialing case (provider + payer +
 // state) with filters, a stalled quick filter, and a summary strip.
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
 import { Search } from 'lucide-react';
@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatusPill, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { useDebounced } from '@/hooks/useDebounced';
 import { useCases } from '@/hooks/useCases';
 import { useProviders } from '@/hooks/useProviders';
 import { useContracts } from '@/hooks/useContracts';
@@ -38,32 +39,6 @@ export const Route = createFileRoute('/cases/')({
 
 const ALL = '__all__';
 
-function hexToStatusColor(hex: string | null | undefined): StatusColor {
-  switch ((hex ?? '').toUpperCase()) {
-    case '#2563EB':
-      return 'blue';
-    case '#D97706':
-      return 'amber';
-    case '#DC2626':
-    case '#991B1B':
-      return 'red';
-    case '#0891B2':
-      return 'teal';
-    case '#059669':
-      return 'green';
-    default:
-      return 'gray';
-  }
-}
-
-function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
 
 interface EnrichedCase {
   c: CredentialCase;

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { fmtDate } from '@/lib/format';
 import { Plus, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -1017,7 +1017,7 @@ function TeamTab() {
                     </td>
                     <td className="px-3 h-10 align-middle">{roleBadge(m.role)}</td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {m.createdAt ? format(new Date(m.createdAt), 'MMM d, yyyy') : '—'}
+                      {fmtDate(m.createdAt)}
                     </td>
                     <td className="px-3 h-10 align-middle text-right">
                       {canEdit ? (
@@ -1180,10 +1180,10 @@ function InsurancePoliciesSection({
                     {p.policyNumber}
                   </td>
                   <td className="px-3 h-10 align-middle text-muted-foreground">
-                    {format(new Date(p.policyStartDate), 'MMM d, yyyy')}
+                    {fmtDate(p.policyStartDate)}
                   </td>
                   <td className="px-3 h-10 align-middle text-muted-foreground">
-                    {format(new Date(p.policyEndDate), 'MMM d, yyyy')}
+                    {fmtDate(p.policyEndDate)}
                   </td>
                   <td className="px-3 h-10 align-middle">
                     <span
