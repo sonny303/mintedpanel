@@ -58,9 +58,6 @@ export const useAuthStore = create<AuthState>()(
           if (data.session) {
             try {
               await get().loadMemberships();
-              if (get().memberships.length === 0) {
-                set({ initError: "Can't reach Minted Panel. Check your connection." });
-              }
             } catch {
               set({ initError: "Can't reach Minted Panel. Check your connection." });
             }
