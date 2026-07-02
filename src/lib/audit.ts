@@ -17,10 +17,10 @@ export interface AuditInput {
 export async function writeAudit(input: AuditInput): Promise<void> {
   const state = useAuthStore.getState();
   const orgId = state.activeOrgId;
-  if (!orgId) return;
+  if (!orgId) throw new Error('writeAudit: no active org');
   const userId = state.user?.id ?? null;
   const userName = state.fullName ?? state.user?.email ?? null;
-  await supabase.from('audit_log').insert({
+  const { error } = await supabase.from('audit_log').insert({
     org_id: orgId,
     user_id: userId,
     user_name: userName,
@@ -31,6 +31,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
     after: (input.after ?? null) as never,
     description: input.description ?? null,
   });
+  if (error) throw error;
 }
 
 export function requireActiveOrg(): string {
