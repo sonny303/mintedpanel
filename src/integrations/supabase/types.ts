@@ -1234,6 +1234,27 @@ export type Database = {
           },
         ]
       }
+      user_table_prefs: {
+        Row: {
+          page_key: string
+          prefs: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          page_key: string
+          prefs?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          page_key?: string
+          prefs?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
