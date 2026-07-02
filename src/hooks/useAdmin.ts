@@ -1,7 +1,7 @@
 // Payer, MSO, SOP template, status config, and audit-log query hooks.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { queryKeys } from '@/hooks/queryKeys';
+import { FIVE_MINUTES, queryKeys } from '@/hooks/queryKeys';
 import {
   createPayer,
   getPayer,
@@ -43,7 +43,9 @@ export function usePayers() {
     queryKey: queryKeys.payers(orgId),
     queryFn: listPayers,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function usePayer(id: string | undefined) {
@@ -82,7 +84,9 @@ export function useMsos() {
     queryKey: queryKeys.msos(orgId),
     queryFn: listMsos,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useMso(id: string | undefined) {
@@ -122,7 +126,9 @@ export function useRoutingRules() {
     queryKey: queryKeys.msoRoutingRules(orgId),
     queryFn: listRoutingRules,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 function invalidateRoutingRuleCaches(
@@ -158,7 +164,9 @@ export function useTemplates() {
     queryKey: queryKeys.templates(orgId),
     queryFn: listTemplates,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useTemplate(id: string | undefined) {
@@ -197,7 +205,9 @@ export function useStatusConfigs(track?: StatusTrack) {
     queryKey: queryKeys.statusConfigs(orgId, track),
     queryFn: () => listStatusConfigs(track),
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useStatusConfig(id: string | undefined) {

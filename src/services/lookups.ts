@@ -56,23 +56,23 @@ export async function getProviderGroups(): Promise<ProviderGroup[]> {
 
 export async function getCoordinators(): Promise<Profile[]> {
   const orgId = requireActiveOrg();
-  const { data: caseRows, error: caseErr } = await supabase
-    .from('credential_cases')
-    .select('assigned_to')
-    .eq('org_id', orgId)
-    .not('assigned_to', 'is', null);
-  if (caseErr) throw caseErr;
-  const ids = Array.from(
-    new Set((caseRows ?? []).map((r) => r.assigned_to as string).filter(Boolean)),
-  );
-  if (ids.length === 0) return [];
+  // Single query: profiles inner-joined to credential_cases via the
+  // assigned_to FK, scoped to the active org. PostgREST returns each
+  // profile once (embedded relation is nested, not row-multiplied).
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, created_at')
-    .in('id', ids);
+    .select(
+      'id, email, full_name, created_at, credential_cases!credential_cases_assigned_to_fkey!inner(id, org_id)',
+    )
+    .eq('credential_cases.org_id', orgId);
   if (error) throw error;
-  return camelizeRow<Profile[]>(data ?? []);
+  const rows = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((r) => {
+    const { credential_cases: _cc, ...rest } = r;
+    return rest;
+  });
+  return camelizeRow<Profile[]>(rows);
 }
+
 
 export async function getMsoRoutingRule(
   payerId: string,
@@ -137,15 +137,17 @@ export async function getNotesFor(
   );
   const nameMap = new Map<string, string | null>();
   if (authorIds.length > 0) {
-    const { data: profs } = await supabase
+    const { data: profs, error: profErr } = await supabase
       .from('profiles')
       .select('id, full_name, email')
       .in('id', authorIds);
+    if (profErr) throw profErr;
     for (const p of profs ?? []) {
       const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
       nameMap.set(p.id as string, name);
     }
   }
+
   const merged = rows.map((n) => ({
     ...n,
     author_name: n.author_id ? nameMap.get(n.author_id as string) ?? null : null,
