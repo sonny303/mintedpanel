@@ -908,7 +908,6 @@ function downloadCsv(filename: string, rows: (string | number | null | undefined
 }
 
 function SummaryTab() {
-  const orgId = useActiveOrgId() ?? 'no-org';
   const casesQ = useCases();
   const tasksQ = useTasks();
   const providersQ = useProviders();
@@ -1470,7 +1469,6 @@ function formatAddress(f: RosterAux['facilities'][number] | undefined): string {
 }
 
 function RosterTab() {
-  const orgId = useActiveOrgId() ?? 'no-org';
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
   const statusesQ = useStatusConfigs('credentialing');
