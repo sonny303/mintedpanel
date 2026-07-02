@@ -118,6 +118,41 @@ export interface CreateNoteInput {
   content: string;
 }
 
+export async function getNotesFor(
+  entityType: NoteEntityType,
+  entityId: string,
+): Promise<Note[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from('notes')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = data ?? [];
+  const authorIds = Array.from(
+    new Set(rows.map((n) => n.author_id).filter((v): v is string => Boolean(v))),
+  );
+  const nameMap = new Map<string, string | null>();
+  if (authorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', authorIds);
+    for (const p of profs ?? []) {
+      const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
+      nameMap.set(p.id as string, name);
+    }
+  }
+  const merged = rows.map((n) => ({
+    ...n,
+    author_name: n.author_id ? nameMap.get(n.author_id as string) ?? null : null,
+  }));
+  return camelizeRow<Note[]>(merged);
+}
+
 export async function createNote(input: CreateNoteInput): Promise<Note> {
   const orgId = requireActiveOrg();
   const payload = {
