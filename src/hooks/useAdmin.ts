@@ -43,7 +43,9 @@ export function usePayers() {
     queryKey: queryKeys.payers(orgId),
     queryFn: listPayers,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function usePayer(id: string | undefined) {
