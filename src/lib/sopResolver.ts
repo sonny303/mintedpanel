@@ -84,6 +84,14 @@ function definitionToInsert(
     isCompleted: false,
     completedAt: null,
     completedBy: null,
+    dataFields: (step.dataFields ?? [])
+      .map((f) => ({
+        label: f.label,
+        value: Object.prototype.hasOwnProperty.call(tokens, f.token)
+          ? tokens[f.token]
+          : '',
+      }))
+      .filter((f) => f.label && f.value),
   }));
   return {
     title: interpolate(definition.title, tokens),
