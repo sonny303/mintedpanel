@@ -38,7 +38,7 @@ import {
 } from "@/hooks/useLookups";
 import { useMsos, usePayers, useTemplates } from "@/hooks/useAdmin";
 import { useActiveOrgId } from "@/lib/auth-store";
-import type { Mso, Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
+import type { Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 interface NewCaseModalProps {
   open: boolean;
