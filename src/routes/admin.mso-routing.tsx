@@ -303,6 +303,13 @@ function AdminMsoRoutingPage() {
           <div className="p-6 text-center text-muted-foreground text-[13px]">
             Loading…
           </div>
+        ) : msosQ.isError ? (
+          <div className="p-8 text-center">
+            <div className="text-[13px] text-foreground mb-3">Failed to load MSOs.</div>
+            <Button variant="outline" size="sm" onClick={() => msosQ.refetch()}>
+              Retry
+            </Button>
+          </div>
         ) : (msosQ.data ?? []).length === 0 ? (
           <div className="p-6 text-center text-muted-foreground text-[13px]">
             No MSOs yet.
