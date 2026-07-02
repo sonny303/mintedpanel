@@ -127,8 +127,6 @@ function CaseDetailPage() {
           contractStatus={contractStatus}
           canEdit={canEdit}
           onOpenStatus={() => setStatusModalOpen(true)}
-          copiedEmailToken={copiedEmailToken}
-          onCopyToken={handleCopyToken}
         />
 
         {c.provider?.status === 'terminated' ? (
