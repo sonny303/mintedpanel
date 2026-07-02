@@ -25,7 +25,7 @@ import {
   useUpdateTemplate,
 } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import type { SOPTaskDefinition, SOPTemplate } from '@/types';
 
 type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
