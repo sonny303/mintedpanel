@@ -358,6 +358,15 @@ function AdminAuditPage() {
                   Loading…
                 </TableCell>
               </TableRow>
+            ) : auditQ.isError ? (
+              <TableRow>
+                <TableCell colSpan={6} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load audit entries.</div>
+                  <Button variant="outline" size="sm" onClick={() => auditQ.refetch()}>
+                    Retry
+                  </Button>
+                </TableCell>
+              </TableRow>
             ) : pageRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-10 text-center text-tertiary">
