@@ -228,27 +228,20 @@ function ProvidersListPage() {
             ) : providers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
-                  {hasActiveFilter ? (
-                    <>
-                      <div className="text-[13px] text-muted-foreground mb-3">
-                        No providers match these filters.
-                      </div>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-[13px] text-muted-foreground mb-3">
-                        No providers yet.
-                      </div>
-                      {canEdit ? (
+                  <EmptyState
+                    message={hasActiveFilter ? 'No providers match these filters' : 'No providers yet'}
+                    action={
+                      hasActiveFilter ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : canEdit ? (
                         <Button size="sm" onClick={() => navigate({ to: '/providers/new' })}>
                           Add provider
                         </Button>
-                      ) : null}
-                    </>
-                  )}
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             ) : (
