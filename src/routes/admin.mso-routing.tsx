@@ -360,17 +360,19 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
       return;
     }
     try {
-      await saveM.mutateAsync({
-        id: rule?.id ?? null,
-        input: {
-          payerId,
-          state: state.trim(),
-          specialty: specialty.trim() || 'All',
-          routeType,
-          msoId: routeType === 'mso' ? msoId : null,
-          notes: notes.trim() || null,
-        },
-      });
+      const input: RoutingRuleInput = {
+        payerId,
+        state: state.trim(),
+        specialty: specialty.trim() || 'All',
+        routeType,
+        msoId: routeType === 'mso' ? msoId : null,
+        notes: notes.trim() || null,
+      };
+      if (rule?.id) {
+        await updateM.mutateAsync(input);
+      } else {
+        await createM.mutateAsync(input);
+      }
       toast.success(rule ? 'Rule updated.' : 'Rule added.');
       onClose();
     } catch (err) {
