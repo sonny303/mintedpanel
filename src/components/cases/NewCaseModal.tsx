@@ -374,6 +374,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
 
     qc.invalidateQueries({ queryKey: ["cases", orgId] });
     qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+    qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
 
     setSubmitting(false);
 
