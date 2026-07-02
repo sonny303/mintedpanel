@@ -1,17 +1,23 @@
 // Add Provider entry point. The 5-step form lives in ProviderForm; this
-// route wires it to the createProvider mutation. Billing users are redirected
-// before the page renders.
+// route wires it to createProviderWithDetails so licenses and facility
+// assignments captured in steps 3 and 4 are persisted alongside the provider.
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { useCreateProvider } from '@/hooks/useProviders';
-import { useAuthStore } from '@/lib/auth-store';
+import { useActiveOrgId, useAuthStore } from '@/lib/auth-store';
 import {
   ProviderForm,
   emptyProviderFormState,
   type ProviderFormState,
 } from '@/components/providers/ProviderForm';
-import type { ProviderInput } from '@/services/providers';
+import {
+  createProviderWithDetails,
+  type CreateProviderWithDetailsInput,
+  type CreateProviderWithDetailsResult,
+  type LicenseInput,
+  type ProviderInput,
+} from '@/services/providers';
 
 export const Route = createFileRoute('/providers/new')({
   beforeLoad: () => {
@@ -24,7 +30,7 @@ export const Route = createFileRoute('/providers/new')({
   component: Page,
 });
 
-function toInput(form: ProviderFormState): ProviderInput {
+function toProviderInput(form: ProviderFormState): ProviderInput {
   return {
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
@@ -57,15 +63,44 @@ function toInput(form: ProviderFormState): ProviderInput {
   };
 }
 
+function toLicenseInputs(form: ProviderFormState): LicenseInput[] {
+  return form.licenses
+    .filter((l) => l.state || l.number || l.type || l.issueDate || l.expirationDate)
+    .map((l) => ({
+      state: l.state,
+      licenseNumber: l.number.trim() || null,
+      licenseType: l.type || null,
+      issueDate: l.issueDate || null,
+      expirationDate: l.expirationDate || null,
+    }));
+}
+
 function Page() {
   const navigate = useNavigate();
-  const create = useCreateProvider();
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? 'no-org';
+
+  const create = useMutation({
+    mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['providers', orgId] });
+    },
+  });
 
   const onSubmit = async (form: ProviderFormState) => {
     try {
-      const created = await create.mutateAsync(toInput(form));
+      const result: CreateProviderWithDetailsResult = await create.mutateAsync({
+        provider: toProviderInput(form),
+        licenses: toLicenseInputs(form),
+        facilityIds: form.facilityIds,
+      });
+      if (result.warnings.length > 0) {
+        for (const w of result.warnings) toast.error(w);
+        toast.warning('Provider created, but some details did not save. Fix and retry.');
+        return;
+      }
       toast.success('Provider added');
-      navigate({ to: '/providers/$id', params: { id: created.id } });
+      navigate({ to: '/providers/$id', params: { id: result.provider.id } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to create provider');
     }
