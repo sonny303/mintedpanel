@@ -742,6 +742,27 @@ function EnrollmentMatrixTab() {
     return <Skeleton className="h-64 w-full" />;
   }
 
+  const isError =
+    casesQ.isError || providersQ.isError || payersQ.isError || statusesQ.isError || groupsQ.isError;
+  const retry = () => {
+    if (casesQ.isError) casesQ.refetch();
+    if (providersQ.isError) providersQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+  };
+
+  if (isError) {
+    return (
+      <div className="border border-border rounded-md px-3 py-12 text-center">
+        <div className="text-[13px] text-foreground mb-3">Failed to load enrollment matrix.</div>
+        <Button variant="outline" size="sm" onClick={retry}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="space-y-4">
