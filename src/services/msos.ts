@@ -2,7 +2,7 @@
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { Mso } from '@/types';
+import type { Mso, MsoRoutingRule } from '@/types';
 
 export interface MsoInput {
   name: string;
