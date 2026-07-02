@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { getMsoRoutingRule, type StateLicense } from "@/services/lookups";
 import { createTasksForCase } from "@/services/tasks";
+import { resolveTemplate } from "@/lib/sopResolver";
 import { useCases, useCreateCase } from "@/hooks/useCases";
 import {
   useCoordinators,
@@ -37,7 +38,7 @@ import {
 } from "@/hooks/useLookups";
 import { useMsos, usePayers, useTemplates } from "@/hooks/useAdmin";
 import { useActiveOrgId } from "@/lib/auth-store";
-import type { Mso, Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
+import type { Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 interface NewCaseModalProps {
   open: boolean;
@@ -47,99 +48,6 @@ interface NewCaseModalProps {
 }
 
 const NONE = "__none__";
-
-interface ResolvedStep {
-  id: string;
-  order: number;
-  instruction: string;
-  isCompleted: false;
-  dataFields: { label: string; value: string; copyable: boolean }[];
-}
-
-interface ResolvedTask {
-  title: string;
-  description: string | null;
-  dueDate: string | null;
-  sortOrder: number;
-  steps: ResolvedStep[];
-}
-
-const TOKEN_RE = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
-
-function interpolate(input: string, tokens: Record<string, string>): string {
-  return input.replace(TOKEN_RE, (_, k: string) => tokens[k] ?? "");
-}
-
-function offsetDate(days: number): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function buildTokenMap(
-  provider: Provider,
-  group: ProviderGroup | null,
-  mso: Mso | null,
-  licenseNumber: string | null,
-): Record<string, string> {
-  return {
-    "provider.npi": provider.npi ?? "",
-    "provider.caqhId": provider.caqhId ?? "",
-    "provider.caqhLastAttestedDate": provider.caqhLastAttestedDate ?? "",
-    "provider.taxonomyCode": provider.taxonomyCode ?? "",
-    "provider.firstName": provider.firstName,
-    "provider.lastName": provider.lastName,
-    "provider.email": provider.email ?? "",
-    "provider.licenseNumber": licenseNumber ?? "",
-    "group.tin": group?.tin ?? "",
-    "group.npiType2": group?.npiType2 ?? "",
-    "group.name": group?.name ?? "",
-    "mso.portalUrl": mso?.portalUrl ?? "",
-  };
-}
-
-interface RawStep {
-  step?: string;
-  dataFieldTokens?: string[];
-}
-interface RawDef {
-  title?: string;
-  description?: string;
-  dayOffset?: number;
-  sortOrder?: number;
-  sopStepTemplates?: RawStep[];
-}
-
-function resolveRawTemplate(template: SOPTemplate, tokens: Record<string, string>): ResolvedTask[] {
-  const defs = (template.taskDefinitions ?? []) as unknown as RawDef[];
-  return defs.map((def, idx) => {
-    const rawSteps = def.sopStepTemplates ?? [];
-    const steps: ResolvedStep[] = rawSteps.map((s, sIdx) => {
-      const tokensList = s.dataFieldTokens ?? [];
-      const dataFields = tokensList
-        .map((tok) => ({
-          label: tok,
-          value: tokens[tok] ?? "",
-          copyable: true,
-        }))
-        .filter((f) => f.label && f.value);
-      return {
-        id: `step-${sIdx}`,
-        order: sIdx,
-        instruction: interpolate(s.step ?? "", tokens),
-        isCompleted: false,
-        dataFields,
-      };
-    });
-    return {
-      title: interpolate(def.title ?? "Task", tokens),
-      description: def.description ? interpolate(def.description, tokens) : null,
-      dueDate: typeof def.dayOffset === "number" ? offsetDate(def.dayOffset) : null,
-      sortOrder: def.sortOrder ?? idx,
-      steps,
-    };
-  });
-}
 
 function pickTemplate(
   templates: SOPTemplate[],
@@ -352,8 +260,14 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
       if (!template) {
         templateMissingCount += 1;
       } else {
-        const tokens = buildTokenMap(provider, group, mso, licenseNumber);
-        const tasks = resolveRawTemplate(template, tokens);
+        const tasks = resolveTemplate(
+          template,
+          provider,
+          group,
+          null,
+          mso ? { mso } : null,
+          licenseNumber,
+        );
         if (tasks.length > 0) {
           await createTasksForCase(
             tasks.map((t) => ({
@@ -361,7 +275,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
               providerId: provider.id,
               title: t.title,
               description: t.description,
-              sopContent: t.steps,
+              sopContent: t.sopContent,
               sortOrder: t.sortOrder,
               dueDate: t.dueDate,
             })),

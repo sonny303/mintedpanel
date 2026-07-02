@@ -33,6 +33,7 @@ function buildTokenMap(ctx: ResolveContext): Record<string, string> {
   return {
     'provider.npi': provider.npi ?? '',
     'provider.caqhId': provider.caqhId ?? '',
+    'provider.caqhLastAttestedDate': provider.caqhLastAttestedDate ?? '',
     'provider.taxonomyCode': provider.taxonomyCode ?? '',
     'provider.firstName': provider.firstName,
     'provider.lastName': provider.lastName,
@@ -84,6 +85,14 @@ function definitionToInsert(
     isCompleted: false,
     completedAt: null,
     completedBy: null,
+    dataFields: (step.dataFields ?? [])
+      .map((f) => ({
+        label: f.label,
+        value: Object.prototype.hasOwnProperty.call(tokens, f.token)
+          ? tokens[f.token]
+          : '',
+      }))
+      .filter((f) => f.label && f.value),
   }));
   return {
     title: interpolate(definition.title, tokens),

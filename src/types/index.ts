@@ -200,6 +200,11 @@ export interface Touch {
   createdAt: string;
 }
 
+export interface SOPStepDataField {
+  label: string;
+  value: string;
+}
+
 export interface SOPStep {
   id: string;
   order: number;
@@ -208,6 +213,7 @@ export interface SOPStep {
   isCompleted: boolean;
   completedAt?: string | null;
   completedBy?: string | null;
+  dataFields?: SOPStepDataField[];
 }
 
 export interface Task {
@@ -274,7 +280,11 @@ export interface SOPTaskDefinition {
   description?: string;
   sortOrder?: number;
   dueOffsetDays?: number;
-  steps: { label: string; detail?: string }[];
+  steps: {
+    label: string;
+    detail?: string;
+    dataFields?: { label: string; token: string }[];
+  }[];
 }
 
 export interface SOPTemplate {
