@@ -2,7 +2,7 @@
 // with a payer portal: ordered step lock, copy buttons for data fields, notes.
 import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { format, parseISO } from 'date-fns';
+import { fmtDate, fmtDateTime } from '@/lib/format';
 import {
   Calendar,
   CheckCircle2,
