@@ -205,7 +205,9 @@ export function useStatusConfigs(track?: StatusTrack) {
     queryKey: queryKeys.statusConfigs(orgId, track),
     queryFn: () => listStatusConfigs(track),
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useStatusConfig(id: string | undefined) {
