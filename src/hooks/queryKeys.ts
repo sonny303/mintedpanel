@@ -30,4 +30,15 @@ export const queryKeys = {
   auditLog: (orgId: string, filters?: unknown) => ['audit-log', orgId, filters ?? {}] as const,
   touchSummary: (orgId: string) => ['touch-summary', orgId] as const,
   rosterAux: (orgId: string) => ['roster-aux', orgId] as const,
+  facilities: (orgId: string, groupId?: string | null) =>
+    ['facilities', orgId, groupId ?? 'all'] as const,
+  providerGroups: (orgId: string) => ['provider-groups', orgId] as const,
+  coordinators: (orgId: string) => ['coordinators', orgId] as const,
+  stateLicenses: (orgId: string, providerId: string) =>
+    ['state-licenses', orgId, providerId] as const,
+  notes: (orgId: string, entityType: string, entityId: string) =>
+    ['notes', orgId, entityType, entityId] as const,
 } as const;
+
+export const FIVE_MINUTES = 5 * 60 * 1000;
+
