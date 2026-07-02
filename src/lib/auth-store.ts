@@ -46,21 +46,43 @@ export const useAuthStore = create<AuthState>()(
       memberships: [],
       activeOrgId: null,
       initialized: false,
+      initError: null,
       loading: false,
 
       init: async () => {
-        const { data } = await supabase.auth.getSession();
-        set({ session: data.session, user: data.session?.user ?? null });
-        if (data.session) await get().loadMemberships();
-        set({ initialized: true });
+        set({ initError: null });
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          set({ session: data.session, user: data.session?.user ?? null });
+          if (data.session) {
+            try {
+              await get().loadMemberships();
+              if (get().memberships.length === 0) {
+                set({ initError: "Can't reach Minted Panel. Check your connection." });
+              }
+            } catch {
+              set({ initError: "Can't reach Minted Panel. Check your connection." });
+            }
+          }
+        } catch {
+          set({ initError: "Can't reach Minted Panel. Check your connection." });
+        } finally {
+          set({ initialized: true });
+        }
 
         supabase.auth.onAuthStateChange(async (event, session) => {
           if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
           set({ session, user: session?.user ?? null });
           if (session) {
-            await get().loadMemberships();
+            try {
+              await get().loadMemberships();
+              set({ initError: null });
+            } catch {
+              set({ initError: "Can't reach Minted Panel. Check your connection." });
+            }
           } else {
-            set({ memberships: [], activeOrgId: null, fullName: null });
+            set({ memberships: [], activeOrgId: null, fullName: null, initError: null });
           }
         });
       },
