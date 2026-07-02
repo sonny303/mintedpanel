@@ -38,11 +38,14 @@ export interface CaseInput {
   expectedEffectiveDate?: string | null;
 }
 
+const CASE_LIST_COLUMNS =
+  'id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, created_at, updated_at';
+
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
   let query = supabase
     .from('credential_cases')
-    .select('*')
+    .select(CASE_LIST_COLUMNS)
     .eq('org_id', orgId)
     .order('created_at', { ascending: false });
   if (filters.providerId) query = query.eq('provider_id', filters.providerId);
@@ -54,6 +57,7 @@ export async function getCases(filters: CaseFilters = {}): Promise<CredentialCas
   if (error) throw error;
   return camelizeRow<CredentialCase[]>(data ?? []);
 }
+
 
 export async function getCase(id: string): Promise<CaseDetail | null> {
   const orgId = requireActiveOrg();
