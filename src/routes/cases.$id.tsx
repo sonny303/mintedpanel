@@ -59,7 +59,7 @@ import { useCase, useContractFor, useUpdateCaseStatus } from '@/hooks/useCases';
 import { useStatusConfigs } from '@/hooks/useAdmin';
 import { useCoordinators, useCreateNote, useMsoRoutingRule } from '@/hooks/useLookups';
 import { useLogTouch } from '@/hooks/useTouches';
-import { useRole } from '@/lib/auth-store';
+import { useCanWrite } from '@/lib/permissions';
 import type {
   StatusConfig,
   Task,
@@ -105,8 +105,7 @@ function isExecutedLabel(label: string | undefined): boolean {
 function CaseDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role !== 'billing';
+  const canEdit = useCanWrite();
 
   const caseQ = useCase(id);
   const statusesQ = useStatusConfigs();

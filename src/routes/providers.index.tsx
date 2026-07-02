@@ -21,7 +21,7 @@ import { useProviders } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useStatusConfigs, usePayers } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useCanWrite } from '@/lib/permissions';
 import type { CredentialCase, Payer, Profile, Provider, ProviderGroup, ProviderStatus, StatusConfig } from '@/types';
 
 export const Route = createFileRoute('/providers/')({
@@ -37,8 +37,7 @@ const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
 
 function ProvidersListPage() {
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role !== 'billing';
+  const canEdit = useCanWrite();
 
   const [search, setSearch] = useState('');
   const [groupId, setGroupId] = useState<string>(ALL);

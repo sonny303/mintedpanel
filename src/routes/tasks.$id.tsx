@@ -34,7 +34,7 @@ import { CopyButton } from '@/components/CopyButton';
 import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from '@/hooks/useTasks';
 import { useCase } from '@/hooks/useCases';
 import { useCreateNote, useNotes } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useCanWrite } from '@/lib/permissions';
 import type { SOPStep, TaskStatus } from '@/types';
 
 export const Route = createFileRoute('/tasks/$id')({
@@ -82,8 +82,7 @@ function readDataFields(step: SOPStep): DataField[] {
 function TaskDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role !== 'billing';
+  const canEdit = useCanWrite();
 
   const taskQ = useTask(id);
   const task = taskQ.data ?? null;
