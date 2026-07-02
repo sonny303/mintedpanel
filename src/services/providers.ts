@@ -305,13 +305,13 @@ export async function terminateProvider(
   }
 
   const dueDate = addDaysISO(input.terminationDate, 14);
-  const taskRows = activeCases.map((cs) => ({
+  const taskRows: TaskInsert[] = activeCases.map((cs) => ({
     org_id: orgId,
     case_id: cs.id,
     provider_id: input.providerId,
     title: `Submit termination to ${payerNameById.get(cs.payer_id) ?? 'payer'} — ${cs.state}`,
     description: input.reason ?? null,
-    sop_content: buildTerminationSteps() as never,
+    sop_content: buildTerminationSteps() as unknown as Json,
     status: 'not_started',
     sort_order: 999,
     due_date: dueDate,
@@ -319,19 +319,24 @@ export async function terminateProvider(
   }));
 
   if (taskRows.length > 0) {
-    const { error: insErr } = await supabase.from('tasks').insert(taskRows as never);
+    const { error: insErr } = await supabase.from('tasks').insert(taskRows);
     if (insErr) throw insErr;
   }
 
+  const providerUpdate: ProviderUpdate = {
+    status: 'terminated',
+    terminated_date: input.terminationDate,
+  };
   const { data: updated, error: updErr } = await supabase
     .from('providers')
-    .update({ status: 'terminated', terminated_date: input.terminationDate } as never)
+    .update(providerUpdate)
     .eq('id', input.providerId)
     .eq('org_id', orgId)
     .select('*')
     .single();
   if (updErr) throw updErr;
   const after = camelizeRow<Provider>(updated);
+
 
   await writeAudit({
     actionType: 'TERMINATION',
