@@ -56,7 +56,7 @@ interface NoteRow {
   authorName: string | null;
 }
 
-import { fmtDate, fmtDateTime } from '@/lib/format';
+
 
 function initialsOf(name: string | null | undefined): string {
   if (!name) return '··';
