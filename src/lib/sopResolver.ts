@@ -33,6 +33,7 @@ function buildTokenMap(ctx: ResolveContext): Record<string, string> {
   return {
     'provider.npi': provider.npi ?? '',
     'provider.caqhId': provider.caqhId ?? '',
+    'provider.caqhLastAttestedDate': provider.caqhLastAttestedDate ?? '',
     'provider.taxonomyCode': provider.taxonomyCode ?? '',
     'provider.firstName': provider.firstName,
     'provider.lastName': provider.lastName,
