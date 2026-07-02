@@ -1,11 +1,5 @@
 // Centralized TanStack Query keys; every key is scoped by active org id so
 // switching orgs naturally invalidates the cached data for the prior org.
-import { useActiveOrgId } from '@/lib/auth-store';
-
-export function useOrgKey(): readonly [string] {
-  const orgId = useActiveOrgId();
-  return [orgId ?? 'no-org'] as const;
-}
 
 export const queryKeys = {
   providers: (orgId: string, filters?: unknown) => ['providers', orgId, filters ?? {}] as const,
