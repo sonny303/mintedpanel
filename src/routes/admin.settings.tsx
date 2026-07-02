@@ -2,7 +2,6 @@
 // and Team (memberships with role change for admins). No delete operations.
 import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fmtDate } from '@/lib/format';
 import { Plus, ChevronDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,20 +29,32 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
-import {
   useActiveMembership,
-  useActiveOrgId,
-  useAuthStore,
   useRole,
   type AppRole,
 } from '@/lib/auth-store';
+import { useProviderGroups } from '@/hooks/useLookups';
+import {
+  useCreateFacility,
+  useCreateGroupInsurancePolicy,
+  useCreateProviderGroup,
+  useFacilitiesAll,
+  useGroupInsurancePolicies,
+  useMemberships,
+  useOrganization,
+  useUpdateFacility,
+  useUpdateGroupInsurancePolicy,
+  useUpdateMembershipRole,
+  useUpdateOrganizationName,
+  useUpdateProviderGroup,
+} from '@/hooks/useOrgSettings';
+import type {
+  FacilityInput,
+  InsurancePolicy,
+  InsurancePolicyInput,
+  InsuranceType,
+  ProviderGroupInput,
+} from '@/services/orgSettings';
 import type { Facility, ProviderGroup } from '@/types';
 
 export const Route = createFileRoute('/admin/settings')({
@@ -56,95 +67,6 @@ const US_STATES = [
   'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV',
   'WI','WY','DC',
 ];
-
-interface MembershipRow {
-  id: string;
-  orgId: string;
-  userId: string;
-  role: AppRole;
-  createdAt: string;
-  fullName: string | null;
-  email: string | null;
-}
-
-function useOrganization() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['organization', orgId] as const,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id, name, created_at')
-        .eq('id', orgId)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? camelizeRow<{ id: string; name: string; createdAt: string }>(data) : null;
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
-
-function useProviderGroupsList() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['provider-groups', orgId] as const,
-    queryFn: async (): Promise<ProviderGroup[]> => {
-      const { data, error } = await supabase
-        .from('provider_groups')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('name');
-      if (error) throw error;
-      return camelizeRow<ProviderGroup[]>(data ?? []);
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
-
-function useFacilitiesList() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['facilities', orgId] as const,
-    queryFn: async (): Promise<Facility[]> => {
-      const { data, error } = await supabase
-        .from('facilities')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('name');
-      if (error) throw error;
-      return camelizeRow<Facility[]>(data ?? []);
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
-
-function useMemberships() {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['memberships-admin', orgId] as const,
-    queryFn: async (): Promise<MembershipRow[]> => {
-      const { data, error } = await supabase
-        .from('memberships')
-        .select('id, org_id, user_id, role, created_at, profiles(full_name, email)')
-        .eq('org_id', orgId)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((row) => {
-        const profile = row.profiles as { full_name: string | null; email: string | null } | null;
-        return {
-          id: row.id as string,
-          orgId: row.org_id as string,
-          userId: row.user_id as string,
-          role: row.role as AppRole,
-          createdAt: row.created_at as string,
-          fullName: profile?.full_name ?? null,
-          email: profile?.email ?? null,
-        };
-      });
-    },
-    enabled: orgId !== 'no-org',
-  });
-}
 
 function AdminSettingsPage() {
   return (
@@ -175,11 +97,8 @@ function OrganizationTab() {
   const role = useRole();
   const canEdit = role === 'admin';
   const orgQ = useOrganization();
-  const groupsQ = useProviderGroupsList();
-  const facilitiesQ = useFacilitiesList();
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
-  const loadMemberships = useAuthStore((s) => s.loadMemberships);
+  const groupsQ = useProviderGroups();
+  const facilitiesQ = useFacilitiesAll();
 
   const [name, setName] = useState<string>('');
   const [nameDirty, setNameDirty] = useState(false);
@@ -194,28 +113,22 @@ function OrganizationTab() {
   const orgName = orgQ.data?.name ?? '';
   const currentName = nameDirty ? name : orgName;
 
-  const saveName = useMutation({
-    mutationFn: async () => {
-      if (!orgId) throw new Error('No active organization');
-      const { error } = await supabase
-        .from('organizations')
-        .update({ name: currentName.trim() })
-        .eq('id', orgId);
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      setNameDirty(false);
-      setNameErr(null);
-      toast.success('Organization name updated');
-      await qc.invalidateQueries({ queryKey: ['organization', orgId ?? 'no-org'] });
-      await loadMemberships();
-    },
-    onError: (e) => {
-      const msg = e instanceof Error ? e.message : 'Save failed';
-      setNameErr(msg);
-      toast.error(msg);
-    },
-  });
+  const saveName = useUpdateOrganizationName();
+
+  const handleSaveName = () => {
+    setNameErr(null);
+    saveName.mutate(currentName, {
+      onSuccess: () => {
+        setNameDirty(false);
+        toast.success('Organization name updated');
+      },
+      onError: (e) => {
+        const msg = e instanceof Error ? e.message : 'Save failed';
+        setNameErr(msg);
+        toast.error(msg);
+      },
+    });
+  };
 
   const facilitiesByGroup = useMemo(() => {
     const m = new Map<string, Facility[]>();
@@ -253,7 +166,7 @@ function OrganizationTab() {
               saveName.isPending ||
               !currentName.trim()
             }
-            onClick={() => saveName.mutate()}
+            onClick={handleSaveName}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
           >
             {saveName.isPending ? 'Saving…' : 'Save'}
@@ -488,8 +401,6 @@ function GroupEditModal({
   group: ProviderGroup | null;
   onClose: () => void;
 }) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
   const g = (group ?? {}) as Record<string, unknown>;
   const initStr = (k: string) => (typeof g[k] === 'string' ? (g[k] as string) : '');
   const [name, setName] = useState(group?.name ?? '');
@@ -531,59 +442,62 @@ function GroupEditModal({
     }
   };
 
-  const mut = useMutation({
-    mutationFn: async () => {
-      if (!orgId) throw new Error('No active organization');
-      if (!name.trim()) throw new Error('Name is required');
-      const stateArr = states
-        .split(',')
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean);
-      const cs = sameAsBilling ? billStreet : corrStreet;
-      const cc = sameAsBilling ? billCity : corrCity;
-      const cst = sameAsBilling ? billState : corrState;
-      const cz = sameAsBilling ? billZip : corrZip;
-      const payload = {
-        org_id: orgId,
-        name: name.trim(),
-        tin: tin.trim() || null,
-        npi_type2: npi.trim() || null,
-        states: stateArr.length > 0 ? stateArr : null,
-        is_active: active,
-        billing_street: billStreet.trim() || null,
-        billing_city: billCity.trim() || null,
-        billing_state: billState || null,
-        billing_zip: billZip.trim() || null,
-        correspondence_street: cs.trim() || null,
-        correspondence_city: cc.trim() || null,
-        correspondence_state: cst || null,
-        correspondence_zip: cz.trim() || null,
-      };
-      if (group) {
-        const { error } = await supabase
-          .from('provider_groups')
-          .update(payload as never)
-          .eq('id', group.id)
-          .eq('org_id', orgId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('provider_groups')
-          .insert(payload as never);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['provider-groups', orgId ?? 'no-org'] });
-      toast.success(group ? 'Group updated' : 'Group created');
-      onClose();
-    },
-    onError: (e) => {
+  const createMut = useCreateProviderGroup();
+  const updateMut = useUpdateProviderGroup(group?.id ?? '');
+  const pending = createMut.isPending || updateMut.isPending;
+
+  const handleSave = () => {
+    setError(null);
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    const stateArr = states
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+    const cs = sameAsBilling ? billStreet : corrStreet;
+    const cc = sameAsBilling ? billCity : corrCity;
+    const cst = sameAsBilling ? billState : corrState;
+    const cz = sameAsBilling ? billZip : corrZip;
+    const input: ProviderGroupInput = {
+      name: name.trim(),
+      tin: tin.trim() || null,
+      npiType2: npi.trim() || null,
+      states: stateArr.length > 0 ? stateArr : null,
+      isActive: active,
+      billingStreet: billStreet.trim() || null,
+      billingCity: billCity.trim() || null,
+      billingState: billState || null,
+      billingZip: billZip.trim() || null,
+      correspondenceStreet: cs.trim() || null,
+      correspondenceCity: cc.trim() || null,
+      correspondenceState: cst || null,
+      correspondenceZip: cz.trim() || null,
+    };
+    const onErr = (e: unknown) => {
       const msg = e instanceof Error ? e.message : 'Save failed';
       setError(msg);
       toast.error(msg);
-    },
-  });
+    };
+    if (group) {
+      updateMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Group updated');
+          onClose();
+        },
+        onError: onErr,
+      });
+    } else {
+      createMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Group created');
+          onClose();
+        },
+        onError: onErr,
+      });
+    }
+  };
 
   const renderStateSelect = (value: string, onChange: (v: string) => void, disabled = false) => (
     <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
@@ -725,15 +639,15 @@ function GroupEditModal({
           ) : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
           <Button
-            onClick={() => mut.mutate()}
-            disabled={mut.isPending}
+            onClick={handleSave}
+            disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {mut.isPending ? 'Saving…' : group ? 'Save changes' : 'Create group'}
+            {pending ? 'Saving…' : group ? 'Save changes' : 'Create group'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -752,8 +666,6 @@ function FacilityEditModal({
   groups: ProviderGroup[];
   onClose: () => void;
 }) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
   const [name, setName] = useState(facility?.name ?? '');
   const [groupId, setGroupId] = useState<string>(
     facility?.groupId ?? defaultGroupId ?? '__none__',
@@ -765,45 +677,48 @@ function FacilityEditModal({
   const [active, setActive] = useState<boolean>(facility?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
-  const mut = useMutation({
-    mutationFn: async () => {
-      if (!orgId) throw new Error('No active organization');
-      if (!name.trim()) throw new Error('Name is required');
-      const payload = {
-        org_id: orgId,
-        name: name.trim(),
-        group_id: groupId === '__none__' ? null : groupId,
-        street: street.trim() || null,
-        city: city.trim() || null,
-        state: state === '__none__' ? null : state,
-        zip: zip.trim() || null,
-        is_active: active,
-      };
-      if (facility) {
-        const { error } = await supabase
-          .from('facilities')
-          .update(payload as never)
-          .eq('id', facility.id)
-          .eq('org_id', orgId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('facilities')
-          .insert(payload as never);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['facilities', orgId ?? 'no-org'] });
-      toast.success(facility ? 'Facility updated' : 'Facility created');
-      onClose();
-    },
-    onError: (e) => {
+  const createMut = useCreateFacility();
+  const updateMut = useUpdateFacility(facility?.id ?? '');
+  const pending = createMut.isPending || updateMut.isPending;
+
+  const handleSave = () => {
+    setError(null);
+    if (!name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    const input: FacilityInput = {
+      name: name.trim(),
+      groupId: groupId === '__none__' ? null : groupId,
+      street: street.trim() || null,
+      city: city.trim() || null,
+      state: state === '__none__' ? null : state,
+      zip: zip.trim() || null,
+      isActive: active,
+    };
+    const onErr = (e: unknown) => {
       const msg = e instanceof Error ? e.message : 'Save failed';
       setError(msg);
       toast.error(msg);
-    },
-  });
+    };
+    if (facility) {
+      updateMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Facility updated');
+          onClose();
+        },
+        onError: onErr,
+      });
+    } else {
+      createMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Facility created');
+          onClose();
+        },
+        onError: onErr,
+      });
+    }
+  };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -873,15 +788,15 @@ function FacilityEditModal({
           ) : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
           <Button
-            onClick={() => mut.mutate()}
-            disabled={mut.isPending}
+            onClick={handleSave}
+            disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {mut.isPending ? 'Saving…' : facility ? 'Save changes' : 'Create facility'}
+            {pending ? 'Saving…' : facility ? 'Save changes' : 'Create facility'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -918,53 +833,25 @@ function TeamTab() {
   const canEdit = role === 'admin';
   const me = useActiveMembership();
   const membershipsQ = useMemberships();
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
 
-  const updateRole = useMutation({
-    mutationFn: async ({ id, role: newRole }: { id: string; role: AppRole }) => {
-      if (!orgId) throw new Error('No active organization');
-      const { error } = await supabase
-        .from('memberships')
-        .update({ role: newRole })
-        .eq('id', id)
-        .eq('org_id', orgId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['memberships-admin', orgId ?? 'no-org'] });
-      toast.success('Role updated');
-    },
-    onError: (e) => {
-      toast.error(e instanceof Error ? e.message : 'Role update failed');
-    },
-  });
+  const updateRole = useUpdateMembershipRole();
+
+  const handleRoleChange = (id: string, newRole: AppRole) => {
+    updateRole.mutate(
+      { id, role: newRole },
+      {
+        onSuccess: () => toast.success('Role updated'),
+        onError: (e) => {
+          const msg = e instanceof Error ? e.message : 'Update failed';
+          toast.error(msg);
+        },
+      },
+    );
+  };
 
   return (
     <div className="space-y-4">
-      <div className="border border-[#E8E5E0] rounded-md bg-[#FAFAF9] px-4 py-3 text-[13px] text-foreground">
-        Billing role is read-only everywhere. This is enforced by the database,
-        not just the interface.
-      </div>
-
-      <div className="flex items-center justify-end">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <Button disabled className="bg-[#1B4D3E] text-white h-9 opacity-60">
-                  <Plus className="w-4 h-4 mr-1" /> Invite
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              Invites come with email automation later.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      <div className="border border-[#E8E5E0] rounded-md overflow-hidden bg-white">
+      <div className="border border-[#E8E5E0] rounded-md bg-white">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
@@ -988,7 +875,7 @@ function TeamTab() {
             ) : membershipsQ.isError ? (
               <tr>
                 <td colSpan={5} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load members.</div>
+                  <div className="text-[13px] text-foreground mb-3">Failed to load team members.</div>
                   <Button variant="outline" size="sm" onClick={() => membershipsQ.refetch()}>
                     Retry
                   </Button>
@@ -1023,9 +910,7 @@ function TeamTab() {
                       {canEdit ? (
                         <Select
                           value={m.role}
-                          onValueChange={(v) =>
-                            updateRole.mutate({ id: m.id, role: v as AppRole })
-                          }
+                          onValueChange={(v) => handleRoleChange(m.id, v as AppRole)}
                         >
                           <SelectTrigger className="h-8 w-[140px] ml-auto text-[12px]">
                             <SelectValue />
@@ -1050,38 +935,6 @@ function TeamTab() {
 }
 
 /* --------------------------- Insurance Policies --------------------------- */
-
-type InsuranceType = 'professional_liability' | 'general_liability';
-
-interface InsurancePolicy {
-  id: string;
-  orgId: string;
-  groupId: string;
-  insuranceType: InsuranceType;
-  insurerName: string;
-  policyNumber: string;
-  policyStartDate: string;
-  policyEndDate: string;
-  notes: string | null;
-}
-
-function useGroupInsurancePolicies(groupId: string) {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['group-insurance-policies', orgId, groupId] as const,
-    queryFn: async (): Promise<InsurancePolicy[]> => {
-      const { data, error } = await supabase
-        .from('group_insurance_policies' as never)
-        .select('*')
-        .eq('org_id', orgId)
-        .eq('group_id', groupId)
-        .order('policy_end_date', { ascending: false });
-      if (error) throw error;
-      return camelizeRow<InsurancePolicy[]>((data ?? []) as never);
-    },
-    enabled: orgId !== 'no-org' && Boolean(groupId),
-  });
-}
 
 function insuranceTypeLabel(t: InsuranceType): string {
   return t === 'professional_liability' ? 'Professional Liability' : 'General Liability';
@@ -1218,8 +1071,6 @@ function InsurancePolicyEditModal({
   policy: InsurancePolicy | null;
   onClose: () => void;
 }) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId();
   const [insuranceType, setInsuranceType] = useState<InsuranceType>(
     policy?.insuranceType ?? 'professional_liability',
   );
@@ -1230,50 +1081,44 @@ function InsurancePolicyEditModal({
   const [notes, setNotes] = useState(policy?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const mut = useMutation({
-    mutationFn: async () => {
-      if (!orgId) throw new Error('No active organization');
-      if (!insurerName.trim()) throw new Error('Insurer name is required');
-      if (!policyNumber.trim()) throw new Error('Policy number is required');
-      if (!startDate) throw new Error('Start date is required');
-      if (!endDate) throw new Error('End date is required');
-      const payload = {
-        org_id: orgId,
-        group_id: groupId,
-        insurance_type: insuranceType,
-        insurer_name: insurerName.trim(),
-        policy_number: policyNumber.trim(),
-        policy_start_date: startDate,
-        policy_end_date: endDate,
-        notes: notes.trim() || null,
-      };
-      if (policy) {
-        const { error: err } = await supabase
-          .from('group_insurance_policies' as never)
-          .update(payload as never)
-          .eq('id', policy.id)
-          .eq('org_id', orgId);
-        if (err) throw err;
-      } else {
-        const { error: err } = await supabase
-          .from('group_insurance_policies' as never)
-          .insert(payload as never);
-        if (err) throw err;
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({
-        queryKey: ['group-insurance-policies', orgId ?? 'no-org', groupId],
-      });
-      toast.success(policy ? 'Policy updated' : 'Policy created');
-      onClose();
-    },
-    onError: (e) => {
+  const createMut = useCreateGroupInsurancePolicy(groupId);
+  const updateMut = useUpdateGroupInsurancePolicy(policy?.id ?? '', groupId);
+  const pending = createMut.isPending || updateMut.isPending;
+
+  const handleSave = () => {
+    setError(null);
+    const input: InsurancePolicyInput = {
+      groupId,
+      insuranceType,
+      insurerName,
+      policyNumber,
+      policyStartDate: startDate,
+      policyEndDate: endDate,
+      notes: notes.trim() || null,
+    };
+    const onErr = (e: unknown) => {
       const msg = e instanceof Error ? e.message : 'Save failed';
       setError(msg);
       toast.error(msg);
-    },
-  });
+    };
+    if (policy) {
+      updateMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Policy updated');
+          onClose();
+        },
+        onError: onErr,
+      });
+    } else {
+      createMut.mutate(input, {
+        onSuccess: () => {
+          toast.success('Policy created');
+          onClose();
+        },
+        onError: onErr,
+      });
+    }
+  };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -1348,15 +1193,15 @@ function InsurancePolicyEditModal({
           ) : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
           <Button
-            onClick={() => mut.mutate()}
-            disabled={mut.isPending}
+            onClick={handleSave}
+            disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {mut.isPending ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
+            {pending ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
           </Button>
         </DialogFooter>
       </DialogContent>
