@@ -33,7 +33,7 @@ import {
   useCreateRoutingRule,
   useUpdateRoutingRule,
 } from '@/hooks/useAdmin';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import type { Mso, MsoRoutingRule } from '@/types';
 import type { RoutingRuleInput } from '@/services/msos';
 
@@ -52,8 +52,7 @@ const US_STATES = [
 
 
 function AdminMsoRoutingPage() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
 
   const rulesQ = useRoutingRules();
   const payersQ = usePayers();

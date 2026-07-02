@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/select';
 import {
   useActiveMembership,
-  useRole,
+  useIsAdmin,
   type AppRole,
 } from '@/lib/auth-store';
 import { useProviderGroups } from '@/hooks/useLookups';
@@ -94,8 +94,7 @@ function AdminSettingsPage() {
 /* ------------------------------ Organization ------------------------------ */
 
 function OrganizationTab() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const orgQ = useOrganization();
   const groupsQ = useProviderGroups();
   const facilitiesQ = useFacilitiesAll();

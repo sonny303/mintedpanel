@@ -33,7 +33,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import type { StatusConfig, StatusTrack } from '@/types';
 
 export const Route = createFileRoute('/admin/statuses')({
@@ -79,8 +79,7 @@ function normalizeRequiredField(raw: unknown): RequiredFieldDef {
 }
 
 function AdminStatusesPage() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
 
   const credQ = useStatusConfigs('credentialing');
   const conQ = useStatusConfigs('contracting');
