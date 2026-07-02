@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -25,11 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { usePayers, useMsos, useCreateMso, useUpdateMso } from '@/hooks/useAdmin';
-import { useActiveOrgId, useRole } from '@/lib/auth-store';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
+import {
+  usePayers,
+  useMsos,
+  useCreateMso,
+  useUpdateMso,
+  useRoutingRules,
+  useCreateRoutingRule,
+  useUpdateRoutingRule,
+} from '@/hooks/useAdmin';
+import { useRole } from '@/lib/auth-store';
 import type { Mso, MsoRoutingRule } from '@/types';
+import type { RoutingRuleInput } from '@/services/msos';
 
 export const Route = createFileRoute('/admin/mso-routing')({
   component: AdminMsoRoutingPage,
