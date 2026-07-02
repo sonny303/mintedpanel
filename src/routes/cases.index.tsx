@@ -98,6 +98,7 @@ function CasesListPage() {
   const contractStatusesQ = useStatusConfigs('contracting');
   const groupsQ = useProviderGroups();
   const coordinatorsQ = useCoordinators();
+  const lastTouchesQ = useLastTouchDates();
 
   const providerById = useMemo(() => {
     const m = new Map<string, Provider>();
