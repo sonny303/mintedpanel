@@ -329,13 +329,22 @@ function TaskQueuePage() {
                       e.isOverdue ? 'text-[#DC2626] font-medium' : ''
                     }`}
                   >
-                    {e.task.dueDate ? fmtDate(e.task.dueDate) : '—'}
-                    {e.isOverdue && e.task.dueDate
-                      ? ` (${Math.abs(
-                          differenceInCalendarDays(parseISO(e.task.dueDate), today),
-                        )}d)`
-                      : ''}
+                    {e.task.status === 'completed' && e.task.completedDate ? (
+                      <span className="text-muted-foreground">
+                        Completed {fmtDate(e.task.completedDate)}
+                      </span>
+                    ) : (
+                      <>
+                        {e.task.dueDate ? fmtDate(e.task.dueDate) : '—'}
+                        {e.isOverdue && e.task.dueDate
+                          ? ` (${Math.abs(
+                              differenceInCalendarDays(parseISO(e.task.dueDate), today),
+                            )}d)`
+                          : ''}
+                      </>
+                    )}
                   </td>
+
                   <td className="px-3">
                     <StatusPill
                       status={STATUS_COLOR[e.task.status]}

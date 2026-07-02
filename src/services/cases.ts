@@ -81,9 +81,44 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
   if (error) throw error;
   if (!data) return null;
   const notes = await getNotesFor('case', id);
-  const merged = { ...(data as Record<string, unknown>), notes };
+
+  // Enrich status_history with author names for "changed by {name}".
+  const rawHistory = ((data as Record<string, unknown>).status_history as
+    | Array<Record<string, unknown>>
+    | null) ?? [];
+  const changedByIds = Array.from(
+    new Set(
+      rawHistory
+        .map((h) => h.changed_by as string | null)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const nameMap = new Map<string, string | null>();
+  if (changedByIds.length > 0) {
+    const { data: profs, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', changedByIds);
+    if (profErr) throw profErr;
+    for (const p of profs ?? []) {
+      const name =
+        (p.full_name as string | null) ?? (p.email as string | null) ?? null;
+      nameMap.set(p.id as string, name);
+    }
+  }
+  const enrichedHistory = rawHistory.map((h) => ({
+    ...h,
+    changed_by_name: h.changed_by ? nameMap.get(h.changed_by as string) ?? null : null,
+  }));
+
+  const merged = {
+    ...(data as Record<string, unknown>),
+    status_history: enrichedHistory,
+    notes,
+  };
   return camelizeRow<CaseDetail>(merged);
 }
+
 
 
 export interface AppendStatusHistoryInput {

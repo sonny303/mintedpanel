@@ -38,6 +38,11 @@ export function CaseHistoryPanel({
                       </span>
                       {from} → <span className="font-medium">{to}</span>
                     </div>
+                    {h.changedByName ? (
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        by {h.changedByName}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="text-[11px] text-muted-foreground text-right shrink-0 tabular-nums">
                     {fmtDateTime(h.changedAt)}
@@ -45,6 +50,7 @@ export function CaseHistoryPanel({
                 </li>
               );
             })}
+
           </ul>
         )}
       </CardContent>

@@ -248,7 +248,9 @@ export interface StatusHistoryEntry {
   toStatusId: string | null;
   metadata: Record<string, unknown> | null;
   changedBy: string | null;
+  changedByName?: string | null;
   changedAt: string;
+
   createdAt: string;
 }
 

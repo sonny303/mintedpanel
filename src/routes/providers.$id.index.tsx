@@ -22,9 +22,11 @@ import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
+import { useProviderGroups, useNotes, useCreateNote } from '@/hooks/useLookups';
 import { useCanWrite } from '@/lib/permissions';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
+import { CaseNotesPanel } from '@/components/cases/CaseNotesPanel';
+
 import {
   Dialog,
   DialogContent,
@@ -189,11 +191,37 @@ function ProviderDetailPage() {
           <LicensesCard provider={provider} />
           <EmploymentCard provider={provider} />
           <CaqhCard provider={provider} />
+          <ProviderNotes providerId={provider.id} canEdit={canEdit} />
         </div>
       </div>
     </TooltipProvider>
   );
 }
+
+function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: boolean }) {
+  const notesQ = useNotes('provider', providerId);
+  const createNoteM = useCreateNote();
+  return (
+    <CaseNotesPanel
+      notes={notesQ.data ?? []}
+      canEdit={canEdit}
+      saving={createNoteM.isPending}
+      onSaveNote={async (content) => {
+        try {
+          await createNoteM.mutateAsync({
+            entityType: 'provider',
+            entityId: providerId,
+            content,
+          });
+          toast.success('Note added');
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
+      }}
+    />
+  );
+}
+
 
 
 interface HeaderProps {
