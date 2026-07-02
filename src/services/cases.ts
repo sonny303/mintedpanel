@@ -223,5 +223,3 @@ export async function getContractFor(
   return data ? camelizeRow<Contract>(data) : null;
 }
 
-// Re-exports for convenience when a screen needs the joined child types
-export type { Task, Touch, Note, StatusHistoryEntry };
