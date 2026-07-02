@@ -1,0 +1,13 @@
+Feature,Status,Required for customer #2,Notes
+Provider add/edit/view,Built (bug),Yes,"Add form drops licenses + facility assignments (Blocker 2); edit duplicates licenses via no-op delete (Blocker 3); detail Licenses card reads legacy columns and shows 'No licenses on file' for state_licenses providers (Blocker 4); view/edit otherwise solid with audit logging"
+Case creation (payer + state),Built (bug),Yes,"Multi-payer modal with duplicate gate, license gate, MSO routing, contract-missing pill — all verified working; non-atomic client-side orchestration can strand a case without tasks and freeze the modal (Blocker 6)"
+SOP template + auto-task spawn,Built but broken,Yes,"Regression: spawned tasks have empty steps + null due dates (Blocker 1); confirmed in real data (case created 2026-07-01) and reproduced live; templates + editor + matching all work — only the resolver shape is wrong"
+Task drawer (open/mark done/close),Built,Yes,"Verified E2E: open 0.9s first/0.1s after, complete with toast+undo, sequential lock, reopen confirm, notes; state persists across refresh (3/3)"
+Case status pills (credentialing + contracting),Built,Yes,"Verified accurate against DB (contracting from contracts table, credentialing from status_configs); Change-status dialog enforces required fields per status"
+Admin settings (payers/SOPs/templates),Built,Yes,"Payers CRUD with toasts; template editor rich (token help, 100+ tokens); statuses + MSO routing editable; empty-name payer validation is silent (S4); Members panel view-only — no invite flow (S8)"
+Audit log (who/what/when),Built,Yes,"43 write sites across services; append-only enforced at policy level; viewer loads 50 rows fast; webhook writes audit too"
+Responsive design (desktop + mobile),Partial,No (desktop-only scope OK),"Desktop clean at 1440px; 375px: no horizontal scroll and dialogs fit, but sidebar never collapses (~220px of 375px consumed) — unusable in practice on phones"
+Email-to-touch automation (n8n webhook),Built,No,"Edge function 'email-to-touch' v3 ACTIVE in dev project: secret-gated (x-webhook-secret), token->case resolution, inserts touch + follow-up task + audit; docs say 'planned' — stale; spawned task sort_order=0 locks other tasks (S3); n8n side not verifiable from here"
+Chrome extension (auto-fill payer forms),Missing,No,"Post-MVP per architecture notes; data model already exposes what it needs via RLS"
+Reports / dashboard,Built,Yes,"4 tabs (Summary/Contracts/Matrix/Roster) all render with real data, charts OK, CSV export on roster; no blank screens incl. empty-data run"
+Bulk provider upload,Missing,Yes,"No import path; onboarding a 30-provider group = 30 manual 5-step forms; CSV utilities exist for export only"
