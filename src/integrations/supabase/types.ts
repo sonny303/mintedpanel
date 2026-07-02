@@ -77,6 +77,7 @@ export type Database = {
           id: string
           notes: string | null
           org_id: string
+          payer_group_id: string | null
           payer_id: string | null
           state: string
           updated_at: string | null
@@ -90,6 +91,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id: string
+          payer_group_id?: string | null
           payer_id?: string | null
           state: string
           updated_at?: string | null
@@ -103,6 +105,7 @@ export type Database = {
           id?: string
           notes?: string | null
           org_id?: string
+          payer_group_id?: string | null
           payer_id?: string | null
           state?: string
           updated_at?: string | null
@@ -142,6 +145,7 @@ export type Database = {
         Row: {
           approved_date: string | null
           assigned_to: string | null
+          case_email_token: string
           confirmed_effective_date: string | null
           created_at: string | null
           created_by: string | null
@@ -163,6 +167,7 @@ export type Database = {
         Insert: {
           approved_date?: string | null
           assigned_to?: string | null
+          case_email_token?: string
           confirmed_effective_date?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -184,6 +189,7 @@ export type Database = {
         Update: {
           approved_date?: string | null
           assigned_to?: string | null
+          case_email_token?: string
           confirmed_effective_date?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -270,39 +276,84 @@ export type Database = {
       }
       facilities: {
         Row: {
+          accepting_new_patients: boolean | null
+          ada_compliance: Json | null
+          appointment_phone: string | null
           city: string | null
+          contact_name: string | null
+          county: string | null
           created_at: string
+          email: string | null
+          fax: string | null
           group_id: string | null
+          hours: Json | null
           id: string
+          interpreter_languages: string[] | null
           is_active: boolean
+          language_line: boolean | null
+          languages_offered: string[] | null
           name: string
           org_id: string
+          phone: string | null
+          service_types: Json | null
           state: string | null
           street: string | null
+          suite: string | null
+          treating_categories: Json | null
           zip: string | null
         }
         Insert: {
+          accepting_new_patients?: boolean | null
+          ada_compliance?: Json | null
+          appointment_phone?: string | null
           city?: string | null
+          contact_name?: string | null
+          county?: string | null
           created_at?: string
+          email?: string | null
+          fax?: string | null
           group_id?: string | null
+          hours?: Json | null
           id?: string
+          interpreter_languages?: string[] | null
           is_active?: boolean
+          language_line?: boolean | null
+          languages_offered?: string[] | null
           name: string
           org_id: string
+          phone?: string | null
+          service_types?: Json | null
           state?: string | null
           street?: string | null
+          suite?: string | null
+          treating_categories?: Json | null
           zip?: string | null
         }
         Update: {
+          accepting_new_patients?: boolean | null
+          ada_compliance?: Json | null
+          appointment_phone?: string | null
           city?: string | null
+          contact_name?: string | null
+          county?: string | null
           created_at?: string
+          email?: string | null
+          fax?: string | null
           group_id?: string | null
+          hours?: Json | null
           id?: string
+          interpreter_languages?: string[] | null
           is_active?: boolean
+          language_line?: boolean | null
+          languages_offered?: string[] | null
           name?: string
           org_id?: string
+          phone?: string | null
+          service_types?: Json | null
           state?: string | null
           street?: string | null
+          suite?: string | null
+          treating_categories?: Json | null
           zip?: string | null
         }
         Relationships: [
@@ -324,7 +375,7 @@ export type Database = {
       }
       group_insurance_policies: {
         Row: {
-          created_at: string
+          created_at: string | null
           group_id: string
           id: string
           insurance_type: string
@@ -334,10 +385,10 @@ export type Database = {
           policy_end_date: string
           policy_number: string
           policy_start_date: string
-          updated_at: string
+          updated_at: string | null
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           group_id: string
           id?: string
           insurance_type: string
@@ -347,10 +398,10 @@ export type Database = {
           policy_end_date: string
           policy_number: string
           policy_start_date: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           group_id?: string
           id?: string
           insurance_type?: string
@@ -360,7 +411,7 @@ export type Database = {
           policy_end_date?: string
           policy_number?: string
           policy_start_date?: string
-          updated_at?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -661,7 +712,9 @@ export type Database = {
           id: string
           is_primary: boolean | null
           org_id: string
+          practice_frequency: string | null
           provider_id: string | null
+          start_date: string | null
         }
         Insert: {
           created_at?: string | null
@@ -669,7 +722,9 @@ export type Database = {
           id?: string
           is_primary?: boolean | null
           org_id: string
+          practice_frequency?: string | null
           provider_id?: string | null
+          start_date?: string | null
         }
         Update: {
           created_at?: string | null
@@ -677,7 +732,9 @@ export type Database = {
           id?: string
           is_primary?: boolean | null
           org_id?: string
+          practice_frequency?: string | null
           provider_id?: string | null
+          start_date?: string | null
         }
         Relationships: [
           {
@@ -705,34 +762,139 @@ export type Database = {
       }
       provider_groups: {
         Row: {
+          billing_city: string | null
+          billing_contact_name: string | null
+          billing_email: string | null
+          billing_fax: string | null
+          billing_phone: string | null
+          billing_state: string | null
+          billing_street: string | null
+          billing_suite: string | null
+          billing_zip: string | null
+          contract_signer_email: string | null
+          contract_signer_name: string | null
+          contracting_contact_email: string | null
+          contracting_contact_name: string | null
+          contracting_contact_title: string | null
+          correspondence_city: string | null
+          correspondence_contact_name: string | null
+          correspondence_email: string | null
+          correspondence_fax: string | null
+          correspondence_phone: string | null
+          correspondence_state: string | null
+          correspondence_street: string | null
+          correspondence_suite: string | null
+          correspondence_zip: string | null
           created_at: string
+          credentialing_city: string | null
+          credentialing_contact_name: string | null
+          credentialing_email: string | null
+          credentialing_fax: string | null
+          credentialing_phone: string | null
+          credentialing_state: string | null
+          credentialing_street: string | null
+          credentialing_suite: string | null
+          credentialing_zip: string | null
           id: string
           is_active: boolean
           name: string
           npi_type2: string | null
           org_id: string
+          preferred_contact_method: string | null
           states: string[] | null
+          tax_id_type: string | null
           tin: string | null
+          website_url: string | null
         }
         Insert: {
+          billing_city?: string | null
+          billing_contact_name?: string | null
+          billing_email?: string | null
+          billing_fax?: string | null
+          billing_phone?: string | null
+          billing_state?: string | null
+          billing_street?: string | null
+          billing_suite?: string | null
+          billing_zip?: string | null
+          contract_signer_email?: string | null
+          contract_signer_name?: string | null
+          contracting_contact_email?: string | null
+          contracting_contact_name?: string | null
+          contracting_contact_title?: string | null
+          correspondence_city?: string | null
+          correspondence_contact_name?: string | null
+          correspondence_email?: string | null
+          correspondence_fax?: string | null
+          correspondence_phone?: string | null
+          correspondence_state?: string | null
+          correspondence_street?: string | null
+          correspondence_suite?: string | null
+          correspondence_zip?: string | null
           created_at?: string
+          credentialing_city?: string | null
+          credentialing_contact_name?: string | null
+          credentialing_email?: string | null
+          credentialing_fax?: string | null
+          credentialing_phone?: string | null
+          credentialing_state?: string | null
+          credentialing_street?: string | null
+          credentialing_suite?: string | null
+          credentialing_zip?: string | null
           id?: string
           is_active?: boolean
           name: string
           npi_type2?: string | null
           org_id: string
+          preferred_contact_method?: string | null
           states?: string[] | null
+          tax_id_type?: string | null
           tin?: string | null
+          website_url?: string | null
         }
         Update: {
+          billing_city?: string | null
+          billing_contact_name?: string | null
+          billing_email?: string | null
+          billing_fax?: string | null
+          billing_phone?: string | null
+          billing_state?: string | null
+          billing_street?: string | null
+          billing_suite?: string | null
+          billing_zip?: string | null
+          contract_signer_email?: string | null
+          contract_signer_name?: string | null
+          contracting_contact_email?: string | null
+          contracting_contact_name?: string | null
+          contracting_contact_title?: string | null
+          correspondence_city?: string | null
+          correspondence_contact_name?: string | null
+          correspondence_email?: string | null
+          correspondence_fax?: string | null
+          correspondence_phone?: string | null
+          correspondence_state?: string | null
+          correspondence_street?: string | null
+          correspondence_suite?: string | null
+          correspondence_zip?: string | null
           created_at?: string
+          credentialing_city?: string | null
+          credentialing_contact_name?: string | null
+          credentialing_email?: string | null
+          credentialing_fax?: string | null
+          credentialing_phone?: string | null
+          credentialing_state?: string | null
+          credentialing_street?: string | null
+          credentialing_suite?: string | null
+          credentialing_zip?: string | null
           id?: string
           is_active?: boolean
           name?: string
           npi_type2?: string | null
           org_id?: string
+          preferred_contact_method?: string | null
           states?: string[] | null
+          tax_id_type?: string | null
           tin?: string | null
+          website_url?: string | null
         }
         Relationships: [
           {
@@ -746,15 +908,22 @@ export type Database = {
       }
       providers: {
         Row: {
+          additional_certifications: Json | null
+          age_groups_served: string[] | null
+          board_certified: boolean | null
           caqh_id: string | null
           caqh_last_attested_date: string | null
           created_at: string | null
           credentials: string | null
+          cultural_competency_training: boolean | null
           date_of_birth: string | null
+          dea_expiration_date: string | null
           dea_number: string | null
           degree: string | null
           email: string | null
+          ethnicity: string | null
           first_name: string
+          gender: string | null
           graduation_date: string | null
           group_id: string | null
           home_city: string | null
@@ -763,11 +932,18 @@ export type Database = {
           home_zip: string | null
           id: string
           is_new_grad: boolean | null
+          languages: string[] | null
           last_name: string
+          license_expiration_date: string | null
+          license_issue_date: string | null
+          license_number: string | null
+          license_state: string | null
           malpractice_carrier: string | null
           malpractice_coverage_end: string | null
           malpractice_coverage_start: string | null
           malpractice_policy_number: string | null
+          medicaid_attested: boolean | null
+          middle_initial: string | null
           npi: string | null
           org_id: string
           phone: string | null
@@ -776,20 +952,29 @@ export type Database = {
           ssn_last4: string | null
           start_date: string | null
           status: string
+          sub_specialty: string | null
+          suffix: string | null
           taxonomy_code: string | null
           terminated_date: string | null
           updated_at: string | null
         }
         Insert: {
+          additional_certifications?: Json | null
+          age_groups_served?: string[] | null
+          board_certified?: boolean | null
           caqh_id?: string | null
           caqh_last_attested_date?: string | null
           created_at?: string | null
           credentials?: string | null
+          cultural_competency_training?: boolean | null
           date_of_birth?: string | null
+          dea_expiration_date?: string | null
           dea_number?: string | null
           degree?: string | null
           email?: string | null
+          ethnicity?: string | null
           first_name: string
+          gender?: string | null
           graduation_date?: string | null
           group_id?: string | null
           home_city?: string | null
@@ -798,11 +983,18 @@ export type Database = {
           home_zip?: string | null
           id?: string
           is_new_grad?: boolean | null
+          languages?: string[] | null
           last_name: string
+          license_expiration_date?: string | null
+          license_issue_date?: string | null
+          license_number?: string | null
+          license_state?: string | null
           malpractice_carrier?: string | null
           malpractice_coverage_end?: string | null
           malpractice_coverage_start?: string | null
           malpractice_policy_number?: string | null
+          medicaid_attested?: boolean | null
+          middle_initial?: string | null
           npi?: string | null
           org_id: string
           phone?: string | null
@@ -811,20 +1003,29 @@ export type Database = {
           ssn_last4?: string | null
           start_date?: string | null
           status?: string
+          sub_specialty?: string | null
+          suffix?: string | null
           taxonomy_code?: string | null
           terminated_date?: string | null
           updated_at?: string | null
         }
         Update: {
+          additional_certifications?: Json | null
+          age_groups_served?: string[] | null
+          board_certified?: boolean | null
           caqh_id?: string | null
           caqh_last_attested_date?: string | null
           created_at?: string | null
           credentials?: string | null
+          cultural_competency_training?: boolean | null
           date_of_birth?: string | null
+          dea_expiration_date?: string | null
           dea_number?: string | null
           degree?: string | null
           email?: string | null
+          ethnicity?: string | null
           first_name?: string
+          gender?: string | null
           graduation_date?: string | null
           group_id?: string | null
           home_city?: string | null
@@ -833,11 +1034,18 @@ export type Database = {
           home_zip?: string | null
           id?: string
           is_new_grad?: boolean | null
+          languages?: string[] | null
           last_name?: string
+          license_expiration_date?: string | null
+          license_issue_date?: string | null
+          license_number?: string | null
+          license_state?: string | null
           malpractice_carrier?: string | null
           malpractice_coverage_end?: string | null
           malpractice_coverage_start?: string | null
           malpractice_policy_number?: string | null
+          medicaid_attested?: boolean | null
+          middle_initial?: string | null
           npi?: string | null
           org_id?: string
           phone?: string | null
@@ -846,6 +1054,8 @@ export type Database = {
           ssn_last4?: string | null
           start_date?: string | null
           status?: string
+          sub_specialty?: string | null
+          suffix?: string | null
           taxonomy_code?: string | null
           terminated_date?: string | null
           updated_at?: string | null
@@ -869,10 +1079,10 @@ export type Database = {
       }
       sop_templates: {
         Row: {
+          archived: boolean
           created_at: string | null
           group_id: string | null
           id: string
-          is_archived: boolean
           name: string
           org_id: string
           payer_id: string | null
@@ -882,10 +1092,10 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          archived?: boolean
           created_at?: string | null
           group_id?: string | null
           id?: string
-          is_archived?: boolean
           name: string
           org_id: string
           payer_id?: string | null
@@ -895,10 +1105,10 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          archived?: boolean
           created_at?: string | null
           group_id?: string | null
           id?: string
-          is_archived?: boolean
           name?: string
           org_id?: string
           payer_id?: string | null
@@ -1236,18 +1446,21 @@ export type Database = {
       }
       user_table_prefs: {
         Row: {
+          id: string
           page_key: string
           prefs: Json
           updated_at: string
           user_id: string
         }
         Insert: {
+          id?: string
           page_key: string
           prefs?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
+          id?: string
           page_key?: string
           prefs?: Json
           updated_at?: string
