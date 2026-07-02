@@ -1527,53 +1527,8 @@ function RosterTab() {
     [matchingCases],
   );
 
-  // Aux data: facility assignments, facilities, state licenses
-  const auxQ = useQuery<RosterAux>({
-    queryKey: ['roster-aux', orgId, providerIds],
-    enabled: orgId !== 'no-org' && providerIds.length > 0,
-    queryFn: async () => {
-      const [aRes, lRes] = await Promise.all([
-        supabase
-          .from('provider_facility_assignments')
-          .select('provider_id, facility_id')
-          .eq('org_id', orgId)
-          .in('provider_id', providerIds),
-        supabase
-          .from('state_licenses')
-          .select('provider_id, state, license_number, expiration_date')
-          .eq('org_id', orgId)
-          .in('provider_id', providerIds),
-      ]);
-      if (aRes.error) throw aRes.error;
-      if (lRes.error) throw lRes.error;
-      const assignments = (aRes.data ?? []).map((r) => ({
-        providerId: r.provider_id as string,
-        facilityId: r.facility_id as string,
-      }));
-      const facilityIds = Array.from(new Set(assignments.map((a) => a.facilityId).filter(Boolean)));
-      const matchingCaseFacilityIds = Array.from(
-        new Set(matchingCases.map((c) => c.facilityId).filter((v): v is string => Boolean(v))),
-      );
-      const allFacilityIds = Array.from(new Set([...facilityIds, ...matchingCaseFacilityIds]));
-      let facilities: RosterAux['facilities'] = [];
-      if (allFacilityIds.length > 0) {
-        const fRes = await supabase
-          .from('facilities')
-          .select('id, name, street, city, state, zip')
-          .eq('org_id', orgId)
-          .in('id', allFacilityIds);
-        if (fRes.error) throw fRes.error;
-        facilities = camelizeRow<RosterAux['facilities']>(fRes.data ?? []);
-      }
-      const licenses = (lRes.data ?? []).map((r) => ({
-        providerId: r.provider_id as string,
-        state: r.state as string,
-        licenseNumber: (r.license_number as string | null) ?? null,
-        expirationDate: (r.expiration_date as string | null) ?? null,
-      }));
-      return { assignments, facilities, licenses };
-    },
-  });
+  // Aux data: facility assignments, facilities, state licenses (org-wide)
+  const auxQ = useRosterAux();
 
   const rows: RosterRow[] = useMemo(() => {
     if (!generated) return [];
