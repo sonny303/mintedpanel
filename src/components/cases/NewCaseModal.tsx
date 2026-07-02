@@ -26,7 +26,8 @@ import {
 import { StatusPill } from "@/components/StatusPill";
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
-import { getMsoRoutingRule, type StateLicense } from "@/services/lookups";
+import { type StateLicense } from "@/services/lookups";
+import { createTasksForCase } from "@/services/tasks";
 import { useCases, useCreateCase } from "@/hooks/useCases";
 import {
   useCoordinators,
