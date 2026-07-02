@@ -99,7 +99,11 @@ export const useAuthStore = create<AuthState>()(
           .from("memberships")
           .select("org_id, role, organizations(name)")
           .eq("user_id", user.id);
-        if (error || !data) {
+        if (error) {
+          set({ fullName: profile?.full_name ?? null });
+          throw error;
+        }
+        if (!data) {
           set({ memberships: [], activeOrgId: null, fullName: profile?.full_name ?? null });
           return;
         }
