@@ -1,14 +1,14 @@
 // Edit Provider page: pre-fills the shared 5-step form with the existing
 // provider and licenses, saves via updateProviderWithLicenses. Billing role
-// is redirected back to the read-only detail view.
-import { useEffect, useMemo } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+// is redirected before the page renders.
+import { useMemo } from 'react';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProvider, useUpdateProviderWithLicenses } from '@/hooks/useProviders';
 import { useStateLicensesByProvider } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   emptyProviderFormState,
   type ProviderFormState,
@@ -18,6 +18,13 @@ import { EditProviderForm } from '@/components/providers/EditProviderForm';
 import type { LicenseInput } from '@/services/providers';
 
 export const Route = createFileRoute('/providers/$id/edit')({
+  beforeLoad: () => {
+    const { memberships, activeOrgId } = useAuthStore.getState();
+    const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
+    if (role === 'billing') {
+      throw redirect({ to: '/providers', replace: true });
+    }
+  },
   component: EditPage,
 });
 

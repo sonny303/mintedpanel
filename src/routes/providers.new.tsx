@@ -1,8 +1,11 @@
 // Add Provider entry point. The 5-step form lives in ProviderForm; this
-// route wires it to the createProvider mutation.
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+// route wires it to the createProvider mutation. Billing users are redirected
+// before the page renders.
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useCreateProvider } from '@/hooks/useProviders';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   ProviderForm,
   emptyProviderFormState,
@@ -11,6 +14,13 @@ import {
 import type { ProviderInput } from '@/services/providers';
 
 export const Route = createFileRoute('/providers/new')({
+  beforeLoad: () => {
+    const { memberships, activeOrgId } = useAuthStore.getState();
+    const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
+    if (role === 'billing') {
+      throw redirect({ to: '/providers', replace: true });
+    }
+  },
   component: Page,
 });
 
