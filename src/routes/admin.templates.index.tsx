@@ -6,6 +6,8 @@ import { fmtDate } from '@/lib/format';
 import { useDebounced } from '@/hooks/useDebounced';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -129,24 +131,24 @@ function TemplatesIndex() {
           </thead>
           <tbody>
             {templatesQ.isLoading ? (
-              <tr>
-                <td className="px-3 h-10 text-sm text-muted-foreground" colSpan={7}>
-                  Loading…
-                </td>
-              </tr>
+              <TableSkeletonRows rows={6} cols={7} />
             ) : templatesQ.isError ? (
               <tr>
                 <td className="px-3 py-12 text-center" colSpan={7}>
-                  <div className="text-[13px] text-foreground mb-3">Failed to load templates.</div>
-                  <Button variant="outline" size="sm" onClick={() => templatesQ.refetch()}>
-                    Retry
-                  </Button>
+                  <EmptyState
+                    message="Failed to load templates"
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => templatesQ.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td className="px-3 h-10 text-sm text-muted-foreground" colSpan={7}>
-                  No templates yet.
+                <td className="px-3 py-12" colSpan={7}>
+                  <EmptyState message="No templates yet" />
                 </td>
               </tr>
             ) : (

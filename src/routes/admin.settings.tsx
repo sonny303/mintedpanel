@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -202,24 +204,24 @@ function OrganizationTab() {
           </thead>
           <tbody>
             {groupsQ.isLoading ? (
-              <tr>
-                <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
+              <TableSkeletonRows rows={6} cols={6} />
             ) : groupsQ.isError ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load provider groups.</div>
-                  <Button variant="outline" size="sm" onClick={() => groupsQ.refetch()}>
-                    Retry
-                  </Button>
+                  <EmptyState
+                    message="Failed to load provider groups"
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => groupsQ.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
                 </td>
               </tr>
             ) : (groupsQ.data ?? []).length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                  No provider groups yet.
+                <td colSpan={6} className="px-3 py-12">
+                  <EmptyState message="No provider groups yet" />
                 </td>
               </tr>
             ) : (
@@ -317,8 +319,8 @@ function OrganizationTab() {
                   )}
                 </div>
                 {list.length === 0 ? (
-                  <div className="text-[12px] text-muted-foreground">
-                    No facilities.
+                  <div className="py-4">
+                    <EmptyState message="No facilities yet" />
                   </div>
                 ) : (
                   <ul className="space-y-1">
@@ -862,24 +864,24 @@ function TeamTab() {
           </thead>
           <tbody>
             {membershipsQ.isLoading ? (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
+              <TableSkeletonRows rows={6} cols={5} />
             ) : membershipsQ.isError ? (
               <tr>
                 <td colSpan={5} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load team members.</div>
-                  <Button variant="outline" size="sm" onClick={() => membershipsQ.refetch()}>
-                    Retry
-                  </Button>
+                  <EmptyState
+                    message="Failed to load team members"
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => membershipsQ.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
                 </td>
               </tr>
             ) : (membershipsQ.data ?? []).length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                  No members.
+                <td colSpan={5} className="px-3 py-12">
+                  <EmptyState message="No members yet" />
                 </td>
               </tr>
             ) : (
@@ -983,17 +985,28 @@ function InsurancePoliciesSection({
         )}
       </div>
       {policiesQ.isLoading ? (
-        <div className="p-4 text-[12px] text-muted-foreground">Loading…</div>
+        <table className="w-full">
+          <tbody>
+            <TableSkeletonRows rows={6} cols={6} />
+          </tbody>
+        </table>
       ) : policiesQ.isError ? (
         <div className="p-6 text-center">
-          <div className="text-[13px] text-foreground mb-3">Failed to load insurance policies.</div>
-          <Button variant="outline" size="sm" onClick={() => policiesQ.refetch()}>
-            Retry
-          </Button>
+          <EmptyState
+            message="Failed to load insurance policies"
+            action={
+              <Button variant="outline" size="sm" onClick={() => policiesQ.refetch()}>
+                Retry
+              </Button>
+            }
+          />
         </div>
       ) : (policiesQ.data ?? []).length === 0 ? (
-        <div className="p-4 text-[12px] text-muted-foreground">
-          No insurance policies. Add a policy to track group coverage.
+        <div className="p-4">
+          <EmptyState
+            message="No insurance policies yet"
+            description="Add a policy to track group coverage"
+          />
         </div>
       ) : (
         <table className="w-full text-[13px]">

@@ -5,6 +5,8 @@ import { useMemo, useState, Fragment } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { format, parseISO } from 'date-fns';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -132,7 +134,7 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
   });
 
   if (keys.length === 0) {
-    return <div className="text-[13px] text-tertiary">No field-level changes recorded.</div>;
+    return <EmptyState message="No field-level changes recorded" />;
   }
 
   return (
@@ -353,24 +355,24 @@ function AdminAuditPage() {
           </TableHeader>
           <TableBody>
             {auditQ.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-10 text-center text-tertiary">
-                  Loading…
-                </TableCell>
-              </TableRow>
+              <TableSkeletonRows rows={6} cols={6} />
             ) : auditQ.isError ? (
               <TableRow>
                 <TableCell colSpan={6} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load audit entries.</div>
-                  <Button variant="outline" size="sm" onClick={() => auditQ.refetch()}>
-                    Retry
-                  </Button>
+                  <EmptyState
+                    message="Failed to load audit entries"
+                    action={
+                      <Button variant="outline" size="sm" onClick={() => auditQ.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : pageRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-10 text-center text-tertiary">
-                  No audit entries match the current filters.
+                <TableCell colSpan={6} className="px-3 py-12">
+                  <EmptyState message="No audit entries match the current filters" />
                 </TableCell>
               </TableRow>
             ) : (

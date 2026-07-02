@@ -43,6 +43,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeletonRows } from '@/components/TableSkeletonRows';
+
+import { EmptyState } from '@/components/EmptyState';
 import { toast } from 'sonner';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
 import { fmtDate } from '@/lib/format';
@@ -277,27 +280,24 @@ function ContractsTab() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={9} className="p-3">
-                    <Skeleton className="h-8 w-full" />
-                  </td>
-                </tr>
+                <TableSkeletonRows rows={6} cols={9} />
               ) : isError ? (
                 <tr>
                   <td colSpan={9} className="px-3 py-12 text-center">
-                    <div className="text-[13px] text-foreground mb-3">Failed to load contracts.</div>
-                    <Button variant="outline" size="sm" onClick={retry}>
-                      Retry
-                    </Button>
+                    <EmptyState
+                      message="Failed to load contracts"
+                      action={
+                        <Button variant="outline" size="sm" onClick={retry}>
+                          Retry
+                        </Button>
+                      }
+                    />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={9}
-                    className="text-center py-12 text-muted-foreground text-[13px]"
-                  >
-                    No contracts match these filters.
+                  <td colSpan={9} className="px-3 py-12 text-center">
+                    <EmptyState message="No contracts match these filters" />
                   </td>
                 </tr>
               ) : (
@@ -788,11 +788,8 @@ function EnrollmentMatrixTab() {
             <tbody>
               {filteredProviders.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={payers.length + 1}
-                    className="text-center py-12 text-muted-foreground text-[13px]"
-                  >
-                    No providers match these filters.
+                  <td colSpan={payers.length + 1} className="px-3 py-12 text-center">
+                    <EmptyState message="No providers match these filters" />
                   </td>
                 </tr>
               ) : (
@@ -1224,7 +1221,9 @@ function SummaryTab() {
             </Button>
           </div>
           {statusBars.length === 0 ? (
-            <div className="text-[13px] text-muted-foreground py-8 text-center">No data.</div>
+            <div className="py-8">
+              <EmptyState message="No data" />
+            </div>
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -1269,7 +1268,9 @@ function SummaryTab() {
             </Button>
           </div>
           {payerBars.length === 0 ? (
-            <div className="text-[13px] text-muted-foreground py-8 text-center">No data.</div>
+            <div className="py-8">
+              <EmptyState message="No data" />
+            </div>
           ) : (
             <div style={{ height: Math.max(payerBars.length * 28 + 40, 200) }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -1332,8 +1333,8 @@ function SummaryTab() {
           <tbody>
             {approvalRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                  No approved cases in range.
+                <td colSpan={5} className="px-3 py-12">
+                  <EmptyState message="No approved cases in range" />
                 </td>
               </tr>
             ) : (
@@ -1402,8 +1403,8 @@ function SummaryTab() {
           <tbody>
             {coordinatorRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="text-center py-8 text-muted-foreground">
-                  No coordinator activity in range.
+                <td colSpan={4} className="px-3 py-12">
+                  <EmptyState message="No coordinator activity in range" />
                 </td>
               </tr>
             ) : (
@@ -1738,9 +1739,10 @@ function RosterTab() {
           </Button>
         </div>
       ) : rows.length === 0 ? (
-        <div className="border border-[#E8E5E0] rounded-md bg-white p-12 text-center text-[13px] text-muted-foreground">
-          No providers in this group have a case for the selected payer
-          {generated.state ? ` in ${generated.state}` : ''}.
+        <div className="border border-[#E8E5E0] rounded-md bg-white p-12">
+          <EmptyState
+            message={`No providers in this group have a case for the selected payer${generated.state ? ` in ${generated.state}` : ''}`}
+          />
         </div>
       ) : (
         <div className="border border-[#E8E5E0] rounded-md bg-white overflow-x-auto">
