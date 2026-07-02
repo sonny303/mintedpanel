@@ -3,6 +3,7 @@
 // also append status_history and audit_log.
 
 import { supabase } from '@/integrations/supabase/externalClient';
+import { getNotesFor } from '@/services/lookups';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type {
