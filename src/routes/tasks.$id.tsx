@@ -11,7 +11,6 @@ import {
   Lock,
   MessageSquare,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,11 +31,10 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { CopyButton } from '@/components/CopyButton';
-import { supabase } from '@/integrations/supabase/externalClient';
 import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from '@/hooks/useTasks';
 import { useCase } from '@/hooks/useCases';
-import { useCreateNote } from '@/hooks/useLookups';
-import { useActiveOrgId, useRole } from '@/lib/auth-store';
+import { useCreateNote, useNotes } from '@/hooks/useLookups';
+import { useRole } from '@/lib/auth-store';
 import type { SOPStep, TaskStatus } from '@/types';
 
 export const Route = createFileRoute('/tasks/$id')({
