@@ -218,6 +218,34 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
+
+      <Dialog
+        open={reopenTask !== null}
+        onOpenChange={(o) => {
+          if (!o) setReopenTask(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Reopen this task?</DialogTitle>
+            <DialogDescription>
+              It will move back to In progress.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenTask(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
+              onClick={reopenConfirm}
+              disabled={updateStatusM.isPending}
+            >
+              Reopen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
