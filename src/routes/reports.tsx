@@ -1139,6 +1139,37 @@ function SummaryTab() {
     );
   }
 
+  const isError =
+    casesQ.isError ||
+    tasksQ.isError ||
+    providersQ.isError ||
+    payersQ.isError ||
+    statusesQ.isError ||
+    groupsQ.isError ||
+    coordinatorsQ.isError ||
+    touchesQ.isError;
+  const retry = () => {
+    if (casesQ.isError) casesQ.refetch();
+    if (tasksQ.isError) tasksQ.refetch();
+    if (providersQ.isError) providersQ.refetch();
+    if (payersQ.isError) payersQ.refetch();
+    if (statusesQ.isError) statusesQ.refetch();
+    if (groupsQ.isError) groupsQ.refetch();
+    if (coordinatorsQ.isError) coordinatorsQ.refetch();
+    if (touchesQ.isError) touchesQ.refetch();
+  };
+
+  if (isError) {
+    return (
+      <div className="border border-border rounded-md px-3 py-12 text-center">
+        <div className="text-[13px] text-foreground mb-3">Failed to load summary data.</div>
+        <Button variant="outline" size="sm" onClick={retry}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Filters */}
