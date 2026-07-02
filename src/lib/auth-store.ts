@@ -19,6 +19,8 @@ export interface MembershipEntry {
   role: AppRole;
 }
 
+export type SignInErrorKind = "invalid" | "network" | "unknown";
+
 interface AuthState {
   session: Session | null;
   user: User | null;
@@ -26,11 +28,12 @@ interface AuthState {
   memberships: MembershipEntry[];
   activeOrgId: string | null;
   initialized: boolean;
+  initError: string | null;
   loading: boolean;
   init: () => Promise<void>;
   loadMemberships: () => Promise<void>;
   setActiveOrg: (orgId: string) => void;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; kind?: SignInErrorKind }>;
   signOut: () => Promise<void>;
 }
 
@@ -43,21 +46,40 @@ export const useAuthStore = create<AuthState>()(
       memberships: [],
       activeOrgId: null,
       initialized: false,
+      initError: null,
       loading: false,
 
       init: async () => {
-        const { data } = await supabase.auth.getSession();
-        set({ session: data.session, user: data.session?.user ?? null });
-        if (data.session) await get().loadMemberships();
-        set({ initialized: true });
+        set({ initError: null });
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          set({ session: data.session, user: data.session?.user ?? null });
+          if (data.session) {
+            try {
+              await get().loadMemberships();
+            } catch {
+              set({ initError: "Can't reach Minted Panel. Check your connection." });
+            }
+          }
+        } catch {
+          set({ initError: "Can't reach Minted Panel. Check your connection." });
+        } finally {
+          set({ initialized: true });
+        }
 
         supabase.auth.onAuthStateChange(async (event, session) => {
           if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
           set({ session, user: session?.user ?? null });
           if (session) {
-            await get().loadMemberships();
+            try {
+              await get().loadMemberships();
+              set({ initError: null });
+            } catch {
+              set({ initError: "Can't reach Minted Panel. Check your connection." });
+            }
           } else {
-            set({ memberships: [], activeOrgId: null, fullName: null });
+            set({ memberships: [], activeOrgId: null, fullName: null, initError: null });
           }
         });
       },
@@ -74,7 +96,11 @@ export const useAuthStore = create<AuthState>()(
           .from("memberships")
           .select("org_id, role, organizations(name)")
           .eq("user_id", user.id);
-        if (error || !data) {
+        if (error) {
+          set({ fullName: profile?.full_name ?? null });
+          throw error;
+        }
+        if (!data) {
           set({ memberships: [], activeOrgId: null, fullName: profile?.full_name ?? null });
           return;
         }
@@ -98,10 +124,23 @@ export const useAuthStore = create<AuthState>()(
 
       signIn: async (email, password) => {
         set({ loading: true });
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        set({ loading: false });
-        if (error) return { error: error.message };
-        return { error: null };
+        try {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          set({ loading: false });
+          if (!error) return { error: null };
+          const name = (error as { name?: string }).name ?? "";
+          const status = (error as { status?: number }).status;
+          if (name === "AuthRetryableFetchError" || status === 0 || typeof status === "undefined") {
+            return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+          }
+          if (status === 400 || status === 401 || /invalid/i.test(error.message)) {
+            return { error: "Invalid email or password", kind: "invalid" };
+          }
+          return { error: error.message, kind: "unknown" };
+        } catch {
+          set({ loading: false });
+          return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+        }
       },
 
       signOut: async () => {

@@ -134,6 +134,7 @@ function RootComponent() {
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
   const session = useAuthStore((s) => s.session);
+  const initError = useAuthStore((s) => s.initError);
 
   useEffect(() => {
     registerQueryClient(queryClient);
@@ -154,6 +155,25 @@ function RootComponent() {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-background text-[13px] text-muted-foreground">
         Loading...
+      </div>
+    );
+  }
+
+  if (initError && session && !isPublicRoute) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-background px-4">
+        <div className="w-full max-w-sm rounded-md border border-[#E8E5E0] bg-white p-6 text-center">
+          <h2 className="text-[15px] font-semibold text-foreground">Can't reach Minted Panel</h2>
+          <p className="mt-2 text-[13px] text-muted-foreground">
+            Check your connection.
+          </p>
+          <button
+            onClick={() => { void init(); }}
+            className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
