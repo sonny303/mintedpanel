@@ -124,10 +124,23 @@ export const useAuthStore = create<AuthState>()(
 
       signIn: async (email, password) => {
         set({ loading: true });
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        set({ loading: false });
-        if (error) return { error: error.message };
-        return { error: null };
+        try {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          set({ loading: false });
+          if (!error) return { error: null };
+          const name = (error as { name?: string }).name ?? "";
+          const status = (error as { status?: number }).status;
+          if (name === "AuthRetryableFetchError" || status === 0 || typeof status === "undefined") {
+            return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+          }
+          if (status === 400 || status === 401 || /invalid/i.test(error.message)) {
+            return { error: "Invalid email or password", kind: "invalid" };
+          }
+          return { error: error.message, kind: "unknown" };
+        } catch {
+          set({ loading: false });
+          return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+        }
       },
 
       signOut: async () => {
