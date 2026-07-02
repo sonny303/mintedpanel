@@ -13,7 +13,6 @@ import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as LandingRouteImport } from './routes/landing'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksIndexRouteImport } from './routes/tasks.index'
@@ -52,11 +51,6 @@ const ProvidersRoute = ProvidersRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LandingRoute = LandingRouteImport.update({
-  id: '/landing',
-  path: '/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CasesRoute = CasesRouteImport.update({
@@ -158,7 +152,6 @@ const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -183,7 +176,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -206,7 +198,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
-  '/landing': typeof LandingRoute
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -234,7 +225,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cases'
-    | '/landing'
     | '/login'
     | '/providers'
     | '/reports'
@@ -259,7 +249,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/landing'
     | '/login'
     | '/reports'
     | '/admin/audit'
@@ -281,7 +270,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cases'
-    | '/landing'
     | '/login'
     | '/providers'
     | '/reports'
@@ -308,7 +296,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
-  LandingRoute: typeof LandingRoute
   LoginRoute: typeof LoginRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
@@ -349,13 +336,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/landing': {
-      id: '/landing'
-      path: '/landing'
-      fullPath: '/landing'
-      preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cases': {
@@ -565,7 +545,6 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
-  LandingRoute: LandingRoute,
   LoginRoute: LoginRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
@@ -580,3 +559,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
