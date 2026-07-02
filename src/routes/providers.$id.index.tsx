@@ -21,7 +21,7 @@ import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useCanWrite } from '@/lib/permissions';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import {
   Dialog,
@@ -68,9 +68,8 @@ const PROVIDER_STATUS_COLOR: Record<ProviderStatus, StatusColor> = {
 function ProviderDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role !== 'billing';
-  const canTerminate = role === 'specialist' || role === 'admin';
+  const canEdit = useCanWrite();
+  const canTerminate = useCanWrite();
   const [newCaseOpen, setNewCaseOpen] = useState(false);
   const [terminateOpen, setTerminateOpen] = useState(false);
 

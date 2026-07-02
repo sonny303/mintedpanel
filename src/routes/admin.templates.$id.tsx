@@ -25,7 +25,7 @@ import {
   useUpdateTemplate,
 } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import type { SOPTaskDefinition, SOPTemplate } from '@/types';
 
 type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
@@ -149,8 +149,7 @@ export const Route = createFileRoute('/admin/templates/$id')({
 function TemplateEditor() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const tplQ = useTemplate(id);
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();

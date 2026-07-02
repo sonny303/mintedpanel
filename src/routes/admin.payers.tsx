@@ -31,7 +31,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { usePayers, useCreatePayer, useUpdatePayer } from '@/hooks/useAdmin';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import type { Payer } from '@/types';
 import type { PayerInput } from '@/services/payers';
 
@@ -67,8 +67,7 @@ function YesNoPill({ value }: { value: boolean }) {
 }
 
 function AdminPayersPage() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const payersQ = usePayers();
   const [editing, setEditing] = useState<{ payer: Payer | null } | null>(null);
 

@@ -57,7 +57,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
 import { useRosterAux, useTouchSummary } from '@/hooks/useReports';
-import { useRole } from '@/lib/auth-store';
+import { useCanWrite } from '@/lib/permissions';
 import type { Contract, CredentialCase, StatusConfig } from '@/types';
 
 
@@ -133,8 +133,7 @@ function ReportsPage() {
 // ──────────────────────────────────────────────────────────────────────────
 
 function ContractsTab() {
-  const role = useRole();
-  const canEdit = role === 'specialist' || role === 'admin';
+  const canEdit = useCanWrite();
 
   const contractsQ = useContracts();
   const casesQ = useCases();

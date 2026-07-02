@@ -28,11 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  useActiveMembership,
-  useRole,
-  type AppRole,
-} from '@/lib/auth-store';
+import { useActiveMembership, type AppRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import { useProviderGroups } from '@/hooks/useLookups';
 import {
   useCreateFacility,
@@ -94,8 +91,7 @@ function AdminSettingsPage() {
 /* ------------------------------ Organization ------------------------------ */
 
 function OrganizationTab() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const orgQ = useOrganization();
   const groupsQ = useProviderGroups();
   const facilitiesQ = useFacilitiesAll();
@@ -829,8 +825,7 @@ function roleBadge(role: AppRole) {
 }
 
 function TeamTab() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const me = useActiveMembership();
   const membershipsQ = useMemberships();
 

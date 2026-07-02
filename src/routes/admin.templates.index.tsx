@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCreateTemplate, usePayers, useTemplates } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
-import { useRole } from '@/lib/auth-store';
+import { useIsAdmin } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import type { SOPTemplate } from '@/types';
 
@@ -26,8 +26,7 @@ export const Route = createFileRoute('/admin/templates/')({
 });
 
 function TemplatesIndex() {
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const navigate = useNavigate();
   const templatesQ = useTemplates();
   const payersQ = usePayers();
