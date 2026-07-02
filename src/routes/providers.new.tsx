@@ -62,8 +62,13 @@ function Page() {
   const create = useCreateProvider();
 
   const onSubmit = async (form: ProviderFormState) => {
-    const created = await create.mutateAsync(toInput(form));
-    navigate({ to: '/providers/$id', params: { id: created.id } });
+    try {
+      const created = await create.mutateAsync(toInput(form));
+      toast.success('Provider added');
+      navigate({ to: '/providers/$id', params: { id: created.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create provider');
+    }
   };
 
   return (
