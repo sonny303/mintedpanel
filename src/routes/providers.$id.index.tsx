@@ -22,7 +22,7 @@ import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useContracts } from '@/hooks/useContracts';
 import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups, useNotes, useCreateNote } from '@/hooks/useLookups';
+import { useProviderGroups, useNotes, useCreateNote, useStateLicensesByProvider } from '@/hooks/useLookups';
 import { useCanWrite } from '@/lib/permissions';
 import { NewCaseModal } from '@/components/cases/NewCaseModal';
 import { CaseNotesPanel } from '@/components/cases/CaseNotesPanel';
