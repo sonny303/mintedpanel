@@ -43,11 +43,18 @@ export interface ProviderInput {
   malpracticeCoverageEnd?: string | null;
 }
 
+const PROVIDER_LIST_COLUMNS =
+  'id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, updated_at';
+
 export async function getProviders(filters: ProviderFilters = {}): Promise<Provider[]> {
   const orgId = requireActiveOrg();
+  let selectStr = PROVIDER_LIST_COLUMNS;
+  if (filters.state) selectStr += ', state_licenses!inner(state, org_id)';
+  if (filters.payerId) selectStr += ', credential_cases!inner(payer_id, org_id)';
+
   let query = supabase
     .from('providers')
-    .select('*')
+    .select(selectStr)
     .eq('org_id', orgId)
     .order('last_name', { ascending: true });
 
@@ -59,30 +66,27 @@ export async function getProviders(filters: ProviderFilters = {}): Promise<Provi
       `first_name.ilike.${term},last_name.ilike.${term},npi.ilike.${term},email.ilike.${term}`,
     );
   }
-
   if (filters.state) {
-    const { data: lic } = await supabase
-      .from('state_licenses')
-      .select('provider_id')
-      .eq('org_id', orgId)
-      .eq('state', filters.state);
-    const ids = (lic ?? []).map((r) => r.provider_id as string);
-    query = query.in('id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000']);
+    query = query
+      .eq('state_licenses.org_id', orgId)
+      .eq('state_licenses.state', filters.state);
   }
   if (filters.payerId) {
-    const { data: cases } = await supabase
-      .from('credential_cases')
-      .select('provider_id')
-      .eq('org_id', orgId)
-      .eq('payer_id', filters.payerId);
-    const ids = (cases ?? []).map((r) => r.provider_id as string);
-    query = query.in('id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000']);
+    query = query
+      .eq('credential_cases.org_id', orgId)
+      .eq('credential_cases.payer_id', filters.payerId);
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  return camelizeRow<Provider[]>(data ?? []);
+  const stripped = (data ?? []).map((row) => {
+    const { state_licenses: _sl, credential_cases: _cc, ...rest } =
+      row as Record<string, unknown> & { state_licenses?: unknown; credential_cases?: unknown };
+    return rest;
+  });
+  return camelizeRow<Provider[]>(stripped);
 }
+
 
 export async function getProvider(id: string): Promise<Provider | null> {
   const orgId = requireActiveOrg();
