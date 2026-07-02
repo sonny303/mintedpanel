@@ -309,6 +309,15 @@ function ContractsTab() {
                     <Skeleton className="h-8 w-full" />
                   </td>
                 </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-12 text-center">
+                    <div className="text-[13px] text-foreground mb-3">Failed to load contracts.</div>
+                    <Button variant="outline" size="sm" onClick={retry}>
+                      Retry
+                    </Button>
+                  </td>
+                </tr>
               ) : filtered.length === 0 ? (
                 <tr>
                   <td
