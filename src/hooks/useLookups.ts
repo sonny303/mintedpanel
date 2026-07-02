@@ -7,10 +7,12 @@ import {
   getCoordinators,
   getFacilities,
   getMsoRoutingRule,
+  getNotesFor,
   getProviderGroups,
   getStateLicensesByProvider,
   type CreateNoteInput,
 } from '@/services/lookups';
+import type { NoteEntityType } from '@/types';
 
 export function useFacilities(groupId?: string | null) {
   const orgId = useActiveOrgId() ?? 'no-org';
@@ -61,12 +63,25 @@ export function useMsoRoutingRule(
   });
 }
 
+export function useNotes(
+  entityType: NoteEntityType,
+  entityId: string | undefined,
+) {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['notes', orgId, entityType, entityId ?? ''] as const,
+    queryFn: () => getNotesFor(entityType, entityId as string),
+    enabled: orgId !== 'no-org' && Boolean(entityId),
+  });
+}
+
 export function useCreateNote() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? 'no-org';
   return useMutation({
     mutationFn: (input: CreateNoteInput) => createNote(input),
     onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['notes', orgId, vars.entityType, vars.entityId] });
       if (vars.entityType === 'case') {
         qc.invalidateQueries({ queryKey: ['case', orgId, vars.entityId] });
       }

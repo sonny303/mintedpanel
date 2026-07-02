@@ -11,7 +11,6 @@ import {
   Lock,
   MessageSquare,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -32,11 +31,10 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { CopyButton } from '@/components/CopyButton';
-import { supabase } from '@/integrations/supabase/externalClient';
 import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from '@/hooks/useTasks';
 import { useCase } from '@/hooks/useCases';
-import { useCreateNote } from '@/hooks/useLookups';
-import { useActiveOrgId, useRole } from '@/lib/auth-store';
+import { useCreateNote, useNotes } from '@/hooks/useLookups';
+import { useRole } from '@/lib/auth-store';
 import type { SOPStep, TaskStatus } from '@/types';
 
 export const Route = createFileRoute('/tasks/$id')({
@@ -47,16 +45,6 @@ interface DataField {
   label: string;
   value: string;
 }
-
-interface NoteRow {
-  id: string;
-  content: string;
-  createdAt: string;
-  authorId: string | null;
-  authorName: string | null;
-}
-
-
 
 function initialsOf(name: string | null | undefined): string {
   if (!name) return '··';
@@ -91,46 +79,6 @@ function readDataFields(step: SOPStep): DataField[] {
   return out;
 }
 
-function useTaskNotes(taskId: string | undefined) {
-  const orgId = useActiveOrgId() ?? 'no-org';
-  return useQuery({
-    queryKey: ['task-notes', orgId, taskId ?? ''] as const,
-    enabled: orgId !== 'no-org' && Boolean(taskId),
-    queryFn: async (): Promise<NoteRow[]> => {
-      const { data, error } = await supabase
-        .from('notes')
-        .select('id, content, created_at, author_id')
-        .eq('entity_type', 'task')
-        .eq('entity_id', taskId as string)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      const rows = data ?? [];
-      const authorIds = Array.from(
-        new Set(rows.map((r) => r.author_id).filter((v): v is string => Boolean(v))),
-      );
-      const nameMap = new Map<string, string | null>();
-      if (authorIds.length > 0) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', authorIds);
-        for (const p of profs ?? []) {
-          const name =
-            (p.full_name as string | null) ?? (p.email as string | null) ?? null;
-          nameMap.set(p.id as string, name);
-        }
-      }
-      return rows.map((r) => ({
-        id: r.id as string,
-        content: r.content as string,
-        createdAt: r.created_at as string,
-        authorId: (r.author_id as string | null) ?? null,
-        authorName: r.author_id ? nameMap.get(r.author_id as string) ?? null : null,
-      }));
-    },
-  });
-}
-
 function TaskDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -140,7 +88,7 @@ function TaskDetailPage() {
   const taskQ = useTask(id);
   const task = taskQ.data ?? null;
   const caseQ = useCase(task?.caseId ?? undefined);
-  const notesQ = useTaskNotes(id);
+  const notesQ = useNotes('task', id);
 
   const completeStepM = useCompleteSOPStep();
   const updateStatusM = useUpdateTaskStatus();
