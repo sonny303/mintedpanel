@@ -1,9 +1,9 @@
 // Provider list screen at /providers. Shows per-payer credentialing status,
-// CAQH age, and coordinator; supports search and Group/State/Payer/Status filters.
+// CAQH age, and coordinator; supports search, filters, and column sorting.
 import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
-import { Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Search } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,13 +16,14 @@ import {
 } from '@/components/ui/select';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useProviders } from '@/hooks/useProviders';
 import { useCases } from '@/hooks/useCases';
 import { useStatusConfigs, usePayers } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
 import { useCanWrite } from '@/lib/permissions';
+import { cn } from '@/lib/utils';
 import type { CredentialCase, Payer, Profile, Provider, ProviderGroup, ProviderStatus, StatusConfig } from '@/types';
 
 export const Route = createFileRoute('/providers/')({
@@ -36,6 +37,14 @@ const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' },
 ];
 
+type SortKey = 'provider' | 'group' | 'state' | 'coordinator';
+type SortDir = 'asc' | 'desc';
+interface SortState {
+  key: SortKey;
+  dir: SortDir;
+}
+const DEFAULT_SORT: SortState = { key: 'provider', dir: 'asc' };
+
 function ProvidersListPage() {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
@@ -45,6 +54,7 @@ function ProvidersListPage() {
   const [state, setState] = useState<string>(ALL);
   const [payerId, setPayerId] = useState<string>(ALL);
   const [status, setStatus] = useState<string>(ALL);
+  const [sort, setSort] = useState<SortState | null>(null);
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -122,7 +132,61 @@ function ProvidersListPage() {
     payerId !== ALL ||
     status !== ALL;
 
-  const providers = providersQ.data ?? [];
+  function coordinatorNameFor(p: Provider): string | null {
+    const cases = casesByProvider.get(p.id) ?? [];
+    const withCoord = cases
+      .filter((c) => c.assignedTo)
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+    const id = withCoord[0]?.assignedTo;
+    if (!id) return null;
+    return coordinatorById.get(id)?.fullName ?? null;
+  }
+
+  function sortValueFor(p: Provider, key: SortKey): string | null {
+    switch (key) {
+      case 'provider':
+        return (p.lastName || p.firstName || '').trim() || null;
+      case 'group':
+        return p.groupId ? groupById.get(p.groupId)?.name ?? null : null;
+      case 'state':
+        return p.homeState ?? null;
+      case 'coordinator':
+        return coordinatorNameFor(p);
+    }
+  }
+
+  const effectiveSort = sort ?? DEFAULT_SORT;
+
+  const providers = useMemo(() => {
+    const rows = [...(providersQ.data ?? [])];
+    const { key, dir } = effectiveSort;
+    const mult = dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const av = sortValueFor(a, key);
+      const bv = sortValueFor(b, key);
+      const aEmpty = !av;
+      const bEmpty = !bv;
+      // Empty values always sort to the bottom regardless of direction.
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+      const cmp = av.localeCompare(bv, undefined, { sensitivity: 'base' });
+      if (cmp !== 0) return cmp * mult;
+      // Stable tiebreaker by last name then first name.
+      const at = `${a.lastName} ${a.firstName}`.trim();
+      const bt = `${b.lastName} ${b.firstName}`.trim();
+      return at.localeCompare(bt, undefined, { sensitivity: 'base' });
+    });
+    return rows;
+  }, [providersQ.data, effectiveSort, groupById, coordinatorById, casesByProvider]);
+
+  function onSort(key: SortKey) {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' };
+      if (prev.dir === 'asc') return { key, dir: 'desc' };
+      return null; // third click clears
+    });
+  }
 
   return (
     <div>
@@ -203,12 +267,12 @@ function ProvidersListPage() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <Th>Provider</Th>
-              <Th>Group</Th>
-              <Th>State</Th>
+              <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={onSort} />
+              <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={onSort} />
+              <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={onSort} />
               <Th>Payer Statuses</Th>
               <Th className="text-right">CAQH</Th>
-              <Th>Coordinator</Th>
+              <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={onSort} />
             </tr>
           </thead>
           <tbody>
@@ -253,7 +317,7 @@ function ProvidersListPage() {
                   cases={casesByProvider.get(p.id) ?? []}
                   payerById={payerById}
                   statusById={statusById}
-                  coordinatorById={coordinatorById}
+                  coordinatorName={coordinatorNameFor(p)}
                   onOpen={() => navigate({ to: '/providers/$id', params: { id: p.id } })}
                 />
               ))
@@ -275,17 +339,46 @@ function Th({ children, className = '' }: { children: React.ReactNode; className
   );
 }
 
+interface SortableThProps {
+  label: string;
+  sortKey: SortKey;
+  sort: SortState;
+  onSort: (key: SortKey) => void;
+}
+
+function SortableTh({ label, sortKey, sort, onSort }: SortableThProps) {
+  const active = sort.key === sortKey;
+  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th className="text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="group inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground"
+      >
+        <span>{label}</span>
+        <Icon
+          className={cn(
+            'h-3 w-3',
+            active ? 'text-foreground opacity-100' : 'opacity-0 group-hover:opacity-60',
+          )}
+        />
+      </button>
+    </th>
+  );
+}
+
 interface RowProps {
   provider: Provider;
   group: ProviderGroup | null;
   cases: CredentialCase[];
   payerById: Map<string, Payer>;
   statusById: Map<string, StatusConfig>;
-  coordinatorById: Map<string, Profile>;
+  coordinatorName: string | null;
   onOpen: () => void;
 }
 
-function ProviderRow({ provider, group, cases, payerById, statusById, coordinatorById, onOpen }: RowProps) {
+function ProviderRow({ provider, group, cases, payerById, statusById, coordinatorName, onOpen }: RowProps) {
   const isTerminated = provider.status === 'terminated';
 
   const caqh = (() => {
@@ -298,15 +391,6 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
       : days >= 90 ? 'text-[#D97706] font-medium'
       : 'text-foreground';
     return <span className={`${cls} tabular-nums`}>{days}d</span>;
-  })();
-
-  const coordinatorName = (() => {
-    const withCoord = cases
-      .filter((c) => c.assignedTo)
-      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
-    const id = withCoord[0]?.assignedTo;
-    if (!id) return '—';
-    return coordinatorById.get(id)?.fullName ?? '—';
   })();
 
   return (
@@ -357,7 +441,7 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
         )}
       </td>
       <td className="px-3 text-right">{caqh}</td>
-      <td className="px-3 text-foreground">{coordinatorName}</td>
+      <td className="px-3 text-foreground">{coordinatorName ?? '—'}</td>
     </tr>
   );
 }
