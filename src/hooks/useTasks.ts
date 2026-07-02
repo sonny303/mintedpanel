@@ -61,6 +61,7 @@ export function useCompleteSOPStep() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['tasks', orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
+      qc.invalidateQueries({ queryKey: ['case', orgId] });
       qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
     },
   });
