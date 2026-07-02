@@ -447,14 +447,14 @@ function CasesListPage() {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
             <tr className="border-b border-border">
-              {visibleCols.provider && <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.payer && <SortableTh label="Payer" sortKey="payer" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.state && <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.credentialing && <SortableTh label="Credentialing" sortKey="credentialing" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.groupContract && <SortableTh label="Group Contract" sortKey="groupContract" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.lastTouch && <SortableTh label="Last touch" sortKey="lastTouch" sort={effectiveSort} onSort={cycleSort} align="right" />}
-              {visibleCols.daysOpen && <SortableTh label="Days open" sortKey="daysOpen" sort={effectiveSort} onSort={cycleSort} align="right" />}
-              {visibleCols.coordinator && <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.provider && <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.payer && <SortableTh label="Payer" sortKey="payer" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.state && <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.credentialing && <SortableTh label="Credentialing" sortKey="credentialing" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.groupContract && <SortableTh label="Group Contract" sortKey="groupContract" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.lastTouch && <SortableTh label="Last touch" sortKey="lastTouch" sort={effectiveSort} onSort={handleSort} align="right" />}
+              {visibleCols.daysOpen && <SortableTh label="Days open" sortKey="daysOpen" sort={effectiveSort} onSort={handleSort} align="right" />}
+              {visibleCols.coordinator && <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={handleSort} />}
             </tr>
           </thead>
           <tbody>
