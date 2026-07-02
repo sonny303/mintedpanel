@@ -129,6 +129,8 @@ function AdminStatusesPage() {
         track="credentialing"
         statuses={credQ.data ?? []}
         loading={credQ.isLoading}
+        isError={credQ.isError}
+        onRetry={() => credQ.refetch()}
         inUse={credInUse}
         canEdit={canEdit}
         onAdd={() => setEditing({ track: 'credentialing', status: null })}
@@ -141,11 +143,14 @@ function AdminStatusesPage() {
         track="contracting"
         statuses={conQ.data ?? []}
         loading={conQ.isLoading}
+        isError={conQ.isError}
+        onRetry={() => conQ.refetch()}
         inUse={conInUse}
         canEdit={canEdit}
         onAdd={() => setEditing({ track: 'contracting', status: null })}
         onEdit={(s) => setEditing({ track: 'contracting', status: s })}
       />
+
 
       <StatusEditModal
         open={editing !== null}
