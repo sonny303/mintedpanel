@@ -156,6 +156,7 @@ export async function updateProvider(
 }
 
 export interface LicenseInput {
+  id?: string | null;
   state: string;
   licenseNumber: string | null;
   licenseType: string | null;
