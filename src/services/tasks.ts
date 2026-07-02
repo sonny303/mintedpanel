@@ -5,6 +5,48 @@ import { camelizeRow } from '@/lib/case';
 import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
 import type { SOPStep, Task, TaskStatus } from '@/types';
 
+export interface CaseTaskInput {
+  caseId: string;
+  providerId: string;
+  title: string;
+  description: string | null;
+  sopContent: unknown;
+  sortOrder: number;
+  dueDate: string | null;
+}
+
+export async function createTasksForCase(inputs: CaseTaskInput[]): Promise<Task[]> {
+  if (inputs.length === 0) return [];
+  const orgId = requireActiveOrg();
+  const caseId = inputs[0].caseId;
+  const payload = inputs.map((t) => ({
+    org_id: orgId,
+    case_id: t.caseId,
+    provider_id: t.providerId,
+    title: t.title,
+    description: t.description,
+    sop_content: t.sopContent as never,
+    status: 'not_started' as const,
+    sort_order: t.sortOrder,
+    due_date: t.dueDate,
+    is_auto_generated: true,
+  }));
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(payload as never)
+    .select('*');
+  if (error) throw error;
+  const created = camelizeRow<Task[]>(data ?? []);
+  await writeAudit({
+    actionType: 'CREATE',
+    entityType: 'task',
+    entityId: caseId,
+    after: { caseId, count: created.length, taskIds: created.map((t) => t.id) },
+    description: `Auto-generated ${created.length} SOP task${created.length === 1 ? '' : 's'} for case`,
+  });
+  return created;
+}
+
 export interface TaskFilters {
   caseId?: string;
   status?: TaskStatus;
