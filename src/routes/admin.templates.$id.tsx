@@ -149,8 +149,7 @@ export const Route = createFileRoute('/admin/templates/$id')({
 function TemplateEditor() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
-  const canEdit = role === 'admin';
+  const canEdit = useIsAdmin();
   const tplQ = useTemplate(id);
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
