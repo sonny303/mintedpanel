@@ -112,7 +112,7 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
   const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
   const { data, error } = await supabase
     .from('providers')
-    .insert(payload as never)
+    .insert(payload as unknown as ProviderInsert)
     .select('*')
     .single();
   if (error) throw error;
@@ -136,7 +136,8 @@ export async function updateProvider(
   const payload = snakeizeRow<Record<string, unknown>>(patch);
   const { data, error } = await supabase
     .from('providers')
-    .update(payload as never)
+    .update(payload as unknown as ProviderUpdate)
+
     .eq('id', id)
     .eq('org_id', orgId)
     .select('*')
@@ -182,7 +183,7 @@ export async function updateProviderWithLicenses(
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   const { data, error } = await supabase
     .from('providers')
-    .update(payload as never)
+    .update(payload as unknown as ProviderUpdate)
     .eq('id', id)
     .eq('org_id', orgId)
     .select('*')
@@ -197,7 +198,7 @@ export async function updateProviderWithLicenses(
     .eq('provider_id', id);
   if (delErr) throw delErr;
 
-  const rows = input.licenses
+  const rows: StateLicenseInsert[] = input.licenses
     .filter((l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType)
     .map((l) => ({
       org_id: orgId,
@@ -209,9 +210,10 @@ export async function updateProviderWithLicenses(
       expiration_date: l.expirationDate,
     }));
   if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('state_licenses').insert(rows as never);
+    const { error: insErr } = await supabase.from('state_licenses').insert(rows);
     if (insErr) throw insErr;
   }
+
 
   await writeAudit({
     actionType: 'UPDATE',
