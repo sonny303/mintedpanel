@@ -319,7 +319,9 @@ interface RuleModalProps {
 }
 
 function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
-  const saveM = useSaveRule();
+  const createM = useCreateRoutingRule();
+  const updateM = useUpdateRoutingRule(rule?.id ?? '');
+  const saving = createM.isPending || updateM.isPending;
 
   const [payerId, setPayerId] = useState('');
   const [state, setState] = useState('All');
