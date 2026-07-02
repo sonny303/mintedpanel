@@ -7,10 +7,12 @@ import {
   getCoordinators,
   getFacilities,
   getMsoRoutingRule,
+  getNotesFor,
   getProviderGroups,
   getStateLicensesByProvider,
   type CreateNoteInput,
 } from '@/services/lookups';
+import type { NoteEntityType } from '@/types';
 
 export function useFacilities(groupId?: string | null) {
   const orgId = useActiveOrgId() ?? 'no-org';
