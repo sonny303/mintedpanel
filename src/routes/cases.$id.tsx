@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/EmptyState';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
