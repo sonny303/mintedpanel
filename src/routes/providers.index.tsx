@@ -213,13 +213,7 @@ function ProvidersListPage() {
           </thead>
           <tbody>
             {providersQ.isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-border h-10">
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    <td key={j} className="px-3"><Skeleton className="h-4 w-24" /></td>
-                  ))}
-                </tr>
-              ))
+              <TableSkeletonRows rows={8} cols={6} />
             ) : providersQ.isError ? (
               <tr>
                 <td colSpan={6} className="px-3 py-12 text-center">
