@@ -79,13 +79,13 @@ export async function getProviders(filters: ProviderFilters = {}): Promise<Provi
 
   const { data, error } = await query;
   if (error) throw error;
-  const stripped = (data ?? []).map((row) => {
-    const { state_licenses: _sl, credential_cases: _cc, ...rest } =
-      row as Record<string, unknown> & { state_licenses?: unknown; credential_cases?: unknown };
+  const stripped = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => {
+    const { state_licenses: _sl, credential_cases: _cc, ...rest } = row;
     return rest;
   });
   return camelizeRow<Provider[]>(stripped);
 }
+
 
 
 export async function getProvider(id: string): Promise<Provider | null> {
