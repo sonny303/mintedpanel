@@ -144,6 +144,8 @@ function CasesListPage() {
     return m;
   }, [contractsQ.data]);
 
+  const lastTouchByCase = lastTouchesQ.data;
+
   const enriched: EnrichedCase[] = useMemo(() => {
     return (casesQ.data ?? []).map((c) => {
       const provider = providerById.get(c.providerId) ?? null;
@@ -160,7 +162,24 @@ function CasesListPage() {
       const daysOpen = c.submittedDate
         ? differenceInDays(new Date(), parseISO(c.submittedDate))
         : null;
-      return { c, provider, group, payer, credStatus, contractStatus, coordinator, daysOpen };
+      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
+      const daysSinceTouch = lastTouchDate
+        ? differenceInDays(new Date(), parseISO(lastTouchDate))
+        : null;
+      const isStalled = daysSinceTouch === null ? true : daysSinceTouch >= 14;
+      return {
+        c,
+        provider,
+        group,
+        payer,
+        credStatus,
+        contractStatus,
+        coordinator,
+        daysOpen,
+        lastTouchDate,
+        daysSinceTouch,
+        isStalled,
+      };
     });
   }, [
     casesQ.data,
@@ -170,6 +189,7 @@ function CasesListPage() {
     statusById,
     contractByKey,
     coordinatorById,
+    lastTouchByCase,
   ]);
 
   const states = useMemo(() => {
