@@ -100,7 +100,11 @@ export async function updateTaskStatus(id: string, status: TaskStatus): Promise<
   const orgId = requireActiveOrg();
   const before = await getTask(id);
   const patch: Record<string, unknown> = { status };
-  if (status === 'completed') patch.completed_date = new Date().toISOString().slice(0, 10);
+  if (status === 'completed') {
+    patch.completed_date = new Date().toISOString().slice(0, 10);
+  } else {
+    patch.completed_date = null;
+  }
   const { data, error } = await supabase
     .from('tasks')
     .update(patch as never)

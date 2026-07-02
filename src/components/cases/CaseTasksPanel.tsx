@@ -9,6 +9,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusPill } from '@/components/StatusPill';
 import { CheckCircle2, Circle, Lock } from 'lucide-react';
@@ -31,12 +40,27 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
   const updateStatusM = useUpdateTaskStatus();
   const [drawerTask, setDrawerTask] = useState<{ task: Task; locked: boolean } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
   const completedTasks = tasks.filter((t) => t.status === 'completed').length;
 
   const openDrawer = (task: Task, locked: boolean) => {
     setDrawerTask({ task, locked });
     setDrawerOpen(true);
+  };
+
+  const reopenConfirm = () => {
+    const t = reopenTask;
+    if (!t) return;
+    setReopenTask(null);
+    updateStatusM.mutate(
+      { id: t.id, status: 'in_progress' },
+      {
+        onSuccess: () => toast.success(`Reopened "${t.title}"`),
+        onError: (err: unknown) =>
+          toast.error(err instanceof Error ? err.message : 'Could not reopen task'),
+      },
+    );
   };
 
   const completeWithUndo = (task: Task) => {
@@ -101,6 +125,8 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
 
                 const canComplete =
                   canEdit && !locked && t.status !== 'completed';
+                const canReopen = canEdit && t.status === 'completed';
+                const circleInteractive = canComplete || canReopen;
 
                 const row = (
                   <div
@@ -118,16 +144,25 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     <button
                       type="button"
                       className={`flex-shrink-0 -m-1 p-1 rounded ${
-                        canComplete ? 'hover:bg-[#1B4D3E]/10 cursor-pointer' : 'cursor-default'
+                        circleInteractive ? 'hover:bg-[#1B4D3E]/10 cursor-pointer' : 'cursor-default'
                       }`}
                       aria-label={
-                        canComplete ? `Complete ${t.title}` : `Status ${t.status}`
+                        canComplete
+                          ? `Complete ${t.title}`
+                          : canReopen
+                            ? `Reopen ${t.title}`
+                            : `Status ${t.status}`
                       }
-                      disabled={!canComplete || updateStatusM.isPending}
+                      disabled={!circleInteractive || updateStatusM.isPending}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!canComplete) return;
-                        completeWithUndo(t);
+                        if (canComplete) {
+                          completeWithUndo(t);
+                          return;
+                        }
+                        if (canReopen) {
+                          setReopenTask(t);
+                        }
                       }}
                     >
                       {taskStatusIcon(t.status, locked)}
@@ -183,6 +218,34 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
+
+      <Dialog
+        open={reopenTask !== null}
+        onOpenChange={(o) => {
+          if (!o) setReopenTask(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Reopen this task?</DialogTitle>
+            <DialogDescription>
+              It will move back to In progress.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReopenTask(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
+              onClick={reopenConfirm}
+              disabled={updateStatusM.isPending}
+            >
+              Reopen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
