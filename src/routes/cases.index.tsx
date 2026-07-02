@@ -395,20 +395,17 @@ function CasesListPage() {
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="px-3 py-12 text-center text-[13px] text-muted-foreground"
-                >
-                  {hasActiveFilter ? (
-                    <>
-                      <div className="mb-3">No cases match these filters.</div>
-                      <Button variant="outline" size="sm" onClick={clearFilters}>
-                        Clear filters
-                      </Button>
-                    </>
-                  ) : (
-                    <>No cases yet</>
-                  )}
+                <td colSpan={8} className="px-3 py-12 text-center">
+                  <EmptyState
+                    message={hasActiveFilter ? 'No cases match these filters' : 'No cases yet'}
+                    action={
+                      hasActiveFilter ? (
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear filters
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             ) : (
