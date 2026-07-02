@@ -625,7 +625,9 @@ function CaseDetailPage() {
                   />
                 ) : null}
                 {notes.length === 0 ? (
-                  <div className="text-[13px] text-muted-foreground">No notes yet</div>
+                  <div className="p-6">
+                    <EmptyState message="No notes yet" />
+                  </div>
                 ) : (
                   notes.map((n) => (
                     <div key={n.id} className="bg-muted/30 p-3 rounded-md border border-border">
