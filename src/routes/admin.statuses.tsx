@@ -258,6 +258,8 @@ function ReorderableSection({
   description,
   statuses,
   loading,
+  isError,
+  onRetry,
   inUse,
   canEdit,
   onAdd,
@@ -286,6 +288,13 @@ function ReorderableSection({
         {loading ? (
           <div className="p-8 text-center text-[13px] text-muted-foreground">
             Loading…
+          </div>
+        ) : isError ? (
+          <div className="p-8 text-center">
+            <div className="text-[13px] text-foreground mb-3">Failed to load statuses.</div>
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
           </div>
         ) : statuses.length === 0 ? (
           <div className="p-8 text-center text-[13px] text-muted-foreground">
