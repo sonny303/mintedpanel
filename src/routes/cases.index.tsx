@@ -241,9 +241,10 @@ function CasesListPage() {
         if (!e.contractStatus || e.contractStatus.id !== contractStatusId) return false;
       }
       if (coordinatorId !== ALL && e.c.assignedTo !== coordinatorId) return false;
+      if (stalled && !e.isStalled) return false;
       return true;
     });
-  }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId]);
+  }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId, stalled]);
 
   // Sort by days open desc default (null at the bottom)
   const sorted = useMemo(() => {
