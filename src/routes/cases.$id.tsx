@@ -438,15 +438,15 @@ function CaseDetailPage() {
                   />
                 ) : null}
                 {touches.length === 0 ? (
-                  <div className="p-8 flex flex-col items-center justify-center text-center">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-3">
-                      <MessageSquare className="w-5 h-5 text-muted-foreground" />
-                    </div>
-                    <p className="text-[14px] font-medium text-foreground">No touches logged yet</p>
-                    <p className="text-[12px] text-muted-foreground mt-1">
-                      Record calls, emails, and portal updates here.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <MessageSquare className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    }
+                    message="No touches logged yet"
+                    description="Record calls, emails, and portal updates here"
+                  />
                 ) : (
                   <div className="p-4 space-y-6">
                     {touches.map((t, idx) => {
