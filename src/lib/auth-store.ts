@@ -19,6 +19,8 @@ export interface MembershipEntry {
   role: AppRole;
 }
 
+export type SignInErrorKind = "invalid" | "network" | "unknown";
+
 interface AuthState {
   session: Session | null;
   user: User | null;
@@ -26,11 +28,12 @@ interface AuthState {
   memberships: MembershipEntry[];
   activeOrgId: string | null;
   initialized: boolean;
+  initError: string | null;
   loading: boolean;
   init: () => Promise<void>;
   loadMemberships: () => Promise<void>;
   setActiveOrg: (orgId: string) => void;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; kind?: SignInErrorKind }>;
   signOut: () => Promise<void>;
 }
 
