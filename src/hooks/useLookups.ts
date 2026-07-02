@@ -2,6 +2,7 @@
 // mso routing rule lookup, and note creation.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
+import { FIVE_MINUTES, queryKeys } from '@/hooks/queryKeys';
 import {
   createNote,
   getCoordinators,
@@ -17,36 +18,40 @@ import type { NoteEntityType } from '@/types';
 export function useFacilities(groupId?: string | null) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['facilities', orgId, groupId ?? 'all'] as const,
+    queryKey: queryKeys.facilities(orgId, groupId),
     queryFn: () => getFacilities(groupId),
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
 }
 
 export function useProviderGroups() {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['provider-groups', orgId] as const,
+    queryKey: queryKeys.providerGroups(orgId),
     queryFn: () => getProviderGroups(),
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
 }
 
 export function useCoordinators() {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['coordinators', orgId] as const,
+    queryKey: queryKeys.coordinators(orgId),
     queryFn: () => getCoordinators(),
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
 }
 
 export function useStateLicensesByProvider(providerId: string | undefined) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['state-licenses', orgId, providerId ?? ''] as const,
+    queryKey: queryKeys.stateLicenses(orgId, providerId ?? ''),
     queryFn: () => getStateLicensesByProvider(providerId as string),
     enabled: orgId !== 'no-org' && Boolean(providerId),
+    staleTime: FIVE_MINUTES,
   });
 }
 
@@ -57,9 +62,10 @@ export function useMsoRoutingRule(
 ) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['mso-routing-rule', orgId, payerId ?? '', state ?? '', specialty ?? ''] as const,
+    queryKey: queryKeys.msoRoutingRule(orgId, payerId ?? '', state ?? '', specialty ?? ''),
     queryFn: () => getMsoRoutingRule(payerId as string, state as string, specialty ?? null),
     enabled: orgId !== 'no-org' && Boolean(payerId && state),
+    staleTime: FIVE_MINUTES,
   });
 }
 
@@ -69,7 +75,7 @@ export function useNotes(
 ) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
-    queryKey: ['notes', orgId, entityType, entityId ?? ''] as const,
+    queryKey: queryKeys.notes(orgId, entityType, entityId ?? ''),
     queryFn: () => getNotesFor(entityType, entityId as string),
     enabled: orgId !== 'no-org' && Boolean(entityId),
   });
@@ -81,11 +87,11 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: (input: CreateNoteInput) => createNote(input),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['notes', orgId, vars.entityType, vars.entityId] });
+      qc.invalidateQueries({ queryKey: queryKeys.notes(orgId, vars.entityType, vars.entityId) });
       if (vars.entityType === 'case') {
-        qc.invalidateQueries({ queryKey: ['case', orgId, vars.entityId] });
+        qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.entityId) });
       }
-      qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.auditLog(orgId) });
     },
   });
 }
