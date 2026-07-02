@@ -164,7 +164,9 @@ export function useTemplates() {
     queryKey: queryKeys.templates(orgId),
     queryFn: listTemplates,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useTemplate(id: string | undefined) {
