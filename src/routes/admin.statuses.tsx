@@ -171,6 +171,8 @@ interface TrackSectionProps {
   track: StatusTrack;
   statuses: StatusConfig[];
   loading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   inUse: Map<string, number>;
   canEdit: boolean;
   onAdd: () => void;
