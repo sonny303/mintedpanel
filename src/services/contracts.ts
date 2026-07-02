@@ -97,15 +97,12 @@ export async function updateContractStatus(
     .single();
   if (error) throw error;
 
-  await supabase.from('status_history').insert({
-    org_id: orgId,
-    case_id: null,
-    contract_id: contractId,
+  await appendStatusHistory({
     track: 'contracting',
-    from_status_id: fromStatusId,
-    to_status_id: statusId,
-    metadata: metadata as never,
-    changed_by: currentUserId(),
+    contractId,
+    fromStatusId,
+    toStatusId: statusId,
+    metadata,
   });
 
   await writeAudit({
