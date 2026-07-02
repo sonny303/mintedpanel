@@ -52,7 +52,8 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { StatusPill, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { fmtDate, fmtDateTime } from '@/lib/format';
 import { CopyButton } from '@/components/CopyButton';
 import { useCase, useContractFor, useUpdateCaseStatus } from '@/hooks/useCases';
 import { useStatusConfigs } from '@/hooks/useAdmin';
@@ -70,26 +71,6 @@ export const Route = createFileRoute('/cases/$id')({
   component: CaseDetailPage,
 });
 
-function hexToStatusColor(hex: string | null | undefined): StatusColor {
-  switch ((hex ?? '').toUpperCase()) {
-    case '#2563EB': return 'blue';
-    case '#D97706': return 'amber';
-    case '#DC2626':
-    case '#991B1B': return 'red';
-    case '#0891B2': return 'teal';
-    case '#059669': return 'green';
-    default: return 'gray';
-  }
-}
-
-function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  try { return format(parseISO(value), 'MMM dd, yyyy'); } catch { return value; }
-}
-function fmtDateTime(value: string | null | undefined): string {
-  if (!value) return '—';
-  try { return format(parseISO(value), 'MMM dd, yyyy h:mm a'); } catch { return value; }
-}
 
 const TOUCH_TYPE_ICON: Record<TouchType, typeof Phone> = {
   call: Phone, email: Mail, portal: Globe, fax: Printer,

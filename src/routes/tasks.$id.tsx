@@ -56,23 +56,7 @@ interface NoteRow {
   authorName: string | null;
 }
 
-function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  try {
-    return format(parseISO(value), 'MMM dd, yyyy');
-  } catch {
-    return value;
-  }
-}
-
-function fmtDateTime(value: string | null | undefined): string {
-  if (!value) return '—';
-  try {
-    return format(parseISO(value), 'MMM dd, yyyy · h:mm a');
-  } catch {
-    return value;
-  }
-}
+import { fmtDate, fmtDateTime } from '@/lib/format';
 
 function initialsOf(name: string | null | undefined): string {
   if (!name) return '··';
