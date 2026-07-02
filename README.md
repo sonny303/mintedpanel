@@ -24,14 +24,6 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
-## Test logins
-
-| Email                  | Role       | Notes                                       |
-| ---------------------- | ---------- | ------------------------------------------- |
-| admin@openpanel.test   | Admin      | Full access, admin portal, template editor  |
-| specialist@openpanel.test | Specialist | Day-to-day credentialing work               |
-| billing@openpanel.test | Billing    | Read-only across the entire app (RLS-level) |
-
 ## Deploy notes
 
 - Vercel single-page-app deploy. `vercel.json` rewrites every route to `/` so TanStack Router can resolve client-side.
