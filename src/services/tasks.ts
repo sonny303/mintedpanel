@@ -174,13 +174,15 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
     after.caseId &&
     after.title.toLowerCase().startsWith('submit termination')
   ) {
-    await supabase
+    const { error: termErr } = await supabase
       .from('credential_cases')
       .update({ termination_date: now.slice(0, 10) } as never)
       .eq('id', after.caseId)
       .eq('org_id', orgId)
       .is('termination_date', null);
+    if (termErr) throw termErr;
   }
+
 
   await writeAudit({
     actionType: 'UPDATE',
