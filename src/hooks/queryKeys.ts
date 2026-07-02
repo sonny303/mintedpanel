@@ -34,4 +34,6 @@ export const queryKeys = {
     ['status-configs', orgId, track ?? 'all'] as const,
   statusConfig: (orgId: string, id: string) => ['status-config', orgId, id] as const,
   auditLog: (orgId: string, filters?: unknown) => ['audit-log', orgId, filters ?? {}] as const,
+  touchSummary: (orgId: string) => ['touch-summary', orgId] as const,
+  rosterAux: (orgId: string) => ['roster-aux', orgId] as const,
 } as const;
