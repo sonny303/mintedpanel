@@ -2,7 +2,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
 import { queryKeys } from '@/hooks/queryKeys';
-import { getTouches, logTouch, type TouchInput } from '@/services/touches';
+import { getLastTouchDates, getTouches, logTouch, type TouchInput } from '@/services/touches';
+
+export function useLastTouchDates() {
+  const orgId = useActiveOrgId() ?? 'no-org';
+  return useQuery({
+    queryKey: ['touches', orgId, 'last-per-case'] as const,
+    queryFn: () => getLastTouchDates(),
+    enabled: orgId !== 'no-org',
+  });
+}
 
 export function useTouches(caseId: string | undefined) {
   const orgId = useActiveOrgId() ?? 'no-org';
