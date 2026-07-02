@@ -54,11 +54,14 @@ export interface TaskFilters {
   assignedTo?: string;
 }
 
+const TASK_LIST_COLUMNS =
+  'id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, created_at, updated_at';
+
 export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   const orgId = requireActiveOrg();
   let query = supabase
     .from('tasks')
-    .select('*')
+    .select(TASK_LIST_COLUMNS)
     .eq('org_id', orgId)
     .order('sort_order', { ascending: true });
   if (filters.caseId) query = query.eq('case_id', filters.caseId);
@@ -66,11 +69,12 @@ export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   if (filters.dueBefore) query = query.lte('due_date', filters.dueBefore);
   // assignedTo isn't on tasks today; filter via cases when requested.
   if (filters.assignedTo) {
-    const { data: caseRows } = await supabase
+    const { data: caseRows, error: caseErr } = await supabase
       .from('credential_cases')
       .select('id')
       .eq('org_id', orgId)
       .eq('assigned_to', filters.assignedTo);
+    if (caseErr) throw caseErr;
     const ids = (caseRows ?? []).map((r) => r.id as string);
     query = query.in('case_id', ids.length > 0 ? ids : ['00000000-0000-0000-0000-000000000000']);
   }
@@ -78,6 +82,7 @@ export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   if (error) throw error;
   return camelizeRow<Task[]>(data ?? []);
 }
+
 
 export async function getTask(id: string): Promise<Task | null> {
   const orgId = requireActiveOrg();
