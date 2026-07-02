@@ -424,7 +424,7 @@ function TaskDetailPage() {
             ) : notesQ.isError ? (
               <p className="text-[13px] text-muted-foreground">Could not load notes.</p>
             ) : (notesQ.data ?? []).length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No notes yet.</p>
+              <EmptyState message="No notes yet" />
             ) : (
               <div className="space-y-4">
                 {(notesQ.data ?? []).map((n) => (
