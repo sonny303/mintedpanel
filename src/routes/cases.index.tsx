@@ -74,6 +74,9 @@ interface EnrichedCase {
   contractStatus: StatusConfig | null;
   coordinator: Profile | null;
   daysOpen: number | null;
+  lastTouchDate: string | null;
+  daysSinceTouch: number | null;
+  isStalled: boolean;
 }
 
 function CasesListPage() {
