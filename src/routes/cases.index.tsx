@@ -1,5 +1,6 @@
 // Cases list at /cases. One row per credentialing case (provider + payer +
-// state) with filters, a stalled quick filter, and a summary strip.
+// state) with filters, sortable headers, column picker, persisted prefs,
+// infinite scroll, and a summary strip.
 import React, { useDeferredValue, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -16,7 +17,15 @@ import {
 } from '@/components/ui/select';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
+import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
+import {
+  ColumnPicker,
+  InfiniteScrollSentinel,
+  SortableTh,
+  compareForSort,
+  useInfiniteRows,
+} from '@/components/shared/TableToolkit';
+import { useTablePrefs } from '@/hooks/useTablePrefs';
 import { useDebounced } from '@/hooks/useDebounced';
 import { useCases } from '@/hooks/useCases';
 import { useProviders } from '@/hooks/useProviders';
@@ -40,6 +49,37 @@ export const Route = createFileRoute('/cases/')({
 
 const ALL = '__all__';
 
+type ColumnKey =
+  | 'provider'
+  | 'payer'
+  | 'state'
+  | 'credentialing'
+  | 'groupContract'
+  | 'lastTouch'
+  | 'daysOpen'
+  | 'coordinator';
+
+const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
+  { key: 'provider', label: 'Provider' },
+  { key: 'payer', label: 'Payer' },
+  { key: 'state', label: 'State' },
+  { key: 'credentialing', label: 'Credentialing' },
+  { key: 'groupContract', label: 'Group Contract' },
+  { key: 'lastTouch', label: 'Last touch' },
+  { key: 'daysOpen', label: 'Days open' },
+  { key: 'coordinator', label: 'Coordinator' },
+];
+const ALL_KEYS = COLUMN_DEFS.map((c) => c.key);
+const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
+  provider: true,
+  payer: true,
+  state: true,
+  credentialing: true,
+  groupContract: true,
+  lastTouch: true,
+  daysOpen: true,
+  coordinator: true,
+};
 
 interface EnrichedCase {
   c: CredentialCase;
@@ -65,6 +105,14 @@ function CasesListPage() {
   const [contractStatusId, setContractStatusId] = useState<string>(ALL);
   const [coordinatorId, setCoordinatorId] = useState<string>(ALL);
   const [stalled, setStalled] = useState(false);
+
+  const { state: prefs, setVisible, cycleSort } = useTablePrefs<ColumnKey>({
+    pageKey: 'cases',
+    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: 'provider', dir: 'asc' } },
+    allKeys: ALL_KEYS,
+  });
+  const visibleCols = prefs.visibleCols;
+  const effectiveSort = prefs.sort ?? { key: 'provider', dir: 'asc' as const };
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -174,7 +222,6 @@ function CasesListPage() {
     return Array.from(set).sort();
   }, [enriched]);
 
-  // Summary counts (pre-filter, for the whole org)
   const summary = useMemo(() => {
     let total = enriched.length;
     let inProgress = 0;
@@ -200,7 +247,6 @@ function CasesListPage() {
     return { total, inProgress, awaiting, denied };
   }, [enriched]);
 
-  // Filter
   const queryStr = deferredSearch.trim().toLowerCase();
   const filtered = useMemo(() => {
     return enriched.filter((e) => {
@@ -222,14 +268,41 @@ function CasesListPage() {
     });
   }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId, stalled]);
 
-  // Sort by days open desc default (null at the bottom)
+  function sortValueFor(e: EnrichedCase, key: string): string | number | null {
+    switch (key) {
+      case 'provider':
+        return e.provider ? (e.provider.lastName || e.provider.firstName || '').trim() || null : null;
+      case 'payer':
+        return e.payer?.name ?? null;
+      case 'state':
+        return e.c.state ?? null;
+      case 'credentialing':
+        return e.credStatus?.label ?? null;
+      case 'groupContract':
+        return e.contractStatus?.label ?? null;
+      case 'lastTouch':
+        return e.daysSinceTouch;
+      case 'daysOpen':
+        return e.daysOpen;
+      case 'coordinator':
+        return e.coordinator?.fullName ?? null;
+      default:
+        return null;
+    }
+  }
+
   const sorted = useMemo(() => {
-    return [...filtered].sort((a, b) => {
-      const av = a.daysOpen ?? -Infinity;
-      const bv = b.daysOpen ?? -Infinity;
-      return bv - av;
-    });
-  }, [filtered]);
+    const rows = [...filtered];
+    const { key, dir } = effectiveSort;
+    rows.sort((a, b) => compareForSort(sortValueFor(a, key), sortValueFor(b, key), dir));
+    return rows;
+  }, [filtered, effectiveSort.key, effectiveSort.dir]);
+
+  const resetKey = `${effectiveSort.key}|${effectiveSort.dir}|${queryStr}|${payerId}|${stateF}|${credStatusId}|${contractStatusId}|${coordinatorId}|${stalled}`;
+  const { visible, hasMore, loadingMore, sentinelRef, total } = useInfiniteRows({
+    items: sorted,
+    resetKey,
+  });
 
   function clearFilters() {
     setSearch('');
@@ -250,13 +323,15 @@ function CasesListPage() {
     coordinatorId !== ALL ||
     stalled;
 
+  const visibleCount = COLUMN_DEFS.filter((c) => visibleCols[c.key]).length;
+
   return (
     <div>
       <PageHeader
         title="Cases"
         actions={
           <span className="text-[13px] text-muted-foreground tabular-nums">
-            {casesQ.isSuccess ? `${sorted.length} cases` : null}
+            {casesQ.isSuccess ? `${total} cases` : null}
           </span>
         }
       />
@@ -280,71 +355,51 @@ function CasesListPage() {
         </div>
 
         <Select value={payerId} onValueChange={setPayerId}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All Payers" />
-          </SelectTrigger>
+          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Payers" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Payers</SelectItem>
             {(payersQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={stateF} onValueChange={setStateF}>
-          <SelectTrigger className="h-9 w-[140px]">
-            <SelectValue placeholder="All States" />
-          </SelectTrigger>
+          <SelectTrigger className="h-9 w-[140px]"><SelectValue placeholder="All States" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All States</SelectItem>
             {states.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
+              <SelectItem key={s} value={s}>{s}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={credStatusId} onValueChange={setCredStatusId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Credentialing" />
-          </SelectTrigger>
+          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="All Credentialing" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Credentialing</SelectItem>
             {(credStatusesQ.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.label}
-              </SelectItem>
+              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={contractStatusId} onValueChange={setContractStatusId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Group Contract" />
-          </SelectTrigger>
+          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="All Group Contract" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Group Contract</SelectItem>
             {(contractStatusesQ.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.label}
-              </SelectItem>
+              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={coordinatorId} onValueChange={setCoordinatorId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Coordinators" />
-          </SelectTrigger>
+          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="All Coordinators" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Coordinators</SelectItem>
             {(coordinatorsQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.fullName ?? p.email ?? p.id}
-              </SelectItem>
+              <SelectItem key={p.id} value={p.id}>{p.fullName ?? p.email ?? p.id}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -363,82 +418,67 @@ function CasesListPage() {
             Clear
           </Button>
         ) : null}
+
+        <div className="ml-auto">
+          <ColumnPicker
+            columns={COLUMN_DEFS}
+            visible={visibleCols}
+            onChange={setVisible}
+            lockedKeys={['provider']}
+          />
+        </div>
       </div>
 
-      <div className="border border-border rounded-md overflow-hidden">
+      <div className="border border-border rounded-md">
         <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <Th>Provider</Th>
-              <Th>Payer</Th>
-              <Th>State</Th>
-              <Th>Credentialing</Th>
-              <Th>Group Contract</Th>
-              <Th className="text-right">Last touch</Th>
-              <Th className="text-right">Days open</Th>
-              <Th>Coordinator</Th>
+          <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
+            <tr className="border-b border-border">
+              {visibleCols.provider && <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.payer && <SortableTh label="Payer" sortKey="payer" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.state && <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.credentialing && <SortableTh label="Credentialing" sortKey="credentialing" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.groupContract && <SortableTh label="Group Contract" sortKey="groupContract" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.lastTouch && <SortableTh label="Last touch" sortKey="lastTouch" sort={effectiveSort} onSort={cycleSort} align="right" />}
+              {visibleCols.daysOpen && <SortableTh label="Days open" sortKey="daysOpen" sort={effectiveSort} onSort={cycleSort} align="right" />}
+              {visibleCols.coordinator && <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={cycleSort} />}
             </tr>
           </thead>
           <tbody>
             {casesQ.isLoading ? (
-              <TableSkeletonRows rows={8} cols={8} />
+              <TableSkeletonRows rows={8} cols={visibleCount} />
             ) : casesQ.isError ? (
               <tr>
-                <td colSpan={8} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">
-                    Failed to load cases.
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => casesQ.refetch()}>
-                    Retry
-                  </Button>
+                <td colSpan={visibleCount} className="px-3 py-12 text-center">
+                  <div className="text-[13px] text-foreground mb-3">Failed to load cases.</div>
+                  <Button variant="outline" size="sm" onClick={() => casesQ.refetch()}>Retry</Button>
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-12 text-center">
+                <td colSpan={visibleCount} className="px-3 py-12 text-center">
                   <EmptyState
                     message={hasActiveFilter ? 'No cases match these filters' : 'No cases yet'}
-                    action={
-                      hasActiveFilter ? (
-                        <Button variant="outline" size="sm" onClick={clearFilters}>
-                          Clear filters
-                        </Button>
-                      ) : undefined
-                    }
+                    action={hasActiveFilter ? (
+                      <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                    ) : undefined}
                   />
                 </td>
               </tr>
             ) : (
-              sorted.map((e) => (
+              visible.map((e) => (
                 <CaseRow
                   key={e.c.id}
                   data={e}
-                  onOpen={() =>
-                    navigate({ to: '/cases/$id', params: { id: e.c.id } })
-                  }
+                  visibleCols={visibleCols}
+                  onOpen={() => navigate({ to: '/cases/$id', params: { id: e.c.id } })}
                 />
               ))
             )}
           </tbody>
         </table>
+        <InfiniteScrollSentinel sentinelRef={sentinelRef} hasMore={hasMore} loadingMore={loadingMore} />
       </div>
     </div>
-  );
-}
-
-function Th({
-  children,
-  className = '',
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={`text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9 ${className}`}
-    >
-      {children}
-    </th>
   );
 }
 
@@ -459,16 +499,9 @@ function SummaryStrip({ total, inProgress, awaiting, denied }: SummaryStripProps
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {items.map((it) => (
-        <div
-          key={it.label}
-          className="border border-border rounded-md p-4 bg-background"
-        >
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {it.label}
-          </div>
-          <div className="mt-1 text-[20px] font-semibold tabular-nums text-foreground">
-            {it.value}
-          </div>
+        <div key={it.label} className="border border-border rounded-md p-4 bg-background">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{it.label}</div>
+          <div className="mt-1 text-[20px] font-semibold tabular-nums text-foreground">{it.value}</div>
         </div>
       ))}
     </div>
@@ -477,28 +510,16 @@ function SummaryStrip({ total, inProgress, awaiting, denied }: SummaryStripProps
 
 interface CaseRowProps {
   data: EnrichedCase;
+  visibleCols: Record<ColumnKey, boolean>;
   onOpen: () => void;
 }
 
-function CaseRow({ data, onOpen }: CaseRowProps) {
-  const {
-    c,
-    provider,
-    group,
-    payer,
-    credStatus,
-    contractStatus,
-    coordinator,
-    daysOpen,
-    daysSinceTouch,
-  } = data;
+function CaseRow({ data, visibleCols, onOpen }: CaseRowProps) {
+  const { c, provider, group, payer, credStatus, contractStatus, coordinator, daysOpen, daysSinceTouch } = data;
 
   const providerName = provider
-    ? `${provider.firstName} ${provider.lastName}${
-        provider.credentials ? `, ${provider.credentials}` : ''
-      }`
+    ? `${provider.firstName} ${provider.lastName}${provider.credentials ? `, ${provider.credentials}` : ''}`
     : '—';
-
   const isTerminated = provider?.status === 'terminated';
 
   return (
@@ -506,49 +527,49 @@ function CaseRow({ data, onOpen }: CaseRowProps) {
       onClick={onOpen}
       className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
     >
-      <td className="px-3 py-1.5">
-        <div className="font-medium text-foreground leading-tight">{providerName}</div>
-        <div className="text-[12px] text-muted-foreground leading-tight">
-          {group?.name ?? '—'}
-        </div>
-      </td>
-      <td className="px-3 text-foreground">{payer?.name ?? '—'}</td>
-      <td className="px-3 text-foreground">{c.state}</td>
-      <td className="px-3 py-1.5">
-        {credStatus ? (
-          <StatusPill
-            status={hexToStatusColor(credStatus.color)}
-            label={credStatus.label}
-          />
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </td>
-      <td className="px-3 py-1.5">
-        {contractStatus ? (
-          <StatusPill
-            status={hexToStatusColor(contractStatus.color)}
-            label={contractStatus.label}
-          />
-        ) : (
-          <StatusPill status="gray" label="No contract" />
-        )}
-      </td>
-      <td className="px-3 text-right tabular-nums">
-        {daysSinceTouch === null ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
-          <span
-            className={daysSinceTouch >= 14 ? 'text-[#DC2626] font-medium' : 'text-foreground'}
-          >
-            {daysSinceTouch}d
-          </span>
-        )}
-      </td>
-      <td className="px-3 text-right text-foreground tabular-nums">
-        {daysOpen !== null ? `${daysOpen}d` : '—'}
-      </td>
-      <td className="px-3 text-foreground">{coordinator?.fullName ?? '—'}</td>
+      {visibleCols.provider && (
+        <td className="px-3 py-1.5">
+          <div className="font-medium text-foreground leading-tight">{providerName}</div>
+          <div className="text-[12px] text-muted-foreground leading-tight">{group?.name ?? '—'}</div>
+        </td>
+      )}
+      {visibleCols.payer && <td className="px-3 text-foreground">{payer?.name ?? '—'}</td>}
+      {visibleCols.state && <td className="px-3 text-foreground">{c.state}</td>}
+      {visibleCols.credentialing && (
+        <td className="px-3 py-1.5">
+          {credStatus ? (
+            <StatusPill status={hexToStatusColor(credStatus.color)} label={credStatus.label} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      )}
+      {visibleCols.groupContract && (
+        <td className="px-3 py-1.5">
+          {contractStatus ? (
+            <StatusPill status={hexToStatusColor(contractStatus.color)} label={contractStatus.label} />
+          ) : (
+            <StatusPill status="gray" label="No contract" />
+          )}
+        </td>
+      )}
+      {visibleCols.lastTouch && (
+        <td className="px-3 text-right tabular-nums">
+          {daysSinceTouch === null ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <span className={daysSinceTouch >= 14 ? 'text-[#DC2626] font-medium' : 'text-foreground'}>
+              {daysSinceTouch}d
+            </span>
+          )}
+        </td>
+      )}
+      {visibleCols.daysOpen && (
+        <td className="px-3 text-right text-foreground tabular-nums">
+          {daysOpen !== null ? `${daysOpen}d` : '—'}
+        </td>
+      )}
+      {visibleCols.coordinator && <td className="px-3 text-foreground">{coordinator?.fullName ?? '—'}</td>}
     </tr>
   );
 }
