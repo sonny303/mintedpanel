@@ -51,15 +51,6 @@ function CaseDetailPage() {
   const createNoteM = useCreateNote();
 
   const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [copiedEmailToken, setCopiedEmailToken] = useState(false);
-
-  const handleCopyToken = () => {
-    if (c?.caseEmailToken) {
-      navigator.clipboard.writeText(c.caseEmailToken).catch(() => {});
-      setCopiedEmailToken(true);
-      setTimeout(() => setCopiedEmailToken(false), 2000);
-    }
-  };
 
   const statusById = useMemo(() => {
     const m = new Map<string, StatusConfig>();
@@ -136,8 +127,6 @@ function CaseDetailPage() {
           contractStatus={contractStatus}
           canEdit={canEdit}
           onOpenStatus={() => setStatusModalOpen(true)}
-          copiedEmailToken={copiedEmailToken}
-          onCopyToken={handleCopyToken}
         />
 
         {c.provider?.status === 'terminated' ? (

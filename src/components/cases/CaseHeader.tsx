@@ -1,11 +1,11 @@
-// Case detail header: provider name, submeta, forwarding ID, and both
-// status pills (credentialing + group contract) with a Change button.
+// Case detail header: provider name, submeta, and both status pills
+// (credentialing + group contract) with a Change button. The forwarding ID
+// lives in the Case Facts card, not here.
 import { Link } from '@tanstack/react-router';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
-import { Check, Copy } from 'lucide-react';
 import type { CaseDetail, StatusConfig } from '@/types';
 
 export function CaseHeader({
@@ -14,16 +14,12 @@ export function CaseHeader({
   contractStatus,
   canEdit,
   onOpenStatus,
-  copiedEmailToken,
-  onCopyToken,
 }: {
   c: CaseDetail;
   credStatus: StatusConfig | null | undefined;
   contractStatus: StatusConfig | null | undefined;
   canEdit: boolean;
   onOpenStatus: () => void;
-  copiedEmailToken: boolean;
-  onCopyToken: () => void;
 }) {
   const providerName = c.provider
     ? `${c.provider.firstName} ${c.provider.lastName}${c.provider.credentials ? `, ${c.provider.credentials}` : ''}`
@@ -52,26 +48,6 @@ export function CaseHeader({
           {c.state}
           {c.specialty ? (<><span className="text-border">·</span>{c.specialty}</>) : null}
         </p>
-        {c.caseEmailToken && (
-          <p className="text-[13px] text-muted-foreground mt-1.5 flex items-center gap-2">
-            <span>Forwarding ID:</span>
-            <span className="font-mono text-foreground bg-muted/50 px-1.5 py-0.5 rounded text-[12px]">
-              {c.caseEmailToken}
-            </span>
-            <button
-              type="button"
-              onClick={onCopyToken}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
-              title="Copy Forwarding ID"
-            >
-              {copiedEmailToken ? (
-                <Check className="w-3.5 h-3.5 text-[#059669]" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </p>
-        )}
       </div>
 
       <div className="flex items-center gap-6">

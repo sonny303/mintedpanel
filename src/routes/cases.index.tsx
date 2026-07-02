@@ -112,7 +112,21 @@ function CasesListPage() {
     allKeys: ALL_KEYS,
   });
   const visibleCols = prefs.visibleCols;
-  const effectiveSort = prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+  // Local override so header clicks always reorder immediately, even before the
+  // persisted prefs row loads. Persistence still runs via cycleSort in useTablePrefs.
+  const [localSort, setLocalSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const effectiveSort =
+    localSort ?? prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+
+  const handleSort = (key: string) => {
+    setLocalSort((cur) => {
+      const active = cur ?? prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+      const nextDir: 'asc' | 'desc' =
+        active.key === key && active.dir === 'asc' ? 'desc' : 'asc';
+      return { key, dir: nextDir };
+    });
+    cycleSort(key);
+  };
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -433,14 +447,14 @@ function CasesListPage() {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
             <tr className="border-b border-border">
-              {visibleCols.provider && <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.payer && <SortableTh label="Payer" sortKey="payer" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.state && <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.credentialing && <SortableTh label="Credentialing" sortKey="credentialing" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.groupContract && <SortableTh label="Group Contract" sortKey="groupContract" sort={effectiveSort} onSort={cycleSort} />}
-              {visibleCols.lastTouch && <SortableTh label="Last touch" sortKey="lastTouch" sort={effectiveSort} onSort={cycleSort} align="right" />}
-              {visibleCols.daysOpen && <SortableTh label="Days open" sortKey="daysOpen" sort={effectiveSort} onSort={cycleSort} align="right" />}
-              {visibleCols.coordinator && <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={cycleSort} />}
+              {visibleCols.provider && <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.payer && <SortableTh label="Payer" sortKey="payer" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.state && <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.credentialing && <SortableTh label="Credentialing" sortKey="credentialing" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.groupContract && <SortableTh label="Group Contract" sortKey="groupContract" sort={effectiveSort} onSort={handleSort} />}
+              {visibleCols.lastTouch && <SortableTh label="Last touch" sortKey="lastTouch" sort={effectiveSort} onSort={handleSort} align="right" />}
+              {visibleCols.daysOpen && <SortableTh label="Days open" sortKey="daysOpen" sort={effectiveSort} onSort={handleSort} align="right" />}
+              {visibleCols.coordinator && <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={handleSort} />}
             </tr>
           </thead>
           <tbody>
