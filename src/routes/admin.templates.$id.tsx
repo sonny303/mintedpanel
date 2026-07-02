@@ -3,7 +3,7 @@
 import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, Plus, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/externalClient';
 import { toast } from 'sonner';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
@@ -12,7 +12,6 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,7 +27,11 @@ import {
 } from '@/hooks/useAdmin';
 import { useProviderGroups } from '@/hooks/useLookups';
 import { useIsAdmin } from '@/lib/permissions';
+import { TemplateTaskRow } from '@/components/templates/TemplateTaskRow';
+import { TokenHelpPanel } from '@/components/templates/TokenHelpPanel';
+import { useDiscardConfirm } from '@/components/templates/DiscardConfirmDialog';
 import type { SOPTaskDefinition, SOPTemplate } from '@/types';
+
 
 type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
 
