@@ -6,6 +6,7 @@ import { differenceInDays, format, parseISO } from 'date-fns';
 import { Pencil, Plus, XCircle } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TableSkeletonRows } from '@/components/TableSkeletonRows';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
