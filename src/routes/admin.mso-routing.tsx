@@ -491,7 +491,7 @@ function RuleModal({ open, rule, payers, msos, onClose }: RuleModalProps) {
           <Button
             onClick={handleSubmit}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
-            disabled={saveM.isPending}
+            disabled={saving}
           >
             {rule ? 'Save changes' : 'Add rule'}
           </Button>
