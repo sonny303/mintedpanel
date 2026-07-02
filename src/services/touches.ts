@@ -25,6 +25,23 @@ export async function getTouches(caseId: string): Promise<Touch[]> {
   return camelizeRow<Touch[]>(data ?? []);
 }
 
+// Latest touch_date per case for the active org, as a Map keyed by case_id.
+// One query — used by list views to compute "stalled" without N+1 fetches.
+export async function getLastTouchDates(): Promise<Map<string, string>> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from('touches')
+    .select('case_id, touch_date')
+    .eq('org_id', orgId)
+    .order('touch_date', { ascending: false });
+  if (error) throw error;
+  const m = new Map<string, string>();
+  for (const row of (data ?? []) as { case_id: string; touch_date: string }[]) {
+    if (!m.has(row.case_id)) m.set(row.case_id, row.touch_date);
+  }
+  return m;
+}
+
 export async function logTouch(caseId: string, input: TouchInput): Promise<Touch> {
   const orgId = requireActiveOrg();
   const source = 'manual' as const;
