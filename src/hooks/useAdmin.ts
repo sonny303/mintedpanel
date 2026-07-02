@@ -84,7 +84,9 @@ export function useMsos() {
     queryKey: queryKeys.msos(orgId),
     queryFn: listMsos,
     enabled: orgId !== 'no-org',
+    staleTime: FIVE_MINUTES,
   });
+
 }
 
 export function useMso(id: string | undefined) {
