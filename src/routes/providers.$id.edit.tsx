@@ -31,16 +31,9 @@ export const Route = createFileRoute('/providers/$id/edit')({
 function EditPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
-  const role = useRole();
   const providerQ = useProvider(id);
   const licensesQ = useStateLicensesByProvider(id);
   const update = useUpdateProviderWithLicenses(id);
-
-  useEffect(() => {
-    if (role === 'billing') {
-      navigate({ to: '/providers/$id', params: { id }, replace: true });
-    }
-  }, [role, id, navigate]);
 
   const initial: ProviderFormState | null = useMemo(() => {
     const p = providerQ.data;
@@ -130,9 +123,6 @@ function EditPage() {
     toast.success('Provider updated');
     navigate({ to: '/providers/$id', params: { id } });
   };
-
-
-  if (role === 'billing') return null;
 
   if (providerQ.isLoading || licensesQ.isLoading || !initial) {
     return (
