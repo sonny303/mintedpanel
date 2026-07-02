@@ -202,13 +202,16 @@ function TemplateEditor() {
     setIsArchived(Boolean(tpl.archived ?? tpl.isArchived ?? false));
     setDirty(false);
   }, [tpl]);
+  const { ask: askDiscard, dialog: discardDialog } = useDiscardConfirm();
 
   useBlocker({
-    shouldBlockFn: () => {
+    shouldBlockFn: async () => {
       if (!dirty) return false;
-      return !window.confirm('Discard unsaved changes?');
+      const ok = await askDiscard();
+      return !ok;
     },
   });
+
 
   useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
