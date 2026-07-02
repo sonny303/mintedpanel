@@ -237,7 +237,7 @@ export function TaskDrawer({
                     Status
                   </label>
                   <Select
-                    value={task.status === 'completed' ? '' : task.status}
+                    value={task.status}
                     onValueChange={(v) => handleSetStatus(v as TaskStatus)}
                     disabled={
                       !canEdit ||
@@ -246,12 +246,17 @@ export function TaskDrawer({
                     }
                   >
                     <SelectTrigger className="h-8 flex-1 text-[13px] shadow-none">
-                      <SelectValue placeholder="Select status" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="not_started">Not started</SelectItem>
                       <SelectItem value="in_progress">In progress</SelectItem>
                       <SelectItem value="blocked">Blocked</SelectItem>
+                      {task.status === 'completed' ? (
+                        <SelectItem value="completed" disabled>
+                          Completed
+                        </SelectItem>
+                      ) : null}
                     </SelectContent>
                   </Select>
                 </div>
