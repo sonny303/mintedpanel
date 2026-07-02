@@ -512,21 +512,21 @@ function SummaryStrip({ total, inProgress, awaiting, denied }: SummaryStripProps
 
 interface CaseRowProps {
   data: EnrichedCase;
-  stalledOnly: boolean;
   onOpen: () => void;
 }
 
-function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
-  const { c, provider, group, payer, credStatus, contractStatus, coordinator, daysOpen } =
-    data;
-  const touchesQ = useTouches(c.id);
-  const lastTouchDate = touchesQ.data?.[0]?.touchDate ?? null;
-  const daysSinceTouch = lastTouchDate
-    ? differenceInDays(new Date(), parseISO(lastTouchDate))
-    : null;
-  const isStalled = daysSinceTouch === null ? true : daysSinceTouch >= 14;
-
-  if (stalledOnly && !isStalled) return null;
+function CaseRow({ data, onOpen }: CaseRowProps) {
+  const {
+    c,
+    provider,
+    group,
+    payer,
+    credStatus,
+    contractStatus,
+    coordinator,
+    daysOpen,
+    daysSinceTouch,
+  } = data;
 
   const providerName = provider
     ? `${provider.firstName} ${provider.lastName}${
@@ -541,7 +541,6 @@ function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
       onClick={onOpen}
       className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
     >
-
       <td className="px-3 py-1.5">
         <div className="font-medium text-foreground leading-tight">{providerName}</div>
         <div className="text-[12px] text-muted-foreground leading-tight">
@@ -571,9 +570,7 @@ function CaseRow({ data, stalledOnly, onOpen }: CaseRowProps) {
         )}
       </td>
       <td className="px-3 text-right tabular-nums">
-        {touchesQ.isLoading ? (
-          <span className="text-muted-foreground">…</span>
-        ) : daysSinceTouch === null ? (
+        {daysSinceTouch === null ? (
           <span className="text-muted-foreground">—</span>
         ) : (
           <span
