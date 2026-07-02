@@ -90,7 +90,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setActiveOrg: (orgId) => {
-        if (get().memberships.some((m) => m.orgId === orgId)) set({ activeOrgId: orgId });
+        if (get().memberships.some((m) => m.orgId === orgId) && get().activeOrgId !== orgId) {
+          set({ activeOrgId: orgId });
+          registeredQueryClient?.removeQueries();
+        }
       },
 
       signIn: async (email, password) => {
@@ -104,6 +107,7 @@ export const useAuthStore = create<AuthState>()(
       signOut: async () => {
         await supabase.auth.signOut();
         set({ session: null, user: null, memberships: [], activeOrgId: null, fullName: null });
+        registeredQueryClient?.clear();
         await useAuthStore.persist.clearStorage();
       },
     }),
