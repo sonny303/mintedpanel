@@ -56,10 +56,9 @@ import { useProviders } from '@/hooks/useProviders';
 import { useTasks } from '@/hooks/useTasks';
 import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
 import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
+import { useRosterAux, useTouchSummary } from '@/hooks/useReports';
 import { useRole, useActiveOrgId } from '@/lib/auth-store';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow } from '@/lib/case';
-import type { Contract, CredentialCase, StatusConfig, Touch } from '@/types';
+import type { Contract, CredentialCase, StatusConfig } from '@/types';
 
 
 interface ReportsSearch {
