@@ -280,7 +280,11 @@ export interface SOPTaskDefinition {
   description?: string;
   sortOrder?: number;
   dueOffsetDays?: number;
-  steps: { label: string; detail?: string }[];
+  steps: {
+    label: string;
+    detail?: string;
+    dataFields?: { label: string; token: string }[];
+  }[];
 }
 
 export interface SOPTemplate {
