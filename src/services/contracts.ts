@@ -2,7 +2,8 @@
 // append status_history (track 'contracting') and audit_log.
 import { supabase } from '@/integrations/supabase/externalClient';
 import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
+import { requireActiveOrg, writeAudit } from '@/lib/audit';
+import { appendStatusHistory } from '@/services/cases';
 import type { Contract } from '@/types';
 
 export interface ContractFilters {
@@ -56,6 +57,14 @@ export async function createContract(input: ContractInput): Promise<Contract> {
     .single();
   if (error) throw error;
   const created = camelizeRow<Contract>(data);
+  if (created.contractingStatusId) {
+    await appendStatusHistory({
+      track: 'contracting',
+      contractId: created.id,
+      fromStatusId: null,
+      toStatusId: created.contractingStatusId,
+    });
+  }
   await writeAudit({
     actionType: 'CREATE',
     entityType: 'contract',
@@ -88,15 +97,12 @@ export async function updateContractStatus(
     .single();
   if (error) throw error;
 
-  await supabase.from('status_history').insert({
-    org_id: orgId,
-    case_id: null,
-    contract_id: contractId,
+  await appendStatusHistory({
     track: 'contracting',
-    from_status_id: fromStatusId,
-    to_status_id: statusId,
-    metadata: metadata as never,
-    changed_by: currentUserId(),
+    contractId,
+    fromStatusId,
+    toStatusId: statusId,
+    metadata,
   });
 
   await writeAudit({

@@ -82,6 +82,30 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
 }
 
 
+export interface AppendStatusHistoryInput {
+  track: 'credentialing' | 'contracting';
+  caseId?: string | null;
+  contractId?: string | null;
+  fromStatusId: string | null;
+  toStatusId: string;
+  metadata?: Record<string, unknown>;
+}
+
+export async function appendStatusHistory(input: AppendStatusHistoryInput): Promise<void> {
+  const orgId = requireActiveOrg();
+  const { error } = await supabase.from('status_history').insert({
+    org_id: orgId,
+    case_id: input.caseId ?? null,
+    contract_id: input.contractId ?? null,
+    track: input.track,
+    from_status_id: input.fromStatusId,
+    to_status_id: input.toStatusId,
+    metadata: (input.metadata ?? {}) as never,
+    changed_by: currentUserId(),
+  });
+  if (error) throw error;
+}
+
 export async function createCase(input: CaseInput): Promise<CredentialCase> {
   const orgId = requireActiveOrg();
   let credentialingStatusId = input.credentialingStatusId ?? null;
@@ -114,6 +138,12 @@ export async function createCase(input: CaseInput): Promise<CredentialCase> {
     .single();
   if (error) throw error;
   const created = camelizeRow<CredentialCase>(data);
+  await appendStatusHistory({
+    track: 'credentialing',
+    caseId: created.id,
+    fromStatusId: null,
+    toStatusId: credentialingStatusId,
+  });
   await writeAudit({
     actionType: 'CREATE',
     entityType: 'credential_case',
@@ -155,15 +185,12 @@ export async function updateCaseStatus(
     .single();
   if (updErr) throw updErr;
 
-  await supabase.from('status_history').insert({
-    org_id: orgId,
-    case_id: caseId,
-    contract_id: null,
+  await appendStatusHistory({
     track: 'credentialing',
-    from_status_id: fromStatusId,
-    to_status_id: statusId,
-    metadata: metadata as never,
-    changed_by: currentUserId(),
+    caseId,
+    fromStatusId,
+    toStatusId: statusId,
+    metadata,
   });
 
   await writeAudit({

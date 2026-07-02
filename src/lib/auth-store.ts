@@ -2,8 +2,14 @@
 // Persists active org choice in localStorage so the selection survives navigation and reloads.
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { QueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
+
+let registeredQueryClient: QueryClient | null = null;
+export function registerQueryClient(client: QueryClient): void {
+  registeredQueryClient = client;
+}
 
 export type AppRole = "specialist" | "billing" | "admin";
 
@@ -84,7 +90,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setActiveOrg: (orgId) => {
-        if (get().memberships.some((m) => m.orgId === orgId)) set({ activeOrgId: orgId });
+        if (get().memberships.some((m) => m.orgId === orgId) && get().activeOrgId !== orgId) {
+          set({ activeOrgId: orgId });
+          registeredQueryClient?.removeQueries();
+        }
       },
 
       signIn: async (email, password) => {
@@ -98,6 +107,7 @@ export const useAuthStore = create<AuthState>()(
       signOut: async () => {
         await supabase.auth.signOut();
         set({ session: null, user: null, memberships: [], activeOrgId: null, fullName: null });
+        registeredQueryClient?.clear();
         await useAuthStore.persist.clearStorage();
       },
     }),
