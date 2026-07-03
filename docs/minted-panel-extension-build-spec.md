@@ -113,10 +113,11 @@ Migration `20260703070000_portal_fill_infrastructure.sql` (this repo) is live. A
 ## 7. Fill engine (extension, M1+)
 
 1. Content script activates on `url_pattern` match; background calls `resolve-fill` for `portal_key` + current step and hands the content script the resolved field list. No token logic in the extension.
-2. For each field, branch on `resolution`: `filled` fills; `manual` goes to the side panel manual list with its `notes`; `partial` fills the partial value and flags the field amber; `empty` is listed as missing data. Then: locate element (selector, then fallbacks), set value, dispatch `input` and `change` (and `blur` for validation-heavy forms). For `select`: match option by value, then by trimmed text. For React-controlled inputs: use the native value setter (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(...)`) before dispatching, or the framework swallows the change.
-3. Highlight filled fields with a subtle outline (forest green `#1B4D3E`, 1px).
-4. **SSN rule:** the platform stores last 4 only. If a form needs full SSN, the field appears in the manual list with the note "Full SSN from secure file. Never stored in Minted Panel." The extension never handles full SSNs. Non-negotiable.
-5. MutationObserver debounced at 500ms triggers re-scan on wizard step changes. Never re-fill a field the user has edited (track filled values; if current value differs from what we set, leave it alone).
+2. **Locator convention:** an unprefixed `selector` is a CSS selector; `label:` prefix means match by field label text (via `label[for]`, wrapping label, or aria-label) — used when maps are drafted before the live DOM is recorded. `selector_fallbacks` holds ordered alternates in the same syntax. Recording (via `scripts/record-form-fields.js` or M4 recording mode) upgrades `label:` selectors to concrete name/id CSS.
+3. For each field, branch on `resolution`: `filled` fills; `manual` goes to the side panel manual list with its `notes`; `partial` fills the partial value and flags the field amber; `empty` is listed as missing data. Then: locate element (selector, then fallbacks), set value, dispatch `input` and `change` (and `blur` for validation-heavy forms). For `select`: match option by value, then by trimmed text. For React-controlled inputs: use the native value setter (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(...)`) before dispatching, or the framework swallows the change.
+4. Highlight filled fields with a subtle outline (forest green `#1B4D3E`, 1px).
+5. **SSN rule:** the platform stores last 4 only. If a form needs full SSN, the field appears in the manual list with the note "Full SSN from secure file. Never stored in Minted Panel." The extension never handles full SSNs. Non-negotiable.
+6. MutationObserver debounced at 500ms triggers re-scan on wizard step changes. Never re-fill a field the user has edited (track filled values; if current value differs from what we set, leave it alone).
 
 ## 8. Attachment engine (extension, M2)
 
@@ -183,7 +184,8 @@ One Lovable prompt covering, in priority order:
 - [ ] Wrong-org case is invisible (RLS check)
 
 **M1 — BCBS KS fill (est. 1 week)**
-- [ ] Field maps recorded and approved for the BCBS KS enrollment form
+- [x] Form URL confirmed and field maps drafted from the published 15-481 application (24 rows seeded as `proposed`, portal_key `bcbs_ks_enrollment`)
+- [ ] JSF selectors recorded on the live form (`scripts/record-form-fields.js`) and maps approved
 - [ ] All mapped text/select/radio/date fields fill correctly for a KFP provider
 - [ ] Defaulting rules honored (facility phone/fax, group credentialing email)
 - [ ] Unmapped fields listed in side panel with notes
@@ -210,7 +212,7 @@ One Lovable prompt covering, in priority order:
 
 ## 12. Open questions
 
-1. Exact BCBS KS form URL and whether it sits behind Availity login or is a public web form. Determines M1 host permissions.
+1. ~~Exact BCBS KS form URL?~~ Resolved: `https://provider.bcbsks.com/bcbsks-provider/facelets/allUsers/form/NetworkEnrollmentForm.faces` — the web version of the Provider Network Application (form 15-481, formerly Provider Network Enrollment). The `allUsers` path indicates a public form, not behind Availity; confirm on first load. M1 host permission: `provider.bcbsks.com`. Field maps are seeded as `proposed` (see `scripts/seeds/bcbs_ks_enrollment_field_maps.sql`); JSF DOM selectors still need recording via `scripts/record-form-fields.js`.
 2. Full SSN handling long-term: stay manual forever, or a session-only vault that never touches Supabase? Recommend: manual forever.
 3. Chrome Web Store listing (private/unlisted) vs. enterprise policy install for Sowmya's machine? Unlisted is simplest for v1.
 4. ~~Does `touches.source` have a check constraint?~~ Resolved: yes, and it's updated — `'extension'` added, plus `'form_filled'` to the outcome constraint.
