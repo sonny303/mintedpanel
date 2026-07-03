@@ -57,7 +57,7 @@ function pickTemplate(
 ): SOPTemplate | null {
   const active = templates.filter((t) => {
     const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
-    return !Boolean(row.archived ?? row.isArchived ?? false);
+    return !(row.archived ?? row.isArchived ?? false);
   });
   const exact = active.find(
     (t) =>

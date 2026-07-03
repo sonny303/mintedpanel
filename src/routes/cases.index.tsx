@@ -241,7 +241,7 @@ function CasesListPage() {
   }, [enriched]);
 
   const summary = useMemo(() => {
-    let total = enriched.length;
+    const total = enriched.length;
     let inProgress = 0;
     let awaiting = 0;
     let denied = 0;
