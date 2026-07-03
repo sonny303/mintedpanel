@@ -56,20 +56,18 @@ export async function getProviderGroups(): Promise<ProviderGroup[]> {
 
 export async function getCoordinators(): Promise<Profile[]> {
   const orgId = requireActiveOrg();
-  // Single query: profiles inner-joined to credential_cases via the
-  // assigned_to FK, scoped to the active org. PostgREST returns each
-  // profile once (embedded relation is nested, not row-multiplied).
+  // Every member of the active org (not just those already assigned to a
+  // case) so brand-new invitees can be selected as coordinators.
   const { data, error } = await supabase
-    .from('profiles')
-    .select(
-      'id, email, full_name, created_at, credential_cases!credential_cases_assigned_to_fkey!inner(id, org_id)',
-    )
-    .eq('credential_cases.org_id', orgId);
+    .from('memberships')
+    .select('user_id, profiles(id, email, full_name, created_at)')
+    .eq('org_id', orgId);
   if (error) throw error;
-  const rows = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((r) => {
-    const { credential_cases: _cc, ...rest } = r;
-    return rest;
-  });
+  const rows = ((data ?? []) as unknown as Array<{
+    profiles: Record<string, unknown> | null;
+  }>)
+    .map((r) => r.profiles)
+    .filter((p): p is Record<string, unknown> => Boolean(p));
   return camelizeRow<Profile[]>(rows);
 }
 
