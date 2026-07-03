@@ -116,7 +116,7 @@ function LoginPage() {
               lineHeight: 1.5,
             }}
           >
-            Credentialing and contracting for healthcare provider groups across payers and states — so your team can focus on care.
+            {"\n"}
           </p>
         </div>
       </div>
