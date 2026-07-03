@@ -151,7 +151,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "openpanel-active-org",
+      name: "minted-panel-active-org",
       storage: createJSONStorage(() => {
         if (typeof window === "undefined") {
           return {
