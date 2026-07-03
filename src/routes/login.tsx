@@ -25,7 +25,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (initialized && session && pathname === "/login") {
-      navigate({ to: "/cases" });
+      navigate({ to: "/providers" });
     }
   }, [initialized, session, pathname, navigate]);
 
@@ -37,7 +37,7 @@ function LoginPage() {
       setError(result.error);
       return;
     }
-    navigate({ to: "/cases" });
+    navigate({ to: "/providers" });
   }
 
   return (
@@ -47,7 +47,7 @@ function LoginPage() {
         className="relative hidden md:flex flex-col justify-between overflow-hidden"
         style={{
           flex: "0 0 46%",
-          backgroundColor: "#1B4A38",
+          backgroundColor: "var(--mp-primary)",
           padding: "48px",
         }}
       >
@@ -125,13 +125,13 @@ function LoginPage() {
       {/* RIGHT 54% */}
       <div
         className="flex-1 flex items-center justify-center px-6"
-        style={{ backgroundColor: "#FAF9F5" }}
+        style={{ backgroundColor: "var(--mp-app)" }}
       >
         <form onSubmit={onSubmit} noValidate style={{ width: "360px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: 600, color: "#14301F", margin: 0 }}>
+          <h1 style={{ fontSize: "28px", fontWeight: 600, color: "var(--mp-ink)", margin: 0 }}>
             Sign in
           </h1>
-          <p style={{ marginTop: "8px", fontSize: "15px", color: "#6B7370" }}>
+          <p style={{ marginTop: "8px", fontSize: "15px", color: "var(--mp-ink-secondary)" }}>
             Use your Minted Panel credentials.
           </p>
 
@@ -143,7 +143,7 @@ function LoginPage() {
                   display: "block",
                   fontSize: "14px",
                   fontWeight: 600,
-                  color: "#22322A",
+                  color: "var(--mp-ink)",
                   marginBottom: "8px",
                 }}
               >
@@ -162,9 +162,9 @@ function LoginPage() {
                   padding: "0 14px",
                   fontSize: "15px",
                   backgroundColor: "#FFFFFF",
-                  border: "1px solid #D9D7CE",
-                  borderRadius: "10px",
-                  color: "#14301F",
+                  border: `1px solid ${error ? "var(--mp-danger)" : "var(--mp-border)"}`,
+                  borderRadius: "var(--mp-radius-lg)",
+                  color: "var(--mp-ink)",
                   outline: "none",
                   ...FONT,
                 }}
@@ -175,7 +175,7 @@ function LoginPage() {
               <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
                 <label
                   htmlFor="password"
-                  style={{ fontSize: "14px", fontWeight: 600, color: "#22322A" }}
+                  style={{ fontSize: "14px", fontWeight: 600, color: "var(--mp-ink)" }}
                 >
                   Password
                 </label>
@@ -184,7 +184,7 @@ function LoginPage() {
                   style={{
                     fontSize: "13px",
                     fontWeight: 500,
-                    color: "#1D5540",
+                    color: "var(--mp-primary)",
                     textDecoration: "none",
                   }}
                 >
@@ -204,9 +204,9 @@ function LoginPage() {
                   padding: "0 14px",
                   fontSize: "15px",
                   backgroundColor: "#FFFFFF",
-                  border: "1px solid #D9D7CE",
-                  borderRadius: "10px",
-                  color: "#14301F",
+                  border: `1px solid ${error ? "var(--mp-danger)" : "var(--mp-border)"}`,
+                  borderRadius: "var(--mp-radius-lg)",
+                  color: "var(--mp-ink)",
                   outline: "none",
                   ...FONT,
                 }}
@@ -218,10 +218,10 @@ function LoginPage() {
                 role="alert"
                 style={{
                   fontSize: "13px",
-                  color: "#B42318",
-                  backgroundColor: "#FEF3F2",
-                  border: "1px solid #FECDCA",
-                  borderRadius: "10px",
+                  color: "var(--mp-danger)",
+                  backgroundColor: "var(--mp-danger-tint)",
+                  border: "1px solid color-mix(in srgb, var(--mp-danger) 30%, white)",
+                  borderRadius: "var(--mp-radius-lg)",
                   padding: "10px 12px",
                 }}
               >
@@ -232,16 +232,18 @@ function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#143A2B")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#1B4A38")}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--mp-primary-hover)")
+              }
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--mp-primary)")}
               style={{
                 width: "100%",
                 height: "48px",
-                backgroundColor: "#1B4A38",
+                backgroundColor: "var(--mp-primary)",
                 color: "#FFFFFF",
                 fontSize: "15px",
                 fontWeight: 600,
-                borderRadius: "10px",
+                borderRadius: "var(--mp-radius-lg)",
                 border: "none",
                 cursor: loading ? "not-allowed" : "pointer",
                 opacity: loading ? 0.7 : 1,

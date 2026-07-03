@@ -22,7 +22,9 @@ import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
@@ -99,10 +101,20 @@ const ProvidersIdRoute = ProvidersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ProvidersRoute,
 } as any)
+const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
+  id: '/dev/primitives',
+  path: '/dev/primitives',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CasesIdRoute = CasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => CasesRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
   id: '/admin/templates',
@@ -169,7 +181,9 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/primitives': typeof DevPrimitivesRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
@@ -191,7 +205,9 @@ export interface FileRoutesByTo {
   '/admin/payers': typeof AdminPayersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
+  '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/primitives': typeof DevPrimitivesRoute
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
@@ -217,7 +233,9 @@ export interface FileRoutesById {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
+  '/dev/primitives': typeof DevPrimitivesRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
@@ -245,7 +263,9 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/admin/users'
     | '/cases/$id'
+    | '/dev/primitives'
     | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
@@ -267,7 +287,9 @@ export interface FileRouteTypes {
     | '/admin/payers'
     | '/admin/settings'
     | '/admin/statuses'
+    | '/admin/users'
     | '/cases/$id'
+    | '/dev/primitives'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases'
@@ -292,7 +314,9 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/admin/users'
     | '/cases/$id'
+    | '/dev/primitives'
     | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
@@ -319,6 +343,8 @@ export interface RootRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
+  AdminUsersRoute: typeof AdminUsersRoute
+  DevPrimitivesRoute: typeof DevPrimitivesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -414,12 +440,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdRouteImport
       parentRoute: typeof ProvidersRoute
     }
+    '/dev/primitives': {
+      id: '/dev/primitives'
+      path: '/dev/primitives'
+      fullPath: '/dev/primitives'
+      preLoaderRoute: typeof DevPrimitivesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cases/$id': {
       id: '/cases/$id'
       path: '/$id'
       fullPath: '/cases/$id'
       preLoaderRoute: typeof CasesIdRouteImport
       parentRoute: typeof CasesRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/templates': {
       id: '/admin/templates'
@@ -576,6 +616,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
+  AdminUsersRoute: AdminUsersRoute,
+  DevPrimitivesRoute: DevPrimitivesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

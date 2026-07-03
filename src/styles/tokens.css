@@ -1,0 +1,90 @@
+/* M1 design tokens — single source of truth for the Minted Panel UI system.
+ * Values marked PLACEHOLDER are interpolated pending the design token sheet
+ * (type scale and shadows were specified as "per sheet"; the sheet is not yet
+ * in the repo). Swap them here when the design file lands — nothing else
+ * hardcodes these values.
+ */
+
+/* Instrument Sans 400–700, self-hosted (no Google Fonts CDN). */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  /* Surfaces */
+  --mp-sidebar: #0c2a1d;
+  --mp-app: #f5f6f5;
+  --mp-card: #ffffff;
+  --mp-border: #e5e8e6;
+  --mp-muted: #eff1ef;
+  --mp-primary: #164a2f;
+  --mp-primary-hover: #1d5c3c;
+  --mp-primary-tint: #e4efe7;
+
+  /* Ink */
+  --mp-ink: #182b20;
+  --mp-ink-secondary: #5b6b60;
+  --mp-ink-faint: #99a49b;
+
+  /* Status hues */
+  --mp-ok: #059669;
+  --mp-info: #2563eb;
+  --mp-warn: #d97706;
+  --mp-danger: #dc2626;
+  --mp-pending: #0891b2;
+  --mp-neutral: #9ca3af;
+
+  /* Status tints (PLACEHOLDER: 12% hue over white pending sheet values) */
+  --mp-ok-tint: color-mix(in srgb, var(--mp-ok) 12%, white);
+  --mp-info-tint: color-mix(in srgb, var(--mp-info) 12%, white);
+  --mp-warn-tint: color-mix(in srgb, var(--mp-warn) 12%, white);
+  --mp-danger-tint: color-mix(in srgb, var(--mp-danger) 12%, white);
+  --mp-pending-tint: color-mix(in srgb, var(--mp-pending) 12%, white);
+  --mp-neutral-tint: color-mix(in srgb, var(--mp-neutral) 14%, white);
+
+  /* Type scale (PLACEHOLDER steps within the sheet's stated 10.5–25px range) */
+  --mp-text-2xs: 10.5px;
+  --mp-text-xs: 12px;
+  --mp-text-sm: 13px;
+  --mp-text-base: 14px;
+  --mp-text-lg: 16px;
+  --mp-text-xl: 18px;
+  --mp-text-2xl: 21px;
+  --mp-text-3xl: 25px;
+
+  /* Radius */
+  --mp-radius-sm: 6px;
+  --mp-radius-md: 8px;
+  --mp-radius-lg: 10px;
+  --mp-radius-pill: 999px;
+
+  /* Shadows (PLACEHOLDER pending sheet values) */
+  --mp-shadow-sm: 0 1px 2px rgba(24, 43, 32, 0.06);
+  --mp-shadow-md: 0 2px 8px rgba(24, 43, 32, 0.08);
+  --mp-shadow-lg: 0 8px 24px rgba(24, 43, 32, 0.14);
+}
