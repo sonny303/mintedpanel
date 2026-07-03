@@ -45,13 +45,20 @@ export function useContractFor(
   });
 }
 
+export interface CreateCaseVars {
+  input: CaseInput;
+  tasks?: CaseTaskPayload[];
+}
+
 export function useCreateCase() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? 'no-org';
   return useMutation({
-    mutationFn: (input: CaseInput) => createCase(input),
+    mutationFn: (vars: CreateCaseVars) => createCase(vars.input, vars.tasks ?? []),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cases', orgId] });
+      qc.invalidateQueries({ queryKey: ['tasks', orgId] });
+      qc.invalidateQueries({ queryKey: ['audit-log', orgId] });
     },
   });
 }
