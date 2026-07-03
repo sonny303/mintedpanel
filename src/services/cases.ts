@@ -150,53 +150,54 @@ export async function appendStatusHistory(input: AppendStatusHistoryInput): Prom
   if (error) throw error;
 }
 
-export async function createCase(input: CaseInput): Promise<CredentialCase> {
-  const orgId = requireActiveOrg();
-  let credentialingStatusId = input.credentialingStatusId ?? null;
-  if (!credentialingStatusId) {
-    const { data: statuses, error: statusErr } = await supabase
-      .from('status_configs')
-      .select('id, sort_order')
-      .eq('org_id', orgId)
-      .eq('track', 'credentialing')
-      .order('sort_order', { ascending: true })
-      .limit(1);
-    if (statusErr) throw statusErr;
-    const first = (statuses ?? [])[0];
-    if (!first) {
-      throw new Error(
-        'No credentialing status configured for this organization. Add at least one credentialing status before creating cases.',
-      );
-    }
-    credentialingStatusId = first.id as string;
-  }
-  const payload = {
-    ...snakeizeRow<Record<string, unknown>>({ ...input, credentialingStatusId }),
-    org_id: orgId,
-    created_by: currentUserId(),
-  };
-  const { data, error } = await supabase
-    .from('credential_cases')
-    .insert(payload as unknown as CredentialCaseInsert)
-    .select('*')
-    .single();
+export interface CaseTaskPayload {
+  title: string;
+  description: string | null;
+  sopContent: unknown;
+  sortOrder: number;
+  dueDate: string | null;
+}
 
-  if (error) throw error;
-  const created = camelizeRow<CredentialCase>(data);
-  await appendStatusHistory({
-    track: 'credentialing',
-    caseId: created.id,
-    fromStatusId: null,
-    toStatusId: credentialingStatusId,
+export async function createCase(
+  input: CaseInput,
+  tasks: CaseTaskPayload[] = [],
+): Promise<CredentialCase> {
+  const orgId = requireActiveOrg();
+  const p_input: Record<string, unknown> = {
+    org_id: orgId,
+    provider_id: input.providerId,
+    payer_id: input.payerId,
+    state: input.state,
+    group_id: input.groupId ?? null,
+    facility_id: input.facilityId ?? null,
+    specialty: input.specialty ?? null,
+    mso_id: input.msoId ?? null,
+    assigned_to: input.assignedTo ?? null,
+    submitted_date: input.submittedDate ?? null,
+    expected_effective_date: input.expectedEffectiveDate ?? null,
+  };
+  if (input.credentialingStatusId) {
+    p_input.credentialing_status_id = input.credentialingStatusId;
+  }
+  const p_tasks = tasks.map((t) => ({
+    title: t.title,
+    description: t.description,
+    sop_content: t.sopContent,
+    sort_order: t.sortOrder,
+    due_date: t.dueDate,
+  }));
+
+  const rpc = supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('create_case_with_tasks', {
+    p_input,
+    p_tasks,
   });
-  await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'credential_case',
-    entityId: created.id,
-    after: created,
-    description: `Created credentialing case`,
-  });
-  return created;
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('create_case_with_tasks returned no data');
+  return camelizeRow<CredentialCase>(data);
 }
 
 export async function updateCaseStatus(
