@@ -460,9 +460,9 @@ function CountUp({ target, suffix = '' }: { target: number; suffix?: string }) {
 
 function Stats() {
   const items = [
-    { n: 50, suf: '+', label: 'Payers Managed', copy: 'Commercial, Medicare, and Medicaid networks', delay: 0 },
+    { n: 15, suf: '+', label: 'Payers Managed', copy: 'Commercial, Medicare, and Medicaid networks', delay: 0 },
     { n: 50, suf: '', label: 'All 50 States', copy: 'Multi-state credentialing without the complexity', delay: 120 },
-    { n: 100, suf: '% *', label: 'Follow-Through', copy: 'Tracked until the provider is active and billing', delay: 240 },
+    { n: 100, suf: '%\u00a0', label: 'Follow-Through', copy: 'Tracked until the provider is active and billing', delay: 240 },
   ];
   return (
     <div style={{ borderBottom: '1px solid #E7E4DA' }}>
