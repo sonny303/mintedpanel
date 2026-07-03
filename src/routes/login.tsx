@@ -1,11 +1,12 @@
-// Login page: Minted Panel wordmark on the deep-green left panel, email + password
-// form on the right. Shows an inline error on bad credentials.
+// Login page: Minted Panel branding on the deep-green left panel with logo,
+// dotted texture, and oversized watermark. Email + password form on the right.
 import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/lib/auth-store";
+import logoAsset from "@/assets/minted-logo.png.asset.json";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -41,21 +42,46 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh w-full grid grid-cols-1 md:grid-cols-2 bg-white">
+    <div className="min-h-dvh w-full grid grid-cols-1 md:grid-cols-2 bg-[#FAF7F0]">
       <div
-        className="hidden md:flex flex-col justify-between p-12 text-white"
+        className="relative hidden md:flex flex-col justify-between p-10 text-white overflow-hidden"
         style={{ backgroundColor: "#1B4D3E" }}
       >
-        <div className="text-[28px] font-semibold tracking-tight whitespace-pre-line">{"Minted Panel\nCredentialing"}</div>
-        <div className="text-[14px] text-white/70 max-w-xs">
-          Credentialing operations for allied health organizations.
+        {/* Dotted texture */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)",
+            backgroundSize: "18px 18px",
+          }}
+          aria-hidden="true"
+        />
+        {/* Oversized watermark logo */}
+        <img
+          src={logoAsset.url}
+          alt=""
+          aria-hidden="true"
+          className="absolute -bottom-24 -left-16 w-[520px] opacity-20 pointer-events-none select-none"
+        />
+
+        <div className="relative flex items-center gap-3">
+          <div className="h-11 w-11 rounded-lg bg-white flex items-center justify-center">
+            <img src={logoAsset.url} alt="Minted Panel logo" className="h-7 w-7 object-contain" />
+          </div>
+          <span className="text-[20px] font-semibold tracking-tight">Minted Panel</span>
+        </div>
+
+        <div className="relative">
+          <h2 className="text-[44px] leading-[1.05] font-semibold tracking-tight max-w-sm">
+            Credentialing, kept in order.
+          </h2>
         </div>
       </div>
 
       <div className="flex items-center justify-center p-8">
         <form onSubmit={onSubmit} className="w-full max-w-sm space-y-6" noValidate>
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight text-foreground">
+            <h1 className="text-[24px] font-semibold tracking-tight text-foreground">
               Sign in
             </h1>
             <p className="mt-1 text-[14px] text-muted-foreground">
@@ -69,6 +95,7 @@ function LoginPage() {
               id="email"
               type="email"
               autoComplete="email"
+              placeholder="you@organization.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
