@@ -219,99 +219,93 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
     const skipped: { payerName: string; reason: string }[] = [];
     let templateMissingCount = 0;
 
-    for (const payerId of selectedPayerIds) {
-      const payer = payerById.get(payerId);
-      if (!payer) continue;
-      const dup = existingCases.find((c) => c.payerId === payerId && c.state === state);
-      if (dup) {
-        skipped.push({
-          payerName: payer.name,
-          reason: "Duplicate case exists",
-        });
-        continue;
-      }
+    try {
+      for (const payerId of selectedPayerIds) {
+        const payer = payerById.get(payerId);
+        if (!payer) continue;
+        try {
+          const dup = existingCases.find((c) => c.payerId === payerId && c.state === state);
+          if (dup) {
+            skipped.push({ payerName: payer.name, reason: "Duplicate case exists" });
+            continue;
+          }
 
-      const rule = await qc.fetchQuery({
-        queryKey: ['mso-routing-rule', orgId, payerId, state, provider.specialty ?? ''] as const,
-        queryFn: () => getMsoRoutingRule(payerId, state, provider.specialty ?? null),
-      });
-      const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
-      const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
+          const rule = await qc.fetchQuery({
+            queryKey: ['mso-routing-rule', orgId, payerId, state, provider.specialty ?? ''] as const,
+            queryFn: () => getMsoRoutingRule(payerId, state, provider.specialty ?? null),
+          });
+          const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
+          const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
 
-      let caseRow;
-      try {
-        caseRow = await createCase.mutateAsync({
-          providerId: provider.id,
-          payerId,
-          state,
-          groupId: provider.groupId ?? null,
-          facilityId: facilityId === NONE ? null : facilityId,
-          specialty: provider.specialty ?? null,
-          msoId,
-          assignedTo: coordinatorId === NONE ? null : coordinatorId,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Save failed';
-        skipped.push({ payerName: payer.name, reason: message });
-        continue;
-      }
+          const template = pickTemplate(templates, payerId, state, provider.groupId ?? null);
+          let tasks: ReturnType<typeof resolveTemplate> = [];
+          if (!template) {
+            templateMissingCount += 1;
+          } else {
+            tasks = resolveTemplate(
+              template,
+              provider,
+              group,
+              null,
+              mso ? { mso } : null,
+              licenseNumber,
+            );
+          }
 
-      const template = pickTemplate(templates, payerId, state, provider.groupId ?? null);
-      if (!template) {
-        templateMissingCount += 1;
-      } else {
-        const tasks = resolveTemplate(
-          template,
-          provider,
-          group,
-          null,
-          mso ? { mso } : null,
-          licenseNumber,
-        );
-        if (tasks.length > 0) {
-          await createTasksForCase(
-            tasks.map((t) => ({
-              caseId: caseRow.id,
+          const caseRow = await createCase.mutateAsync({
+            input: {
               providerId: provider.id,
+              payerId,
+              state,
+              groupId: provider.groupId ?? null,
+              facilityId: facilityId === NONE ? null : facilityId,
+              specialty: provider.specialty ?? null,
+              msoId,
+              assignedTo: coordinatorId === NONE ? null : coordinatorId,
+            },
+            tasks: tasks.map((t) => ({
               title: t.title,
               description: t.description,
               sopContent: t.sopContent,
               sortOrder: t.sortOrder,
               dueDate: t.dueDate,
             })),
-          );
+          });
+
+          created.push({ id: caseRow.id, payerName: payer.name });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Save failed';
+          skipped.push({ payerName: payer.name, reason: message });
         }
       }
 
-      created.push({ id: caseRow.id, payerName: payer.name });
-    }
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
 
-    qc.invalidateQueries({ queryKey: ["cases", orgId] });
-    qc.invalidateQueries({ queryKey: ["tasks", orgId] });
-    qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+      if (created.length === 0) {
+        const first = skipped[0];
+        toast.error(first ? `${first.payerName}: ${first.reason}` : "No cases created");
+        return;
+      }
 
-    setSubmitting(false);
+      if (templateMissingCount > 0) {
+        toast.message("No SOP template found for this payer/state — tasks not generated.");
+      }
+      if (skipped.length > 0) {
+        toast.message(`${skipped.length} payer${skipped.length === 1 ? "" : "s"} skipped`);
+      }
 
-    if (created.length === 0) {
-      const first = skipped[0];
-      toast.error(first ? `${first.payerName}: ${first.reason}` : "No cases created");
-      return;
-    }
+      onOpenChange(false);
+      reset();
 
-    if (templateMissingCount > 0) {
-      toast.message("No SOP template found for this payer/state — tasks not generated.");
-    }
-    if (skipped.length > 0) {
-      toast.message(`${skipped.length} payer${skipped.length === 1 ? "" : "s"} skipped`);
-    }
-
-    onOpenChange(false);
-    reset();
-
-    if (created.length === 1) {
-      navigate({ to: "/cases/$id", params: { id: created[0].id } });
-    } else {
-      toast.success(`${created.length} cases created`);
+      if (created.length === 1) {
+        navigate({ to: "/cases/$id", params: { id: created[0].id } });
+      } else {
+        toast.success(`${created.length} cases created`);
+      }
+    } finally {
+      setSubmitting(false);
     }
   }
 
