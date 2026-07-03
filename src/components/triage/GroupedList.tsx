@@ -12,6 +12,8 @@ export interface GroupedListGroup {
   title: string;
   count: number;
   progress?: { value: number; max: number };
+  /** Rich header content (e.g. avatar + badges); replaces the default title + count */
+  headerContent?: ReactNode;
   rows: ReactNode[];
 }
 
@@ -41,14 +43,18 @@ export function GroupedList({ groups, density }: GroupedListProps) {
                   isCollapsed ? "-rotate-90" : ""
                 }`}
               />
-              <span className="text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
-                {group.title}
-              </span>
-              <span className="tabular-nums text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
-                {group.count}
-              </span>
+              {group.headerContent ?? (
+                <>
+                  <span className="text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+                    {group.title}
+                  </span>
+                  <span className="tabular-nums text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
+                    {group.count}
+                  </span>
+                </>
+              )}
               {group.progress ? (
-                <span className="ml-auto w-28 flex-shrink-0">
+                <span className="ml-auto w-28 flex-shrink-0 hidden sm:block">
                   <ProgressBar value={group.progress.value} max={group.progress.max} />
                 </span>
               ) : null}

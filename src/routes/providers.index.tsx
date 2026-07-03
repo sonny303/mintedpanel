@@ -1,550 +1,498 @@
-// Provider list screen at /providers. Shows per-payer credentialing status,
-// CAQH age, and coordinator; supports search, filters, sorting, column picker,
-// persisted preferences, and infinite scroll.
-import React, { useDeferredValue, useMemo, useState } from "react";
+// Provider-grouped work view at /providers (M2). Every case renders inline
+// under its provider row; the action engine (src/lib/actionState.ts) drives
+// chip counts, row states, and worst-state rollups. Read-and-navigate only:
+// name → legacy provider detail, row/CTA → case detail. No writes.
+import React, { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInDays, parseISO } from "date-fns";
-import { Plus, Search } from "lucide-react";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
-import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
-import {
-  ColumnPicker,
-  InfiniteScrollSentinel,
-  SortableTh,
-  StaticTh,
-  compareForSort,
-  useInfiniteRows,
-} from "@/components/shared/TableToolkit";
-import { useTablePrefs } from "@/hooks/useTablePrefs";
-import { useDebounced } from "@/hooks/useDebounced";
+import { SummaryChips } from "@/components/triage/SummaryChips";
+import { GroupedList, type GroupedListDensity } from "@/components/triage/GroupedList";
+import { StatusPill } from "@/components/triage/StatusPill";
+import { ActionBadge, type ActionBadgeTone } from "@/components/triage/ActionBadge";
+import { ProgressBar } from "@/components/triage/ProgressBar";
+import { RowCta } from "@/components/triage/RowCta";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
-import { useStatusConfigs, usePayers } from "@/hooks/useAdmin";
-import { useProviderGroups, useCoordinators } from "@/hooks/useLookups";
+import { useTasks } from "@/hooks/useTasks";
+import { useContracts } from "@/hooks/useContracts";
+import { useLastTouchDates } from "@/hooks/useTouches";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
-import type {
-  CredentialCase,
-  Payer,
-  Profile,
-  Provider,
-  ProviderGroup,
-  ProviderStatus,
-  StatusConfig,
-} from "@/types";
+import { getActionState, worstActionState, daysSilent, type ActionState } from "@/lib/actionState";
+import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/providers/")({
-  component: ProvidersListPage,
+  component: ProvidersWorkView,
 });
 
-const ALL = "__all__";
-const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
-  { value: "onboarding", label: "Onboarding" },
-  { value: "active", label: "Active" },
-  { value: "terminated", label: "Terminated" },
-];
+const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
+const DENSITY_STORAGE_KEY = "mp.providers.density";
 
-type ColumnKey =
-  "provider" | "group" | "status" | "state" | "payerStatuses" | "caqh" | "coordinator";
-const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
-  { key: "provider", label: "Provider" },
-  { key: "group", label: "Group" },
-  { key: "status", label: "Status" },
-  { key: "state", label: "State" },
-  { key: "payerStatuses", label: "Payer Statuses" },
-  { key: "caqh", label: "CAQH" },
-  { key: "coordinator", label: "Coordinator" },
-];
-const ALL_KEYS = COLUMN_DEFS.map((c) => c.key);
-const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
-  provider: true,
-  group: true,
-  status: true,
-  state: true,
-  payerStatuses: true,
-  caqh: false,
-  coordinator: true,
+// Placeholder tone mapping pending the design sheet's badge treatments.
+const BADGE_TONE: Record<ActionState, ActionBadgeTone> = {
+  needs_action: "warn",
+  blocked: "danger",
+  stalled: "danger",
+  awaiting_effective: "pending",
+  on_track: "ok",
+  complete: "neutral",
 };
 
-const STATUS_LABEL: Record<ProviderStatus, string> = {
-  onboarding: "Onboarding",
-  active: "Active",
-  terminated: "Terminated",
-};
-const STATUS_COLOR: Record<ProviderStatus, "blue" | "green" | "gray"> = {
-  onboarding: "blue",
-  active: "green",
-  terminated: "gray",
-};
-const STATUS_SORT_RANK: Record<ProviderStatus, number> = {
-  onboarding: 0,
-  active: 1,
-  terminated: 2,
+const BADGE_NOUN: Record<ActionState, string> = {
+  needs_action: "needs action",
+  blocked: "blocked",
+  stalled: "stalled",
+  awaiting_effective: "awaiting effective",
+  on_track: "On track",
+  complete: "Complete",
 };
 
-function ProvidersListPage() {
+type ChipId = "all" | "needs" | "inprog" | "awaiting";
+
+const CHIP_STATES: Record<Exclude<ChipId, "all">, readonly ActionState[]> = {
+  needs: ["needs_action", "blocked"],
+  inprog: ["on_track", "stalled"],
+  awaiting: ["awaiting_effective"],
+};
+
+interface WorkRow {
+  case: CredentialCase;
+  state: ActionState;
+  statusLabel: string;
+  statusColor: string;
+  suffix: string | undefined;
+  contractStatus: StatusConfig | null;
+  payerName: string;
+  isPreCred: boolean;
+  lastTouchLabel: string;
+  days: number | null;
+  nextTask: Task | null;
+}
+
+interface WorkGroup {
+  provider: Provider;
+  rows: WorkRow[];
+  openRows: WorkRow[];
+  worst: ActionState;
+  worstCount: number;
+  inNetwork: number;
+  denominator: number;
+  oldestDays: number | null;
+}
+
+function initialsOf(p: Provider): string {
+  return `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`.toUpperCase();
+}
+
+function loadDensity(): GroupedListDensity {
+  if (typeof window === "undefined") return "comfortable";
+  return window.localStorage.getItem(DENSITY_STORAGE_KEY) === "compact" ? "compact" : "comfortable";
+}
+
+const severityRank = (s: ActionState) =>
+  ["needs_action", "blocked", "stalled", "awaiting_effective", "on_track", "complete"].indexOf(s);
+
+function ProvidersWorkView() {
   const navigate = useNavigate();
-  const canEdit = useCanWrite();
-
-  const [search, setSearch] = useState("");
-  const [groupId, setGroupId] = useState<string>(ALL);
-  const [state, setState] = useState<string>(ALL);
-  const [payerId, setPayerId] = useState<string>(ALL);
-  const [status, setStatus] = useState<string>(ALL);
-
-  const {
-    state: prefs,
-    setVisible,
-    cycleSort,
-  } = useTablePrefs<ColumnKey>({
-    pageKey: "providers",
-    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: "provider", dir: "asc" } },
-    allKeys: ALL_KEYS,
-  });
-  const visibleCols = prefs.visibleCols;
-  const effectiveSort = prefs.sort ?? { key: "provider", dir: "asc" as const };
-
-  const debouncedSearch = useDebounced(search, 300);
-  const deferredSearch = useDeferredValue(debouncedSearch);
-
-  const filters = useMemo(
-    () => ({
-      search: deferredSearch.trim() || undefined,
-      groupId: groupId === ALL ? undefined : groupId,
-      state: state === ALL ? undefined : state,
-      payerId: payerId === ALL ? undefined : payerId,
-      status: status === ALL ? undefined : (status as ProviderStatus),
-    }),
-    [deferredSearch, groupId, state, payerId, status],
-  );
-
-  const providersQ = useProviders(filters);
-  const casesQ = useCases({});
+  const canWrite = useCanWrite();
+  const providersQ = useProviders();
+  const casesQ = useCases();
+  const tasksQ = useTasks();
+  const contractsQ = useContracts();
   const payersQ = usePayers();
-  const groupsQ = useProviderGroups();
-  const statusesQ = useStatusConfigs("credentialing");
-  const coordinatorsQ = useCoordinators();
+  const statusConfigsQ = useStatusConfigs();
+  const lastTouchQ = useLastTouchDates();
 
-  const payerById = useMemo(() => {
-    const m = new Map<string, Payer>();
-    (payersQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [payersQ.data]);
+  const [chip, setChip] = useState<ChipId>("all");
+  const [density, setDensityState] = useState<GroupedListDensity>(loadDensity);
 
-  const groupById = useMemo(() => {
-    const m = new Map<string, ProviderGroup>();
-    (groupsQ.data ?? []).forEach((g) => m.set(g.id, g));
-    return m;
-  }, [groupsQ.data]);
-
-  const statusById = useMemo(() => {
-    const m = new Map<string, StatusConfig>();
-    (statusesQ.data ?? []).forEach((s) => m.set(s.id, s));
-    return m;
-  }, [statusesQ.data]);
-
-  const coordinatorById = useMemo(() => {
-    const m = new Map<string, Profile>();
-    (coordinatorsQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [coordinatorsQ.data]);
-
-  const casesByProvider = useMemo(() => {
-    const m = new Map<string, CredentialCase[]>();
-    (casesQ.data ?? []).forEach((c) => {
-      const arr = m.get(c.providerId) ?? [];
-      arr.push(c);
-      m.set(c.providerId, arr);
-    });
-    return m;
-  }, [casesQ.data]);
-
-  const states = useMemo(() => {
-    const set = new Set<string>();
-    (providersQ.data ?? []).forEach((p) => p.homeState && set.add(p.homeState));
-    return Array.from(set).sort();
-  }, [providersQ.data]);
-
-  function clearFilters() {
-    setSearch("");
-    setGroupId(ALL);
-    setState(ALL);
-    setPayerId(ALL);
-    setStatus(ALL);
-  }
-
-  const hasActiveFilter =
-    Boolean(deferredSearch.trim()) ||
-    groupId !== ALL ||
-    state !== ALL ||
-    payerId !== ALL ||
-    status !== ALL;
-
-  function coordinatorNameFor(p: Provider): string | null {
-    const cases = casesByProvider.get(p.id) ?? [];
-    const withCoord = cases
-      .filter((c) => c.assignedTo)
-      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
-    const id = withCoord[0]?.assignedTo;
-    if (!id) return null;
-    return coordinatorById.get(id)?.fullName ?? null;
-  }
-
-  function sortValueFor(p: Provider, key: string): string | number | null {
-    switch (key) {
-      case "provider":
-        return (p.lastName || p.firstName || "").trim() || null;
-      case "group":
-        return p.groupId ? (groupById.get(p.groupId)?.name ?? null) : null;
-      case "status":
-        return p.status ? STATUS_SORT_RANK[p.status] : null;
-      case "state":
-        return p.homeState ?? null;
-      case "coordinator":
-        return coordinatorNameFor(p);
-      default:
-        return null;
+  function setDensity(next: GroupedListDensity) {
+    setDensityState(next);
+    try {
+      window.localStorage.setItem(DENSITY_STORAGE_KEY, next);
+    } catch {
+      // storage unavailable (private mode) — session-local toggle still works
     }
   }
 
-  const providers = useMemo(() => {
-    const rows = [...(providersQ.data ?? [])];
-    const { key, dir } = effectiveSort;
-    rows.sort((a, b) => {
-      const cmp = compareForSort(sortValueFor(a, key), sortValueFor(b, key), dir);
-      if (cmp !== 0) return cmp;
-      const at = `${a.lastName} ${a.firstName}`.trim();
-      const bt = `${b.lastName} ${b.firstName}`.trim();
-      return at.localeCompare(bt, undefined, { sensitivity: "base" });
-    });
-    return rows;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const loading =
+    providersQ.isLoading ||
+    casesQ.isLoading ||
+    tasksQ.isLoading ||
+    contractsQ.isLoading ||
+    payersQ.isLoading ||
+    statusConfigsQ.isLoading;
+
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
+
+  const groups: WorkGroup[] = useMemo(() => {
+    const providers = providersQ.data ?? [];
+    const cases = casesQ.data ?? [];
+    const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
+    const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
+    const lastTouchByCase = lastTouchQ.data;
+
+    const openTasksByCase = new Map<string, Task[]>();
+    for (const t of tasksQ.data ?? []) {
+      if (!t.caseId || t.status === "completed") continue;
+      const list = openTasksByCase.get(t.caseId) ?? [];
+      list.push(t);
+      openTasksByCase.set(t.caseId, list);
+    }
+    for (const list of openTasksByCase.values()) {
+      list.sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"),
+      );
+    }
+
+    const contractByKey = new Map(
+      (contractsQ.data ?? []).map((c) => [`${c.groupId}|${c.payerId}|${c.state}`, c]),
+    );
+
+    const now = new Date();
+    const rowsByProvider = new Map<string, WorkRow[]>();
+
+    for (const c of cases) {
+      const status = c.credentialingStatusId
+        ? (statusById.get(c.credentialingStatusId) ?? null)
+        : null;
+      const openTasks = openTasksByCase.get(c.id) ?? [];
+      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
+
+      const state = getActionState({
+        statusLabel: status?.label ?? null,
+        actionBucket: status?.actionBucket ?? null,
+        openTaskDueDates: openTasks.map((t) => t.dueDate),
+        lastTouchDate,
+        createdAt: c.createdAt,
+        confirmedEffectiveDate: c.confirmedEffectiveDate,
+        expectedEffectiveDate: c.expectedEffectiveDate,
+        now,
+      });
+
+      const effective = c.confirmedEffectiveDate ?? c.expectedEffectiveDate;
+      const suffix =
+        state === "stalled"
+          ? `${daysSilent({ lastTouchDate, createdAt: c.createdAt }, now)}d silent`
+          : state === "awaiting_effective" && effective
+            ? `eff ${format(parseISO(effective), "MMM d")}`
+            : undefined;
+
+      const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);
+      const contractStatus = contract?.contractingStatusId
+        ? (statusById.get(contract.contractingStatusId) ?? null)
+        : null;
+
+      const touchDays = lastTouchDate
+        ? differenceInCalendarDays(now, parseISO(lastTouchDate))
+        : null;
+      const days =
+        state === "complete"
+          ? null
+          : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt));
+
+      const row: WorkRow = {
+        case: c,
+        state,
+        statusLabel: status?.label ?? "No status",
+        statusColor: status?.color ?? "var(--mp-neutral)",
+        suffix,
+        contractStatus,
+        payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
+        isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
+        lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
+        days,
+        nextTask: openTasks[0] ?? null,
+      };
+      const list = rowsByProvider.get(c.providerId) ?? [];
+      list.push(row);
+      rowsByProvider.set(c.providerId, list);
+    }
+
+    const built: WorkGroup[] = [];
+    for (const provider of providers) {
+      const rows = rowsByProvider.get(provider.id);
+      if (!rows || rows.length === 0) continue;
+      rows.sort((a, b) => {
+        if (a.isPreCred !== b.isPreCred) return a.isPreCred ? 1 : -1;
+        return severityRank(a.state) - severityRank(b.state) || (b.days ?? -1) - (a.days ?? -1);
+      });
+      const openRows = rows.filter((r) => r.state !== "complete");
+      const nonPreCred = rows.filter((r) => !r.isPreCred);
+      const worst = worstActionState(openRows.map((r) => r.state)) ?? "complete";
+      built.push({
+        provider,
+        rows,
+        openRows,
+        worst,
+        worstCount: openRows.filter((r) => r.state === worst).length,
+        inNetwork: nonPreCred.filter((r) => r.statusLabel === "In-Network").length,
+        denominator: nonPreCred.length,
+        oldestDays: openRows.reduce<number | null>(
+          (max, r) => (r.days !== null && (max === null || r.days > max) ? r.days : max),
+          null,
+        ),
+      });
+    }
+    built.sort(
+      (a, b) =>
+        severityRank(a.worst) - severityRank(b.worst) ||
+        a.provider.lastName.localeCompare(b.provider.lastName),
+    );
+    return built;
   }, [
     providersQ.data,
-    effectiveSort.key,
-    effectiveSort.dir,
-    groupById,
-    coordinatorById,
-    casesByProvider,
+    casesQ.data,
+    tasksQ.data,
+    contractsQ.data,
+    payersQ.data,
+    statusConfigsQ.data,
+    lastTouchQ.data,
   ]);
 
-  const resetKey = `${effectiveSort.key}|${effectiveSort.dir}|${JSON.stringify(filters)}`;
-  const { visible, hasMore, loadingMore, sentinelRef, total } = useInfiniteRows({
-    items: providers,
-    resetKey,
-  });
+  const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
+  const chips = [
+    { id: "all", label: "All open cases", n: openRowsAll.length },
+    {
+      id: "needs",
+      label: "Needs your action",
+      n: openRowsAll.filter((r) => CHIP_STATES.needs.includes(r.state)).length,
+      warn: true,
+    },
+    {
+      id: "inprog",
+      label: "In progress",
+      n: openRowsAll.filter((r) => CHIP_STATES.inprog.includes(r.state)).length,
+    },
+    {
+      id: "awaiting",
+      label: "Awaiting effective date",
+      n: openRowsAll.filter((r) => CHIP_STATES.awaiting.includes(r.state)).length,
+    },
+  ];
 
-  const visibleCount = COLUMN_DEFS.filter((c) => visibleCols[c.key]).length;
+  const visibleGroups = useMemo(() => {
+    if (chip === "all") return groups;
+    const states = CHIP_STATES[chip];
+    return groups
+      .map((g) => ({ ...g, rows: g.rows.filter((r) => states.includes(r.state)) }))
+      .filter((g) => g.rows.length > 0);
+  }, [groups, chip]);
+
+  const totalProviders = groups.length;
+  const totalOpen = openRowsAll.length;
+
+  function caseRow(row: WorkRow) {
+    const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
+    const pills = (
+      <>
+        <StatusPill label={row.statusLabel} color={row.statusColor} suffix={row.suffix} />
+        {row.contractStatus ? (
+          <span title="Group contract">
+            <StatusPill label={row.contractStatus.label} color={row.contractStatus.color} />
+          </span>
+        ) : null}
+      </>
+    );
+    const daysCell =
+      row.days === null ? null : (
+        <span
+          className={`tabular-nums text-[var(--mp-text-sm)] ${
+            row.state === "stalled"
+              ? "font-semibold text-[color:var(--mp-danger)]"
+              : "text-[color:var(--mp-ink-secondary)]"
+          }`}
+        >
+          {row.days}d
+        </span>
+      );
+    const payerCell = row.isPreCred ? (
+      <span className="flex items-center gap-2 min-w-0">
+        <span className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-muted px-2 py-0.5 text-[var(--mp-text-2xs)] font-semibold uppercase tracking-wide text-[color:var(--mp-ink-secondary)]">
+          Pre-credentialing
+        </span>
+        <span className="truncate text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+          {row.payerName}
+        </span>
+      </span>
+    ) : (
+      <span className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+        {row.payerName}
+      </span>
+    );
+
+    return (
+      <div
+        className="cursor-pointer"
+        onClick={openCase}
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") openCase();
+        }}
+      >
+        {/* Desktop row */}
+        <div className="hidden md:flex items-center gap-3">
+          <div className="flex-1 min-w-0">{payerCell}</div>
+          <div className="flex items-center gap-2">{pills}</div>
+          <span className="w-16 text-right text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            {row.lastTouchLabel}
+          </span>
+          <span className="w-10 text-right">{daysCell}</span>
+          <span className="w-32 flex justify-end" onClick={(e) => e.stopPropagation()}>
+            {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
+          </span>
+        </div>
+        {/* Mobile card */}
+        <div className="md:hidden space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            {payerCell}
+            {daysCell}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">{pills}</div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              Last touch {row.lastTouchLabel}
+            </span>
+            <span onClick={(e) => e.stopPropagation()}>
+              {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function groupHeader(g: WorkGroup) {
+    const badgeLabel =
+      g.worst === "on_track" || g.worst === "complete"
+        ? BADGE_NOUN[g.worst]
+        : `${g.worstCount} ${BADGE_NOUN[g.worst]}`;
+    const openProvider = () => navigate({ to: "/providers/$id", params: { id: g.provider.id } });
+    return (
+      <div className="flex flex-1 min-w-0 items-center gap-3">
+        <span className="w-7 h-7 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-primary)] flex-shrink-0">
+          {initialsOf(g.provider)}
+        </span>
+        <span className="min-w-0 flex items-baseline gap-1.5">
+          <span
+            role="link"
+            tabIndex={0}
+            className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)] hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              openProvider();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                openProvider();
+              }
+            }}
+          >
+            {g.provider.firstName} {g.provider.lastName}
+          </span>
+          {g.provider.credentials ? (
+            <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              {g.provider.credentials}
+            </span>
+          ) : null}
+        </span>
+        <span className="hidden lg:inline text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+          {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
+        </span>
+        <span className="hidden sm:flex items-center gap-2 ml-auto">
+          <span className="w-20">
+            <ProgressBar value={g.inNetwork} max={g.denominator} />
+          </span>
+          <span className="tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            {g.inNetwork} of {g.denominator} in-network
+          </span>
+        </span>
+        <ActionBadge tone={BADGE_TONE[g.worst]} text={badgeLabel} />
+        {g.oldestDays !== null ? (
+          <span className="hidden sm:inline tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+            {g.oldestDays}d oldest
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto">
       <PageHeader
         title="Providers"
+        description={`${totalProviders} providers · ${totalOpen} open cases`}
         actions={
-          <span className="text-[13px] text-muted-foreground tabular-nums">
-            {providersQ.isSuccess ? `${total} providers` : null}
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card p-0.5">
+              {(["comfortable", "compact"] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={density === d}
+                  onClick={() => setDensity(d)}
+                  className={`rounded-[4px] px-2.5 py-1 text-[var(--mp-text-xs)] font-medium capitalize transition-colors ${
+                    density === d
+                      ? "bg-mp-primary text-white"
+                      : "text-[color:var(--mp-ink-secondary)] hover:bg-mp-muted"
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+            {canWrite ? (
+              <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
+                <Plus className="w-4 h-4" />
+                New Provider
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name or NPI..."
-            className="pl-9 h-9"
-          />
-        </div>
-
-        <Select value={groupId} onValueChange={setGroupId}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All Groups" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Groups</SelectItem>
-            {(groupsQ.data ?? []).map((g) => (
-              <SelectItem key={g.id} value={g.id}>
-                {g.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={state} onValueChange={setState}>
-          <SelectTrigger className="h-9 w-[140px]">
-            <SelectValue placeholder="All States" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All States</SelectItem>
-            {states.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={payerId} onValueChange={setPayerId}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All Payers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Payers</SelectItem>
-            {(payersQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Statuses</SelectItem>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="ml-auto flex items-center gap-2">
-          <ColumnPicker
-            columns={COLUMN_DEFS}
-            visible={visibleCols}
-            onChange={setVisible}
-            lockedKeys={["provider"]}
-          />
-
-          {canEdit ? (
-            <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
-              <Plus className="h-4 w-4" />
-              Add provider
-            </Button>
-          ) : null}
-        </div>
+      <div className="mb-4">
+        <SummaryChips chips={chips} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 
-      <div className="border border-border rounded-md">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
-            <tr className="border-b border-border">
-              {visibleCols.provider && (
-                <SortableTh
-                  label="Provider"
-                  sortKey="provider"
-                  sort={effectiveSort}
-                  onSort={cycleSort}
-                />
-              )}
-              {visibleCols.group && (
-                <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={cycleSort} />
-              )}
-              {visibleCols.status && (
-                <SortableTh
-                  label="Status"
-                  sortKey="status"
-                  sort={effectiveSort}
-                  onSort={cycleSort}
-                />
-              )}
-              {visibleCols.state && (
-                <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />
-              )}
-              {visibleCols.payerStatuses && <StaticTh>Payer Statuses</StaticTh>}
-              {visibleCols.caqh && <StaticTh className="text-right">CAQH</StaticTh>}
-              {visibleCols.coordinator && (
-                <SortableTh
-                  label="Coordinator"
-                  sortKey="coordinator"
-                  sort={effectiveSort}
-                  onSort={cycleSort}
-                />
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {providersQ.isLoading ? (
-              <TableSkeletonRows rows={8} cols={visibleCount} />
-            ) : providersQ.isError ? (
-              <tr>
-                <td colSpan={visibleCount} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load providers.</div>
-                  <Button variant="outline" size="sm" onClick={() => providersQ.refetch()}>
-                    Retry
-                  </Button>
-                </td>
-              </tr>
-            ) : providers.length === 0 ? (
-              <tr>
-                <td colSpan={visibleCount} className="px-3 py-12 text-center">
-                  <EmptyState
-                    message={
-                      hasActiveFilter ? "No providers match these filters" : "No providers yet"
-                    }
-                    action={
-                      hasActiveFilter ? (
-                        <Button variant="outline" size="sm" onClick={clearFilters}>
-                          Clear filters
-                        </Button>
-                      ) : canEdit ? (
-                        <Button size="sm" onClick={() => navigate({ to: "/providers/new" })}>
-                          Add provider
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </td>
-              </tr>
-            ) : (
-              visible.map((p) => (
-                <ProviderRow
-                  key={p.id}
-                  provider={p}
-                  group={p.groupId ? (groupById.get(p.groupId) ?? null) : null}
-                  cases={casesByProvider.get(p.id) ?? []}
-                  payerById={payerById}
-                  statusById={statusById}
-                  coordinatorName={coordinatorNameFor(p)}
-                  visibleCols={visibleCols}
-                  onOpen={() => navigate({ to: "/providers/$id", params: { id: p.id } })}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
-        <InfiniteScrollSentinel
-          sentinelRef={sentinelRef}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load the work view. Refresh to retry.
+        </div>
+      ) : loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
+          ))}
+        </div>
+      ) : visibleGroups.length === 0 ? (
+        <EmptyState
+          message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
+          description={
+            chip === "all"
+              ? "Create a provider and open cases to start tracking."
+              : "No open cases match this filter right now."
+          }
         />
-      </div>
+      ) : (
+        <GroupedList
+          density={density}
+          groups={visibleGroups.map((g) => ({
+            id: g.provider.id,
+            title: `${g.provider.firstName} ${g.provider.lastName}`,
+            count: g.rows.length,
+            headerContent: groupHeader(g),
+            rows: g.rows.map((row) => caseRow(row)),
+          }))}
+        />
+      )}
     </div>
-  );
-}
-
-interface RowProps {
-  provider: Provider;
-  group: ProviderGroup | null;
-  cases: CredentialCase[];
-  payerById: Map<string, Payer>;
-  statusById: Map<string, StatusConfig>;
-  coordinatorName: string | null;
-  visibleCols: Record<ColumnKey, boolean>;
-  onOpen: () => void;
-}
-
-function ProviderRow({
-  provider,
-  group,
-  cases,
-  payerById,
-  statusById,
-  coordinatorName,
-  visibleCols,
-  onOpen,
-}: RowProps) {
-  const isTerminated = provider.status === "terminated";
-
-  const caqh = (() => {
-    if (!provider.caqhLastAttestedDate) {
-      return <span className="text-muted-foreground">—</span>;
-    }
-    const days = differenceInDays(new Date(), parseISO(provider.caqhLastAttestedDate));
-    const cls =
-      days >= 110
-        ? "text-[#DC2626] font-medium"
-        : days >= 90
-          ? "text-[#D97706] font-medium"
-          : "text-foreground";
-    return <span className={`${cls} tabular-nums`}>{days}d</span>;
-  })();
-
-  return (
-    <tr
-      onClick={onOpen}
-      className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? "opacity-60" : ""}`}
-    >
-      {visibleCols.provider && (
-        <td className="px-3 py-1.5">
-          <div className="font-medium text-foreground leading-tight">
-            {provider.firstName} {provider.lastName}
-            {provider.credentials ? (
-              <span className="text-muted-foreground font-normal">, {provider.credentials}</span>
-            ) : null}
-          </div>
-          <div className="text-[12px] text-muted-foreground tabular-nums leading-tight">
-            {provider.npi ?? "—"}
-          </div>
-        </td>
-      )}
-      {visibleCols.group && (
-        <td className="px-3 whitespace-nowrap">
-          {group ? (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border border-border bg-muted text-foreground">
-              {group.name}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </td>
-      )}
-      {visibleCols.status && (
-        <td className="px-3 py-1.5">
-          {provider.status ? (
-            <StatusPill
-              status={STATUS_COLOR[provider.status]}
-              label={STATUS_LABEL[provider.status]}
-            />
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </td>
-      )}
-      {visibleCols.state && <td className="px-3 text-foreground">{provider.homeState ?? "—"}</td>}
-      {visibleCols.payerStatuses && (
-        <td className="px-3 py-1.5">
-          {isTerminated ? (
-            <StatusPill status="gray" label="Terminated" />
-          ) : cases.length === 0 ? (
-            <span className="text-muted-foreground">—</span>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {cases.map((c) => {
-                const payer = payerById.get(c.payerId);
-                const sc = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
-                return (
-                  <StatusPill
-                    key={c.id}
-                    status={hexToStatusColor(sc?.color)}
-                    label={payer?.name ?? "Payer"}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </td>
-      )}
-      {visibleCols.caqh && <td className="px-3 text-right">{caqh}</td>}
-      {visibleCols.coordinator && (
-        <td className="px-3 text-foreground">{coordinatorName ?? "—"}</td>
-      )}
-    </tr>
   );
 }

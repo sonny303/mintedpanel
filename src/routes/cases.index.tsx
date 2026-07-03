@@ -5,6 +5,7 @@ import React, { useDeferredValue, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInDays, parseISO } from "date-fns";
 import { Search } from "lucide-react";
+import { STALLED_AFTER_DAYS } from "@/lib/actionState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,7 +211,7 @@ function CasesListPage() {
       const daysSinceAnchor = stalledAnchor
         ? differenceInDays(new Date(), parseISO(stalledAnchor))
         : null;
-      const isStalled = daysSinceAnchor === null ? false : daysSinceAnchor >= 14;
+      const isStalled = daysSinceAnchor === null ? false : daysSinceAnchor >= STALLED_AFTER_DAYS;
       return {
         c,
         provider,
