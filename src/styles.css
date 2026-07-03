@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "./styles/tokens.css";
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
@@ -12,8 +13,8 @@
 
 @theme inline {
   --font-sans:
-    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    "Instrument Sans", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono:
     "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -57,6 +58,25 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
+  /* M1 token utilities (values in styles/tokens.css) */
+  --color-mp-sidebar: var(--mp-sidebar);
+  --color-mp-app: var(--mp-app);
+  --color-mp-card: var(--mp-card);
+  --color-mp-border: var(--mp-border);
+  --color-mp-muted: var(--mp-muted);
+  --color-mp-primary: var(--mp-primary);
+  --color-mp-primary-hover: var(--mp-primary-hover);
+  --color-mp-primary-tint: var(--mp-primary-tint);
+  --color-mp-ink: var(--mp-ink);
+  --color-mp-ink-secondary: var(--mp-ink-secondary);
+  --color-mp-ink-faint: var(--mp-ink-faint);
+  --color-mp-ok: var(--mp-ok);
+  --color-mp-info: var(--mp-info);
+  --color-mp-warn: var(--mp-warn);
+  --color-mp-danger: var(--mp-danger);
+  --color-mp-pending: var(--mp-pending);
+  --color-mp-neutral: var(--mp-neutral);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -68,33 +88,34 @@
 }
 
 :root {
-  --background: #fdfdfc;
-  --foreground: #1f2937;
-  --card: #ffffff;
-  --card-foreground: #1f2937;
-  --popover: #ffffff;
-  --popover-foreground: #1f2937;
-  --primary: #1b4d3e;
+  /* Base palette resolved from the M1 token sheet (styles/tokens.css) */
+  --background: var(--mp-app);
+  --foreground: var(--mp-ink);
+  --card: var(--mp-card);
+  --card-foreground: var(--mp-ink);
+  --popover: var(--mp-card);
+  --popover-foreground: var(--mp-ink);
+  --primary: var(--mp-primary);
   --primary-foreground: #ffffff;
   --secondary: #ffffff;
-  --secondary-foreground: #1f2937;
-  --muted: #f5f4f1;
-  --muted-foreground: #6b7280;
-  --accent: #f5f4f1;
-  --accent-foreground: #1f2937;
-  --destructive: #dc2626;
+  --secondary-foreground: var(--mp-ink);
+  --muted: var(--mp-muted);
+  --muted-foreground: var(--mp-ink-secondary);
+  --accent: var(--mp-muted);
+  --accent-foreground: var(--mp-ink);
+  --destructive: var(--mp-danger);
   --destructive-foreground: #ffffff;
-  --border: #e8e5e0;
-  --input: #e8e5e0;
-  --ring: #1b4d3e;
-  --text-muted: #9ca3af;
+  --border: var(--mp-border);
+  --input: var(--mp-border);
+  --ring: var(--mp-primary);
+  --text-muted: var(--mp-ink-faint);
 
-  --status-gray: #9ca3af;
-  --status-blue: #2563eb;
-  --status-amber: #d97706;
-  --status-red: #dc2626;
-  --status-teal: #0891b2;
-  --status-green: #059669;
+  --status-gray: var(--mp-neutral);
+  --status-blue: var(--mp-info);
+  --status-amber: var(--mp-warn);
+  --status-red: var(--mp-danger);
+  --status-teal: var(--mp-pending);
+  --status-green: var(--mp-ok);
 
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -127,7 +148,7 @@
   }
 
   *:focus-visible {
-    outline: 2px solid #1b4d3e;
+    outline: 2px solid var(--mp-primary);
     outline-offset: 2px;
   }
 }

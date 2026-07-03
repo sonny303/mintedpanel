@@ -115,11 +115,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      // Instrument Sans is self-hosted from public/fonts (C1-era rule: no Google Fonts CDN).
       {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap",
+        rel: "preload",
+        href: "/fonts/instrument-sans-latin-400-normal.woff2",
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "preload",
+        href: "/fonts/instrument-sans-latin-600-normal.woff2",
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
       },
       { rel: "stylesheet", href: appCss },
     ],
@@ -149,7 +158,10 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAuthRoute = pathname === "/login";
   const isRootRoute = pathname === "/";
-  const isPublicRoute = isAuthRoute || isRootRoute;
+  // Dev-only demo routes (env-flag-gated) skip the session redirect but still
+  // render inside the shell, so shell + primitives are verifiable without auth.
+  const isDevRoute = pathname.startsWith("/dev");
+  const isPublicRoute = isAuthRoute || isRootRoute || isDevRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
@@ -204,7 +216,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isPublicRoute ? (
+      {isAuthRoute || isRootRoute ? (
         <Outlet />
       ) : (
         <AppShell>
