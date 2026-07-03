@@ -11,12 +11,15 @@ import {
 } from '@/services/tasks';
 import type { TaskStatus } from '@/types';
 
+const THIRTY_SECONDS = 30_000;
+
 export function useTasks(filters: TaskFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
     queryKey: queryKeys.tasks(orgId, filters),
     queryFn: () => getTasks(filters),
     enabled: orgId !== 'no-org',
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -26,6 +29,7 @@ export function useTask(id: string | undefined) {
     queryKey: queryKeys.task(orgId, id ?? ''),
     queryFn: () => getTask(id as string),
     enabled: orgId !== 'no-org' && Boolean(id),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
