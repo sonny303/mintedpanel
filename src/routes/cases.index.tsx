@@ -1,709 +1,437 @@
-// Cases list at /cases. One row per credentialing case (provider + payer +
-// state) with filters, sortable headers, column picker, persisted prefs,
-// infinite scroll, and a summary strip.
-import React, { useDeferredValue, useMemo, useState } from "react";
+// Payer-grouped work view at /cases (M3). Same data and engine as the M2
+// Providers view, pivoted: one group per payer, provider rows inside. Chip
+// counts flow through the shared workView helpers so the two pages can never
+// disagree. Read-and-navigate only; the case detail page is untouched.
+import React, { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInDays, parseISO } from "date-fns";
-import { Search } from "lucide-react";
-import { STALLED_AFTER_DAYS } from "@/lib/actionState";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
-import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
-import {
-  ColumnPicker,
-  InfiniteScrollSentinel,
-  SortableTh,
-  compareForSort,
-  useInfiniteRows,
-} from "@/components/shared/TableToolkit";
-import { useTablePrefs } from "@/hooks/useTablePrefs";
-import { useDebounced } from "@/hooks/useDebounced";
-import { useCases } from "@/hooks/useCases";
+import { SummaryChips } from "@/components/triage/SummaryChips";
+import { GroupedList, type GroupedListDensity } from "@/components/triage/GroupedList";
+import { StatusPill } from "@/components/triage/StatusPill";
+import { ActionBadge, type ActionBadgeTone } from "@/components/triage/ActionBadge";
+import { ProgressBar } from "@/components/triage/ProgressBar";
+import { RowCta } from "@/components/triage/RowCta";
 import { useProviders } from "@/hooks/useProviders";
+import { useCases } from "@/hooks/useCases";
+import { useTasks } from "@/hooks/useTasks";
 import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { useProviderGroups, useCoordinators } from "@/hooks/useLookups";
-import type {
-  Contract,
-  CredentialCase,
-  Payer,
-  Profile,
-  Provider,
-  ProviderGroup,
-  StatusConfig,
-} from "@/types";
+import { getActionState, worstActionState, daysSilent, type ActionState } from "@/lib/actionState";
+import { CHIP_STATES, chipCounts, type ChipId } from "@/lib/workView";
+import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/cases/")({
-  component: CasesListPage,
+  component: CasesWorkView,
 });
 
-const ALL = "__all__";
+const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
+const DENSITY_STORAGE_KEY = "mp.cases.density";
 
-type ColumnKey =
-  | "provider"
-  | "payer"
-  | "state"
-  | "credentialing"
-  | "groupContract"
-  | "lastTouch"
-  | "daysOpen"
-  | "coordinator";
-
-const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
-  { key: "provider", label: "Provider" },
-  { key: "payer", label: "Payer" },
-  { key: "state", label: "State" },
-  { key: "credentialing", label: "Credentialing" },
-  { key: "groupContract", label: "Group Contract" },
-  { key: "lastTouch", label: "Last touch" },
-  { key: "daysOpen", label: "Days open" },
-  { key: "coordinator", label: "Coordinator" },
-];
-const ALL_KEYS = COLUMN_DEFS.map((c) => c.key);
-const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
-  provider: true,
-  payer: true,
-  state: true,
-  credentialing: true,
-  groupContract: true,
-  lastTouch: true,
-  daysOpen: true,
-  coordinator: true,
+// Placeholder tone mapping pending the design sheet's badge treatments.
+const BADGE_TONE: Record<ActionState, ActionBadgeTone> = {
+  needs_action: "warn",
+  blocked: "danger",
+  stalled: "danger",
+  awaiting_effective: "pending",
+  on_track: "ok",
+  complete: "neutral",
 };
 
-interface EnrichedCase {
-  c: CredentialCase;
-  provider: Provider | null;
-  group: ProviderGroup | null;
-  payer: Payer | null;
-  credStatus: StatusConfig | null;
+const BADGE_NOUN: Record<ActionState, string> = {
+  needs_action: "needs action",
+  blocked: "blocked",
+  stalled: "stalled",
+  awaiting_effective: "awaiting effective",
+  on_track: "On track",
+  complete: "Complete",
+};
+
+interface CaseRow {
+  case: CredentialCase;
+  state: ActionState;
+  statusLabel: string;
+  statusColor: string;
+  suffix: string | undefined;
   contractStatus: StatusConfig | null;
-  coordinator: Profile | null;
-  daysOpen: number | null;
-  lastTouchDate: string | null;
-  daysSinceTouch: number | null;
-  isStalled: boolean;
+  provider: Provider | null;
+  lastTouchLabel: string;
+  days: number | null;
+  nextTask: Task | null;
 }
 
-function CasesListPage() {
+interface PayerGroup {
+  payerId: string;
+  payerName: string;
+  isPreCred: boolean;
+  rows: CaseRow[];
+  openRows: CaseRow[];
+  worst: ActionState;
+  worstCount: number;
+  inNetwork: number;
+}
+
+function loadDensity(): GroupedListDensity {
+  if (typeof window === "undefined") return "comfortable";
+  return window.localStorage.getItem(DENSITY_STORAGE_KEY) === "compact" ? "compact" : "comfortable";
+}
+
+const severityRank = (s: ActionState) =>
+  ["needs_action", "blocked", "stalled", "awaiting_effective", "on_track", "complete"].indexOf(s);
+
+function CasesWorkView() {
   const navigate = useNavigate();
-
-  const [search, setSearch] = useState("");
-  const [payerId, setPayerId] = useState<string>(ALL);
-  const [stateF, setStateF] = useState<string>(ALL);
-  const [credStatusId, setCredStatusId] = useState<string>(ALL);
-  const [contractStatusId, setContractStatusId] = useState<string>(ALL);
-  const [coordinatorId, setCoordinatorId] = useState<string>(ALL);
-  const [stalled, setStalled] = useState(false);
-
-  const {
-    state: prefs,
-    setVisible,
-    cycleSort,
-  } = useTablePrefs<ColumnKey>({
-    pageKey: "cases",
-    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: "provider", dir: "asc" } },
-    allKeys: ALL_KEYS,
-  });
-  const visibleCols = prefs.visibleCols;
-  // Local override so header clicks always reorder immediately, even before the
-  // persisted prefs row loads. Persistence still runs via cycleSort in useTablePrefs.
-  const [localSort, setLocalSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const effectiveSort = localSort ?? prefs.sort ?? { key: "provider", dir: "asc" as const };
-
-  const handleSort = (key: string) => {
-    setLocalSort((cur) => {
-      const active = cur ?? prefs.sort ?? { key: "provider", dir: "asc" as const };
-      const nextDir: "asc" | "desc" = active.key === key && active.dir === "asc" ? "desc" : "asc";
-      return { key, dir: nextDir };
-    });
-    cycleSort(key);
-  };
-
-  const debouncedSearch = useDebounced(search, 300);
-  const deferredSearch = useDeferredValue(debouncedSearch);
-
-  const casesQ = useCases({});
-  const providersQ = useProviders({});
+  const providersQ = useProviders();
+  const casesQ = useCases();
+  const tasksQ = useTasks();
   const contractsQ = useContracts();
   const payersQ = usePayers();
-  const credStatusesQ = useStatusConfigs("credentialing");
-  const contractStatusesQ = useStatusConfigs("contracting");
-  const groupsQ = useProviderGroups();
-  const coordinatorsQ = useCoordinators();
-  const lastTouchesQ = useLastTouchDates();
+  const statusConfigsQ = useStatusConfigs();
+  const lastTouchQ = useLastTouchDates();
 
-  const providerById = useMemo(() => {
-    const m = new Map<string, Provider>();
-    (providersQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [providersQ.data]);
+  const [chip, setChip] = useState<ChipId>("all");
+  const [density, setDensityState] = useState<GroupedListDensity>(loadDensity);
 
-  const groupById = useMemo(() => {
-    const m = new Map<string, ProviderGroup>();
-    (groupsQ.data ?? []).forEach((g) => m.set(g.id, g));
-    return m;
-  }, [groupsQ.data]);
+  function setDensity(next: GroupedListDensity) {
+    setDensityState(next);
+    try {
+      window.localStorage.setItem(DENSITY_STORAGE_KEY, next);
+    } catch {
+      // storage unavailable — session-local toggle still works
+    }
+  }
 
-  const payerById = useMemo(() => {
-    const m = new Map<string, Payer>();
-    (payersQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [payersQ.data]);
+  const loading =
+    providersQ.isLoading ||
+    casesQ.isLoading ||
+    tasksQ.isLoading ||
+    contractsQ.isLoading ||
+    payersQ.isLoading ||
+    statusConfigsQ.isLoading;
 
-  const statusById = useMemo(() => {
-    const m = new Map<string, StatusConfig>();
-    [...(credStatusesQ.data ?? []), ...(contractStatusesQ.data ?? [])].forEach((s) =>
-      m.set(s.id, s),
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
+
+  const groups: PayerGroup[] = useMemo(() => {
+    const cases = casesQ.data ?? [];
+    const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
+    const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
+    const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
+    const lastTouchByCase = lastTouchQ.data;
+
+    const openTasksByCase = new Map<string, Task[]>();
+    for (const t of tasksQ.data ?? []) {
+      if (!t.caseId || t.status === "completed") continue;
+      const list = openTasksByCase.get(t.caseId) ?? [];
+      list.push(t);
+      openTasksByCase.set(t.caseId, list);
+    }
+    for (const list of openTasksByCase.values()) {
+      list.sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"),
+      );
+    }
+
+    const contractByKey = new Map(
+      (contractsQ.data ?? []).map((c) => [`${c.groupId}|${c.payerId}|${c.state}`, c]),
     );
-    return m;
-  }, [credStatusesQ.data, contractStatusesQ.data]);
 
-  const coordinatorById = useMemo(() => {
-    const m = new Map<string, Profile>();
-    (coordinatorsQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [coordinatorsQ.data]);
+    const now = new Date();
+    const rowsByPayer = new Map<string, CaseRow[]>();
 
-  const contractByKey = useMemo(() => {
-    const m = new Map<string, Contract>();
-    (contractsQ.data ?? []).forEach((ct) => {
-      if (!ct.payerId) return;
-      m.set(`${ct.groupId ?? ""}|${ct.payerId}|${ct.state}`, ct);
-    });
-    return m;
-  }, [contractsQ.data]);
-
-  const lastTouchByCase = lastTouchesQ.data;
-
-  const enriched: EnrichedCase[] = useMemo(() => {
-    return (casesQ.data ?? []).map((c) => {
-      const provider = providerById.get(c.providerId) ?? null;
-      const group = c.groupId ? (groupById.get(c.groupId) ?? null) : null;
-      const payer = payerById.get(c.payerId) ?? null;
-      const credStatus = c.credentialingStatusId
+    for (const c of cases) {
+      const status = c.credentialingStatusId
         ? (statusById.get(c.credentialingStatusId) ?? null)
         : null;
-      const contract = contractByKey.get(`${c.groupId ?? ""}|${c.payerId}|${c.state}`);
+      const openTasks = openTasksByCase.get(c.id) ?? [];
+      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
+
+      const state = getActionState({
+        statusLabel: status?.label ?? null,
+        actionBucket: status?.actionBucket ?? null,
+        openTaskDueDates: openTasks.map((t) => t.dueDate),
+        lastTouchDate,
+        createdAt: c.createdAt,
+        confirmedEffectiveDate: c.confirmedEffectiveDate,
+        expectedEffectiveDate: c.expectedEffectiveDate,
+        now,
+      });
+
+      const effective = c.confirmedEffectiveDate ?? c.expectedEffectiveDate;
+      const suffix =
+        state === "stalled"
+          ? `${daysSilent({ lastTouchDate, createdAt: c.createdAt }, now)}d silent`
+          : state === "awaiting_effective" && effective
+            ? `eff ${format(parseISO(effective), "MMM d")}`
+            : undefined;
+
+      const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);
       const contractStatus = contract?.contractingStatusId
         ? (statusById.get(contract.contractingStatusId) ?? null)
         : null;
-      const coordinator = c.assignedTo ? (coordinatorById.get(c.assignedTo) ?? null) : null;
-      const daysOpen = c.submittedDate
-        ? differenceInDays(new Date(), parseISO(c.submittedDate))
+
+      const touchDays = lastTouchDate
+        ? differenceInCalendarDays(now, parseISO(lastTouchDate))
         : null;
-      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
-      const daysSinceTouch = lastTouchDate
-        ? differenceInDays(new Date(), parseISO(lastTouchDate))
-        : null;
-      const stalledAnchor = lastTouchDate ?? c.createdAt ?? null;
-      const daysSinceAnchor = stalledAnchor
-        ? differenceInDays(new Date(), parseISO(stalledAnchor))
-        : null;
-      const isStalled = daysSinceAnchor === null ? false : daysSinceAnchor >= STALLED_AFTER_DAYS;
-      return {
-        c,
-        provider,
-        group,
-        payer,
-        credStatus,
+      const days =
+        state === "complete"
+          ? null
+          : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt));
+
+      const row: CaseRow = {
+        case: c,
+        state,
+        statusLabel: status?.label ?? "No status",
+        statusColor: status?.color ?? "var(--mp-neutral)",
+        suffix,
         contractStatus,
-        coordinator,
-        daysOpen,
-        lastTouchDate,
-        daysSinceTouch,
-        isStalled,
+        provider: providerById.get(c.providerId) ?? null,
+        lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
+        days,
+        nextTask: openTasks[0] ?? null,
       };
+      const list = rowsByPayer.get(c.payerId) ?? [];
+      list.push(row);
+      rowsByPayer.set(c.payerId, list);
+    }
+
+    const built: PayerGroup[] = [];
+    for (const [payerId, rows] of rowsByPayer) {
+      const payerName = payerById.get(payerId)?.name ?? "Unknown payer";
+      const isPreCred = payerName === PRE_CRED_PAYER_NAME;
+      rows.sort(
+        (a, b) => severityRank(a.state) - severityRank(b.state) || (b.days ?? -1) - (a.days ?? -1),
+      );
+      const openRows = rows.filter((r) => r.state !== "complete");
+      built.push({
+        payerId,
+        payerName: isPreCred ? "Pre-credentialing" : payerName,
+        isPreCred,
+        rows,
+        openRows,
+        worst: worstActionState(openRows.map((r) => r.state)) ?? "complete",
+        worstCount: 0,
+        inNetwork: rows.filter((r) => r.statusLabel === "In-Network").length,
+      });
+    }
+    for (const g of built) {
+      g.worstCount = g.openRows.filter((r) => r.state === g.worst).length;
+    }
+    built.sort((a, b) => {
+      // Pre-cred group pinned last, always.
+      if (a.isPreCred !== b.isPreCred) return a.isPreCred ? 1 : -1;
+      return (
+        severityRank(a.worst) - severityRank(b.worst) || a.payerName.localeCompare(b.payerName)
+      );
     });
+    return built;
   }, [
+    providersQ.data,
     casesQ.data,
-    providerById,
-    groupById,
-    payerById,
-    statusById,
-    contractByKey,
-    coordinatorById,
-    lastTouchByCase,
+    tasksQ.data,
+    contractsQ.data,
+    payersQ.data,
+    statusConfigsQ.data,
+    lastTouchQ.data,
   ]);
 
-  const states = useMemo(() => {
-    const set = new Set<string>();
-    enriched.forEach((e) => e.c.state && set.add(e.c.state));
-    return Array.from(set).sort();
-  }, [enriched]);
+  const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
+  const counts = chipCounts(openRowsAll.map((r) => r.state));
+  const chips = [
+    { id: "all", label: "All open cases", n: counts.all },
+    { id: "needs", label: "Needs your action", n: counts.needs, warn: true },
+    { id: "inprog", label: "In progress", n: counts.inprog },
+    { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
+  ];
 
-  const summary = useMemo(() => {
-    const total = enriched.length;
-    let inProgress = 0;
-    let awaiting = 0;
-    let denied = 0;
-    for (const e of enriched) {
-      const label = (e.credStatus?.label ?? "").toLowerCase();
-      if (
-        label.includes("progress") ||
-        label.includes("submitted") ||
-        label.includes("review") ||
-        label.includes("pending")
-      ) {
-        inProgress += 1;
-      }
-      if (label.includes("approved") || label.includes("await") || label.includes("effective")) {
-        awaiting += 1;
-      }
-      if (label.includes("denied") || label.includes("appeal") || label.includes("reject")) {
-        denied += 1;
-      }
-    }
-    return { total, inProgress, awaiting, denied };
-  }, [enriched]);
+  const visibleGroups = useMemo(() => {
+    if (chip === "all") return groups;
+    const states = CHIP_STATES[chip];
+    return groups
+      .map((g) => ({ ...g, rows: g.rows.filter((r) => states.includes(r.state)) }))
+      .filter((g) => g.rows.length > 0);
+  }, [groups, chip]);
 
-  const queryStr = deferredSearch.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    return enriched.filter((e) => {
-      if (queryStr) {
-        const name = e.provider
-          ? `${e.provider.firstName} ${e.provider.lastName}`.toLowerCase()
-          : "";
-        if (!name.includes(queryStr)) return false;
-      }
-      if (payerId !== ALL && e.c.payerId !== payerId) return false;
-      if (stateF !== ALL && e.c.state !== stateF) return false;
-      if (credStatusId !== ALL && e.c.credentialingStatusId !== credStatusId) return false;
-      if (contractStatusId !== ALL) {
-        if (!e.contractStatus || e.contractStatus.id !== contractStatusId) return false;
-      }
-      if (coordinatorId !== ALL && e.c.assignedTo !== coordinatorId) return false;
-      if (stalled && !e.isStalled) return false;
-      return true;
-    });
-  }, [enriched, queryStr, payerId, stateF, credStatusId, contractStatusId, coordinatorId, stalled]);
+  function caseRow(row: CaseRow) {
+    const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
+    const providerName = row.provider
+      ? `${row.provider.firstName} ${row.provider.lastName}`
+      : "Unknown provider";
+    const pills = (
+      <>
+        <StatusPill label={row.statusLabel} color={row.statusColor} suffix={row.suffix} />
+        {row.contractStatus ? (
+          <span title="Group contract">
+            <StatusPill label={row.contractStatus.label} color={row.contractStatus.color} />
+          </span>
+        ) : null}
+      </>
+    );
+    const daysCell =
+      row.days === null ? null : (
+        <span
+          className={`tabular-nums text-[var(--mp-text-sm)] ${
+            row.state === "stalled"
+              ? "font-semibold text-[color:var(--mp-danger)]"
+              : "text-[color:var(--mp-ink-secondary)]"
+          }`}
+        >
+          {row.days}d
+        </span>
+      );
+    const nameCell = (
+      <span className="min-w-0 flex items-baseline gap-1.5">
+        <span className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+          {providerName}
+        </span>
+        {row.provider?.credentials ? (
+          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            {row.provider.credentials}
+          </span>
+        ) : null}
+        <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          · {row.case.state}
+        </span>
+      </span>
+    );
 
-  function sortValueFor(e: EnrichedCase, key: string): string | number | null {
-    switch (key) {
-      case "provider":
-        return e.provider
-          ? (e.provider.lastName || e.provider.firstName || "").trim() || null
-          : null;
-      case "payer":
-        return e.payer?.name ?? null;
-      case "state":
-        return e.c.state ?? null;
-      case "credentialing":
-        return e.credStatus?.label ?? null;
-      case "groupContract":
-        return e.contractStatus?.label ?? null;
-      case "lastTouch":
-        return e.daysSinceTouch;
-      case "daysOpen":
-        return e.daysOpen;
-      case "coordinator":
-        return e.coordinator?.fullName ?? null;
-      default:
-        return null;
-    }
+    return (
+      <div
+        className="cursor-pointer"
+        onClick={openCase}
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") openCase();
+        }}
+      >
+        {/* Desktop row */}
+        <div className="hidden md:flex items-center gap-3">
+          <div className="flex-1 min-w-0">{nameCell}</div>
+          <div className="flex items-center gap-2">{pills}</div>
+          <span className="w-16 text-right text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            {row.lastTouchLabel}
+          </span>
+          <span className="w-10 text-right">{daysCell}</span>
+          <span className="w-32 flex justify-end" onClick={(e) => e.stopPropagation()}>
+            {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
+          </span>
+        </div>
+        {/* Mobile card */}
+        <div className="md:hidden space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            {nameCell}
+            {daysCell}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">{pills}</div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              Last touch {row.lastTouchLabel}
+            </span>
+            <span onClick={(e) => e.stopPropagation()}>
+              {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const sorted = useMemo(() => {
-    const rows = [...filtered];
-    const { key, dir } = effectiveSort;
-    rows.sort((a, b) => compareForSort(sortValueFor(a, key), sortValueFor(b, key), dir));
-    return rows;
-  }, [filtered, effectiveSort.key, effectiveSort.dir]);
-
-  const resetKey = `${effectiveSort.key}|${effectiveSort.dir}|${queryStr}|${payerId}|${stateF}|${credStatusId}|${contractStatusId}|${coordinatorId}|${stalled}`;
-  const { visible, hasMore, loadingMore, sentinelRef, total } = useInfiniteRows({
-    items: sorted,
-    resetKey,
-  });
-
-  function clearFilters() {
-    setSearch("");
-    setPayerId(ALL);
-    setStateF(ALL);
-    setCredStatusId(ALL);
-    setContractStatusId(ALL);
-    setCoordinatorId(ALL);
-    setStalled(false);
+  function groupHeader(g: PayerGroup) {
+    const badgeLabel =
+      g.worst === "on_track" || g.worst === "complete"
+        ? BADGE_NOUN[g.worst]
+        : `${g.worstCount} ${BADGE_NOUN[g.worst]}`;
+    return (
+      <div className="flex flex-1 min-w-0 items-center gap-3">
+        <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+          {g.payerName}
+        </span>
+        <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+          {g.rows.length} {g.rows.length === 1 ? "case" : "cases"}
+        </span>
+        {!g.isPreCred ? (
+          <span className="hidden sm:flex items-center gap-2 ml-auto">
+            <span className="w-20">
+              <ProgressBar value={g.inNetwork} max={g.rows.length} />
+            </span>
+            <span className="tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+              {g.inNetwork} of {g.rows.length} in-network
+            </span>
+          </span>
+        ) : (
+          <span className="ml-auto" />
+        )}
+        <ActionBadge tone={BADGE_TONE[g.worst]} text={badgeLabel} />
+      </div>
+    );
   }
 
-  const hasActiveFilter =
-    Boolean(queryStr) ||
-    payerId !== ALL ||
-    stateF !== ALL ||
-    credStatusId !== ALL ||
-    contractStatusId !== ALL ||
-    coordinatorId !== ALL ||
-    stalled;
-
-  const visibleCount = COLUMN_DEFS.filter((c) => visibleCols[c.key]).length;
+  const totalPayers = groups.length;
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto">
       <PageHeader
         title="Cases"
+        description={`${totalPayers} payers · ${counts.all} open cases`}
         actions={
-          <span className="text-[13px] text-muted-foreground tabular-nums">
-            {casesQ.isSuccess ? `${total} cases` : null}
-          </span>
+          <div className="flex items-center gap-1 rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card p-0.5">
+            {(["comfortable", "compact"] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                aria-pressed={density === d}
+                onClick={() => setDensity(d)}
+                className={`rounded-[4px] px-2.5 py-1 text-[var(--mp-text-xs)] font-medium capitalize transition-colors ${
+                  density === d
+                    ? "bg-mp-primary text-white"
+                    : "text-[color:var(--mp-ink-secondary)] hover:bg-mp-muted"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
         }
       />
 
-      <SummaryStrip
-        total={summary.total}
-        inProgress={summary.inProgress}
-        awaiting={summary.awaiting}
-        denied={summary.denied}
-      />
-
-      <div className="flex items-center gap-3 mb-4 mt-4 flex-wrap">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search provider name..."
-            className="pl-9 h-9"
-          />
-        </div>
-
-        <Select value={payerId} onValueChange={setPayerId}>
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="All Payers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Payers</SelectItem>
-            {(payersQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={stateF} onValueChange={setStateF}>
-          <SelectTrigger className="h-9 w-[140px]">
-            <SelectValue placeholder="All States" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All States</SelectItem>
-            {states.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={credStatusId} onValueChange={setCredStatusId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Credentialing" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Credentialing</SelectItem>
-            {(credStatusesQ.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={contractStatusId} onValueChange={setContractStatusId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Group Contract" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Group Contract</SelectItem>
-            {(contractStatusesQ.data ?? []).map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={coordinatorId} onValueChange={setCoordinatorId}>
-          <SelectTrigger className="h-9 w-[180px]">
-            <SelectValue placeholder="All Coordinators" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Coordinators</SelectItem>
-            {(coordinatorsQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.fullName ?? p.email ?? p.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Button
-          variant={stalled ? "default" : "outline"}
-          size="sm"
-          className="h-9"
-          onClick={() => setStalled((v) => !v)}
-        >
-          Stalled
-        </Button>
-
-        {hasActiveFilter ? (
-          <Button variant="ghost" size="sm" className="h-9" onClick={clearFilters}>
-            Clear
-          </Button>
-        ) : null}
-
-        <div className="ml-auto">
-          <ColumnPicker
-            columns={COLUMN_DEFS}
-            visible={visibleCols}
-            onChange={setVisible}
-            lockedKeys={["provider"]}
-          />
-        </div>
+      <div className="mb-4">
+        <SummaryChips chips={chips} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 
-      <div className="border border-border rounded-md">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
-            <tr className="border-b border-border">
-              {visibleCols.provider && (
-                <SortableTh
-                  label="Provider"
-                  sortKey="provider"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-              {visibleCols.payer && (
-                <SortableTh
-                  label="Payer"
-                  sortKey="payer"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-              {visibleCols.state && (
-                <SortableTh
-                  label="State"
-                  sortKey="state"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-              {visibleCols.credentialing && (
-                <SortableTh
-                  label="Credentialing"
-                  sortKey="credentialing"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-              {visibleCols.groupContract && (
-                <SortableTh
-                  label="Group Contract"
-                  sortKey="groupContract"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-              {visibleCols.lastTouch && (
-                <SortableTh
-                  label="Last touch"
-                  sortKey="lastTouch"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                  align="right"
-                />
-              )}
-              {visibleCols.daysOpen && (
-                <SortableTh
-                  label="Days open"
-                  sortKey="daysOpen"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                  align="right"
-                />
-              )}
-              {visibleCols.coordinator && (
-                <SortableTh
-                  label="Coordinator"
-                  sortKey="coordinator"
-                  sort={effectiveSort}
-                  onSort={handleSort}
-                />
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {casesQ.isLoading ? (
-              <TableSkeletonRows rows={8} cols={visibleCount} />
-            ) : casesQ.isError ? (
-              <tr>
-                <td colSpan={visibleCount} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">Failed to load cases.</div>
-                  <Button variant="outline" size="sm" onClick={() => casesQ.refetch()}>
-                    Retry
-                  </Button>
-                </td>
-              </tr>
-            ) : sorted.length === 0 ? (
-              <tr>
-                <td colSpan={visibleCount} className="px-3 py-12 text-center">
-                  <EmptyState
-                    message={hasActiveFilter ? "No cases match these filters" : "No cases yet"}
-                    action={
-                      hasActiveFilter ? (
-                        <Button variant="outline" size="sm" onClick={clearFilters}>
-                          Clear filters
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                </td>
-              </tr>
-            ) : (
-              visible.map((e) => (
-                <CaseRow
-                  key={e.c.id}
-                  data={e}
-                  visibleCols={visibleCols}
-                  onOpen={() => navigate({ to: "/cases/$id", params: { id: e.c.id } })}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
-        <InfiniteScrollSentinel
-          sentinelRef={sentinelRef}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load cases. Refresh to retry.
+        </div>
+      ) : loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
+          ))}
+        </div>
+      ) : visibleGroups.length === 0 ? (
+        <EmptyState
+          message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
+          description={
+            chip === "all"
+              ? "Open cases from a provider's detail page to start tracking."
+              : "No open cases match this filter right now."
+          }
         />
-      </div>
+      ) : (
+        <GroupedList
+          density={density}
+          groups={visibleGroups.map((g) => ({
+            id: g.payerId,
+            title: g.payerName,
+            count: g.rows.length,
+            headerContent: groupHeader(g),
+            rows: g.rows.map((row) => caseRow(row)),
+          }))}
+        />
+      )}
     </div>
-  );
-}
-
-interface SummaryStripProps {
-  total: number;
-  inProgress: number;
-  awaiting: number;
-  denied: number;
-}
-
-function SummaryStrip({ total, inProgress, awaiting, denied }: SummaryStripProps) {
-  const items: { label: string; value: number }[] = [
-    { label: "Total cases", value: total },
-    { label: "In progress", value: inProgress },
-    { label: "Awaiting effective date", value: awaiting },
-    { label: "Denied / Appeal", value: denied },
-  ];
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map((it) => (
-        <div key={it.label} className="border border-border rounded-md p-4 bg-background">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            {it.label}
-          </div>
-          <div className="mt-1 text-[20px] font-semibold tabular-nums text-foreground">
-            {it.value}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-interface CaseRowProps {
-  data: EnrichedCase;
-  visibleCols: Record<ColumnKey, boolean>;
-  onOpen: () => void;
-}
-
-function CaseRow({ data, visibleCols, onOpen }: CaseRowProps) {
-  const {
-    c,
-    provider,
-    group,
-    payer,
-    credStatus,
-    contractStatus,
-    coordinator,
-    daysOpen,
-    daysSinceTouch,
-  } = data;
-
-  const providerName = provider
-    ? `${provider.firstName} ${provider.lastName}${provider.credentials ? `, ${provider.credentials}` : ""}`
-    : "—";
-  const isTerminated = provider?.status === "terminated";
-
-  return (
-    <tr
-      onClick={onOpen}
-      className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? "opacity-60" : ""}`}
-    >
-      {visibleCols.provider && (
-        <td className="px-3 py-1.5">
-          <div className="font-medium text-foreground leading-tight">{providerName}</div>
-          <div className="text-[12px] text-muted-foreground leading-tight">
-            {group?.name ?? "—"}
-          </div>
-        </td>
-      )}
-      {visibleCols.payer && <td className="px-3 text-foreground">{payer?.name ?? "—"}</td>}
-      {visibleCols.state && <td className="px-3 text-foreground">{c.state}</td>}
-      {visibleCols.credentialing && (
-        <td className="px-3 py-1.5">
-          {credStatus ? (
-            <StatusPill status={hexToStatusColor(credStatus.color)} label={credStatus.label} />
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </td>
-      )}
-      {visibleCols.groupContract && (
-        <td className="px-3 py-1.5">
-          {contractStatus ? (
-            <StatusPill
-              status={hexToStatusColor(contractStatus.color)}
-              label={contractStatus.label}
-            />
-          ) : (
-            <StatusPill status="gray" label="No contract" />
-          )}
-        </td>
-      )}
-      {visibleCols.lastTouch && (
-        <td className="px-3 text-right tabular-nums">
-          {daysSinceTouch === null ? (
-            <span className="text-muted-foreground">—</span>
-          ) : (
-            <span
-              className={daysSinceTouch >= 14 ? "text-[#DC2626] font-medium" : "text-foreground"}
-            >
-              {daysSinceTouch}d
-            </span>
-          )}
-        </td>
-      )}
-      {visibleCols.daysOpen && (
-        <td className="px-3 text-right text-foreground tabular-nums">
-          {daysOpen !== null ? `${daysOpen}d` : "—"}
-        </td>
-      )}
-      {visibleCols.coordinator && (
-        <td className="px-3 text-foreground">{coordinator?.fullName ?? "—"}</td>
-      )}
-    </tr>
   );
 }
