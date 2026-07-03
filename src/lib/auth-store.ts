@@ -87,6 +87,17 @@ export const useAuthStore = create<AuthState>()(
       loadMemberships: async () => {
         const user = get().user;
         if (!user) return;
+        // Convert any pending_invites matching this user's email into
+        // memberships before we read. Errors here are non-fatal.
+        try {
+          const rpc = supabase.rpc as unknown as (name: string) => Promise<{
+            data: number | null;
+            error: unknown;
+          }>;
+          await rpc("claim_invites");
+        } catch {
+          // ignore — user may simply have no pending invites
+        }
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name")

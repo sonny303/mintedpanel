@@ -17,6 +17,7 @@ export type NoteEntityType = 'case' | 'task' | 'provider';
 export type AuditActionType =
   | 'CREATE'
   | 'UPDATE'
+  | 'DELETE'
   | 'STATUS_CHANGE'
   | 'TOUCH_LOGGED'
   | 'TERMINATION';
