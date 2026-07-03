@@ -36,6 +36,7 @@ export const Route = createFileRoute('/admin/audit')({
 const ACTION_TYPES: AuditActionType[] = [
   'CREATE',
   'UPDATE',
+  'DELETE',
   'STATUS_CHANGE',
   'TOUCH_LOGGED',
   'TERMINATION',
@@ -47,6 +48,7 @@ function ActionPill({ action }: { action: AuditActionType }) {
   const styles: Record<AuditActionType, string> = {
     CREATE: 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]',
     UPDATE: 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]',
+    DELETE: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
     STATUS_CHANGE: 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]',
     TOUCH_LOGGED: 'bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]',
     TERMINATION: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
