@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
@@ -33,6 +34,11 @@ import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.template
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TasksRoute = TasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/tasks': typeof TasksRouteWithChildren
+  '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/tasks': typeof TasksRouteWithChildren
+  '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/reports'
     | '/tasks'
+    | '/welcome'
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
@@ -251,6 +261,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/reports'
+    | '/welcome'
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
@@ -274,6 +285,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/reports'
     | '/tasks'
+    | '/welcome'
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
@@ -300,6 +312,7 @@ export interface RootRouteChildren {
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   TasksRoute: typeof TasksRouteWithChildren
+  WelcomeRoute: typeof WelcomeRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
   AdminPayersRoute: typeof AdminPayersRoute
@@ -310,6 +323,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tasks': {
       id: '/tasks'
       path: '/tasks'
@@ -549,6 +569,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
   TasksRoute: TasksRouteWithChildren,
+  WelcomeRoute: WelcomeRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
   AdminPayersRoute: AdminPayersRoute,
