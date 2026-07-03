@@ -1,21 +1,21 @@
 // SOP template list for the admin portal: shows all templates for the active
 // org with quick metadata and links to the editor; admins can create new ones.
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
-import { fmtDate } from '@/lib/format';
-import { useDebounced } from '@/hooks/useDebounced';
-import { Plus } from 'lucide-react';
-import { toast } from 'sonner';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useCreateTemplate, usePayers, useTemplates } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useIsAdmin } from '@/lib/permissions';
-import { cn } from '@/lib/utils';
-import type { SOPTemplate } from '@/types';
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { fmtDate } from "@/lib/format";
+import { useDebounced } from "@/hooks/useDebounced";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useCreateTemplate, usePayers, useTemplates } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useIsAdmin } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
+import type { SOPTemplate } from "@/types";
 
 type TemplateRow = SOPTemplate & { archived?: boolean; isArchived?: boolean };
 
@@ -23,7 +23,7 @@ function isTemplateArchived(template: TemplateRow): boolean {
   return Boolean(template.archived ?? template.isArchived ?? false);
 }
 
-export const Route = createFileRoute('/admin/templates/')({
+export const Route = createFileRoute("/admin/templates/")({
   component: TemplatesIndex,
 });
 
@@ -34,7 +34,7 @@ function TemplatesIndex() {
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
   const createMut = useCreateTemplate();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search, 300);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -62,13 +62,13 @@ function TemplatesIndex() {
     if (!canEdit) return;
     try {
       const created = await createMut.mutateAsync({
-        name: 'Untitled template',
+        name: "Untitled template",
         taskDefinitions: [],
       });
-      toast.success('Template created');
-      navigate({ to: '/admin/templates/$id', params: { id: created.id } });
+      toast.success("Template created");
+      navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not create template';
+      const msg = err instanceof Error ? err.message : "Could not create template";
       toast.error(msg);
     }
   }
@@ -83,7 +83,7 @@ function TemplatesIndex() {
             <Button
               onClick={handleNew}
               disabled={createMut.isPending}
-              style={{ backgroundColor: '#1B4D3E' }}
+              style={{ backgroundColor: "#1B4D3E" }}
               className="text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -156,10 +156,10 @@ function TemplatesIndex() {
                 <tr
                   key={t.id}
                   className={cn(
-                    'border-t border-[#E8E5E0] hover:bg-muted/40 cursor-pointer',
-                    isTemplateArchived(t) ? 'opacity-70' : undefined,
+                    "border-t border-[#E8E5E0] hover:bg-muted/40 cursor-pointer",
+                    isTemplateArchived(t) ? "opacity-70" : undefined,
                   )}
-                  onClick={() => navigate({ to: '/admin/templates/$id', params: { id: t.id } })}
+                  onClick={() => navigate({ to: "/admin/templates/$id", params: { id: t.id } })}
                 >
                   <td className="px-3 h-10 text-sm">
                     <Link
@@ -177,12 +177,12 @@ function TemplatesIndex() {
                     ) : null}
                   </td>
                   <td className="px-3 h-10 text-sm">
-                    {t.payerId ? payerName.get(t.payerId) ?? '—' : '—'}
+                    {t.payerId ? (payerName.get(t.payerId) ?? "—") : "—"}
                   </td>
-                  <td className="px-3 h-10 text-sm">{t.state ?? '—'}</td>
-                  <td className="px-3 h-10 text-sm">{t.specialty ?? '—'}</td>
+                  <td className="px-3 h-10 text-sm">{t.state ?? "—"}</td>
+                  <td className="px-3 h-10 text-sm">{t.specialty ?? "—"}</td>
                   <td className="px-3 h-10 text-sm">
-                    {t.groupId ? groupName.get(t.groupId) ?? '—' : '—'}
+                    {t.groupId ? (groupName.get(t.groupId) ?? "—") : "—"}
                   </td>
                   <td className="px-3 h-10 text-sm tabular-nums">
                     {t.taskDefinitions?.length ?? 0}

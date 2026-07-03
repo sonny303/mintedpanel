@@ -1,8 +1,8 @@
 // Sticky top navigation for the public landing page.
 // Wordmark lockup on the left, single Login button on the right.
-import { useNavigate } from '@tanstack/react-router';
-import { Button } from '@/components/ui/button';
-import logoAsset from '@/assets/mpc-logo.png.asset.json';
+import { useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import logoAsset from "@/assets/mpc-logo.png.asset.json";
 
 export function LandingNav() {
   const navigate = useNavigate();
@@ -16,7 +16,7 @@ export function LandingNav() {
         <Button
           variant="outline"
           className="border-[#1B4D3E] text-[#1B4D3E] hover:bg-[#1B4D3E]/5"
-          onClick={() => navigate({ to: '/login' })}
+          onClick={() => navigate({ to: "/login" })}
         >
           Login
         </Button>

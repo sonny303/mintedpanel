@@ -1,18 +1,18 @@
 // Four field-section bodies shared by the Add stepper and single-page Edit.
 // Each takes (form, errors, update); Licenses/Employment also mutate arrays via update.
-import { Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Field, FieldLabel } from '@/components/providers/FormField';
-import { useFacilities, useProviderGroups } from '@/hooks/useLookups';
+} from "@/components/ui/select";
+import { Field, FieldLabel } from "@/components/providers/FormField";
+import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   US_STATES,
   emptyLicenseRow,
@@ -20,7 +20,7 @@ import {
   type ProviderFormErrors,
   type ProviderFormState,
   type UpdateProviderField,
-} from '@/components/providers/providerFormShared';
+} from "@/components/providers/providerFormShared";
 
 interface SectionProps {
   form: ProviderFormState;
@@ -32,23 +32,23 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Field label="First name" error={errors.firstName}>
-        <Input value={form.firstName} onChange={(e) => update('firstName', e.target.value)} />
+        <Input value={form.firstName} onChange={(e) => update("firstName", e.target.value)} />
       </Field>
       <Field label="Last name" error={errors.lastName}>
-        <Input value={form.lastName} onChange={(e) => update('lastName', e.target.value)} />
+        <Input value={form.lastName} onChange={(e) => update("lastName", e.target.value)} />
       </Field>
       <Field label="Credentials">
         <Input
           placeholder="PT, DPT"
           value={form.credentials}
-          onChange={(e) => update('credentials', e.target.value)}
+          onChange={(e) => update("credentials", e.target.value)}
         />
       </Field>
       <Field label="Date of birth">
         <Input
           type="date"
           value={form.dateOfBirth}
-          onChange={(e) => update('dateOfBirth', e.target.value)}
+          onChange={(e) => update("dateOfBirth", e.target.value)}
         />
       </Field>
       <Field
@@ -63,21 +63,15 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
             maxLength={4}
             className="w-24 font-mono"
             value={form.ssnLast4}
-            onChange={(e) =>
-              update('ssnLast4', e.target.value.replace(/\D/g, '').slice(0, 4))
-            }
+            onChange={(e) => update("ssnLast4", e.target.value.replace(/\D/g, "").slice(0, 4))}
           />
         </div>
       </Field>
       <Field label="Email" error={errors.email}>
-        <Input
-          type="email"
-          value={form.email}
-          onChange={(e) => update('email', e.target.value)}
-        />
+        <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
       </Field>
       <Field label="Phone">
-        <Input value={form.phone} onChange={(e) => update('phone', e.target.value)} />
+        <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
       </Field>
       <div className="md:col-span-2">
         <FieldLabel>Home address</FieldLabel>
@@ -86,21 +80,23 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
             className="md:col-span-3"
             placeholder="Street"
             value={form.homeStreet}
-            onChange={(e) => update('homeStreet', e.target.value)}
+            onChange={(e) => update("homeStreet", e.target.value)}
           />
           <Input
             className="md:col-span-2"
             placeholder="City"
             value={form.homeCity}
-            onChange={(e) => update('homeCity', e.target.value)}
+            onChange={(e) => update("homeCity", e.target.value)}
           />
-          <Select value={form.homeState} onValueChange={(v) => update('homeState', v)}>
+          <Select value={form.homeState} onValueChange={(v) => update("homeState", v)}>
             <SelectTrigger>
               <SelectValue placeholder="State" />
             </SelectTrigger>
             <SelectContent>
               {US_STATES.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -108,7 +104,7 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
             className="md:col-span-1"
             placeholder="ZIP"
             value={form.homeZip}
-            onChange={(e) => update('homeZip', e.target.value)}
+            onChange={(e) => update("homeZip", e.target.value)}
           />
         </div>
       </div>
@@ -124,7 +120,7 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
           inputMode="numeric"
           maxLength={10}
           value={form.npi}
-          onChange={(e) => update('npi', e.target.value.replace(/\D/g, '').slice(0, 10))}
+          onChange={(e) => update("npi", e.target.value.replace(/\D/g, "").slice(0, 10))}
         />
       </Field>
       <Field label="CAQH ID" error={errors.caqhId}>
@@ -133,15 +129,15 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
           maxLength={8}
           disabled={form.isNewGrad}
           value={form.caqhId}
-          onChange={(e) => update('caqhId', e.target.value.replace(/\D/g, '').slice(0, 8))}
+          onChange={(e) => update("caqhId", e.target.value.replace(/\D/g, "").slice(0, 8))}
         />
         <label className="mt-2 flex items-center gap-2 text-sm">
           <Checkbox
             checked={form.isNewGrad}
             onCheckedChange={(c) => {
               const v = c === true;
-              update('isNewGrad', v);
-              if (v) update('caqhId', '');
+              update("isNewGrad", v);
+              if (v) update("caqhId", "");
             }}
           />
           New grad — no CAQH yet
@@ -152,7 +148,7 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
           type="date"
           disabled={form.isNewGrad}
           value={form.caqhLastAttestedDate}
-          onChange={(e) => update('caqhLastAttestedDate', e.target.value)}
+          onChange={(e) => update("caqhLastAttestedDate", e.target.value)}
         />
       </Field>
       <Field
@@ -160,13 +156,10 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
         error={errors.taxonomyCode}
         helper="Change if this provider uses a specialty taxonomy"
       >
-        <Input
-          value={form.taxonomyCode}
-          onChange={(e) => update('taxonomyCode', e.target.value)}
-        />
+        <Input value={form.taxonomyCode} onChange={(e) => update("taxonomyCode", e.target.value)} />
       </Field>
       <Field label="DEA number">
-        <Input value={form.deaNumber} onChange={(e) => update('deaNumber', e.target.value)} />
+        <Input value={form.deaNumber} onChange={(e) => update("deaNumber", e.target.value)} />
       </Field>
     </div>
   );
@@ -175,22 +168,23 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
 export function LicensesSection({ form, errors, update }: SectionProps) {
   const updateRow = (i: number, patch: Partial<LicenseRow>) => {
     update(
-      'licenses',
+      "licenses",
       form.licenses.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
     );
   };
   const addRow = () => {
-    update('licenses', [...form.licenses, emptyLicenseRow()]);
+    update("licenses", [...form.licenses, emptyLicenseRow()]);
   };
   const removeRow = (i: number) => {
-    update('licenses', form.licenses.filter((_, idx) => idx !== i));
+    update(
+      "licenses",
+      form.licenses.filter((_, idx) => idx !== i),
+    );
   };
 
   return (
     <div className="space-y-4">
-      {errors.licenses ? (
-        <p className="text-xs text-destructive">{errors.licenses}</p>
-      ) : null}
+      {errors.licenses ? <p className="text-xs text-destructive">{errors.licenses}</p> : null}
       {form.licenses.map((row, i) => (
         <div key={i} className="rounded-md border border-border p-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
@@ -202,20 +196,25 @@ export function LicensesSection({ form, errors, update }: SectionProps) {
                 </SelectTrigger>
                 <SelectContent>
                   {US_STATES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="md:col-span-3">
               <FieldLabel>License number</FieldLabel>
-              <Input value={row.number} onChange={(e) => updateRow(i, { number: e.target.value })} />
+              <Input
+                value={row.number}
+                onChange={(e) => updateRow(i, { number: e.target.value })}
+              />
             </div>
             <div className="md:col-span-2">
               <FieldLabel>Type</FieldLabel>
               <Select
                 value={row.type}
-                onValueChange={(v) => updateRow(i, { type: v as LicenseRow['type'] })}
+                onValueChange={(v) => updateRow(i, { type: v as LicenseRow["type"] })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Type" />
@@ -271,7 +270,7 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
     const next = form.facilityIds.includes(id)
       ? form.facilityIds.filter((f) => f !== id)
       : [...form.facilityIds, id];
-    update('facilityIds', next);
+    update("facilityIds", next);
   };
 
   const facilityList = facilities.data ?? [];
@@ -282,8 +281,8 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
         <Select
           value={form.groupId}
           onValueChange={(v) => {
-            update('groupId', v);
-            update('facilityIds', []);
+            update("groupId", v);
+            update("facilityIds", []);
           }}
         >
           <SelectTrigger>
@@ -291,13 +290,15 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
           </SelectTrigger>
           <SelectContent>
             {(groups.data ?? []).map((g) => (
-              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </Field>
       <Field label="Specialty">
-        <Input value={form.specialty} onChange={(e) => update('specialty', e.target.value)} />
+        <Input value={form.specialty} onChange={(e) => update("specialty", e.target.value)} />
       </Field>
       <div className="md:col-span-2">
         <FieldLabel>Facilities</FieldLabel>
@@ -326,46 +327,46 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
         <Input
           type="date"
           value={form.startDate}
-          onChange={(e) => update('startDate', e.target.value)}
+          onChange={(e) => update("startDate", e.target.value)}
         />
       </Field>
       <Field label="Degree">
-        <Input value={form.degree} onChange={(e) => update('degree', e.target.value)} />
+        <Input value={form.degree} onChange={(e) => update("degree", e.target.value)} />
       </Field>
       <Field label="School">
-        <Input value={form.schoolName} onChange={(e) => update('schoolName', e.target.value)} />
+        <Input value={form.schoolName} onChange={(e) => update("schoolName", e.target.value)} />
       </Field>
       <Field label="Graduation date">
         <Input
           type="date"
           value={form.graduationDate}
-          onChange={(e) => update('graduationDate', e.target.value)}
+          onChange={(e) => update("graduationDate", e.target.value)}
         />
       </Field>
       <Field label="Malpractice carrier">
         <Input
           value={form.malpracticeCarrier}
-          onChange={(e) => update('malpracticeCarrier', e.target.value)}
+          onChange={(e) => update("malpracticeCarrier", e.target.value)}
         />
       </Field>
       <Field label="Policy number">
         <Input
           value={form.malpracticePolicyNumber}
-          onChange={(e) => update('malpracticePolicyNumber', e.target.value)}
+          onChange={(e) => update("malpracticePolicyNumber", e.target.value)}
         />
       </Field>
       <Field label="Coverage start">
         <Input
           type="date"
           value={form.malpracticeCoverageStart}
-          onChange={(e) => update('malpracticeCoverageStart', e.target.value)}
+          onChange={(e) => update("malpracticeCoverageStart", e.target.value)}
         />
       </Field>
       <Field label="Coverage end">
         <Input
           type="date"
           value={form.malpracticeCoverageEnd}
-          onChange={(e) => update('malpracticeCoverageEnd', e.target.value)}
+          onChange={(e) => update("malpracticeCoverageEnd", e.target.value)}
         />
       </Field>
     </div>

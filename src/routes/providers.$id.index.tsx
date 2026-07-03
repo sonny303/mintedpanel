@@ -1,31 +1,31 @@
 // Provider detail at /providers/$id. Shows the provider header, cases table
 // on the left, and identity/licenses/employment/CAQH cards on the right.
-import React, { useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { differenceInDays, format, parseISO } from 'date-fns';
-import { Pencil, Plus, XCircle } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor, type StatusColor } from '@/components/StatusPill';
-import { fmtDate } from '@/lib/format';
-import { CopyButton } from '@/components/CopyButton';
+import React, { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { differenceInDays, format, parseISO } from "date-fns";
+import { Pencil, Plus, XCircle } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill, hexToStatusColor, type StatusColor } from "@/components/StatusPill";
+import { fmtDate } from "@/lib/format";
+import { CopyButton } from "@/components/CopyButton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useProvider, useTerminateProvider } from "@/hooks/useProviders";
+import { useCases } from "@/hooks/useCases";
+import { useContracts } from "@/hooks/useContracts";
+import { usePayers, useMsos, useStatusConfigs } from "@/hooks/useAdmin";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { useProvider, useTerminateProvider } from '@/hooks/useProviders';
-import { useCases } from '@/hooks/useCases';
-import { useContracts } from '@/hooks/useContracts';
-import { usePayers, useMsos, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups, useNotes, useCreateNote, useStateLicensesByProvider } from '@/hooks/useLookups';
-import { useCanWrite } from '@/lib/permissions';
-import { NewCaseModal } from '@/components/cases/NewCaseModal';
-import { CaseNotesPanel } from '@/components/cases/CaseNotesPanel';
+  useProviderGroups,
+  useNotes,
+  useCreateNote,
+  useStateLicensesByProvider,
+} from "@/hooks/useLookups";
+import { useCanWrite } from "@/lib/permissions";
+import { NewCaseModal } from "@/components/cases/NewCaseModal";
+import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 
 import {
   Dialog,
@@ -34,11 +34,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { toast } from 'sonner';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 import type {
   Contract,
@@ -49,25 +49,23 @@ import type {
   ProviderGroup,
   ProviderStatus,
   StatusConfig,
-} from '@/types';
+} from "@/types";
 
-export const Route = createFileRoute('/providers/$id/')({
+export const Route = createFileRoute("/providers/$id/")({
   component: ProviderDetailPage,
 });
 
-
 const PROVIDER_STATUS_LABEL: Record<ProviderStatus, string> = {
-  onboarding: 'Onboarding',
-  active: 'Active',
-  terminated: 'Terminated',
+  onboarding: "Onboarding",
+  active: "Active",
+  terminated: "Terminated",
 };
 
 const PROVIDER_STATUS_COLOR: Record<ProviderStatus, StatusColor> = {
-  onboarding: 'amber',
-  active: 'green',
-  terminated: 'gray',
+  onboarding: "amber",
+  active: "green",
+  terminated: "gray",
 };
-
 
 function ProviderDetailPage() {
   const { id } = Route.useParams();
@@ -85,7 +83,6 @@ function ProviderDetailPage() {
   const msosQ = useMsos();
   const statusesQ = useStatusConfigs();
   const groupsQ = useProviderGroups();
-  
 
   const payerById = useMemo(() => {
     const m = new Map<string, Payer>();
@@ -112,7 +109,7 @@ function ProviderDetailPage() {
   }, [groupsQ.data]);
 
   const contractKey = (groupId: string | null, payerId: string, state: string) =>
-    `${groupId ?? ''}|${payerId}|${state}`;
+    `${groupId ?? ""}|${payerId}|${state}`;
 
   const contractByKey = useMemo(() => {
     const m = new Map<string, Contract>();
@@ -136,7 +133,7 @@ function ProviderDetailPage() {
     return (
       <div>
         <PageHeader title="Provider not found" />
-        <Button variant="outline" onClick={() => navigate({ to: '/providers' })}>
+        <Button variant="outline" onClick={() => navigate({ to: "/providers" })}>
           Back to providers
         </Button>
       </div>
@@ -144,7 +141,7 @@ function ProviderDetailPage() {
   }
 
   const provider = providerQ.data;
-  const group = provider.groupId ? groupById.get(provider.groupId) ?? null : null;
+  const group = provider.groupId ? (groupById.get(provider.groupId) ?? null) : null;
   const cases = casesQ.data ?? [];
 
   return (
@@ -154,7 +151,7 @@ function ProviderDetailPage() {
         group={group}
         canEdit={canEdit}
         canTerminate={canTerminate}
-        onEdit={() => navigate({ to: '/providers/$id/edit', params: { id: provider.id } })}
+        onEdit={() => navigate({ to: "/providers/$id/edit", params: { id: provider.id } })}
         onNewCase={() => setNewCaseOpen(true)}
         onTerminate={() => setTerminateOpen(true)}
       />
@@ -171,7 +168,6 @@ function ProviderDetailPage() {
         provider={provider}
       />
 
-
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
         <div className="lg:col-span-3">
           <CasesPanel
@@ -182,7 +178,7 @@ function ProviderDetailPage() {
             statusById={statusById}
             contractByKey={contractByKey}
             contractKey={contractKey}
-            onOpenCase={(caseId) => navigate({ to: '/cases/$id', params: { id: caseId } })}
+            onOpenCase={(caseId) => navigate({ to: "/cases/$id", params: { id: caseId } })}
           />
         </div>
 
@@ -199,7 +195,7 @@ function ProviderDetailPage() {
 }
 
 function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: boolean }) {
-  const notesQ = useNotes('provider', providerId);
+  const notesQ = useNotes("provider", providerId);
   const createNoteM = useCreateNote();
   return (
     <CaseNotesPanel
@@ -209,11 +205,11 @@ function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: b
       onSaveNote={async (content) => {
         try {
           await createNoteM.mutateAsync({
-            entityType: 'provider',
+            entityType: "provider",
             entityId: providerId,
             content,
           });
-          toast.success('Note added');
+          toast.success("Note added");
         } catch (e) {
           toast.error((e as Error).message);
         }
@@ -221,8 +217,6 @@ function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: b
     />
   );
 }
-
-
 
 interface HeaderProps {
   provider: Provider;
@@ -234,21 +228,26 @@ interface HeaderProps {
   onTerminate: () => void;
 }
 
-function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onTerminate }: HeaderProps) {
-
+function Header({
+  provider,
+  group,
+  canEdit,
+  canTerminate,
+  onEdit,
+  onNewCase,
+  onTerminate,
+}: HeaderProps) {
   const name = `${provider.firstName} ${provider.lastName}${
-    provider.credentials ? `, ${provider.credentials}` : ''
+    provider.credentials ? `, ${provider.credentials}` : ""
   }`;
-  const isTerminated = provider.status === 'terminated';
+  const isTerminated = provider.status === "terminated";
 
   return (
     <div className="pb-4 mb-2 border-b border-border">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-[20px] font-semibold tracking-tight text-foreground">
-              {name}
-            </h1>
+            <h1 className="text-[20px] font-semibold tracking-tight text-foreground">{name}</h1>
             <StatusPill
               status={PROVIDER_STATUS_COLOR[provider.status]}
               label={PROVIDER_STATUS_LABEL[provider.status]}
@@ -279,12 +278,7 @@ function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onT
 
         {canEdit ? (
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={onEdit}
-            >
+            <Button variant="outline" size="sm" className="gap-2" onClick={onEdit}>
               <Pencil className="h-4 w-4" />
               Edit provider
             </Button>
@@ -302,7 +296,7 @@ function Header({ provider, group, canEdit, canTerminate, onEdit, onNewCase, onT
                 disabled={isTerminated}
               >
                 <XCircle className="h-4 w-4" />
-                {isTerminated ? 'Terminated' : 'Terminate provider'}
+                {isTerminated ? "Terminated" : "Terminate provider"}
               </Button>
             ) : null}
           </div>
@@ -319,9 +313,9 @@ interface TerminateProviderDialogProps {
 }
 
 function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProviderDialogProps) {
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const today = format(new Date(), "yyyy-MM-dd");
   const [terminationDate, setTerminationDate] = useState<string>(today);
-  const [reason, setReason] = useState<string>('');
+  const [reason, setReason] = useState<string>("");
   const terminateM = useTerminateProvider(provider.id);
   const canSubmit = Boolean(terminationDate) && !terminateM.isPending;
 
@@ -333,11 +327,11 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
       });
       toast.success(
         result.tasksCreated > 0
-          ? `Provider terminated. ${result.tasksCreated} termination task${result.tasksCreated === 1 ? '' : 's'} created.`
-          : 'Provider terminated.',
+          ? `Provider terminated. ${result.tasksCreated} termination task${result.tasksCreated === 1 ? "" : "s"} created.`
+          : "Provider terminated.",
       );
       onOpenChange(false);
-      setReason('');
+      setReason("");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -350,7 +344,7 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
         onOpenChange(v);
         if (!v) {
           setTerminationDate(today);
-          setReason('');
+          setReason("");
         }
       }}
     >
@@ -358,8 +352,8 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
         <DialogHeader>
           <DialogTitle>Terminate provider</DialogTitle>
           <DialogDescription>
-            This sets the provider to Terminated and creates a termination task for every
-            active case. It does not delete anything.
+            This sets the provider to Terminated and creates a termination task for every active
+            case. It does not delete anything.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -387,11 +381,15 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={terminateM.isPending}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={terminateM.isPending}
+          >
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={!canSubmit}>
-            {terminateM.isPending ? 'Terminating…' : 'Terminate provider'}
+            {terminateM.isPending ? "Terminating…" : "Terminate provider"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -402,11 +400,9 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
 function IdField({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="inline-flex items-center gap-2">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
+      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
 
-      <span className="text-foreground tabular-nums">{value ?? '—'}</span>
+      <span className="text-foreground tabular-nums">{value ?? "—"}</span>
       {value ? <CopyButton value={value} label={label} /> : null}
     </div>
   );
@@ -463,9 +459,7 @@ function CasesPanel({
                 const credSc = c.credentialingStatusId
                   ? statusById.get(c.credentialingStatusId)
                   : null;
-                const contract = contractByKey.get(
-                  contractKey(c.groupId, c.payerId, c.state),
-                );
+                const contract = contractByKey.get(contractKey(c.groupId, c.payerId, c.state));
                 const contractSc = contract?.contractingStatusId
                   ? statusById.get(contract.contractingStatusId)
                   : null;
@@ -482,9 +476,7 @@ function CasesPanel({
                   >
                     <td className="px-3 py-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-foreground">
-                          {payer?.name ?? '—'}
-                        </span>
+                        <span className="font-medium text-foreground">{payer?.name ?? "—"}</span>
                         {mso ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-[20px] text-[11px] font-medium border border-border bg-muted text-muted-foreground">
                             via {mso.name}
@@ -495,10 +487,7 @@ function CasesPanel({
                     <td className="px-3 text-foreground">{c.state}</td>
                     <td className="px-3 py-1.5">
                       {credSc ? (
-                        <StatusPill
-                          status={hexToStatusColor(credSc.color)}
-                          label={credSc.label}
-                        />
+                        <StatusPill status={hexToStatusColor(credSc.color)} label={credSc.label} />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -517,7 +506,7 @@ function CasesPanel({
                       {fmtDate(c.submittedDate)}
                     </td>
                     <td className="px-3 text-right text-foreground tabular-nums">
-                      {daysOpen !== null ? `${daysOpen}d` : '—'}
+                      {daysOpen !== null ? `${daysOpen}d` : "—"}
                     </td>
                   </tr>
                 );
@@ -534,16 +523,16 @@ function IdentityCard({ provider }: { provider: Provider }) {
   const addressLine =
     [provider.homeStreet, provider.homeCity, provider.homeState, provider.homeZip]
       .filter(Boolean)
-      .join(', ') || '—';
-  const ssn = provider.ssnLast4 ? `xxx-xx-${provider.ssnLast4}` : '—';
+      .join(", ") || "—";
+  const ssn = provider.ssnLast4 ? `xxx-xx-${provider.ssnLast4}` : "—";
 
   return (
     <Card title="Identity">
       <DL>
         <DRow label="Date of birth" value={fmtDate(provider.dateOfBirth)} />
         <DRow label="SSN" value={ssn} mono />
-        <DRow label="Email" value={provider.email ?? '—'} />
-        <DRow label="Phone" value={provider.phone ?? '—'} mono />
+        <DRow label="Email" value={provider.email ?? "—"} />
+        <DRow label="Phone" value={provider.phone ?? "—"} mono />
         <DRow label="Address" value={addressLine} />
       </DL>
     </Card>
@@ -598,20 +587,18 @@ function LicensesCard({ provider }: { provider: Provider }) {
               }
               return (
                 <tr key={l.id} className="border-b border-border last:border-0 h-10">
-                  <td className="px-3 text-foreground">{l.state || '—'}</td>
-                  <td className="px-3 text-foreground tabular-nums">
-                    {l.licenseNumber ?? '—'}
-                  </td>
-                  <td className="px-3 text-foreground capitalize">{l.licenseType ?? '—'}</td>
+                  <td className="px-3 text-foreground">{l.state || "—"}</td>
+                  <td className="px-3 text-foreground tabular-nums">{l.licenseNumber ?? "—"}</td>
+                  <td className="px-3 text-foreground capitalize">{l.licenseType ?? "—"}</td>
                   <td className="px-3 text-foreground tabular-nums">{fmtDate(l.issueDate)}</td>
                   <td className="px-3 tabular-nums">
                     <span
                       className={
                         expired
-                          ? 'text-[#DC2626] font-medium'
+                          ? "text-[#DC2626] font-medium"
                           : expiringSoon
-                            ? 'text-[#D97706] font-medium'
-                            : 'text-foreground'
+                            ? "text-[#D97706] font-medium"
+                            : "text-foreground"
                       }
                     >
                       {fmtDate(exp)}
@@ -622,7 +609,7 @@ function LicensesCard({ provider }: { provider: Provider }) {
                       <StatusPill status="amber" label="Expiring soon" className="ml-2" />
                     ) : null}
                   </td>
-                  <td className="px-3 text-foreground capitalize">{l.status ?? '—'}</td>
+                  <td className="px-3 text-foreground capitalize">{l.status ?? "—"}</td>
                 </tr>
               );
             })}
@@ -665,7 +652,7 @@ function LicensesCard({ provider }: { provider: Provider }) {
         </thead>
         <tbody>
           <tr className="border-b border-border last:border-0 h-10">
-            <td className="px-3 text-foreground">{provider.licenseState ?? '—'}</td>
+            <td className="px-3 text-foreground">{provider.licenseState ?? "—"}</td>
             <td className="px-3 text-foreground tabular-nums">{number}</td>
             <td className="px-3 text-foreground tabular-nums">
               {fmtDate(provider.licenseIssueDate)}
@@ -674,10 +661,10 @@ function LicensesCard({ provider }: { provider: Provider }) {
               <span
                 className={
                   expired
-                    ? 'text-[#DC2626] font-medium'
+                    ? "text-[#DC2626] font-medium"
                     : expiringSoon
-                      ? 'text-[#D97706] font-medium'
-                      : 'text-foreground'
+                      ? "text-[#D97706] font-medium"
+                      : "text-foreground"
                 }
               >
                 {fmtDate(exp)}
@@ -695,28 +682,23 @@ function LicensesCard({ provider }: { provider: Provider }) {
   );
 }
 
-
 function EmploymentCard({ provider }: { provider: Provider }) {
   return (
     <Card title="Employment & malpractice">
       <DL>
-        <DRow label="Specialty" value={provider.specialty ?? '—'} />
+        <DRow label="Specialty" value={provider.specialty ?? "—"} />
         <DRow label="Start date" value={fmtDate(provider.startDate)} />
-        <DRow label="Degree" value={provider.degree ?? '—'} />
-        <DRow label="School" value={provider.schoolName ?? '—'} />
+        <DRow label="Degree" value={provider.degree ?? "—"} />
+        <DRow label="School" value={provider.schoolName ?? "—"} />
         <DRow label="Graduation" value={fmtDate(provider.graduationDate)} />
-        <DRow label="Carrier" value={provider.malpracticeCarrier ?? '—'} />
-        <DRow
-          label="Policy #"
-          value={provider.malpracticePolicyNumber ?? '—'}
-          mono
-        />
+        <DRow label="Carrier" value={provider.malpracticeCarrier ?? "—"} />
+        <DRow label="Policy #" value={provider.malpracticePolicyNumber ?? "—"} mono />
         <DRow
           label="Coverage"
           value={
             provider.malpracticeCoverageStart || provider.malpracticeCoverageEnd
               ? `${fmtDate(provider.malpracticeCoverageStart)} – ${fmtDate(provider.malpracticeCoverageEnd)}`
-              : '—'
+              : "—"
           }
         />
       </DL>
@@ -727,26 +709,20 @@ function EmploymentCard({ provider }: { provider: Provider }) {
 function CaqhCard({ provider }: { provider: Provider }) {
   const attested = provider.caqhLastAttestedDate;
   let days: number | null = null;
-  let cls = 'text-foreground';
+  let cls = "text-foreground";
   if (attested) {
     days = differenceInDays(new Date(), parseISO(attested));
-    if (days >= 110) cls = 'text-[#DC2626] font-medium';
-    else if (days >= 90) cls = 'text-[#D97706] font-medium';
+    if (days >= 110) cls = "text-[#DC2626] font-medium";
+    else if (days >= 90) cls = "text-[#D97706] font-medium";
   }
   return (
     <Card title="CAQH">
       <DL>
-        <DRow label="CAQH ID" value={provider.caqhId ?? '—'} mono />
+        <DRow label="CAQH ID" value={provider.caqhId ?? "—"} mono />
         <DRow label="Last attested" value={fmtDate(attested)} />
         <DRow
           label="Days since"
-          value={
-            days === null ? (
-              '—'
-            ) : (
-              <span className={`tabular-nums ${cls}`}>{days}d</span>
-            )
-          }
+          value={days === null ? "—" : <span className={`tabular-nums ${cls}`}>{days}d</span>}
         />
       </DL>
     </Card>
@@ -778,26 +754,18 @@ function DL({ children }: { children: React.ReactNode }) {
   return <dl className="grid grid-cols-[120px_1fr] gap-y-2 gap-x-3 text-[13px]">{children}</dl>;
 }
 
-function DRow({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
+function DRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <>
       <dt className="text-[11px] uppercase tracking-wider text-muted-foreground self-center">
         {label}
       </dt>
-      <dd className={`text-foreground ${mono ? 'tabular-nums' : ''}`}>{value}</dd>
+      <dd className={`text-foreground ${mono ? "tabular-nums" : ""}`}>{value}</dd>
     </>
   );
 }
 
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <th
       className={`text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9 ${className}`}

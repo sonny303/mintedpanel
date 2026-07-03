@@ -74,9 +74,7 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
                   className="flex items-center justify-between"
                 >
                   <span>{m.orgName}</span>
-                  {m.orgId === activeOrgId ? (
-                    <Check className="w-4 h-4 text-primary" />
-                  ) : null}
+                  {m.orgId === activeOrgId ? <Check className="w-4 h-4 text-primary" /> : null}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -93,10 +91,20 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
 
       <div className="flex items-center gap-4">
         {children}
-        <Button variant="ghost" size="icon" aria-label="Search" className="h-8 w-8 text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Search"
+          className="h-8 w-8 text-muted-foreground"
+        >
           <Search className="w-4 h-4" />
         </Button>
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="h-8 w-8 text-muted-foreground">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Notifications"
+          className="h-8 w-8 text-muted-foreground"
+        >
           <Bell className="w-4 h-4" />
         </Button>
         <DropdownMenu>
@@ -113,18 +121,14 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
               <div className="text-[13px] font-medium text-foreground truncate">
                 {fullName ?? user?.email ?? "Signed in"}
               </div>
-              <div className="text-[12px] text-muted-foreground truncate">
-                {user?.email}
-              </div>
+              <div className="text-[12px] text-muted-foreground truncate">{user?.email}</div>
               <div className="mt-2 flex items-center gap-2">
                 {active ? (
                   <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground">
                     {roleLabel[active.role] ?? active.role}
                   </span>
                 ) : null}
-                <span className="text-[11px] text-muted-foreground truncate">
-                  {activeOrgName}
-                </span>
+                <span className="text-[11px] text-muted-foreground truncate">{activeOrgName}</span>
               </div>
             </div>
             <DropdownMenuSeparator />

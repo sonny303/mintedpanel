@@ -1,6 +1,6 @@
 // Minimal single-row footer.
-import { Link } from '@tanstack/react-router';
-import logoAsset from '@/assets/mpc-logo.png.asset.json';
+import { Link } from "@tanstack/react-router";
+import logoAsset from "@/assets/mpc-logo.png.asset.json";
 
 export function LandingFooter() {
   return (

@@ -1,9 +1,9 @@
 // pending_invites CRUD + membership removal + claim_invites RPC.
 // pending_invites and claim_invites aren't yet in the generated Database
 // types, so table access goes through narrow, locally-typed shims.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { AppRole } from '@/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { AppRole } from "@/types";
 
 export interface PendingInvite {
   id: string;
@@ -39,39 +39,53 @@ function toInvite(row: PendingInviteRow): PendingInvite {
 
 // Narrow escape hatch: pending_invites is not in generated Database types.
 const invitesTable = () =>
-  (supabase.from as unknown as (name: string) => {
-    select: (cols: string) => {
-      eq: (c: string, v: string) => {
-        order: (c: string, opts?: { ascending: boolean }) => Promise<{
-          data: PendingInviteRow[] | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-    insert: (row: Record<string, unknown>) => {
+  (
+    supabase.from as unknown as (name: string) => {
       select: (cols: string) => {
-        single: () => Promise<{
-          data: PendingInviteRow | null;
-          error: { code?: string; message: string } | null;
-        }>;
+        eq: (
+          c: string,
+          v: string,
+        ) => {
+          order: (
+            c: string,
+            opts?: { ascending: boolean },
+          ) => Promise<{
+            data: PendingInviteRow[] | null;
+            error: { message: string } | null;
+          }>;
+        };
       };
-    };
-    delete: () => {
-      eq: (c: string, v: string) => {
-        eq: (c: string, v: string) => Promise<{
-          data: PendingInviteRow[] | null;
-          error: { message: string } | null;
-        }>;
+      insert: (row: Record<string, unknown>) => {
+        select: (cols: string) => {
+          single: () => Promise<{
+            data: PendingInviteRow | null;
+            error: { code?: string; message: string } | null;
+          }>;
+        };
       };
-    };
-  })('pending_invites');
+      delete: () => {
+        eq: (
+          c: string,
+          v: string,
+        ) => {
+          eq: (
+            c: string,
+            v: string,
+          ) => Promise<{
+            data: PendingInviteRow[] | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    }
+  )("pending_invites");
 
 export async function listPendingInvites(): Promise<PendingInvite[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await invitesTable()
-    .select('*')
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false });
+    .select("*")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map(toInvite);
 }
@@ -84,17 +98,15 @@ export interface CreatePendingInviteInput {
 
 export class DuplicateInviteError extends Error {
   constructor() {
-    super('An invite for that email is already pending.');
-    this.name = 'DuplicateInviteError';
+    super("An invite for that email is already pending.");
+    this.name = "DuplicateInviteError";
   }
 }
 
-export async function createPendingInvite(
-  input: CreatePendingInviteInput,
-): Promise<PendingInvite> {
+export async function createPendingInvite(input: CreatePendingInviteInput): Promise<PendingInvite> {
   const orgId = requireActiveOrg();
   const email = input.email.trim().toLowerCase();
-  if (!email) throw new Error('Email is required');
+  if (!email) throw new Error("Email is required");
   const payload = {
     org_id: orgId,
     email,
@@ -102,19 +114,16 @@ export async function createPendingInvite(
     full_name: input.fullName?.trim() ? input.fullName.trim() : null,
     invited_by: currentUserId(),
   };
-  const { data, error } = await invitesTable()
-    .insert(payload)
-    .select('*')
-    .single();
+  const { data, error } = await invitesTable().insert(payload).select("*").single();
   if (error) {
-    if (error.code === '23505') throw new DuplicateInviteError();
+    if (error.code === "23505") throw new DuplicateInviteError();
     throw new Error(error.message);
   }
-  if (!data) throw new Error('Failed to create invite');
+  if (!data) throw new Error("Failed to create invite");
   const invite = toInvite(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'pending_invite',
+    actionType: "CREATE",
+    entityType: "pending_invite",
     entityId: invite.id,
     after: invite,
     description: `Invited ${invite.email} as ${invite.role}`,
@@ -124,11 +133,11 @@ export async function createPendingInvite(
 
 export async function revokePendingInvite(invite: PendingInvite): Promise<void> {
   const orgId = requireActiveOrg();
-  const { error } = await invitesTable().delete().eq('id', invite.id).eq('org_id', orgId);
+  const { error } = await invitesTable().delete().eq("id", invite.id).eq("org_id", orgId);
   if (error) throw new Error(error.message);
   await writeAudit({
-    actionType: 'DELETE',
-    entityType: 'pending_invite',
+    actionType: "DELETE",
+    entityType: "pending_invite",
     entityId: invite.id,
     before: invite,
     description: `Revoked invite for ${invite.email}`,
@@ -144,17 +153,17 @@ export interface RemoveMembershipInput {
 export async function removeMembership(input: RemoveMembershipInput): Promise<void> {
   const orgId = requireActiveOrg();
   const { error } = await supabase
-    .from('memberships')
+    .from("memberships")
     .delete()
-    .eq('id', input.id)
-    .eq('org_id', orgId);
+    .eq("id", input.id)
+    .eq("org_id", orgId);
   if (error) throw error;
   await writeAudit({
-    actionType: 'DELETE',
-    entityType: 'membership',
+    actionType: "DELETE",
+    entityType: "membership",
     entityId: input.id,
     before: input,
-    description: `Removed ${input.email ?? 'member'} (${input.role})`,
+    description: `Removed ${input.email ?? "member"} (${input.role})`,
   });
 }
 
@@ -163,7 +172,7 @@ export async function claimInvites(): Promise<number> {
     data: number | null;
     error: { message: string } | null;
   }>;
-  const { data, error } = await rpc('claim_invites');
+  const { data, error } = await rpc("claim_invites");
   if (error) throw new Error(error.message);
-  return typeof data === 'number' ? data : 0;
+  return typeof data === "number" ? data : 0;
 }

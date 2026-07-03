@@ -2,11 +2,11 @@
 // notes/status history), create, and credentialing-track status changes that
 // also append status_history and audit_log.
 
-import { supabase } from '@/integrations/supabase/externalClient';
-import { getNotesFor } from '@/services/lookups';
-import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { Database, Json } from '@/integrations/supabase/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { getNotesFor } from "@/services/lookups";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { Database, Json } from "@/integrations/supabase/types";
 import type {
   CaseDetail,
   Contract,
@@ -15,10 +15,9 @@ import type {
   StatusHistoryEntry,
   Task,
   Touch,
-} from '@/types';
+} from "@/types";
 
-type CredentialCaseUpdate = Database['public']['Tables']['credential_cases']['Update'];
-
+type CredentialCaseUpdate = Database["public"]["Tables"]["credential_cases"]["Update"];
 
 export interface CaseFilters {
   providerId?: string;
@@ -43,30 +42,29 @@ export interface CaseInput {
 }
 
 const CASE_LIST_COLUMNS =
-  'id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, created_at, updated_at';
+  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
   let query = supabase
-    .from('credential_cases')
+    .from("credential_cases")
     .select(CASE_LIST_COLUMNS)
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false });
-  if (filters.providerId) query = query.eq('provider_id', filters.providerId);
-  if (filters.payerId) query = query.eq('payer_id', filters.payerId);
-  if (filters.state) query = query.eq('state', filters.state);
-  if (filters.statusId) query = query.eq('credentialing_status_id', filters.statusId);
-  if (filters.assignedTo) query = query.eq('assigned_to', filters.assignedTo);
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false });
+  if (filters.providerId) query = query.eq("provider_id", filters.providerId);
+  if (filters.payerId) query = query.eq("payer_id", filters.payerId);
+  if (filters.state) query = query.eq("state", filters.state);
+  if (filters.statusId) query = query.eq("credentialing_status_id", filters.statusId);
+  if (filters.assignedTo) query = query.eq("assigned_to", filters.assignedTo);
   const { data, error } = await query;
   if (error) throw error;
   return camelizeRow<CredentialCase[]>(data ?? []);
 }
 
-
 export async function getCase(id: string): Promise<CaseDetail | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('credential_cases')
+    .from("credential_cases")
     .select(
       `*,
        provider:providers(*),
@@ -79,40 +77,37 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
        touches(*),
        status_history(*)`,
     )
-    .eq('id', id)
-    .eq('org_id', orgId)
+    .eq("id", id)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const notes = await getNotesFor('case', id);
+  const notes = await getNotesFor("case", id);
 
   // Enrich status_history with author names for "changed by {name}".
-  const rawHistory = ((data as Record<string, unknown>).status_history as
-    | Array<Record<string, unknown>>
-    | null) ?? [];
+  const rawHistory =
+    ((data as Record<string, unknown>).status_history as Array<Record<string, unknown>> | null) ??
+    [];
   const changedByIds = Array.from(
     new Set(
-      rawHistory
-        .map((h) => h.changed_by as string | null)
-        .filter((v): v is string => Boolean(v)),
+      rawHistory.map((h) => h.changed_by as string | null).filter((v): v is string => Boolean(v)),
     ),
   );
   const nameMap = new Map<string, string | null>();
   if (changedByIds.length > 0) {
     const { data: profs, error: profErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', changedByIds);
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", changedByIds);
     if (profErr) throw profErr;
     for (const p of profs ?? []) {
-      const name =
-        (p.full_name as string | null) ?? (p.email as string | null) ?? null;
+      const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
       nameMap.set(p.id as string, name);
     }
   }
   const enrichedHistory = rawHistory.map((h) => ({
     ...h,
-    changed_by_name: h.changed_by ? nameMap.get(h.changed_by as string) ?? null : null,
+    changed_by_name: h.changed_by ? (nameMap.get(h.changed_by as string) ?? null) : null,
   }));
 
   const merged = {
@@ -123,10 +118,8 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
   return camelizeRow<CaseDetail>(merged);
 }
 
-
-
 export interface AppendStatusHistoryInput {
-  track: 'credentialing' | 'contracting';
+  track: "credentialing" | "contracting";
   caseId?: string | null;
   contractId?: string | null;
   fromStatusId: string | null;
@@ -136,7 +129,7 @@ export interface AppendStatusHistoryInput {
 
 export async function appendStatusHistory(input: AppendStatusHistoryInput): Promise<void> {
   const orgId = requireActiveOrg();
-  const { error } = await supabase.from('status_history').insert({
+  const { error } = await supabase.from("status_history").insert({
     org_id: orgId,
     case_id: input.caseId ?? null,
     contract_id: input.contractId ?? null,
@@ -190,12 +183,12 @@ export async function createCase(
     fn: string,
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
-  const { data, error } = await rpc('create_case_with_tasks', {
+  const { data, error } = await rpc("create_case_with_tasks", {
     p_input,
     p_tasks,
   });
   if (error) throw new Error(error.message);
-  if (!data) throw new Error('create_case_with_tasks returned no data');
+  if (!data) throw new Error("create_case_with_tasks returned no data");
   return camelizeRow<CredentialCase>(data);
 }
 
@@ -207,13 +200,13 @@ export async function updateCaseStatus(
   const orgId = requireActiveOrg();
 
   const { data: existing, error: readErr } = await supabase
-    .from('credential_cases')
-    .select('*')
-    .eq('id', caseId)
-    .eq('org_id', orgId)
+    .from("credential_cases")
+    .select("*")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (readErr) throw readErr;
-  if (!existing) throw new Error('Case not found');
+  if (!existing) throw new Error("Case not found");
   const fromStatusId = (existing.credentialing_status_id as string | null) ?? null;
 
   const patch: Record<string, unknown> = {
@@ -222,17 +215,17 @@ export async function updateCaseStatus(
   };
 
   const { data: updated, error: updErr } = await supabase
-    .from('credential_cases')
+    .from("credential_cases")
     .update(patch as unknown as CredentialCaseUpdate)
-    .eq('id', caseId)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
 
   if (updErr) throw updErr;
 
   await appendStatusHistory({
-    track: 'credentialing',
+    track: "credentialing",
     caseId,
     fromStatusId,
     toStatusId: statusId,
@@ -240,8 +233,8 @@ export async function updateCaseStatus(
   });
 
   await writeAudit({
-    actionType: 'STATUS_CHANGE',
-    entityType: 'credential_case',
+    actionType: "STATUS_CHANGE",
+    entityType: "credential_case",
     entityId: caseId,
     before: { credentialingStatusId: fromStatusId },
     after: { credentialingStatusId: statusId, ...metadata },
@@ -258,14 +251,13 @@ export async function getContractFor(
 ): Promise<Contract | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('contracts')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('group_id', groupId)
-    .eq('payer_id', payerId)
-    .eq('state', state)
+    .from("contracts")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .eq("payer_id", payerId)
+    .eq("state", state)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Contract>(data) : null;
 }
-

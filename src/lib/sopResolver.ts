@@ -10,7 +10,7 @@ import type {
   SOPStep,
   SOPTaskDefinition,
   SOPTemplate,
-} from '@/types';
+} from "@/types";
 
 export interface ResolvedTaskInsert {
   title: string;
@@ -31,24 +31,22 @@ interface ResolveContext {
 function buildTokenMap(ctx: ResolveContext): Record<string, string> {
   const { provider, group, facility, mso, stateLicenseNumber } = ctx;
   return {
-    'provider.npi': provider.npi ?? '',
-    'provider.caqhId': provider.caqhId ?? '',
-    'provider.caqhLastAttestedDate': provider.caqhLastAttestedDate ?? '',
-    'provider.taxonomyCode': provider.taxonomyCode ?? '',
-    'provider.firstName': provider.firstName,
-    'provider.lastName': provider.lastName,
-    'provider.email': provider.email ?? '',
-    'provider.licenseNumber': stateLicenseNumber ?? '',
-    'group.tin': group?.tin ?? '',
-    'group.npiType2': group?.npiType2 ?? '',
-    'group.name': group?.name ?? '',
-    'facility.name': facility?.name ?? '',
-    'facility.address': facility
-      ? [facility.street, facility.city, facility.state, facility.zip]
-          .filter(Boolean)
-          .join(', ')
-      : '',
-    'mso.portalUrl': mso?.portalUrl ?? '',
+    "provider.npi": provider.npi ?? "",
+    "provider.caqhId": provider.caqhId ?? "",
+    "provider.caqhLastAttestedDate": provider.caqhLastAttestedDate ?? "",
+    "provider.taxonomyCode": provider.taxonomyCode ?? "",
+    "provider.firstName": provider.firstName,
+    "provider.lastName": provider.lastName,
+    "provider.email": provider.email ?? "",
+    "provider.licenseNumber": stateLicenseNumber ?? "",
+    "group.tin": group?.tin ?? "",
+    "group.npiType2": group?.npiType2 ?? "",
+    "group.name": group?.name ?? "",
+    "facility.name": facility?.name ?? "",
+    "facility.address": facility
+      ? [facility.street, facility.city, facility.state, facility.zip].filter(Boolean).join(", ")
+      : "",
+    "mso.portalUrl": mso?.portalUrl ?? "",
   };
 }
 
@@ -56,7 +54,7 @@ const TOKEN_PATTERN = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
 
 function interpolate(input: string, tokens: Record<string, string>): string {
   return input.replace(TOKEN_PATTERN, (_, key: string) =>
-    Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : '',
+    Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : "",
   );
 }
 
@@ -74,7 +72,7 @@ function definitionToInsert(
 ): ResolvedTaskInsert {
   const sortOrder = definition.sortOrder ?? index;
   const dueDate =
-    typeof definition.dueOffsetDays === 'number'
+    typeof definition.dueOffsetDays === "number"
       ? offsetDate(baseDateIso, definition.dueOffsetDays)
       : null;
   const steps: SOPStep[] = definition.steps.map((step, idx) => ({
@@ -88,17 +86,13 @@ function definitionToInsert(
     dataFields: (step.dataFields ?? [])
       .map((f) => ({
         label: f.label,
-        value: Object.prototype.hasOwnProperty.call(tokens, f.token)
-          ? tokens[f.token]
-          : '',
+        value: Object.prototype.hasOwnProperty.call(tokens, f.token) ? tokens[f.token] : "",
       }))
       .filter((f) => f.label && f.value),
   }));
   return {
     title: interpolate(definition.title, tokens),
-    description: definition.description
-      ? interpolate(definition.description, tokens)
-      : null,
+    description: definition.description ? interpolate(definition.description, tokens) : null,
     sortOrder,
     dueDate,
     sopContent: steps,

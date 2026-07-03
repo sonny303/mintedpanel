@@ -1,13 +1,13 @@
 // Load and auto-persist per-user table preferences (visible columns + sort).
 // Reads on mount, debounces writes on every change. Falls back to defaults
 // while loading or when no row exists.
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuthStore } from '@/lib/auth-store';
-import { getTablePrefs, upsertTablePrefs, type TablePrefsPayload } from '@/services/tablePrefs';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuthStore } from "@/lib/auth-store";
+import { getTablePrefs, upsertTablePrefs, type TablePrefsPayload } from "@/services/tablePrefs";
 
 export interface TableSortState {
   key: string;
-  dir: 'asc' | 'desc';
+  dir: "asc" | "desc";
 }
 
 export interface TablePrefsState<ColKey extends string> {
@@ -49,11 +49,11 @@ export function useTablePrefs<ColKey extends string>({
           const merged: Record<string, boolean> = { ...defaults.visibleCols };
           if (row.visibleCols) {
             for (const k of allKeys) {
-              if (typeof row.visibleCols[k] === 'boolean') merged[k] = row.visibleCols[k]!;
+              if (typeof row.visibleCols[k] === "boolean") merged[k] = row.visibleCols[k]!;
             }
           }
           const sort: TableSortState | null =
-            row.sortKey && (row.sortDir === 'asc' || row.sortDir === 'desc')
+            row.sortKey && (row.sortDir === "asc" || row.sortDir === "desc")
               ? { key: row.sortKey, dir: row.sortDir }
               : null;
           setState({ visibleCols: merged as Record<ColKey, boolean>, sort });
@@ -102,8 +102,8 @@ export function useTablePrefs<ColKey extends string>({
     setState((prev) => {
       const cur = prev.sort;
       let next: TableSortState | null;
-      if (!cur || cur.key !== key) next = { key, dir: 'asc' };
-      else if (cur.dir === 'asc') next = { key, dir: 'desc' };
+      if (!cur || cur.key !== key) next = { key, dir: "asc" };
+      else if (cur.dir === "asc") next = { key, dir: "desc" };
       else next = null;
       return { ...prev, sort: next };
     });

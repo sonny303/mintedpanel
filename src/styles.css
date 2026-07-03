@@ -12,11 +12,11 @@
 
 @theme inline {
   --font-sans:
-    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   --font-mono:
-    "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+    "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -68,32 +68,32 @@
 }
 
 :root {
-  --background: #FDFDFC;
-  --foreground: #1F2937;
-  --card: #FFFFFF;
-  --card-foreground: #1F2937;
-  --popover: #FFFFFF;
-  --popover-foreground: #1F2937;
-  --primary: #1B4D3E;
-  --primary-foreground: #FFFFFF;
-  --secondary: #FFFFFF;
-  --secondary-foreground: #1F2937;
-  --muted: #F5F4F1;
-  --muted-foreground: #6B7280;
-  --accent: #F5F4F1;
-  --accent-foreground: #1F2937;
-  --destructive: #DC2626;
-  --destructive-foreground: #FFFFFF;
-  --border: #E8E5E0;
-  --input: #E8E5E0;
-  --ring: #1B4D3E;
-  --text-muted: #9CA3AF;
+  --background: #fdfdfc;
+  --foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
+  --primary: #1b4d3e;
+  --primary-foreground: #ffffff;
+  --secondary: #ffffff;
+  --secondary-foreground: #1f2937;
+  --muted: #f5f4f1;
+  --muted-foreground: #6b7280;
+  --accent: #f5f4f1;
+  --accent-foreground: #1f2937;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e8e5e0;
+  --input: #e8e5e0;
+  --ring: #1b4d3e;
+  --text-muted: #9ca3af;
 
-  --status-gray: #9CA3AF;
-  --status-blue: #2563EB;
-  --status-amber: #D97706;
-  --status-red: #DC2626;
-  --status-teal: #0891B2;
+  --status-gray: #9ca3af;
+  --status-blue: #2563eb;
+  --status-amber: #d97706;
+  --status-red: #dc2626;
+  --status-teal: #0891b2;
   --status-green: #059669;
 
   --chart-1: oklch(0.646 0.222 41.116);
@@ -127,7 +127,7 @@
   }
 
   *:focus-visible {
-    outline: 2px solid #1B4D3E;
+    outline: 2px solid #1b4d3e;
     outline-offset: 2px;
   }
 }

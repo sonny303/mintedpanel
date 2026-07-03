@@ -1,37 +1,32 @@
 // Enrollment Matrix tab of the Reports page. Providers × payers grid with a
 // per-cell credentialing status pill (or state count when multiple).
-import { useMemo, useState } from 'react';
-import { Link } from '@tanstack/react-router';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
-import { useCases } from '@/hooks/useCases';
-import { useProviders } from '@/hooks/useProviders';
-import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import type { CredentialCase } from '@/types';
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
+import { useCases } from "@/hooks/useCases";
+import { useProviders } from "@/hooks/useProviders";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import type { CredentialCase } from "@/types";
 
-const ALL = '__all__';
+const ALL = "__all__";
 
 export function MatrixTab() {
   const casesQ = useCases();
   const providersQ = useProviders();
   const payersQ = usePayers();
-  const statusesQ = useStatusConfigs('credentialing');
+  const statusesQ = useStatusConfigs("credentialing");
   const groupsQ = useProviderGroups();
 
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
@@ -51,9 +46,7 @@ export function MatrixTab() {
   const filteredProviders = useMemo(() => {
     return (providersQ.data ?? [])
       .filter((p) => groupFilter === ALL || p.groupId === groupFilter)
-      .sort((a, b) =>
-        `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`),
-      );
+      .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`));
   }, [providersQ.data, groupFilter]);
 
   const payers = useMemo(
@@ -78,10 +71,7 @@ export function MatrixTab() {
   }, [casesQ.data, stateFilter]);
 
   const loading =
-    casesQ.isLoading ||
-    providersQ.isLoading ||
-    payersQ.isLoading ||
-    statusesQ.isLoading;
+    casesQ.isLoading || providersQ.isLoading || payersQ.isLoading || statusesQ.isLoading;
 
   if (loading) {
     return <Skeleton className="h-64 w-full" />;
@@ -176,7 +166,7 @@ export function MatrixTab() {
                           className="hover:underline"
                         >
                           {prov.lastName}, {prov.firstName}
-                          {prov.credentials ? `, ${prov.credentials}` : ''}
+                          {prov.credentials ? `, ${prov.credentials}` : ""}
                         </Link>
                       </td>
                       {payers.map((p) => {
@@ -198,14 +188,10 @@ export function MatrixTab() {
                             : null;
                           return (
                             <td key={p.id} className="px-3 h-10 align-middle">
-                              <Link
-                                to="/cases/$id"
-                                params={{ id: cs.id }}
-                                className="inline-flex"
-                              >
+                              <Link to="/cases/$id" params={{ id: cs.id }} className="inline-flex">
                                 <StatusPill
                                   status={hexToStatusColor(st?.color)}
-                                  label={`${cs.state} · ${st?.label ?? '—'}`}
+                                  label={`${cs.state} · ${st?.label ?? "—"}`}
                                 />
                               </Link>
                             </td>
@@ -231,7 +217,7 @@ export function MatrixTab() {
                                       : null;
                                     return (
                                       <div key={cs.id} className="text-[12px]">
-                                        {cs.state} · {st?.label ?? '—'}
+                                        {cs.state} · {st?.label ?? "—"}
                                       </div>
                                     );
                                   })}

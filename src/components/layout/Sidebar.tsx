@@ -1,6 +1,6 @@
-import { Link, useRouterState } from '@tanstack/react-router';
-import { Separator } from '@/components/ui/separator';
-import logoAsset from '@/assets/mpc-logo.png.asset.json';
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Separator } from "@/components/ui/separator";
+import logoAsset from "@/assets/mpc-logo.png.asset.json";
 
 import {
   Users,
@@ -11,7 +11,7 @@ import {
   Network,
   Building2,
   CheckCircle2,
-} from 'lucide-react';
+} from "lucide-react";
 
 type NavLink = {
   to: string;
@@ -21,36 +21,36 @@ type NavLink = {
 };
 
 const mainNav: NavLink[] = [
-  { to: '/cases', label: 'Cases', icon: FileStack },
-  { to: '/providers', label: 'Providers', icon: Users },
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: "/cases", label: "Cases", icon: FileStack },
+  { to: "/providers", label: "Providers", icon: Users },
+  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
 const adminNav: NavLink[] = [
-  { to: '/admin/statuses', label: 'Statuses', icon: CheckCircle2 },
-  { to: '/admin/templates', label: 'Templates', icon: FileText },
-  { to: '/admin/mso-routing', label: 'MSO Routing', icon: Network },
-  { to: '/admin/payers', label: 'Payers', icon: Building2 },
-  { to: '/admin/audit', label: 'Audit Log', icon: FileStack },
-  { to: '/admin/settings', label: 'Group & Locations', icon: Building2 },
+  { to: "/admin/statuses", label: "Statuses", icon: CheckCircle2 },
+  { to: "/admin/templates", label: "Templates", icon: FileText },
+  { to: "/admin/mso-routing", label: "MSO Routing", icon: Network },
+  { to: "/admin/payers", label: "Payers", icon: Building2 },
+  { to: "/admin/audit", label: "Audit Log", icon: FileStack },
+  { to: "/admin/settings", label: "Group & Locations", icon: Building2 },
 ];
 
-import { useRole } from '@/lib/auth-store';
+import { useRole } from "@/lib/auth-store";
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const role = useRole();
-  const showAdmin = role === 'admin';
+  const showAdmin = role === "admin";
 
   const isActive = (to: string, exact?: boolean) =>
-    exact ? pathname === to : pathname === to || pathname.startsWith(to + '/');
+    exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
 
   const itemClass = (active: boolean) =>
     `flex items-center gap-3 px-3 py-2 rounded-md text-[14px] ${
       active
-        ? 'bg-primary/10 text-primary font-medium'
-        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+        ? "bg-primary/10 text-primary font-medium"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted"
     }`;
 
   return (
@@ -59,7 +59,6 @@ export function Sidebar() {
         <div className="flex items-center gap-2 font-semibold text-[16px] tracking-tight">
           <div className="w-6 h-6 rounded bg-white flex items-center justify-center">
             <img src={logoAsset.url} alt="Minted Panel" className="w-5 h-5 object-contain" />
-
           </div>
           Minted Panel Cre
         </div>
@@ -74,7 +73,7 @@ export function Sidebar() {
               <Link
                 key={item.to}
                 to={item.to}
-                aria-current={active ? 'page' : undefined}
+                aria-current={active ? "page" : undefined}
                 className={itemClass(active)}
               >
                 <Icon className="w-4 h-4" />
@@ -102,7 +101,7 @@ export function Sidebar() {
                     <Link
                       key={item.to}
                       to={item.to}
-                      aria-current={active ? 'page' : undefined}
+                      aria-current={active ? "page" : undefined}
                       className={itemClass(active)}
                     >
                       <Icon className="w-4 h-4" />

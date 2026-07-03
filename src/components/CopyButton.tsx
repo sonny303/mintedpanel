@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { useEffect, useState, useRef } from "react";
+import { Copy, Check } from "lucide-react";
 
 interface CopyButtonProps {
   value: string;
@@ -7,7 +7,7 @@ interface CopyButtonProps {
   className?: string;
 }
 
-export function CopyButton({ value, label, className = '' }: CopyButtonProps) {
+export function CopyButton({ value, label, className = "" }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -35,8 +35,8 @@ export function CopyButton({ value, label, className = '' }: CopyButtonProps) {
       aria-label={copied ? `Copied ${label ?? value}` : `Copy ${label ?? value}`}
       className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[12px] font-medium transition-colors ${
         copied
-          ? 'border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]'
-          : 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted'
+          ? "border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]"
+          : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted"
       } ${className}`}
     >
       {copied ? (

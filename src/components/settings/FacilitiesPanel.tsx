@@ -1,38 +1,34 @@
 // Facilities list grouped by provider group, plus create/edit dialog.
 // Each provider group additionally shows its insurance policies inline.
-import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { EmptyState } from '@/components/EmptyState';
-import { useProviderGroups } from '@/hooks/useLookups';
-import {
-  useCreateFacility,
-  useFacilitiesAll,
-  useUpdateFacility,
-} from '@/hooks/useOrgSettings';
-import { useIsAdmin } from '@/lib/permissions';
-import type { FacilityInput } from '@/services/orgSettings';
-import type { Facility, ProviderGroup } from '@/types';
-import { InsurancePanel } from './InsurancePanel';
-import { US_STATES } from './shared';
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { EmptyState } from "@/components/EmptyState";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useCreateFacility, useFacilitiesAll, useUpdateFacility } from "@/hooks/useOrgSettings";
+import { useIsAdmin } from "@/lib/permissions";
+import type { FacilityInput } from "@/services/orgSettings";
+import type { Facility, ProviderGroup } from "@/types";
+import { InsurancePanel } from "./InsurancePanel";
+import { US_STATES } from "./shared";
 
 export function FacilitiesPanel() {
   const canEdit = useIsAdmin();
@@ -46,7 +42,7 @@ export function FacilitiesPanel() {
   const facilitiesByGroup = useMemo(() => {
     const m = new Map<string, Facility[]>();
     for (const f of facilitiesQ.data ?? []) {
-      const key = f.groupId ?? '__none__';
+      const key = f.groupId ?? "__none__";
       const arr = m.get(key) ?? [];
       arr.push(f);
       m.set(key, arr);
@@ -71,27 +67,23 @@ export function FacilitiesPanel() {
       <div className="divide-y divide-[#E8E5E0]">
         {[
           ...(groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name })),
-          { id: '__none__', name: 'Unassigned' },
+          { id: "__none__", name: "Unassigned" },
         ].map((g) => {
           const list = facilitiesByGroup.get(g.id) ?? [];
-          if (list.length === 0 && g.id === '__none__') return null;
+          if (list.length === 0 && g.id === "__none__") return null;
           return (
             <div key={g.id} className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-[13px] font-medium text-foreground">
                   {g.name}
-                  <span className="ml-2 text-muted-foreground font-normal">
-                    ({list.length})
-                  </span>
+                  <span className="ml-2 text-muted-foreground font-normal">({list.length})</span>
                 </div>
-                {canEdit && g.id !== '__none__' && (
+                {canEdit && g.id !== "__none__" && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-7 text-[11px] px-2"
-                    onClick={() =>
-                      setModal({ facility: null, defaultGroupId: g.id })
-                    }
+                    onClick={() => setModal({ facility: null, defaultGroupId: g.id })}
                   >
                     Add to group
                   </Button>
@@ -111,9 +103,7 @@ export function FacilitiesPanel() {
                       <div>
                         <div className="text-[13px] font-medium">{f.name}</div>
                         <div className="text-[12px] text-muted-foreground">
-                          {[f.street, f.city, f.state, f.zip]
-                            .filter(Boolean)
-                            .join(', ') || '—'}
+                          {[f.street, f.city, f.state, f.zip].filter(Boolean).join(", ") || "—"}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -142,7 +132,7 @@ export function FacilitiesPanel() {
                   ))}
                 </ul>
               )}
-              {g.id !== '__none__' ? (
+              {g.id !== "__none__" ? (
                 <div className="mt-4">
                   <InsurancePanel groupId={g.id} canEdit={canEdit} />
                 </div>
@@ -175,45 +165,43 @@ function FacilityEditModal({
   groups: ProviderGroup[];
   onClose: () => void;
 }) {
-  const [name, setName] = useState(facility?.name ?? '');
-  const [groupId, setGroupId] = useState<string>(
-    facility?.groupId ?? defaultGroupId ?? '__none__',
-  );
-  const [street, setStreet] = useState(facility?.street ?? '');
-  const [city, setCity] = useState(facility?.city ?? '');
-  const [state, setState] = useState<string>(facility?.state ?? '__none__');
-  const [zip, setZip] = useState(facility?.zip ?? '');
+  const [name, setName] = useState(facility?.name ?? "");
+  const [groupId, setGroupId] = useState<string>(facility?.groupId ?? defaultGroupId ?? "__none__");
+  const [street, setStreet] = useState(facility?.street ?? "");
+  const [city, setCity] = useState(facility?.city ?? "");
+  const [state, setState] = useState<string>(facility?.state ?? "__none__");
+  const [zip, setZip] = useState(facility?.zip ?? "");
   const [active, setActive] = useState<boolean>(facility?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
   const createMut = useCreateFacility();
-  const updateMut = useUpdateFacility(facility?.id ?? '');
+  const updateMut = useUpdateFacility(facility?.id ?? "");
   const pending = createMut.isPending || updateMut.isPending;
 
   const handleSave = () => {
     setError(null);
     if (!name.trim()) {
-      setError('Name is required');
+      setError("Name is required");
       return;
     }
     const input: FacilityInput = {
       name: name.trim(),
-      groupId: groupId === '__none__' ? null : groupId,
+      groupId: groupId === "__none__" ? null : groupId,
       street: street.trim() || null,
       city: city.trim() || null,
-      state: state === '__none__' ? null : state,
+      state: state === "__none__" ? null : state,
       zip: zip.trim() || null,
       isActive: active,
     };
     const onErr = (e: unknown) => {
-      const msg = e instanceof Error ? e.message : 'Save failed';
+      const msg = e instanceof Error ? e.message : "Save failed";
       setError(msg);
       toast.error(msg);
     };
     if (facility) {
       updateMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Facility updated');
+          toast.success("Facility updated");
           onClose();
         },
         onError: onErr,
@@ -221,7 +209,7 @@ function FacilityEditModal({
     } else {
       createMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Facility created');
+          toast.success("Facility created");
           onClose();
         },
         onError: onErr,
@@ -233,7 +221,7 @@ function FacilityEditModal({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>{facility ? 'Edit facility' : 'Add facility'}</DialogTitle>
+          <DialogTitle>{facility ? "Edit facility" : "Add facility"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
@@ -243,7 +231,10 @@ function FacilityEditModal({
           <div>
             <Label className="text-[12px]">Provider group</Label>
             <Select value={groupId} onValueChange={setGroupId}>
-              <SelectTrigger className="h-9 w-full" title={groups.find((g) => g.id === groupId)?.name ?? 'Unassigned'}>
+              <SelectTrigger
+                className="h-9 w-full"
+                title={groups.find((g) => g.id === groupId)?.name ?? "Unassigned"}
+              >
                 <SelectValue className="truncate" />
               </SelectTrigger>
               <SelectContent>
@@ -305,7 +296,7 @@ function FacilityEditModal({
             disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {pending ? 'Saving…' : facility ? 'Save changes' : 'Create facility'}
+            {pending ? "Saving…" : facility ? "Save changes" : "Create facility"}
           </Button>
         </DialogFooter>
       </DialogContent>

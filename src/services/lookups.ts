@@ -1,9 +1,16 @@
 // Read-only lookup queries used by list screens: provider groups for the
 // active org, coordinators, state licenses, mso routing rules, plus notes.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { Facility, MsoRoutingRule, Note, NoteEntityType, Profile, ProviderGroup } from '@/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import type {
+  Facility,
+  MsoRoutingRule,
+  Note,
+  NoteEntityType,
+  Profile,
+  ProviderGroup,
+} from "@/types";
 
 export interface StateLicense {
   id: string;
@@ -21,11 +28,11 @@ export interface StateLicense {
 export async function getStateLicensesByProvider(providerId: string): Promise<StateLicense[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('state_licenses')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('provider_id', providerId)
-    .order('state', { ascending: true });
+    .from("state_licenses")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("provider_id", providerId)
+    .order("state", { ascending: true });
   if (error) throw error;
   return camelizeRow<StateLicense[]>(data ?? []);
 }
@@ -33,11 +40,11 @@ export async function getStateLicensesByProvider(providerId: string): Promise<St
 export async function getFacilities(groupId?: string | null): Promise<Facility[]> {
   const orgId = requireActiveOrg();
   let query = supabase
-    .from('facilities')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('name', { ascending: true });
-  if (groupId) query = query.eq('group_id', groupId);
+    .from("facilities")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name", { ascending: true });
+  if (groupId) query = query.eq("group_id", groupId);
   const { data, error } = await query;
   if (error) throw error;
   return camelizeRow<Facility[]>(data ?? []);
@@ -46,10 +53,10 @@ export async function getFacilities(groupId?: string | null): Promise<Facility[]
 export async function getProviderGroups(): Promise<ProviderGroup[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('provider_groups')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('name', { ascending: true });
+    .from("provider_groups")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name", { ascending: true });
   if (error) throw error;
   return camelizeRow<ProviderGroup[]>(data ?? []);
 }
@@ -59,18 +66,19 @@ export async function getCoordinators(): Promise<Profile[]> {
   // Every member of the active org (not just those already assigned to a
   // case) so brand-new invitees can be selected as coordinators.
   const { data, error } = await supabase
-    .from('memberships')
-    .select('user_id, profiles(id, email, full_name, created_at)')
-    .eq('org_id', orgId);
+    .from("memberships")
+    .select("user_id, profiles(id, email, full_name, created_at)")
+    .eq("org_id", orgId);
   if (error) throw error;
-  const rows = ((data ?? []) as unknown as Array<{
-    profiles: Record<string, unknown> | null;
-  }>)
+  const rows = (
+    (data ?? []) as unknown as Array<{
+      profiles: Record<string, unknown> | null;
+    }>
+  )
     .map((r) => r.profiles)
     .filter((p): p is Record<string, unknown> => Boolean(p));
   return camelizeRow<Profile[]>(rows);
 }
-
 
 export async function getMsoRoutingRule(
   payerId: string,
@@ -83,30 +91,30 @@ export async function getMsoRoutingRule(
   // for both state and specialty. Most specific match wins (specialty > state);
   // ties broken by created_at desc. Never returns early inside the scan.
   const { data, error } = await supabase
-    .from('mso_routing_rules')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('payer_id', payerId);
+    .from("mso_routing_rules")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("payer_id", payerId);
   if (error) throw error;
   const rows = camelizeRow<MsoRoutingRule[]>(data ?? []);
 
   const candidates: Array<{ rule: MsoRoutingRule; score: number; createdMs: number }> = [];
   for (const rule of rows) {
-    const ruleState = rule.state ?? '';
-    const ruleSpecialty = rule.specialty ?? '';
-    const stateMatches = ruleState === state || ruleState === 'All';
+    const ruleState = rule.state ?? "";
+    const ruleSpecialty = rule.specialty ?? "";
+    const stateMatches = ruleState === state || ruleState === "All";
     const specialtyMatches =
-      ruleSpecialty === 'All' || (specialty !== null && ruleSpecialty === specialty);
+      ruleSpecialty === "All" || (specialty !== null && ruleSpecialty === specialty);
     if (!stateMatches || !specialtyMatches) continue;
     let score = 0;
-    if (ruleSpecialty !== 'All') score += 2;
-    if (ruleState !== 'All') score += 1;
+    if (ruleSpecialty !== "All") score += 2;
+    if (ruleState !== "All") score += 1;
     const createdMs = rule.createdAt ? new Date(rule.createdAt).getTime() : 0;
 
     candidates.push({ rule, score, createdMs });
   }
 
-  candidates.sort((a, b) => (b.score - a.score) || (b.createdMs - a.createdMs));
+  candidates.sort((a, b) => b.score - a.score || b.createdMs - a.createdMs);
   return candidates[0]?.rule ?? null;
 }
 
@@ -116,18 +124,15 @@ export interface CreateNoteInput {
   content: string;
 }
 
-export async function getNotesFor(
-  entityType: NoteEntityType,
-  entityId: string,
-): Promise<Note[]> {
+export async function getNotesFor(entityType: NoteEntityType, entityId: string): Promise<Note[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('notes')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('entity_type', entityType)
-    .eq('entity_id', entityId)
-    .order('created_at', { ascending: false });
+    .from("notes")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .order("created_at", { ascending: false });
   if (error) throw error;
   const rows = data ?? [];
   const authorIds = Array.from(
@@ -136,9 +141,9 @@ export async function getNotesFor(
   const nameMap = new Map<string, string | null>();
   if (authorIds.length > 0) {
     const { data: profs, error: profErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .in('id', authorIds);
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", authorIds);
     if (profErr) throw profErr;
     for (const p of profs ?? []) {
       const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
@@ -148,7 +153,7 @@ export async function getNotesFor(
 
   const merged = rows.map((n) => ({
     ...n,
-    author_name: n.author_id ? nameMap.get(n.author_id as string) ?? null : null,
+    author_name: n.author_id ? (nameMap.get(n.author_id as string) ?? null) : null,
   }));
   return camelizeRow<Note[]>(merged);
 }
@@ -161,15 +166,15 @@ export async function createNote(input: CreateNoteInput): Promise<Note> {
     author_id: currentUserId(),
   };
   const { data, error } = await supabase
-    .from('notes')
+    .from("notes")
     .insert(payload as never)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Note>(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'note',
+    actionType: "CREATE",
+    entityType: "note",
     entityId: created.id,
     after: created,
     description: `Added note to ${created.entityType}`,

@@ -33,7 +33,10 @@ interface AuthState {
   init: () => Promise<void>;
   loadMemberships: () => Promise<void>;
   setActiveOrg: (orgId: string) => void;
-  signIn: (email: string, password: string) => Promise<{ error: string | null; kind?: SignInErrorKind }>;
+  signIn: (
+    email: string,
+    password: string,
+  ) => Promise<{ error: string | null; kind?: SignInErrorKind }>;
   signOut: () => Promise<void>;
 }
 
@@ -142,7 +145,10 @@ export const useAuthStore = create<AuthState>()(
           const name = (error as { name?: string }).name ?? "";
           const status = (error as { status?: number }).status;
           if (name === "AuthRetryableFetchError" || status === 0 || typeof status === "undefined") {
-            return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+            return {
+              error: "Can't reach the server. Check your connection and try again.",
+              kind: "network",
+            };
           }
           if (status === 400 || status === 401 || /invalid/i.test(error.message)) {
             return { error: "Invalid email or password", kind: "invalid" };
@@ -150,7 +156,10 @@ export const useAuthStore = create<AuthState>()(
           return { error: error.message, kind: "unknown" };
         } catch {
           set({ loading: false });
-          return { error: "Can't reach the server. Check your connection and try again.", kind: "network" };
+          return {
+            error: "Can't reach the server. Check your connection and try again.",
+            kind: "network",
+          };
         }
       },
 
@@ -179,9 +188,7 @@ export const useAuthStore = create<AuthState>()(
 );
 
 export function useActiveMembership(): MembershipEntry | null {
-  return useAuthStore((s) =>
-    s.memberships.find((m) => m.orgId === s.activeOrgId) ?? null,
-  );
+  return useAuthStore((s) => s.memberships.find((m) => m.orgId === s.activeOrgId) ?? null);
 }
 
 export function useRole(): AppRole | null {
@@ -191,4 +198,3 @@ export function useRole(): AppRole | null {
 export function useActiveOrgId(): string | null {
   return useAuthStore((s) => s.activeOrgId);
 }
-

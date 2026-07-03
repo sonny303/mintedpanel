@@ -1,27 +1,27 @@
 // Roster tab of the Reports page. Choose a group + payer (optional state)
 // then preview and download a payer roster CSV for matched cases.
-import { useMemo, useState } from 'react';
-import { format, parseISO } from 'date-fns';
-import { Download } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { useMemo, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/EmptyState';
-import { downloadCsv } from '@/lib/csv';
-import { useCases } from '@/hooks/useCases';
-import { useProviders } from '@/hooks/useProviders';
-import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useRosterAux } from '@/hooks/useReports';
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/EmptyState";
+import { downloadCsv } from "@/lib/csv";
+import { useCases } from "@/hooks/useCases";
+import { useProviders } from "@/hooks/useProviders";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useRosterAux } from "@/hooks/useReports";
 
-const ALL = '__all__';
+const ALL = "__all__";
 
 interface RosterRow {
   lastName: string;
@@ -51,29 +51,32 @@ interface RosterAuxFacility {
 }
 
 function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'roster';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "roster"
+  );
 }
 
 function formatAddress(f: RosterAuxFacility | undefined): string {
-  if (!f) return '';
-  const parts = [f.street, [f.city, f.state].filter(Boolean).join(', '), f.zip]
-    .filter((p) => p && String(p).trim().length > 0);
-  return parts.join(' • ');
+  if (!f) return "";
+  const parts = [f.street, [f.city, f.state].filter(Boolean).join(", "), f.zip].filter(
+    (p) => p && String(p).trim().length > 0,
+  );
+  return parts.join(" • ");
 }
 
 export function RosterTab() {
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
-  const statusesQ = useStatusConfigs('credentialing');
+  const statusesQ = useStatusConfigs("credentialing");
   const providersQ = useProviders();
   const casesQ = useCases();
 
-  const [groupId, setGroupId] = useState<string>('');
-  const [payerId, setPayerId] = useState<string>('');
+  const [groupId, setGroupId] = useState<string>("");
+  const [payerId, setPayerId] = useState<string>("");
   const [stateSel, setStateSel] = useState<string>(ALL);
   const [generated, setGenerated] = useState<{
     groupId: string;
@@ -120,9 +123,7 @@ export function RosterTab() {
 
   const rows: RosterRow[] = useMemo(() => {
     if (!generated) return [];
-    const providerById = new Map(
-      (providersQ.data ?? []).map((p) => [p.id, p]),
-    );
+    const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
     const group = groupById.get(generated.groupId);
     const aux = auxQ.data;
     const facilityById = new Map((aux?.facilities ?? []).map((f) => [f.id, f]));
@@ -137,9 +138,7 @@ export function RosterTab() {
       .map((cs) => {
         const p = providerById.get(cs.providerId);
         if (!p) return null;
-        const status = cs.credentialingStatusId
-          ? statusById.get(cs.credentialingStatusId)
-          : null;
+        const status = cs.credentialingStatusId ? statusById.get(cs.credentialingStatusId) : null;
         const facilityId = cs.facilityId ?? assignmentByProvider.get(p.id) ?? null;
         const facility = facilityId ? facilityById.get(facilityId) : undefined;
         const license = (aux?.licenses ?? []).find(
@@ -149,21 +148,21 @@ export function RosterTab() {
         return {
           lastName: p.lastName,
           firstName: p.firstName,
-          credentials: p.credentials ?? '',
-          npi: p.npi ?? '',
-          groupNpi: group?.npiType2 ?? '',
-          tin: group?.tin ?? '',
-          taxonomyCode: p.taxonomyCode ?? '',
-          facilityName: facility?.name ?? '',
+          credentials: p.credentials ?? "",
+          npi: p.npi ?? "",
+          groupNpi: group?.npiType2 ?? "",
+          tin: group?.tin ?? "",
+          taxonomyCode: p.taxonomyCode ?? "",
+          facilityName: facility?.name ?? "",
           facilityAddress: formatAddress(facility),
           state: cs.state,
-          licenseNumber: license?.licenseNumber ?? '',
+          licenseNumber: license?.licenseNumber ?? "",
           licenseExpiration: license?.expirationDate
-            ? format(parseISO(license.expirationDate), 'yyyy-MM-dd')
-            : '',
-          caqhId: p.caqhId ?? '',
-          credentialingStatus: status?.label ?? '',
-          effectiveDate: eff ? format(parseISO(eff), 'yyyy-MM-dd') : '',
+            ? format(parseISO(license.expirationDate), "yyyy-MM-dd")
+            : "",
+          caqhId: p.caqhId ?? "",
+          credentialingStatus: status?.label ?? "",
+          effectiveDate: eff ? format(parseISO(eff), "yyyy-MM-dd") : "",
         } satisfies RosterRow;
       })
       .filter((r): r is RosterRow => r !== null)
@@ -187,23 +186,23 @@ export function RosterTab() {
     if (!generated || rows.length === 0) return;
     const group = groupById.get(generated.groupId);
     const payer = payerById.get(generated.payerId);
-    const filename = `minted-panel-roster-${slugify(group?.name ?? 'group')}-${slugify(payer?.name ?? 'payer')}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const filename = `minted-panel-roster-${slugify(group?.name ?? "group")}-${slugify(payer?.name ?? "payer")}-${format(new Date(), "yyyy-MM-dd")}.csv`;
     const header = [
-      'Last name',
-      'First name',
-      'Credentials',
-      'NPI (Type 1)',
-      'Group NPI (Type 2)',
-      'TIN',
-      'Taxonomy code',
-      'Primary facility name',
-      'Primary facility address',
-      'State',
-      'License number',
-      'License expiration',
-      'CAQH ID',
-      'Credentialing status',
-      'Effective date',
+      "Last name",
+      "First name",
+      "Credentials",
+      "NPI (Type 1)",
+      "Group NPI (Type 2)",
+      "TIN",
+      "Taxonomy code",
+      "Primary facility name",
+      "Primary facility address",
+      "State",
+      "License number",
+      "License expiration",
+      "CAQH ID",
+      "Credentialing status",
+      "Effective date",
     ];
     downloadCsv(filename, [
       header,
@@ -266,9 +265,7 @@ export function RosterTab() {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              State
-            </Label>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">State</Label>
             <Select value={stateSel} onValueChange={setStateSel}>
               <SelectTrigger className="h-9 w-[160px]">
                 <SelectValue placeholder="All states" />
@@ -291,11 +288,7 @@ export function RosterTab() {
             Generate roster
           </Button>
           {generated && rows.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={handleDownload}
-              className="h-9 ml-auto"
-            >
+            <Button variant="outline" onClick={handleDownload} className="h-9 ml-auto">
               <Download className="h-4 w-4 mr-1" /> Download CSV
             </Button>
           )}
@@ -331,7 +324,7 @@ export function RosterTab() {
       ) : rows.length === 0 ? (
         <div className="border border-[#E8E5E0] rounded-md bg-white p-12">
           <EmptyState
-            message={`No providers in this group have a case for the selected payer${generated.state ? ` in ${generated.state}` : ''}`}
+            message={`No providers in this group have a case for the selected payer${generated.state ? ` in ${generated.state}` : ""}`}
           />
         </div>
       ) : (
@@ -363,11 +356,11 @@ export function RosterTab() {
                 >
                   <td className="px-3">{r.lastName}</td>
                   <td className="px-3">{r.firstName}</td>
-                  <td className="px-3">{r.credentials || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.npi || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.groupNpi || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.tin || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.taxonomyCode || '—'}</td>
+                  <td className="px-3">{r.credentials || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.npi || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.groupNpi || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.tin || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.taxonomyCode || "—"}</td>
                   <td className="px-3">
                     {r.facilityName ? (
                       <div className="flex flex-col leading-tight">
@@ -379,15 +372,15 @@ export function RosterTab() {
                         )}
                       </div>
                     ) : (
-                      '—'
+                      "—"
                     )}
                   </td>
                   <td className="px-3">{r.state}</td>
-                  <td className="px-3 tabular-nums">{r.licenseNumber || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.licenseExpiration || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.caqhId || '—'}</td>
-                  <td className="px-3">{r.credentialingStatus || '—'}</td>
-                  <td className="px-3 tabular-nums">{r.effectiveDate || '—'}</td>
+                  <td className="px-3 tabular-nums">{r.licenseNumber || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.licenseExpiration || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.caqhId || "—"}</td>
+                  <td className="px-3">{r.credentialingStatus || "—"}</td>
+                  <td className="px-3 tabular-nums">{r.effectiveDate || "—"}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,9 +1,9 @@
 // Status history card on the case detail page (both tracks combined).
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/EmptyState';
-import { History } from 'lucide-react';
-import { fmtDateTime } from '@/lib/format';
-import type { StatusConfig, StatusHistoryEntry } from '@/types';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/EmptyState";
+import { History } from "lucide-react";
+import { fmtDateTime } from "@/lib/format";
+import type { StatusConfig, StatusHistoryEntry } from "@/types";
 
 export function CaseHistoryPanel({
   history,
@@ -27,8 +27,8 @@ export function CaseHistoryPanel({
         ) : (
           <ul className="space-y-3 text-[13px]">
             {history.map((h) => {
-              const from = h.fromStatusId ? statusById.get(h.fromStatusId)?.label ?? '—' : '—';
-              const to = h.toStatusId ? statusById.get(h.toStatusId)?.label ?? '—' : '—';
+              const from = h.fromStatusId ? (statusById.get(h.fromStatusId)?.label ?? "—") : "—";
+              const to = h.toStatusId ? (statusById.get(h.toStatusId)?.label ?? "—") : "—";
               return (
                 <li key={h.id} className="flex justify-between gap-3">
                   <div className="min-w-0">
@@ -50,7 +50,6 @@ export function CaseHistoryPanel({
                 </li>
               );
             })}
-
           </ul>
         )}
       </CardContent>

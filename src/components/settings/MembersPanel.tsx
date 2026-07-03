@@ -1,10 +1,10 @@
 // Team members table: role changes, invites (pending list), and removal.
 // Admin-only mutations; every mutation surfaces success/error via toast.
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -12,39 +12,39 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { fmtDate } from '@/lib/format';
-import { useAuthStore, useActiveMembership, type AppRole } from '@/lib/auth-store';
-import { useIsAdmin } from '@/lib/permissions';
-import { useMemberships, useUpdateMembershipRole } from '@/hooks/useOrgSettings';
+} from "@/components/ui/select";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { fmtDate } from "@/lib/format";
+import { useAuthStore, useActiveMembership, type AppRole } from "@/lib/auth-store";
+import { useIsAdmin } from "@/lib/permissions";
+import { useMemberships, useUpdateMembershipRole } from "@/hooks/useOrgSettings";
 import {
   useCreatePendingInvite,
   usePendingInvites,
   useRemoveMembership,
   useRevokePendingInvite,
-} from '@/hooks/useInvites';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { DuplicateInviteError, type PendingInvite } from '@/services/invites';
-import type { MembershipRow } from '@/services/orgSettings';
+} from "@/hooks/useInvites";
+import { supabase } from "@/integrations/supabase/externalClient";
+import { DuplicateInviteError, type PendingInvite } from "@/services/invites";
+import type { MembershipRow } from "@/services/orgSettings";
 
 function roleBadge(role: AppRole) {
-  if (role === 'specialist') {
+  if (role === "specialist") {
     return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
         Specialist
       </span>
     );
   }
-  if (role === 'billing') {
+  if (role === "billing") {
     return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#F5F5F4] text-[#57534E] border-[#E8E5E0]">
         Billing
@@ -66,24 +66,24 @@ function InviteDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<AppRole>('specialist');
-  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<AppRole>("specialist");
+  const [fullName, setFullName] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const createInvite = useCreatePendingInvite();
 
   const reset = () => {
-    setEmail('');
-    setRole('specialist');
-    setFullName('');
+    setEmail("");
+    setRole("specialist");
+    setFullName("");
     setEmailError(null);
   };
 
   const handleSubmit = async () => {
     const trimmed = email.trim();
     if (!trimmed || !/.+@.+\..+/.test(trimmed)) {
-      setEmailError('Enter a valid email address');
+      setEmailError("Enter a valid email address");
       return;
     }
     setEmailError(null);
@@ -95,7 +95,7 @@ function InviteDialog({
         fullName: fullName.trim() || null,
       });
       const { data: inviteResp, error: fnError } = await supabase.functions.invoke(
-        'invite-member',
+        "invite-member",
         { body: { email: trimmed, orgId: activeOrgId, fullName: fullName.trim() || null } },
       );
       if (fnError) {
@@ -111,9 +111,9 @@ function InviteDialog({
       onOpenChange(false);
     } catch (e) {
       if (e instanceof DuplicateInviteError) {
-        setEmailError('An invite for that email is already pending.');
+        setEmailError("An invite for that email is already pending.");
       } else {
-        const msg = e instanceof Error ? e.message : 'Failed to create invite';
+        const msg = e instanceof Error ? e.message : "Failed to create invite";
         toast.error(msg);
       }
     } finally {
@@ -149,9 +149,7 @@ function InviteDialog({
               placeholder="teammate@example.com"
               className="mt-1"
             />
-            {emailError ? (
-              <p className="mt-1 text-[12px] text-[#B91C1C]">{emailError}</p>
-            ) : null}
+            {emailError ? <p className="mt-1 text-[12px] text-[#B91C1C]">{emailError}</p> : null}
           </div>
           <div>
             <Label htmlFor="invite-name">Full name (optional)</Label>
@@ -184,10 +182,10 @@ function InviteDialog({
           <Button
             onClick={handleSubmit}
             disabled={submitting}
-            style={{ backgroundColor: '#1B4D3E' }}
+            style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
-            {submitting ? 'Sending…' : 'Send invite'}
+            {submitting ? "Sending…" : "Send invite"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -210,22 +208,27 @@ function RemoveMemberDialog({
       { id: member.id, email: member.email, role: member.role },
       {
         onSuccess: () => {
-          toast.success('Member removed');
+          toast.success("Member removed");
           onClose();
         },
         onError: (e) => {
-          toast.error(e instanceof Error ? e.message : 'Failed to remove member');
+          toast.error(e instanceof Error ? e.message : "Failed to remove member");
         },
       },
     );
   };
   return (
-    <Dialog open={Boolean(member)} onOpenChange={(v) => { if (!v && !submitting) onClose(); }}>
+    <Dialog
+      open={Boolean(member)}
+      onOpenChange={(v) => {
+        if (!v && !submitting) onClose();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Remove team member?</DialogTitle>
           <DialogDescription>
-            {member?.fullName ?? member?.email ?? 'This member'} will lose access to this
+            {member?.fullName ?? member?.email ?? "This member"} will lose access to this
             organization. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
@@ -238,7 +241,7 @@ function RemoveMemberDialog({
             disabled={submitting}
             className="bg-[#B91C1C] text-white hover:opacity-90"
           >
-            {submitting ? 'Removing…' : 'Remove'}
+            {submitting ? "Removing…" : "Remove"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -262,9 +265,9 @@ export function MembersPanel() {
     updateRole.mutate(
       { id, role: newRole },
       {
-        onSuccess: () => toast.success('Role updated'),
+        onSuccess: () => toast.success("Role updated"),
         onError: (e) => {
-          const msg = e instanceof Error ? e.message : 'Update failed';
+          const msg = e instanceof Error ? e.message : "Update failed";
           toast.error(msg);
         },
       },
@@ -274,7 +277,7 @@ export function MembersPanel() {
   const handleRevoke = (invite: PendingInvite) => {
     revokeInvite.mutate(invite, {
       onSuccess: () => toast.success(`Invite for ${invite.email} revoked`),
-      onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to revoke invite'),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to revoke invite"),
     });
   };
 
@@ -289,7 +292,7 @@ export function MembersPanel() {
         {canEdit ? (
           <Button
             onClick={() => setInviteOpen(true)}
-            style={{ backgroundColor: '#1B4D3E' }}
+            style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
             Invite member
@@ -301,7 +304,7 @@ export function MembersPanel() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-              {['Name', 'Email', 'Role', 'Joined', ''].map((h, i) => (
+              {["Name", "Email", "Role", "Joined", ""].map((h, i) => (
                 <th
                   key={i}
                   className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
@@ -341,11 +344,9 @@ export function MembersPanel() {
                     key={m.id}
                     className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
                   >
-                    <td className="px-3 h-10 align-middle font-medium">
-                      {m.fullName ?? '—'}
-                    </td>
+                    <td className="px-3 h-10 align-middle font-medium">{m.fullName ?? "—"}</td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {m.email ?? '—'}
+                      {m.email ?? "—"}
                     </td>
                     <td className="px-3 h-10 align-middle">{roleBadge(m.role)}</td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
@@ -394,7 +395,7 @@ export function MembersPanel() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-                {['Email', 'Role', 'Invited', ''].map((h, i) => (
+                {["Email", "Role", "Invited", ""].map((h, i) => (
                   <th
                     key={i}
                     className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"

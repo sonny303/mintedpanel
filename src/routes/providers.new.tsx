@@ -1,30 +1,30 @@
 // Add Provider entry point. The 5-step form lives in ProviderForm; this
 // route wires it to createProviderWithDetails so licenses and facility
 // assignments captured in steps 3 and 4 are persisted alongside the provider.
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { useActiveOrgId, useAuthStore } from '@/lib/auth-store';
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { useActiveOrgId, useAuthStore } from "@/lib/auth-store";
 import {
   ProviderForm,
   emptyProviderFormState,
   type ProviderFormState,
-} from '@/components/providers/ProviderForm';
+} from "@/components/providers/ProviderForm";
 import {
   createProviderWithDetails,
   type CreateProviderWithDetailsInput,
   type CreateProviderWithDetailsResult,
   type LicenseInput,
   type ProviderInput,
-} from '@/services/providers';
+} from "@/services/providers";
 
-export const Route = createFileRoute('/providers/new')({
+export const Route = createFileRoute("/providers/new")({
   beforeLoad: () => {
     const { memberships, activeOrgId } = useAuthStore.getState();
     const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
-    if (role === 'billing') {
-      throw redirect({ to: '/providers', replace: true });
+    if (role === "billing") {
+      throw redirect({ to: "/providers", replace: true });
     }
   },
   component: Page,
@@ -59,7 +59,7 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
     malpracticePolicyNumber: form.malpracticePolicyNumber.trim() || null,
     malpracticeCoverageStart: form.malpracticeCoverageStart || null,
     malpracticeCoverageEnd: form.malpracticeCoverageEnd || null,
-    status: 'active',
+    status: "active",
   };
 }
 
@@ -78,12 +78,12 @@ function toLicenseInputs(form: ProviderFormState): LicenseInput[] {
 function Page() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
 
   const create = useMutation({
     mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['providers', orgId] });
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
     },
   });
 
@@ -96,13 +96,13 @@ function Page() {
       });
       if (result.warnings.length > 0) {
         for (const w of result.warnings) toast.error(w);
-        toast.warning('Provider created, but some details did not save. Fix and retry.');
+        toast.warning("Provider created, but some details did not save. Fix and retry.");
         return;
       }
-      toast.success('Provider added');
-      navigate({ to: '/providers/$id', params: { id: result.provider.id } });
+      toast.success("Provider added");
+      navigate({ to: "/providers/$id", params: { id: result.provider.id } });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create provider');
+      toast.error(error instanceof Error ? error.message : "Failed to create provider");
     }
   };
 

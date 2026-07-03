@@ -1,28 +1,28 @@
 // Edit Provider page: pre-fills the shared 5-step form with the existing
 // provider and licenses, saves via updateProviderWithLicenses. Billing role
 // is redirected before the page renders.
-import { useMemo } from 'react';
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
-import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useProvider, useUpdateProviderWithLicenses } from '@/hooks/useProviders';
-import { useStateLicensesByProvider } from '@/hooks/useLookups';
-import { useAuthStore } from '@/lib/auth-store';
+import { useMemo } from "react";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useProvider, useUpdateProviderWithLicenses } from "@/hooks/useProviders";
+import { useStateLicensesByProvider } from "@/hooks/useLookups";
+import { useAuthStore } from "@/lib/auth-store";
 import {
   emptyProviderFormState,
   type ProviderFormState,
   type LicenseRow,
-} from '@/components/providers/ProviderForm';
-import { EditProviderForm } from '@/components/providers/EditProviderForm';
-import type { LicenseInput } from '@/services/providers';
+} from "@/components/providers/ProviderForm";
+import { EditProviderForm } from "@/components/providers/EditProviderForm";
+import type { LicenseInput } from "@/services/providers";
 
-export const Route = createFileRoute('/providers/$id/edit')({
+export const Route = createFileRoute("/providers/$id/edit")({
   beforeLoad: () => {
     const { memberships, activeOrgId } = useAuthStore.getState();
     const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
-    if (role === 'billing') {
-      throw redirect({ to: '/providers', replace: true });
+    if (role === "billing") {
+      throw redirect({ to: "/providers", replace: true });
     }
   },
   component: EditPage,
@@ -39,44 +39,43 @@ function EditPage() {
     const p = providerQ.data;
     if (!p) return null;
     const licenses: LicenseRow[] = (licensesQ.data ?? []).map((l) => ({
-      state: l.state ?? '',
-      number: l.licenseNumber ?? '',
-      type:
-        l.licenseType === 'full' || l.licenseType === 'compact' ? l.licenseType : '',
-      issueDate: l.issueDate ?? '',
-      expirationDate: l.expirationDate ?? '',
+      state: l.state ?? "",
+      number: l.licenseNumber ?? "",
+      type: l.licenseType === "full" || l.licenseType === "compact" ? l.licenseType : "",
+      issueDate: l.issueDate ?? "",
+      expirationDate: l.expirationDate ?? "",
     }));
     return {
       ...emptyProviderFormState,
-      firstName: p.firstName ?? '',
-      lastName: p.lastName ?? '',
-      credentials: p.credentials ?? '',
-      dateOfBirth: p.dateOfBirth ?? '',
-      ssnLast4: p.ssnLast4 ?? '',
-      email: p.email ?? '',
-      phone: p.phone ?? '',
-      homeStreet: p.homeStreet ?? '',
-      homeCity: p.homeCity ?? '',
-      homeState: p.homeState ?? '',
-      homeZip: p.homeZip ?? '',
-      npi: p.npi ?? '',
-      caqhId: p.caqhId ?? '',
+      firstName: p.firstName ?? "",
+      lastName: p.lastName ?? "",
+      credentials: p.credentials ?? "",
+      dateOfBirth: p.dateOfBirth ?? "",
+      ssnLast4: p.ssnLast4 ?? "",
+      email: p.email ?? "",
+      phone: p.phone ?? "",
+      homeStreet: p.homeStreet ?? "",
+      homeCity: p.homeCity ?? "",
+      homeState: p.homeState ?? "",
+      homeZip: p.homeZip ?? "",
+      npi: p.npi ?? "",
+      caqhId: p.caqhId ?? "",
       isNewGrad: p.isNewGrad ?? false,
-      caqhLastAttestedDate: p.caqhLastAttestedDate ?? '',
-      taxonomyCode: p.taxonomyCode ?? '',
-      deaNumber: p.deaNumber ?? '',
+      caqhLastAttestedDate: p.caqhLastAttestedDate ?? "",
+      taxonomyCode: p.taxonomyCode ?? "",
+      deaNumber: p.deaNumber ?? "",
       licenses: licenses.length > 0 ? licenses : emptyProviderFormState.licenses,
-      groupId: p.groupId ?? '',
+      groupId: p.groupId ?? "",
       facilityIds: [],
-      specialty: p.specialty ?? '',
-      startDate: p.startDate ?? '',
-      degree: p.degree ?? '',
-      schoolName: p.schoolName ?? '',
-      graduationDate: p.graduationDate ?? '',
-      malpracticeCarrier: p.malpracticeCarrier ?? '',
-      malpracticePolicyNumber: p.malpracticePolicyNumber ?? '',
-      malpracticeCoverageStart: p.malpracticeCoverageStart ?? '',
-      malpracticeCoverageEnd: p.malpracticeCoverageEnd ?? '',
+      specialty: p.specialty ?? "",
+      startDate: p.startDate ?? "",
+      degree: p.degree ?? "",
+      schoolName: p.schoolName ?? "",
+      graduationDate: p.graduationDate ?? "",
+      malpracticeCarrier: p.malpracticeCarrier ?? "",
+      malpracticePolicyNumber: p.malpracticePolicyNumber ?? "",
+      malpracticeCoverageStart: p.malpracticeCoverageStart ?? "",
+      malpracticeCoverageEnd: p.malpracticeCoverageEnd ?? "",
     };
   }, [providerQ.data, licensesQ.data]);
 
@@ -120,8 +119,8 @@ function EditPage() {
       },
       licenses,
     });
-    toast.success('Provider updated');
-    navigate({ to: '/providers/$id', params: { id } });
+    toast.success("Provider updated");
+    navigate({ to: "/providers/$id", params: { id } });
   };
 
   if (providerQ.isLoading || licensesQ.isLoading || !initial) {
@@ -137,7 +136,7 @@ function EditPage() {
     return <p className="text-sm text-destructive">Failed to load provider.</p>;
   }
 
-  const name = `${initial.firstName} ${initial.lastName}`.trim() || 'provider';
+  const name = `${initial.firstName} ${initial.lastName}`.trim() || "provider";
 
   return (
     <div className="max-w-4xl">
@@ -146,7 +145,7 @@ function EditPage() {
         initial={initial}
         isPending={update.isPending}
         onSubmit={onSubmit}
-        onCancel={() => navigate({ to: '/providers/$id', params: { id } })}
+        onCancel={() => navigate({ to: "/providers/$id", params: { id } })}
       />
     </div>
   );

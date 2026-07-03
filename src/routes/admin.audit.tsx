@@ -1,23 +1,23 @@
 // Admin → Audit log viewer. Strictly read-only; the audit_log table is
 // append-only at the database level. Filters, paginated table, and a
 // before/after diff for each entry.
-import { useMemo, useState, Fragment } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { format, parseISO } from 'date-fns';
-import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState, Fragment } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { format, parseISO } from "date-fns";
+import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -25,33 +25,33 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { useAuditLog } from '@/hooks/useAdmin';
-import type { AuditActionType, AuditLogEntry } from '@/types';
+} from "@/components/ui/table";
+import { useAuditLog } from "@/hooks/useAdmin";
+import type { AuditActionType, AuditLogEntry } from "@/types";
 
-export const Route = createFileRoute('/admin/audit')({
+export const Route = createFileRoute("/admin/audit")({
   component: AdminAuditPage,
 });
 
 const ACTION_TYPES: AuditActionType[] = [
-  'CREATE',
-  'UPDATE',
-  'DELETE',
-  'STATUS_CHANGE',
-  'TOUCH_LOGGED',
-  'TERMINATION',
+  "CREATE",
+  "UPDATE",
+  "DELETE",
+  "STATUS_CHANGE",
+  "TOUCH_LOGGED",
+  "TERMINATION",
 ];
 
 const PAGE_SIZE = 50;
 
 function ActionPill({ action }: { action: AuditActionType }) {
   const styles: Record<AuditActionType, string> = {
-    CREATE: 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]',
-    UPDATE: 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]',
-    DELETE: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
-    STATUS_CHANGE: 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]',
-    TOUCH_LOGGED: 'bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]',
-    TERMINATION: 'bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]',
+    CREATE: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]",
+    UPDATE: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
+    DELETE: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
+    STATUS_CHANGE: "bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]",
+    TOUCH_LOGGED: "bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]",
+    TERMINATION: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
   };
   return (
     <span
@@ -71,21 +71,21 @@ function EntityLink({ entry }: { entry: AuditLogEntry }) {
     </span>
   );
   if (!entityId) return label;
-  if (entityType === 'case') {
+  if (entityType === "case") {
     return (
       <Link to="/cases/$id" params={{ id: entityId }} className="hover:underline">
         {label}
       </Link>
     );
   }
-  if (entityType === 'provider') {
+  if (entityType === "provider") {
     return (
       <Link to="/providers/$id" params={{ id: entityId }} className="hover:underline">
         {label}
       </Link>
     );
   }
-  if (entityType === 'task') {
+  if (entityType === "task") {
     return (
       <Link to="/tasks/$id" params={{ id: entityId }} className="hover:underline">
         {label}
@@ -96,9 +96,9 @@ function EntityLink({ entry }: { entry: AuditLogEntry }) {
 }
 
 function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
   try {
     return JSON.stringify(v, null, 2);
   } catch {
@@ -108,7 +108,7 @@ function formatValue(v: unknown): string {
 
 function DiffView({ before, after }: { before: unknown; after: unknown }) {
   const isObj = (x: unknown): x is Record<string, unknown> =>
-    typeof x === 'object' && x !== null && !Array.isArray(x);
+    typeof x === "object" && x !== null && !Array.isArray(x);
 
   if (!isObj(before) && !isObj(after)) {
     return (
@@ -165,19 +165,19 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
 }
 
 function AdminAuditPage() {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [userId, setUserId] = useState<string>('all');
-  const [actionType, setActionType] = useState<string>('all');
-  const [entityType, setEntityType] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [userId, setUserId] = useState<string>("all");
+  const [actionType, setActionType] = useState<string>("all");
+  const [entityType, setEntityType] = useState<string>("all");
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const filters = useMemo(
     () => ({
-      actionType: actionType !== 'all' ? (actionType as AuditActionType) : undefined,
-      entityType: entityType !== 'all' ? entityType : undefined,
-      userId: userId !== 'all' ? userId : undefined,
+      actionType: actionType !== "all" ? (actionType as AuditActionType) : undefined,
+      entityType: entityType !== "all" ? entityType : undefined,
+      userId: userId !== "all" ? userId : undefined,
       since: dateFrom ? new Date(dateFrom).toISOString() : undefined,
       limit: 1000,
     }),
@@ -219,20 +219,17 @@ function AdminAuditPage() {
   }
 
   function resetFilters() {
-    setDateFrom('');
-    setDateTo('');
-    setUserId('all');
-    setActionType('all');
-    setEntityType('all');
+    setDateFrom("");
+    setDateTo("");
+    setUserId("all");
+    setActionType("all");
+    setEntityType("all");
     setPage(0);
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Audit Log"
-        description="Read-only history of organization activity."
-      />
+      <PageHeader title="Audit Log" description="Read-only history of organization activity." />
 
       <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-md bg-[#FAFAF9] text-[13px] text-foreground">
         <Lock className="h-4 w-4 text-tertiary" />
@@ -382,10 +379,7 @@ function AdminAuditPage() {
                 const isOpen = expanded.has(r.id);
                 return (
                   <Fragment key={r.id}>
-                    <TableRow
-                      className="h-10 cursor-pointer"
-                      onClick={() => toggleExpand(r.id)}
-                    >
+                    <TableRow className="h-10 cursor-pointer" onClick={() => toggleExpand(r.id)}>
                       <TableCell className="px-3">
                         {isOpen ? (
                           <ChevronDown className="h-4 w-4 text-tertiary" />
@@ -394,7 +388,7 @@ function AdminAuditPage() {
                         )}
                       </TableCell>
                       <TableCell className="px-3 tabular-nums text-[13px]">
-                        {format(parseISO(r.ts), 'yyyy-MM-dd HH:mm:ss')}
+                        {format(parseISO(r.ts), "yyyy-MM-dd HH:mm:ss")}
                       </TableCell>
                       <TableCell className="px-3 text-[13px]">
                         {r.userName ?? <span className="text-tertiary">—</span>}
@@ -402,10 +396,7 @@ function AdminAuditPage() {
                       <TableCell className="px-3">
                         <ActionPill action={r.actionType} />
                       </TableCell>
-                      <TableCell
-                        className="px-3 text-[13px]"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <TableCell className="px-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
                         <EntityLink entry={r} />
                       </TableCell>
                       <TableCell className="px-3 text-[13px] text-foreground">

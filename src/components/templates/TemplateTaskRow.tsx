@@ -1,19 +1,19 @@
 // Editor card for a single template task, including its SOP steps and
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { EmptyState } from '@/components/EmptyState';
+} from "@/components/ui/select";
+import { EmptyState } from "@/components/EmptyState";
 
 interface DataField {
   label: string;
@@ -69,12 +69,7 @@ export interface TemplateTaskRowProps {
   updateStep: (taskId: string, stepId: string, patch: Partial<EditableStep>) => void;
   reorderSteps: (taskId: string, fromId: string, toId: string) => void;
   addDataField: (taskId: string, stepId: string) => void;
-  updateDataField: (
-    taskId: string,
-    stepId: string,
-    idx: number,
-    patch: Partial<DataField>,
-  ) => void;
+  updateDataField: (taskId: string, stepId: string, idx: number, patch: Partial<DataField>) => void;
   removeDataField: (taskId: string, stepId: string, idx: number) => void;
 }
 
@@ -159,9 +154,7 @@ export function TemplateTaskRow({
 
       <div className="p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            SOP steps
-          </span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">SOP steps</span>
           {canEdit ? (
             <Button size="sm" variant="outline" onClick={() => addStep(task.id)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -200,9 +193,7 @@ export function TemplateTaskRow({
                   <Label className="text-xs">Step {stepIdx + 1} instruction</Label>
                   <Textarea
                     value={step.label}
-                    onChange={(e) =>
-                      updateStep(task.id, step.id, { label: e.target.value })
-                    }
+                    onChange={(e) => updateStep(task.id, step.id, { label: e.target.value })}
                     disabled={!canEdit}
                     rows={2}
                   />
@@ -227,10 +218,7 @@ export function TemplateTaskRow({
                   ) : (
                     <div className="space-y-2">
                       {step.dataFields.map((field, i) => (
-                        <div
-                          key={i}
-                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
-                        >
+                        <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
                           <Input
                             placeholder="Label"
                             value={field.label}

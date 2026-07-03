@@ -1,21 +1,21 @@
 // Shared date formatting helpers used across route files.
 // Standardizes on 'MMM d, yyyy' (and 'MMM d, yyyy · h:mm a' for timestamps).
-import { format, parseISO } from 'date-fns';
+import { format, parseISO } from "date-fns";
 
 export function fmtDate(value: string | null | undefined): string {
-  if (!value) return '—';
+  if (!value) return "—";
   try {
-    return format(parseISO(value), 'MMM d, yyyy');
+    return format(parseISO(value), "MMM d, yyyy");
   } catch {
-    return '—';
+    return "—";
   }
 }
 
 export function fmtDateTime(value: string | null | undefined): string {
-  if (!value) return '—';
+  if (!value) return "—";
   try {
-    return format(parseISO(value), 'MMM d, yyyy · h:mm a');
+    return format(parseISO(value), "MMM d, yyyy · h:mm a");
   } catch {
-    return '—';
+    return "—";
   }
 }

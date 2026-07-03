@@ -1,6 +1,6 @@
 // Shared Field + FieldLabel primitives for provider forms.
 // Associates label with child input via generated id + htmlFor for a11y.
-import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 
 export function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: ReactNode }) {
   return (

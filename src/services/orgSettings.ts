@@ -1,19 +1,19 @@
 // Org settings CRUD (organization name, provider groups, facilities,
 // memberships, group insurance policies) with audit_log writes on mutations.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { AppRole, Facility, Organization, ProviderGroup } from '@/types';
-import type { Database } from '@/integrations/supabase/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { AppRole, Facility, Organization, ProviderGroup } from "@/types";
+import type { Database } from "@/integrations/supabase/types";
 
 /* ------------------------------ Organization ------------------------------ */
 
 export async function getOrganization(): Promise<Organization | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('organizations')
-    .select('id, name, created_at')
-    .eq('id', orgId)
+    .from("organizations")
+    .select("id, name, created_at")
+    .eq("id", orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Organization>(data) : null;
@@ -23,18 +23,18 @@ export async function updateOrganizationName(name: string): Promise<Organization
   const orgId = requireActiveOrg();
   const before = await getOrganization();
   const trimmed = name.trim();
-  if (!trimmed) throw new Error('Name is required');
+  if (!trimmed) throw new Error("Name is required");
   const { data, error } = await supabase
-    .from('organizations')
+    .from("organizations")
     .update({ name: trimmed })
-    .eq('id', orgId)
-    .select('id, name, created_at')
+    .eq("id", orgId)
+    .select("id, name, created_at")
     .single();
   if (error) throw error;
   const after = camelizeRow<Organization>(data);
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'organization',
+    actionType: "UPDATE",
+    entityType: "organization",
     entityId: orgId,
     before,
     after,
@@ -64,10 +64,10 @@ export interface ProviderGroupInput {
 export async function listProviderGroups(): Promise<ProviderGroup[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('provider_groups')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('name');
+    .from("provider_groups")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name");
   if (error) throw error;
   return camelizeRow<ProviderGroup[]>(data ?? []);
 }
@@ -75,10 +75,10 @@ export async function listProviderGroups(): Promise<ProviderGroup[]> {
 async function getProviderGroup(id: string): Promise<ProviderGroup | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('provider_groups')
-    .select('*')
-    .eq('id', id)
-    .eq('org_id', orgId)
+    .from("provider_groups")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<ProviderGroup>(data) : null;
@@ -86,18 +86,18 @@ async function getProviderGroup(id: string): Promise<ProviderGroup | null> {
 
 export async function createProviderGroup(input: ProviderGroupInput): Promise<ProviderGroup> {
   const orgId = requireActiveOrg();
-  if (!input.name.trim()) throw new Error('Name is required');
+  if (!input.name.trim()) throw new Error("Name is required");
   const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
   const { data, error } = await supabase
-    .from('provider_groups')
+    .from("provider_groups")
     .insert(payload as never)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<ProviderGroup>(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'provider_group',
+    actionType: "CREATE",
+    entityType: "provider_group",
     entityId: created.id,
     after: created,
     description: `Created provider group ${created.name}`,
@@ -113,17 +113,17 @@ export async function updateProviderGroup(
   const before = await getProviderGroup(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
   const { data, error } = await supabase
-    .from('provider_groups')
+    .from("provider_groups")
     .update(payload as never)
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (error) throw error;
   const after = camelizeRow<ProviderGroup>(data);
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'provider_group',
+    actionType: "UPDATE",
+    entityType: "provider_group",
     entityId: id,
     before,
     after,
@@ -147,10 +147,10 @@ export interface FacilityInput {
 export async function listFacilities(): Promise<Facility[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('facilities')
-    .select('*')
-    .eq('org_id', orgId)
-    .order('name');
+    .from("facilities")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("name");
   if (error) throw error;
   return camelizeRow<Facility[]>(data ?? []);
 }
@@ -158,10 +158,10 @@ export async function listFacilities(): Promise<Facility[]> {
 async function getFacility(id: string): Promise<Facility | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('facilities')
-    .select('*')
-    .eq('id', id)
-    .eq('org_id', orgId)
+    .from("facilities")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Facility>(data) : null;
@@ -169,18 +169,18 @@ async function getFacility(id: string): Promise<Facility | null> {
 
 export async function createFacility(input: FacilityInput): Promise<Facility> {
   const orgId = requireActiveOrg();
-  if (!input.name.trim()) throw new Error('Name is required');
+  if (!input.name.trim()) throw new Error("Name is required");
   const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
   const { data, error } = await supabase
-    .from('facilities')
+    .from("facilities")
     .insert(payload as never)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Facility>(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'facility',
+    actionType: "CREATE",
+    entityType: "facility",
     entityId: created.id,
     after: created,
     description: `Created facility ${created.name}`,
@@ -188,25 +188,22 @@ export async function createFacility(input: FacilityInput): Promise<Facility> {
   return created;
 }
 
-export async function updateFacility(
-  id: string,
-  patch: Partial<FacilityInput>,
-): Promise<Facility> {
+export async function updateFacility(id: string, patch: Partial<FacilityInput>): Promise<Facility> {
   const orgId = requireActiveOrg();
   const before = await getFacility(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
   const { data, error } = await supabase
-    .from('facilities')
+    .from("facilities")
     .update(payload as never)
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (error) throw error;
   const after = camelizeRow<Facility>(data);
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'facility',
+    actionType: "UPDATE",
+    entityType: "facility",
     entityId: id,
     before,
     after,
@@ -230,10 +227,10 @@ export interface MembershipRow {
 export async function listMemberships(): Promise<MembershipRow[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('memberships')
-    .select('id, org_id, user_id, role, created_at, profiles(full_name, email)')
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: true });
+    .from("memberships")
+    .select("id, org_id, user_id, role, created_at, profiles(full_name, email)")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []).map((row) => {
     const profile = row.profiles as { full_name: string | null; email: string | null } | null;
@@ -258,27 +255,27 @@ export async function updateMembershipRole(id: string, role: AppRole): Promise<M
   const orgId = requireActiveOrg();
   const before = await getMembership(id);
   const { error } = await supabase
-    .from('memberships')
+    .from("memberships")
     .update({ role })
-    .eq('id', id)
-    .eq('org_id', orgId);
+    .eq("id", id)
+    .eq("org_id", orgId);
   if (error) throw error;
   const after = await getMembership(id);
-  if (!after) throw new Error('Membership not found after update');
+  if (!after) throw new Error("Membership not found after update");
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'membership',
+    actionType: "UPDATE",
+    entityType: "membership",
     entityId: id,
     before,
     after,
-    description: `Changed role to ${role}${after.email ? ` for ${after.email}` : ''}`,
+    description: `Changed role to ${role}${after.email ? ` for ${after.email}` : ""}`,
   });
   return after;
 }
 
 /* --------------------------- Insurance Policies --------------------------- */
 
-export type InsuranceType = 'professional_liability' | 'general_liability';
+export type InsuranceType = "professional_liability" | "general_liability";
 
 export interface InsurancePolicy {
   id: string;
@@ -302,9 +299,9 @@ export interface InsurancePolicyInput {
   notes?: string | null;
 }
 
-type InsuranceRow = Database['public']['Tables']['group_insurance_policies']['Row'];
-type InsuranceInsert = Database['public']['Tables']['group_insurance_policies']['Insert'];
-type InsuranceUpdate = Database['public']['Tables']['group_insurance_policies']['Update'];
+type InsuranceRow = Database["public"]["Tables"]["group_insurance_policies"]["Row"];
+type InsuranceInsert = Database["public"]["Tables"]["group_insurance_policies"]["Insert"];
+type InsuranceUpdate = Database["public"]["Tables"]["group_insurance_policies"]["Update"];
 
 function toPolicy(row: InsuranceRow): InsurancePolicy {
   return {
@@ -320,16 +317,14 @@ function toPolicy(row: InsuranceRow): InsurancePolicy {
   };
 }
 
-export async function listGroupInsurancePolicies(
-  groupId: string,
-): Promise<InsurancePolicy[]> {
+export async function listGroupInsurancePolicies(groupId: string): Promise<InsurancePolicy[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('group_insurance_policies')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('group_id', groupId)
-    .order('policy_end_date', { ascending: false });
+    .from("group_insurance_policies")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .order("policy_end_date", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(toPolicy);
 }
@@ -337,27 +332,27 @@ export async function listGroupInsurancePolicies(
 async function getInsurancePolicy(id: string): Promise<InsurancePolicy | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('group_insurance_policies')
-    .select('*')
-    .eq('id', id)
-    .eq('org_id', orgId)
+    .from("group_insurance_policies")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? toPolicy(data) : null;
 }
 
 function validatePolicyInput(input: InsurancePolicyInput | Partial<InsurancePolicyInput>): void {
-  if ('insurerName' in input && input.insurerName !== undefined && !input.insurerName.trim()) {
-    throw new Error('Insurer name is required');
+  if ("insurerName" in input && input.insurerName !== undefined && !input.insurerName.trim()) {
+    throw new Error("Insurer name is required");
   }
-  if ('policyNumber' in input && input.policyNumber !== undefined && !input.policyNumber.trim()) {
-    throw new Error('Policy number is required');
+  if ("policyNumber" in input && input.policyNumber !== undefined && !input.policyNumber.trim()) {
+    throw new Error("Policy number is required");
   }
-  if ('policyStartDate' in input && input.policyStartDate !== undefined && !input.policyStartDate) {
-    throw new Error('Start date is required');
+  if ("policyStartDate" in input && input.policyStartDate !== undefined && !input.policyStartDate) {
+    throw new Error("Start date is required");
   }
-  if ('policyEndDate' in input && input.policyEndDate !== undefined && !input.policyEndDate) {
-    throw new Error('End date is required');
+  if ("policyEndDate" in input && input.policyEndDate !== undefined && !input.policyEndDate) {
+    throw new Error("End date is required");
   }
 }
 
@@ -377,15 +372,15 @@ export async function createGroupInsurancePolicy(
     notes: input.notes?.trim() ? input.notes.trim() : null,
   };
   const { data, error } = await supabase
-    .from('group_insurance_policies')
+    .from("group_insurance_policies")
     .insert(payload)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = toPolicy(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'group_insurance_policy',
+    actionType: "CREATE",
+    entityType: "group_insurance_policy",
     entityId: created.id,
     after: created,
     description: `Created ${created.insuranceType} policy ${created.policyNumber}`,
@@ -409,17 +404,17 @@ export async function updateGroupInsurancePolicy(
   if (patch.policyEndDate !== undefined) payload.policy_end_date = patch.policyEndDate;
   if (patch.notes !== undefined) payload.notes = patch.notes?.trim() ? patch.notes.trim() : null;
   const { data, error } = await supabase
-    .from('group_insurance_policies')
+    .from("group_insurance_policies")
     .update(payload)
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (error) throw error;
   const after = toPolicy(data);
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'group_insurance_policy',
+    actionType: "UPDATE",
+    entityType: "group_insurance_policy",
     entityId: id,
     before,
     after,

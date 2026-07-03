@@ -1,48 +1,43 @@
 // Admin → Payers list and edit. Every payer field exposed in modal because
 // these values drive submission guidance and billing rules for coordinators.
-import { useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { Plus, Info } from 'lucide-react';
-import { toast } from 'sonner';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
+import { useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Plus, Info } from "lucide-react";
+import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { usePayers, useCreatePayer, useUpdatePayer } from '@/hooks/useAdmin';
-import { useIsAdmin } from '@/lib/permissions';
-import type { Payer } from '@/types';
-import type { PayerInput } from '@/services/payers';
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePayers, useCreatePayer, useUpdatePayer } from "@/hooks/useAdmin";
+import { useIsAdmin } from "@/lib/permissions";
+import type { Payer } from "@/types";
+import type { PayerInput } from "@/services/payers";
 
-export const Route = createFileRoute('/admin/payers')({
+export const Route = createFileRoute("/admin/payers")({
   component: AdminPayersPage,
 });
 
 const EMPTY: PayerInput = {
-  name: '',
+  name: "",
   isActive: true,
   avgDecisionDays: null,
   provisionalBillingAllowed: false,
@@ -100,17 +95,17 @@ function AdminPayersPage() {
             <thead>
               <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
                 {[
-                  'Payer',
-                  'Active',
-                  'Avg decision',
-                  'Provisional',
-                  'Retro',
-                  'CAQH deadline',
-                  'Type path',
-                  'Prior auth',
-                  'Billing ID',
-                  'Portal',
-                  '',
+                  "Payer",
+                  "Active",
+                  "Avg decision",
+                  "Provisional",
+                  "Retro",
+                  "CAQH deadline",
+                  "Type path",
+                  "Prior auth",
+                  "Billing ID",
+                  "Portal",
+                  "",
                 ].map((h, i) => (
                   <th
                     key={i}
@@ -148,14 +143,14 @@ function AdminPayersPage() {
                   <tr
                     key={p.id}
                     onClick={() => canEdit && setEditing({ payer: p })}
-                    className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${canEdit ? 'cursor-pointer' : ''}`}
+                    className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${canEdit ? "cursor-pointer" : ""}`}
                   >
                     <td className="px-3 h-10 align-middle font-medium">{p.name}</td>
                     <td className="px-3 h-10 align-middle">
                       <YesNoPill value={p.isActive} />
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.avgDecisionDays != null ? `${p.avgDecisionDays} d` : '—'}
+                      {p.avgDecisionDays != null ? `${p.avgDecisionDays} d` : "—"}
                     </td>
                     <td className="px-3 h-10 align-middle">
                       <div className="flex items-center gap-1.5">
@@ -185,16 +180,16 @@ function AdminPayersPage() {
                       </div>
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.caqhPullDeadlineDays != null ? `${p.caqhPullDeadlineDays} d` : '—'}
+                      {p.caqhPullDeadlineDays != null ? `${p.caqhPullDeadlineDays} d` : "—"}
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.providerTypePath ?? '—'}
+                      {p.providerTypePath ?? "—"}
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.priorAuthVendor ?? '—'}
+                      {p.priorAuthVendor ?? "—"}
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.payerBillingId ?? '—'}
+                      {p.payerBillingId ?? "—"}
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground max-w-[180px] truncate">
                       {p.portalUrl ? (
@@ -207,10 +202,13 @@ function AdminPayersPage() {
                           {p.portalUrl}
                         </a>
                       ) : (
-                        '—'
+                        "—"
                       )}
                     </td>
-                    <td className="px-3 h-10 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                    <td
+                      className="px-3 h-10 align-middle text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {canEdit && (
                         <Button
                           variant="outline"
@@ -230,25 +228,14 @@ function AdminPayersPage() {
         </div>
       </div>
 
-      {editing ? (
-        <PayerEditModal
-          payer={editing.payer}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
+      {editing ? <PayerEditModal payer={editing.payer} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
 
-function PayerEditModal({
-  payer,
-  onClose,
-}: {
-  payer: Payer | null;
-  onClose: () => void;
-}) {
+function PayerEditModal({ payer, onClose }: { payer: Payer | null; onClose: () => void }) {
   const createMut = useCreatePayer();
-  const updateMut = useUpdatePayer(payer?.id ?? '');
+  const updateMut = useUpdatePayer(payer?.id ?? "");
   const [form, setForm] = useState<PayerInput>(() =>
     payer
       ? {
@@ -276,7 +263,7 @@ function PayerEditModal({
   }
 
   function numOrNull(v: string): number | null {
-    if (v.trim() === '') return null;
+    if (v.trim() === "") return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
@@ -285,20 +272,20 @@ function PayerEditModal({
     setError(null);
     setNameError(null);
     if (!form.name.trim()) {
-      setNameError('Name is required');
+      setNameError("Name is required");
       return;
     }
     try {
       if (payer) {
         await updateMut.mutateAsync(form);
-        toast.success('Payer updated');
+        toast.success("Payer updated");
       } else {
         await createMut.mutateAsync(form);
-        toast.success('Payer created');
+        toast.success("Payer created");
       }
       onClose();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Save failed';
+      const msg = e instanceof Error ? e.message : "Save failed";
       setError(msg);
       toast.error(msg);
     }
@@ -308,7 +295,7 @@ function PayerEditModal({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>{payer ? 'Edit payer' : 'Add payer'}</DialogTitle>
+          <DialogTitle>{payer ? "Edit payer" : "Add payer"}</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4 py-2">
@@ -321,11 +308,9 @@ function PayerEditModal({
                 if (nameError) setNameError(null);
               }}
               aria-invalid={nameError ? true : undefined}
-              className={`h-9 ${nameError ? 'border-[#B91C1C] focus-visible:ring-[#B91C1C]' : ''}`}
+              className={`h-9 ${nameError ? "border-[#B91C1C] focus-visible:ring-[#B91C1C]" : ""}`}
             />
-            {nameError ? (
-              <div className="text-[12px] text-[#B91C1C] mt-1">{nameError}</div>
-            ) : null}
+            {nameError ? <div className="text-[12px] text-[#B91C1C] mt-1">{nameError}</div> : null}
           </div>
 
           <div className="col-span-2 flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
@@ -345,7 +330,7 @@ function PayerEditModal({
             <Label className="text-[12px]">Avg decision days</Label>
             <Input
               type="number"
-              value={form.avgDecisionDays ?? ''}
+              value={form.avgDecisionDays ?? ""}
               onChange={(e) => patch({ avgDecisionDays: numOrNull(e.target.value) })}
               className="h-9"
             />
@@ -354,10 +339,8 @@ function PayerEditModal({
             <Label className="text-[12px]">CAQH pull deadline (days)</Label>
             <Input
               type="number"
-              value={form.caqhPullDeadlineDays ?? ''}
-              onChange={(e) =>
-                patch({ caqhPullDeadlineDays: numOrNull(e.target.value) })
-              }
+              value={form.caqhPullDeadlineDays ?? ""}
+              onChange={(e) => patch({ caqhPullDeadlineDays: numOrNull(e.target.value) })}
               className="h-9"
             />
           </div>
@@ -365,11 +348,11 @@ function PayerEditModal({
           <div>
             <Label className="text-[12px]">Provider type path</Label>
             <Select
-              value={form.providerTypePath ?? '__none__'}
+              value={form.providerTypePath ?? "__none__"}
               onValueChange={(v) =>
                 patch({
                   providerTypePath:
-                    v === '__none__' ? null : (v as 'individual' | 'organizational'),
+                    v === "__none__" ? null : (v as "individual" | "organizational"),
                 })
               }
             >
@@ -386,10 +369,8 @@ function PayerEditModal({
           <div>
             <Label className="text-[12px]">Prior auth vendor</Label>
             <Input
-              value={form.priorAuthVendor ?? ''}
-              onChange={(e) =>
-                patch({ priorAuthVendor: e.target.value || null })
-              }
+              value={form.priorAuthVendor ?? ""}
+              onChange={(e) => patch({ priorAuthVendor: e.target.value || null })}
               className="h-9"
             />
           </div>
@@ -397,7 +378,7 @@ function PayerEditModal({
           <div>
             <Label className="text-[12px]">Payer billing ID</Label>
             <Input
-              value={form.payerBillingId ?? ''}
+              value={form.payerBillingId ?? ""}
               onChange={(e) => patch({ payerBillingId: e.target.value || null })}
               className="h-9"
             />
@@ -405,7 +386,7 @@ function PayerEditModal({
           <div>
             <Label className="text-[12px]">Portal URL</Label>
             <Input
-              value={form.portalUrl ?? ''}
+              value={form.portalUrl ?? ""}
               onChange={(e) => patch({ portalUrl: e.target.value || null })}
               className="h-9"
               placeholder="https://"
@@ -435,20 +416,16 @@ function PayerEditModal({
                 <Label className="text-[12px]">Provisional billing notes</Label>
                 <Textarea
                   rows={2}
-                  value={form.provisionalBillingNotes ?? ''}
-                  onChange={(e) =>
-                    patch({ provisionalBillingNotes: e.target.value || null })
-                  }
+                  value={form.provisionalBillingNotes ?? ""}
+                  onChange={(e) => patch({ provisionalBillingNotes: e.target.value || null })}
                 />
               </div>
               <div>
                 <Label className="text-[12px]">Retro billing window (days)</Label>
                 <Input
                   type="number"
-                  value={form.retroBillingWindowDays ?? ''}
-                  onChange={(e) =>
-                    patch({ retroBillingWindowDays: numOrNull(e.target.value) })
-                  }
+                  value={form.retroBillingWindowDays ?? ""}
+                  onChange={(e) => patch({ retroBillingWindowDays: numOrNull(e.target.value) })}
                   className="h-9"
                   disabled={!form.retroBillingAllowed}
                 />
@@ -472,7 +449,7 @@ function PayerEditModal({
             disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {pending ? 'Saving…' : payer ? 'Save changes' : 'Create payer'}
+            {pending ? "Saving…" : payer ? "Save changes" : "Create payer"}
           </Button>
         </DialogFooter>
       </DialogContent>

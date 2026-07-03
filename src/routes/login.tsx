@@ -56,8 +56,7 @@ function LoginPage() {
           aria-hidden="true"
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage:
-              "radial-gradient(circle, rgba(255,255,255,0.10) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.10) 1px, transparent 1px)",
             backgroundSize: "26px 26px",
           }}
         />
@@ -87,11 +86,13 @@ function LoginPage() {
               borderRadius: "12px",
             }}
           >
-            <img src={logoAsset.url} alt="Minted Panel" style={{ width: "28px", height: "28px", objectFit: "contain" }} />
+            <img
+              src={logoAsset.url}
+              alt="Minted Panel"
+              style={{ width: "28px", height: "28px", objectFit: "contain" }}
+            />
           </div>
-          <span style={{ fontSize: "19px", fontWeight: 700, color: "#FCFBF7" }}>
-            Minted Panel
-          </span>
+          <span style={{ fontSize: "19px", fontWeight: 700, color: "#FCFBF7" }}>Minted Panel</span>
         </div>
 
         {/* Bottom: headline */}
@@ -136,7 +137,16 @@ function LoginPage() {
 
           <div style={{ marginTop: "34px", display: "flex", flexDirection: "column", gap: "20px" }}>
             <div>
-              <label htmlFor="email" style={{ display: "block", fontSize: "14px", fontWeight: 600, color: "#22322A", marginBottom: "8px" }}>
+              <label
+                htmlFor="email"
+                style={{
+                  display: "block",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: "#22322A",
+                  marginBottom: "8px",
+                }}
+              >
                 Email
               </label>
               <input
@@ -163,10 +173,21 @@ function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
-                <label htmlFor="password" style={{ fontSize: "14px", fontWeight: 600, color: "#22322A" }}>
+                <label
+                  htmlFor="password"
+                  style={{ fontSize: "14px", fontWeight: 600, color: "#22322A" }}
+                >
                   Password
                 </label>
-                <a href="#" style={{ fontSize: "13px", fontWeight: 500, color: "#1D5540", textDecoration: "none" }}>
+                <a
+                  href="#"
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#1D5540",
+                    textDecoration: "none",
+                  }}
+                >
                   Forgot password?
                 </a>
               </div>

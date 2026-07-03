@@ -1,41 +1,37 @@
 // Insurance policies list + edit dialog for a provider group.
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { useState } from "react";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { fmtDate } from '@/lib/format';
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { fmtDate } from "@/lib/format";
 import {
   useCreateGroupInsurancePolicy,
   useGroupInsurancePolicies,
   useUpdateGroupInsurancePolicy,
-} from '@/hooks/useOrgSettings';
-import type {
-  InsurancePolicy,
-  InsurancePolicyInput,
-  InsuranceType,
-} from '@/services/orgSettings';
+} from "@/hooks/useOrgSettings";
+import type { InsurancePolicy, InsurancePolicyInput, InsuranceType } from "@/services/orgSettings";
 
 function insuranceTypeLabel(t: InsuranceType): string {
-  return t === 'professional_liability' ? 'Professional Liability' : 'General Liability';
+  return t === "professional_liability" ? "Professional Liability" : "General Liability";
 }
 
 function policyStatus(start: string, end: string): { label: string; cls: string } {
@@ -45,29 +41,23 @@ function policyStatus(start: string, end: string): { label: string; cls: string 
   const e = new Date(end);
   if (today < s) {
     return {
-      label: 'Future',
-      cls: 'bg-[#F5F5F4] text-[#9CA3AF] border-[#E8E5E0]',
+      label: "Future",
+      cls: "bg-[#F5F5F4] text-[#9CA3AF] border-[#E8E5E0]",
     };
   }
   if (today > e) {
     return {
-      label: 'Expired',
-      cls: 'bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]',
+      label: "Expired",
+      cls: "bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]",
     };
   }
   return {
-    label: 'Active',
-    cls: 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]',
+    label: "Active",
+    cls: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]",
   };
 }
 
-export function InsurancePanel({
-  groupId,
-  canEdit,
-}: {
-  groupId: string;
-  canEdit: boolean;
-}) {
+export function InsurancePanel({ groupId, canEdit }: { groupId: string; canEdit: boolean }) {
   const policiesQ = useGroupInsurancePolicies(groupId);
   const [modal, setModal] = useState<{ policy: InsurancePolicy | null } | null>(null);
 
@@ -113,16 +103,14 @@ export function InsurancePanel({
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-              {['Type', 'Insurer', 'Policy #', 'Start Date', 'End Date', 'Status'].map(
-                (h, i) => (
-                  <th
-                    key={i}
-                    className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
-                  >
-                    {h}
-                  </th>
-                ),
-              )}
+              {["Type", "Insurer", "Policy #", "Start Date", "End Date", "Status"].map((h, i) => (
+                <th
+                  key={i}
+                  className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -133,14 +121,12 @@ export function InsurancePanel({
                   key={p.id}
                   onClick={() => canEdit && setModal({ policy: p })}
                   className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${
-                    canEdit ? 'cursor-pointer' : ''
+                    canEdit ? "cursor-pointer" : ""
                   }`}
                 >
                   <td className="px-3 h-10 align-middle">{insuranceTypeLabel(p.insuranceType)}</td>
                   <td className="px-3 h-10 align-middle font-medium">{p.insurerName}</td>
-                  <td className="px-3 h-10 align-middle text-muted-foreground">
-                    {p.policyNumber}
-                  </td>
+                  <td className="px-3 h-10 align-middle text-muted-foreground">{p.policyNumber}</td>
                   <td className="px-3 h-10 align-middle text-muted-foreground">
                     {fmtDate(p.policyStartDate)}
                   </td>
@@ -181,17 +167,17 @@ function InsurancePolicyEditModal({
   onClose: () => void;
 }) {
   const [insuranceType, setInsuranceType] = useState<InsuranceType>(
-    policy?.insuranceType ?? 'professional_liability',
+    policy?.insuranceType ?? "professional_liability",
   );
-  const [insurerName, setInsurerName] = useState(policy?.insurerName ?? '');
-  const [policyNumber, setPolicyNumber] = useState(policy?.policyNumber ?? '');
-  const [startDate, setStartDate] = useState(policy?.policyStartDate ?? '');
-  const [endDate, setEndDate] = useState(policy?.policyEndDate ?? '');
-  const [notes, setNotes] = useState(policy?.notes ?? '');
+  const [insurerName, setInsurerName] = useState(policy?.insurerName ?? "");
+  const [policyNumber, setPolicyNumber] = useState(policy?.policyNumber ?? "");
+  const [startDate, setStartDate] = useState(policy?.policyStartDate ?? "");
+  const [endDate, setEndDate] = useState(policy?.policyEndDate ?? "");
+  const [notes, setNotes] = useState(policy?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const createMut = useCreateGroupInsurancePolicy(groupId);
-  const updateMut = useUpdateGroupInsurancePolicy(policy?.id ?? '', groupId);
+  const updateMut = useUpdateGroupInsurancePolicy(policy?.id ?? "", groupId);
   const pending = createMut.isPending || updateMut.isPending;
 
   const handleSave = () => {
@@ -206,14 +192,14 @@ function InsurancePolicyEditModal({
       notes: notes.trim() || null,
     };
     const onErr = (e: unknown) => {
-      const msg = e instanceof Error ? e.message : 'Save failed';
+      const msg = e instanceof Error ? e.message : "Save failed";
       setError(msg);
       toast.error(msg);
     };
     if (policy) {
       updateMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Policy updated');
+          toast.success("Policy updated");
           onClose();
         },
         onError: onErr,
@@ -221,7 +207,7 @@ function InsurancePolicyEditModal({
     } else {
       createMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Policy created');
+          toast.success("Policy created");
           onClose();
         },
         onError: onErr,
@@ -233,7 +219,7 @@ function InsurancePolicyEditModal({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>{policy ? 'Edit policy' : 'Add policy'}</DialogTitle>
+          <DialogTitle>{policy ? "Edit policy" : "Add policy"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
@@ -289,11 +275,7 @@ function InsurancePolicyEditModal({
           </div>
           <div>
             <Label className="text-[12px]">Notes</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-            />
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
           </div>
           {error ? (
             <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
@@ -310,7 +292,7 @@ function InsurancePolicyEditModal({
             disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {pending ? 'Saving…' : policy ? 'Save changes' : 'Create policy'}
+            {pending ? "Saving…" : policy ? "Save changes" : "Create policy"}
           </Button>
         </DialogFooter>
       </DialogContent>

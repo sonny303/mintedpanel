@@ -30,7 +30,7 @@ Minted Panel is a credentialing operations SaaS for medical groups, tracking pro
 The ONLY valid Supabase client import is:
 
 ```ts
-import { supabase } from '@/integrations/supabase/externalClient';
+import { supabase } from "@/integrations/supabase/externalClient";
 ```
 
 `src/integrations/supabase/client.ts` is auto-generated dead code pointing at an abandoned database. Never import it. `externalClient.ts` currently hardcodes the URL and publishable key; the production fix is env-based config wired in at deploy time — do not refactor it speculatively.

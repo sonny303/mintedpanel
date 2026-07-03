@@ -231,7 +231,13 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
           }
 
           const rule = await qc.fetchQuery({
-            queryKey: ['mso-routing-rule', orgId, payerId, state, provider.specialty ?? ''] as const,
+            queryKey: [
+              "mso-routing-rule",
+              orgId,
+              payerId,
+              state,
+              provider.specialty ?? "",
+            ] as const,
             queryFn: () => getMsoRoutingRule(payerId, state, provider.specialty ?? null),
           });
           const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
@@ -274,7 +280,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
 
           created.push({ id: caseRow.id, payerName: payer.name });
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Save failed';
+          const message = err instanceof Error ? err.message : "Save failed";
           skipped.push({ payerName: payer.name, reason: message });
         }
       }

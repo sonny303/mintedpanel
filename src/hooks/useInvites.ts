@@ -1,6 +1,6 @@
 // TanStack Query hooks for pending invites and membership removal.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useActiveOrgId } from '@/lib/auth-store';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useActiveOrgId } from "@/lib/auth-store";
 import {
   createPendingInvite,
   listPendingInvites,
@@ -9,24 +9,24 @@ import {
   type CreatePendingInviteInput,
   type PendingInvite,
   type RemoveMembershipInput,
-} from '@/services/invites';
+} from "@/services/invites";
 
-const invitesKey = (orgId: string) => ['pending-invites', orgId] as const;
-const membersKey = (orgId: string) => ['memberships-admin', orgId] as const;
-const auditKey = (orgId: string) => ['audit-log', orgId] as const;
+const invitesKey = (orgId: string) => ["pending-invites", orgId] as const;
+const membersKey = (orgId: string) => ["memberships-admin", orgId] as const;
+const auditKey = (orgId: string) => ["audit-log", orgId] as const;
 
 export function usePendingInvites() {
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: invitesKey(orgId),
     queryFn: () => listPendingInvites(),
-    enabled: orgId !== 'no-org',
+    enabled: orgId !== "no-org",
   });
 }
 
 export function useCreatePendingInvite() {
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (input: CreatePendingInviteInput) => createPendingInvite(input),
     onSuccess: () => {
@@ -38,7 +38,7 @@ export function useCreatePendingInvite() {
 
 export function useRevokePendingInvite() {
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (invite: PendingInvite) => revokePendingInvite(invite),
     onSuccess: () => {
@@ -50,7 +50,7 @@ export function useRevokePendingInvite() {
 
 export function useRemoveMembership() {
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (input: RemoveMembershipInput) => removeMembership(input),
     onSuccess: () => {

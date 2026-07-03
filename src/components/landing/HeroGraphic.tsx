@@ -1,6 +1,6 @@
 // Abstract geometric graphic used in the hero and problem sections.
 // Layered rounded panels in the Primary green — no icons, no illustrations.
-export function HeroGraphic({ className = '' }: { className?: string }) {
+export function HeroGraphic({ className = "" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 480 400"

@@ -1,15 +1,15 @@
 // Landing page for invited users after they click the email link.
 // They arrive with a valid session but no password. We collect one,
 // then run claim_invites() to attach any pending memberships.
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, type FormEvent } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { useAuthStore } from '@/lib/auth-store';
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/externalClient";
+import { useAuthStore } from "@/lib/auth-store";
 
-export const Route = createFileRoute('/welcome')({
+export const Route = createFileRoute("/welcome")({
   component: WelcomePage,
 });
 
@@ -19,14 +19,14 @@ function WelcomePage() {
   const initialized = useAuthStore((s) => s.initialized);
   const loadMemberships = useAuthStore((s) => s.loadMemberships);
 
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialized && !session) {
-      navigate({ to: '/login' });
+      navigate({ to: "/login" });
     }
   }, [initialized, session, navigate]);
 
@@ -34,11 +34,11 @@ function WelcomePage() {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+      setError("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError("Passwords do not match.");
       return;
     }
     setSubmitting(true);
@@ -49,12 +49,12 @@ function WelcomePage() {
         data: number | null;
         error: { message: string } | null;
       }>;
-      const { error: claimError } = await rpc('claim_invites');
+      const { error: claimError } = await rpc("claim_invites");
       if (claimError) throw claimError;
       await loadMemberships();
-      navigate({ to: '/cases' });
+      navigate({ to: "/cases" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set password');
+      setError(err instanceof Error ? err.message : "Failed to set password");
     } finally {
       setSubmitting(false);
     }
@@ -64,10 +64,10 @@ function WelcomePage() {
     <div className="min-h-dvh w-full grid grid-cols-1 md:grid-cols-2 bg-white">
       <div
         className="hidden md:flex flex-col justify-between p-12 text-white"
-        style={{ backgroundColor: '#1B4D3E' }}
+        style={{ backgroundColor: "#1B4D3E" }}
       >
         <div className="text-[28px] font-semibold tracking-tight whitespace-pre-line">
-          {'Minted Panel\nCredentialing'}
+          {"Minted Panel\nCredentialing"}
         </div>
         <div className="text-[14px] text-white/70 max-w-xs">
           Welcome to the team. Set a password to finish setting up your account.
@@ -124,9 +124,9 @@ function WelcomePage() {
             type="submit"
             disabled={submitting}
             className="w-full text-white hover:opacity-90"
-            style={{ backgroundColor: '#1B4D3E' }}
+            style={{ backgroundColor: "#1B4D3E" }}
           >
-            {submitting ? 'Setting password…' : 'Set password and continue'}
+            {submitting ? "Setting password…" : "Set password and continue"}
           </Button>
         </form>
       </div>

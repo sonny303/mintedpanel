@@ -1,27 +1,17 @@
 // Domain types for Minted Panel. App code uses camelCase; database rows are
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 
-export type AppRole = 'specialist' | 'billing' | 'admin';
-export type StatusTrack = 'credentialing' | 'contracting';
-export type TouchType = 'call' | 'email' | 'portal' | 'fax';
+export type AppRole = "specialist" | "billing" | "admin";
+export type StatusTrack = "credentialing" | "contracting";
+export type TouchType = "call" | "email" | "portal" | "fax";
 export type TouchOutcome =
-  | 'reached'
-  | 'left_voicemail'
-  | 'no_answer'
-  | 'response_received'
-  | 'submitted'
-  | 'no_response';
-export type ProviderStatus = 'onboarding' | 'active' | 'terminated';
-export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'blocked';
-export type NoteEntityType = 'case' | 'task' | 'provider';
+  "reached" | "left_voicemail" | "no_answer" | "response_received" | "submitted" | "no_response";
+export type ProviderStatus = "onboarding" | "active" | "terminated";
+export type TaskStatus = "not_started" | "in_progress" | "completed" | "blocked";
+export type NoteEntityType = "case" | "task" | "provider";
 export type AuditActionType =
-  | 'CREATE'
-  | 'UPDATE'
-  | 'DELETE'
-  | 'STATUS_CHANGE'
-  | 'TOUCH_LOGGED'
-  | 'TERMINATION';
-export type MsoRouteType = 'direct' | 'mso';
+  "CREATE" | "UPDATE" | "DELETE" | "STATUS_CHANGE" | "TOUCH_LOGGED" | "TERMINATION";
+export type MsoRouteType = "direct" | "mso";
 
 export interface Organization {
   id: string;
@@ -98,7 +88,6 @@ export interface Provider {
   licenseExpirationDate: string | null;
   createdAt: string;
   updatedAt: string;
-
 }
 
 export interface Payer {
@@ -112,7 +101,7 @@ export interface Payer {
   retroBillingAllowed: boolean;
   retroBillingWindowDays: number | null;
   caqhPullDeadlineDays: number | null;
-  providerTypePath: 'individual' | 'organizational' | null;
+  providerTypePath: "individual" | "organizational" | null;
   priorAuthVendor: string | null;
   payerBillingId: string | null;
   portalUrl: string | null;
@@ -197,7 +186,7 @@ export interface Touch {
   nextFollowUpDate: string | null;
   notes: string | null;
   coordinatorId: string | null;
-  source: 'manual' | 'email_webhook';
+  source: "manual" | "email_webhook";
   createdAt: string;
 }
 
@@ -302,7 +291,6 @@ export interface SOPTemplate {
   createdAt: string;
   updatedAt: string;
 }
-
 
 export interface CaseDetail extends CredentialCase {
   provider: Provider | null;

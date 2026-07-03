@@ -1,12 +1,12 @@
 // Dialog for changing a contract's contracting-track status. Enforces
 // required_fields for Executed (effective date) and Terminated (reason).
-import { useState } from 'react';
-import { format } from 'date-fns';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { useState } from "react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -14,22 +14,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useUpdateContractStatus } from '@/hooks/useContracts';
-import type { Contract, StatusConfig } from '@/types';
+} from "@/components/ui/select";
+import { useUpdateContractStatus } from "@/hooks/useContracts";
+import type { Contract, StatusConfig } from "@/types";
 
 function isExecutedLabel(label: string | undefined | null): boolean {
-  return (label ?? '').toLowerCase().includes('execut');
+  return (label ?? "").toLowerCase().includes("execut");
 }
 function isTerminatedLabel(label: string | undefined | null): boolean {
-  return (label ?? '').toLowerCase().includes('terminat');
+  return (label ?? "").toLowerCase().includes("terminat");
 }
 
 export function StatusChangeContractDialog({
@@ -42,9 +42,9 @@ export function StatusChangeContractDialog({
   onClose: () => void;
 }) {
   const updateM = useUpdateContractStatus();
-  const [statusId, setStatusId] = useState<string>('');
-  const [effectiveDate, setEffectiveDate] = useState<string>('');
-  const [terminationReason, setTerminationReason] = useState<string>('');
+  const [statusId, setStatusId] = useState<string>("");
+  const [effectiveDate, setEffectiveDate] = useState<string>("");
+  const [terminationReason, setTerminationReason] = useState<string>("");
 
   const open = contract !== null;
   const selected = statuses.find((s) => s.id === statusId) ?? null;
@@ -53,9 +53,9 @@ export function StatusChangeContractDialog({
 
   function handleOpenChange(next: boolean) {
     if (!next) {
-      setStatusId('');
-      setEffectiveDate('');
-      setTerminationReason('');
+      setStatusId("");
+      setEffectiveDate("");
+      setTerminationReason("");
       onClose();
     }
   }
@@ -63,26 +63,26 @@ export function StatusChangeContractDialog({
   async function handleSubmit() {
     if (!contract || !statusId) return;
     if (requiresEffective && !effectiveDate) {
-      toast.error('Effective date is required.');
+      toast.error("Effective date is required.");
       return;
     }
     if (requiresReason && !terminationReason.trim()) {
-      toast.error('Termination reason is required.');
+      toast.error("Termination reason is required.");
       return;
     }
     const metadata: Record<string, unknown> = {};
     if (requiresEffective) metadata.effectiveDate = effectiveDate;
     if (requiresReason) {
-      const stamp = format(new Date(), 'MMM dd, yyyy');
-      const prefix = contract.notes ? `${contract.notes}\n` : '';
+      const stamp = format(new Date(), "MMM dd, yyyy");
+      const prefix = contract.notes ? `${contract.notes}\n` : "";
       metadata.notes = `${prefix}[${stamp}] Terminated: ${terminationReason.trim()}`;
     }
     try {
       await updateM.mutateAsync({ contractId: contract.id, statusId, metadata });
-      toast.success('Contract status updated.');
+      toast.success("Contract status updated.");
       handleOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update status.');
+      toast.error(err instanceof Error ? err.message : "Failed to update status.");
     }
   }
 
@@ -91,9 +91,7 @@ export function StatusChangeContractDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change contract status</DialogTitle>
-          <DialogDescription>
-            Writes to status history and audit log.
-          </DialogDescription>
+          <DialogDescription>Writes to status history and audit log.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -145,7 +143,7 @@ export function StatusChangeContractDialog({
             disabled={!statusId || updateM.isPending}
             onClick={handleSubmit}
           >
-            {updateM.isPending ? 'Saving…' : 'Update status'}
+            {updateM.isPending ? "Saving…" : "Update status"}
           </Button>
         </DialogFooter>
       </DialogContent>

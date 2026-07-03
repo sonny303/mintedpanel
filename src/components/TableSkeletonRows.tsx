@@ -1,7 +1,7 @@
 // Renders skeleton placeholder rows inside a <tbody> for consistent loading states.
 // Mirrors the skeleton markup used on the case list page.
 
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface TableSkeletonRowsProps {
   rows: number;

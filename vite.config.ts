@@ -54,7 +54,13 @@ export default defineConfig(({ command, mode }) => {
     // core only — including @tanstack/react-start would pull its node:async_hooks
     // server entry into the client bundle and crash hydration.
     optimizeDeps: {
-      include: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"],
+      include: [
+        "react",
+        "react-dom",
+        "react-dom/client",
+        "react/jsx-runtime",
+        "react/jsx-dev-runtime",
+      ],
       ignoreOutdatedRequests: true,
     },
     server: {

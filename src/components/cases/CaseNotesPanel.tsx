@@ -1,13 +1,13 @@
 // Internal notes card on the case detail page with an inline add form.
 // The mutation hook lives in the parent route (onSaveNote/saving).
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { EmptyState } from '@/components/EmptyState';
-import { fmtDateTime } from '@/lib/format';
-import { Plus, User } from 'lucide-react';
-import type { Note } from '@/types';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { EmptyState } from "@/components/EmptyState";
+import { fmtDateTime } from "@/lib/format";
+import { Plus, User } from "lucide-react";
+import type { Note } from "@/types";
 
 export function CaseNotesPanel({
   notes,
@@ -55,11 +55,13 @@ export function CaseNotesPanel({
         ) : (
           notes.map((n) => (
             <div key={n.id} className="bg-muted/30 p-3 rounded-md border border-border">
-              <p className="text-[13px] text-foreground leading-relaxed whitespace-pre-wrap">{n.content}</p>
+              <p className="text-[13px] text-foreground leading-relaxed whitespace-pre-wrap">
+                {n.content}
+              </p>
               <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="font-medium inline-flex items-center gap-1">
                   <User className="w-3 h-3" />
-                  {n.authorName ?? '—'}
+                  {n.authorName ?? "—"}
                 </span>
                 <span className="tabular-nums">{fmtDateTime(n.createdAt)}</span>
               </div>
@@ -80,7 +82,7 @@ function AddNoteForm({
   onSave: (content: string) => void;
   saving: boolean;
 }) {
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState("");
   return (
     <div className="space-y-2">
       <Textarea
@@ -90,13 +92,15 @@ function AddNoteForm({
         className="min-h-[80px] text-[13px] resize-none"
       />
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>Cancel</Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
         <Button
           size="sm"
           disabled={saving || !content.trim()}
           onClick={() => onSave(content.trim())}
         >
-          {saving ? 'Saving…' : 'Save note'}
+          {saving ? "Saving…" : "Save note"}
         </Button>
       </div>
     </div>

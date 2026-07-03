@@ -1,6 +1,6 @@
-import React from 'react';
-import { Sidebar } from './Sidebar';
-import { TopBar } from './TopBar';
+import React from "react";
+import { Sidebar } from "./Sidebar";
+import { TopBar } from "./TopBar";
 
 interface AppShellProps {
   children: React.ReactNode;

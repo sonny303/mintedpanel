@@ -1,15 +1,14 @@
 // Provider CRUD with org filtering and audit logging.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { Database, Json } from '@/integrations/supabase/types';
-import type { Provider, ProviderStatus } from '@/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { Database, Json } from "@/integrations/supabase/types";
+import type { Provider, ProviderStatus } from "@/types";
 
-type ProviderInsert = Database['public']['Tables']['providers']['Insert'];
-type ProviderUpdate = Database['public']['Tables']['providers']['Update'];
-type StateLicenseInsert = Database['public']['Tables']['state_licenses']['Insert'];
-type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
-
+type ProviderInsert = Database["public"]["Tables"]["providers"]["Insert"];
+type ProviderUpdate = Database["public"]["Tables"]["providers"]["Update"];
+type StateLicenseInsert = Database["public"]["Tables"]["state_licenses"]["Insert"];
+type TaskInsert = Database["public"]["Tables"]["tasks"]["Insert"];
 
 export interface ProviderFilters {
   groupId?: string;
@@ -51,22 +50,22 @@ export interface ProviderInput {
 }
 
 const PROVIDER_LIST_COLUMNS =
-  'id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, updated_at';
+  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, updated_at";
 
 export async function getProviders(filters: ProviderFilters = {}): Promise<Provider[]> {
   const orgId = requireActiveOrg();
   let selectStr = PROVIDER_LIST_COLUMNS;
-  if (filters.state) selectStr += ', state_licenses!inner(state, org_id)';
-  if (filters.payerId) selectStr += ', credential_cases!inner(payer_id, org_id)';
+  if (filters.state) selectStr += ", state_licenses!inner(state, org_id)";
+  if (filters.payerId) selectStr += ", credential_cases!inner(payer_id, org_id)";
 
   let query = supabase
-    .from('providers')
+    .from("providers")
     .select(selectStr)
-    .eq('org_id', orgId)
-    .order('last_name', { ascending: true });
+    .eq("org_id", orgId)
+    .order("last_name", { ascending: true });
 
-  if (filters.groupId) query = query.eq('group_id', filters.groupId);
-  if (filters.status) query = query.eq('status', filters.status);
+  if (filters.groupId) query = query.eq("group_id", filters.groupId);
+  if (filters.status) query = query.eq("status", filters.status);
   if (filters.search) {
     const term = `%${filters.search}%`;
     query = query.or(
@@ -74,14 +73,12 @@ export async function getProviders(filters: ProviderFilters = {}): Promise<Provi
     );
   }
   if (filters.state) {
-    query = query
-      .eq('state_licenses.org_id', orgId)
-      .eq('state_licenses.state', filters.state);
+    query = query.eq("state_licenses.org_id", orgId).eq("state_licenses.state", filters.state);
   }
   if (filters.payerId) {
     query = query
-      .eq('credential_cases.org_id', orgId)
-      .eq('credential_cases.payer_id', filters.payerId);
+      .eq("credential_cases.org_id", orgId)
+      .eq("credential_cases.payer_id", filters.payerId);
   }
 
   const { data, error } = await query;
@@ -93,15 +90,13 @@ export async function getProviders(filters: ProviderFilters = {}): Promise<Provi
   return camelizeRow<Provider[]>(stripped);
 }
 
-
-
 export async function getProvider(id: string): Promise<Provider | null> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('providers')
-    .select('*')
-    .eq('id', id)
-    .eq('org_id', orgId)
+    .from("providers")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Provider>(data) : null;
@@ -111,15 +106,15 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
   const orgId = requireActiveOrg();
   const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
   const { data, error } = await supabase
-    .from('providers')
+    .from("providers")
     .insert(payload as unknown as ProviderInsert)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Provider>(data);
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'provider',
+    actionType: "CREATE",
+    entityType: "provider",
     entityId: created.id,
     after: created,
     description: `Created provider ${created.firstName} ${created.lastName}`,
@@ -127,26 +122,23 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
   return created;
 }
 
-export async function updateProvider(
-  id: string,
-  patch: Partial<ProviderInput>,
-): Promise<Provider> {
+export async function updateProvider(id: string, patch: Partial<ProviderInput>): Promise<Provider> {
   const orgId = requireActiveOrg();
   const before = await getProvider(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
   const { data, error } = await supabase
-    .from('providers')
+    .from("providers")
     .update(payload as unknown as ProviderUpdate)
 
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (error) throw error;
   const after = camelizeRow<Provider>(data);
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'provider',
+    actionType: "UPDATE",
+    entityType: "provider",
     entityId: id,
     before,
     after,
@@ -186,9 +178,9 @@ export async function createProviderWithDetails(
   const orgId = requireActiveOrg();
   const payload = { ...snakeizeRow<Record<string, unknown>>(input.provider), org_id: orgId };
   const { data, error } = await supabase
-    .from('providers')
+    .from("providers")
     .insert(payload as unknown as ProviderInsert)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Provider>(data);
@@ -205,12 +197,12 @@ export async function createProviderWithDetails(
       license_type: l.licenseType,
       issue_date: l.issueDate,
       expiration_date: l.expirationDate,
-      status: 'active',
+      status: "active",
     }));
 
   let insertedLicenses: StateLicenseInsert[] = [];
   if (licenseRows.length > 0) {
-    const { error: licErr } = await supabase.from('state_licenses').insert(licenseRows);
+    const { error: licErr } = await supabase.from("state_licenses").insert(licenseRows);
     if (licErr) {
       warnings.push(`Licenses not saved: ${licErr.message}`);
     } else {
@@ -229,7 +221,7 @@ export async function createProviderWithDetails(
   let insertedFacilityIds: string[] = [];
   if (facilityRows.length > 0) {
     const { error: facErr } = await supabase
-      .from('provider_facility_assignments')
+      .from("provider_facility_assignments")
       .insert(facilityRows);
     if (facErr) {
       warnings.push(`Facility assignments not saved: ${facErr.message}`);
@@ -239,8 +231,8 @@ export async function createProviderWithDetails(
   }
 
   await writeAudit({
-    actionType: 'CREATE',
-    entityType: 'provider',
+    actionType: "CREATE",
+    entityType: "provider",
     entityId: created.id,
     after: {
       provider: created,
@@ -260,10 +252,10 @@ export async function updateProviderWithLicenses(
   const orgId = requireActiveOrg();
   const before = await getProvider(id);
   const { data: licsBefore, error: licsBeforeErr } = await supabase
-    .from('state_licenses')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('provider_id', id);
+    .from("state_licenses")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("provider_id", id);
   if (licsBeforeErr) throw licsBeforeErr;
   const existing = (licsBefore ?? []) as Array<{
     id: string;
@@ -273,11 +265,11 @@ export async function updateProviderWithLicenses(
 
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   const { data, error } = await supabase
-    .from('providers')
+    .from("providers")
     .update(payload as unknown as ProviderUpdate)
-    .eq('id', id)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (error) throw error;
   const after = camelizeRow<Provider>(data);
@@ -289,7 +281,7 @@ export async function updateProviderWithLicenses(
   // Match incoming rows to existing rows by id, else by (state + licenseNumber).
   const existingById = new Map(existing.map((r) => [r.id, r]));
   const naturalKey = (state: string | null, num: string | null): string =>
-    `${(state ?? '').toUpperCase()}::${(num ?? '').trim()}`;
+    `${(state ?? "").toUpperCase()}::${(num ?? "").trim()}`;
   const existingByNatural = new Map(
     existing.map((r) => [naturalKey(r.state, r.license_number), r]),
   );
@@ -302,7 +294,7 @@ export async function updateProviderWithLicenses(
     const row: StateLicenseInsert = {
       org_id: orgId,
       provider_id: id,
-      state: l.state || '',
+      state: l.state || "",
       license_number: l.licenseNumber,
       license_type: l.licenseType,
       issue_date: l.issueDate,
@@ -329,12 +321,12 @@ export async function updateProviderWithLicenses(
   // Delete removed rows and verify the delete actually removed them.
   if (toDeleteIds.length > 0) {
     const { data: deleted, error: delErr } = await supabase
-      .from('state_licenses')
+      .from("state_licenses")
       .delete()
-      .eq('org_id', orgId)
-      .eq('provider_id', id)
-      .in('id', toDeleteIds)
-      .select('id');
+      .eq("org_id", orgId)
+      .eq("provider_id", id)
+      .in("id", toDeleteIds)
+      .select("id");
     if (delErr) throw delErr;
     const removed = new Set(((deleted ?? []) as Array<{ id: string }>).map((r) => r.id));
     const missed = toDeleteIds.filter((did) => !removed.has(did));
@@ -348,7 +340,7 @@ export async function updateProviderWithLicenses(
   // Update matched rows.
   for (const { id: licId, row } of toUpdate) {
     const { error: updErr } = await supabase
-      .from('state_licenses')
+      .from("state_licenses")
       .update({
         state: row.state,
         license_number: row.license_number,
@@ -356,21 +348,21 @@ export async function updateProviderWithLicenses(
         issue_date: row.issue_date,
         expiration_date: row.expiration_date,
       })
-      .eq('id', licId)
-      .eq('org_id', orgId)
-      .eq('provider_id', id);
+      .eq("id", licId)
+      .eq("org_id", orgId)
+      .eq("provider_id", id);
     if (updErr) throw updErr;
   }
 
   // Insert new rows.
   if (toInsert.length > 0) {
-    const { error: insErr } = await supabase.from('state_licenses').insert(toInsert);
+    const { error: insErr } = await supabase.from("state_licenses").insert(toInsert);
     if (insErr) throw insErr;
   }
 
   await writeAudit({
-    actionType: 'UPDATE',
-    entityType: 'provider',
+    actionType: "UPDATE",
+    entityType: "provider",
     entityId: id,
     before: { provider: before, licenses: existing },
     after: {
@@ -388,8 +380,7 @@ export async function updateProviderWithLicenses(
   return after;
 }
 
-
-const TERMINATION_ACTIVE_LABELS = ['active', 'approved, pending effective date'];
+const TERMINATION_ACTIVE_LABELS = ["active", "approved, pending effective date"];
 
 function buildTerminationSteps(): {
   id: string;
@@ -398,13 +389,13 @@ function buildTerminationSteps(): {
   isCompleted: boolean;
 }[] {
   const mkId = (): string =>
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return [
-    { id: mkId(), order: 1, label: 'Notify payer of termination date', isCompleted: false },
-    { id: mkId(), order: 2, label: 'Confirm removal from payer directory', isCompleted: false },
-    { id: mkId(), order: 3, label: 'Log confirmation in touch log', isCompleted: false },
+    { id: mkId(), order: 1, label: "Notify payer of termination date", isCompleted: false },
+    { id: mkId(), order: 2, label: "Confirm removal from payer directory", isCompleted: false },
+    { id: mkId(), order: 3, label: "Log confirmation in touch log", isCompleted: false },
   ];
 }
 
@@ -430,13 +421,13 @@ export async function terminateProvider(
 ): Promise<TerminateProviderResult> {
   const orgId = requireActiveOrg();
   const before = await getProvider(input.providerId);
-  if (!before) throw new Error('Provider not found');
+  if (!before) throw new Error("Provider not found");
 
   const { data: statusRows, error: statusErr } = await supabase
-    .from('status_configs')
-    .select('id, label')
-    .eq('org_id', orgId)
-    .eq('track', 'credentialing');
+    .from("status_configs")
+    .select("id, label")
+    .eq("org_id", orgId)
+    .eq("track", "credentialing");
   if (statusErr) throw statusErr;
   const activeStatusIds = (statusRows ?? [])
     .filter((s) => TERMINATION_ACTIVE_LABELS.includes((s.label as string).toLowerCase()))
@@ -445,11 +436,11 @@ export async function terminateProvider(
   let activeCases: { id: string; payer_id: string; state: string }[] = [];
   if (activeStatusIds.length > 0) {
     const { data: caseRows, error: caseErr } = await supabase
-      .from('credential_cases')
-      .select('id, payer_id, state')
-      .eq('org_id', orgId)
-      .eq('provider_id', input.providerId)
-      .in('credentialing_status_id', activeStatusIds);
+      .from("credential_cases")
+      .select("id, payer_id, state")
+      .eq("org_id", orgId)
+      .eq("provider_id", input.providerId)
+      .in("credentialing_status_id", activeStatusIds);
     if (caseErr) throw caseErr;
     activeCases = (caseRows ?? []) as typeof activeCases;
   }
@@ -458,9 +449,9 @@ export async function terminateProvider(
   const payerNameById = new Map<string, string>();
   if (payerIds.length > 0) {
     const { data: payers, error: payersErr } = await supabase
-      .from('payers')
-      .select('id, name')
-      .in('id', payerIds);
+      .from("payers")
+      .select("id, name")
+      .in("id", payerIds);
     if (payersErr) throw payersErr;
     for (const p of payers ?? []) payerNameById.set(p.id as string, p.name as string);
   }
@@ -470,38 +461,37 @@ export async function terminateProvider(
     org_id: orgId,
     case_id: cs.id,
     provider_id: input.providerId,
-    title: `Submit termination to ${payerNameById.get(cs.payer_id) ?? 'payer'} — ${cs.state}`,
+    title: `Submit termination to ${payerNameById.get(cs.payer_id) ?? "payer"} — ${cs.state}`,
     description: input.reason ?? null,
     sop_content: buildTerminationSteps() as unknown as Json,
-    status: 'not_started',
+    status: "not_started",
     sort_order: 999,
     due_date: dueDate,
     is_auto_generated: true,
   }));
 
   if (taskRows.length > 0) {
-    const { error: insErr } = await supabase.from('tasks').insert(taskRows);
+    const { error: insErr } = await supabase.from("tasks").insert(taskRows);
     if (insErr) throw insErr;
   }
 
   const providerUpdate: ProviderUpdate = {
-    status: 'terminated',
+    status: "terminated",
     terminated_date: input.terminationDate,
   };
   const { data: updated, error: updErr } = await supabase
-    .from('providers')
+    .from("providers")
     .update(providerUpdate)
-    .eq('id', input.providerId)
-    .eq('org_id', orgId)
-    .select('*')
+    .eq("id", input.providerId)
+    .eq("org_id", orgId)
+    .select("*")
     .single();
   if (updErr) throw updErr;
   const after = camelizeRow<Provider>(updated);
 
-
   await writeAudit({
-    actionType: 'TERMINATION',
-    entityType: 'provider',
+    actionType: "TERMINATION",
+    entityType: "provider",
     entityId: input.providerId,
     before: { status: before.status, terminatedDate: before.terminatedDate },
     after: {
@@ -511,9 +501,8 @@ export async function terminateProvider(
       terminationTasksCreated: taskRows.length,
       affectedCaseIds: activeCases.map((c) => c.id),
     },
-    description: `Terminated provider ${after.firstName} ${after.lastName} (${taskRows.length} task${taskRows.length === 1 ? '' : 's'} created)`,
+    description: `Terminated provider ${after.firstName} ${after.lastName} (${taskRows.length} task${taskRows.length === 1 ? "" : "s"} created)`,
   });
 
   return { provider: after, tasksCreated: taskRows.length };
 }
-

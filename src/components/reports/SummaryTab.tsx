@@ -1,8 +1,8 @@
 // Summary tab of the Reports page. Filters + status/payer charts, avg days
 // to approval by payer, and coordinator workload table with CSV export.
-import { useMemo, useState } from 'react';
-import { differenceInCalendarDays, parseISO } from 'date-fns';
-import { Download } from 'lucide-react';
+import { useMemo, useState } from "react";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { Download } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -12,43 +12,43 @@ import {
   Tooltip as RTooltip,
   XAxis,
   YAxis,
-} from 'recharts';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "recharts";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/EmptyState';
-import { downloadCsv } from '@/lib/csv';
-import { useCases } from '@/hooks/useCases';
-import { useTasks } from '@/hooks/useTasks';
-import { useProviders } from '@/hooks/useProviders';
-import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
-import { useTouchSummary } from '@/hooks/useReports';
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/EmptyState";
+import { downloadCsv } from "@/lib/csv";
+import { useCases } from "@/hooks/useCases";
+import { useTasks } from "@/hooks/useTasks";
+import { useProviders } from "@/hooks/useProviders";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { useProviderGroups, useCoordinators } from "@/hooks/useLookups";
+import { useTouchSummary } from "@/hooks/useReports";
 
-const ALL = '__all__';
+const ALL = "__all__";
 
 export function SummaryTab() {
   const casesQ = useCases();
   const tasksQ = useTasks();
   const providersQ = useProviders();
   const payersQ = usePayers();
-  const statusesQ = useStatusConfigs('credentialing');
+  const statusesQ = useStatusConfigs("credentialing");
   const groupsQ = useProviderGroups();
   const coordinatorsQ = useCoordinators();
   const touchesQ = useTouchSummary();
 
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [stateFilter, setStateFilter] = useState<string>(ALL);
-  const [from, setFrom] = useState<string>('');
-  const [to, setTo] = useState<string>('');
+  const [from, setFrom] = useState<string>("");
+  const [to, setTo] = useState<string>("");
 
   const payerById = useMemo(
     () => new Map((payersQ.data ?? []).map((p) => [p.id, p])),
@@ -82,14 +82,14 @@ export function SummaryTab() {
   const statusBars = useMemo(() => {
     const counts = new Map<string, number>();
     filteredCases.forEach((c) => {
-      const id = c.credentialingStatusId ?? '__none__';
+      const id = c.credentialingStatusId ?? "__none__";
       counts.set(id, (counts.get(id) ?? 0) + 1);
     });
     return (statusesQ.data ?? [])
       .map((s) => ({
         id: s.id,
         label: s.label,
-        color: s.color || '#6B7280',
+        color: s.color || "#6B7280",
         count: counts.get(s.id) ?? 0,
       }))
       .filter((r) => r.count > 0)
@@ -104,7 +104,7 @@ export function SummaryTab() {
     return Array.from(counts.entries())
       .map(([payerId, count]) => ({
         payerId,
-        label: payerById.get(payerId)?.name ?? '—',
+        label: payerById.get(payerId)?.name ?? "—",
         count,
       }))
       .sort((a, b) => b.count - a.count);
@@ -133,7 +133,7 @@ export function SummaryTab() {
         const variance = expected !== null ? avg - expected : null;
         return {
           payerId,
-          payerName: payer?.name ?? '—',
+          payerName: payer?.name ?? "—",
           avg,
           count: n,
           expected,
@@ -146,11 +146,11 @@ export function SummaryTab() {
   const coordinatorRows = useMemo(() => {
     const filteredCaseIds = new Set(filteredCases.map((c) => c.id));
     const openByCoord = new Map<string, number>();
-    const terminalLabels = new Set(['denied', 'expired', 'terminated', 'closed']);
+    const terminalLabels = new Set(["denied", "expired", "terminated", "closed"]);
     filteredCases.forEach((c) => {
       if (!c.assignedTo) return;
       const st = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
-      const label = (st?.label ?? '').toLowerCase();
+      const label = (st?.label ?? "").toLowerCase();
       const closed = Array.from(terminalLabels).some((t) => label.includes(t));
       if (closed) return;
       openByCoord.set(c.assignedTo, (openByCoord.get(c.assignedTo) ?? 0) + 1);
@@ -162,7 +162,7 @@ export function SummaryTab() {
     filteredCases.forEach((c) => caseAssignee.set(c.id, c.assignedTo));
     (tasksQ.data ?? []).forEach((t) => {
       if (!t.caseId || !filteredCaseIds.has(t.caseId)) return;
-      if (t.status === 'completed') return;
+      if (t.status === "completed") return;
       if (!t.dueDate || t.dueDate >= todayStr) return;
       const assignee = caseAssignee.get(t.caseId);
       if (!assignee) return;
@@ -187,7 +187,7 @@ export function SummaryTab() {
     return Array.from(ids)
       .map((id) => {
         const prof = coordinatorById.get(id);
-        const name = prof?.fullName ?? prof?.email ?? '—';
+        const name = prof?.fullName ?? prof?.email ?? "—";
         return {
           id,
           name,
@@ -254,7 +254,9 @@ export function SummaryTab() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Group</Label>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Group
+          </Label>
           <Select value={groupFilter} onValueChange={setGroupFilter}>
             <SelectTrigger className="h-9 w-[200px]">
               <SelectValue placeholder="Group" />
@@ -270,7 +272,9 @@ export function SummaryTab() {
           </Select>
         </div>
         <div className="flex flex-col gap-1">
-          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">State</Label>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            State
+          </Label>
           <Select value={stateFilter} onValueChange={setStateFilter}>
             <SelectTrigger className="h-9 w-[140px]">
               <SelectValue placeholder="State" />
@@ -314,8 +318,8 @@ export function SummaryTab() {
             onClick={() => {
               setGroupFilter(ALL);
               setStateFilter(ALL);
-              setFrom('');
-              setTo('');
+              setFrom("");
+              setTo("");
             }}
           >
             Clear
@@ -331,8 +335,8 @@ export function SummaryTab() {
               variant="ghost"
               size="sm"
               onClick={() =>
-                downloadCsv('cases-by-status.csv', [
-                  ['Status', 'Cases'],
+                downloadCsv("cases-by-status.csv", [
+                  ["Status", "Cases"],
                   ...statusBars.map((r) => [r.label, r.count]),
                 ])
               }
@@ -352,14 +356,14 @@ export function SummaryTab() {
                   <CartesianGrid stroke="#F3F4F6" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: '#6B7280' }}
+                    tick={{ fontSize: 11, fill: "#6B7280" }}
                     interval={0}
                     angle={-20}
                     textAnchor="end"
                     height={50}
                   />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
-                  <RTooltip cursor={{ fill: '#F9FAFB' }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6B7280" }} />
+                  <RTooltip cursor={{ fill: "#F9FAFB" }} />
                   <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                     {statusBars.map((r) => (
                       <Cell key={r.id} fill={r.color} />
@@ -378,8 +382,8 @@ export function SummaryTab() {
               variant="ghost"
               size="sm"
               onClick={() =>
-                downloadCsv('cases-by-payer.csv', [
-                  ['Payer', 'Cases'],
+                downloadCsv("cases-by-payer.csv", [
+                  ["Payer", "Cases"],
                   ...payerBars.map((r) => [r.label, r.count]),
                 ])
               }
@@ -401,14 +405,18 @@ export function SummaryTab() {
                   margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
                 >
                   <CartesianGrid stroke="#F3F4F6" horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "#6B7280" }}
+                  />
                   <YAxis
                     type="category"
                     dataKey="label"
                     width={140}
-                    tick={{ fontSize: 11, fill: '#374151' }}
+                    tick={{ fontSize: 11, fill: "#374151" }}
                   />
-                  <RTooltip cursor={{ fill: '#F9FAFB' }} />
+                  <RTooltip cursor={{ fill: "#F9FAFB" }} />
                   <Bar dataKey="count" fill="#1B4D3E" radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -424,14 +432,14 @@ export function SummaryTab() {
             variant="ghost"
             size="sm"
             onClick={() =>
-              downloadCsv('avg-approval-by-payer.csv', [
-                ['Payer', 'Avg days', 'Cases', 'Expected (avg_decision_days)', 'Variance'],
+              downloadCsv("avg-approval-by-payer.csv", [
+                ["Payer", "Avg days", "Cases", "Expected (avg_decision_days)", "Variance"],
                 ...approvalRows.map((r) => [
                   r.payerName,
                   r.avg,
                   r.count,
-                  r.expected ?? '',
-                  r.variance ?? '',
+                  r.expected ?? "",
+                  r.variance ?? "",
                 ]),
               ])
             }
@@ -461,29 +469,24 @@ export function SummaryTab() {
               approvalRows.map((r) => {
                 const varClass =
                   r.variance === null
-                    ? 'text-muted-foreground'
+                    ? "text-muted-foreground"
                     : r.variance <= 0
-                      ? 'text-[#059669]'
-                      : 'text-[#DC2626]';
+                      ? "text-[#059669]"
+                      : "text-[#DC2626]";
                 const varText =
                   r.variance === null
-                    ? '—'
+                    ? "—"
                     : r.variance === 0
-                      ? 'on target'
+                      ? "on target"
                       : r.variance < 0
                         ? `${r.variance} d faster`
                         : `+${r.variance} d slower`;
                 return (
-                  <tr
-                    key={r.payerId}
-                    className="border-t border-[#E8E5E0] h-10 hover:bg-[#F9FAFB]"
-                  >
+                  <tr key={r.payerId} className="border-t border-[#E8E5E0] h-10 hover:bg-[#F9FAFB]">
                     <td className="px-4">{r.payerName}</td>
                     <td className="px-4 text-right tabular-nums">{r.avg}</td>
                     <td className="px-4 text-right tabular-nums">{r.count}</td>
-                    <td className="px-4 text-right tabular-nums">
-                      {r.expected ?? '—'}
-                    </td>
+                    <td className="px-4 text-right tabular-nums">{r.expected ?? "—"}</td>
                     <td className={`px-4 text-right tabular-nums ${varClass}`}>{varText}</td>
                   </tr>
                 );
@@ -500,8 +503,8 @@ export function SummaryTab() {
             variant="ghost"
             size="sm"
             onClick={() =>
-              downloadCsv('coordinator-workload.csv', [
-                ['Coordinator', 'Open cases', 'Overdue tasks', 'Touches (30d)'],
+              downloadCsv("coordinator-workload.csv", [
+                ["Coordinator", "Open cases", "Overdue tasks", "Touches (30d)"],
                 ...coordinatorRows.map((r) => [r.name, r.openCases, r.overdueTasks, r.touches30]),
               ])
             }

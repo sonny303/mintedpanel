@@ -1,15 +1,15 @@
 // Admin → Settings: two tabs. Organization (name, provider groups,
 // facilities/insurance) and Team (memberships). Panels live in
 // src/components/settings/*.
-import { createFileRoute } from '@tanstack/react-router';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { OrgPanel } from '@/components/settings/OrgPanel';
-import { GroupsPanel } from '@/components/settings/GroupsPanel';
-import { FacilitiesPanel } from '@/components/settings/FacilitiesPanel';
-import { MembersPanel } from '@/components/settings/MembersPanel';
+import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OrgPanel } from "@/components/settings/OrgPanel";
+import { GroupsPanel } from "@/components/settings/GroupsPanel";
+import { FacilitiesPanel } from "@/components/settings/FacilitiesPanel";
+import { MembersPanel } from "@/components/settings/MembersPanel";
 
-export const Route = createFileRoute('/admin/settings')({
+export const Route = createFileRoute("/admin/settings")({
   component: AdminSettingsPage,
 });
 

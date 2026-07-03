@@ -1,8 +1,8 @@
 // Org-wide read helpers for the Reports page: touch summary rows for the
 // Summary tab and roster aux (assignments/licenses/facilities) for the Roster tab.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { requireActiveOrg } from '@/lib/audit';
-import { camelizeRow } from '@/lib/case';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { requireActiveOrg } from "@/lib/audit";
+import { camelizeRow } from "@/lib/case";
 
 export interface TouchSummaryRow {
   coordinatorId: string | null;
@@ -12,9 +12,9 @@ export interface TouchSummaryRow {
 export async function getTouchSummary(): Promise<TouchSummaryRow[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('touches')
-    .select('coordinator_id, touch_date')
-    .eq('org_id', orgId);
+    .from("touches")
+    .select("coordinator_id, touch_date")
+    .eq("org_id", orgId);
   if (error) throw error;
   return (data ?? []).map((r) => ({
     coordinatorId: (r.coordinator_id as string | null) ?? null,
@@ -53,17 +53,14 @@ export async function getRosterAux(): Promise<RosterAuxData> {
   const orgId = requireActiveOrg();
   const [aRes, lRes, fRes] = await Promise.all([
     supabase
-      .from('provider_facility_assignments')
-      .select('provider_id, facility_id')
-      .eq('org_id', orgId),
+      .from("provider_facility_assignments")
+      .select("provider_id, facility_id")
+      .eq("org_id", orgId),
     supabase
-      .from('state_licenses')
-      .select('provider_id, state, license_number, expiration_date')
-      .eq('org_id', orgId),
-    supabase
-      .from('facilities')
-      .select('id, name, street, city, state, zip')
-      .eq('org_id', orgId),
+      .from("state_licenses")
+      .select("provider_id, state, license_number, expiration_date")
+      .eq("org_id", orgId),
+    supabase.from("facilities").select("id, name, street, city, state, zip").eq("org_id", orgId),
   ]);
   if (aRes.error) throw aRes.error;
   if (lRes.error) throw lRes.error;
