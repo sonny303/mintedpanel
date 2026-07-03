@@ -2,7 +2,7 @@
 // credentialing-track status mutation.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { queryKeys, FIVE_MINUTES } from '@/hooks/queryKeys';
+import { queryKeys } from '@/hooks/queryKeys';
 import {
   createCase,
   getCase,
@@ -15,7 +15,6 @@ import {
 } from '@/services/cases';
 
 const THIRTY_SECONDS = 30_000;
-void FIVE_MINUTES;
 
 export function useCases(filters: CaseFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
