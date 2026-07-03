@@ -268,6 +268,7 @@ function PayerEditModal({
       : EMPTY,
   );
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const pending = createMut.isPending || updateMut.isPending;
 
   function patch(p: Partial<PayerInput>) {
@@ -282,8 +283,9 @@ function PayerEditModal({
 
   async function save() {
     setError(null);
+    setNameError(null);
     if (!form.name.trim()) {
-      setError('Name is required.');
+      setNameError('Name is required');
       return;
     }
     try {
