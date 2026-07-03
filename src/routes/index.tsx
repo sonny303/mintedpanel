@@ -477,6 +477,7 @@ function Stats() {
         }}
       >
         {items.map((it) => {
+          // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
           const r = useReveal(it.delay);
           return (
             <div key={it.label} ref={r.ref} style={{ ...r.style, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -832,6 +833,7 @@ function HowItWorks() {
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24 }}>
         {steps.map((s) => {
+          // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
           const r = useReveal(s.delay);
           return (
             <div key={s.n} ref={r.ref} style={r.style}>
@@ -903,6 +905,7 @@ function WhatWeHandle() {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20 }}>
           {items.map(([title, copy], i) => {
+            // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
             const r = useReveal((i % 3) * 80);
             return (
               <div key={title} ref={r.ref} style={r.style}>
@@ -984,6 +987,7 @@ function BuiltForScale() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {cards.map(([title, copy, delay]) => {
+          // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
           const r = useReveal(delay as number);
           return (
             <div
@@ -1060,6 +1064,7 @@ function WhyMintedPanel() {
           }}
         >
           {features.map(([title, copy], i) => {
+            // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
             const r = useReveal(i % 2 === 0 ? 0 : 80);
             return (
               <div key={title} ref={r.ref} style={r.style}>
@@ -1113,6 +1118,7 @@ function WhyMintedPanel() {
           }}
         >
           {minis.map(([title, copy, delay]) => {
+            // eslint-disable-next-line react-hooks/rules-of-hooks -- pre-existing: map over a static array, hook order is stable
             const r = useReveal(delay as number);
             return (
               <div key={title} ref={r.ref} style={r.style}>
