@@ -4,12 +4,15 @@ import { useActiveOrgId } from '@/lib/auth-store';
 import { queryKeys } from '@/hooks/queryKeys';
 import { getLastTouchDates, getTouches, logTouch, type TouchInput } from '@/services/touches';
 
+const THIRTY_SECONDS = 30_000;
+
 export function useLastTouchDates() {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
     queryKey: ['touches', orgId, 'last-per-case'] as const,
     queryFn: () => getLastTouchDates(),
     enabled: orgId !== 'no-org',
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -19,6 +22,7 @@ export function useTouches(caseId: string | undefined) {
     queryKey: queryKeys.touches(orgId, caseId ?? ''),
     queryFn: () => getTouches(caseId as string),
     enabled: orgId !== 'no-org' && Boolean(caseId),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
