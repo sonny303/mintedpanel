@@ -11,12 +11,15 @@ import {
   type ContractInput,
 } from '@/services/contracts';
 
+const THIRTY_SECONDS = 30_000;
+
 export function useContracts(filters: ContractFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
     queryKey: queryKeys.contracts(orgId, filters),
     queryFn: () => listContracts(filters),
     enabled: orgId !== 'no-org',
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -26,6 +29,7 @@ export function useContract(id: string | undefined) {
     queryKey: queryKeys.contract(orgId, id ?? ''),
     queryFn: () => getContract(id as string),
     enabled: orgId !== 'no-org' && Boolean(id),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
