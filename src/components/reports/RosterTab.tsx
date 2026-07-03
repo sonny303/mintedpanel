@@ -187,7 +187,7 @@ export function RosterTab() {
     if (!generated || rows.length === 0) return;
     const group = groupById.get(generated.groupId);
     const payer = payerById.get(generated.payerId);
-    const filename = `openpanel-roster-${slugify(group?.name ?? 'group')}-${slugify(payer?.name ?? 'payer')}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const filename = `minted-panel-roster-${slugify(group?.name ?? 'group')}-${slugify(payer?.name ?? 'payer')}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     const header = [
       'Last name',
       'First name',

@@ -1,4 +1,4 @@
--- Seed data for OpenPanel demo (BEST PT + KS FIT PT orgs).
+-- Seed data for Minted Panel demo (BEST PT + KS FIT PT orgs).
 -- Uses fixed UUIDs so future migrations and prompts can reference rows.
 -- Idempotent: every INSERT uses ON CONFLICT (id) DO NOTHING.
 INSERT INTO public.organizations VALUES ('4ab122a8-78f1-5a68-8277-7f7199255208', 'BEST PT', '2026-06-10 04:50:27.297544+00') ON CONFLICT (id) DO NOTHING;

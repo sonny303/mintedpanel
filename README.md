@@ -1,4 +1,4 @@
-# OpenPanel
+# Minted Panel
 
 Credentialing operations workspace for medical groups. Track providers, payers, cases, tasks, touches, contracts, and MSO routing across states — all scoped by organization with role-based access.
 
