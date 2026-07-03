@@ -23,6 +23,7 @@ import { useLastTouchDates } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { getActionState, worstActionState, daysSilent, type ActionState } from "@/lib/actionState";
+import { CHIP_STATES, chipCounts, type ChipId } from "@/lib/workView";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/providers/")({
@@ -49,14 +50,6 @@ const BADGE_NOUN: Record<ActionState, string> = {
   awaiting_effective: "awaiting effective",
   on_track: "On track",
   complete: "Complete",
-};
-
-type ChipId = "all" | "needs" | "inprog" | "awaiting";
-
-const CHIP_STATES: Record<Exclude<ChipId, "all">, readonly ActionState[]> = {
-  needs: ["needs_action", "blocked"],
-  inprog: ["on_track", "stalled"],
-  awaiting: ["awaiting_effective"],
 };
 
 interface WorkRow {
@@ -256,24 +249,12 @@ function ProvidersWorkView() {
   ]);
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
+  const counts = chipCounts(openRowsAll.map((r) => r.state));
   const chips = [
-    { id: "all", label: "All open cases", n: openRowsAll.length },
-    {
-      id: "needs",
-      label: "Needs your action",
-      n: openRowsAll.filter((r) => CHIP_STATES.needs.includes(r.state)).length,
-      warn: true,
-    },
-    {
-      id: "inprog",
-      label: "In progress",
-      n: openRowsAll.filter((r) => CHIP_STATES.inprog.includes(r.state)).length,
-    },
-    {
-      id: "awaiting",
-      label: "Awaiting effective date",
-      n: openRowsAll.filter((r) => CHIP_STATES.awaiting.includes(r.state)).length,
-    },
+    { id: "all", label: "All open cases", n: counts.all },
+    { id: "needs", label: "Needs your action", n: counts.needs, warn: true },
+    { id: "inprog", label: "In progress", n: counts.inprog },
+    { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
   ];
 
   const visibleGroups = useMemo(() => {
