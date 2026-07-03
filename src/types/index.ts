@@ -136,6 +136,8 @@ export interface StatusConfig {
   color: string;
   sortOrder: number;
   requiredFields: string[];
+  /** ours | waiting_payer | waiting_provider | complete — drives the M2 action engine */
+  actionBucket: string;
   createdAt: string;
 }
 
