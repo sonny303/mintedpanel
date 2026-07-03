@@ -115,6 +115,7 @@ function LoginPage() {
               color: "rgba(240,239,230,0.75)",
               lineHeight: 1.5,
             }}
+          >
             {"\n"}
           </p>
         </div>
