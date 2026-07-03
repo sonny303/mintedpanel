@@ -17,7 +17,6 @@ import type {
   Touch,
 } from '@/types';
 
-type CredentialCaseInsert = Database['public']['Tables']['credential_cases']['Insert'];
 type CredentialCaseUpdate = Database['public']['Tables']['credential_cases']['Update'];
 
 
