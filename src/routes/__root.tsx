@@ -90,8 +90,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "Minted Panel Credentialing" },
       { name: "twitter:description", content: "Credentialing operations for allied health organizations." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a8376ba7-701e-41b1-b549-9960d779af97/id-preview-6eb3171c--eac3a110-e7ee-46ac-8b63-56e159d95c8c.lovable.app-1781492195504.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/a8376ba7-701e-41b1-b549-9960d779af97/id-preview-6eb3171c--eac3a110-e7ee-46ac-8b63-56e159d95c8c.lovable.app-1781492195504.png" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

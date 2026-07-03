@@ -1,26 +1,27 @@
-# Plan - Harming /tasks/$id Route Against Malformed SOP Content
+# Fix stale "OpenPanel" social image in Publish dialog
 
-Ensure that the task details page and completion service safely handle any scenario where `sop_content` in the database is not an array (e.g. `null`, `string`, empty object, or missing) without crashing the route or throwing runtime exceptions.
+## What's happening
 
-## User Review Required
+The Publish dialog's "Social image" preview is showing an old screenshot with the "OpenPanel" wordmark. That image is not coming from your live site — it's a hardcoded URL in `src/routes/__root.tsx`:
 
-> [!IMPORTANT]
-> - There are no schema modifications.
-> - An inline amber alert notice is displayed when `sop_content` is malformed (not an array).
+- `og:image` and `twitter:image` both point at `https://pub-…r2.dev/…lovable.app-1781492195504.png`
+- That file is an auto-captured screenshot of the login page from before the rebrand, so it still shows "OpenPanel"
 
-## Technical Details
+The rest of the metadata (title, description, og:title, twitter:title) is already "Minted Panel Credentialing" — only the pinned image is stale.
 
-### 1. Update `src/services/tasks.ts`
-Modify `completeSOPStep` to safely treat `existing.sopContent` as an empty list if it's not a valid array, avoiding runtime type errors on operations like `.find` or `.map`:
-- Check if `Array.isArray(existing.sopContent)` is true. If not, use an empty array `[]` for step operations.
+There's a second, smaller issue: per project head-meta rules, `og:image` should never live in `__root.tsx` because the root `head()` concatenates into every route and would override any per-page share image.
 
-### 2. Update `src/routes/tasks.$id.tsx`
-Guard the `sopContent` array operations inside the component rendering:
-- Check if `Array.isArray(task?.sopContent)` is true.
-- Compute the sorted `steps` safely. If `sopContent` is not an array, default to `[]`.
-- If `sopContent` is not an array, render an inline amber alert block styled nicely:
-  ```tsx
-  <div className="p-6 text-[14px] text-amber-800 bg-amber-50/50">
-    SOP steps could not be read for this task.
-  </div>
-  ```
+## Fix
+
+Edit `src/routes/__root.tsx` only:
+
+- Remove the `og:image` meta entry (line 93)
+- Remove the `twitter:image` meta entry (line 94)
+
+With no explicit `og:image`, Lovable hosting injects the project's current preview (a fresh screenshot of the live site) at serve time, so the Publish dialog and shared links will show the Minted Panel branding.
+
+No other files change. No routing, styling, or backend changes.
+
+## After deploying
+
+Republish so the new HTML ships. The Publish dialog preview and any newly-scraped link previews will pick up the current site; previously-scraped previews on external platforms (Slack, LinkedIn, iMessage) stay cached until those platforms re-fetch — you can force a refresh from each platform's link-preview debugger.
