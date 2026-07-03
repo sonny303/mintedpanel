@@ -268,6 +268,7 @@ function PayerEditModal({
       : EMPTY,
   );
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const pending = createMut.isPending || updateMut.isPending;
 
   function patch(p: Partial<PayerInput>) {
@@ -282,8 +283,9 @@ function PayerEditModal({
 
   async function save() {
     setError(null);
+    setNameError(null);
     if (!form.name.trim()) {
-      setError('Name is required.');
+      setNameError('Name is required');
       return;
     }
     try {
@@ -314,9 +316,16 @@ function PayerEditModal({
             <Label className="text-[12px]">Name</Label>
             <Input
               value={form.name}
-              onChange={(e) => patch({ name: e.target.value })}
-              className="h-9"
+              onChange={(e) => {
+                patch({ name: e.target.value });
+                if (nameError) setNameError(null);
+              }}
+              aria-invalid={nameError ? true : undefined}
+              className={`h-9 ${nameError ? 'border-[#B91C1C] focus-visible:ring-[#B91C1C]' : ''}`}
             />
+            {nameError ? (
+              <div className="text-[12px] text-[#B91C1C] mt-1">{nameError}</div>
+            ) : null}
           </div>
 
           <div className="col-span-2 flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">

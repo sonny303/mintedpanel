@@ -204,7 +204,11 @@ function CasesListPage() {
       const daysSinceTouch = lastTouchDate
         ? differenceInDays(new Date(), parseISO(lastTouchDate))
         : null;
-      const isStalled = daysSinceTouch === null ? true : daysSinceTouch >= 14;
+      const stalledAnchor = lastTouchDate ?? c.createdAt ?? null;
+      const daysSinceAnchor = stalledAnchor
+        ? differenceInDays(new Date(), parseISO(stalledAnchor))
+        : null;
+      const isStalled = daysSinceAnchor === null ? false : daysSinceAnchor >= 14;
       return {
         c,
         provider,

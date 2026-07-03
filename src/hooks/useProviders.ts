@@ -17,12 +17,15 @@ import {
 
 
 
+const THIRTY_SECONDS = 30_000;
+
 export function useProviders(filters: ProviderFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
     queryKey: queryKeys.providers(orgId, filters),
     queryFn: () => getProviders(filters),
     enabled: orgId !== 'no-org',
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -32,6 +35,7 @@ export function useProvider(id: string | undefined) {
     queryKey: queryKeys.provider(orgId, id ?? ''),
     queryFn: () => getProvider(id as string),
     enabled: orgId !== 'no-org' && Boolean(id),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
