@@ -1,12 +1,18 @@
 // Built-for-scale section: two-column layout with relay illustration
 // paired with copy, and three tier cards below in a symmetric grid.
-import { Eyebrow } from './Eyebrow';
-import relayAsset from '@/assets/relay.png.asset.json';
+import { Eyebrow } from "./Eyebrow";
+import relayAsset from "@/assets/relay.png.asset.json";
 
 const TIERS = [
-  { title: 'Single-Site Practices', copy: 'Build a strong credentialing foundation as you grow.' },
-  { title: 'Multi-Location Groups', copy: 'Manage expansion without adding back-office headcount.' },
-  { title: 'Enterprise Provider Networks', copy: 'High-volume credentialing and contracting at scale.' },
+  { title: "Single-Site Practices", copy: "Build a strong credentialing foundation as you grow." },
+  {
+    title: "Multi-Location Groups",
+    copy: "Manage expansion without adding back-office headcount.",
+  },
+  {
+    title: "Enterprise Provider Networks",
+    copy: "High-volume credentialing and contracting at scale.",
+  },
 ];
 
 export function ScaleSection() {

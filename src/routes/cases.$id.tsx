@@ -1,37 +1,37 @@
 // Case detail at /cases/$id. Composes header, MSO callout, side cards, and
 // the tasks / touches / history / notes panels from src/components/cases.
-import { useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { differenceInDays, parseISO } from 'date-fns';
-import { AlertTriangle, ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { CopyButton } from '@/components/CopyButton';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { fmtDate } from '@/lib/format';
-import { useCase, useContractFor, useUpdateCaseStatus } from '@/hooks/useCases';
-import { useStatusConfigs } from '@/hooks/useAdmin';
-import { useCoordinators, useCreateNote, useMsoRoutingRule } from '@/hooks/useLookups';
-import { useLogTouch } from '@/hooks/useTouches';
-import { useCanWrite } from '@/lib/permissions';
-import type { StatusConfig } from '@/types';
-import { CaseHeader } from '@/components/cases/CaseHeader';
-import { CaseTasksPanel } from '@/components/cases/CaseTasksPanel';
-import { CaseTouchesPanel } from '@/components/cases/CaseTouchesPanel';
-import { CaseHistoryPanel } from '@/components/cases/CaseHistoryPanel';
-import { CaseNotesPanel } from '@/components/cases/CaseNotesPanel';
-import { ChangeStatusDialog } from '@/components/cases/ChangeStatusDialog';
+import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { differenceInDays, parseISO } from "date-fns";
+import { AlertTriangle, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { CopyButton } from "@/components/CopyButton";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { fmtDate } from "@/lib/format";
+import { useCase, useContractFor, useUpdateCaseStatus } from "@/hooks/useCases";
+import { useStatusConfigs } from "@/hooks/useAdmin";
+import { useCoordinators, useCreateNote, useMsoRoutingRule } from "@/hooks/useLookups";
+import { useLogTouch } from "@/hooks/useTouches";
+import { useCanWrite } from "@/lib/permissions";
+import type { StatusConfig } from "@/types";
+import { CaseHeader } from "@/components/cases/CaseHeader";
+import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
+import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
+import { CaseHistoryPanel } from "@/components/cases/CaseHistoryPanel";
+import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
+import { ChangeStatusDialog } from "@/components/cases/ChangeStatusDialog";
 
-export const Route = createFileRoute('/cases/$id')({
+export const Route = createFileRoute("/cases/$id")({
   component: CaseDetailPage,
 });
 
 function isExecutedLabel(label: string | undefined): boolean {
-  return (label ?? '').toLowerCase().includes('execut');
+  return (label ?? "").toLowerCase().includes("execut");
 }
 
 function CaseDetailPage() {
@@ -59,14 +59,14 @@ function CaseDetailPage() {
   }, [statusesQ.data]);
 
   const credentialingStatuses = useMemo(
-    () => (statusesQ.data ?? []).filter((s) => s.track === 'credentialing'),
+    () => (statusesQ.data ?? []).filter((s) => s.track === "credentialing"),
     [statusesQ.data],
   );
 
   const coordinatorName = useMemo(() => {
-    if (!c?.assignedTo) return '—';
+    if (!c?.assignedTo) return "—";
     const found = (coordinatorsQ.data ?? []).find((x) => x.id === c.assignedTo);
-    return found?.fullName ?? found?.email ?? '—';
+    return found?.fullName ?? found?.email ?? "—";
   }, [c?.assignedTo, coordinatorsQ.data]);
 
   if (caseQ.isLoading) {
@@ -83,8 +83,12 @@ function CaseDetailPage() {
       <div>
         <PageHeader title="Something went wrong loading this case" />
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => caseQ.refetch()}>Retry</Button>
-          <Button variant="outline" onClick={() => navigate({ to: '/cases' })}>Back to cases</Button>
+          <Button variant="outline" onClick={() => caseQ.refetch()}>
+            Retry
+          </Button>
+          <Button variant="outline" onClick={() => navigate({ to: "/cases" })}>
+            Back to cases
+          </Button>
         </div>
       </div>
     );
@@ -93,30 +97,32 @@ function CaseDetailPage() {
     return (
       <div>
         <PageHeader title="Case not found" />
-        <Button variant="outline" onClick={() => navigate({ to: '/cases' })}>Back to cases</Button>
+        <Button variant="outline" onClick={() => navigate({ to: "/cases" })}>
+          Back to cases
+        </Button>
       </div>
     );
   }
 
   const credStatus = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
   const contract = contractQ.data ?? null;
-  const contractStatus = contract?.contractingStatusId ? statusById.get(contract.contractingStatusId) : null;
+  const contractStatus = contract?.contractingStatusId
+    ? statusById.get(contract.contractingStatusId)
+    : null;
   const contractIsExecuted = isExecutedLabel(contractStatus?.label);
 
   const tasks = (c.tasks ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
-  const touches = (c.touches ?? []).slice().sort(
-    (a, b) => parseISO(b.touchDate).getTime() - parseISO(a.touchDate).getTime(),
-  );
-  const statusHistory = (c.statusHistory ?? []).slice().sort(
-    (a, b) => parseISO(b.changedAt).getTime() - parseISO(a.changedAt).getTime(),
-  );
-  const notes = (c.notes ?? []).slice().sort(
-    (a, b) => parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime(),
-  );
+  const touches = (c.touches ?? [])
+    .slice()
+    .sort((a, b) => parseISO(b.touchDate).getTime() - parseISO(a.touchDate).getTime());
+  const statusHistory = (c.statusHistory ?? [])
+    .slice()
+    .sort((a, b) => parseISO(b.changedAt).getTime() - parseISO(a.changedAt).getTime());
+  const notes = (c.notes ?? [])
+    .slice()
+    .sort((a, b) => parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime());
 
-  const daysOpen = c.submittedDate
-    ? differenceInDays(new Date(), parseISO(c.submittedDate))
-    : null;
+  const daysOpen = c.submittedDate ? differenceInDays(new Date(), parseISO(c.submittedDate)) : null;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -129,7 +135,7 @@ function CaseDetailPage() {
           onOpenStatus={() => setStatusModalOpen(true)}
         />
 
-        {c.provider?.status === 'terminated' ? (
+        {c.provider?.status === "terminated" ? (
           <div className="border border-border bg-[#F3F4F6] text-[#9CA3AF] rounded-md p-3 text-[13px]">
             Provider terminated {fmtDate(c.provider.terminatedDate)} — termination tasks generated.
           </div>
@@ -141,7 +147,7 @@ function CaseDetailPage() {
               <div className="flex items-center gap-3 text-[#D97706]">
                 <AlertTriangle className="w-5 h-5 shrink-0" />
                 <span className="text-[14px] font-medium">
-                  Route through {c.mso.name}, not {c.payer?.name ?? 'payer'} directly
+                  Route through {c.mso.name}, not {c.payer?.name ?? "payer"} directly
                 </span>
               </div>
               {c.mso.portalUrl && (
@@ -174,7 +180,7 @@ function CaseDetailPage() {
               onSaveTouch={async (input) => {
                 try {
                   await logTouchM.mutateAsync({ caseId: c.id, input });
-                  toast.success('Touch logged');
+                  toast.success("Touch logged");
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
@@ -189,16 +195,32 @@ function CaseDetailPage() {
               </CardHeader>
               <CardContent className="p-4">
                 <dl className="space-y-3 text-[13px]">
-                  <Row label="Submitted" value={<span className="tabular-nums">{fmtDate(c.submittedDate)}</span>} />
-                  <Row label="Expected effective" value={<span className="tabular-nums">{fmtDate(c.expectedEffectiveDate)}</span>} />
-                  <Row label="Confirmed effective" value={<span className="tabular-nums">{fmtDate(c.confirmedEffectiveDate)}</span>} />
-                  <Row label="Days open" value={
-                    <span className="tabular-nums">{daysOpen !== null ? `${daysOpen}d` : '—'}</span>
-                  }/>
+                  <Row
+                    label="Submitted"
+                    value={<span className="tabular-nums">{fmtDate(c.submittedDate)}</span>}
+                  />
+                  <Row
+                    label="Expected effective"
+                    value={<span className="tabular-nums">{fmtDate(c.expectedEffectiveDate)}</span>}
+                  />
+                  <Row
+                    label="Confirmed effective"
+                    value={
+                      <span className="tabular-nums">{fmtDate(c.confirmedEffectiveDate)}</span>
+                    }
+                  />
+                  <Row
+                    label="Days open"
+                    value={
+                      <span className="tabular-nums">
+                        {daysOpen !== null ? `${daysOpen}d` : "—"}
+                      </span>
+                    }
+                  />
                   <Separator className="my-2" />
                   <Row label="Coordinator" value={coordinatorName} />
-                  <Row label="Group" value={c.group?.name ?? '—'} />
-                  <Row label="Facility" value={c.facility?.name ?? '—'} />
+                  <Row label="Group" value={c.group?.name ?? "—"} />
+                  <Row label="Facility" value={c.facility?.name ?? "—"} />
                   {c.caseEmailToken && (
                     <>
                       <Separator className="my-2" />
@@ -233,11 +255,11 @@ function CaseDetailPage() {
               onSaveNote={async (content) => {
                 try {
                   await createNoteM.mutateAsync({
-                    entityType: 'case',
+                    entityType: "case",
                     entityId: c.id,
                     content,
                   });
-                  toast.success('Note added');
+                  toast.success("Note added");
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
@@ -252,7 +274,7 @@ function CaseDetailPage() {
         onOpenChange={setStatusModalOpen}
         statuses={credentialingStatuses}
         currentStatusId={c.credentialingStatusId}
-        payerName={c.payer?.name ?? 'payer'}
+        payerName={c.payer?.name ?? "payer"}
         state={c.state}
         contractIsExecuted={contractIsExecuted}
         saving={updateStatusM.isPending}
@@ -260,7 +282,7 @@ function CaseDetailPage() {
           try {
             const merged: Record<string, unknown> = { ...metadata };
             if (withoutContractWarning) {
-              merged.__warning = 'set Active without executed contract';
+              merged.__warning = "set Active without executed contract";
             }
             await updateStatusM.mutateAsync({
               caseId: c.id,
@@ -268,7 +290,7 @@ function CaseDetailPage() {
               metadata: merged,
             });
             setStatusModalOpen(false);
-            toast.success('Status updated');
+            toast.success("Status updated");
           } catch (e) {
             toast.error((e as Error).message);
           }
@@ -292,7 +314,7 @@ function IdRow({ label, value }: { label: string; value: string | null }) {
     <div className="flex items-center justify-between gap-3">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="flex items-center gap-2">
-        <span className="font-medium tabular-nums">{value ?? '—'}</span>
+        <span className="font-medium tabular-nums">{value ?? "—"}</span>
         {value ? <CopyButton value={value} label={label} /> : null}
       </dd>
     </div>

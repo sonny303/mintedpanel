@@ -1,19 +1,19 @@
 // Single-page Edit Provider form used by /providers/$id/edit. Renders the same
 // four sections as the Add stepper, stacked with no wizard chrome.
-import { useState, type ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import {
   CredentialsSection,
   EmploymentSection,
   LicensesSection,
   PersonalSection,
-} from '@/components/providers/ProviderFormSections';
+} from "@/components/providers/ProviderFormSections";
 import {
   validateAll,
   type ProviderFormErrors,
   type ProviderFormState,
   type UpdateProviderField,
-} from '@/components/providers/providerFormShared';
+} from "@/components/providers/providerFormShared";
 
 export interface EditProviderFormProps {
   initial: ProviderFormState;
@@ -44,7 +44,7 @@ export function EditProviderForm({
     try {
       await onSubmit(form);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to save provider');
+      setSubmitError(err instanceof Error ? err.message : "Failed to save provider");
     }
   };
 
@@ -63,16 +63,14 @@ export function EditProviderForm({
         <EmploymentSection form={form} errors={errors} update={update} />
       </Section>
 
-      {submitError ? (
-        <p className="text-sm text-destructive">{submitError}</p>
-      ) : null}
+      {submitError ? <p className="text-sm text-destructive">{submitError}</p> : null}
 
       <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
         <Button variant="outline" onClick={onCancel} disabled={isPending}>
           Cancel
         </Button>
         <Button onClick={submit} disabled={isPending}>
-          {isPending ? 'Saving…' : 'Save changes'}
+          {isPending ? "Saving…" : "Save changes"}
         </Button>
       </div>
     </div>

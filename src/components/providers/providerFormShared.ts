@@ -2,10 +2,57 @@
 // Owned by ProviderForm.tsx and EditProviderForm.tsx.
 
 export const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
-  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
-  'VA','WA','WV','WI','WY','DC',
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
+  "DC",
 ] as const;
 
 export const SSN_LAST4_RE = /^\d{4}$/;
@@ -16,7 +63,7 @@ export const EMAIL_RE = /^\S+@\S+\.\S+$/;
 export interface LicenseRow {
   state: string;
   number: string;
-  type: 'full' | 'compact' | '';
+  type: "full" | "compact" | "";
   issueDate: string;
   expirationDate: string;
 }
@@ -54,35 +101,35 @@ export interface ProviderFormState {
 }
 
 export const emptyProviderFormState: ProviderFormState = {
-  firstName: '',
-  lastName: '',
-  credentials: '',
-  dateOfBirth: '',
-  ssnLast4: '',
-  email: '',
-  phone: '',
-  homeStreet: '',
-  homeCity: '',
-  homeState: '',
-  homeZip: '',
-  npi: '',
-  caqhId: '',
+  firstName: "",
+  lastName: "",
+  credentials: "",
+  dateOfBirth: "",
+  ssnLast4: "",
+  email: "",
+  phone: "",
+  homeStreet: "",
+  homeCity: "",
+  homeState: "",
+  homeZip: "",
+  npi: "",
+  caqhId: "",
   isNewGrad: false,
-  caqhLastAttestedDate: '',
-  taxonomyCode: '225100000X',
-  deaNumber: '',
-  licenses: [{ state: '', number: '', type: '', issueDate: '', expirationDate: '' }],
-  groupId: '',
+  caqhLastAttestedDate: "",
+  taxonomyCode: "225100000X",
+  deaNumber: "",
+  licenses: [{ state: "", number: "", type: "", issueDate: "", expirationDate: "" }],
+  groupId: "",
   facilityIds: [],
-  specialty: '',
-  startDate: '',
-  degree: '',
-  schoolName: '',
-  graduationDate: '',
-  malpracticeCarrier: '',
-  malpracticePolicyNumber: '',
-  malpracticeCoverageStart: '',
-  malpracticeCoverageEnd: '',
+  specialty: "",
+  startDate: "",
+  degree: "",
+  schoolName: "",
+  graduationDate: "",
+  malpracticeCarrier: "",
+  malpracticePolicyNumber: "",
+  malpracticeCoverageStart: "",
+  malpracticeCoverageEnd: "",
 };
 
 export type ProviderFormErrors = Partial<Record<string, string>>;
@@ -93,27 +140,27 @@ export type UpdateProviderField = <K extends keyof ProviderFormState>(
 ) => void;
 
 export function emptyLicenseRow(): LicenseRow {
-  return { state: '', number: '', type: '', issueDate: '', expirationDate: '' };
+  return { state: "", number: "", type: "", issueDate: "", expirationDate: "" };
 }
 
 export function validateNames(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
-  if (!f.firstName.trim()) e.firstName = 'Required';
-  if (!f.lastName.trim()) e.lastName = 'Required';
+  if (!f.firstName.trim()) e.firstName = "Required";
+  if (!f.lastName.trim()) e.lastName = "Required";
   return e;
 }
 
 export function validatePersonal(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = { ...validateNames(f) };
-  if (f.ssnLast4 && !SSN_LAST4_RE.test(f.ssnLast4)) e.ssnLast4 = 'Enter exactly 4 digits';
-  if (f.email && !EMAIL_RE.test(f.email)) e.email = 'Invalid email';
+  if (f.ssnLast4 && !SSN_LAST4_RE.test(f.ssnLast4)) e.ssnLast4 = "Enter exactly 4 digits";
+  if (f.email && !EMAIL_RE.test(f.email)) e.email = "Invalid email";
   return e;
 }
 
 export function validateCredentials(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
-  if (f.npi && !NPI_RE.test(f.npi)) e.npi = 'NPI must be 10 digits and start with 1';
-  if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = 'CAQH must be 8 digits';
+  if (f.npi && !NPI_RE.test(f.npi)) e.npi = "NPI must be 10 digits and start with 1";
+  if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = "CAQH must be 8 digits";
   return e;
 }
 

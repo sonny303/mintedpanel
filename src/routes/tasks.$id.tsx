@@ -1,44 +1,32 @@
 // Task detail at /tasks/$id. SOP step runner that coordinators use side-by-side
 // with a payer portal: ordered step lock, copy buttons for data fields, notes.
-import { useEffect, useMemo, useState } from 'react';
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { fmtDate, fmtDateTime } from '@/lib/format';
-import {
-  Calendar,
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-  Lock,
-  MessageSquare,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
-import { EmptyState } from '@/components/EmptyState';
+import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { fmtDate, fmtDateTime } from "@/lib/format";
+import { Calendar, CheckCircle2, ExternalLink, Loader2, Lock, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { EmptyState } from "@/components/EmptyState";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { toast } from 'sonner';
-import { CopyButton } from '@/components/CopyButton';
-import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from '@/hooks/useTasks';
-import { useCase } from '@/hooks/useCases';
-import { useCreateNote, useNotes } from '@/hooks/useLookups';
-import { useCanWrite } from '@/lib/permissions';
-import type { SOPStep, TaskStatus } from '@/types';
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "sonner";
+import { CopyButton } from "@/components/CopyButton";
+import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from "@/hooks/useTasks";
+import { useCase } from "@/hooks/useCases";
+import { useCreateNote, useNotes } from "@/hooks/useLookups";
+import { useCanWrite } from "@/lib/permissions";
+import type { SOPStep, TaskStatus } from "@/types";
 
-export const Route = createFileRoute('/tasks/$id')({
+export const Route = createFileRoute("/tasks/$id")({
   component: TaskDetailPage,
 });
 
@@ -48,18 +36,18 @@ interface DataField {
 }
 
 function initialsOf(name: string | null | undefined): string {
-  if (!name) return '··';
+  if (!name) return "··";
   const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (first + last).toUpperCase() || '··';
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "··";
 }
 
 function readInstruction(step: SOPStep): string {
   const raw = step as unknown as { instruction?: unknown; label?: unknown };
-  if (typeof raw.instruction === 'string') return raw.instruction;
-  if (typeof raw.label === 'string') return raw.label;
-  return '';
+  if (typeof raw.instruction === "string") return raw.instruction;
+  if (typeof raw.label === "string") return raw.label;
+  return "";
 }
 
 function readDataFields(step: SOPStep): DataField[] {
@@ -68,13 +56,13 @@ function readDataFields(step: SOPStep): DataField[] {
   if (!Array.isArray(candidate)) return [];
   const out: DataField[] = [];
   for (const item of candidate) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    const label = typeof o.label === 'string' && o.label.trim() !== '' ? o.label : null;
+    const label = typeof o.label === "string" && o.label.trim() !== "" ? o.label : null;
     if (label === null) continue;
     if (o.value === null || o.value === undefined) continue;
     const value = String(o.value);
-    if (value === '') continue;
+    if (value === "") continue;
     out.push({ label, value });
   }
   return out;
@@ -88,13 +76,13 @@ function TaskDetailPage() {
   const taskQ = useTask(id);
   const task = taskQ.data ?? null;
   const caseQ = useCase(task?.caseId ?? undefined);
-  const notesQ = useNotes('task', id);
+  const notesQ = useNotes("task", id);
 
   const completeStepM = useCompleteSOPStep();
   const updateStatusM = useUpdateTaskStatus();
   const createNoteM = useCreateNote();
 
-  const [noteDraft, setNoteDraft] = useState('');
+  const [noteDraft, setNoteDraft] = useState("");
 
   const sopIsValid = Array.isArray(task?.sopContent);
   const steps = useMemo<SOPStep[]>(
@@ -113,8 +101,8 @@ function TaskDetailPage() {
   // Auto-complete the task once all steps are checked off.
   useEffect(() => {
     if (!task) return;
-    if (allComplete && task.status !== 'completed' && !updateStatusM.isPending) {
-      updateStatusM.mutate({ id: task.id, status: 'completed' });
+    if (allComplete && task.status !== "completed" && !updateStatusM.isPending) {
+      updateStatusM.mutate({ id: task.id, status: "completed" });
     }
   }, [allComplete, task, updateStatusM]);
 
@@ -134,8 +122,12 @@ function TaskDetailPage() {
       <div className="max-w-[860px] mx-auto space-y-3">
         <h1 className="text-[20px] font-semibold">Something went wrong loading this task</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => taskQ.refetch()}>Retry</Button>
-          <Button variant="outline" onClick={() => navigate({ to: '/tasks' })}>Back to tasks</Button>
+          <Button variant="outline" onClick={() => taskQ.refetch()}>
+            Retry
+          </Button>
+          <Button variant="outline" onClick={() => navigate({ to: "/tasks" })}>
+            Back to tasks
+          </Button>
         </div>
       </div>
     );
@@ -144,28 +136,28 @@ function TaskDetailPage() {
     return (
       <div className="max-w-[860px] mx-auto space-y-3">
         <h1 className="text-[20px] font-semibold">Task not found</h1>
-        <Button variant="outline" onClick={() => navigate({ to: '/tasks' })}>Back to tasks</Button>
+        <Button variant="outline" onClick={() => navigate({ to: "/tasks" })}>
+          Back to tasks
+        </Button>
       </div>
     );
   }
 
   const c = caseQ.data ?? null;
-  const providerName = c?.provider
-    ? `${c.provider.firstName} ${c.provider.lastName}`
-    : null;
+  const providerName = c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : null;
   const payerName = c?.payer?.name ?? null;
   const stateCode = c?.state ?? null;
   const caseLabel = c
-    ? [providerName, payerName, stateCode].filter(Boolean).join(' · ') || 'Case'
-    : 'Case';
+    ? [providerName, payerName, stateCode].filter(Boolean).join(" · ") || "Case"
+    : "Case";
 
   // Locked when any earlier task in the same case is not yet completed.
   const isLocked = (() => {
-    if (!c?.tasks || task.status === 'completed') return false;
+    if (!c?.tasks || task.status === "completed") return false;
     const ordered = c.tasks.slice().sort((a, b) => a.sortOrder - b.sortOrder);
     const idx = ordered.findIndex((t) => t.id === task.id);
     if (idx <= 0) return false;
-    return ordered.slice(0, idx).some((t) => t.status !== 'completed');
+    return ordered.slice(0, idx).some((t) => t.status !== "completed");
   })();
 
   const handleToggleStep = (stepIndex: number, checked: boolean) => {
@@ -177,7 +169,7 @@ function TaskDetailPage() {
       { taskId: task.id, stepId: step.id },
       {
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not complete step'),
+          toast.error(err instanceof Error ? err.message : "Could not complete step"),
       },
     );
   };
@@ -188,9 +180,9 @@ function TaskDetailPage() {
     updateStatusM.mutate(
       { id: task.id, status: next as TaskStatus },
       {
-        onSuccess: () => toast.success('Status updated'),
+        onSuccess: () => toast.success("Status updated"),
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not update status'),
+          toast.error(err instanceof Error ? err.message : "Could not update status"),
       },
     );
   };
@@ -199,14 +191,14 @@ function TaskDetailPage() {
     const content = noteDraft.trim();
     if (!content) return;
     createNoteM.mutate(
-      { entityType: 'task', entityId: task.id, content },
+      { entityType: "task", entityId: task.id, content },
       {
         onSuccess: () => {
-          setNoteDraft('');
+          setNoteDraft("");
           notesQ.refetch();
         },
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not add note'),
+          toast.error(err instanceof Error ? err.message : "Could not add note"),
       },
     );
   };
@@ -220,10 +212,7 @@ function TaskDetailPage() {
             aria-label="Breadcrumb"
             className="flex items-center gap-2 text-sm text-muted-foreground min-w-0"
           >
-            <Link
-              to="/tasks"
-              className="hover:text-foreground hover:underline underline-offset-4"
-            >
+            <Link to="/tasks" className="hover:text-foreground hover:underline underline-offset-4">
               Tasks
             </Link>
             <span className="text-border">/</span>
@@ -251,12 +240,16 @@ function TaskDetailPage() {
                   className="text-[14px] text-muted-foreground mt-1 inline-flex items-center gap-2 flex-wrap hover:text-foreground group"
                 >
                   <span className="group-hover:underline underline-offset-4">
-                    {providerName ?? 'Provider'}
+                    {providerName ?? "Provider"}
                   </span>
                   <span className="text-border">•</span>
-                  <span className="group-hover:underline underline-offset-4">{payerName ?? '—'}</span>
+                  <span className="group-hover:underline underline-offset-4">
+                    {payerName ?? "—"}
+                  </span>
                   <span className="text-border">•</span>
-                  <span className="group-hover:underline underline-offset-4">{stateCode ?? '—'}</span>
+                  <span className="group-hover:underline underline-offset-4">
+                    {stateCode ?? "—"}
+                  </span>
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : task.caseId ? (
@@ -271,7 +264,7 @@ function TaskDetailPage() {
               {updateStatusM.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : null}
-              {task.status !== 'completed' ? (
+              {task.status !== "completed" ? (
                 isLocked ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -292,16 +285,16 @@ function TaskDetailPage() {
                     size="sm"
                     className="h-8 bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
                     disabled={!canEdit || updateStatusM.isPending}
-                    onClick={() => handleStatusChange('completed')}
+                    onClick={() => handleStatusChange("completed")}
                   >
                     Mark complete
                   </Button>
                 )
               ) : null}
               <Select
-                value={task.status === 'completed' ? 'completed' : task.status}
+                value={task.status === "completed" ? "completed" : task.status}
                 onValueChange={handleStatusChange}
-                disabled={!canEdit || updateStatusM.isPending || task.status === 'completed'}
+                disabled={!canEdit || updateStatusM.isPending || task.status === "completed"}
               >
                 <SelectTrigger className="w-[150px] h-8 text-[13px] shadow-none">
                   <SelectValue />
@@ -310,7 +303,7 @@ function TaskDetailPage() {
                   <SelectItem value="not_started">Not started</SelectItem>
                   <SelectItem value="in_progress">In progress</SelectItem>
                   <SelectItem value="blocked">Blocked</SelectItem>
-                  {task.status === 'completed' ? (
+                  {task.status === "completed" ? (
                     <SelectItem value="completed" disabled>
                       Completed
                     </SelectItem>
@@ -326,7 +319,7 @@ function TaskDetailPage() {
               <div
                 className="h-full bg-[#1B4D3E] transition-all"
                 style={{
-                  width: totalSteps > 0 ? `${(completedCount / totalSteps) * 100}%` : '0%',
+                  width: totalSteps > 0 ? `${(completedCount / totalSteps) * 100}%` : "0%",
                 }}
               />
             </div>
@@ -356,7 +349,6 @@ function TaskDetailPage() {
                 No SOP steps defined for this task.
               </div>
             ) : (
-
               steps.map((step, index) => {
                 const isChecked = step.isCompleted;
                 const isActive = !isChecked && index === firstIncompleteIndex;
@@ -368,18 +360,18 @@ function TaskDetailPage() {
                 return (
                   <div
                     key={step.id}
-                    className={`p-4 flex gap-4 ${isLocked ? 'opacity-60' : ''} ${
-                      isActive ? 'bg-[#1B4D3E]/[0.03]' : ''
+                    className={`p-4 flex gap-4 ${isLocked ? "opacity-60" : ""} ${
+                      isActive ? "bg-[#1B4D3E]/[0.03]" : ""
                     }`}
                   >
                     <div className="flex flex-col items-center gap-2 flex-shrink-0 pt-0.5">
                       <span
                         className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold tabular-nums ${
                           isChecked
-                            ? 'bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]'
+                            ? "bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]"
                             : isActive
-                              ? 'bg-[#1B4D3E] text-white'
-                              : 'bg-muted text-muted-foreground border border-[#E8E5E0]'
+                              ? "bg-[#1B4D3E] text-white"
+                              : "bg-muted text-muted-foreground border border-[#E8E5E0]"
                         }`}
                       >
                         {isChecked ? <CheckCircle2 className="h-4 w-4" /> : stepNumber}
@@ -396,19 +388,12 @@ function TaskDetailPage() {
                               />
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            Complete step {blockingStep} first
-                          </TooltipContent>
+                          <TooltipContent>Complete step {blockingStep} first</TooltipContent>
                         </Tooltip>
                       ) : (
                         <Checkbox
                           checked={isChecked}
-                          disabled={
-                            isChecked ||
-                            !isActive ||
-                            !canEdit ||
-                            completeStepM.isPending
-                          }
+                          disabled={isChecked || !isActive || !canEdit || completeStepM.isPending}
                           onCheckedChange={(v) => handleToggleStep(index, Boolean(v))}
                           aria-label={`Mark step ${stepNumber} complete`}
                         />
@@ -419,7 +404,7 @@ function TaskDetailPage() {
                       <div className="flex items-start gap-2">
                         <p
                           className={`text-[14px] leading-[1.6] ${
-                            isChecked ? 'text-muted-foreground' : 'text-foreground font-medium'
+                            isChecked ? "text-muted-foreground" : "text-foreground font-medium"
                           }`}
                         >
                           {readInstruction(step)}
@@ -428,8 +413,6 @@ function TaskDetailPage() {
                           <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />
                         ) : null}
                       </div>
-
-
 
                       {fields.length > 0 ? (
                         <div className="bg-[#F9FAFB] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
@@ -482,9 +465,7 @@ function TaskDetailPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 text-[12px]">
-                        <span className="font-semibold text-foreground">
-                          {n.authorName ?? '—'}
-                        </span>
+                        <span className="font-semibold text-foreground">{n.authorName ?? "—"}</span>
                         <span className="text-muted-foreground tabular-nums">
                           {fmtDateTime(n.createdAt)}
                         </span>
@@ -513,7 +494,7 @@ function TaskDetailPage() {
                     onClick={handleAddNote}
                     disabled={!noteDraft.trim() || createNoteM.isPending}
                   >
-                    {createNoteM.isPending ? 'Saving…' : 'Add note'}
+                    {createNoteM.isPending ? "Saving…" : "Add note"}
                   </Button>
                 </div>
               </div>

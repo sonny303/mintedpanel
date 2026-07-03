@@ -82,22 +82,45 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Minted Panel Credentialing" },
-      { name: "description", content: "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care." },
+      {
+        name: "description",
+        content:
+          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+      },
       { name: "author", content: "Minted Panel" },
       { property: "og:title", content: "Minted Panel Credentialing" },
-      { property: "og:description", content: "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care." },
+      {
+        property: "og:description",
+        content:
+          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:title", content: "Minted Panel Credentialing" },
-      { name: "twitter:description", content: "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1b049f6b-466c-4443-84c3-0c472bcd49a5" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1b049f6b-466c-4443-84c3-0c472bcd49a5" },
+      {
+        name: "twitter:description",
+        content:
+          "Minted Panel handles credentialing and contracting for healthcare provider groups across payers and states, so your team can focus on care.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1b049f6b-466c-4443-84c3-0c472bcd49a5",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/1b049f6b-466c-4443-84c3-0c472bcd49a5",
+      },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap",
+      },
       { rel: "stylesheet", href: appCss },
     ],
   }),
@@ -161,11 +184,11 @@ function RootComponent() {
       <div className="min-h-dvh flex items-center justify-center bg-background px-4">
         <div className="w-full max-w-sm rounded-md border border-[#E8E5E0] bg-white p-6 text-center">
           <h2 className="text-[15px] font-semibold text-foreground">Can't reach Minted Panel</h2>
-          <p className="mt-2 text-[13px] text-muted-foreground">
-            Check your connection.
-          </p>
+          <p className="mt-2 text-[13px] text-muted-foreground">Check your connection.</p>
           <button
-            onClick={() => { void init(); }}
+            onClick={() => {
+              void init();
+            }}
             className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
           >
             Retry
@@ -181,7 +204,13 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isPublicRoute ? <Outlet /> : <AppShell><Outlet /></AppShell>}
+      {isPublicRoute ? (
+        <Outlet />
+      ) : (
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      )}
       <Toaster />
     </QueryClientProvider>
   );

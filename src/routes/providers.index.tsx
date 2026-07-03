@@ -1,23 +1,23 @@
 // Provider list screen at /providers. Shows per-payer credentialing status,
 // CAQH age, and coordinator; supports search, filters, sorting, column picker,
 // persisted preferences, and infinite scroll.
-import React, { useDeferredValue, useMemo, useState } from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { differenceInDays, parseISO } from 'date-fns';
-import { Plus, Search } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import React, { useDeferredValue, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { differenceInDays, parseISO } from "date-fns";
+import { Plus, Search } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
+} from "@/components/ui/select";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
 import {
   ColumnPicker,
   InfiniteScrollSentinel,
@@ -25,36 +25,45 @@ import {
   StaticTh,
   compareForSort,
   useInfiniteRows,
-} from '@/components/shared/TableToolkit';
-import { useTablePrefs } from '@/hooks/useTablePrefs';
-import { useDebounced } from '@/hooks/useDebounced';
-import { useProviders } from '@/hooks/useProviders';
-import { useCases } from '@/hooks/useCases';
-import { useStatusConfigs, usePayers } from '@/hooks/useAdmin';
-import { useProviderGroups, useCoordinators } from '@/hooks/useLookups';
-import { useCanWrite } from '@/lib/permissions';
-import type { CredentialCase, Payer, Profile, Provider, ProviderGroup, ProviderStatus, StatusConfig } from '@/types';
+} from "@/components/shared/TableToolkit";
+import { useTablePrefs } from "@/hooks/useTablePrefs";
+import { useDebounced } from "@/hooks/useDebounced";
+import { useProviders } from "@/hooks/useProviders";
+import { useCases } from "@/hooks/useCases";
+import { useStatusConfigs, usePayers } from "@/hooks/useAdmin";
+import { useProviderGroups, useCoordinators } from "@/hooks/useLookups";
+import { useCanWrite } from "@/lib/permissions";
+import type {
+  CredentialCase,
+  Payer,
+  Profile,
+  Provider,
+  ProviderGroup,
+  ProviderStatus,
+  StatusConfig,
+} from "@/types";
 
-export const Route = createFileRoute('/providers/')({
+export const Route = createFileRoute("/providers/")({
   component: ProvidersListPage,
 });
 
-const ALL = '__all__';
+const ALL = "__all__";
 const STATUS_OPTIONS: { value: ProviderStatus; label: string }[] = [
-  { value: 'onboarding', label: 'Onboarding' },
-  { value: 'active', label: 'Active' },
-  { value: 'terminated', label: 'Terminated' },
+  { value: "onboarding", label: "Onboarding" },
+  { value: "active", label: "Active" },
+  { value: "terminated", label: "Terminated" },
 ];
 
-type ColumnKey = 'provider' | 'group' | 'status' | 'state' | 'payerStatuses' | 'caqh' | 'coordinator';
+type ColumnKey =
+  "provider" | "group" | "status" | "state" | "payerStatuses" | "caqh" | "coordinator";
 const COLUMN_DEFS: { key: ColumnKey; label: string }[] = [
-  { key: 'provider', label: 'Provider' },
-  { key: 'group', label: 'Group' },
-  { key: 'status', label: 'Status' },
-  { key: 'state', label: 'State' },
-  { key: 'payerStatuses', label: 'Payer Statuses' },
-  { key: 'caqh', label: 'CAQH' },
-  { key: 'coordinator', label: 'Coordinator' },
+  { key: "provider", label: "Provider" },
+  { key: "group", label: "Group" },
+  { key: "status", label: "Status" },
+  { key: "state", label: "State" },
+  { key: "payerStatuses", label: "Payer Statuses" },
+  { key: "caqh", label: "CAQH" },
+  { key: "coordinator", label: "Coordinator" },
 ];
 const ALL_KEYS = COLUMN_DEFS.map((c) => c.key);
 const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
@@ -68,14 +77,14 @@ const DEFAULT_VISIBILITY: Record<ColumnKey, boolean> = {
 };
 
 const STATUS_LABEL: Record<ProviderStatus, string> = {
-  onboarding: 'Onboarding',
-  active: 'Active',
-  terminated: 'Terminated',
+  onboarding: "Onboarding",
+  active: "Active",
+  terminated: "Terminated",
 };
-const STATUS_COLOR: Record<ProviderStatus, 'blue' | 'green' | 'gray'> = {
-  onboarding: 'blue',
-  active: 'green',
-  terminated: 'gray',
+const STATUS_COLOR: Record<ProviderStatus, "blue" | "green" | "gray"> = {
+  onboarding: "blue",
+  active: "green",
+  terminated: "gray",
 };
 const STATUS_SORT_RANK: Record<ProviderStatus, number> = {
   onboarding: 0,
@@ -87,19 +96,23 @@ function ProvidersListPage() {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [groupId, setGroupId] = useState<string>(ALL);
   const [state, setState] = useState<string>(ALL);
   const [payerId, setPayerId] = useState<string>(ALL);
   const [status, setStatus] = useState<string>(ALL);
 
-  const { state: prefs, setVisible, cycleSort } = useTablePrefs<ColumnKey>({
-    pageKey: 'providers',
-    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: 'provider', dir: 'asc' } },
+  const {
+    state: prefs,
+    setVisible,
+    cycleSort,
+  } = useTablePrefs<ColumnKey>({
+    pageKey: "providers",
+    defaults: { visibleCols: DEFAULT_VISIBILITY, sort: { key: "provider", dir: "asc" } },
     allKeys: ALL_KEYS,
   });
   const visibleCols = prefs.visibleCols;
-  const effectiveSort = prefs.sort ?? { key: 'provider', dir: 'asc' as const };
+  const effectiveSort = prefs.sort ?? { key: "provider", dir: "asc" as const };
 
   const debouncedSearch = useDebounced(search, 300);
   const deferredSearch = useDeferredValue(debouncedSearch);
@@ -119,7 +132,7 @@ function ProvidersListPage() {
   const casesQ = useCases({});
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
-  const statusesQ = useStatusConfigs('credentialing');
+  const statusesQ = useStatusConfigs("credentialing");
   const coordinatorsQ = useCoordinators();
 
   const payerById = useMemo(() => {
@@ -163,7 +176,7 @@ function ProvidersListPage() {
   }, [providersQ.data]);
 
   function clearFilters() {
-    setSearch('');
+    setSearch("");
     setGroupId(ALL);
     setState(ALL);
     setPayerId(ALL);
@@ -181,7 +194,7 @@ function ProvidersListPage() {
     const cases = casesByProvider.get(p.id) ?? [];
     const withCoord = cases
       .filter((c) => c.assignedTo)
-      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
     const id = withCoord[0]?.assignedTo;
     if (!id) return null;
     return coordinatorById.get(id)?.fullName ?? null;
@@ -189,15 +202,15 @@ function ProvidersListPage() {
 
   function sortValueFor(p: Provider, key: string): string | number | null {
     switch (key) {
-      case 'provider':
-        return (p.lastName || p.firstName || '').trim() || null;
-      case 'group':
-        return p.groupId ? groupById.get(p.groupId)?.name ?? null : null;
-      case 'status':
+      case "provider":
+        return (p.lastName || p.firstName || "").trim() || null;
+      case "group":
+        return p.groupId ? (groupById.get(p.groupId)?.name ?? null) : null;
+      case "status":
         return p.status ? STATUS_SORT_RANK[p.status] : null;
-      case 'state':
+      case "state":
         return p.homeState ?? null;
-      case 'coordinator':
+      case "coordinator":
         return coordinatorNameFor(p);
       default:
         return null;
@@ -212,11 +225,18 @@ function ProvidersListPage() {
       if (cmp !== 0) return cmp;
       const at = `${a.lastName} ${a.firstName}`.trim();
       const bt = `${b.lastName} ${b.firstName}`.trim();
-      return at.localeCompare(bt, undefined, { sensitivity: 'base' });
+      return at.localeCompare(bt, undefined, { sensitivity: "base" });
     });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providersQ.data, effectiveSort.key, effectiveSort.dir, groupById, coordinatorById, casesByProvider]);
+  }, [
+    providersQ.data,
+    effectiveSort.key,
+    effectiveSort.dir,
+    groupById,
+    coordinatorById,
+    casesByProvider,
+  ]);
 
   const resetKey = `${effectiveSort.key}|${effectiveSort.dir}|${JSON.stringify(filters)}`;
   const { visible, hasMore, loadingMore, sentinelRef, total } = useInfiniteRows({
@@ -249,41 +269,57 @@ function ProvidersListPage() {
         </div>
 
         <Select value={groupId} onValueChange={setGroupId}>
-          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Groups" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="All Groups" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Groups</SelectItem>
             {(groupsQ.data ?? []).map((g) => (
-              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={state} onValueChange={setState}>
-          <SelectTrigger className="h-9 w-[140px]"><SelectValue placeholder="All States" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[140px]">
+            <SelectValue placeholder="All States" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All States</SelectItem>
             {states.map((s) => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={payerId} onValueChange={setPayerId}>
-          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Payers" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="All Payers" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Payers</SelectItem>
             {(payersQ.data ?? []).map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>All Statuses</SelectItem>
             {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -293,14 +329,11 @@ function ProvidersListPage() {
             columns={COLUMN_DEFS}
             visible={visibleCols}
             onChange={setVisible}
-            lockedKeys={['provider']}
+            lockedKeys={["provider"]}
           />
 
           {canEdit ? (
-            <Button
-              onClick={() => navigate({ to: '/providers/new' })}
-              className="h-9 gap-2"
-            >
+            <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
               <Plus className="h-4 w-4" />
               Add provider
             </Button>
@@ -313,13 +346,23 @@ function ProvidersListPage() {
           <thead className="sticky top-0 z-10 bg-muted/30 backdrop-blur">
             <tr className="border-b border-border">
               {visibleCols.provider && (
-                <SortableTh label="Provider" sortKey="provider" sort={effectiveSort} onSort={cycleSort} />
+                <SortableTh
+                  label="Provider"
+                  sortKey="provider"
+                  sort={effectiveSort}
+                  onSort={cycleSort}
+                />
               )}
               {visibleCols.group && (
                 <SortableTh label="Group" sortKey="group" sort={effectiveSort} onSort={cycleSort} />
               )}
               {visibleCols.status && (
-                <SortableTh label="Status" sortKey="status" sort={effectiveSort} onSort={cycleSort} />
+                <SortableTh
+                  label="Status"
+                  sortKey="status"
+                  sort={effectiveSort}
+                  onSort={cycleSort}
+                />
               )}
               {visibleCols.state && (
                 <SortableTh label="State" sortKey="state" sort={effectiveSort} onSort={cycleSort} />
@@ -327,7 +370,12 @@ function ProvidersListPage() {
               {visibleCols.payerStatuses && <StaticTh>Payer Statuses</StaticTh>}
               {visibleCols.caqh && <StaticTh className="text-right">CAQH</StaticTh>}
               {visibleCols.coordinator && (
-                <SortableTh label="Coordinator" sortKey="coordinator" sort={effectiveSort} onSort={cycleSort} />
+                <SortableTh
+                  label="Coordinator"
+                  sortKey="coordinator"
+                  sort={effectiveSort}
+                  onSort={cycleSort}
+                />
               )}
             </tr>
           </thead>
@@ -337,9 +385,7 @@ function ProvidersListPage() {
             ) : providersQ.isError ? (
               <tr>
                 <td colSpan={visibleCount} className="px-3 py-12 text-center">
-                  <div className="text-[13px] text-foreground mb-3">
-                    Failed to load providers.
-                  </div>
+                  <div className="text-[13px] text-foreground mb-3">Failed to load providers.</div>
                   <Button variant="outline" size="sm" onClick={() => providersQ.refetch()}>
                     Retry
                   </Button>
@@ -349,14 +395,16 @@ function ProvidersListPage() {
               <tr>
                 <td colSpan={visibleCount} className="px-3 py-12 text-center">
                   <EmptyState
-                    message={hasActiveFilter ? 'No providers match these filters' : 'No providers yet'}
+                    message={
+                      hasActiveFilter ? "No providers match these filters" : "No providers yet"
+                    }
                     action={
                       hasActiveFilter ? (
                         <Button variant="outline" size="sm" onClick={clearFilters}>
                           Clear filters
                         </Button>
                       ) : canEdit ? (
-                        <Button size="sm" onClick={() => navigate({ to: '/providers/new' })}>
+                        <Button size="sm" onClick={() => navigate({ to: "/providers/new" })}>
                           Add provider
                         </Button>
                       ) : undefined
@@ -369,19 +417,23 @@ function ProvidersListPage() {
                 <ProviderRow
                   key={p.id}
                   provider={p}
-                  group={p.groupId ? groupById.get(p.groupId) ?? null : null}
+                  group={p.groupId ? (groupById.get(p.groupId) ?? null) : null}
                   cases={casesByProvider.get(p.id) ?? []}
                   payerById={payerById}
                   statusById={statusById}
                   coordinatorName={coordinatorNameFor(p)}
                   visibleCols={visibleCols}
-                  onOpen={() => navigate({ to: '/providers/$id', params: { id: p.id } })}
+                  onOpen={() => navigate({ to: "/providers/$id", params: { id: p.id } })}
                 />
               ))
             )}
           </tbody>
         </table>
-        <InfiniteScrollSentinel sentinelRef={sentinelRef} hasMore={hasMore} loadingMore={loadingMore} />
+        <InfiniteScrollSentinel
+          sentinelRef={sentinelRef}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+        />
       </div>
     </div>
   );
@@ -398,8 +450,17 @@ interface RowProps {
   onOpen: () => void;
 }
 
-function ProviderRow({ provider, group, cases, payerById, statusById, coordinatorName, visibleCols, onOpen }: RowProps) {
-  const isTerminated = provider.status === 'terminated';
+function ProviderRow({
+  provider,
+  group,
+  cases,
+  payerById,
+  statusById,
+  coordinatorName,
+  visibleCols,
+  onOpen,
+}: RowProps) {
+  const isTerminated = provider.status === "terminated";
 
   const caqh = (() => {
     if (!provider.caqhLastAttestedDate) {
@@ -407,16 +468,18 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
     }
     const days = differenceInDays(new Date(), parseISO(provider.caqhLastAttestedDate));
     const cls =
-      days >= 110 ? 'text-[#DC2626] font-medium'
-      : days >= 90 ? 'text-[#D97706] font-medium'
-      : 'text-foreground';
+      days >= 110
+        ? "text-[#DC2626] font-medium"
+        : days >= 90
+          ? "text-[#D97706] font-medium"
+          : "text-foreground";
     return <span className={`${cls} tabular-nums`}>{days}d</span>;
   })();
 
   return (
     <tr
       onClick={onOpen}
-      className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? 'opacity-60' : ''}`}
+      className={`border-b border-border h-10 cursor-pointer hover:bg-muted/40 ${isTerminated ? "opacity-60" : ""}`}
     >
       {visibleCols.provider && (
         <td className="px-3 py-1.5">
@@ -427,7 +490,7 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
             ) : null}
           </div>
           <div className="text-[12px] text-muted-foreground tabular-nums leading-tight">
-            {provider.npi ?? '—'}
+            {provider.npi ?? "—"}
           </div>
         </td>
       )}
@@ -445,15 +508,16 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
       {visibleCols.status && (
         <td className="px-3 py-1.5">
           {provider.status ? (
-            <StatusPill status={STATUS_COLOR[provider.status]} label={STATUS_LABEL[provider.status]} />
+            <StatusPill
+              status={STATUS_COLOR[provider.status]}
+              label={STATUS_LABEL[provider.status]}
+            />
           ) : (
             <span className="text-muted-foreground">—</span>
           )}
         </td>
       )}
-      {visibleCols.state && (
-        <td className="px-3 text-foreground">{provider.homeState ?? '—'}</td>
-      )}
+      {visibleCols.state && <td className="px-3 text-foreground">{provider.homeState ?? "—"}</td>}
       {visibleCols.payerStatuses && (
         <td className="px-3 py-1.5">
           {isTerminated ? (
@@ -469,7 +533,7 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
                   <StatusPill
                     key={c.id}
                     status={hexToStatusColor(sc?.color)}
-                    label={payer?.name ?? 'Payer'}
+                    label={payer?.name ?? "Payer"}
                   />
                 );
               })}
@@ -477,11 +541,9 @@ function ProviderRow({ provider, group, cases, payerById, statusById, coordinato
           )}
         </td>
       )}
-      {visibleCols.caqh && (
-        <td className="px-3 text-right">{caqh}</td>
-      )}
+      {visibleCols.caqh && <td className="px-3 text-right">{caqh}</td>}
       {visibleCols.coordinator && (
-        <td className="px-3 text-foreground">{coordinatorName ?? '—'}</td>
+        <td className="px-3 text-foreground">{coordinatorName ?? "—"}</td>
       )}
     </tr>
   );

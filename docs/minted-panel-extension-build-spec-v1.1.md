@@ -1,4 +1,5 @@
 # Minted Panel Chrome Extension — Build Spec v1.1
+
 **Date:** July 2, 2026
 **v1.1 change:** Field maps aligned to the pre-planned YAML schema (source types, hardcoded values, web/pdf map types). Added YAML seeder and PDF fill via edge function (M2.5). Token vocabulary confirmed at 132 tokens across 9 tables.
 **Audience:** Claude Code / Cursor. This is a build spec, not a Lovable prompt.
@@ -11,6 +12,7 @@
 A Chrome extension (Manifest V3) that auto-fills payer credentialing web forms and auto-attaches required documents (W9, COI, license copies) using provider data from the Minted Panel Supabase project.
 
 **The workflow it serves:**
+
 1. Sowmya opens a case in Minted Panel (e.g., Joe + BCBS KS).
 2. The task drawer shows an SOP step with a portal link.
 3. She clicks the link. A new tab opens on the payer form.
@@ -23,12 +25,14 @@ A Chrome extension (Manifest V3) that auto-fills payer credentialing web forms a
 ## 2. Goals and non-goals
 
 **Goals**
+
 - Fill web forms on payer portals using data already in Supabase.
 - Attach documents from Supabase Storage to file inputs.
 - Zero re-typing of provider demographics, group info, or facility info.
 - Every fill session logged back to the case as a touch.
 
 **Non-goals (v1)**
+
 - In-tab PDF filling. Chrome's built-in PDF viewer is closed to extensions. No content script can touch it. PDF fill happens server-side instead (section 8b), triggered from the platform or the extension side panel.
 - Auto-login to portals. Sowmya must be authenticated in the portal already.
 - Auto-submit. Never.
@@ -37,14 +41,14 @@ A Chrome extension (Manifest V3) that auto-fills payer credentialing web forms a
 
 ## 3. V1 scope and sequencing
 
-| Milestone | Target | Why this order |
-|---|---|---|
-| M0 | Extension shell, auth, context handoff | Foundation |
-| M1 | BCBS KS provider enrollment web form: fill only | Simplest real target, standard inputs |
-| M2 | Attachments on the M1 form (W9, COI) | Proves the DataTransfer approach |
-| M2.5 | PDF fill edge function (Optum/Aetna AcroForm PDFs) | Server-side, low risk, reuses maps. Seeded from existing YAML |
-| M3 | CAQH ProView | Highest value, hardest. Multi-page SPA, MFA, timeouts |
-| M4 | BCBS TX, Aetna web flows + field-map admin UI | Generalize |
+| Milestone | Target                                             | Why this order                                                |
+| --------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| M0        | Extension shell, auth, context handoff             | Foundation                                                    |
+| M1        | BCBS KS provider enrollment web form: fill only    | Simplest real target, standard inputs                         |
+| M2        | Attachments on the M1 form (W9, COI)               | Proves the DataTransfer approach                              |
+| M2.5      | PDF fill edge function (Optum/Aetna AcroForm PDFs) | Server-side, low risk, reuses maps. Seeded from existing YAML |
+| M3        | CAQH ProView                                       | Highest value, hardest. Multi-page SPA, MFA, timeouts         |
+| M4        | BCBS TX, Aetna web flows + field-map admin UI      | Generalize                                                    |
 
 **CAQH risk note:** CAQH ProView terms of service restrict automated access. Before M3 ships, get a read on ToS exposure. Mitigation built into the design: the extension acts only in Sowmya's authenticated session, at human speed, human submits. It is assistive fill, not a bot. Still, flag it.
 
@@ -76,11 +80,13 @@ minted-panel-extension/
 Two mechanisms, both implemented. Primary is (a); (b) is the fallback.
 
 **(a) `externally_connectable` message from the dashboard.**
+
 - `manifest.json` declares `externally_connectable.matches` for the app domain(s).
 - Minted Panel change (one small Lovable prompt, out of this repo's scope): when a coordinator clicks a portal link in the task drawer, before `window.open`, the app calls `chrome.runtime.sendMessage(EXTENSION_ID, { type: 'SET_ACTIVE_CASE', caseId, providerId, orgId, portalUrl })`.
 - Background stores it and associates the next tab opened to `portalUrl`'s origin with that case.
 
 **(b) Manual case picker in the side panel.**
+
 - If no handoff message arrived (Sowmya opened the portal directly), the side panel shows a searchable case list (open cases, current org). She picks the case. Same registry entry gets written.
 - This also covers the day the handoff breaks. Never let the extension be useless without the dashboard.
 
@@ -91,25 +97,27 @@ Context expires when the tab closes or after 60 minutes idle. One tab, one case.
 All tables org-scoped with the standard RLS pattern. `org_id` set in code, never from payload.
 
 **`portal_field_maps`**
-| column | type | notes |
-|---|---|---|
-| id | uuid pk | |
-| org_id | uuid | RLS scope. Maps can be org-specific; a null org_id row is a shared/global map |
-| portal_key | text | e.g. `bcbs_ks_enrollment`, `caqh_proview` |
-| url_pattern | text | match pattern for content script activation and step detection |
-| page_step | text | wizard step identifier, nullable for single-page forms |
-| map_type | text | `web` or `pdf`. Web maps run in the extension; pdf maps run in the fill edge function |
-| selector | text | web: CSS selector. pdf: AcroForm field name |
-| selector_fallbacks | jsonb | web only. Ordered alternates: label text match, name attr, aria-label |
-| source | text | `token`, `manual`, `manual_partial`, `hardcoded`. Matches the YAML schema in the SOP field guides |
-| token | text | for `token`/`manual_partial` sources. e.g. `{{provider.npi}}` — same vocabulary as `get_sop_field_tokens()` (132 tokens, 9 tables) |
-| hardcoded_value | text | for `hardcoded` source only. e.g. specialty = `PT` |
-| transform | text | nullable: `date_mmddyyyy`, `phone_digits`, `state_abbrev`, `uppercase` |
-| field_type | text | `text`, `select`, `radio`, `checkbox`, `date`, `file` |
-| notes | text | coordinator-facing instruction. Required when source is `manual` or `manual_partial` (mirrors the YAML `instruction` field) |
-| status | text | `proposed`, `approved`, `retired`. Extension only executes `approved` |
+
+| column             | type    | notes                                                                                                                              |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| id                 | uuid pk |                                                                                                                                    |
+| org_id             | uuid    | RLS scope. Maps can be org-specific; a null org_id row is a shared/global map                                                      |
+| portal_key         | text    | e.g. `bcbs_ks_enrollment`, `caqh_proview`                                                                                          |
+| url_pattern        | text    | match pattern for content script activation and step detection                                                                     |
+| page_step          | text    | wizard step identifier, nullable for single-page forms                                                                             |
+| map_type           | text    | `web` or `pdf`. Web maps run in the extension; pdf maps run in the fill edge function                                              |
+| selector           | text    | web: CSS selector. pdf: AcroForm field name                                                                                        |
+| selector_fallbacks | jsonb   | web only. Ordered alternates: label text match, name attr, aria-label                                                              |
+| source             | text    | `token`, `manual`, `manual_partial`, `hardcoded`. Matches the YAML schema in the SOP field guides                                  |
+| token              | text    | for `token`/`manual_partial` sources. e.g. `{{provider.npi}}` — same vocabulary as `get_sop_field_tokens()` (132 tokens, 9 tables) |
+| hardcoded_value    | text    | for `hardcoded` source only. e.g. specialty = `PT`                                                                                 |
+| transform          | text    | nullable: `date_mmddyyyy`, `phone_digits`, `state_abbrev`, `uppercase`                                                             |
+| field_type         | text    | `text`, `select`, `radio`, `checkbox`, `date`, `file`                                                                              |
+| notes              | text    | coordinator-facing instruction. Required when source is `manual` or `manual_partial` (mirrors the YAML `instruction` field)        |
+| status             | text    | `proposed`, `approved`, `retired`. Extension only executes `approved`                                                              |
 
 **Source semantics (from the pre-planned YAML schema):**
+
 - `token`: resolve and fill.
 - `hardcoded`: fill `hardcoded_value` as-is.
 - `manual`: never fill. Surface in the side panel manual list with `notes`.
@@ -120,33 +128,35 @@ All tables org-scoped with the standard RLS pattern. `org_id` set in code, never
 **Approval flow:** AI (or a recording session) writes rows as `proposed`. SS approves in an admin screen (M4) or via SQL until then. The extension never runs a `proposed` map. This is the guardrail from the original architecture plan.
 
 **`provider_documents`**
-| column | type | notes |
-|---|---|---|
-| id | uuid pk | |
-| org_id | uuid | |
-| provider_id | uuid | nullable: group-level docs (COI, W9) have null provider_id and set group_id |
-| group_id | uuid | nullable |
-| doc_type | text | `w9`, `coi`, `state_license`, `dea`, `diploma`, `board_cert`, `voided_check`, `other` |
-| file_path | text | Supabase Storage path |
-| file_name | text | original filename |
-| effective_date | date | nullable |
-| expiration_date | date | nullable. Enables expirables alerting later (roadmap G-item) |
-| uploaded_by | uuid | |
-| created_at | timestamptz | |
+
+| column          | type        | notes                                                                                 |
+| --------------- | ----------- | ------------------------------------------------------------------------------------- |
+| id              | uuid pk     |                                                                                       |
+| org_id          | uuid        |                                                                                       |
+| provider_id     | uuid        | nullable: group-level docs (COI, W9) have null provider_id and set group_id           |
+| group_id        | uuid        | nullable                                                                              |
+| doc_type        | text        | `w9`, `coi`, `state_license`, `dea`, `diploma`, `board_cert`, `voided_check`, `other` |
+| file_path       | text        | Supabase Storage path                                                                 |
+| file_name       | text        | original filename                                                                     |
+| effective_date  | date        | nullable                                                                              |
+| expiration_date | date        | nullable. Enables expirables alerting later (roadmap G-item)                          |
+| uploaded_by     | uuid        |                                                                                       |
+| created_at      | timestamptz |                                                                                       |
 
 Storage bucket: `provider-documents`, private, RLS on storage.objects mirroring table policy. Remember: malpractice COI is group-level. W9 is group-level. Licenses are provider-level.
 
 **`fill_sessions`** (append-only, like touches)
-| column | type | notes |
-|---|---|---|
-| id | uuid pk | |
-| org_id, case_id, provider_id | uuid | |
-| portal_key | text | |
-| started_at, completed_at | timestamptz | |
-| fields_filled | int | |
-| fields_skipped | jsonb | list of tokens/selectors that failed or were unmapped |
-| docs_attached | jsonb | doc_type + file_name list |
-| performed_by | uuid | |
+
+| column                       | type        | notes                                                 |
+| ---------------------------- | ----------- | ----------------------------------------------------- |
+| id                           | uuid pk     |                                                       |
+| org_id, case_id, provider_id | uuid        |                                                       |
+| portal_key                   | text        |                                                       |
+| started_at, completed_at     | timestamptz |                                                       |
+| fields_filled                | int         |                                                       |
+| fields_skipped               | jsonb       | list of tokens/selectors that failed or were unmapped |
+| docs_attached                | jsonb       | doc_type + file_name list                             |
+| performed_by                 | uuid        |                                                       |
 
 On session complete, the background also inserts a row into `touches` (`touch_type: 'portal'`, `source: 'extension'` — add `'extension'` to the source enum/check if constrained) so the case timeline shows the work.
 
@@ -174,6 +184,7 @@ On session complete, the background also inserts a row into `touches` (`touch_ty
 Chrome's native PDF viewer is closed to extensions. So PDF fill runs server-side and reuses the same maps.
 
 **Flow**
+
 1. Trigger from either place:
    - Platform (primary): "Generate filled PDF" button on the case page, next to the SOP task. Works on any machine, no extension needed.
    - Extension (convenience): side panel detects a PDF tab or PDF link on a portal page and offers "Fill this PDF for {provider}."
@@ -187,6 +198,7 @@ Chrome's native PDF viewer is closed to extensions. So PDF fill runs server-side
 3. Output saved to `provider_documents` (`doc_type: 'filled_form'`, linked to the case in a `case_id` column, nullable) and offered as a download. Fill session + touch logged, same as web fills.
 
 **Constraints**
+
 - AcroForm PDFs only in v1 (real fillable fields). Optum and most Aetna/BCBS forms qualify.
 - Flat/scanned PDFs need x/y coordinate placement. Out of scope until a real form forces it. If it comes up, add `pdf_x`, `pdf_y`, `pdf_page` columns.
 - Never flatten the PDF on output. Sowmya may need to correct fields.
@@ -204,6 +216,7 @@ Chrome's native PDF viewer is closed to extensions. So PDF fill runs server-side
 ## 10. Minted Panel app changes (separate, small, via Lovable)
 
 Out of this repo. One Lovable prompt covering:
+
 1. Task drawer portal links call `chrome.runtime.sendMessage(EXTENSION_ID, ...)` before opening the tab. Wrapped in a feature check (`chrome?.runtime?.sendMessage` exists) so the app works without the extension.
 2. Documents tab on provider and group pages: upload/list/delete against `provider_documents` + Storage bucket. Service layer + hooks + audit rows, per the post-KTLO architecture.
 3. Case timeline renders `source: 'extension'` touches with a distinct pill.
@@ -211,6 +224,7 @@ Out of this repo. One Lovable prompt covering:
 ## 11. Milestones and done-when
 
 **M0 — Shell (est. 3-5 days)**
+
 - [ ] MV3 extension loads unpacked, side panel opens
 - [ ] Supabase login works, session survives browser restart
 - [ ] Dashboard link click sets active case (verify in side panel)
@@ -218,6 +232,7 @@ Out of this repo. One Lovable prompt covering:
 - [ ] Wrong-org case is invisible (RLS check)
 
 **M1 — BCBS KS fill (est. 1 week)**
+
 - [ ] Field maps recorded and approved for the BCBS KS enrollment form
 - [ ] All mapped text/select/radio/date fields fill correctly for a KFP provider
 - [ ] Defaulting rules honored (facility phone/fax, group credentialing email)
@@ -226,12 +241,14 @@ Out of this repo. One Lovable prompt covering:
 - [ ] Full SSN field appears as manual with the secure-source note
 
 **M2 — Attachments (est. 3-5 days)**
+
 - [ ] `provider_documents` table + bucket live, KFP W9 and COI uploaded
 - [ ] Auto-attach works on a standard file input
 - [ ] Manual-download fallback works
 - [ ] Expired doc blocked with warning
 
 **M2.5 — PDF fill (est. 1 week)**
+
 - [ ] `fill-pdf` edge function deployed, blank Optum PDF in `form-templates` bucket
 - [ ] Optum YAML seeded to `portal_field_maps` as pdf rows, field names recorded, approved
 - [ ] Filled PDF downloads with correct values, defaulting rules honored
@@ -240,12 +257,14 @@ Out of this repo. One Lovable prompt covering:
 - [ ] Case page button works with no extension installed
 
 **M3 — CAQH (est. 2-3 weeks)**
+
 - [ ] ToS review done and accepted
 - [ ] Step detection across the ProView wizard
 - [ ] Fill works on at least the demographics, practice location, and disclosure pages
 - [ ] Session-timeout recovery: re-scan and resume without data loss
 
 **M4 — Generalize (est. 2 weeks)**
+
 - [ ] BCBS TX and Aetna web flows mapped
 - [ ] Admin screen in Minted Panel: view/approve/retire `proposed` field maps
 - [ ] Recording mode: click a field on a portal, pick a token, row saved as `proposed`

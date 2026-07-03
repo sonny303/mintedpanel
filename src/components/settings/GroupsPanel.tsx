@@ -1,35 +1,35 @@
 // Provider-groups table + edit dialog for Settings → Organization.
-import { useState } from 'react';
-import { Plus, ChevronDown } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useState } from "react";
+import { Plus, ChevronDown } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useCreateProviderGroup, useUpdateProviderGroup } from '@/hooks/useOrgSettings';
-import { useIsAdmin } from '@/lib/permissions';
-import type { ProviderGroupInput } from '@/services/orgSettings';
-import type { ProviderGroup } from '@/types';
-import { US_STATES } from './shared';
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useCreateProviderGroup, useUpdateProviderGroup } from "@/hooks/useOrgSettings";
+import { useIsAdmin } from "@/lib/permissions";
+import type { ProviderGroupInput } from "@/services/orgSettings";
+import type { ProviderGroup } from "@/types";
+import { US_STATES } from "./shared";
 
 export function GroupsPanel() {
   const canEdit = useIsAdmin();
@@ -53,7 +53,7 @@ export function GroupsPanel() {
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-            {['Name', 'TIN', 'Group NPI', 'States', 'Active', ''].map((h, i) => (
+            {["Name", "TIN", "Group NPI", "States", "Active", ""].map((h, i) => (
               <th
                 key={i}
                 className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
@@ -92,14 +92,12 @@ export function GroupsPanel() {
                 className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
               >
                 <td className="px-3 h-10 align-middle font-medium">{g.name}</td>
+                <td className="px-3 h-10 align-middle text-muted-foreground">{g.tin ?? "—"}</td>
                 <td className="px-3 h-10 align-middle text-muted-foreground">
-                  {g.tin ?? '—'}
+                  {g.npiType2 ?? "—"}
                 </td>
                 <td className="px-3 h-10 align-middle text-muted-foreground">
-                  {g.npiType2 ?? '—'}
-                </td>
-                <td className="px-3 h-10 align-middle text-muted-foreground">
-                  {g.states && g.states.length > 0 ? g.states.join(', ') : '—'}
+                  {g.states && g.states.length > 0 ? g.states.join(", ") : "—"}
                 </td>
                 <td className="px-3 h-10 align-middle">
                   {g.isActive ? (
@@ -130,46 +128,38 @@ export function GroupsPanel() {
         </tbody>
       </table>
 
-      {modal ? (
-        <GroupEditModal group={modal.group} onClose={() => setModal(null)} />
-      ) : null}
+      {modal ? <GroupEditModal group={modal.group} onClose={() => setModal(null)} /> : null}
     </section>
   );
 }
 
-function GroupEditModal({
-  group,
-  onClose,
-}: {
-  group: ProviderGroup | null;
-  onClose: () => void;
-}) {
+function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClose: () => void }) {
   const g = (group ?? {}) as Record<string, unknown>;
-  const initStr = (k: string) => (typeof g[k] === 'string' ? (g[k] as string) : '');
-  const [name, setName] = useState(group?.name ?? '');
-  const [tin, setTin] = useState(group?.tin ?? '');
-  const [npi, setNpi] = useState(group?.npiType2 ?? '');
-  const [states, setStates] = useState<string>(group?.states?.join(', ') ?? '');
+  const initStr = (k: string) => (typeof g[k] === "string" ? (g[k] as string) : "");
+  const [name, setName] = useState(group?.name ?? "");
+  const [tin, setTin] = useState(group?.tin ?? "");
+  const [npi, setNpi] = useState(group?.npiType2 ?? "");
+  const [states, setStates] = useState<string>(group?.states?.join(", ") ?? "");
   const [active, setActive] = useState<boolean>(group?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
-  const [billStreet, setBillStreet] = useState(initStr('billingStreet'));
-  const [billCity, setBillCity] = useState(initStr('billingCity'));
-  const [billState, setBillState] = useState(initStr('billingState'));
-  const [billZip, setBillZip] = useState(initStr('billingZip'));
+  const [billStreet, setBillStreet] = useState(initStr("billingStreet"));
+  const [billCity, setBillCity] = useState(initStr("billingCity"));
+  const [billState, setBillState] = useState(initStr("billingState"));
+  const [billZip, setBillZip] = useState(initStr("billingZip"));
 
-  const [corrStreet, setCorrStreet] = useState(initStr('correspondenceStreet'));
-  const [corrCity, setCorrCity] = useState(initStr('correspondenceCity'));
-  const [corrState, setCorrState] = useState(initStr('correspondenceState'));
-  const [corrZip, setCorrZip] = useState(initStr('correspondenceZip'));
+  const [corrStreet, setCorrStreet] = useState(initStr("correspondenceStreet"));
+  const [corrCity, setCorrCity] = useState(initStr("correspondenceCity"));
+  const [corrState, setCorrState] = useState(initStr("correspondenceState"));
+  const [corrZip, setCorrZip] = useState(initStr("correspondenceZip"));
 
   const initialSame =
     Boolean(group) &&
-    (initStr('correspondenceStreet') !== '' || initStr('correspondenceCity') !== '') &&
-    initStr('correspondenceStreet') === initStr('billingStreet') &&
-    initStr('correspondenceCity') === initStr('billingCity') &&
-    initStr('correspondenceState') === initStr('billingState') &&
-    initStr('correspondenceZip') === initStr('billingZip');
+    (initStr("correspondenceStreet") !== "" || initStr("correspondenceCity") !== "") &&
+    initStr("correspondenceStreet") === initStr("billingStreet") &&
+    initStr("correspondenceCity") === initStr("billingCity") &&
+    initStr("correspondenceState") === initStr("billingState") &&
+    initStr("correspondenceZip") === initStr("billingZip");
   const [sameAsBilling, setSameAsBilling] = useState<boolean>(initialSame);
 
   const [billingOpen, setBillingOpen] = useState(false);
@@ -186,17 +176,17 @@ function GroupEditModal({
   };
 
   const createMut = useCreateProviderGroup();
-  const updateMut = useUpdateProviderGroup(group?.id ?? '');
+  const updateMut = useUpdateProviderGroup(group?.id ?? "");
   const pending = createMut.isPending || updateMut.isPending;
 
   const handleSave = () => {
     setError(null);
     if (!name.trim()) {
-      setError('Name is required');
+      setError("Name is required");
       return;
     }
     const stateArr = states
-      .split(',')
+      .split(",")
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
     const cs = sameAsBilling ? billStreet : corrStreet;
@@ -219,14 +209,14 @@ function GroupEditModal({
       correspondenceZip: cz.trim() || null,
     };
     const onErr = (e: unknown) => {
-      const msg = e instanceof Error ? e.message : 'Save failed';
+      const msg = e instanceof Error ? e.message : "Save failed";
       setError(msg);
       toast.error(msg);
     };
     if (group) {
       updateMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Group updated');
+          toast.success("Group updated");
           onClose();
         },
         onError: onErr,
@@ -234,7 +224,7 @@ function GroupEditModal({
     } else {
       createMut.mutate(input, {
         onSuccess: () => {
-          toast.success('Group created');
+          toast.success("Group created");
           onClose();
         },
         onError: onErr,
@@ -249,34 +239,48 @@ function GroupEditModal({
       </SelectTrigger>
       <SelectContent>
         {US_STATES.map((s) => (
-          <SelectItem key={s} value={s}>{s}</SelectItem>
+          <SelectItem key={s} value={s}>
+            {s}
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
   );
 
   const sectionTriggerCls =
-    'flex w-full items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2 text-[13px] font-medium hover:bg-[#FAFAF9] [&[data-state=open]>svg]:rotate-180';
+    "flex w-full items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2 text-[13px] font-medium hover:bg-[#FAFAF9] [&[data-state=open]>svg]:rotate-180";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg border-[#E8E5E0] shadow-none max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{group ? 'Edit provider group' : 'Add provider group'}</DialogTitle>
+          <DialogTitle>{group ? "Edit provider group" : "Add provider group"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
             <Label className="text-[12px] uppercase tracking-wider">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 rounded-[4px]" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-9 rounded-[4px]"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-[12px] uppercase tracking-wider">TIN</Label>
-              <Input value={tin} onChange={(e) => setTin(e.target.value)} className="h-9 rounded-[4px]" />
+              <Input
+                value={tin}
+                onChange={(e) => setTin(e.target.value)}
+                className="h-9 rounded-[4px]"
+              />
             </div>
             <div>
               <Label className="text-[12px] uppercase tracking-wider">Group NPI</Label>
-              <Input value={npi} onChange={(e) => setNpi(e.target.value)} className="h-9 rounded-[4px]" />
+              <Input
+                value={npi}
+                onChange={(e) => setNpi(e.target.value)}
+                className="h-9 rounded-[4px]"
+              />
             </div>
           </div>
           <div>
@@ -298,12 +302,20 @@ function GroupEditModal({
               <p className="text-[12px] text-[#6B7280]">Where payers send checks and EOBs.</p>
               <div>
                 <Label className="text-[12px] uppercase tracking-wider">Street</Label>
-                <Input value={billStreet} onChange={(e) => setBillStreet(e.target.value)} className="h-9 rounded-[4px]" />
+                <Input
+                  value={billStreet}
+                  onChange={(e) => setBillStreet(e.target.value)}
+                  className="h-9 rounded-[4px]"
+                />
               </div>
               <div className="grid grid-cols-[1fr_120px_120px] gap-3">
                 <div>
                   <Label className="text-[12px] uppercase tracking-wider">City</Label>
-                  <Input value={billCity} onChange={(e) => setBillCity(e.target.value)} className="h-9 rounded-[4px]" />
+                  <Input
+                    value={billCity}
+                    onChange={(e) => setBillCity(e.target.value)}
+                    className="h-9 rounded-[4px]"
+                  />
                 </div>
                 <div>
                   <Label className="text-[12px] uppercase tracking-wider">State</Label>
@@ -311,7 +323,11 @@ function GroupEditModal({
                 </div>
                 <div>
                   <Label className="text-[12px] uppercase tracking-wider">Zip</Label>
-                  <Input value={billZip} onChange={(e) => setBillZip(e.target.value)} className="h-9 rounded-[4px]" />
+                  <Input
+                    value={billZip}
+                    onChange={(e) => setBillZip(e.target.value)}
+                    className="h-9 rounded-[4px]"
+                  />
                 </div>
               </div>
             </CollapsibleContent>
@@ -390,7 +406,7 @@ function GroupEditModal({
             disabled={pending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
-            {pending ? 'Saving…' : group ? 'Save changes' : 'Create group'}
+            {pending ? "Saving…" : group ? "Save changes" : "Create group"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,10 +1,10 @@
 // Right-side slide-over that opens on task row click from the case Tasks panel.
 // Lets coordinators run status changes, SOP steps, and notes without leaving the case page.
-import { useEffect, useMemo, useState } from 'react';
-import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { useNavigate } from '@tanstack/react-router';
-import { differenceInDays, parseISO } from 'date-fns';
-import { toast } from 'sonner';
+import { useEffect, useMemo, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { useNavigate } from "@tanstack/react-router";
+import { differenceInDays, parseISO } from "date-fns";
+import { toast } from "sonner";
 import {
   Calendar,
   CheckCircle2,
@@ -13,34 +13,25 @@ import {
   Lock,
   MessageSquare,
   X,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill } from '@/components/StatusPill';
-import { fmtDate, fmtDateTime } from '@/lib/format';
-import {
-  useCompleteSOPStep,
-  useTask,
-  useUpdateTaskStatus,
-} from '@/hooks/useTasks';
-import { useCreateNote, useNotes } from '@/hooks/useLookups';
-import { useCanWrite } from '@/lib/permissions';
-import type { SOPStep, Task, TaskStatus } from '@/types';
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill } from "@/components/StatusPill";
+import { fmtDate, fmtDateTime } from "@/lib/format";
+import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
+import { useCreateNote, useNotes } from "@/hooks/useLookups";
+import { useCanWrite } from "@/lib/permissions";
+import type { SOPStep, Task, TaskStatus } from "@/types";
 
 interface TaskDrawerProps {
   taskId: string | null;
@@ -51,50 +42,42 @@ interface TaskDrawerProps {
 }
 
 function initialsOf(name: string | null | undefined): string {
-  if (!name) return '··';
+  if (!name) return "··";
   const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return (first + last).toUpperCase() || '··';
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "··";
 }
 
 function statusLabel(s: TaskStatus): string {
-  if (s === 'not_started') return 'Not started';
-  if (s === 'in_progress') return 'In progress';
-  if (s === 'completed') return 'Completed';
-  return 'Blocked';
+  if (s === "not_started") return "Not started";
+  if (s === "in_progress") return "In progress";
+  if (s === "completed") return "Completed";
+  return "Blocked";
 }
 
-function statusPillColor(
-  s: TaskStatus,
-): 'gray' | 'amber' | 'green' | 'red' {
-  if (s === 'completed') return 'green';
-  if (s === 'in_progress') return 'amber';
-  if (s === 'blocked') return 'red';
-  return 'gray';
+function statusPillColor(s: TaskStatus): "gray" | "amber" | "green" | "red" {
+  if (s === "completed") return "green";
+  if (s === "in_progress") return "amber";
+  if (s === "blocked") return "red";
+  return "gray";
 }
 
-export function TaskDrawer({
-  taskId,
-  fallbackTask,
-  locked,
-  open,
-  onOpenChange,
-}: TaskDrawerProps) {
+export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }: TaskDrawerProps) {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
 
   const taskQ = useTask(open && taskId ? taskId : undefined);
   const task = taskQ.data ?? fallbackTask;
 
-  const notesQ = useNotes('task', open && taskId ? taskId : undefined);
+  const notesQ = useNotes("task", open && taskId ? taskId : undefined);
   const updateStatusM = useUpdateTaskStatus();
   const completeStepM = useCompleteSOPStep();
   const createNoteM = useCreateNote();
 
-  const [noteDraft, setNoteDraft] = useState('');
+  const [noteDraft, setNoteDraft] = useState("");
   useEffect(() => {
-    if (!open) setNoteDraft('');
+    if (!open) setNoteDraft("");
   }, [open]);
 
   const steps = useMemo<SOPStep[]>(
@@ -109,11 +92,11 @@ export function TaskDrawer({
   if (!task) return null;
 
   const overdue =
-    task.status !== 'completed' &&
+    task.status !== "completed" &&
     task.dueDate &&
     differenceInDays(new Date(), parseISO(task.dueDate)) > 0;
 
-  const handleSetStatus = (next: TaskStatus, successMsg = 'Status updated') => {
+  const handleSetStatus = (next: TaskStatus, successMsg = "Status updated") => {
     if (!canEdit) return;
     if (next === task.status) return;
     updateStatusM.mutate(
@@ -121,14 +104,14 @@ export function TaskDrawer({
       {
         onSuccess: () => toast.success(successMsg),
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not update status'),
+          toast.error(err instanceof Error ? err.message : "Could not update status"),
       },
     );
   };
 
   const handleMarkComplete = () => {
-    if (locked || task.status === 'completed') return;
-    handleSetStatus('completed', 'Task completed');
+    if (locked || task.status === "completed") return;
+    handleSetStatus("completed", "Task completed");
   };
 
   const handleStep = (index: number, checked: boolean) => {
@@ -140,7 +123,7 @@ export function TaskDrawer({
       { taskId: task.id, stepId: step.id },
       {
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not complete step'),
+          toast.error(err instanceof Error ? err.message : "Could not complete step"),
       },
     );
   };
@@ -149,11 +132,11 @@ export function TaskDrawer({
     const content = noteDraft.trim();
     if (!content) return;
     createNoteM.mutate(
-      { entityType: 'task', entityId: task.id, content },
+      { entityType: "task", entityId: task.id, content },
       {
-        onSuccess: () => setNoteDraft(''),
+        onSuccess: () => setNoteDraft(""),
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not add note'),
+          toast.error(err instanceof Error ? err.message : "Could not add note"),
       },
     );
   };
@@ -178,7 +161,7 @@ export function TaskDrawer({
                 <div className="flex flex-wrap items-center gap-2 text-[12px]">
                   <span
                     className={`inline-flex items-center gap-1 tabular-nums ${
-                      overdue ? 'text-[#DC2626] font-semibold' : 'text-muted-foreground'
+                      overdue ? "text-[#DC2626] font-semibold" : "text-muted-foreground"
                     }`}
                   >
                     <Calendar className="h-3.5 w-3.5" />
@@ -202,7 +185,7 @@ export function TaskDrawer({
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
               {/* Actions */}
               <div className="space-y-3">
-                {task.status !== 'completed' ? (
+                {task.status !== "completed" ? (
                   locked ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -226,7 +209,7 @@ export function TaskDrawer({
                       {updateStatusM.isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Mark complete'
+                        "Mark complete"
                       )}
                     </Button>
                   )
@@ -239,11 +222,7 @@ export function TaskDrawer({
                   <Select
                     value={task.status}
                     onValueChange={(v) => handleSetStatus(v as TaskStatus)}
-                    disabled={
-                      !canEdit ||
-                      updateStatusM.isPending ||
-                      task.status === 'completed'
-                    }
+                    disabled={!canEdit || updateStatusM.isPending || task.status === "completed"}
                   >
                     <SelectTrigger className="h-8 flex-1 text-[13px] shadow-none">
                       <SelectValue />
@@ -252,7 +231,7 @@ export function TaskDrawer({
                       <SelectItem value="not_started">Not started</SelectItem>
                       <SelectItem value="in_progress">In progress</SelectItem>
                       <SelectItem value="blocked">Blocked</SelectItem>
-                      {task.status === 'completed' ? (
+                      {task.status === "completed" ? (
                         <SelectItem value="completed" disabled>
                           Completed
                         </SelectItem>
@@ -294,19 +273,14 @@ export function TaskDrawer({
                             <Checkbox
                               checked={isChecked}
                               disabled={
-                                isChecked ||
-                                !isActive ||
-                                !canEdit ||
-                                completeStepM.isPending
+                                isChecked || !isActive || !canEdit || completeStepM.isPending
                               }
                               onCheckedChange={(v) => handleStep(index, Boolean(v))}
                             />
                           )}
                           <p
                             className={`flex-1 text-[13px] leading-snug ${
-                              isChecked
-                                ? 'text-muted-foreground line-through'
-                                : 'text-foreground'
+                              isChecked ? "text-muted-foreground line-through" : "text-foreground"
                             }`}
                           >
                             {step.label}
@@ -346,7 +320,7 @@ export function TaskDrawer({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 text-[11px]">
                             <span className="font-semibold text-foreground">
-                              {n.authorName ?? '—'}
+                              {n.authorName ?? "—"}
                             </span>
                             <span className="text-muted-foreground tabular-nums">
                               {fmtDateTime(n.createdAt)}
@@ -391,7 +365,7 @@ export function TaskDrawer({
                 type="button"
                 onClick={() => {
                   onOpenChange(false);
-                  navigate({ to: '/tasks/$id', params: { id: task.id } });
+                  navigate({ to: "/tasks/$id", params: { id: task.id } });
                 }}
                 className="inline-flex items-center gap-1.5 text-[13px] text-[#1B4D3E] hover:underline underline-offset-4"
               >

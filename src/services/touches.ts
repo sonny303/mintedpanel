@@ -1,9 +1,9 @@
 // Touches: append-only contact log per case. Reads filter by org; the insert
 // also writes an audit_log row with action_type 'TOUCH_LOGGED'.
-import { supabase } from '@/integrations/supabase/externalClient';
-import { camelizeRow, snakeizeRow } from '@/lib/case';
-import { currentUserId, requireActiveOrg, writeAudit } from '@/lib/audit';
-import type { Touch, TouchOutcome, TouchType } from '@/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { Touch, TouchOutcome, TouchType } from "@/types";
 
 export interface TouchInput {
   touchDate: string;
@@ -16,11 +16,11 @@ export interface TouchInput {
 export async function getTouches(caseId: string): Promise<Touch[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('touches')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('case_id', caseId)
-    .order('touch_date', { ascending: false });
+    .from("touches")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("case_id", caseId)
+    .order("touch_date", { ascending: false });
   if (error) throw error;
   return camelizeRow<Touch[]>(data ?? []);
 }
@@ -30,10 +30,10 @@ export async function getTouches(caseId: string): Promise<Touch[]> {
 export async function getLastTouchDates(): Promise<Map<string, string>> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
-    .from('touches')
-    .select('case_id, touch_date')
-    .eq('org_id', orgId)
-    .order('touch_date', { ascending: false });
+    .from("touches")
+    .select("case_id, touch_date")
+    .eq("org_id", orgId)
+    .order("touch_date", { ascending: false });
   if (error) throw error;
   const m = new Map<string, string>();
   for (const row of (data ?? []) as { case_id: string; touch_date: string }[]) {
@@ -44,24 +44,24 @@ export async function getLastTouchDates(): Promise<Map<string, string>> {
 
 export async function logTouch(caseId: string, input: TouchInput): Promise<Touch> {
   const orgId = requireActiveOrg();
-  const source = 'manual' as const;
+  const source = "manual" as const;
   const payload = {
     ...snakeizeRow<Record<string, unknown>>(input),
     org_id: orgId,
     case_id: caseId,
-    coordinator_id: source === 'manual' ? currentUserId() : null,
+    coordinator_id: source === "manual" ? currentUserId() : null,
     source,
   };
   const { data, error } = await supabase
-    .from('touches')
+    .from("touches")
     .insert(payload as never)
-    .select('*')
+    .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Touch>(data);
   await writeAudit({
-    actionType: 'TOUCH_LOGGED',
-    entityType: 'touch',
+    actionType: "TOUCH_LOGGED",
+    entityType: "touch",
     entityId: created.id,
     after: created,
     description: `Logged ${created.touchType} touch (${created.outcome})`,

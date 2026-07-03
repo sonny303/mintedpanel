@@ -1,8 +1,12 @@
 // Three-stat capability strip below the hero.
 const STATS = [
-  { value: '50+', label: 'Payers Managed', copy: 'Commercial, Medicare, and Medicaid networks' },
-  { value: '50', label: 'All 50 States', copy: 'Multi-state credentialing without the complexity' },
-  { value: '100%', label: 'Follow-Through', copy: 'Tracked until the provider is active and billing' },
+  { value: "50+", label: "Payers Managed", copy: "Commercial, Medicare, and Medicaid networks" },
+  { value: "50", label: "All 50 States", copy: "Multi-state credentialing without the complexity" },
+  {
+    value: "100%",
+    label: "Follow-Through",
+    copy: "Tracked until the provider is active and billing",
+  },
 ];
 
 export function StatsSection() {

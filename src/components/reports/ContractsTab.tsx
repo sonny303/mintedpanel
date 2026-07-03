@@ -1,31 +1,31 @@
 // Contracts tab of the Reports page. Shows one row per group + payer + state
 // contract with providers count (cases) and status change controls.
-import { useMemo, useState } from 'react';
-import { Link } from '@tanstack/react-router';
-import { Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill, hexToStatusColor } from '@/components/StatusPill';
-import { fmtDate } from '@/lib/format';
-import { useContracts } from '@/hooks/useContracts';
-import { useCases } from '@/hooks/useCases';
-import { usePayers, useStatusConfigs } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useCanWrite } from '@/lib/permissions';
-import type { Contract } from '@/types';
-import { StatusChangeContractDialog } from './StatusChangeContractDialog';
-import { AddContractDialog } from './AddContractDialog';
+} from "@/components/ui/select";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
+import { fmtDate } from "@/lib/format";
+import { useContracts } from "@/hooks/useContracts";
+import { useCases } from "@/hooks/useCases";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useCanWrite } from "@/lib/permissions";
+import type { Contract } from "@/types";
+import { StatusChangeContractDialog } from "./StatusChangeContractDialog";
+import { AddContractDialog } from "./AddContractDialog";
 
-const ALL = '__all__';
+const ALL = "__all__";
 
 export function ContractsTab() {
   const canEdit = useCanWrite();
@@ -34,7 +34,7 @@ export function ContractsTab() {
   const casesQ = useCases();
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
-  const statusesQ = useStatusConfigs('contracting');
+  const statusesQ = useStatusConfigs("contracting");
 
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [payerFilter, setPayerFilter] = useState<string>(ALL);
@@ -199,15 +199,15 @@ export function ContractsTab() {
                   const status = c.contractingStatusId
                     ? statusById.get(c.contractingStatusId)
                     : null;
-                  const key = `${c.groupId ?? ''}|${c.payerId ?? ''}|${c.state}`;
+                  const key = `${c.groupId ?? ""}|${c.payerId ?? ""}|${c.state}`;
                   const providerCount = providerCountByKey.get(key) ?? 0;
                   return (
                     <tr
                       key={c.id}
                       className="border-b border-border last:border-b-0 hover:bg-[#FAFAF9]"
                     >
-                      <td className="px-3 h-10 align-middle">{group?.name ?? '—'}</td>
-                      <td className="px-3 h-10 align-middle">{payer?.name ?? '—'}</td>
+                      <td className="px-3 h-10 align-middle">{group?.name ?? "—"}</td>
+                      <td className="px-3 h-10 align-middle">{payer?.name ?? "—"}</td>
                       <td className="px-3 h-10 align-middle">{c.state}</td>
                       <td className="px-3 h-10 align-middle">
                         {status ? (
@@ -223,10 +223,7 @@ export function ContractsTab() {
                       <td className="px-3 h-10 align-middle">{fmtDate(c.expirationDate)}</td>
                       <td className="px-3 h-10 align-middle text-right tabular-nums">
                         {providerCount > 0 ? (
-                          <Link
-                            to="/cases"
-                            className="text-[#1B4D3E] hover:underline"
-                          >
+                          <Link to="/cases" className="text-[#1B4D3E] hover:underline">
                             {providerCount}
                           </Link>
                         ) : (
@@ -234,7 +231,7 @@ export function ContractsTab() {
                         )}
                       </td>
                       <td className="px-3 h-10 align-middle max-w-[240px] truncate text-muted-foreground">
-                        {c.notes ?? '—'}
+                        {c.notes ?? "—"}
                       </td>
                       <td className="px-3 h-10 align-middle text-right">
                         {canEdit && (

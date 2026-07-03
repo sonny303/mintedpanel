@@ -1,37 +1,31 @@
 // SOP template editor: edit template metadata, ordered task cards with
 // reorderable SOP steps and closed token data fields, plus live preview.
-import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, Plus, Save } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/externalClient';
-import { toast } from 'sonner';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { createFileRoute, useBlocker, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Archive, ArchiveRestore, Copy, Plus, Save } from "lucide-react";
+import { supabase } from "@/integrations/supabase/externalClient";
+import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  useCreateTemplate,
-  usePayers,
-  useTemplate,
-  useUpdateTemplate,
-} from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import { useIsAdmin } from '@/lib/permissions';
-import { TemplateTaskRow } from '@/components/templates/TemplateTaskRow';
-import { TokenHelpPanel } from '@/components/templates/TokenHelpPanel';
-import { useDiscardConfirm } from '@/components/templates/DiscardConfirmDialog';
-import type { SOPTaskDefinition, SOPTemplate } from '@/types';
-
+} from "@/components/ui/select";
+import { useCreateTemplate, usePayers, useTemplate, useUpdateTemplate } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useIsAdmin } from "@/lib/permissions";
+import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
+import { TokenHelpPanel } from "@/components/templates/TokenHelpPanel";
+import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
+import type { SOPTaskDefinition, SOPTemplate } from "@/types";
 
 type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
 
@@ -62,20 +56,20 @@ interface SopFieldToken {
 }
 
 const TOKEN_GROUP_LABELS: Record<string, string> = {
-  provider: 'Provider',
-  group: 'Group',
-  facility: 'Facility',
-  mso: 'MSO',
-  group_insurance: 'Group Insurance',
+  provider: "Provider",
+  group: "Group",
+  facility: "Facility",
+  mso: "MSO",
+  group_insurance: "Group Insurance",
 };
 
-const TOKEN_GROUP_ORDER = ['provider', 'group', 'facility', 'mso', 'group_insurance'];
+const TOKEN_GROUP_ORDER = ["provider", "group", "facility", "mso", "group_insurance"];
 
 function useSopFieldTokens() {
   return useQuery({
-    queryKey: ['sop-field-tokens'] as const,
+    queryKey: ["sop-field-tokens"] as const,
     queryFn: async (): Promise<SopFieldToken[]> => {
-      const { data, error } = await supabase.rpc('get_sop_field_tokens' as never);
+      const { data, error } = await supabase.rpc("get_sop_field_tokens" as never);
       if (error) throw error;
       return (data ?? []) as SopFieldToken[];
     },
@@ -85,26 +79,72 @@ function useSopFieldTokens() {
 }
 
 const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS',
-  'KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY',
-  'NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV',
-  'WI','WY',
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
 ];
 
 const SAMPLE_VALUES: Record<string, string> = {
-  'provider.npi': '1234567890',
-  'provider.caqhId': 'CAQH-987654',
-  'provider.taxonomyCode': '225100000X',
-  'provider.firstName': 'Jordan',
-  'provider.lastName': 'Rivera',
-  'provider.email': 'jordan.rivera@example.com',
-  'provider.licenseNumber': 'TX-PT-44821',
-  'group.tin': '12-3456789',
-  'group.npiType2': '9876543210',
-  'group.name': 'BEST Physical Therapy',
-  'facility.name': 'Riverbend Clinic — North',
-  'facility.address': '4400 N Lamar Blvd, Austin, TX 78756',
-  'mso.portalUrl': 'https://portal.example-mso.com',
+  "provider.npi": "1234567890",
+  "provider.caqhId": "CAQH-987654",
+  "provider.taxonomyCode": "225100000X",
+  "provider.firstName": "Jordan",
+  "provider.lastName": "Rivera",
+  "provider.email": "jordan.rivera@example.com",
+  "provider.licenseNumber": "TX-PT-44821",
+  "group.tin": "12-3456789",
+  "group.npiType2": "9876543210",
+  "group.name": "BEST Physical Therapy",
+  "facility.name": "Riverbend Clinic — North",
+  "facility.address": "4400 N Lamar Blvd, Austin, TX 78756",
+  "mso.portalUrl": "https://portal.example-mso.com",
 };
 
 function randId(): string {
@@ -114,17 +154,17 @@ function randId(): string {
 function toEditable(defs: SOPTaskDefinition[] | null | undefined): EditableTask[] {
   return (defs ?? []).map((d, i) => ({
     id: randId(),
-    title: d.title ?? '',
-    description: d.description ?? '',
+    title: d.title ?? "",
+    description: d.description ?? "",
     dueOffsetDays: d.dueOffsetDays ?? i * 7,
     steps: (d.steps ?? []).map((s) => {
       const raw = s as { label?: string; detail?: string; dataFields?: DataField[] };
       return {
         id: randId(),
-        label: raw.label ?? '',
-        detail: raw.detail ?? '',
-        dataFields: (raw.dataFields ?? []).filter((f) =>
-          typeof f.token === 'string' && f.token.includes('.'),
+        label: raw.label ?? "",
+        detail: raw.detail ?? "",
+        dataFields: (raw.dataFields ?? []).filter(
+          (f) => typeof f.token === "string" && f.token.includes("."),
         ),
       };
     }),
@@ -140,14 +180,12 @@ function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
     steps: t.steps.map((s) => ({
       label: s.label,
       detail: s.detail,
-      dataFields: s.dataFields.filter((f) =>
-        typeof f.token === 'string' && f.token.includes('.'),
-      ),
-    })) as SOPTaskDefinition['steps'],
+      dataFields: s.dataFields.filter((f) => typeof f.token === "string" && f.token.includes(".")),
+    })) as SOPTaskDefinition["steps"],
   }));
 }
 
-export const Route = createFileRoute('/admin/templates/$id')({
+export const Route = createFileRoute("/admin/templates/$id")({
   component: TemplateEditor,
 });
 
@@ -165,7 +203,7 @@ function TemplateEditor() {
   const groupedTokens = useMemo(() => {
     const map = new Map<string, SopFieldToken[]>();
     for (const t of tokens) {
-      const prefix = t.token.split('.')[0];
+      const prefix = t.token.split(".")[0];
       const arr = map.get(prefix) ?? [];
       arr.push(t);
       map.set(prefix, arr);
@@ -176,15 +214,15 @@ function TemplateEditor() {
       items: map.get(p) ?? [],
     }));
   }, [tokens]);
-  const firstToken = tokens[0]?.token ?? 'provider.npi';
+  const firstToken = tokens[0]?.token ?? "provider.npi";
 
   const tpl = tplQ.data as EditableTemplate | undefined;
 
-  const [name, setName] = useState('');
-  const [payerId, setPayerId] = useState<string>('none');
-  const [state, setState] = useState<string>('none');
-  const [specialty, setSpecialty] = useState<string>('');
-  const [groupId, setGroupId] = useState<string>('none');
+  const [name, setName] = useState("");
+  const [payerId, setPayerId] = useState<string>("none");
+  const [state, setState] = useState<string>("none");
+  const [specialty, setSpecialty] = useState<string>("");
+  const [groupId, setGroupId] = useState<string>("none");
   const [tasks, setTasks] = useState<EditableTask[]>([]);
   const [isArchived, setIsArchived] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -194,10 +232,10 @@ function TemplateEditor() {
   useEffect(() => {
     if (!tpl) return;
     setName(tpl.name);
-    setPayerId(tpl.payerId ?? 'none');
-    setState(tpl.state ?? 'none');
-    setSpecialty(tpl.specialty ?? '');
-    setGroupId(tpl.groupId ?? 'none');
+    setPayerId(tpl.payerId ?? "none");
+    setState(tpl.state ?? "none");
+    setSpecialty(tpl.specialty ?? "");
+    setGroupId(tpl.groupId ?? "none");
     setTasks(toEditable(tpl.taskDefinitions));
     setIsArchived(Boolean(tpl.archived ?? tpl.isArchived ?? false));
     setDirty(false);
@@ -212,15 +250,14 @@ function TemplateEditor() {
     },
   });
 
-
   useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
       if (!dirty) return;
       e.preventDefault();
-      e.returnValue = '';
+      e.returnValue = "";
     }
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
 
   function mark<T>(setter: (v: T) => void) {
@@ -235,8 +272,8 @@ function TemplateEditor() {
       ...prev,
       {
         id: randId(),
-        title: 'New task',
-        description: '',
+        title: "New task",
+        description: "",
         dueOffsetDays: prev.length * 7,
         steps: [],
       },
@@ -274,10 +311,7 @@ function TemplateEditor() {
         t.id === taskId
           ? {
               ...t,
-              steps: [
-                ...t.steps,
-                { id: randId(), label: 'New step', detail: '', dataFields: [] },
-              ],
+              steps: [...t.steps, { id: randId(), label: "New step", detail: "", dataFields: [] }],
             }
           : t,
       ),
@@ -335,10 +369,7 @@ function TemplateEditor() {
                 s.id === stepId
                   ? {
                       ...s,
-                      dataFields: [
-                        ...s.dataFields,
-                        { label: '', token: firstToken },
-                      ],
+                      dataFields: [...s.dataFields, { label: "", token: firstToken }],
                     }
                   : s,
               ),
@@ -349,12 +380,7 @@ function TemplateEditor() {
     setDirty(true);
   }
 
-  function updateDataField(
-    taskId: string,
-    stepId: string,
-    idx: number,
-    patch: Partial<DataField>,
-  ) {
+  function updateDataField(taskId: string, stepId: string, idx: number, patch: Partial<DataField>) {
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId
@@ -364,9 +390,7 @@ function TemplateEditor() {
                 s.id === stepId
                   ? {
                       ...s,
-                      dataFields: s.dataFields.map((f, i) =>
-                        i === idx ? { ...f, ...patch } : f,
-                      ),
+                      dataFields: s.dataFields.map((f, i) => (i === idx ? { ...f, ...patch } : f)),
                     }
                   : s,
               ),
@@ -400,17 +424,17 @@ function TemplateEditor() {
     try {
       await updateMut.mutateAsync({
         name,
-        payerId: payerId === 'none' ? null : payerId,
-        state: state === 'none' ? null : state,
+        payerId: payerId === "none" ? null : payerId,
+        state: state === "none" ? null : state,
         specialty: specialty.trim() || null,
-        groupId: groupId === 'none' ? null : groupId,
+        groupId: groupId === "none" ? null : groupId,
         taskDefinitions: fromEditable(tasks),
         archived: isArchived,
       });
       setDirty(false);
-      toast.success('Template saved');
+      toast.success("Template saved");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
+      const msg = err instanceof Error ? err.message : "Save failed";
       toast.error(msg);
     }
   }
@@ -420,17 +444,17 @@ function TemplateEditor() {
     try {
       const created = await createMut.mutateAsync({
         name: `${name} (copy)`,
-        payerId: payerId === 'none' ? null : payerId,
-        state: state === 'none' ? null : state,
+        payerId: payerId === "none" ? null : payerId,
+        state: state === "none" ? null : state,
         specialty: specialty.trim() || null,
-        groupId: groupId === 'none' ? null : groupId,
+        groupId: groupId === "none" ? null : groupId,
         taskDefinitions: fromEditable(tasks),
         archived: false,
       });
-      toast.success('Template duplicated');
-      navigate({ to: '/admin/templates/$id', params: { id: created.id } });
+      toast.success("Template duplicated");
+      navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Duplicate failed';
+      const msg = err instanceof Error ? err.message : "Duplicate failed";
       toast.error(msg);
     }
   }
@@ -441,10 +465,10 @@ function TemplateEditor() {
     setIsArchived(next);
     try {
       await updateMut.mutateAsync({ archived: next });
-      toast.success(next ? 'Template archived' : 'Template restored');
+      toast.success(next ? "Template archived" : "Template restored");
     } catch (err) {
       setIsArchived(!next);
-      const msg = err instanceof Error ? err.message : 'Update failed';
+      const msg = err instanceof Error ? err.message : "Update failed";
       toast.error(msg);
     }
   }
@@ -477,13 +501,11 @@ function TemplateEditor() {
   return (
     <div className="p-6">
       <PageHeader
-        title={name || 'Untitled template'}
-        description={
-          isArchived ? 'Archived. Hidden from case creation matching.' : undefined
-        }
+        title={name || "Untitled template"}
+        description={isArchived ? "Archived. Hidden from case creation matching." : undefined}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate({ to: '/admin/templates' })}>
+            <Button variant="outline" onClick={() => navigate({ to: "/admin/templates" })}>
               Back
             </Button>
             {canEdit ? (
@@ -508,11 +530,11 @@ function TemplateEditor() {
                 <Button
                   onClick={handleSave}
                   disabled={!dirty || updateMut.isPending}
-                  style={{ backgroundColor: '#1B4D3E' }}
+                  style={{ backgroundColor: "#1B4D3E" }}
                   className="text-white hover:opacity-90"
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {updateMut.isPending ? 'Saving…' : 'Save'}
+                  {updateMut.isPending ? "Saving…" : "Save"}
                 </Button>
               </>
             ) : null}
@@ -651,4 +673,3 @@ function TemplateEditor() {
     </div>
   );
 }
-

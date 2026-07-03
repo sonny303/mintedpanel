@@ -1,18 +1,18 @@
 // Problem framing with dark/light comparison cards + abstract graphic.
-import { Eyebrow } from './Eyebrow';
-import { HeroGraphic } from './HeroGraphic';
+import { Eyebrow } from "./Eyebrow";
+import { HeroGraphic } from "./HeroGraphic";
 
 const OLD_WAY = [
-  'Manual spreadsheet tracking',
-  'Missed payer deadlines',
-  'Providers waiting weeks to see patients',
-  'Billing team chasing status daily',
+  "Manual spreadsheet tracking",
+  "Missed payer deadlines",
+  "Providers waiting weeks to see patients",
+  "Billing team chasing status daily",
 ];
 const NEW_WAY = [
-  'Dedicated team manages every case end-to-end',
-  'Proactive deadline tracking and follow-up',
-  'Faster in-network activation',
-  'Real-time dashboard for your team',
+  "Dedicated team manages every case end-to-end",
+  "Proactive deadline tracking and follow-up",
+  "Faster in-network activation",
+  "Real-time dashboard for your team",
 ];
 
 export function ProblemSection() {
@@ -32,13 +32,17 @@ export function ProblemSection() {
           <div className="rounded-md bg-[#1B4D3E] text-white p-5">
             <div className="text-[15px] font-semibold">The old way</div>
             <ul className="mt-3 space-y-2 text-[14px] text-white/90">
-              {OLD_WAY.map((i) => <li key={i}>• {i}</li>)}
+              {OLD_WAY.map((i) => (
+                <li key={i}>• {i}</li>
+              ))}
             </ul>
           </div>
           <div className="rounded-md border border-[#E8E5E0] bg-white p-5">
             <div className="text-[15px] font-semibold text-[#1F2937]">The Minted Panel way</div>
             <ul className="mt-3 space-y-2 text-[14px] text-[#1F2937]">
-              {NEW_WAY.map((i) => <li key={i}>• {i}</li>)}
+              {NEW_WAY.map((i) => (
+                <li key={i}>• {i}</li>
+              ))}
             </ul>
           </div>
         </div>

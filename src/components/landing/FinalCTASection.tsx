@@ -1,6 +1,6 @@
 // Closing CTA with meeting and login buttons.
-import { useNavigate } from '@tanstack/react-router';
-import { Button } from '@/components/ui/button';
+import { useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 
 export function FinalCTASection() {
   const navigate = useNavigate();
@@ -10,8 +10,8 @@ export function FinalCTASection() {
         Ready to hand off your credentialing?
       </h2>
       <p className="mt-4 text-[16px] text-[#6B7280] max-w-2xl mx-auto">
-        Schedule a brief call to review your provider roster and target payers. See how Minted
-        Panel gets your providers in-network faster. Existing clients can log in to access their
+        Schedule a brief call to review your provider roster and target payers. See how Minted Panel
+        gets your providers in-network faster. Existing clients can log in to access their
         dashboard.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -21,7 +21,7 @@ export function FinalCTASection() {
         <Button
           variant="outline"
           className="border-[#1B4D3E] text-[#1B4D3E] hover:bg-[#1B4D3E]/5 h-11 px-6"
-          onClick={() => navigate({ to: '/login' })}
+          onClick={() => navigate({ to: "/login" })}
         >
           Login to Dashboard
         </Button>

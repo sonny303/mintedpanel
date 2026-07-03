@@ -1,11 +1,23 @@
 // Full-width tinted band explaining the managed-service positioning.
-import { Eyebrow } from './Eyebrow';
+import { Eyebrow } from "./Eyebrow";
 
 const REASONS = [
-  { title: 'Dedicated to healthcare providers', copy: 'We work exclusively with healthcare provider groups, so we understand your payers, state requirements, and the credentialing issues that slow provider organizations down.' },
-  { title: 'Proactive, not reactive', copy: 'We monitor open applications, follow up on missing information, and escalate stalled cases to keep files moving.' },
-  { title: 'Full transparency, always', copy: "Every action is logged. You can see each case's status, what's been submitted, and what still needs attention." },
-  { title: 'Your team stays lean', copy: 'You get enterprise-grade credentialing infrastructure without hiring an in-house specialist for every 50 providers.' },
+  {
+    title: "Dedicated to healthcare providers",
+    copy: "We work exclusively with healthcare provider groups, so we understand your payers, state requirements, and the credentialing issues that slow provider organizations down.",
+  },
+  {
+    title: "Proactive, not reactive",
+    copy: "We monitor open applications, follow up on missing information, and escalate stalled cases to keep files moving.",
+  },
+  {
+    title: "Full transparency, always",
+    copy: "Every action is logged. You can see each case's status, what's been submitted, and what still needs attention.",
+  },
+  {
+    title: "Your team stays lean",
+    copy: "You get enterprise-grade credentialing infrastructure without hiring an in-house specialist for every 50 providers.",
+  },
 ];
 
 export function WhySection() {

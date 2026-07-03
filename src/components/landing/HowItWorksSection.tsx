@@ -1,17 +1,17 @@
 // Three numbered process cards.
-import { Eyebrow } from './Eyebrow';
+import { Eyebrow } from "./Eyebrow";
 
 const STEPS = [
   {
-    title: 'Hand off your credentialing',
-    copy: 'Share your provider roster and payer targets. We handle onboarding, document collection, CAQH management, and initial submissions.',
+    title: "Hand off your credentialing",
+    copy: "Share your provider roster and payer targets. We handle onboarding, document collection, CAQH management, and initial submissions.",
   },
   {
-    title: 'We manage every payer and state',
-    copy: 'We track open applications, follow up on pending decisions, manage CAQH re-attestations, and resolve payer issues. Every touchpoint is logged in your account.',
+    title: "We manage every payer and state",
+    copy: "We track open applications, follow up on pending decisions, manage CAQH re-attestations, and resolve payer issues. Every touchpoint is logged in your account.",
   },
   {
-    title: 'Track progress in real time',
+    title: "Track progress in real time",
     copy: "Your dashboard shows every provider's credentialing and contracting status across payers, updated in real time. Your team always knows where things stand.",
   },
 ];

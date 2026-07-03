@@ -1,9 +1,9 @@
 // Internal helper that every mutating service uses to append a row to
 // audit_log. Pulls active org and user identity from the auth store.
 
-import { supabase } from '@/integrations/supabase/externalClient';
-import { useAuthStore } from '@/lib/auth-store';
-import type { AuditActionType } from '@/types';
+import { supabase } from "@/integrations/supabase/externalClient";
+import { useAuthStore } from "@/lib/auth-store";
+import type { AuditActionType } from "@/types";
 
 export interface AuditInput {
   actionType: AuditActionType;
@@ -17,10 +17,10 @@ export interface AuditInput {
 export async function writeAudit(input: AuditInput): Promise<void> {
   const state = useAuthStore.getState();
   const orgId = state.activeOrgId;
-  if (!orgId) throw new Error('writeAudit: no active org');
+  if (!orgId) throw new Error("writeAudit: no active org");
   const userId = state.user?.id ?? null;
   const userName = state.fullName ?? state.user?.email ?? null;
-  const { error } = await supabase.from('audit_log').insert({
+  const { error } = await supabase.from("audit_log").insert({
     org_id: orgId,
     user_id: userId,
     user_name: userName,
@@ -36,7 +36,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
 
 export function requireActiveOrg(): string {
   const orgId = useAuthStore.getState().activeOrgId;
-  if (!orgId) throw new Error('No active organization');
+  if (!orgId) throw new Error("No active organization");
   return orgId;
 }
 

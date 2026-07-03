@@ -1,15 +1,15 @@
 // Admin → Statuses. Two tracks (credentialing, contracting) with add/edit
 // modal, drag-to-reorder, and in-use case counts. Admin-write; specialist read.
-import { useMemo, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { GripVertical, Plus } from 'lucide-react';
-import { toast } from 'sonner';
-import { TableSkeletonRows } from '@/components/TableSkeletonRows';
-import { EmptyState } from '@/components/EmptyState';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { GripVertical, Plus } from "lucide-react";
+import { toast } from "sonner";
+import { TableSkeletonRows } from "@/components/TableSkeletonRows";
+import { EmptyState } from "@/components/EmptyState";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -17,74 +17,69 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import {
-  useStatusConfigs,
-  useCreateStatusConfig,
-  useUpdateStatusConfig,
-} from '@/hooks/useAdmin';
-import { updateStatusConfig } from '@/services/statusConfigs';
-import { useQueryClient } from '@tanstack/react-query';
-import { useActiveOrgId } from '@/lib/auth-store';
-import { useCases } from '@/hooks/useCases';
-import { useContracts } from '@/hooks/useContracts';
-import { useIsAdmin } from '@/lib/permissions';
-import type { StatusConfig, StatusTrack } from '@/types';
+} from "@/components/ui/select";
+import { useStatusConfigs, useCreateStatusConfig, useUpdateStatusConfig } from "@/hooks/useAdmin";
+import { updateStatusConfig } from "@/services/statusConfigs";
+import { useQueryClient } from "@tanstack/react-query";
+import { useActiveOrgId } from "@/lib/auth-store";
+import { useCases } from "@/hooks/useCases";
+import { useContracts } from "@/hooks/useContracts";
+import { useIsAdmin } from "@/lib/permissions";
+import type { StatusConfig, StatusTrack } from "@/types";
 
-export const Route = createFileRoute('/admin/statuses')({
+export const Route = createFileRoute("/admin/statuses")({
   component: AdminStatusesPage,
 });
 
 interface RequiredFieldDef {
   key: string;
-  type: 'text' | 'date' | 'select';
+  type: "text" | "date" | "select";
   label: string;
   options?: string[];
 }
 
 const TOKEN_COLORS: { value: string; name: string }[] = [
-  { value: '#6B7280', name: 'Gray' },
-  { value: '#2563EB', name: 'Blue' },
-  { value: '#D97706', name: 'Amber' },
-  { value: '#DC2626', name: 'Red' },
-  { value: '#0F766E', name: 'Teal' },
-  { value: '#059669', name: 'Green' },
+  { value: "#6B7280", name: "Gray" },
+  { value: "#2563EB", name: "Blue" },
+  { value: "#D97706", name: "Amber" },
+  { value: "#DC2626", name: "Red" },
+  { value: "#0F766E", name: "Teal" },
+  { value: "#059669", name: "Green" },
 ];
 
 function normalizeRequiredField(raw: unknown): RequiredFieldDef {
-  if (typeof raw === 'string') {
-    return { key: raw, type: 'text', label: raw };
+  if (typeof raw === "string") {
+    return { key: raw, type: "text", label: raw };
   }
-  if (raw && typeof raw === 'object') {
+  if (raw && typeof raw === "object") {
     const o = raw as Record<string, unknown>;
-    const type =
-      o.type === 'date' || o.type === 'select' ? (o.type as 'date' | 'select') : 'text';
-    const key = typeof o.key === 'string' ? o.key : '';
+    const type = o.type === "date" || o.type === "select" ? (o.type as "date" | "select") : "text";
+    const key = typeof o.key === "string" ? o.key : "";
     return {
       key,
       type,
-      label: typeof o.label === 'string' ? o.label : key,
+      label: typeof o.label === "string" ? o.label : key,
       options:
-        type === 'select' && Array.isArray(o.options)
-          ? o.options.filter((x): x is string => typeof x === 'string')
+        type === "select" && Array.isArray(o.options)
+          ? o.options.filter((x): x is string => typeof x === "string")
           : undefined,
     };
   }
-  return { key: '', type: 'text', label: '' };
+  return { key: "", type: "text", label: "" };
 }
 
 function AdminStatusesPage() {
   const canEdit = useIsAdmin();
 
-  const credQ = useStatusConfigs('credentialing');
-  const conQ = useStatusConfigs('contracting');
+  const credQ = useStatusConfigs("credentialing");
+  const conQ = useStatusConfigs("contracting");
   const casesQ = useCases();
   const contractsQ = useContracts();
 
@@ -134,8 +129,8 @@ function AdminStatusesPage() {
         onRetry={() => credQ.refetch()}
         inUse={credInUse}
         canEdit={canEdit}
-        onAdd={() => setEditing({ track: 'credentialing', status: null })}
-        onEdit={(s) => setEditing({ track: 'credentialing', status: s })}
+        onAdd={() => setEditing({ track: "credentialing", status: null })}
+        onEdit={(s) => setEditing({ track: "credentialing", status: s })}
       />
 
       <TrackSection
@@ -148,18 +143,15 @@ function AdminStatusesPage() {
         onRetry={() => conQ.refetch()}
         inUse={conInUse}
         canEdit={canEdit}
-        onAdd={() => setEditing({ track: 'contracting', status: null })}
-        onEdit={(s) => setEditing({ track: 'contracting', status: s })}
+        onAdd={() => setEditing({ track: "contracting", status: null })}
+        onEdit={(s) => setEditing({ track: "contracting", status: s })}
       />
-
 
       <StatusEditModal
         open={editing !== null}
-        track={editing?.track ?? 'credentialing'}
+        track={editing?.track ?? "credentialing"}
         status={editing?.status ?? null}
-        existingCount={
-          (editing?.track === 'credentialing' ? credQ.data : conQ.data)?.length ?? 0
-        }
+        existingCount={(editing?.track === "credentialing" ? credQ.data : conQ.data)?.length ?? 0}
         onClose={() => setEditing(null)}
       />
     </div>
@@ -194,13 +186,10 @@ function TrackSection({
   onEdit,
 }: TrackSectionProps) {
   const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? 'no-org';
+  const orgId = useActiveOrgId() ?? "no-org";
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const sorted = useMemo(
-    () => [...statuses].sort((a, b) => a.sortOrder - b.sortOrder),
-    [statuses],
-  );
+  const sorted = useMemo(() => [...statuses].sort((a, b) => a.sortOrder - b.sortOrder), [statuses]);
 
   async function reorder(fromId: string, toId: string) {
     if (fromId === toId) return;
@@ -218,12 +207,10 @@ function TrackSection({
     });
 
     try {
-      await Promise.all(
-        updates.map((u) => updateStatusConfig(u.id, { sortOrder: u.sortOrder })),
-      );
-      qc.invalidateQueries({ queryKey: ['status-configs', orgId] });
+      await Promise.all(updates.map((u) => updateStatusConfig(u.id, { sortOrder: u.sortOrder })));
+      qc.invalidateQueries({ queryKey: ["status-configs", orgId] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Reorder failed.');
+      toast.error(err instanceof Error ? err.message : "Reorder failed.");
     }
   }
 
@@ -246,7 +233,6 @@ function TrackSection({
     />
   );
 }
-
 
 interface ReorderableSectionProps extends TrackSectionProps {
   dragId: string | null;
@@ -277,10 +263,7 @@ function ReorderableSection({
           <p className="text-[12px] text-muted-foreground mt-0.5">{description}</p>
         </div>
         {canEdit && (
-          <Button
-            onClick={onAdd}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
-          >
+          <Button onClick={onAdd} className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9">
             <Plus className="w-4 h-4 mr-1" /> Add status
           </Button>
         )}
@@ -310,13 +293,11 @@ function ReorderableSection({
         ) : (
           statuses.map((s) => {
             const used = inUse.get(s.id) ?? 0;
-            const fields = (s.requiredFields as unknown as unknown[]).map(
-              normalizeRequiredField,
-            );
+            const fields = (s.requiredFields as unknown as unknown[]).map(normalizeRequiredField);
             const summary =
               fields.length === 0
-                ? 'No required fields'
-                : fields.map((f) => f.label || f.key).join(', ');
+                ? "No required fields"
+                : fields.map((f) => f.label || f.key).join(", ");
             return (
               <div
                 key={s.id}
@@ -333,25 +314,19 @@ function ReorderableSection({
                   }
                 }}
                 className={`flex items-center gap-3 px-4 h-12 border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${
-                  dragId === s.id ? 'opacity-50' : ''
+                  dragId === s.id ? "opacity-50" : ""
                 }`}
               >
-                {canEdit && (
-                  <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
-                )}
+                {canEdit && <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />}
                 <span
                   className="inline-block w-3 h-3 rounded-full border border-[#E8E5E0]"
                   style={{ backgroundColor: s.color }}
                   aria-hidden
                 />
-                <span className="text-[13px] font-medium min-w-[180px]">
-                  {s.label}
-                </span>
-                <span className="text-[12px] text-muted-foreground flex-1 truncate">
-                  {summary}
-                </span>
+                <span className="text-[13px] font-medium min-w-[180px]">{s.label}</span>
+                <span className="text-[12px] text-muted-foreground flex-1 truncate">{summary}</span>
                 <span className="text-[12px] text-muted-foreground tabular-nums">
-                  {used > 0 ? `In use by ${used} case${used === 1 ? '' : 's'}` : '—'}
+                  {used > 0 ? `In use by ${used} case${used === 1 ? "" : "s"}` : "—"}
                 </span>
                 {canEdit && (
                   <Button
@@ -380,29 +355,21 @@ interface StatusEditModalProps {
   onClose: () => void;
 }
 
-function StatusEditModal({
-  open,
-  track,
-  status,
-  existingCount,
-  onClose,
-}: StatusEditModalProps) {
+function StatusEditModal({ open, track, status, existingCount, onClose }: StatusEditModalProps) {
   const createM = useCreateStatusConfig();
-  const updateM = useUpdateStatusConfig(status?.id ?? '');
+  const updateM = useUpdateStatusConfig(status?.id ?? "");
 
-  const [label, setLabel] = useState('');
+  const [label, setLabel] = useState("");
   const [color, setColor] = useState(TOKEN_COLORS[0].value);
   const [fields, setFields] = useState<RequiredFieldDef[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
 
-  const hydrateKey = status?.id ?? (open ? 'new' : null);
+  const hydrateKey = status?.id ?? (open ? "new" : null);
   if (open && hydrateKey !== hydratedFor) {
-    setLabel(status?.label ?? '');
+    setLabel(status?.label ?? "");
     setColor(status?.color ?? TOKEN_COLORS[0].value);
     setFields(
-      status
-        ? (status.requiredFields as unknown as unknown[]).map(normalizeRequiredField)
-        : [],
+      status ? (status.requiredFields as unknown as unknown[]).map(normalizeRequiredField) : [],
     );
     setHydratedFor(hydrateKey);
   }
@@ -415,7 +382,7 @@ function StatusEditModal({
   }
 
   function addField() {
-    setFields((f) => [...f, { key: '', type: 'text', label: '' }]);
+    setFields((f) => [...f, { key: "", type: "text", label: "" }]);
   }
   function updateField(i: number, patch: Partial<RequiredFieldDef>) {
     setFields((f) => f.map((item, idx) => (idx === i ? { ...item, ...patch } : item)));
@@ -426,20 +393,20 @@ function StatusEditModal({
 
   async function handleSubmit() {
     if (!label.trim()) {
-      toast.error('Label is required.');
+      toast.error("Label is required.");
       return;
     }
     if (!TOKEN_COLORS.some((c) => c.value === color)) {
-      toast.error('Pick a color from the palette.');
+      toast.error("Pick a color from the palette.");
       return;
     }
     for (const f of fields) {
       if (!f.key.trim() || !f.label.trim()) {
-        toast.error('Each required field needs a key and label.');
+        toast.error("Each required field needs a key and label.");
         return;
       }
-      if (f.type === 'select' && (f.options ?? []).length === 0) {
-        toast.error('Select fields need at least one option.');
+      if (f.type === "select" && (f.options ?? []).length === 0) {
+        toast.error("Select fields need at least one option.");
         return;
       }
     }
@@ -447,7 +414,7 @@ function StatusEditModal({
       key: f.key.trim(),
       type: f.type,
       label: f.label.trim(),
-      ...(f.type === 'select'
+      ...(f.type === "select"
         ? { options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) }
         : {}),
     }));
@@ -459,7 +426,7 @@ function StatusEditModal({
           color,
           requiredFields: cleanFields as unknown as string[],
         });
-        toast.success('Status updated.');
+        toast.success("Status updated.");
       } else {
         await createM.mutateAsync({
           track,
@@ -468,11 +435,11 @@ function StatusEditModal({
           sortOrder: (existingCount + 1) * 10,
           requiredFields: cleanFields as unknown as string[],
         });
-        toast.success('Status added.');
+        toast.success("Status added.");
       }
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed.');
+      toast.error(err instanceof Error ? err.message : "Save failed.");
     }
   }
 
@@ -480,9 +447,9 @@ function StatusEditModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{status ? 'Edit status' : 'Add status'}</DialogTitle>
+          <DialogTitle>{status ? "Edit status" : "Add status"}</DialogTitle>
           <DialogDescription>
-            {track === 'credentialing' ? 'Credentialing' : 'Contracting'} track.
+            {track === "credentialing" ? "Credentialing" : "Contracting"} track.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -501,7 +468,7 @@ function StatusEditModal({
                   type="button"
                   onClick={() => setColor(c.value)}
                   className={`w-8 h-8 rounded-full border-2 ${
-                    color === c.value ? 'border-[#1B4D3E]' : 'border-[#E8E5E0]'
+                    color === c.value ? "border-[#1B4D3E]" : "border-[#E8E5E0]"
                   }`}
                   style={{ backgroundColor: c.value }}
                   title={c.name}
@@ -530,10 +497,7 @@ function StatusEditModal({
             ) : (
               <div className="space-y-3">
                 {fields.map((f, i) => (
-                  <div
-                    key={i}
-                    className="border border-[#E8E5E0] rounded-md p-3 space-y-2"
-                  >
+                  <div key={i} className="border border-[#E8E5E0] rounded-md p-3 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -554,9 +518,8 @@ function StatusEditModal({
                           value={f.type}
                           onValueChange={(v) =>
                             updateField(i, {
-                              type: v as RequiredFieldDef['type'],
-                              options:
-                                v === 'select' ? (f.options ?? ['']) : undefined,
+                              type: v as RequiredFieldDef["type"],
+                              options: v === "select" ? (f.options ?? [""]) : undefined,
                             })
                           }
                         >
@@ -582,18 +545,18 @@ function StatusEditModal({
                         placeholder="Effective date"
                       />
                     </div>
-                    {f.type === 'select' && (
+                    {f.type === "select" && (
                       <div className="space-y-1">
                         <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
                           Options (comma-separated)
                         </Label>
                         <Input
                           className="h-8 text-[13px]"
-                          value={(f.options ?? []).join(', ')}
+                          value={(f.options ?? []).join(", ")}
                           onChange={(e) =>
                             updateField(i, {
                               options: e.target.value
-                                .split(',')
+                                .split(",")
                                 .map((s) => s.trim())
                                 .filter(Boolean),
                             })
@@ -628,7 +591,7 @@ function StatusEditModal({
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
             disabled={createM.isPending || updateM.isPending}
           >
-            {status ? 'Save changes' : 'Add status'}
+            {status ? "Save changes" : "Add status"}
           </Button>
         </DialogFooter>
       </DialogContent>

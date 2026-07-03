@@ -1,6 +1,6 @@
 // Dialog-based replacement for window.confirm('Discard unsaved changes?').
 // Exposes a hook that returns an async ask() plus the JSX to render.
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface DiscardConfirmDialogProps {
   open: boolean;
@@ -17,13 +17,14 @@ interface DiscardConfirmDialogProps {
   onCancel: () => void;
 }
 
-export function DiscardConfirmDialog({
-  open,
-  onConfirm,
-  onCancel,
-}: DiscardConfirmDialogProps) {
+export function DiscardConfirmDialog({ open, onConfirm, onCancel }: DiscardConfirmDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onCancel(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onCancel();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Discard unsaved changes?</DialogTitle>
@@ -37,7 +38,7 @@ export function DiscardConfirmDialog({
           </Button>
           <Button
             onClick={onConfirm}
-            style={{ backgroundColor: '#1B4D3E' }}
+            style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
             Discard

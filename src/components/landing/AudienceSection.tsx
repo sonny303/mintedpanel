@@ -1,19 +1,27 @@
 // Two-column audience section with lucide icons in green chips.
-import { Building2, ClipboardList } from 'lucide-react';
-import { Eyebrow } from './Eyebrow';
+import { Building2, ClipboardList } from "lucide-react";
+import { Eyebrow } from "./Eyebrow";
 
 const CARDS = [
   {
     icon: Building2,
-    title: 'Practice Owners & Operators',
+    title: "Practice Owners & Operators",
     copy: "You're expanding, hiring providers, and entering new states at the same time. Credentialing delays can cost weeks of lost revenue before a provider ever sees a patient.",
-    bullets: ['New location and state expansions', 'Provider onboarding', 'Protect revenue during ramp-up'],
+    bullets: [
+      "New location and state expansions",
+      "Provider onboarding",
+      "Protect revenue during ramp-up",
+    ],
   },
   {
     icon: ClipboardList,
-    title: 'Credentialing Managers',
+    title: "Credentialing Managers",
     copy: "You're tracking dozens of active cases across payers and states. We replace manual follow-up with a real-time dashboard and a team that handles every touch.",
-    bullets: ['Centralized case tracking', 'Proactive deadlines and follow-up', 'One source of truth for billing'],
+    bullets: [
+      "Centralized case tracking",
+      "Proactive deadlines and follow-up",
+      "One source of truth for billing",
+    ],
   },
 ];
 

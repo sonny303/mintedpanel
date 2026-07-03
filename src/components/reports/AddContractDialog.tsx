@@ -1,11 +1,11 @@
 // Dialog for creating a new contract for a group + payer + state pair.
 // Used from the Contracts tab of the Reports page.
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -13,18 +13,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { useCreateContract } from '@/hooks/useContracts';
-import { usePayers } from '@/hooks/useAdmin';
-import { useProviderGroups } from '@/hooks/useLookups';
-import type { StatusConfig } from '@/types';
+} from "@/components/ui/select";
+import { useCreateContract } from "@/hooks/useContracts";
+import { usePayers } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import type { StatusConfig } from "@/types";
 
 export function AddContractDialog({
   open,
@@ -39,26 +39,26 @@ export function AddContractDialog({
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
 
-  const [groupId, setGroupId] = useState<string>('');
-  const [payerId, setPayerId] = useState<string>('');
-  const [state, setState] = useState<string>('');
-  const [statusId, setStatusId] = useState<string>('');
-  const [notes, setNotes] = useState<string>('');
+  const [groupId, setGroupId] = useState<string>("");
+  const [payerId, setPayerId] = useState<string>("");
+  const [state, setState] = useState<string>("");
+  const [statusId, setStatusId] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
 
   function handleOpenChange(next: boolean) {
     if (!next) {
-      setGroupId('');
-      setPayerId('');
-      setState('');
-      setStatusId('');
-      setNotes('');
+      setGroupId("");
+      setPayerId("");
+      setState("");
+      setStatusId("");
+      setNotes("");
       onClose();
     }
   }
 
   async function handleSubmit() {
     if (!groupId || !payerId || !state.trim()) {
-      toast.error('Group, payer, and state are required.');
+      toast.error("Group, payer, and state are required.");
       return;
     }
     try {
@@ -69,10 +69,10 @@ export function AddContractDialog({
         contractingStatusId: statusId || null,
         notes: notes.trim() || null,
       });
-      toast.success('Contract created.');
+      toast.success("Contract created.");
       handleOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create contract.');
+      toast.error(err instanceof Error ? err.message : "Failed to create contract.");
     }
   }
 
@@ -81,9 +81,7 @@ export function AddContractDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add contract</DialogTitle>
-          <DialogDescription>
-            One contract per group + payer + state.
-          </DialogDescription>
+          <DialogDescription>One contract per group + payer + state.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -160,7 +158,7 @@ export function AddContractDialog({
             disabled={createM.isPending}
             onClick={handleSubmit}
           >
-            {createM.isPending ? 'Saving…' : 'Add contract'}
+            {createM.isPending ? "Saving…" : "Add contract"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,14 +1,10 @@
 // Tasks card on the case detail page. Sequential lock: a task is locked
 // until previous tasks are completed. Row click opens the TaskDrawer.
-import { useRef, useState } from 'react';
-import { differenceInDays, format, parseISO } from 'date-fns';
-import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { useRef, useState } from "react";
+import { differenceInDays, format, parseISO } from "date-fns";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -16,22 +12,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/EmptyState';
-import { StatusPill } from '@/components/StatusPill';
-import { CheckCircle2, Circle, Lock } from 'lucide-react';
-import { fmtDate } from '@/lib/format';
-import { useUpdateTaskStatus } from '@/hooks/useTasks';
-import { useCanWrite } from '@/lib/permissions';
-import { TaskDrawer } from '@/components/cases/TaskDrawer';
-import type { Task, TaskStatus } from '@/types';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
+import { StatusPill } from "@/components/StatusPill";
+import { CheckCircle2, Circle, Lock } from "lucide-react";
+import { fmtDate } from "@/lib/format";
+import { useUpdateTaskStatus } from "@/hooks/useTasks";
+import { useCanWrite } from "@/lib/permissions";
+import { TaskDrawer } from "@/components/cases/TaskDrawer";
+import type { Task, TaskStatus } from "@/types";
 
-function taskStatusIcon(status: Task['status'], locked: boolean) {
+function taskStatusIcon(status: Task["status"], locked: boolean) {
   if (locked) return <Lock className="w-4 h-4 text-muted-foreground" />;
-  if (status === 'completed') return <CheckCircle2 className="w-4 h-4 text-[#059669]" />;
-  if (status === 'in_progress') return <Circle className="w-4 h-4 text-[#D97706] fill-[#FEF3C7]" />;
-  if (status === 'blocked') return <Lock className="w-4 h-4 text-[#DC2626]" />;
+  if (status === "completed") return <CheckCircle2 className="w-4 h-4 text-[#059669]" />;
+  if (status === "in_progress") return <Circle className="w-4 h-4 text-[#D97706] fill-[#FEF3C7]" />;
+  if (status === "blocked") return <Lock className="w-4 h-4 text-[#DC2626]" />;
   return <Circle className="w-4 h-4 text-muted-foreground" />;
 }
 
@@ -42,7 +38,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
-  const completedTasks = tasks.filter((t) => t.status === 'completed').length;
+  const completedTasks = tasks.filter((t) => t.status === "completed").length;
 
   const openDrawer = (task: Task, locked: boolean) => {
     setDrawerTask({ task, locked });
@@ -54,26 +50,26 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
     if (!t) return;
     setReopenTask(null);
     updateStatusM.mutate(
-      { id: t.id, status: 'in_progress' },
+      { id: t.id, status: "in_progress" },
       {
         onSuccess: () => toast.success(`Reopened "${t.title}"`),
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not reopen task'),
+          toast.error(err instanceof Error ? err.message : "Could not reopen task"),
       },
     );
   };
 
   const completeWithUndo = (task: Task) => {
     if (!canEdit) return;
-    if (task.status === 'completed') return;
+    if (task.status === "completed") return;
     const previous: TaskStatus = task.status;
     updateStatusM.mutate(
-      { id: task.id, status: 'completed' },
+      { id: task.id, status: "completed" },
       {
         onSuccess: () => {
           toast.success(`Completed "${task.title}"`, {
             action: {
-              label: 'Undo',
+              label: "Undo",
               onClick: () => {
                 if (undoRef.current.has(task.id)) return;
                 undoRef.current.add(task.id);
@@ -82,9 +78,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                   {
                     onSettled: () => undoRef.current.delete(task.id),
                     onError: (err: unknown) =>
-                      toast.error(
-                        err instanceof Error ? err.message : 'Could not undo',
-                      ),
+                      toast.error(err instanceof Error ? err.message : "Could not undo"),
                   },
                 );
               },
@@ -92,7 +86,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
           });
         },
         onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : 'Could not complete task'),
+          toast.error(err instanceof Error ? err.message : "Could not complete task"),
       },
     );
   };
@@ -116,22 +110,21 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
               {tasks.map((t, idx) => {
                 const previousIncomplete = tasks
                   .slice(0, idx)
-                  .some((p) => p.status !== 'completed');
-                const locked = previousIncomplete && t.status !== 'completed';
+                  .some((p) => p.status !== "completed");
+                const locked = previousIncomplete && t.status !== "completed";
                 const overdue =
-                  t.status !== 'completed' &&
+                  t.status !== "completed" &&
                   t.dueDate &&
                   differenceInDays(new Date(), parseISO(t.dueDate)) > 0;
 
-                const canComplete =
-                  canEdit && !locked && t.status !== 'completed';
-                const canReopen = canEdit && t.status === 'completed';
+                const canComplete = canEdit && !locked && t.status !== "completed";
+                const canReopen = canEdit && t.status === "completed";
                 const circleInteractive = canComplete || canReopen;
 
                 const row = (
                   <div
                     className={`p-3 flex items-center gap-3 text-[13px] ${
-                      locked ? 'opacity-60 cursor-not-allowed' : 'hover:bg-muted/30 cursor-pointer'
+                      locked ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/30 cursor-pointer"
                     }`}
                     onClick={() => {
                       if (locked) {
@@ -144,7 +137,9 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     <button
                       type="button"
                       className={`flex-shrink-0 -m-1 p-1 rounded ${
-                        circleInteractive ? 'hover:bg-[#1B4D3E]/10 cursor-pointer' : 'cursor-default'
+                        circleInteractive
+                          ? "hover:bg-[#1B4D3E]/10 cursor-pointer"
+                          : "cursor-default"
                       }`}
                       aria-label={
                         canComplete
@@ -169,20 +164,20 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     </button>
                     <div
                       className={`flex-1 min-w-0 ${
-                        t.status === 'completed'
-                          ? 'text-muted-foreground'
-                          : 'text-foreground font-medium'
+                        t.status === "completed"
+                          ? "text-muted-foreground"
+                          : "text-foreground font-medium"
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={t.status === 'completed' ? 'line-through' : ''}>
+                        <span className={t.status === "completed" ? "line-through" : ""}>
                           {t.title}
                         </span>
-                        {t.status === 'blocked' ? (
+                        {t.status === "blocked" ? (
                           <StatusPill status="red" label="Blocked" />
                         ) : null}
                       </div>
-                      {t.status === 'completed' && t.completedDate ? (
+                      {t.status === "completed" && t.completedDate ? (
                         <div className="text-[11px] text-muted-foreground mt-0.5">
                           Completed {fmtDate(t.completedDate)}
                         </div>
@@ -190,16 +185,18 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                     </div>
                     <span
                       className={`w-20 text-right tabular-nums text-[12px] ${
-                        overdue ? 'text-[#DC2626] font-semibold' : 'text-muted-foreground'
+                        overdue ? "text-[#DC2626] font-semibold" : "text-muted-foreground"
                       }`}
                     >
-                      {t.dueDate ? format(parseISO(t.dueDate), 'MMM dd') : 'TBD'}
+                      {t.dueDate ? format(parseISO(t.dueDate), "MMM dd") : "TBD"}
                     </span>
                   </div>
                 );
                 return locked ? (
                   <Tooltip key={t.id}>
-                    <TooltipTrigger asChild><div>{row}</div></TooltipTrigger>
+                    <TooltipTrigger asChild>
+                      <div>{row}</div>
+                    </TooltipTrigger>
                     <TooltipContent>Complete previous task first</TooltipContent>
                   </Tooltip>
                 ) : (
@@ -228,9 +225,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Reopen this task?</DialogTitle>
-            <DialogDescription>
-              It will move back to In progress.
-            </DialogDescription>
+            <DialogDescription>It will move back to In progress.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReopenTask(null)}>

@@ -1,26 +1,21 @@
 // Reports at /reports — thin tab switcher with URL-driven active tab.
 // Individual tab implementations live in src/components/reports/*.
-import { createFileRoute } from '@tanstack/react-router';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ContractsTab } from '@/components/reports/ContractsTab';
-import { MatrixTab } from '@/components/reports/MatrixTab';
-import { SummaryTab } from '@/components/reports/SummaryTab';
-import { RosterTab } from '@/components/reports/RosterTab';
+import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ContractsTab } from "@/components/reports/ContractsTab";
+import { MatrixTab } from "@/components/reports/MatrixTab";
+import { SummaryTab } from "@/components/reports/SummaryTab";
+import { RosterTab } from "@/components/reports/RosterTab";
 
 interface ReportsSearch {
-  tab?: 'summary' | 'contracts' | 'matrix' | 'roster';
+  tab?: "summary" | "contracts" | "matrix" | "roster";
 }
 
-export const Route = createFileRoute('/reports')({
+export const Route = createFileRoute("/reports")({
   validateSearch: (s: Record<string, unknown>): ReportsSearch => {
     const tab = s.tab;
-    if (
-      tab === 'contracts' ||
-      tab === 'matrix' ||
-      tab === 'summary' ||
-      tab === 'roster'
-    )
+    if (tab === "contracts" || tab === "matrix" || tab === "summary" || tab === "roster")
       return { tab };
     return {};
   },
@@ -30,7 +25,7 @@ export const Route = createFileRoute('/reports')({
 function ReportsPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const initialTab = search.tab ?? 'contracts';
+  const initialTab = search.tab ?? "contracts";
 
   return (
     <div className="space-y-6">
@@ -38,7 +33,7 @@ function ReportsPage() {
       <Tabs
         value={initialTab}
         onValueChange={(v) =>
-          navigate({ search: { tab: v as ReportsSearch['tab'] }, replace: true })
+          navigate({ search: { tab: v as ReportsSearch["tab"] }, replace: true })
         }
       >
         <TabsList>
