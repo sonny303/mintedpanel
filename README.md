@@ -14,18 +14,22 @@ Credentialing operations workspace for medical groups. Track providers, payers, 
 
 ```bash
 npm install
+cp .env.example .env   # then fill in both values
 npm run dev
 ```
 
-Environment variables (production deploy only — dev uses the values currently hardcoded in `src/integrations/supabase/externalClient.ts`):
+Environment variables (required in dev and in deploys — see `.env.example`):
 
 ```
 VITE_SUPABASE_URL=...
-VITE_SUPABASE_PUBLISHABLE_KEY=...
+VITE_SUPABASE_ANON_KEY=...
 ```
 
-## Deploy notes
+## Deploy
 
-- Vercel single-page-app deploy. `vercel.json` rewrites every route to `/` so TanStack Router can resolve client-side.
-- Set the two `VITE_SUPABASE_*` env vars in the Vercel project before deploying.
-- Supabase migrations run separately via the Supabase CLI.
+1. Connect this repo to Vercel (framework: Vite).
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the Vercel project's environment variables.
+3. Deploy. `vercel.json` rewrites every route to `/` so the router can resolve client-side.
+4. One-time, before Lovable is disconnected: the five images under `src/assets/*.asset.json` are still served from Lovable's CDN (`/__l5e/assets-v1/...`). Vendor them into the repo with `node scripts/fetch-lovable-assets.mjs https://<your-lovable-site-domain>` and commit the resulting files under `public/__l5e/` — otherwise logos and landing images 404 outside Lovable hosting.
+
+Supabase migrations run separately via the Supabase CLI.
