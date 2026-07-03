@@ -2,7 +2,7 @@
 // credentialing-track status mutation.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useActiveOrgId } from '@/lib/auth-store';
-import { queryKeys } from '@/hooks/queryKeys';
+import { queryKeys, FIVE_MINUTES } from '@/hooks/queryKeys';
 import {
   createCase,
   getCase,
@@ -14,12 +14,16 @@ import {
   type CaseTaskPayload,
 } from '@/services/cases';
 
+const THIRTY_SECONDS = 30_000;
+void FIVE_MINUTES;
+
 export function useCases(filters: CaseFilters = {}) {
   const orgId = useActiveOrgId() ?? 'no-org';
   return useQuery({
     queryKey: queryKeys.cases(orgId, filters),
     queryFn: () => getCases(filters),
     enabled: orgId !== 'no-org',
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -29,6 +33,7 @@ export function useCase(id: string | undefined) {
     queryKey: queryKeys.case(orgId, id ?? ''),
     queryFn: () => getCase(id as string),
     enabled: orgId !== 'no-org' && Boolean(id),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
@@ -42,6 +47,7 @@ export function useContractFor(
     queryKey: queryKeys.contract(orgId, { groupId, payerId, state }),
     queryFn: () => getContractFor(groupId as string, payerId as string, state as string),
     enabled: orgId !== 'no-org' && Boolean(groupId && payerId && state),
+    staleTime: THIRTY_SECONDS,
   });
 }
 
