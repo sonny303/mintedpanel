@@ -11,6 +11,7 @@ import {
   updateCaseStatus,
   type CaseFilters,
   type CaseInput,
+  type CaseTaskPayload,
 } from '@/services/cases';
 
 export function useCases(filters: CaseFilters = {}) {
