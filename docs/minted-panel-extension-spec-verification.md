@@ -1,38 +1,38 @@
-# Extension Build Spec v1.1 — Verification Against This Repo and Database
+# Extension Build Spec — Verification and Execution Log
 
-**Date:** July 3, 2026
-**Scope:** The build spec (`minted-panel-extension-build-spec-v1.1.md`) targets a new repo, `minted-panel-extension`. Per the spec, nothing is built inside this project until section 6 is approved and M0 lands in the extension repo. This note records what was verified against the live Supabase project (`fkvuhfsqcmujywzgczmc`) and this codebase so the extension work starts from checked facts.
+**Updated:** July 3, 2026
+**Scope:** Records what was verified against the live Supabase project (`fkvuhfsqcmujywzgczmc`) and what has been executed from the spec (`minted-panel-extension-build-spec.md`, now v1.2).
 
-## Open question 4 — `touches.source` check constraint: ANSWERED, yes
+## Executed 2026-07-03 (spec v1.2, milestone M-PDF infra)
 
-`touches_source_check` exists and currently allows only `'manual'` and `'email_webhook'`:
+- **Migration `20260703070000_portal_fill_infrastructure.sql` applied.** `portal_field_maps`, `provider_documents` (with `case_id` + `filled_form`), `fill_sessions` (append-only), `touches` constraints updated (`source` gains `'extension'`, `outcome` gains `'form_filled'`), buckets `provider-documents` and `form-templates` with storage policies. Note: the live database was missing `set_updated_at()` even though migration `20260623044419` defines it — the repo's migration history and the live DB have drifted (Lovable applies changes outside this file set). The new migration recreates the function defensively.
+- **`resolve-fill` edge function deployed** (v1, ACTIVE, JWT required). The single token resolver: approved maps + 133-token vocabulary + defaulting rules + transforms → resolved field list.
+- **`fill-pdf` edge function deployed** (v1, ACTIVE, JWT required). Calls `resolve-fill` over HTTP, fills AcroForm PDFs with pdf-lib, prepends a manual-fields cover sheet, stores output, logs fill_session + touch + audit.
+- Function sources committed under `supabase/functions/`.
 
+**Verification gap:** this sandbox's network policy blocks direct HTTPS to `*.supabase.co`, so the functions were not invoked end-to-end here (deploy-time bundling validates syntax only). First live test needs: a logged-in user, approved `map_type: 'pdf'` rows for a portal_key, and a blank PDF at `form-templates/{portal_key}.pdf`. Smoke test from the app console:
+
+```js
+const { data } = await supabase.functions.invoke('resolve-fill', {
+  body: { caseId: '<case uuid>', portalKey: 'uhc_optum' },
+});
 ```
-CHECK ((source = ANY (ARRAY['manual'::text, 'email_webhook'::text])))
-```
 
-The section 6 migration must drop and recreate this constraint with `'extension'` added before the extension can log touches. `touches_touch_type_check` already permits `'portal'`, so no change is needed there.
+## Verified facts (2026-07-03)
 
-## Token vocabulary — 133 tokens, not 132
+- **`touches.source` check constraint** (spec open question 4): existed with only `'manual'`/`'email_webhook'`; now includes `'extension'`. `touch_type` already allowed `'portal'`. `outcome` is NOT NULL, so `'form_filled'` was added for automated fills.
+- **Token vocabulary:** `get_sop_field_tokens()` returns **133 tokens across 9 tables** (`contracts`, `facilities`, `group_insurance_policies`, `msos`, `payers`, `provider_facility_assignments`, `provider_groups`, `providers`, `state_licenses`). Spec v1.1 said 132; the implementation plan's 46 is badly stale. EXECUTE had been revoked from `authenticated` (migration `20260623044730`); the new migration re-grants it so the resolver can read the vocabulary under the caller's JWT.
+- **No naming collisions:** `portal_field_maps`, `provider_documents`, `fill_sessions` did not exist before the migration.
+- **`writeAudit` pattern** (`src/lib/audit.ts`): throws on insert failure, org from active-org store. The `fill-pdf` function mirrors it — any logging insert failure fails the request.
+- **`group_insurance_policies.insurance_type`** is constrained to `'professional_liability'`/`'general_liability'`; the resolver picks `professional_liability` for malpractice tokens.
+- **`.env` in this repo points at an abandoned Supabase project** (`isdygvnjpctvwthfgxcf`); the real client is hardcoded in `src/integrations/supabase/externalClient.ts` (`fkvuhfsqcmujywzgczmc`), consistent with AGENTS.md.
 
-Live count from `get_sop_field_tokens()` as of July 3, 2026: **133 tokens across 9 tables** (`contracts`, `facilities`, `group_insurance_policies`, `msos`, `payers`, `provider_facility_assignments`, `provider_groups`, `providers`, `state_licenses`). The spec header says 132 — off by one, likely a token added after the spec was drafted. The 9-table claim holds. Update the count on the next spec revision, along with the stale 46-token reference in `minted-panel-customer-implementation-plan.md` (spec open question 6).
+## Referenced documents still missing from version control
 
-Note for the extension's `tokenResolver.ts`: the function returns a single `jsonb` array of `{token, table, column}` objects, and `EXECUTE` is revoked from `PUBLIC`, `anon`, and `authenticated` (see migration `20260623044730`). The extension cannot call it at runtime with the publishable key; treat it as the design-time vocabulary source and resolve tokens against the base tables directly, or grant execute deliberately as part of the section 6 migration.
+`uhc-optum-sop-field-guide-v2.md` and `minted-panel-customer-implementation-plan.md` are cited by the spec but not checked in anywhere reachable. The YAML seeder (M-PDF) is blocked on the field guide.
 
-## Proposed tables — no naming collisions
+## Deliberately not done in this repo
 
-None of `portal_field_maps`, `provider_documents`, or `fill_sessions` exist in the `public` schema. Section 6 migrations are purely additive, consistent with the database rules in `AGENTS.md`.
-
-## `writeAudit` pattern — confirmed
-
-`src/lib/audit.ts` exports `writeAudit`, which throws on insert failure and pulls `org_id` from the active-org auth store. The spec's section 9 requirement (audit every fill session, throw on failure) matches the existing pattern the extension should replicate.
-
-## Referenced documents not in this repo
-
-`uhc-optum-sop-field-guide-v2.md` and `minted-panel-customer-implementation-plan.md` are cited by the spec but are not version-controlled here. The YAML seeder (`scripts/seed-from-yaml.ts`, extension repo) needs the field-guide files checked in somewhere reachable before M2.5.
-
-## What is deliberately NOT done in this repo
-
-- No extension scaffold (M0) — spec hard rule: new repo `minted-panel-extension`.
-- No section 6 migrations — gated on SS approval of the data model.
-- No section 10 app changes (task-drawer handoff, documents tab, extension touch pill) — spec sequences these after M0 proves the handoff, via a separate Lovable prompt.
+- No extension scaffold — spec rule: new repo `minted-panel-extension` (M0, after M-PDF completes).
+- No app UI changes (case-page fill-pdf button, Documents tab, extension touch pill, fill sheet) — section 10, sequenced via Lovable.
+- No `portal_field_maps` seed rows — blocked on the Optum YAML + blank PDF; rows enter as `proposed` and require SS approval regardless.
