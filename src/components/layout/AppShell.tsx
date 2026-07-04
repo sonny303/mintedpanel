@@ -1,7 +1,6 @@
 // M1 app shell: fixed dark sidebar on desktop, hamburger slide-in drawer on
 // mobile (translateX pattern, overlay dismiss, X to close). Route pages render
-// unmodified in the content area. TopBar is retired from the layout but its
-// file stays until M6 cleanup.
+// unmodified in the content area.
 import React, { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Sidebar } from "./Sidebar";
@@ -9,10 +8,9 @@ import logoAsset from "@/assets/minted-mark.png.asset.json";
 
 interface AppShellProps {
   children: React.ReactNode;
-  topBarContent?: React.ReactNode;
 }
 
-export function AppShell({ children, topBarContent }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = () => setDrawerOpen(false);
 
@@ -73,12 +71,6 @@ export function AppShell({ children, topBarContent }: AppShellProps) {
             Minted Panel
           </div>
         </header>
-
-        {topBarContent ? (
-          <div className="hidden md:flex h-14 items-center justify-end px-6 border-b border-border bg-card flex-shrink-0">
-            {topBarContent}
-          </div>
-        ) : null}
 
         <main className="flex-1 overflow-y-auto p-4">{children}</main>
       </div>

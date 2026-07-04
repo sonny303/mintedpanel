@@ -125,8 +125,8 @@ function TaskDetailPage() {
           <Button variant="outline" onClick={() => taskQ.refetch()}>
             Retry
           </Button>
-          <Button variant="outline" onClick={() => navigate({ to: "/tasks" })}>
-            Back to tasks
+          <Button variant="outline" onClick={() => navigate({ to: "/cases" })}>
+            Back to cases
           </Button>
         </div>
       </div>
@@ -136,8 +136,8 @@ function TaskDetailPage() {
     return (
       <div className="max-w-[860px] mx-auto space-y-3">
         <h1 className="text-[20px] font-semibold">Task not found</h1>
-        <Button variant="outline" onClick={() => navigate({ to: "/tasks" })}>
-          Back to tasks
+        <Button variant="outline" onClick={() => navigate({ to: "/cases" })}>
+          Back to cases
         </Button>
       </div>
     );
@@ -212,8 +212,8 @@ function TaskDetailPage() {
             aria-label="Breadcrumb"
             className="flex items-center gap-2 text-sm text-muted-foreground min-w-0"
           >
-            <Link to="/tasks" className="hover:text-foreground hover:underline underline-offset-4">
-              Tasks
+            <Link to="/cases" className="hover:text-foreground hover:underline underline-offset-4">
+              Cases
             </Link>
             <span className="text-border">/</span>
             {task.caseId ? (
