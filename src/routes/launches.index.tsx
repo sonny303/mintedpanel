@@ -133,11 +133,7 @@ function LaunchesPage() {
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
           <div className="flex items-center gap-2 md:w-56 md:flex-shrink-0">
             <StatusPill label={meta.label} color={meta.color} />
-            {r.newState ? (
-              <span className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-                NEW STATE
-              </span>
-            ) : null}
+            {r.newState ? <StatusPill label="New state" color="var(--mp-warn)" /> : null}
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">

@@ -7,6 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ActionBadge } from "@/components/triage/ActionBadge";
+import { StatusPill } from "@/components/triage/StatusPill";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useFollowUpsDue } from "@/hooks/useTouches";
@@ -152,12 +153,7 @@ function ProgressPage() {
                     Billing now
                   </span>
                   {card.billing.map((r) => (
-                    <span
-                      key={r.case.id}
-                      className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-ok/10 px-2 py-0.5 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ok)]"
-                    >
-                      {r.payerName}
-                    </span>
+                    <StatusPill key={r.case.id} label={r.payerName} color="var(--mp-ok)" />
                   ))}
                 </div>
               ) : null}

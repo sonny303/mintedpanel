@@ -70,8 +70,8 @@ export function ContractMatrixTab() {
               >
                 {s}
                 {newStates.has(s) ? (
-                  <span className="ml-1.5 inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-warn)]">
-                    NEW
+                  <span className="ml-1.5 normal-case tracking-normal">
+                    <StatusPill label="New" color="var(--mp-warn)" />
                   </span>
                 ) : null}
               </th>

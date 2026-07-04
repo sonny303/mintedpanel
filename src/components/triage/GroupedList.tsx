@@ -1,77 +1,48 @@
-// Triage GroupedList (M1): collapsible groups with count + progress in the
-// header and a rotating chevron. Density switches row spacing; the toggle UI
-// and user_table_prefs persistence are M2.
+// Triage GroupedList (M1/M2 fix): one card per group. The header row is a
+// single button whose right-edge chevron toggles expand/collapse; the
+// expanded body is arbitrary content (the work views pass a CaseTable).
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { ProgressBar } from "./ProgressBar";
-
-export type GroupedListDensity = "comfortable" | "compact";
 
 export interface GroupedListGroup {
   id: string;
-  title: string;
-  count: number;
-  progress?: { value: number; max: number };
-  /** Rich header content (e.g. avatar + badges); replaces the default title + count */
-  headerContent?: ReactNode;
-  rows: ReactNode[];
+  /** Header row content; laid out by the caller, chevron appended here. */
+  header: ReactNode;
+  /** Expanded body. */
+  children: ReactNode;
 }
 
 interface GroupedListProps {
   groups: GroupedListGroup[];
-  density: GroupedListDensity;
 }
 
-export function GroupedList({ groups, density }: GroupedListProps) {
+export function GroupedList({ groups }: GroupedListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const rowPadding = density === "compact" ? "py-1.5" : "py-3";
 
   return (
-    <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden">
-      {groups.map((group, i) => {
+    <div className="space-y-3">
+      {groups.map((group) => {
         const isCollapsed = collapsed[group.id] ?? false;
         return (
-          <div key={group.id} className={i > 0 ? "border-t border-mp-border" : ""}>
+          <section
+            key={group.id}
+            className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden"
+          >
             <button
               type="button"
               aria-expanded={!isCollapsed}
               onClick={() => setCollapsed((prev) => ({ ...prev, [group.id]: !isCollapsed }))}
-              className="w-full flex items-center gap-3 bg-mp-muted/60 px-4 py-2.5 text-left hover:bg-mp-muted transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-mp-muted/40 transition-colors"
             >
+              {group.header}
               <ChevronDown
-                className={`w-4 h-4 text-[color:var(--mp-ink-faint)] transition-transform duration-200 ${
-                  isCollapsed ? "-rotate-90" : ""
+                className={`w-4 h-4 flex-shrink-0 text-[color:var(--mp-ink-faint)] transition-transform duration-200 ${
+                  isCollapsed ? "" : "rotate-180"
                 }`}
               />
-              {group.headerContent ?? (
-                <>
-                  <span className="text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
-                    {group.title}
-                  </span>
-                  <span className="tabular-nums text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
-                    {group.count}
-                  </span>
-                </>
-              )}
-              {group.progress ? (
-                <span className="ml-auto w-28 flex-shrink-0 hidden sm:block">
-                  <ProgressBar value={group.progress.value} max={group.progress.max} />
-                </span>
-              ) : null}
             </button>
-            {!isCollapsed ? (
-              <ul>
-                {group.rows.map((row, rowIndex) => (
-                  <li
-                    key={rowIndex}
-                    className={`px-4 ${rowPadding} ${rowIndex > 0 ? "border-t border-mp-border/60" : ""}`}
-                  >
-                    {row}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+            {!isCollapsed ? group.children : null}
+          </section>
         );
       })}
     </div>

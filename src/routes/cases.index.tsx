@@ -1,26 +1,39 @@
 // Payer-grouped work view at /cases (M3). Same data and engine as the M2
-// Providers view, pivoted: one group per payer, provider rows inside. Chip
-// counts flow through the shared workView helpers so the two pages can never
-// disagree. Read-and-navigate only; the case detail page is untouched.
+// Providers view, pivoted: one group per payer, provider rows inside. Card
+// counts and list filters flow through the shared workView helpers so the
+// two pages can never disagree. Read-and-navigate only; the case detail page
+// is untouched.
 import React, { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { SummaryChips } from "@/components/triage/SummaryChips";
-import { GroupedList, type GroupedListDensity } from "@/components/triage/GroupedList";
-import { StatusPill } from "@/components/triage/StatusPill";
-import { ActionBadge, type ActionBadgeTone } from "@/components/triage/ActionBadge";
+import { FilterCards } from "@/components/triage/FilterCards";
+import { GroupedList } from "@/components/triage/GroupedList";
+import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
+import { ActionBadge } from "@/components/triage/ActionBadge";
 import { ProgressBar } from "@/components/triage/ProgressBar";
-import { RowCta } from "@/components/triage/RowCta";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { getActionState, worstActionState, daysSilent, type ActionState } from "@/lib/actionState";
-import { CHIP_STATES, chipCounts, type ChipId } from "@/lib/workView";
+import {
+  getActionState,
+  worstActionState,
+  daysSilent,
+  ACTION_STATE_SEVERITY,
+  type ActionState,
+} from "@/lib/actionState";
+import {
+  ACTION_BADGE_TONE,
+  badgeLabel,
+  chipCounts,
+  isAlertState,
+  matchesChip,
+  type ChipId,
+} from "@/lib/workView";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/cases/")({
@@ -28,26 +41,6 @@ export const Route = createFileRoute("/cases/")({
 });
 
 const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
-const DENSITY_STORAGE_KEY = "mp.cases.density";
-
-// Placeholder tone mapping pending the design sheet's badge treatments.
-const BADGE_TONE: Record<ActionState, ActionBadgeTone> = {
-  needs_action: "warn",
-  blocked: "danger",
-  stalled: "danger",
-  awaiting_effective: "pending",
-  on_track: "ok",
-  complete: "neutral",
-};
-
-const BADGE_NOUN: Record<ActionState, string> = {
-  needs_action: "needs action",
-  blocked: "blocked",
-  stalled: "stalled",
-  awaiting_effective: "awaiting effective",
-  on_track: "On track",
-  complete: "Complete",
-};
 
 interface CaseRow {
   case: CredentialCase;
@@ -73,13 +66,7 @@ interface PayerGroup {
   inNetwork: number;
 }
 
-function loadDensity(): GroupedListDensity {
-  if (typeof window === "undefined") return "comfortable";
-  return window.localStorage.getItem(DENSITY_STORAGE_KEY) === "compact" ? "compact" : "comfortable";
-}
-
-const severityRank = (s: ActionState) =>
-  ["needs_action", "blocked", "stalled", "awaiting_effective", "on_track", "complete"].indexOf(s);
+const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 
 function CasesWorkView() {
   const navigate = useNavigate();
@@ -92,16 +79,6 @@ function CasesWorkView() {
   const lastTouchQ = useLastTouchDates();
 
   const [chip, setChip] = useState<ChipId>("all");
-  const [density, setDensityState] = useState<GroupedListDensity>(loadDensity);
-
-  function setDensity(next: GroupedListDensity) {
-    setDensityState(next);
-    try {
-      window.localStorage.setItem(DENSITY_STORAGE_KEY, next);
-    } catch {
-      // storage unavailable — session-local toggle still works
-    }
-  }
 
   const loading =
     providersQ.isLoading ||
@@ -207,7 +184,7 @@ function CasesWorkView() {
       const openRows = rows.filter((r) => r.state !== "complete");
       built.push({
         payerId,
-        payerName: isPreCred ? "Pre-credentialing" : payerName,
+        payerName: isPreCred ? "Pre-Credentialing" : payerName,
         isPreCred,
         rows,
         openRows,
@@ -239,113 +216,62 @@ function CasesWorkView() {
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
   const counts = chipCounts(openRowsAll.map((r) => r.state));
-  const chips = [
+  const cards = [
     { id: "all", label: "All open cases", n: counts.all },
-    { id: "needs", label: "Needs your action", n: counts.needs, warn: true },
+    { id: "needs", label: "Needs your action", n: counts.needs, alert: true },
     { id: "inprog", label: "In progress", n: counts.inprog },
     { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
   ];
 
-  const visibleGroups = useMemo(() => {
-    if (chip === "all") return groups;
-    const states = CHIP_STATES[chip];
-    return groups
-      .map((g) => ({ ...g, rows: g.rows.filter((r) => states.includes(r.state)) }))
-      .filter((g) => g.rows.length > 0);
-  }, [groups, chip]);
+  // Same predicate as the card counts (matchesChip), so a card that says N
+  // always leaves exactly N case rows on screen.
+  const visibleGroups = useMemo(
+    () =>
+      groups
+        .map((g) => ({ group: g, visibleRows: g.rows.filter((r) => matchesChip(chip, r.state)) }))
+        .filter(({ visibleRows }) => visibleRows.length > 0),
+    [groups, chip],
+  );
 
-  function caseRow(row: CaseRow) {
+  function tableRow(row: CaseRow): CaseTableRow {
     const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
     const providerName = row.provider
       ? `${row.provider.firstName} ${row.provider.lastName}`
       : "Unknown provider";
-    const pills = (
-      <>
-        <StatusPill label={row.statusLabel} color={row.statusColor} suffix={row.suffix} />
-        {row.contractStatus ? (
-          <span title="Group contract">
-            <StatusPill label={row.contractStatus.label} color={row.contractStatus.color} />
-          </span>
-        ) : null}
-      </>
-    );
-    const daysCell =
-      row.days === null ? null : (
-        <span
-          className={`tabular-nums text-[var(--mp-text-sm)] ${
-            row.state === "stalled"
-              ? "font-semibold text-[color:var(--mp-danger)]"
-              : "text-[color:var(--mp-ink-secondary)]"
-          }`}
-        >
-          {row.days}d
-        </span>
-      );
-    const nameCell = (
-      <span className="min-w-0 flex items-baseline gap-1.5">
-        <span className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
-          {providerName}
-        </span>
+    const lead = (
+      <span className="text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+        {providerName}
         {row.provider?.credentials ? (
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          <span className="font-normal text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            {" "}
             {row.provider.credentials}
           </span>
         ) : null}
-        <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+        <span className="font-normal text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          {" "}
           · {row.case.state}
         </span>
       </span>
     );
-
-    return (
-      <div
-        className="cursor-pointer"
-        onClick={openCase}
-        role="link"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") openCase();
-        }}
-      >
-        {/* Desktop row */}
-        <div className="hidden md:flex items-center gap-3">
-          <div className="flex-1 min-w-0">{nameCell}</div>
-          <div className="flex items-center gap-2">{pills}</div>
-          <span className="w-16 text-right text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-            {row.lastTouchLabel}
-          </span>
-          <span className="w-10 text-right">{daysCell}</span>
-          <span className="w-32 flex justify-end" onClick={(e) => e.stopPropagation()}>
-            {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
-          </span>
-        </div>
-        {/* Mobile card */}
-        <div className="md:hidden space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            {nameCell}
-            {daysCell}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">{pills}</div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-              Last touch {row.lastTouchLabel}
-            </span>
-            <span onClick={(e) => e.stopPropagation()}>
-              {row.nextTask ? <RowCta label={row.nextTask.title} onClick={openCase} /> : null}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
+    return {
+      id: row.case.id,
+      lead,
+      status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
+      contract: row.contractStatus
+        ? { label: row.contractStatus.label, color: row.contractStatus.color }
+        : null,
+      lastTouch: row.lastTouchLabel,
+      days: row.days,
+      daysDanger: isAlertState(row.state) || row.state === "stalled",
+      action: row.nextTask ? { label: row.nextTask.title, onClick: openCase } : null,
+      alert: isAlertState(row.state),
+      onOpen: openCase,
+    };
   }
 
   function groupHeader(g: PayerGroup) {
-    const badgeLabel =
-      g.worst === "on_track" || g.worst === "complete"
-        ? BADGE_NOUN[g.worst]
-        : `${g.worstCount} ${BADGE_NOUN[g.worst]}`;
     return (
-      <div className="flex flex-1 min-w-0 items-center gap-3">
+      <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
           {g.payerName}
         </span>
@@ -364,7 +290,7 @@ function CasesWorkView() {
         ) : (
           <span className="ml-auto" />
         )}
-        <ActionBadge tone={BADGE_TONE[g.worst]} text={badgeLabel} />
+        <ActionBadge tone={ACTION_BADGE_TONE[g.worst]} text={badgeLabel(g.worst, g.worstCount)} />
       </div>
     );
   }
@@ -373,32 +299,10 @@ function CasesWorkView() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <PageHeader
-        title="Cases"
-        description={`${totalPayers} payers · ${counts.all} open cases`}
-        actions={
-          <div className="flex items-center gap-1 rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card p-0.5">
-            {(["comfortable", "compact"] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                aria-pressed={density === d}
-                onClick={() => setDensity(d)}
-                className={`rounded-[4px] px-2.5 py-1 text-[var(--mp-text-xs)] font-medium capitalize transition-colors ${
-                  density === d
-                    ? "bg-mp-primary text-white"
-                    : "text-[color:var(--mp-ink-secondary)] hover:bg-mp-muted"
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        }
-      />
+      <PageHeader title="Cases" description={`${totalPayers} payers · ${counts.all} open cases`} />
 
       <div className="mb-4">
-        <SummaryChips chips={chips} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
+        <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 
       {failed ? (
@@ -422,13 +326,10 @@ function CasesWorkView() {
         />
       ) : (
         <GroupedList
-          density={density}
-          groups={visibleGroups.map((g) => ({
-            id: g.payerId,
-            title: g.payerName,
-            count: g.rows.length,
-            headerContent: groupHeader(g),
-            rows: g.rows.map((row) => caseRow(row)),
+          groups={visibleGroups.map(({ group, visibleRows }) => ({
+            id: group.payerId,
+            header: groupHeader(group),
+            children: <CaseTable leadLabel="Provider" rows={visibleRows.map(tableRow)} />,
           }))}
         />
       )}

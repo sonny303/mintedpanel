@@ -325,9 +325,11 @@ function LaunchDetailPage() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <StatusPill label={meta.label} color={meta.color} />
         {newState ? (
-          <span className="inline-flex items-center gap-1.5 rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-2 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-            NEW STATE — no group contracts in {launch.state}
-          </span>
+          <StatusPill
+            label="New state"
+            color="var(--mp-warn)"
+            suffix={`no group contracts in ${launch.state}`}
+          />
         ) : null}
         {readiness && readiness.denominator > 0 ? (
           <span className="flex items-center gap-2">
