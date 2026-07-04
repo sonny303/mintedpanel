@@ -95,7 +95,11 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
             >
               <td className="w-full max-w-0 truncate py-1.5 pl-4 pr-3">{row.lead}</td>
               <td className="whitespace-nowrap px-3 py-1.5">
-                <StatusPill label={row.status.label} color={row.status.color} suffix={row.status.suffix} />
+                <StatusPill
+                  label={row.status.label}
+                  color={row.status.color}
+                  suffix={row.status.suffix}
+                />
               </td>
               <td className="whitespace-nowrap px-3 py-1.5">{contractCell(row)}</td>
               <td className="whitespace-nowrap px-3 py-1.5 text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
@@ -103,7 +107,9 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
               </td>
               <td className="whitespace-nowrap px-3 py-1.5">{daysCell(row)}</td>
               <td className="whitespace-nowrap py-1.5 pl-3 pr-4 text-right" onClick={stop}>
-                {row.action ? <RowCta label={row.action.label} onClick={row.action.onClick} /> : null}
+                {row.action ? (
+                  <RowCta label={row.action.label} onClick={row.action.onClick} />
+                ) : null}
               </td>
             </tr>
           ))}
@@ -125,7 +131,11 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate">{row.lead}</span>
-              <StatusPill label={row.status.label} color={row.status.color} suffix={row.status.suffix} />
+              <StatusPill
+                label={row.status.label}
+                color={row.status.color}
+                suffix={row.status.suffix}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {contractCell(row)}
