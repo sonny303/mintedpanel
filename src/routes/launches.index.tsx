@@ -136,7 +136,7 @@ function LaunchesPage() {
             {r.newState ? <StatusPill label="New state" color="var(--mp-warn)" /> : null}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+            <div className="truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
               {r.launch.name}
             </div>
             <div className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">

@@ -131,7 +131,7 @@ function ProgressPage() {
             >
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="truncate text-[var(--mp-text-lg)] font-semibold text-[color:var(--mp-ink)]">
+                  <div className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
                     {card.provider.firstName} {card.provider.lastName}
                   </div>
                   {expandCredentials(card.provider.credentials) ? (

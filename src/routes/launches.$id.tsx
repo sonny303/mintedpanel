@@ -380,7 +380,7 @@ function LaunchDetailPage() {
                   }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
                 >
-                  <span className="flex-1 min-w-0 truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+                  <span className="flex-1 min-w-0 truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
                     {p.firstName} {p.lastName}
                     {p.credentials ? (
                       <span className="ml-1.5 text-[var(--mp-text-xs)] font-normal text-[color:var(--mp-ink-faint)]">

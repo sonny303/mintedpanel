@@ -38,7 +38,7 @@ export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
               {card.label}
             </span>
             <span
-              className={`mt-2 block text-[var(--mp-text-3xl)] font-semibold leading-none tabular-nums ${
+              className={`mt-1 block text-[var(--mp-text-2xl)] font-semibold leading-none tabular-nums ${
                 isSelected ? "text-white" : "text-[color:var(--mp-ink)]"
               }`}
             >
