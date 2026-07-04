@@ -19,14 +19,14 @@ Evidence sources: repo working tree at `30cbdd4`, live hosted Supabase project `
 
 ### What the app actually is
 
-| Aspect | Finding |
-|---|---|
-| UI framework | React 19 + TypeScript 5.8, Vite 7, Tailwind v4, shadcn/ui |
-| App framework | **TanStack Start** (`@tanstack/react-start` plugin in `vite.config.ts`, nitro build plugin, `src/server.ts` SSR entry, `src/start.ts` `createStart(...)`), *not* a plain Vite SPA. `src/routeTree.gen.ts` has `ssr: true`. |
-| Server usage today | **Zero.** No `createServerFn` / server routes anywhere in `src/`. The server runtime is scaffolding: `startInstance` wires `attachSupabaseAuth` function-middleware and an error middleware, but nothing calls a server function. All data access is browser → Supabase PostgREST under RLS. |
+| Aspect                | Finding                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI framework          | React 19 + TypeScript 5.8, Vite 7, Tailwind v4, shadcn/ui                                                                                                                                                                                                                                                                    |
+| App framework         | **TanStack Start** (`@tanstack/react-start` plugin in `vite.config.ts`, nitro build plugin, `src/server.ts` SSR entry, `src/start.ts` `createStart(...)`), _not_ a plain Vite SPA. `src/routeTree.gen.ts` has `ssr: true`.                                                                                                   |
+| Server usage today    | **Zero.** No `createServerFn` / server routes anywhere in `src/`. The server runtime is scaffolding: `startInstance` wires `attachSupabaseAuth` function-middleware and an error middleware, but nothing calls a server function. All data access is browser → Supabase PostgREST under RLS.                                 |
 | Dormant server assets | `src/integrations/supabase/client.server.ts` (service-role admin client, reads `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, RLS-bypassing, currently unimported by app code), `src/integrations/supabase/auth-middleware.ts` (`supabase.auth.getClaims(token)` verification), `src/integrations/supabase/auth-attacher.ts`. |
-| Backend | Supabase (Postgres + GoTrue + Edge Functions), hosted project `fkvuhfsqcmujywzgczmc` ("openpanel", us-east-2). Anon key in the browser; RLS on every table. |
-| Docs drift | `README.md` says "React 18 … Vite" and CLAUDE.md says "No app server of our own." Behaviorally true (nothing server-side runs), but the build is TanStack Start/nitro SSR-capable. Worth correcting when the API layer lands. |
+| Backend               | Supabase (Postgres + GoTrue + Edge Functions), hosted project `fkvuhfsqcmujywzgczmc` ("openpanel", us-east-2). Anon key in the browser; RLS on every table.                                                                                                                                                                  |
+| Docs drift            | `README.md` says "React 18 … Vite" and CLAUDE.md says "No app server of our own." Behaviorally true (nothing server-side runs), but the build is TanStack Start/nitro SSR-capable. Worth correcting when the API layer lands.                                                                                                |
 
 ### Deploy target
 
@@ -84,35 +84,35 @@ Read = `select`; Write = `insert` / `update` / `upsert` / `delete` / RPC with si
 
 ### Services (`src/services/*` — the sanctioned callers)
 
-| File | Tables touched | Read/Write | Screens served (via hooks) |
-|---|---|---|---|
-| `services/audit.ts` | `audit_log` | R | Admin > Audit (`admin.audit.tsx`) via `useAuditLog` |
-| `services/cases.ts` | `credential_cases` R/W(update); `profiles` R; `status_history` W(insert); `contracts` R; RPC `create_case_with_tasks` W | R/W | Cases list + detail, Home, Progress, Providers list/detail, Launches, Reports (all tabs), Admin > Statuses (usage counts), global Search dialog |
-| `services/contracts.ts` | `contracts` R/W(insert, update); `status_history` W via `appendStatusHistory` | R/W | Reports > Contracts + Contract Matrix, Home, Provider detail, Launch detail, Case detail (`useContractFor`) |
-| `services/invites.ts` | `pending_invites` R/W(insert, delete — via locally-typed shim; table absent from generated types); `memberships` W(delete); RPC `claim_invites` W | R/W | Admin > Users and Admin > Settings (MembersPanel) |
-| `services/launches.ts` | `facilities` R/W(insert, update); `provider_facility_assignments` R/W(upsert); creates cases via `createCase` → RPC | R/W | Launches list + detail, Home ("Launches at risk"), Admin > Statuses, Reports > Contract Matrix, launch modals (Edit / Assign Provider / Create Cases) |
-| `services/lookups.ts` | `state_licenses` R; `facilities` R; `provider_groups` R; `memberships` R (+`profiles` join); `mso_routing_rules` R; `notes` R/W(insert); `profiles` R | R/W | Provider detail/edit, Case detail, Task detail, New Case modal, provider forms, Reports tabs, Admin > Templates |
-| `services/msos.ts` | `msos` R/W(insert, update); `mso_routing_rules` R/W(insert, update) | R/W | Admin > MSO Routing, Provider detail, New Case modal, launch Create Cases dialog |
-| `services/orgSettings.ts` | `organizations` R/W(update); `provider_groups` R/W(insert, update); `facilities` R/W(insert, update); `memberships` R/W(update role); `group_insurance_policies` R/W(insert, update) | R/W | Admin > Settings (Org / Groups / Facilities / Members / per-group Insurance panels), Admin > Users; `listFacilities` reused by `useLaunches` |
-| `services/payers.ts` | `payers` R/W(insert, update) | R/W | Admin > Payers; payer names read on Home, Cases, Providers, Progress, Launches, Reports, Search, case-creation dialogs |
-| `services/providers.ts` | `providers` R/W(insert, update); `state_licenses` R/W(insert, update, delete); `provider_facility_assignments` W(insert); `status_configs` R; `credential_cases` R; `payers` R; `tasks` W(insert) — the last four inside the terminate-provider flow | R/W | Providers list/new/detail/edit, Home, Cases, Progress, Launches, Reports, Search, launch dialogs |
-| `services/reports.ts` | `touches` R; `provider_facility_assignments` R; `state_licenses` R; `facilities` R | R | Reports > Summary (touch summary), Reports > Roster (aux data) |
-| `services/statusConfigs.ts` | `status_configs` R/W(insert, update) | R/W | Admin > Statuses; `useStatusConfigs` feeds status pills on essentially every work surface |
-| `services/tablePrefs.ts` | `user_table_prefs` R/W(upsert) | R/W | **None — dead code.** No importers anywhere in `src/`. |
-| `services/tasks.ts` | `tasks` R/W(insert, update); `credential_cases` R/W(update — case status roll-forward on task completion) | R/W | Home, Cases list, Providers list, Task detail (`tasks.$id`), Case tasks panel, Task drawer, Reports > Summary |
-| `services/templates.ts` | `sop_templates` R/W(insert, update) | R/W | Admin > Templates (list + editor), New Case modal, launch Create Cases dialog (template pick) |
-| `services/touches.ts` | `touches` R/W(insert) | R/W | Home (follow-ups due), Cases list (last touch), Case detail (log touch), Progress, Reports > Summary |
+| File                        | Tables touched                                                                                                                                                                                                                                       | Read/Write | Screens served (via hooks)                                                                                                                            |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/audit.ts`         | `audit_log`                                                                                                                                                                                                                                          | R          | Admin > Audit (`admin.audit.tsx`) via `useAuditLog`                                                                                                   |
+| `services/cases.ts`         | `credential_cases` R/W(update); `profiles` R; `status_history` W(insert); `contracts` R; RPC `create_case_with_tasks` W                                                                                                                              | R/W        | Cases list + detail, Home, Progress, Providers list/detail, Launches, Reports (all tabs), Admin > Statuses (usage counts), global Search dialog       |
+| `services/contracts.ts`     | `contracts` R/W(insert, update); `status_history` W via `appendStatusHistory`                                                                                                                                                                        | R/W        | Reports > Contracts + Contract Matrix, Home, Provider detail, Launch detail, Case detail (`useContractFor`)                                           |
+| `services/invites.ts`       | `pending_invites` R/W(insert, delete — via locally-typed shim; table absent from generated types); `memberships` W(delete); RPC `claim_invites` W                                                                                                    | R/W        | Admin > Users and Admin > Settings (MembersPanel)                                                                                                     |
+| `services/launches.ts`      | `facilities` R/W(insert, update); `provider_facility_assignments` R/W(upsert); creates cases via `createCase` → RPC                                                                                                                                  | R/W        | Launches list + detail, Home ("Launches at risk"), Admin > Statuses, Reports > Contract Matrix, launch modals (Edit / Assign Provider / Create Cases) |
+| `services/lookups.ts`       | `state_licenses` R; `facilities` R; `provider_groups` R; `memberships` R (+`profiles` join); `mso_routing_rules` R; `notes` R/W(insert); `profiles` R                                                                                                | R/W        | Provider detail/edit, Case detail, Task detail, New Case modal, provider forms, Reports tabs, Admin > Templates                                       |
+| `services/msos.ts`          | `msos` R/W(insert, update); `mso_routing_rules` R/W(insert, update)                                                                                                                                                                                  | R/W        | Admin > MSO Routing, Provider detail, New Case modal, launch Create Cases dialog                                                                      |
+| `services/orgSettings.ts`   | `organizations` R/W(update); `provider_groups` R/W(insert, update); `facilities` R/W(insert, update); `memberships` R/W(update role); `group_insurance_policies` R/W(insert, update)                                                                 | R/W        | Admin > Settings (Org / Groups / Facilities / Members / per-group Insurance panels), Admin > Users; `listFacilities` reused by `useLaunches`          |
+| `services/payers.ts`        | `payers` R/W(insert, update)                                                                                                                                                                                                                         | R/W        | Admin > Payers; payer names read on Home, Cases, Providers, Progress, Launches, Reports, Search, case-creation dialogs                                |
+| `services/providers.ts`     | `providers` R/W(insert, update); `state_licenses` R/W(insert, update, delete); `provider_facility_assignments` W(insert); `status_configs` R; `credential_cases` R; `payers` R; `tasks` W(insert) — the last four inside the terminate-provider flow | R/W        | Providers list/new/detail/edit, Home, Cases, Progress, Launches, Reports, Search, launch dialogs                                                      |
+| `services/reports.ts`       | `touches` R; `provider_facility_assignments` R; `state_licenses` R; `facilities` R                                                                                                                                                                   | R          | Reports > Summary (touch summary), Reports > Roster (aux data)                                                                                        |
+| `services/statusConfigs.ts` | `status_configs` R/W(insert, update)                                                                                                                                                                                                                 | R/W        | Admin > Statuses; `useStatusConfigs` feeds status pills on essentially every work surface                                                             |
+| `services/tablePrefs.ts`    | `user_table_prefs` R/W(upsert)                                                                                                                                                                                                                       | R/W        | **None — dead code.** No importers anywhere in `src/`.                                                                                                |
+| `services/tasks.ts`         | `tasks` R/W(insert, update); `credential_cases` R/W(update — case status roll-forward on task completion)                                                                                                                                            | R/W        | Home, Cases list, Providers list, Task detail (`tasks.$id`), Case tasks panel, Task drawer, Reports > Summary                                         |
+| `services/templates.ts`     | `sop_templates` R/W(insert, update)                                                                                                                                                                                                                  | R/W        | Admin > Templates (list + editor), New Case modal, launch Create Cases dialog (template pick)                                                         |
+| `services/touches.ts`       | `touches` R/W(insert)                                                                                                                                                                                                                                | R/W        | Home (follow-ups due), Cases list (last touch), Case detail (log touch), Progress, Reports > Summary                                                  |
 
 ### Out-of-layer callers ⚠
 
-| File | Tables / calls | Read/Write | Screen |
-|---|---|---|---|
-| `src/lib/audit.ts` | `audit_log` insert (`writeAudit`, called from service mutations) | W | cross-cutting (every mutation) |
-| `src/lib/auth-store.ts` | `auth.getSession`, `auth.onAuthStateChange`, `auth.signInWithPassword`, `auth.signOut`; `profiles` R; `memberships` R; RPC `claim_invites` | R/W | app bootstrap, Login, org switcher |
-| `src/routes/welcome.tsx` | `auth.updateUser` (password set); RPC `claim_invites` | W | Welcome (invite acceptance) |
-| `src/routes/admin.templates.$id.tsx` | RPC `get_sop_field_tokens` | R | Admin > Template editor (token list) |
-| `src/components/cases/NewCaseModal.tsx` | `state_licenses` R; `provider_facility_assignments` R; `contracts` R — direct queries bypassing the service layer | R | New Case modal (provider detail) |
-| `src/components/settings/MembersPanel.tsx` | `functions.invoke("invite-member")` | W | Admin > Users / Settings — **function not deployed on hosted project** (see §5) |
+| File                                       | Tables / calls                                                                                                                             | Read/Write | Screen                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------- |
+| `src/lib/audit.ts`                         | `audit_log` insert (`writeAudit`, called from service mutations)                                                                           | W          | cross-cutting (every mutation)                                                  |
+| `src/lib/auth-store.ts`                    | `auth.getSession`, `auth.onAuthStateChange`, `auth.signInWithPassword`, `auth.signOut`; `profiles` R; `memberships` R; RPC `claim_invites` | R/W        | app bootstrap, Login, org switcher                                              |
+| `src/routes/welcome.tsx`                   | `auth.updateUser` (password set); RPC `claim_invites`                                                                                      | W          | Welcome (invite acceptance)                                                     |
+| `src/routes/admin.templates.$id.tsx`       | RPC `get_sop_field_tokens`                                                                                                                 | R          | Admin > Template editor (token list)                                            |
+| `src/components/cases/NewCaseModal.tsx`    | `state_licenses` R; `provider_facility_assignments` R; `contracts` R — direct queries bypassing the service layer                          | R          | New Case modal (provider detail)                                                |
+| `src/components/settings/MembersPanel.tsx` | `functions.invoke("invite-member")`                                                                                                        | W          | Admin > Users / Settings — **function not deployed on hosted project** (see §5) |
 
 ### Call-shape inventory (for endpoint design)
 
@@ -150,14 +150,14 @@ default now()` and omitted below unless unusual.
 - **organizations** (2 rows) — `id` PK; `name` text NN.
 - **profiles** (3) — `id` PK → `auth.users(id)` ON DELETE CASCADE (no default); `full_name` text; `email` text.
 - **memberships** (5) — `id` PK; `org_id` NN → organizations (CASCADE); `user_id` NN → profiles (CASCADE); `role` text NN; **U(org_id, user_id)**.
-- **pending_invites** (0) — `id` PK; `org_id` NN → organizations (CASCADE); `email` text NN; `role` text NN; `full_name` text; `invited_by` → `auth.users(id)`; **U(org_id, email)**. *Not in generated types.*
-- **user_table_prefs** (2) — `id` PK; `user_id` NN → `auth.users(id)` (CASCADE); `page_key` text NN; `prefs` jsonb NN default `{}`; `updated_at` NN; **U(user_id, page_key)**. *Only touched by the dead `tablePrefs.ts` service.*
+- **pending_invites** (0) — `id` PK; `org_id` NN → organizations (CASCADE); `email` text NN; `role` text NN; `full_name` text; `invited_by` → `auth.users(id)`; **U(org_id, email)**. _Not in generated types._
+- **user_table_prefs** (2) — `id` PK; `user_id` NN → `auth.users(id)` (CASCADE); `page_key` text NN; `prefs` jsonb NN default `{}`; `updated_at` NN; **U(user_id, page_key)**. _Only touched by the dead `tablePrefs.ts` service._
 
 ### Group / location / provider domain
 
-- **provider_groups** (2) — `id` PK; `org_id` NN → organizations (CASCADE); `name` text NN; `tin`, `npi_type2` text; `states` text[]; `is_active` bool NN default true; plus 36 contact/address columns added Jun 2026: `billing_*` (street*, suite, city, state, zip, contact_name, phone, fax, email), `correspondence_*` (same set), `credentialing_*` (street, suite, city, state, zip, contact_name, phone, fax, email), `contracting_contact_{name,title,email}`, `website_url`, `tax_id_type`, `preferred_contact_method`, `contract_signer_{name,email}`. (* = the two commented columns.)
+- **provider_groups** (2) — `id` PK; `org_id` NN → organizations (CASCADE); `name` text NN; `tin`, `npi_type2` text; `states` text[]; `is_active` bool NN default true; plus 36 contact/address columns added Jun 2026: `billing_*` (street*, suite, city, state, zip, contact*name, phone, fax, email), `correspondence**`(same set),`credentialing*\*`(street, suite, city, state, zip, contact_name, phone, fax, email),`contracting_contact*{name,title,email}`, `website*url`, `tax_id_type`, `preferred_contact_method`, `contract_signer*{name,email}`. (\* = the two commented columns.)
 - **facilities** (12) — `id` PK; `org_id` NN → organizations (CASCADE); `group_id` → provider_groups (SET NULL); `name` text NN; `street`,`city`,`state`,`zip`,`suite`,`county` text; `is_active` bool NN default true; contact block: `phone`,`fax`,`email`,`appointment_phone`,`contact_name` text; `accepting_new_patients` bool default true; `language_line` bool default false; `languages_offered`,`interpreter_languages` text[] default `{}`; `hours`,`ada_compliance`,`service_types`,`treating_categories` jsonb default `{}`; **launch columns:** `status_id` → status_configs, `effective_date` date.
-- **providers** (10) — `id` PK; `org_id` NN → organizations; `group_id` → provider_groups; identity: `first_name`,`last_name` NN, `middle_initial`,`suffix`,`credentials`,`gender`,`ethnicity` text, `date_of_birth` date, `ssn_last4` text (PHI-minimized); contact: `email`,`phone`,`home_{street,city,state,zip}`; credentialing ids: `npi`,`caqh_id`,`dea_number` text, `caqh_last_attested_date`,`dea_expiration_date` date, `taxonomy_code` default `'225100000X'`; practice: `specialty` default `'Physical Therapy'`, `sub_specialty`, `board_certified` bool default false, `languages` text[] default `{}`, `age_groups_served` text[] default `{}`, `additional_certifications` jsonb default `[]`, `medicaid_attested`,`cultural_competency_training` bool default false; lifecycle: `start_date`,`terminated_date`,`graduation_date` date, `status` text NN default `'onboarding'`, `is_new_grad` bool default false, `degree`,`school_name` text; malpractice: `malpractice_{carrier,policy_number}` text, `malpractice_coverage_{start,end}` date; embedded primary license: `license_{number,state}` text, `license_{issue,expiration}_date` date; **legacy:** `launch_id` → launches.
+- **providers** (10) — `id` PK; `org_id` NN → organizations; `group_id` → provider*groups; identity: `first_name`,`last_name` NN, `middle_initial`,`suffix`,`credentials`,`gender`,`ethnicity` text, `date_of_birth` date, `ssn_last4` text (PHI-minimized); contact: `email`,`phone`,`home*{street,city,state,zip}`; credentialing ids: `npi`,`caqh*id`,`dea_number`text,`caqh_last_attested_date`,`dea_expiration_date`date,`taxonomy_code`default`'225100000X'`; practice: `specialty`default`'Physical Therapy'`, `sub_specialty`, `board_certified`bool default false,`languages`text[] default`{}`, `age_groups_served`text[] default`{}`, `additional_certifications`jsonb default`[]`, `medicaid_attested`,`cultural_competency_training`bool default false; lifecycle:`start_date`,`terminated_date`,`graduation_date`date,`status`text NN default`'onboarding'`, `is_new_grad`bool default false,`degree`,`school_name`text; malpractice:`malpractice*{carrier,policy*number}`text,`malpractice_coverage*{start,end}`date; embedded primary license:`license*{number,state}`text,`license*{issue,expiration}\_date`date; **legacy:**`launch_id` → launches.
 - **state_licenses** (10) — `id` PK; `org_id` NN → organizations; `provider_id` → providers; `state` text NN; `license_number`,`license_type` text; `issue_date`,`expiration_date` date; `status` text default `'active'`. (Dedupe unique index added by hosted migration `20260703000140`.)
 - **provider_facility_assignments** (14) — `id` PK; `org_id` NN → organizations; `provider_id` → providers; `facility_id` → facilities; `is_primary` bool default false; `start_date` date; `practice_frequency` text; **U(provider_id, facility_id)**.
 
@@ -192,25 +192,25 @@ default now()` and omitted below unless unusual.
 
 ### Database functions (schema `public`)
 
-| Function | Signature | Returns | Security | Role |
-|---|---|---|---|---|
-| `create_case_with_tasks` | `(p_input jsonb, p_tasks jsonb)` | jsonb | invoker | Transactional case + status_history + tasks + audit rows |
-| `claim_invites` | `()` | integer | **definer** | Converts caller's pending_invites into memberships |
-| `get_sop_field_tokens` | `()` | jsonb | **definer** | Closed token list for SOP templates |
-| `user_org_ids` | `()` | setof uuid | **definer** | RLS helper |
-| `user_role` | `(p_org uuid)` | text | **definer** | RLS helper |
-| `handle_new_user` | trigger | trigger | **definer** | Profile bootstrap on signup |
-| `set_updated_at` | trigger | trigger | invoker | `updated_at` maintenance |
-| `rls_auto_enable` | event trigger | event_trigger | **definer** | Auto-enables RLS on new tables |
+| Function                 | Signature                        | Returns       | Security    | Role                                                     |
+| ------------------------ | -------------------------------- | ------------- | ----------- | -------------------------------------------------------- |
+| `create_case_with_tasks` | `(p_input jsonb, p_tasks jsonb)` | jsonb         | invoker     | Transactional case + status_history + tasks + audit rows |
+| `claim_invites`          | `()`                             | integer       | **definer** | Converts caller's pending_invites into memberships       |
+| `get_sop_field_tokens`   | `()`                             | jsonb         | **definer** | Closed token list for SOP templates                      |
+| `user_org_ids`           | `()`                             | setof uuid    | **definer** | RLS helper                                               |
+| `user_role`              | `(p_org uuid)`                   | text          | **definer** | RLS helper                                               |
+| `handle_new_user`        | trigger                          | trigger       | **definer** | Profile bootstrap on signup                              |
+| `set_updated_at`         | trigger                          | trigger       | invoker     | `updated_at` maintenance                                 |
+| `rls_auto_enable`        | event trigger                    | event_trigger | **definer** | Auto-enables RLS on new tables                           |
 
 ### Edge functions (hosted)
 
-| Function | verify_jwt | Status | In repo? |
-|---|---|---|---|
-| `email-to-touch` | false | ACTIVE | no |
-| `resolve-fill` | true | ACTIVE | no |
-| `fill-pdf` | true | ACTIVE | no |
-| `invite-member` | — | **NOT DEPLOYED** | yes (`supabase/functions/invite-member/`) |
+| Function         | verify_jwt | Status           | In repo?                                  |
+| ---------------- | ---------- | ---------------- | ----------------------------------------- |
+| `email-to-touch` | false      | ACTIVE           | no                                        |
+| `resolve-fill`   | true       | ACTIVE           | no                                        |
+| `fill-pdf`       | true       | ACTIVE           | no                                        |
+| `invite-member`  | —          | **NOT DEPLOYED** | yes (`supabase/functions/invite-member/`) |
 
 ### Migration drift (repo vs hosted)
 
@@ -228,9 +228,9 @@ hosted migrations have no repo file (`create_launches`, `launch_location_pivot`,
 
 Exhaustive search (`**/*.yml`, `**/*.yaml`, node_modules excluded, dot-directories included):
 
-| File | Purpose | Classification | Target config table |
-|---|---|---|---|
-| `.github/workflows/ci.yml` | GitHub Actions CI: prettier check, tsc, eslint, vitest, vite build on PRs + main pushes | **Infra — keep as YAML** | n/a |
+| File                       | Purpose                                                                                 | Classification           | Target config table |
+| -------------------------- | --------------------------------------------------------------------------------------- | ------------------------ | ------------------- |
+| `.github/workflows/ci.yml` | GitHub Actions CI: prettier check, tsc, eslint, vitest, vite build on PRs + main pushes | **Infra — keep as YAML** | n/a                 |
 
 That is the entire inventory: **one YAML file, zero domain YAML.** There is no YAML-encoded domain
 or seed configuration to migrate — domain configuration already lives in database tables
