@@ -11,17 +11,18 @@ export function StatusPill({ label, color, suffix }: StatusPillProps) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
       <span
-        className="inline-flex items-center rounded-[var(--mp-radius-pill)] px-2 py-0.5 text-[var(--mp-text-xs)] font-medium leading-4"
+        className="inline-flex items-center rounded-[var(--mp-radius-pill)] px-2.5 py-0.5 text-[length:var(--mp-text-xs)] font-medium leading-4"
         style={{
           color,
           backgroundColor: `color-mix(in srgb, ${color} 12%, white)`,
-          border: `1px solid color-mix(in srgb, ${color} 28%, white)`,
         }}
       >
         {label}
       </span>
       {suffix ? (
-        <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">{suffix}</span>
+        <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          {suffix}
+        </span>
       ) : null}
     </span>
   );

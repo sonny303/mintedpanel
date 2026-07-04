@@ -57,21 +57,21 @@ export function ContractMatrixTab() {
 
   return (
     <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-x-auto">
-      <table className="w-full text-[var(--mp-text-sm)]">
+      <table className="w-full text-[length:var(--mp-text-sm)]">
         <thead>
           <tr className="border-b border-mp-border bg-mp-muted/60">
-            <th className="px-4 py-2.5 text-left text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+            <th className="px-4 py-2.5 text-left text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
               Payer
             </th>
             {states.map((s) => (
               <th
                 key={s}
-                className="px-4 py-2.5 text-left text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap"
+                className="px-4 py-2.5 text-left text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap"
               >
                 {s}
                 {newStates.has(s) ? (
-                  <span className="ml-1.5 inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-warn)]">
-                    NEW
+                  <span className="ml-1.5 normal-case tracking-normal">
+                    <StatusPill label="New" color="var(--mp-warn)" />
                   </span>
                 ) : null}
               </th>
@@ -96,7 +96,7 @@ export function ContractMatrixTab() {
                           <span className="text-[color:var(--mp-ink-faint)]">No status</span>
                         )}
                         {cell.futureEff ? (
-                          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+                          <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                             Eff {cell.futureEff}
                           </span>
                         ) : null}

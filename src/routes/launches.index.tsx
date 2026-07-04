@@ -133,26 +133,22 @@ function LaunchesPage() {
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
           <div className="flex items-center gap-2 md:w-56 md:flex-shrink-0">
             <StatusPill label={meta.label} color={meta.color} />
-            {r.newState ? (
-              <span className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-                NEW STATE
-              </span>
-            ) : null}
+            {r.newState ? <StatusPill label="New state" color="var(--mp-warn)" /> : null}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+            <div className="truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
               {r.launch.name}
             </div>
-            <div className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            <div className="truncate text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
               {[r.launch.gymName, [r.launch.city, r.launch.state].filter(Boolean).join(", ")]
                 .filter(Boolean)
                 .join(" · ")}
             </div>
           </div>
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-28">
+          <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-28">
             {timing(r.launch)}
           </span>
-          <span className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-32">
+          <span className="truncate text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-32">
             {r.director ?? "—"}
           </span>
           <span className="flex items-center gap-2 md:w-44">
@@ -161,12 +157,12 @@ function LaunchesPage() {
                 <span className="w-16">
                   <ProgressBar value={r.readiness.inNetwork} max={r.readiness.denominator} />
                 </span>
-                <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
+                <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
                   {r.readiness.inNetwork} of {r.readiness.denominator} in-network
                 </span>
               </>
             ) : (
-              <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                 No cases yet
               </span>
             )}
@@ -189,7 +185,7 @@ function LaunchesPage() {
       />
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
           Couldn't load launches. Refresh to retry.
         </div>
       ) : loading ? (
@@ -204,7 +200,7 @@ function LaunchesPage() {
         <div className="space-y-5">
           {recentlyLaunched.length > 0 ? (
             <section>
-              <h2 className="mb-2 text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+              <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
                 Recently launched
               </h2>
               <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
@@ -213,7 +209,7 @@ function LaunchesPage() {
             </section>
           ) : null}
           <section>
-            <h2 className="mb-2 text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+            <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
               Pipeline
             </h2>
             <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">

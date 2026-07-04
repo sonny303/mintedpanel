@@ -7,6 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ActionBadge } from "@/components/triage/ActionBadge";
+import { StatusPill } from "@/components/triage/StatusPill";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useFollowUpsDue } from "@/hooks/useTouches";
@@ -130,11 +131,11 @@ function ProgressPage() {
             >
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="truncate text-[var(--mp-text-lg)] font-semibold text-[color:var(--mp-ink)]">
+                  <div className="truncate text-[length:var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
                     {card.provider.firstName} {card.provider.lastName}
                   </div>
                   {expandCredentials(card.provider.credentials) ? (
-                    <div className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+                    <div className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
                       {expandCredentials(card.provider.credentials)}
                     </div>
                   ) : null}
@@ -142,22 +143,17 @@ function ProgressPage() {
                 <ActionBadge tone={card.worst.state.tone} text={card.worst.state.label} />
               </div>
 
-              <p className="mt-3 text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+              <p className="mt-3 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
                 {card.sentence}
               </p>
 
               {card.billing.length > 0 ? (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[var(--mp-text-2xs)] font-bold uppercase tracking-wider text-[color:var(--mp-ok)]">
+                  <span className="text-[length:var(--mp-text-2xs)] font-bold uppercase tracking-wider text-[color:var(--mp-ok)]">
                     Billing now
                   </span>
                   {card.billing.map((r) => (
-                    <span
-                      key={r.case.id}
-                      className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-ok/10 px-2 py-0.5 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ok)]"
-                    >
-                      {r.payerName}
-                    </span>
+                    <StatusPill key={r.case.id} label={r.payerName} color="var(--mp-ok)" />
                   ))}
                 </div>
               ) : null}
@@ -165,11 +161,11 @@ function ProgressPage() {
               <ul className="mt-4 divide-y divide-[color:var(--mp-border)] border-t border-mp-border">
                 {card.rows.map((r) => (
                   <li key={r.case.id} className="flex items-center gap-3 py-2.5">
-                    <span className="flex-1 min-w-0 truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+                    <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
                       {r.payerName}
                     </span>
                     <ActionBadge tone={r.state.tone} text={r.state.label} />
-                    <span className="w-36 text-right text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+                    <span className="w-36 text-right text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                       {r.when}
                     </span>
                   </li>
