@@ -25,7 +25,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (initialized && session && pathname === "/login") {
-      navigate({ to: "/providers" });
+      navigate({ to: "/home" });
     }
   }, [initialized, session, pathname, navigate]);
 
@@ -37,7 +37,7 @@ function LoginPage() {
       setError(result.error);
       return;
     }
-    navigate({ to: "/providers" });
+    navigate({ to: "/home" });
   }
 
   return (

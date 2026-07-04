@@ -15,6 +15,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
+import { Route as HomeRouteImport } from './routes/home'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksIndexRouteImport } from './routes/tasks.index'
@@ -67,6 +68,11 @@ const LoginRoute = LoginRouteImport.update({
 const LaunchesRoute = LaunchesRouteImport.update({
   id: '/launches',
   path: '/launches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CasesRoute = CasesRouteImport.update({
@@ -188,6 +194,7 @@ const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
@@ -245,6 +253,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
@@ -278,6 +287,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cases'
+    | '/home'
     | '/launches'
     | '/login'
     | '/providers'
@@ -308,6 +318,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/home'
     | '/login'
     | '/reports'
     | '/welcome'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cases'
+    | '/home'
     | '/launches'
     | '/login'
     | '/providers'
@@ -366,6 +378,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
+  HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       path: '/launches'
       fullPath: '/launches'
       preLoaderRoute: typeof LaunchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cases': {
@@ -675,6 +695,7 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
+  HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
   ProvidersRoute: ProvidersRouteWithChildren,

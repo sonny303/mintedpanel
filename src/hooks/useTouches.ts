@@ -2,7 +2,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
-import { getLastTouchDates, getTouches, logTouch, type TouchInput } from "@/services/touches";
+import {
+  getLastTouchDates,
+  getLatestTouchFollowUps,
+  getTouches,
+  logTouch,
+  type TouchInput,
+} from "@/services/touches";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -11,6 +17,17 @@ export function useLastTouchDates() {
   return useQuery({
     queryKey: ["touches", orgId, "last-per-case"] as const,
     queryFn: () => getLastTouchDates(),
+    enabled: orgId !== "no-org",
+    staleTime: THIRTY_SECONDS,
+  });
+}
+
+// M5 (sanctioned): latest touch follow-up per case for the Home queue.
+export function useFollowUpsDue() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: ["touches", orgId, "latest-follow-ups"] as const,
+    queryFn: () => getLatestTouchFollowUps(),
     enabled: orgId !== "no-org",
     staleTime: THIRTY_SECONDS,
   });
