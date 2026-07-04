@@ -302,8 +302,8 @@ export function LaunchEditModal({
           ) : null}
           {newStateNote ? (
             <div className="text-[12px] text-[#92400E] border border-[#FDE68A] bg-[#FEF3C7] rounded-md px-3 py-2">
-              First launch in {state} for this group — payer contracts for this state may not
-              exist yet.
+              First launch in {state} for this group — payer contracts for this state may not exist
+              yet.
             </div>
           ) : null}
           {warnings.map((w) => (

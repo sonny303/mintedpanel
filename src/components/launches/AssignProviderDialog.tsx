@@ -70,9 +70,7 @@ export function AssignProviderDialog({
         <button
           type="button"
           className="flex items-center gap-1.5 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-primary)] hover:underline"
-          onClick={() =>
-            navigate({ to: "/providers/new", search: { locationId: location.id } })
-          }
+          onClick={() => navigate({ to: "/providers/new", search: { locationId: location.id } })}
         >
           <UserPlus className="w-3.5 h-3.5" />
           Not in the system yet? Create a new provider

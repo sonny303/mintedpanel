@@ -110,10 +110,7 @@ export function launchDateDisplay(
  * Locations without a location status count as live — they are plain active
  * sites that predate the pipeline. Soft-archived locations don't count.
  */
-export function isNewStateLaunch(
-  candidate: Facility,
-  all: LocationRow[],
-): boolean {
+export function isNewStateLaunch(candidate: Facility, all: LocationRow[]): boolean {
   if (!candidate.state) return false;
   return !all.some(
     (row) =>

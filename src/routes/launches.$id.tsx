@@ -13,11 +13,7 @@ import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
-import {
-  useFacilityAssignments,
-  useLaunchLocation,
-  useLaunchLocations,
-} from "@/hooks/useLaunches";
+import { useFacilityAssignments, useLaunchLocation, useLaunchLocations } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useContracts } from "@/hooks/useContracts";
@@ -195,9 +191,7 @@ function LaunchDetailPage() {
             </span>
           </span>
         ) : locationCases.length === 0 ? (
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
-            No cases yet
-          </span>
+          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">No cases yet</span>
         ) : null}
         {readiness?.contractGap && !newState && location.state ? (
           <span className="flex items-center gap-1 text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">

@@ -60,10 +60,7 @@ describe("splitLaunchSections", () => {
 
   it("drops Live rows older than 30 days or without a date off the page", () => {
     const { recentlyLaunched, pipeline } = splitLaunchSections(
-      [
-        row("Live", { id: "old", effectiveDate: "2026-05-01" }),
-        row("Live", { id: "undated" }),
-      ],
+      [row("Live", { id: "old", effectiveDate: "2026-05-01" }), row("Live", { id: "undated" })],
       TODAY,
     );
     expect(recentlyLaunched).toHaveLength(0);
@@ -232,7 +229,11 @@ describe("transitionWarnings", () => {
 
   it("stays quiet when the conditions are satisfied", () => {
     expect(
-      transitionWarnings({ toStatusLabel: "Ready for Launch", hasProvider: true, linkedCaseCount: 0 }),
+      transitionWarnings({
+        toStatusLabel: "Ready for Launch",
+        hasProvider: true,
+        linkedCaseCount: 0,
+      }),
     ).toHaveLength(0);
     expect(
       transitionWarnings({ toStatusLabel: "Live", hasProvider: false, linkedCaseCount: 2 }),

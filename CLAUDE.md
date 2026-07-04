@@ -34,7 +34,7 @@ the browser talks straight to Supabase under RLS.
     (parse `eq./in./is./order/limit` query params over fixture rows exported
     from the live DB with `json_agg`), `maybeSingle` (Accept
     `vnd.pgrst.object` → single object or 406 `PGRST116`), `Prefer:
-    return=representation` / `resolution=ignore-duplicates`, and the RPCs
+return=representation` / `resolution=ignore-duplicates`, and the RPCs
     (`claim_invites` → 0, `create_case_with_tasks` → synthesize the case row +
     tasks). Assert on the recorded request payloads as well as the UI. This
     harness verified the entire launch pivot; rebuild it from this recipe when
@@ -73,7 +73,7 @@ file (e.g. `create_launches`, `add_action_bucket_to_status_configs`,
 - `get_sop_field_tokens()` — closed token list for SOP templates.
 - **Gotcha:** `supabase.rpc` must be called bound. Extracting the method
   (`const rpc = supabase.rpc as ...`) throws `Cannot read properties of
-  undefined (reading 'rest')` at call time. Use
+undefined (reading 'rest')` at call time. Use
   `supabase.rpc.bind(supabase)` (fixed everywhere in Jul 2026; keep it that
   way).
 
@@ -186,7 +186,7 @@ are pre-filtered client-side; the DB unique constraint is the backstop.
 ## UI conventions worth knowing
 
 - Create/edit modals: mount-when-editing pattern (`{modal ? <Modal .../> :
-  null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
+null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   entity prop switches create/edit, `"__none__"` sentinel for empty selects,
   footer `variant="outline"` Cancel + `bg-[#1B4D3E]` primary, amber note boxes
   `border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]`, red error boxes
