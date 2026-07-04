@@ -5,7 +5,7 @@
 // path (create_case_with_tasks RPC) so audit rows and SOP task seeding behave
 // exactly like manual creation.
 import { supabase } from "@/integrations/supabase/externalClient";
-import { camelizeRow } from "@/lib/case";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { createCase, type CaseInput, type CaseTaskPayload } from "@/services/cases";
 import type { Facility, FacilityAssignment } from "@/types";
@@ -20,6 +20,97 @@ export async function getLaunchLocation(id: string): Promise<Facility | null> {
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Facility>(data) : null;
+}
+
+export interface CreateLaunchInput {
+  name: string;
+  street?: string | null;
+  city?: string | null;
+  state: string;
+  groupId: string;
+  statusId: string;
+  effectiveDate?: string | null;
+  /** optional provider to assign at creation */
+  providerId?: string | null;
+}
+
+export async function createLaunchLocation(input: CreateLaunchInput): Promise<Facility> {
+  const orgId = requireActiveOrg();
+  if (!input.name.trim()) throw new Error("Name is required");
+  const { providerId, ...facilityInput } = input;
+  const payload = {
+    ...snakeizeRow<Record<string, unknown>>(facilityInput),
+    name: input.name.trim(),
+    org_id: orgId,
+    is_active: true,
+  };
+  const { data, error } = await supabase
+    .from("facilities")
+    .insert(payload as never)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const created = camelizeRow<Facility>(data);
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "facility",
+    entityId: created.id,
+    after: created,
+    description: `Created launch ${created.name}`,
+  });
+  if (providerId) {
+    await assignProviderToFacility(providerId, created.id);
+  }
+  return created;
+}
+
+export interface UpdateLaunchInput {
+  name?: string;
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  groupId?: string | null;
+  statusId?: string;
+  effectiveDate?: string | null;
+}
+
+export async function updateLaunchLocation(
+  id: string,
+  patch: UpdateLaunchInput,
+): Promise<Facility> {
+  const orgId = requireActiveOrg();
+  const { data: beforeRow, error: readErr } = await supabase
+    .from("facilities")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!beforeRow) throw new Error("Location not found");
+  const before = camelizeRow<Facility>(beforeRow);
+
+  const { data, error } = await supabase
+    .from("facilities")
+    .update(snakeizeRow<Record<string, unknown>>(patch) as never)
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<Facility>(data);
+
+  const statusChanged = patch.statusId !== undefined && patch.statusId !== before.statusId;
+  await writeAudit({
+    actionType: statusChanged ? "STATUS_CHANGE" : "UPDATE",
+    entityType: "facility",
+    entityId: id,
+    before,
+    after,
+    description: statusChanged
+      ? `Launch status changed for ${after.name}`
+      : `Updated launch ${after.name}`,
+  });
+  return after;
 }
 
 export async function listFacilityAssignments(): Promise<FacilityAssignment[]> {

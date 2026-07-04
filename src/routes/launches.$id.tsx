@@ -8,9 +8,10 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, Wand2 } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,6 +104,7 @@ function LaunchDetailPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [addProviderId, setAddProviderId] = useState(NONE);
+  const [editOpen, setEditOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [plan, setPlan] = useState<PlanLine[] | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -329,6 +331,10 @@ function LaunchDetailPage() {
         actions={
           canWrite ? (
             <div className="flex items-center gap-2">
+              <Button variant="outline" className="h-9 gap-2" onClick={() => setEditOpen(true)}>
+                <Pencil className="w-4 h-4" />
+                Edit launch
+              </Button>
               <Button variant="outline" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
                 <Plus className="w-4 h-4" />
                 Add provider
@@ -437,6 +443,8 @@ function LaunchDetailPage() {
           </ul>
         )}
       </section>
+
+      {editOpen ? <LaunchEditModal location={location} onClose={() => setEditOpen(false)} /> : null}
 
       {/* Add provider */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

@@ -3,21 +3,32 @@
 // Recently Launched strip (Live, started within 30 days) and the Pipeline
 // (every pre-Live status, dated rows first). Statuses come from the
 // location track in Admin > Statuses.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/triage/StatusPill";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { useFacilityAssignments, useLaunchLocations } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
+import { useCanWrite } from "@/lib/permissions";
 import {
   isNewStateLaunch,
   launchDateDisplay,
   splitLaunchSections,
   type LocationRow,
 } from "@/lib/launchLocations";
+import type { Facility } from "@/types";
 
 export const Route = createFileRoute("/launches/")({
   component: LaunchesPage,
@@ -31,11 +42,13 @@ interface LaunchRow extends LocationRow {
 
 function LaunchesPage() {
   const navigate = useNavigate();
+  const canWrite = useCanWrite();
   const locationsQ = useLaunchLocations();
   const statusConfigsQ = useStatusConfigs("location");
   const assignmentsQ = useFacilityAssignments();
   const providersQ = useProviders();
   const casesQ = useCases();
+  const [modal, setModal] = useState<{ location: Facility | null } | null>(null);
 
   const loading = locationsQ.isLoading || statusConfigsQ.isLoading || casesQ.isLoading;
   const failed = locationsQ.isError;
@@ -112,6 +125,22 @@ function LaunchesPage() {
               <span className="text-[color:var(--mp-ink-faint)]">No cases yet</span>
             )}
           </span>
+          {canWrite ? (
+            <span onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Row actions">
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setModal({ location: r.facility })}>
+                    Edit launch
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          ) : null}
         </div>
       </div>
     );
@@ -122,6 +151,14 @@ function LaunchesPage() {
       <PageHeader
         title="Launches"
         description={`${total} launches · ${pipeline.length} in pipeline`}
+        actions={
+          canWrite ? (
+            <Button className="h-9 gap-2" onClick={() => setModal({ location: null })}>
+              <Plus className="w-4 h-4" />
+              New Launch
+            </Button>
+          ) : null
+        }
       />
 
       {failed ? (
@@ -138,6 +175,14 @@ function LaunchesPage() {
         <EmptyState
           message="No launches yet"
           description="Locations in a pipeline status appear here."
+          action={
+            canWrite ? (
+              <Button className="h-9 gap-2" onClick={() => setModal({ location: null })}>
+                <Plus className="w-4 h-4" />
+                New Launch
+              </Button>
+            ) : null
+          }
         />
       ) : (
         <div className="space-y-5">
@@ -167,6 +212,8 @@ function LaunchesPage() {
           </section>
         </div>
       )}
+
+      {modal ? <LaunchEditModal location={modal.location} onClose={() => setModal(null)} /> : null}
     </div>
   );
 }

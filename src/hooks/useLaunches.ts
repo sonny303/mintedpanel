@@ -7,10 +7,14 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { listFacilities } from "@/services/orgSettings";
 import {
   assignProviderToFacility,
+  createLaunchLocation,
   generateLaunchCases,
   getLaunchLocation,
   listFacilityAssignments,
+  updateLaunchLocation,
+  type CreateLaunchInput,
   type GenerationEntry,
+  type UpdateLaunchInput,
 } from "@/services/launches";
 import type { Facility } from "@/types";
 
@@ -40,6 +44,33 @@ export function useFacilityAssignments() {
     queryFn: listFacilityAssignments,
     enabled: orgId !== "no-org",
     staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useCreateLaunchLocation() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: CreateLaunchInput) => createLaunchLocation(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useUpdateLaunchLocation() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateLaunchInput }) =>
+      updateLaunchLocation(id, patch),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
+      qc.invalidateQueries({ queryKey: ["facility", orgId, id] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
   });
 }
 
