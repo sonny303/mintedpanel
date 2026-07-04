@@ -88,7 +88,6 @@ export interface ProviderFormState {
   deaNumber: string;
   licenses: LicenseRow[];
   groupId: string;
-  launchId: string;
   facilityIds: string[];
   specialty: string;
   startDate: string;
@@ -121,7 +120,6 @@ export const emptyProviderFormState: ProviderFormState = {
   deaNumber: "",
   licenses: [{ state: "", number: "", type: "", issueDate: "", expirationDate: "" }],
   groupId: "",
-  launchId: "",
   facilityIds: [],
   specialty: "",
   startDate: "",

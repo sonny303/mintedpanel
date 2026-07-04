@@ -28,8 +28,8 @@ export const queryKeys = {
   rosterAux: (orgId: string) => ["roster-aux", orgId] as const,
   facilities: (orgId: string, groupId?: string | null) =>
     ["facilities", orgId, groupId ?? "all"] as const,
-  launches: (orgId: string) => ["launches", orgId] as const,
-  launch: (orgId: string, id: string) => ["launch", orgId, id] as const,
+  facility: (orgId: string, id: string) => ["facility", orgId, id] as const,
+  facilityAssignments: (orgId: string) => ["facility-assignments", orgId] as const,
   providerGroups: (orgId: string) => ["provider-groups", orgId] as const,
   coordinators: (orgId: string) => ["coordinators", orgId] as const,
   stateLicenses: (orgId: string, providerId: string) =>

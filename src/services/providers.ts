@@ -50,8 +50,10 @@ export interface ProviderInput {
   malpracticeCoverageEnd?: string | null;
 }
 
+// specialty and email ride along for MSO routing resolution and SOP tokens in
+// the launch case-kickoff flow, which works off this list projection.
 const PROVIDER_LIST_COLUMNS =
-  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, updated_at";
+  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, updated_at";
 
 export async function getProviders(filters: ProviderFilters = {}): Promise<Provider[]> {
   const orgId = requireActiveOrg();

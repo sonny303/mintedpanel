@@ -6,22 +6,32 @@ import { useMemo } from "react";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { useContracts } from "@/hooks/useContracts";
-import { useLaunches } from "@/hooks/useLaunches";
+import { useLaunchLocations } from "@/hooks/useLaunches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { isInactiveLabel } from "@/lib/launchLocations";
 import type { Contract } from "@/types";
 
 const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 export function ContractMatrixTab() {
   const contractsQ = useContracts();
-  const launchesQ = useLaunches();
+  const locationsQ = useLaunchLocations();
   const payersQ = usePayers();
   const statusConfigsQ = useStatusConfigs();
 
   const { states, newStates, payers, cellFor } = useMemo(() => {
     const contracts = contractsQ.data ?? [];
     const contractStates = new Set(contracts.map((c) => c.state).filter(Boolean));
-    const launchStates = new Set((launchesQ.data ?? []).map((l) => l.state).filter(Boolean));
+    const configById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
+    const launchStates = new Set(
+      (locationsQ.data ?? [])
+        .filter((f) => {
+          const status = f.statusId ? configById.get(f.statusId) : null;
+          return status?.track === "location" && !isInactiveLabel(status.label);
+        })
+        .map((f) => f.state)
+        .filter((s): s is string => Boolean(s)),
+    );
     const newStates = new Set([...launchStates].filter((s) => !contractStates.has(s)));
     const states = [...new Set([...contractStates, ...launchStates])].sort();
 
@@ -49,7 +59,7 @@ export function ContractMatrixTab() {
     }
 
     return { states, newStates, payers, cellFor };
-  }, [contractsQ.data, launchesQ.data, payersQ.data, statusConfigsQ.data]);
+  }, [contractsQ.data, locationsQ.data, payersQ.data, statusConfigsQ.data]);
 
   if (contractsQ.isLoading || payersQ.isLoading) {
     return <div className="h-40 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;

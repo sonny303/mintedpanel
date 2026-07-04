@@ -45,7 +45,7 @@ function WelcomePage() {
     try {
       const { error: pwError } = await supabase.auth.updateUser({ password });
       if (pwError) throw pwError;
-      const rpc = supabase.rpc as unknown as (name: string) => Promise<{
+      const rpc = supabase.rpc.bind(supabase) as unknown as (name: string) => Promise<{
         data: number | null;
         error: { message: string } | null;
       }>;

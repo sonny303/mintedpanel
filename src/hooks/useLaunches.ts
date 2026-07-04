@@ -1,48 +1,87 @@
-// M4 launches hooks (sanctioned): reads, the provider-to-launch link mutation
-// (through the existing provider update service so audit rows are uniform),
-// and the generate-cases mutation.
+// Launch-location hooks (launch PRD v2.1). Launch rows ARE facilities rows, so
+// the list shares the facilities cache key; launch-specific state (provider
+// assignments, case generation) lives under its own keys.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/hooks/queryKeys";
+import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import { useActiveOrgId } from "@/lib/auth-store";
+import { listFacilities } from "@/services/orgSettings";
 import {
+  assignProviderToFacility,
+  createLaunchLocation,
   generateLaunchCases,
-  getLaunch,
-  listLaunches,
+  getLaunchLocation,
+  listFacilityAssignments,
+  updateLaunchLocation,
+  type CreateLaunchInput,
   type GenerationEntry,
+  type UpdateLaunchInput,
 } from "@/services/launches";
-import { updateProvider } from "@/services/providers";
-import type { Launch } from "@/types";
+import type { Facility } from "@/types";
 
-const FIVE_MINUTES = 5 * 60 * 1000;
-
-export function useLaunches() {
+export function useLaunchLocations() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
-    queryKey: queryKeys.launches(orgId),
-    queryFn: listLaunches,
+    queryKey: queryKeys.facilities(orgId),
+    queryFn: listFacilities,
     enabled: orgId !== "no-org",
     staleTime: FIVE_MINUTES,
   });
 }
 
-export function useLaunch(id: string | undefined) {
+export function useLaunchLocation(id: string | undefined) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
-    queryKey: queryKeys.launch(orgId, id ?? "none"),
-    queryFn: () => getLaunch(id as string),
+    queryKey: queryKeys.facility(orgId, id ?? "none"),
+    queryFn: () => getLaunchLocation(id as string),
     enabled: orgId !== "no-org" && !!id,
   });
 }
 
-export function useAttachProviderToLaunch() {
+export function useFacilityAssignments() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.facilityAssignments(orgId),
+    queryFn: listFacilityAssignments,
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useCreateLaunchLocation() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ providerId, launchId }: { providerId: string; launchId: string | null }) =>
-      updateProvider(providerId, { launchId }),
+    mutationFn: (input: CreateLaunchInput) => createLaunchLocation(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
-      qc.invalidateQueries({ queryKey: ["launches", orgId] });
+      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useUpdateLaunchLocation() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateLaunchInput }) =>
+      updateLaunchLocation(id, patch),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
+      qc.invalidateQueries({ queryKey: ["facility", orgId, id] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useAssignProviderToFacility() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ providerId, facilityId }: { providerId: string; facilityId: string }) =>
+      assignProviderToFacility(providerId, facilityId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });
@@ -52,8 +91,8 @@ export function useGenerateLaunchCases() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ launch, entries }: { launch: Launch; entries: GenerationEntry[] }) =>
-      generateLaunchCases(launch, entries),
+    mutationFn: ({ location, entries }: { location: Facility; entries: GenerationEntry[] }) =>
+      generateLaunchCases(location, entries),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });

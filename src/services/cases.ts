@@ -179,7 +179,9 @@ export async function createCase(
     due_date: t.dueDate,
   }));
 
-  const rpc = supabase.rpc as unknown as (
+  // Bound reference: extracting the method bare loses `this` and throws
+  // before the request is ever sent.
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: { message: string } | null }>;

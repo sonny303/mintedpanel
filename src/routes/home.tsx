@@ -14,10 +14,10 @@ import { useTasks } from "@/hooks/useTasks";
 import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates, useFollowUpsDue } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { useLaunches } from "@/hooks/useLaunches";
+import { useLaunchLocations } from "@/hooks/useLaunches";
 import { getActionState, type ActionState } from "@/lib/actionState";
 import { launchReadiness } from "@/lib/launchReadiness";
-import type { CredentialCase, Launch } from "@/types";
+import type { CredentialCase } from "@/types";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
@@ -26,7 +26,7 @@ export const Route = createFileRoute("/home")({
 const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 const SECTION_CAP = 10;
 const LAUNCH_RISK_WINDOW_DAYS = 30;
-const AT_RISK_STATUSES = new Set(["pending_fulfillment", "ready_for_launch"]);
+const AT_RISK_STATUSES = new Set(["Pending Fulfillment", "Ready for Launch"]);
 
 interface QueueCase {
   case: CredentialCase;
@@ -49,7 +49,7 @@ function HomePage() {
   const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
   const followUpsQ = useFollowUpsDue();
-  const launchesQ = useLaunches();
+  const locationsQ = useLaunchLocations();
 
   const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
   const now = new Date();
@@ -114,23 +114,22 @@ function HomePage() {
     .sort((a, b) => (a.followUpDate ?? "").localeCompare(b.followUpDate ?? ""));
 
   const launchesAtRisk = useMemo(() => {
-    const providers = providersQ.data ?? [];
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
     const activePayerIds = (payersQ.data ?? [])
       .filter((p) => p.isActive && p.name !== PRE_CRED_PAYER_NAME)
       .map((p) => p.id);
-    return (launchesQ.data ?? [])
+    return (locationsQ.data ?? [])
       .filter((l) => {
-        if (!AT_RISK_STATUSES.has(l.status) || !l.confirmedStartDate) return false;
-        const daysOut = differenceInCalendarDays(parseISO(l.confirmedStartDate), now);
+        const label = l.statusId ? statusById.get(l.statusId)?.label : null;
+        if (!label || !AT_RISK_STATUSES.has(label) || !l.effectiveDate) return false;
+        const daysOut = differenceInCalendarDays(parseISO(l.effectiveDate), now);
         return daysOut >= 0 && daysOut <= LAUNCH_RISK_WINDOW_DAYS;
       })
       .map((l) => {
-        const linkedIds = new Set(providers.filter((p) => p.launchId === l.id).map((p) => p.id));
         const readiness = launchReadiness({
           cases: (casesQ.data ?? [])
-            .filter((c) => linkedIds.has(c.providerId))
+            .filter((c) => c.facilityId === l.id)
             .map((c) => ({
               statusLabel: c.credentialingStatusId
                 ? (statusById.get(c.credentialingStatusId)?.label ?? null)
@@ -148,14 +147,7 @@ function HomePage() {
       })
       .filter(({ readiness }) => readiness.share === null || readiness.share < 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is derived each render by design
-  }, [
-    launchesQ.data,
-    providersQ.data,
-    casesQ.data,
-    contractsQ.data,
-    payersQ.data,
-    statusConfigsQ.data,
-  ]);
+  }, [locationsQ.data, casesQ.data, contractsQ.data, payersQ.data, statusConfigsQ.data]);
 
   const allClear =
     !loading && needsAction.length === 0 && followUps.length === 0 && launchesAtRisk.length === 0;
@@ -292,8 +284,8 @@ function HomePage() {
                   </span>
                   <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
                     Starts{" "}
-                    {launch.confirmedStartDate
-                      ? format(parseISO(launch.confirmedStartDate), "MMM d")
+                    {launch.effectiveDate
+                      ? format(parseISO(launch.effectiveDate), "MMM d, yyyy")
                       : "—"}
                   </span>
                   <span className="flex items-center gap-2">

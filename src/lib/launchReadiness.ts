@@ -1,7 +1,8 @@
-// M4: launch readiness, derived and never stored. One definition, used by the
-// pipeline list and the launch detail alike: the share of the launch's
-// providers' payer cases at In-Network (pre-cred excluded), plus a contract-gap
-// flag when any active payer lacks a group contract in the launch's state.
+// Launch readiness, derived and never stored. One definition, used by the
+// Home queue and the launch-location detail alike: the share of the
+// location's payer cases at In-Network (pre-cred excluded), plus a
+// contract-gap flag when any active payer lacks a group contract in the
+// location's state.
 export interface ReadinessCaseInput {
   /** status_configs.label for the case, if any */
   statusLabel: string | null;
@@ -10,7 +11,7 @@ export interface ReadinessCaseInput {
 }
 
 export interface ReadinessInput {
-  /** cases belonging to providers linked to the launch (providers.launch_id) */
+  /** cases linked to the launch location (credential_cases.facility_id) */
   cases: readonly ReadinessCaseInput[];
   /** ids of active payers for the org */
   activePayerIds: readonly string[];
@@ -38,9 +39,4 @@ export function launchReadiness(input: ReadinessInput): LaunchReadiness {
     share: denominator > 0 ? inNetwork / denominator : null,
     contractGap,
   };
-}
-
-/** NEW STATE: the group has zero contracts in the launch's state. */
-export function isNewState(contractedPayerIdsInState: ReadonlySet<string>): boolean {
-  return contractedPayerIdsInState.size === 0;
 }

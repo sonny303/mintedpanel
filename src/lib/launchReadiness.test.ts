@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNewState, launchReadiness } from "./launchReadiness";
+import { launchReadiness } from "./launchReadiness";
 
 describe("launchReadiness", () => {
   it("computes the in-network share excluding pre-cred cases", () => {
@@ -36,10 +36,5 @@ describe("launchReadiness", () => {
       contractedPayerIdsInState: new Set(["a", "c"]),
     });
     expect(r.contractGap).toBe(true);
-  });
-
-  it("isNewState fires only on zero contracts in the state", () => {
-    expect(isNewState(new Set())).toBe(true);
-    expect(isNewState(new Set(["a"]))).toBe(false);
   });
 });
