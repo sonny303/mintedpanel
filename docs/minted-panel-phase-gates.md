@@ -81,23 +81,22 @@ Supabase project, a Supabase branch, or prod data — Gate 0 is hermetic.
 - **What:** a dedicated CI job that installs Playwright + Chromium, boots the app
   via the Vite dev server (`npm run dev`) with dummy Supabase env vars, and runs
   the specs in `e2e/`. Config: `playwright.config.ts`.
-- **Honest scope.** This is a runnable skeleton, not passing E2E. Two scenarios run;
-  two are `test.skip` because they are writes that need a seeded, disposable test
-  tenant — they must never run against KFP prod data. Skipped specs count as pass.
-  - `login.spec.ts` — minimal render check. Asserts `/login` renders the sign-in
-    form. No real auth. The app reaches `/login` even with an unreachable backend:
-    `auth-store.init()` always resolves `initialized: true`, and `getSession()`
-    reads localStorage with no network when no session is stored.
-  - `dashboard.spec.ts` — route reality check. There is no `/dashboard` route; the
-    authenticated work view is `/cases`. Unauthenticated, the root shell redirects
-    `/cases → /login`. The spec asserts that redirect (confirms the route exists and
-    the guard works). The authenticated dashboard render needs the seeded tenant.
-  - `case-status-update.spec.ts` — `test.skip`. Needs a seeded test tenant; it is a
-    write against `credential_cases`/`status_history`.
-  - `task-complete.spec.ts` — `test.skip`. Needs a seeded test tenant; it is a write
+- **Honest scope.** This is a runnable skeleton, not passing E2E. Four specs: one
+  read-only render check runs; the **three write scenarios are `test.skip`** because
+  they need a seeded, disposable test tenant and an authenticated session — they must
+  never run against KFP prod data. Skipped specs count as pass.
+  - `login.spec.ts` — minimal render check (runs). Asserts `/login` renders the
+    sign-in form. No real auth. The app reaches `/login` even with an unreachable
+    backend: `auth-store.init()` always resolves `initialized: true`, and
+    `getSession()` reads localStorage with no network when no session is stored.
+  - `case-status-update.spec.ts` — `test.skip` (write). Change a case's credentialing
+    status; asserts against `credential_cases`/`status_history`.
+  - `task-complete.spec.ts` — `test.skip` (write). Complete a case task; asserts
     against `tasks`/`credential_cases`.
-- **Green when:** the two active specs pass and the two skipped specs report as
-  skipped (Playwright exits `0`).
+  - `create-case.spec.ts` — `test.skip` (write). Create a case via the New Case flow;
+    asserts the case + auto-seeded SOP tasks (`create_case_with_tasks` RPC).
+- **Green when:** the single active spec passes and the three skipped write specs
+  report as skipped (Playwright exits `0`).
 - **CI:** new `e2e` job in `ci.yml`.
 
 ### 0.6 Prettier (repo-wide)
