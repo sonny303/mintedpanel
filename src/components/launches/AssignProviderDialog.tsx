@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useAssignProviderToFacility, useFacilityAssignments } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
+import { useCanWrite } from "@/lib/permissions";
 import type { Facility } from "@/types";
 
 const NONE = "__none__";
@@ -34,6 +35,7 @@ export function AssignProviderDialog({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const canWrite = useCanWrite();
   const providersQ = useProviders();
   const assignmentsQ = useFacilityAssignments();
   const assign = useAssignProviderToFacility();
@@ -47,6 +49,10 @@ export function AssignProviderDialog({
     );
     return (providersQ.data ?? []).filter((p) => !assigned.has(p.id) && p.status !== "terminated");
   }, [assignmentsQ.data, providersQ.data, location.id]);
+
+  // Defense in depth: never render a write surface to a read-only role, even
+  // if a caller mounts this dialog without gating its trigger.
+  if (!canWrite) return null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

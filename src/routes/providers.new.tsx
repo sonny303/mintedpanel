@@ -3,12 +3,13 @@
 // assignments captured in steps 3 and 4 are persisted alongside the provider.
 // A ?locationId search param (set by the launch flow) pre-selects the launch
 // location's group and facility so onboarding and the launch run in parallel.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useActiveOrgId, useAuthStore } from "@/lib/auth-store";
+import { useActiveOrgId, useAuthStore, useRole } from "@/lib/auth-store";
+import { canWrite } from "@/lib/permissions";
 import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
   ProviderForm,
@@ -28,9 +29,13 @@ export const Route = createFileRoute("/providers/new")({
     locationId: typeof search.locationId === "string" ? search.locationId : undefined,
   }),
   beforeLoad: () => {
+    // Fast path only for a warm store. On a cold URL load memberships aren't
+    // fetched yet (role === null), so we can't decide here — the component
+    // guard below redirects once they resolve. Allow-list, not deny-list.
     const { memberships, activeOrgId } = useAuthStore.getState();
+    if (memberships.length === 0) return;
     const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
-    if (role === "billing") {
+    if (!canWrite(role)) {
       throw redirect({ to: "/providers", replace: true });
     }
   },
@@ -86,6 +91,15 @@ function Page() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
+  // Authoritative guard: once memberships resolve, a read-only role is sent
+  // back to /providers even on a direct URL load (beforeLoad can't decide on a
+  // cold store).
+  const role = useRole();
+  const membershipsLoaded = useAuthStore((s) => s.memberships.length > 0);
+  const blocked = membershipsLoaded && !canWrite(role);
+  useEffect(() => {
+    if (blocked) navigate({ to: "/providers", replace: true });
+  }, [blocked, navigate]);
   const { locationId } = Route.useSearch();
   const locationQ = useLaunchLocation(locationId);
   const launchLocation = locationId ? (locationQ.data ?? null) : null;
@@ -133,6 +147,8 @@ function Page() {
       toast.error(error instanceof Error ? error.message : "Failed to create provider");
     }
   };
+
+  if (blocked) return null;
 
   if (locationId && locationQ.isLoading) {
     return <div className="h-32 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;

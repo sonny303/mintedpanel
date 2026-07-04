@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
 import { RowCta } from "@/components/triage/RowCta";
@@ -52,6 +53,30 @@ function HomePage() {
   const locationsQ = useLaunchLocations();
 
   const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
+  // Any errored query must block the "you're caught up" verdict — a failed
+  // fetch is not the same as an empty queue. Silence here would tell Sowmya
+  // she has no work when we simply couldn't load it.
+  const failed =
+    casesQ.isError ||
+    providersQ.isError ||
+    statusConfigsQ.isError ||
+    tasksQ.isError ||
+    contractsQ.isError ||
+    payersQ.isError ||
+    lastTouchQ.isError ||
+    followUpsQ.isError ||
+    locationsQ.isError;
+  const retry = () => {
+    void casesQ.refetch();
+    void providersQ.refetch();
+    void statusConfigsQ.refetch();
+    void tasksQ.refetch();
+    void contractsQ.refetch();
+    void payersQ.refetch();
+    void lastTouchQ.refetch();
+    void followUpsQ.refetch();
+    void locationsQ.refetch();
+  };
   const now = new Date();
 
   const rows: QueueCase[] = useMemo(() => {
@@ -81,6 +106,7 @@ function HomePage() {
           createdAt: c.createdAt,
           confirmedEffectiveDate: c.confirmedEffectiveDate,
           expectedEffectiveDate: c.expectedEffectiveDate,
+          isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
           now,
         }),
         providerName: provider ? `${provider.firstName} ${provider.lastName}` : "Unknown",
@@ -150,7 +176,11 @@ function HomePage() {
   }, [locationsQ.data, casesQ.data, contractsQ.data, payersQ.data, statusConfigsQ.data]);
 
   const allClear =
-    !loading && needsAction.length === 0 && followUps.length === 0 && launchesAtRisk.length === 0;
+    !loading &&
+    !failed &&
+    needsAction.length === 0 &&
+    followUps.length === 0 &&
+    launchesAtRisk.length === 0;
 
   function caseRow(r: QueueCase, cta: string) {
     const open = () => navigate({ to: "/cases/$id", params: { id: r.case.id } });
@@ -234,6 +264,18 @@ function HomePage() {
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
+        </div>
+      ) : failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-12 text-center">
+          <div className="text-[length:var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+            Couldn't load your day
+          </div>
+          <p className="mt-1 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+            Something went wrong reaching Minted Panel. Your work isn't lost — retry to load it.
+          </p>
+          <Button onClick={retry} className="mt-4 h-9">
+            Retry
+          </Button>
         </div>
       ) : allClear ? (
         <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-16 text-center">

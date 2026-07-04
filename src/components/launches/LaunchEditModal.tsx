@@ -35,6 +35,7 @@ import { useCases } from "@/hooks/useCases";
 import { useProviders } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useStatusConfigs } from "@/hooks/useAdmin";
+import { useCanWrite } from "@/lib/permissions";
 import { US_STATES } from "@/components/providers/providerFormShared";
 import {
   isNewStateLaunch,
@@ -54,6 +55,7 @@ export function LaunchEditModal({
   location: Facility | null;
   onClose: () => void;
 }) {
+  const canWrite = useCanWrite();
   const groupsQ = useProviderGroups();
   const providersQ = useProviders();
   const statusesQ = useStatusConfigs("location");
@@ -200,6 +202,9 @@ export function LaunchEditModal({
       );
     }
   };
+
+  // Defense in depth: a read-only role never sees the launch write form.
+  if (!canWrite) return null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

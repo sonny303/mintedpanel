@@ -141,6 +141,7 @@ function ProvidersWorkView() {
         createdAt: c.createdAt,
         confirmedEffectiveDate: c.confirmedEffectiveDate,
         expectedEffectiveDate: c.expectedEffectiveDate,
+        isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
         now,
       });
 
@@ -359,8 +360,25 @@ function ProvidersWorkView() {
       </div>
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
-          Couldn't load the work view. Refresh to retry.
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center">
+          <p className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+            Couldn't load the work view.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void providersQ.refetch();
+              void casesQ.refetch();
+              void tasksQ.refetch();
+              void contractsQ.refetch();
+              void payersQ.refetch();
+              void statusConfigsQ.refetch();
+              void lastTouchQ.refetch();
+            }}
+            className="mt-3 h-9"
+          >
+            Retry
+          </Button>
         </div>
       ) : loading ? (
         <div className="space-y-2">

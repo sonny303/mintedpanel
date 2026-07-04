@@ -33,6 +33,12 @@ export interface ActionStateInput {
   createdAt: string;
   confirmedEffectiveDate: string | null;
   expectedEffectiveDate: string | null;
+  /**
+   * true when the case sits on the Pre-Credentialing Setup sentinel payer.
+   * Pre-cred has no payer effective date, so an Approved pre-cred case is
+   * genuinely complete and must not be pulled into awaiting_effective.
+   */
+  isPreCred?: boolean;
   /** injectable clock for tests */
   now?: Date;
 }
@@ -51,13 +57,15 @@ export function getActionState(input: ActionStateInput): ActionState {
   // is admin-configurable, so the rule ships anyway.
   if (input.actionBucket === "waiting_provider") return "blocked";
 
-  // 3. awaiting_effective: Approved with a future (confirmed, else expected)
-  // effective date.
+  // 3. awaiting_effective: Approved but not yet billable — either the
+  // (confirmed, else expected) effective date is still in the future, or no
+  // effective date has been recorded at all. An Approved case with a null
+  // effective date is NOT complete: someone still has to chase the date.
   const effective = input.confirmedEffectiveDate ?? input.expectedEffectiveDate;
   if (
     input.statusLabel === "Approved" &&
-    effective != null &&
-    differenceInCalendarDays(parseISO(effective), now) > 0
+    !input.isPreCred &&
+    (effective == null || differenceInCalendarDays(parseISO(effective), now) > 0)
   ) {
     return "awaiting_effective";
   }

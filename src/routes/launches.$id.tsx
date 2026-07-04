@@ -284,7 +284,7 @@ function LaunchDetailPage() {
       {addOpen ? (
         <AssignProviderDialog location={location} onClose={() => setAddOpen(false)} />
       ) : null}
-      {casesOpen && !assignmentsQ.isLoading && !providersQ.isLoading ? (
+      {canWrite && casesOpen && !assignmentsQ.isLoading && !providersQ.isLoading ? (
         <CreateCasesDialog
           location={location}
           linkedProviders={linked}

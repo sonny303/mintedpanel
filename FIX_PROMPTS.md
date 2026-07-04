@@ -1,5 +1,13 @@
 # FIX_PROMPTS — one Claude Code prompt per blocker (audit v3, 2026-07-04)
 
+> **STATUS: FIX 1–6 and FIX 8 were implemented and verified in this session**
+> (all on `claude/minted-panel-audit-v3-uunj9o`; 71/71 harness assertions,
+> 58 unit tests, clean build — see BLOCKERS.md resolution log). **FIX 7's
+> revoke was applied to the live DB via MCP + repo migration** (the
+> leaked-password toggle in it remains an owner dashboard action). The prompts
+> below are retained as the record of what each change was. FF-A/B/C were NOT
+> applied (fast-follows; FF-C held for owner sign-off on live-customer data).
+
 Each prompt is branch + PR ready. Standing rule from the fence slip: prompts that
 touch **services, hooks, or schema** carry a `DO NOT EXECUTE — reference only`
 header and route to MCP review. Everything else is UI-layer and executable.
@@ -20,7 +28,7 @@ no `any`, `npx tsc --noEmit` + `npm test` + `npm run lint` before push).
 >
 > Scope: `src/lib/actionState.ts`, `src/lib/actionState.test.ts` only. Do not modify `workView.ts`, services, hooks, or any route.
 
-*(Optional follow-up in the same PR if product agrees: count `Approved` with a passed effective date into the in-network numerators on `providers.index.tsx`/`cases.index.tsx` so the bars agree with /progress "Billing now". If product does not decide, leave the bars alone.)*
+_(Optional follow-up in the same PR if product agrees: count `Approved` with a passed effective date into the in-network numerators on `providers.index.tsx`/`cases.index.tsx` so the bars agree with /progress "Billing now". If product does not decide, leave the bars alone.)_
 
 ## FIX 2 — Error states: no more false all-clear on Home; add error branches to Progress and Reports-Contracts (B2)
 
@@ -63,6 +71,7 @@ no `any`, `npx tsc --noEmit` + `npm test` + `npm run lint` before push).
 > `src/routes/providers.new.tsx` and `src/routes/providers.$id.edit.tsx` guard in `beforeLoad` by reading `useAuthStore.getState()` synchronously — on a direct URL load memberships haven't loaded yet, `role` is `null`, and the deny-list (`role === "billing"`) passes, so billing users get the full form.
 >
 > Fix both routes the same way:
+>
 > 1. Keep the `beforeLoad` as a fast-path, but flip it to an **allow-list**: redirect unless the role is `admin` or `specialist` — except when memberships are still empty/unloaded (can't decide yet).
 > 2. Add the authoritative check in the component: `const role = useRole(); const memberships = useAuthStore((s) => s.memberships);` — once memberships are loaded, if `!canWrite(role)` (import from `@/lib/permissions`), `navigate({ to: "/providers", replace: true })` in an effect and render null meanwhile.
 >
@@ -85,6 +94,7 @@ no `any`, `npx tsc --noEmit` + `npm test` + `npm run lint` before push).
 > revoke execute on function public.rls_auto_enable() from anon;
 > revoke execute on function public.rls_auto_enable() from authenticated;
 > ```
+>
 > Plus (dashboard/auth config, not SQL): enable "Leaked password protection" in Supabase Auth settings.
 > Re-run `get_advisors(security)` afterward; the two WARNs must clear. The remaining SECURITY DEFINER warnings (`user_role`, `user_org_ids`, `claim_invites`, `get_sop_field_tokens`) are by-design RLS helpers — leave them.
 

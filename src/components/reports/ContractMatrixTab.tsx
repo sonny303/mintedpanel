@@ -4,6 +4,7 @@
 // future effective date; a dash means no contract.
 import { useMemo } from "react";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { useContracts } from "@/hooks/useContracts";
 import { useLaunchLocations } from "@/hooks/useLaunches";
@@ -60,6 +61,27 @@ export function ContractMatrixTab() {
 
     return { states, newStates, payers, cellFor };
   }, [contractsQ.data, locationsQ.data, payersQ.data, statusConfigsQ.data]);
+
+  if (contractsQ.isError || payersQ.isError || statusConfigsQ.isError || locationsQ.isError) {
+    return (
+      <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center">
+        <p className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+          Couldn't load the contract matrix.
+        </p>
+        <Button
+          onClick={() => {
+            void contractsQ.refetch();
+            void payersQ.refetch();
+            void statusConfigsQ.refetch();
+            void locationsQ.refetch();
+          }}
+          className="mt-3 h-9"
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   if (contractsQ.isLoading || payersQ.isLoading) {
     return <div className="h-40 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;

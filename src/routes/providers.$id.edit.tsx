@@ -1,14 +1,15 @@
 // Edit Provider page: pre-fills the shared 5-step form with the existing
 // provider and licenses, saves via updateProviderWithLicenses. Billing role
 // is redirected before the page renders.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProvider, useUpdateProviderWithLicenses } from "@/hooks/useProviders";
 import { useStateLicensesByProvider } from "@/hooks/useLookups";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, useRole } from "@/lib/auth-store";
+import { canWrite } from "@/lib/permissions";
 import {
   emptyProviderFormState,
   type ProviderFormState,
@@ -19,9 +20,12 @@ import type { LicenseInput } from "@/services/providers";
 
 export const Route = createFileRoute("/providers/$id/edit")({
   beforeLoad: () => {
+    // Fast path only for a warm store; the component guard is authoritative on
+    // a cold URL load. Allow-list, not deny-list.
     const { memberships, activeOrgId } = useAuthStore.getState();
+    if (memberships.length === 0) return;
     const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
-    if (role === "billing") {
+    if (!canWrite(role)) {
       throw redirect({ to: "/providers", replace: true });
     }
   },
@@ -31,6 +35,12 @@ export const Route = createFileRoute("/providers/$id/edit")({
 function EditPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const role = useRole();
+  const membershipsLoaded = useAuthStore((s) => s.memberships.length > 0);
+  const blocked = membershipsLoaded && !canWrite(role);
+  useEffect(() => {
+    if (blocked) navigate({ to: "/providers", replace: true });
+  }, [blocked, navigate]);
   const providerQ = useProvider(id);
   const licensesQ = useStateLicensesByProvider(id);
   const update = useUpdateProviderWithLicenses(id);
@@ -122,6 +132,8 @@ function EditPage() {
     toast.success("Provider updated");
     navigate({ to: "/providers/$id", params: { id } });
   };
+
+  if (blocked) return null;
 
   if (providerQ.isLoading || licensesQ.isLoading || !initial) {
     return (

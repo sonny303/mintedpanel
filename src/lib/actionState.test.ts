@@ -107,6 +107,47 @@ describe("awaiting_effective (rule 3)", () => {
       getActionState(input({ statusLabel: "Submitted", confirmedEffectiveDate: "2026-08-01" })),
     ).toBe("on_track");
   });
+
+  it("fires for Approved with NO effective date (must never read as complete)", () => {
+    expect(
+      getActionState(
+        input({
+          statusLabel: "Approved",
+          actionBucket: "complete",
+          confirmedEffectiveDate: null,
+          expectedEffectiveDate: null,
+        }),
+      ),
+    ).toBe("awaiting_effective");
+  });
+
+  it("Approved with no effective date still loses to an overdue task (rule 1 wins)", () => {
+    expect(
+      getActionState(
+        input({
+          statusLabel: "Approved",
+          actionBucket: "complete",
+          confirmedEffectiveDate: null,
+          expectedEffectiveDate: null,
+          openTaskDueDates: ["2026-06-20"],
+        }),
+      ),
+    ).toBe("needs_action");
+  });
+
+  it("does NOT fire for a pre-cred Approved case — pre-cred has no effective date", () => {
+    expect(
+      getActionState(
+        input({
+          statusLabel: "Approved",
+          actionBucket: "complete",
+          isPreCred: true,
+          confirmedEffectiveDate: null,
+          expectedEffectiveDate: null,
+        }),
+      ),
+    ).toBe("complete");
+  });
 });
 
 describe("stalled vs on_track (rules 4-5)", () => {

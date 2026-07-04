@@ -5,11 +5,45 @@ fix-forward against production). Repro'd on the deployed code (`30cbdd4`) with
 live-DB data. "RLS backstop holds" means the database blocked the write — the
 finding is the UI/trust surface, not data loss.
 
+## Resolution log (fixes applied this session)
+
+All fixes landed on `claude/minted-panel-audit-v3-uunj9o` and were re-verified by
+the same browser harness (now **71/71 assertions pass**, incl. flipped probes
+that confirm each fix) plus `tsc`/`eslint`/`vitest` (58 tests) / `vite build`.
+
+| Blocker | Status             | Fix                                                                                                                                                                                                                                                                                                  |
+| ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1      | ✅ Fixed           | Engine: `Approved` + (null or future) effective date → `awaiting_effective`, scoped to non-pre-cred via a new `isPreCred` engine input (pre-cred setup has no effective date). Live effect: exactly one case flips (Pollard/Medicare complete→awaiting); chips 32/10/22/0 → 33/10/22/1.              |
+| B2      | ✅ Fixed           | Error branches + Retry on `/home`, `/progress`, Reports Contract-matrix; Retry buttons on Providers/Cases/Launches; `launches` `failed` now includes `casesQ`/`providersQ`. Home can no longer show "You're caught up." on a failed fetch.                                                           |
+| B3      | ✅ Fixed           | `pickTemplate` (both module-local copies) falls back to state-null templates. Verified: pre-cred/Medicare cases now seed SOP tasks.                                                                                                                                                                  |
+| B4      | ✅ Fixed           | Create Cases dialog render gated on `canWrite` in `launches.$id.tsx` + internal `useCanWrite()` guard in the dialog. Also added defense-in-depth guards to `LaunchEditModal`/`AssignProviderDialog`. Verified: billing deep-link no longer opens the dialog.                                         |
+| B5      | ✅ Fixed           | `providers.new` + `providers.$id/edit` guards switched to allow-list and made component-authoritative (redirect once memberships resolve). Verified: billing is redirected on direct URL load.                                                                                                       |
+| B6      | ✅ Fixed           | Client Progress added to the sidebar main nav (protected file, edited with explicit owner authorization). Verified reachable in one click.                                                                                                                                                           |
+| B7      | ✅ Fixed (live DB) | `REVOKE EXECUTE ON rls_auto_enable() FROM public, anon, authenticated` — applied via MCP + repo migration `20260704190000_*.sql`. Grants now `service_role`/`postgres` only; the `ensure_rls` event trigger still fires. Leaked-password protection is a dashboard toggle — see below, owner action. |
+| B8      | ✅ Fixed           | Deleted `src/services/tablePrefs.ts` (zero importers); noted `user_table_prefs` as droppable dead schema in CLAUDE.md.                                                                                                                                                                               |
+| FF-C    | ⏸ Held (see below) | Live-customer data mutation deferred to owner sign-off.                                                                                                                                                                                                                                              |
+
+**Owner actions still required (cannot be done from code):**
+
+- Enable Supabase Auth **Leaked password protection** (HaveIBeenPwned) in the dashboard — the second B7 advisor item.
+- Decide FF-C (below).
+
+**Why FF-C was held rather than applied:** it mutates a _live production_ customer's
+case data two weeks before go-live, and its two parts differ in risk. Setting
+Douek/Medicare (Approved, past effective date) to In-Network is data-accurate and
+would make the /providers in-network bar agree with /progress "Billing now" — but
+it's still a production write on the existing customer for a cosmetic
+disagreement, and the B1 engine fix already resolves the real trust issue. The
+Beeson piece is genuinely ambiguous: his cases sit on West Central while the pivot
+migration assigned him to KC Racquet + Olathe, and which location should _own_
+those cases is the owner's call, not a guess. Both are documented for a one-line
+green-light rather than applied silently.
+
 ---
 
 ## B1 · TRUST — Approved with no effective date is classified **Complete**; "in-network" disagrees across surfaces
 
-- **Spec:** awaiting-effective covers "approved with a future effective date; approved with a *null* effective date counts here too, never as complete."
+- **Spec:** awaiting-effective covers "approved with a future effective date; approved with a _null_ effective date counts here too, never as complete."
 - **Code:** `src/lib/actionState.ts:56-63` requires a non-null future date; the Approved status carries `action_bucket='complete'`, so Approved + null date falls through to Complete.
 - **Live hit (today):** Pollard/Medicare — Approved, both effective dates NULL → sits in Complete. Nobody is prompted to chase the effective date; the provider may not actually be billable.
 - **Coherence leak (same root):** `/providers` in-network bars count only the literal label "In-Network", while `/progress` counts Approved-with-passed-date as "Billing now". Douek reads **0 of 7 in-network** on /providers and **"Billing 1 of 6 insurers"** on /progress simultaneously (Douek/Medicare, Approved eff 2026-06-01).
@@ -37,7 +71,7 @@ finding is the UI/trust surface, not data loss.
 ## B4 · SECURITY — `/launches/$id?createCases=true` opens the Create Cases write dialog for a **billing** (read-only) user
 
 - **Repro (verified as `sowmya@fitness.fit`):** navigate to `/launches/ecaa7198-91f0-41f2-a864-4ed87e3d51f2?createCases=true` → full payer checklist renders with a live **"Create 2 cases"** button (screenshot `11`). Clicking it fires the RPC; the DB rejects with RLS 42501 and the user sees a raw "Case creation failed" toast.
-- **Root:** `launches.$id.tsx:287` renders `CreateCasesDialog` gated only on loading state (the header buttons *are* `canWrite`-gated; the deep link bypasses them), and `CreateCasesDialog` has no internal permission check. The nav link to /launches is visible to all roles.
+- **Root:** `launches.$id.tsx:287` renders `CreateCasesDialog` gated only on loading state (the header buttons _are_ `canWrite`-gated; the deep link bypasses them), and `CreateCasesDialog` has no internal permission check. The nav link to /launches is visible to all roles.
 - **Impact:** no data written (RLS backstop, SECURITY INVOKER RPC verified) — but a read-only role is shown a functioning write UI. Defense-in-depth failure + guaranteed confusion/support ticket.
 - **Fix shape:** gate the dialog render on `useCanWrite()` and add an internal guard to the dialog. See FIX_PROMPTS #4.
 
@@ -66,6 +100,7 @@ finding is the UI/trust surface, not data loss.
 ---
 
 ### Fast-follow (not blockers)
+
 - **F1** Layering violations: `routes/admin.templates.$id.tsx`, `routes/welcome.tsx`, `components/settings/MembersPanel.tsx`, `components/cases/NewCaseModal.tsx` call Supabase directly — wrap in services/hooks.
 - **F2** AGENTS.md staleness: `externalClient.ts` is env-based now, not hardcoded; update the Supabase-client rule text.
 - **F3** Data hygiene: Beeson's cases sit on West Central while his assignments (pivot migration) are KC Racquet + Olathe — reconcile before demoing KC Racquet readiness; consider flipping Douek/Medicare and Pollard/Medicare from Approved to In-Network (with dates) so the in-network bars mean something.

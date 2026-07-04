@@ -1,5 +1,13 @@
 # AUDIT_TODAY — Minted Panel full-app audit v3 (post-cutover)
 
+> **Post-audit update:** every blocker below (B1–B8) was fixed and re-verified in
+> the same session — see the **resolution log at the top of BLOCKERS.md**. The
+> harness now runs **71/71** assertions green (with probes flipped to confirm each
+> fix), on top of 58 unit tests and a clean build. The findings below are the
+> original audit record; treat them as _what was wrong_, now resolved except the
+> two owner actions noted (Supabase leaked-password toggle; FF-C live-data
+> sign-off).
+
 **Date:** 2026-07-04 · **Auditor persona:** Sowmya running a real day
 **Code audited:** branch tip `30cbdd4` = the PR #13 (launch pivot) merge — the latest production deploy per the brief. (Note: this repo's `main` ref is stale at `f5d511b`; the deployed history lives on the audited branch.)
 **Live DB:** Supabase `fkvuhfsqcmujywzgczmc`, KFP org `20563fd6-8e95-46a0-8e1c-cb3b968b3c3d`
@@ -18,37 +26,37 @@ The cloud sandbox blocks egress to `*.supabase.co` and to the Vercel URL, so pro
 
 SQL rebuild of all 42 live KFP cases vs the UI, per card, per row, per group:
 
-| Engine state | SQL (live data) | /providers UI | /cases UI | /home UI |
-|---|---|---|---|---|
-| needs_action | **10** | 10 | 10 | 10 ("Needs your action") |
-| blocked | 0 | 0 | 0 | (joins needs) |
-| stalled | 0 | 0 | 0 | — |
-| awaiting_effective | 0 | 0 | 0 | — |
-| on_track | 22 | 22 | 22 | — |
-| complete | 10 | (hidden from chips) | (hidden) | — |
-| **Chips: All / Needs / In-prog / Awaiting** | **32 / 10 / 22 / 0** | **32 / 10 / 22 / 0** | **32 / 10 / 22 / 0** | n/a |
+| Engine state                                | SQL (live data)      | /providers UI        | /cases UI            | /home UI                 |
+| ------------------------------------------- | -------------------- | -------------------- | -------------------- | ------------------------ |
+| needs_action                                | **10**               | 10                   | 10                   | 10 ("Needs your action") |
+| blocked                                     | 0                    | 0                    | 0                    | (joins needs)            |
+| stalled                                     | 0                    | 0                    | 0                    | —                        |
+| awaiting_effective                          | 0                    | 0                    | 0                    | —                        |
+| on_track                                    | 22                   | 22                   | 22                   | —                        |
+| complete                                    | 10                   | (hidden from chips)  | (hidden)             | —                        |
+| **Chips: All / Needs / In-prog / Awaiting** | **32 / 10 / 22 / 0** | **32 / 10 / 22 / 0** | **32 / 10 / 22 / 0** | n/a                      |
 
 - **Exact match everywhere**, including per-provider rollups (Beeson 2-needs 0/2 in-network · Douek 1 0/7 · Hershberger 1 1/7 · Knapp 1 1/7 · Mowery 2 0/7 · Pollard 3 0/7), per-payer rollups (UHC "6 needs action"), group ordering (worst-first), and the chip→list contract (clicking "Needs your action 10" leaves exactly 10 rows on both pivots).
 - **Cross-pivot consistency holds** — both views compute from the same data through `workView.ts`; after live mutations (status flips, task completion, case generation) all three surfaces updated **without a manual refresh** (TanStack invalidation verified).
 - **All 44 `status_configs` carry an `action_bucket`** (NOT NULL, 0 unclassified). No false urgency from misconfig.
 - **Follow-ups due = 0** is correct: every live `next_follow_up_date` is 2026-07-07..07-10 (future).
 
-**The false negative (fails the letter of the trust check):** the v3 spec says *"approved with a null effective date counts [as awaiting effective], never as complete."* The code (`actionState.ts:56-63`) requires a **non-null future** date; Approved carries `action_bucket='complete'`, so **Approved + null effective date lands in Complete**. Live case hit: **Pollard/Medicare (Approved, no effective date recorded)** silently sits in Complete — nobody is chasing the effective date. Related coherence leak: Douek/Medicare (Approved, eff 2026-06-01 past) is billing per `/progress` ("Billing 1 of 6 insurers") but `/providers` shows Douek **0 of 7 in-network** because the bar counts only the literal "In-Network" label. Same provider, two different stories. → **BLOCKERS #1.**
+**The false negative (fails the letter of the trust check):** the v3 spec says _"approved with a null effective date counts [as awaiting effective], never as complete."_ The code (`actionState.ts:56-63`) requires a **non-null future** date; Approved carries `action_bucket='complete'`, so **Approved + null effective date lands in Complete**. Live case hit: **Pollard/Medicare (Approved, no effective date recorded)** silently sits in Complete — nobody is chasing the effective date. Related coherence leak: Douek/Medicare (Approved, eff 2026-06-01 past) is billing per `/progress` ("Billing 1 of 6 insurers") but `/providers` shows Douek **0 of 7 in-network** because the bar counts only the literal "In-Network" label. Same provider, two different stories. → **BLOCKERS #1.**
 
 Also live-data reality: `stalled` and `awaiting_effective` are **empty classes in production** (max silence 11 days; no future effective dates). Their logic is verified by the 19 engine unit tests and by synthetic mutation in the harness (S4 produced a real awaiting_effective), but no live case has ever exercised the stalled path. Watch it during the first live week.
 
 ## Part 2 — Day in the life (scripted, deployed code, live-data fixtures)
 
-| # | Scenario | Result | Time (local) | Clicks | Notes |
-|---|---|---|---|---|---|
-| S1 | "What do I work on first?" | **PASS** | 0.4s after login | 1 | `/home` is the landing page; 10 needs-action rows, each with provider · payer · status · next-task CTA, all above the fold at 1440×900 (body 900px, zero scroll) |
-| S2 | BCBS W-9: find case, log touch, flip status, set follow-up | **PASS** | 3.5s | 11 | Home → Cases → BCBS group → row → detail. Touch payload correct (`touch_type=email`, follow-up, `org_id`, coordinator); status→Waiting on Provider; `status_history` + 2 `audit_log` rows landed. No IDs copied between surfaces |
-| S3 | Work everything Stalled | **PASS w/ caveat** | 2 clicks to the set | 2 | No stalled-only chip — stalled lives inside "In progress" but sorts above on-track and carries a bold "Nd silent" suffix + strong days column. Live stalled count is 0 today, so the queue is untested on real rows |
-| S4 | Approval letter, effective 8/1 | **PASS** | 2.5s | 6 | Case → Change → Approved → Confirmed Effective Date (required field enforced) → Awaiting card = 1 and "eff Aug 1" suffix on Providers/Cases/Home **without manual refresh** |
-| S5 | Task work inside case detail | **PASS** | 3.2s | 6 | Tasks list is gone and case detail fully absorbs it: sequential-lock complete w/ Undo toast, due dates visible, internal note saved + audited, `/tasks/$id` reachable via drawer "Open full task page" (also linked from Audit Log). No dead `/tasks` list links anywhere in `src/` |
-| S6 | New location: generate its cases | **PASS w/ 1 blocker** | 1.8s | 3 | KC Racquet Club: checklist ordered pre-cred → MSO (by MSO name) → no-routing; Beeson's existing Aetna/UHC combos disabled "Case exists"; preview said "Create 2 cases" and exactly 2 RPCs fired, each with `facility_id`=location, Cigna routed `mso_id`=ASH with 4 SOP tasks. **But the Pre-Cred case seeded 0 tasks** — see B3. New-state/no-payer path degrades correctly ("No routing for this state" rows unchecked) |
-| S7 | Show the practice owner where we stand | **FAIL on reachability, PASS on content** | 0.9s | n/a — **URL only** | `/progress` is in no nav and nothing links to it (B6). Content is right: "3 of 36 insurer enrollments active" reconciles with live math (In-Network ×2 + Approved-past-eff ×1, over non-pre-cred non-Not-Required cases incl. the 2 just created); zero pre-cred rows leak; "Not Required" omitted; owner-worded labels throughout |
-| S8 | "Did I miss anything?" | **PASS w/ trust risk** | instant | 1 | Home needs-action read exactly 13 after the day's mutations (10 + 1 blocked + 2 new Not Started). But if the cases query *fails*, Home says **"Needs your action — clear"** and, with locations also failing, **"You're caught up."** — a false all-clear on the landing page (B2) |
+| #   | Scenario                                                   | Result                                    | Time (local)        | Clicks             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ---------------------------------------------------------- | ----------------------------------------- | ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | "What do I work on first?"                                 | **PASS**                                  | 0.4s after login    | 1                  | `/home` is the landing page; 10 needs-action rows, each with provider · payer · status · next-task CTA, all above the fold at 1440×900 (body 900px, zero scroll)                                                                                                                                                                                                                                                          |
+| S2  | BCBS W-9: find case, log touch, flip status, set follow-up | **PASS**                                  | 3.5s                | 11                 | Home → Cases → BCBS group → row → detail. Touch payload correct (`touch_type=email`, follow-up, `org_id`, coordinator); status→Waiting on Provider; `status_history` + 2 `audit_log` rows landed. No IDs copied between surfaces                                                                                                                                                                                          |
+| S3  | Work everything Stalled                                    | **PASS w/ caveat**                        | 2 clicks to the set | 2                  | No stalled-only chip — stalled lives inside "In progress" but sorts above on-track and carries a bold "Nd silent" suffix + strong days column. Live stalled count is 0 today, so the queue is untested on real rows                                                                                                                                                                                                       |
+| S4  | Approval letter, effective 8/1                             | **PASS**                                  | 2.5s                | 6                  | Case → Change → Approved → Confirmed Effective Date (required field enforced) → Awaiting card = 1 and "eff Aug 1" suffix on Providers/Cases/Home **without manual refresh**                                                                                                                                                                                                                                               |
+| S5  | Task work inside case detail                               | **PASS**                                  | 3.2s                | 6                  | Tasks list is gone and case detail fully absorbs it: sequential-lock complete w/ Undo toast, due dates visible, internal note saved + audited, `/tasks/$id` reachable via drawer "Open full task page" (also linked from Audit Log). No dead `/tasks` list links anywhere in `src/`                                                                                                                                       |
+| S6  | New location: generate its cases                           | **PASS w/ 1 blocker**                     | 1.8s                | 3                  | KC Racquet Club: checklist ordered pre-cred → MSO (by MSO name) → no-routing; Beeson's existing Aetna/UHC combos disabled "Case exists"; preview said "Create 2 cases" and exactly 2 RPCs fired, each with `facility_id`=location, Cigna routed `mso_id`=ASH with 4 SOP tasks. **But the Pre-Cred case seeded 0 tasks** — see B3. New-state/no-payer path degrades correctly ("No routing for this state" rows unchecked) |
+| S7  | Show the practice owner where we stand                     | **FAIL on reachability, PASS on content** | 0.9s                | n/a — **URL only** | `/progress` is in no nav and nothing links to it (B6). Content is right: "3 of 36 insurer enrollments active" reconciles with live math (In-Network ×2 + Approved-past-eff ×1, over non-pre-cred non-Not-Required cases incl. the 2 just created); zero pre-cred rows leak; "Not Required" omitted; owner-worded labels throughout                                                                                        |
+| S8  | "Did I miss anything?"                                     | **PASS w/ trust risk**                    | instant             | 1                  | Home needs-action read exactly 13 after the day's mutations (10 + 1 blocked + 2 new Not Started). But if the cases query _fails_, Home says **"Needs your action — clear"** and, with locations also failing, **"You're caught up."** — a false all-clear on the landing page (B2)                                                                                                                                        |
 
 ## Part 3 — Anti-Excel test
 
@@ -104,16 +112,16 @@ Verified against live `facilities` (the post-pivot model — the brief's checkli
 
 ## Risk register — what shipped un-gated (nothing "not built"; everything is live)
 
-| Risk | Severity | Where |
-|---|---|---|
-| False all-clear on Home when queries fail; no error state on Home/Progress/Reports-Contracts | High (trust) | B2 |
-| Approved+null-eff classified Complete (live case exists); in-network bar vs "billing now" disagree | High (trust) | B1 |
-| State-null SOP templates (Medicare, both Pre-Cred) never seed tasks in either creation flow | High (workflow) | B3 |
-| Billing deep-links reach write UIs (RLS backstop holds) | High (security posture) | B4, B5 |
-| `/progress` unreachable from the product | Medium (workflow) | B6 |
-| `stalled`/`awaiting_effective` never exercised by live data; follow-up discipline is 3 bulk-logged touch dates | Medium (trust, data) | watch week 1 |
-| Beeson cases↔assignments location mismatch from pivot migration | Low (data hygiene) | Part 4 |
-| Dead `user_table_prefs`/`tablePrefs.ts`; AGENTS.md staleness; 4 layering violations; anon-executable definer fn | Low (code) | B7, B8 |
+| Risk                                                                                                            | Severity                | Where        |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------ |
+| False all-clear on Home when queries fail; no error state on Home/Progress/Reports-Contracts                    | High (trust)            | B2           |
+| Approved+null-eff classified Complete (live case exists); in-network bar vs "billing now" disagree              | High (trust)            | B1           |
+| State-null SOP templates (Medicare, both Pre-Cred) never seed tasks in either creation flow                     | High (workflow)         | B3           |
+| Billing deep-links reach write UIs (RLS backstop holds)                                                         | High (security posture) | B4, B5       |
+| `/progress` unreachable from the product                                                                        | Medium (workflow)       | B6           |
+| `stalled`/`awaiting_effective` never exercised by live data; follow-up discipline is 3 bulk-logged touch dates  | Medium (trust, data)    | watch week 1 |
+| Beeson cases↔assignments location mismatch from pivot migration                                                 | Low (data hygiene)      | Part 4       |
+| Dead `user_table_prefs`/`tablePrefs.ts`; AGENTS.md staleness; 4 layering violations; anon-executable definer fn | Low (code)              | B7, B8       |
 
 ## Part 8 — Verdict
 
@@ -124,7 +132,9 @@ Verified against live `facilities` (the post-pivot model — the brief's checkli
 5. **Jul 17: ON TRACK, conditional.** Five small patches clear every blocker (all UI-layer except one SQL revoke): B1, B2, B3, B4/B5, B6. **The single most dangerous blocker is B2** — the landing page answers "you're caught up" on any failed fetch, and fix-forward-with-no-fallback means a bad deploy or a Supabase blip turns into silently skipped work on a Monday morning. The smallest patch that clears it is ~15 lines: an `isError` branch on `home.tsx` (and `progress.tsx`) that says "Couldn't load — retry" instead of "clear".
 
 ---
+
 ### Appendix — evidence inventory
+
 - SQL rebuild + per-case classification table: reproducible via MCP `execute_sql` (queries embedded in session log; engine rules mirrored from `actionState.ts` at `30cbdd4`).
 - Browser harness: Playwright vs `npm run dev`, Supabase mocked from live-row fixtures (auth/PostgREST/RPC/RLS emulation per `pg_policies`), 68 assertions incl. request-payload asserts; screenshots for Home/Providers/Cases/case detail/Launches/Progress, the two billing holes, and the three error-state probes.
 - Role ground truth: `test@minted.com` = KFP+SP admin; `sowmya@fitness.fit` = KFP billing; `sowmya@minted.com` = admin both (memberships table, live).

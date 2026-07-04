@@ -30,6 +30,7 @@ import { useCases } from "@/hooks/useCases";
 import { usePayers, useMsos, useTemplates } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useGenerateLaunchCases } from "@/hooks/useLaunches";
+import { useCanWrite } from "@/lib/permissions";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
 import type { GenerationEntry } from "@/services/launches";
@@ -39,6 +40,9 @@ const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 // Same matcher as NewCaseModal.pickTemplate — duplicated because the modal
 // keeps it module-local and lib code must not import from components.
+// Precedence falls back to state-agnostic (state === null) templates so
+// payers whose SOP is not state-specific — Medicare, Pre-Credentialing —
+// still seed their tasks instead of creating an empty case.
 function pickTemplate(
   templates: SOPTemplate[],
   payerId: string,
@@ -49,12 +53,14 @@ function pickTemplate(
     const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
     return !(row.archived ?? row.isArchived ?? false);
   });
-  const exact = active.find(
-    (t) =>
-      t.payerId === payerId && t.state === state && (t.groupId === groupId || t.groupId === null),
+  const forPayer = active.filter((t) => t.payerId === payerId);
+  return (
+    forPayer.find((t) => t.state === state && (t.groupId === groupId || t.groupId === null)) ??
+    forPayer.find((t) => t.state === state) ??
+    forPayer.find((t) => t.state === null && (t.groupId === groupId || t.groupId === null)) ??
+    forPayer.find((t) => t.state === null) ??
+    null
   );
-  if (exact) return exact;
-  return active.find((t) => t.payerId === payerId && t.state === state) ?? null;
 }
 
 interface ChecklistRow {
@@ -76,6 +82,7 @@ export function CreateCasesDialog({
   linkedProviders: Provider[];
   onClose: () => void;
 }) {
+  const canWrite = useCanWrite();
   const qc = useQueryClient();
   const casesQ = useCases();
   const payersQ = usePayers();
@@ -220,6 +227,10 @@ export function CreateCasesDialog({
   const selectableCount = (rows ?? []).filter(
     (r) => selected.has(r.payerId) && !r.caseExists,
   ).length;
+
+  // Defense in depth: read-only roles never see the write surface, even via a
+  // deep link that bypasses the trigger's canWrite gate.
+  if (!canWrite) return null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

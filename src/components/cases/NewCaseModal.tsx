@@ -49,6 +49,10 @@ interface NewCaseModalProps {
 
 const NONE = "__none__";
 
+// Kept in sync with CreateCasesDialog.pickTemplate (both keep this matcher
+// module-local; lib code must not import from components). Falls back to
+// state-agnostic (state === null) templates so payers with a non-state SOP —
+// Medicare, Pre-Credentialing — still seed their tasks.
 function pickTemplate(
   templates: SOPTemplate[],
   payerId: string,
@@ -59,12 +63,14 @@ function pickTemplate(
     const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
     return !(row.archived ?? row.isArchived ?? false);
   });
-  const exact = active.find(
-    (t) =>
-      t.payerId === payerId && t.state === state && (t.groupId === groupId || t.groupId === null),
+  const forPayer = active.filter((t) => t.payerId === payerId);
+  return (
+    forPayer.find((t) => t.state === state && (t.groupId === groupId || t.groupId === null)) ??
+    forPayer.find((t) => t.state === state) ??
+    forPayer.find((t) => t.state === null && (t.groupId === groupId || t.groupId === null)) ??
+    forPayer.find((t) => t.state === null) ??
+    null
   );
-  if (exact) return exact;
-  return active.find((t) => t.payerId === payerId && t.state === state) ?? null;
 }
 
 export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseModalProps) {

@@ -25,6 +25,7 @@ import {
   UserCog,
   House,
   Rocket,
+  Gauge,
   ChevronDown,
   Search,
   LogOut,
@@ -44,6 +45,7 @@ const mainNav: NavLink[] = [
   { to: "/cases", label: "Cases", icon: FileStack },
   { to: "/launches", label: "Launches", icon: Rocket },
   { to: "/reports", label: "Reports", icon: BarChart3 },
+  { to: "/progress", label: "Progress", icon: Gauge },
 ];
 
 const adminNav: NavLink[] = [

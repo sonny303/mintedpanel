@@ -54,7 +54,8 @@ function LaunchesPage() {
   const [assignFor, setAssignFor] = useState<Facility | null>(null);
 
   const loading = locationsQ.isLoading || statusConfigsQ.isLoading || casesQ.isLoading;
-  const failed = locationsQ.isError || statusConfigsQ.isError;
+  const failed =
+    locationsQ.isError || statusConfigsQ.isError || casesQ.isError || providersQ.isError;
 
   const { recentlyLaunched, pipeline } = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
@@ -196,8 +197,23 @@ function LaunchesPage() {
       />
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
-          Couldn't load launches. Refresh to retry.
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center">
+          <p className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+            Couldn't load launches.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void locationsQ.refetch();
+              void statusConfigsQ.refetch();
+              void casesQ.refetch();
+              void providersQ.refetch();
+              void assignmentsQ.refetch();
+            }}
+            className="mt-3 h-9"
+          >
+            Retry
+          </Button>
         </div>
       ) : loading ? (
         <div className="space-y-2">

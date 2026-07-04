@@ -177,8 +177,10 @@ location-track status.** The Launches page is a filtered view of locations.
 
 `NewCaseModal` (provider detail) and `CreateCasesDialog` (launch) both:
 resolve the MSO routing rule per payer/state/specialty, pick a SOP template
-(`pickTemplate`: exact payer+state+group, then payer+state — duplicated
-module-locally in both, keep in sync), resolve tokens via
+(`pickTemplate`: payer+state+group → payer+state → payer+**null-state**+group →
+payer+null-state — the null-state fallback lets payers with a non-state SOP,
+e.g. Medicare and Pre-Credentialing, still seed tasks; duplicated module-locally
+in both, keep in sync), resolve tokens via
 `resolveTemplate(template, provider, group, facility, {mso}, licenseNumber)`,
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
@@ -227,6 +229,14 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
 - NewCaseModal still passes `facility: null` into `resolveTemplate`, so
   `{{facility.*}}` tokens resolve empty there; the launch kickoff passes the
   location.
+- `user_table_prefs` is **dead schema**: its only consumer (the Tasks list) was
+  deleted at M6, and `src/services/tablePrefs.ts` was removed Jul 2026. The
+  table remains per the additive rule — drop it via a sanctioned migration when
+  convenient.
+- The priority engine (`actionState.ts`) classifies **Approved with a null
+  effective date** as `awaiting_effective`, never `complete` — an approved case
+  with no billing date still needs the date chased. Approved with a _past_
+  effective date falls through to complete.
 
 ## Keep this file honest — session-end ritual
 

@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 import { ActionBadge } from "@/components/triage/ActionBadge";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { useProviders } from "@/hooks/useProviders";
@@ -41,6 +42,20 @@ function ProgressPage() {
 
   const now = new Date();
   const loading = providersQ.isLoading || casesQ.isLoading || statusConfigsQ.isLoading;
+  // Don't present "0 of 0 active" as a real answer when a fetch failed.
+  const failed =
+    providersQ.isError ||
+    casesQ.isError ||
+    payersQ.isError ||
+    statusConfigsQ.isError ||
+    followUpsQ.isError;
+  const retry = () => {
+    void providersQ.refetch();
+    void casesQ.refetch();
+    void payersQ.refetch();
+    void statusConfigsQ.refetch();
+    void followUpsQ.refetch();
+  };
 
   const model = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
@@ -114,13 +129,29 @@ function ProgressPage() {
     <div className="max-w-3xl mx-auto">
       <PageHeader
         title="Client progress"
-        description={`${model.active} of ${model.denominator} insurer enrollments active · Updated ${format(now, "MMM d, h:mm a")}`}
+        description={
+          failed
+            ? "Couldn't load the latest — retry below"
+            : `${model.active} of ${model.denominator} insurer enrollments active · Updated ${format(now, "MMM d, h:mm a")}`
+        }
       />
       {loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-24 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
+        </div>
+      ) : failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-12 text-center">
+          <div className="text-[length:var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+            Couldn't load client progress
+          </div>
+          <p className="mt-1 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+            Something went wrong on our end. Retry to load the latest.
+          </p>
+          <Button onClick={retry} className="mt-4 h-9">
+            Retry
+          </Button>
         </div>
       ) : (
         <div className="space-y-4">
