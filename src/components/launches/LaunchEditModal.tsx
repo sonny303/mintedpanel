@@ -2,7 +2,10 @@
 // a facilities row in a location-track status (default Prospect) with an
 // optional effective date and an optional provider assignment. Editing covers
 // the same fields; the date label follows the status (Target early in the
-// pipeline, Starts once fulfillment begins).
+// pipeline, Starts once fulfillment begins). Transitions are soft: moving to
+// Ready for Launch without a provider or to Live with zero linked cases
+// warns but never blocks, and a first launch in a new state gets an inline
+// payer-contracts note.
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,11 +25,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateLaunchLocation, useUpdateLaunchLocation } from "@/hooks/useLaunches";
+import {
+  useCreateLaunchLocation,
+  useFacilityAssignments,
+  useLaunchLocations,
+  useUpdateLaunchLocation,
+} from "@/hooks/useLaunches";
+import { useCases } from "@/hooks/useCases";
 import { useProviders } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { US_STATES } from "@/components/providers/providerFormShared";
+import { isNewStateLaunch, transitionWarnings, type LocationRow } from "@/lib/launchLocations";
 import type { Facility } from "@/types";
 
 const NONE = "__none__";
@@ -44,6 +54,9 @@ export function LaunchEditModal({
   const groupsQ = useProviderGroups();
   const providersQ = useProviders();
   const statusesQ = useStatusConfigs("location");
+  const locationsQ = useLaunchLocations();
+  const assignmentsQ = useFacilityAssignments();
+  const casesQ = useCases();
 
   const statuses = useMemo(
     () => [...(statusesQ.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -74,6 +87,49 @@ export function LaunchEditModal({
     : STARTS_LABELS.has(selectedStatusLabel)
       ? "Start date"
       : "Effective date";
+
+  // Soft transition checks (warn, never block) — only when the status moves.
+  const warnings = useMemo(() => {
+    if (!selectedStatusLabel || statusId === location?.statusId) return [];
+    const hasProvider = location
+      ? (assignmentsQ.data ?? []).some((a) => a.facilityId === location.id && a.providerId)
+      : providerId !== NONE;
+    const linkedCaseCount = location
+      ? (casesQ.data ?? []).filter((c) => c.facilityId === location.id).length
+      : 0;
+    return transitionWarnings({
+      toStatusLabel: selectedStatusLabel,
+      hasProvider,
+      linkedCaseCount,
+    });
+  }, [selectedStatusLabel, statusId, location, assignmentsQ.data, casesQ.data, providerId]);
+
+  // First location in this state for the group: payer contracts may not exist.
+  const newStateNote = useMemo(() => {
+    if (state === NONE || groupId === NONE) return false;
+    const statusById = new Map(statuses.map((s) => [s.id, s]));
+    const rows: LocationRow[] = (locationsQ.data ?? []).map((facility) => ({
+      facility,
+      status: facility.statusId ? (statusById.get(facility.statusId) ?? null) : null,
+    }));
+    const candidate: Facility = {
+      ...(location ?? {
+        id: "__new__",
+        orgId: "",
+        name: "",
+        street: null,
+        city: null,
+        zip: null,
+        isActive: true,
+        statusId: null,
+        effectiveDate: null,
+        createdAt: "",
+      }),
+      groupId,
+      state,
+    };
+    return isNewStateLaunch(candidate, rows);
+  }, [state, groupId, statuses, locationsQ.data, location]);
 
   const handleSave = () => {
     setError(null);
@@ -242,6 +298,20 @@ export function LaunchEditModal({
               </Select>
             </div>
           ) : null}
+          {newStateNote ? (
+            <div className="text-[12px] text-[#92400E] border border-[#FDE68A] bg-[#FEF3C7] rounded-md px-3 py-2">
+              First launch in {state} for this group — payer contracts for this state may not
+              exist yet.
+            </div>
+          ) : null}
+          {warnings.map((w) => (
+            <div
+              key={w}
+              className="text-[12px] text-[#92400E] border border-[#FDE68A] bg-[#FEF3C7] rounded-md px-3 py-2"
+            >
+              {w} You can still save.
+            </div>
+          ))}
           {error ? (
             <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
               {error}

@@ -23,7 +23,12 @@ import { useCases } from "@/hooks/useCases";
 import { useContracts } from "@/hooks/useContracts";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
-import { isNewStateLaunch, launchDateDisplay, type LocationRow } from "@/lib/launchLocations";
+import {
+  isNewStateLaunch,
+  launchDateDisplay,
+  needsGoLiveNudge,
+  type LocationRow,
+} from "@/lib/launchLocations";
 import { launchReadiness } from "@/lib/launchReadiness";
 
 export const Route = createFileRoute("/launches/$id")({
@@ -199,6 +204,21 @@ function LaunchDetailPage() {
             <AlertTriangle className="w-3.5 h-3.5" />
             Contract gap in {location.state}
           </span>
+        ) : null}
+        {needsGoLiveNudge(status?.label, location.effectiveDate, new Date()) ? (
+          canWrite ? (
+            <button
+              type="button"
+              className="text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
+              onClick={() => setEditOpen(true)}
+            >
+              Start date passed. Mark Live?
+            </button>
+          ) : (
+            <span className="text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)]">
+              Start date passed
+            </span>
+          )
         ) : null}
       </div>
 

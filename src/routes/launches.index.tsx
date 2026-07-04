@@ -26,6 +26,7 @@ import { useCanWrite } from "@/lib/permissions";
 import {
   isNewStateLaunch,
   launchDateDisplay,
+  needsGoLiveNudge,
   splitLaunchSections,
   type LocationRow,
 } from "@/lib/launchLocations";
@@ -84,6 +85,7 @@ function LaunchesPage() {
   const total = recentlyLaunched.length + pipeline.length;
 
   function launchRow(r: LaunchRow) {
+    const nudge = needsGoLiveNudge(r.status?.label, r.facility.effectiveDate, new Date());
     return (
       <div
         key={r.facility.id}
@@ -113,7 +115,27 @@ function LaunchesPage() {
             </div>
           </div>
           <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-36">
-            {launchDateDisplay(r.status?.label, r.facility.effectiveDate)}
+            <span className="block">
+              {launchDateDisplay(r.status?.label, r.facility.effectiveDate)}
+            </span>
+            {nudge ? (
+              canWrite ? (
+                <button
+                  type="button"
+                  className="mt-0.5 block text-left text-[var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModal({ location: r.facility });
+                  }}
+                >
+                  Start date passed. Mark Live?
+                </button>
+              ) : (
+                <span className="mt-0.5 block text-[var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)]">
+                  Start date passed
+                </span>
+              )
+            ) : null}
           </span>
           <span className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-40">
             {r.providerNames.length > 0 ? r.providerNames.join(", ") : "—"}
@@ -124,7 +146,7 @@ function LaunchesPage() {
                 {r.caseCount} {r.caseCount === 1 ? "case" : "cases"}
               </span>
             ) : (
-              <span className="text-[color:var(--mp-ink-faint)]">No cases yet</span>
+              <span className="text-[color:var(--mp-warn)]">No cases yet</span>
             )}
           </span>
           {canWrite ? (
