@@ -272,7 +272,7 @@ function CasesWorkView() {
   function groupHeader(g: PayerGroup) {
     return (
       <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+        <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
           {g.payerName}
         </span>
         <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">

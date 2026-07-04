@@ -285,7 +285,7 @@ function ProvidersWorkView() {
             <span
               role="link"
               tabIndex={0}
-              className="block truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)] hover:underline"
+              className="block truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
                 openProvider();
