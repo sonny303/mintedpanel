@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Pencil, Plus, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AssignProviderDialog } from "@/components/launches/AssignProviderDialog";
 import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,17 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
 import {
-  useAssignProviderToFacility,
   useFacilityAssignments,
   useGenerateLaunchCases,
   useLaunchLocation,
@@ -99,11 +92,9 @@ function LaunchDetailPage() {
   const groupsQ = useProviderGroups();
   const msosQ = useMsos();
   const templatesQ = useTemplates();
-  const attach = useAssignProviderToFacility();
   const generate = useGenerateLaunchCases();
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addProviderId, setAddProviderId] = useState(NONE);
   const [editOpen, setEditOpen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
   const [plan, setPlan] = useState<PlanLine[] | null>(null);
@@ -131,11 +122,6 @@ function LaunchDetailPage() {
     );
     return (providersQ.data ?? []).filter((p) => linkedIds.has(p.id));
   }, [assignmentsQ.data, providersQ.data, id]);
-
-  const unlinked = useMemo(() => {
-    const linkedIds = new Set(linked.map((p) => p.id));
-    return (providersQ.data ?? []).filter((p) => !linkedIds.has(p.id) && p.status !== "terminated");
-  }, [providersQ.data, linked]);
 
   const credStatusById = useMemo(
     () => new Map((credStatusesQ.data ?? []).map((s) => [s.id, s])),
@@ -445,44 +431,7 @@ function LaunchDetailPage() {
       </section>
 
       {editOpen ? <LaunchEditModal location={location} onClose={() => setEditOpen(false)} /> : null}
-
-      {/* Add provider */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Add provider to {location.name}</DialogTitle>
-          </DialogHeader>
-          <Select value={addProviderId} onValueChange={setAddProviderId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Select provider…</SelectItem>
-              {unlinked.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.firstName} {p.lastName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={addProviderId === NONE || attach.isPending}
-              onClick={async () => {
-                await attach.mutateAsync({ providerId: addProviderId, facilityId: location.id });
-                setAddProviderId(NONE);
-                setAddOpen(false);
-                toast.success("Provider linked");
-              }}
-            >
-              Add
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {addOpen ? <AssignProviderDialog location={location} onClose={() => setAddOpen(false)} /> : null}
 
       {/* Generate cases */}
       <Dialog open={genOpen} onOpenChange={setGenOpen}>

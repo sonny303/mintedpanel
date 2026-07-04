@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AssignProviderDialog } from "@/components/launches/AssignProviderDialog";
 import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { useFacilityAssignments, useLaunchLocations } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
@@ -49,6 +50,7 @@ function LaunchesPage() {
   const providersQ = useProviders();
   const casesQ = useCases();
   const [modal, setModal] = useState<{ location: Facility | null } | null>(null);
+  const [assignFor, setAssignFor] = useState<Facility | null>(null);
 
   const loading = locationsQ.isLoading || statusConfigsQ.isLoading || casesQ.isLoading;
   const failed = locationsQ.isError;
@@ -137,6 +139,9 @@ function LaunchesPage() {
                   <DropdownMenuItem onClick={() => setModal({ location: r.facility })}>
                     Edit launch
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAssignFor(r.facility)}>
+                    Assign provider
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </span>
@@ -214,6 +219,9 @@ function LaunchesPage() {
       )}
 
       {modal ? <LaunchEditModal location={modal.location} onClose={() => setModal(null)} /> : null}
+      {assignFor ? (
+        <AssignProviderDialog location={assignFor} onClose={() => setAssignFor(null)} />
+      ) : null}
     </div>
   );
 }

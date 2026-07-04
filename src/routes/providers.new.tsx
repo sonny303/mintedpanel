@@ -1,11 +1,15 @@
 // Add Provider entry point. The 5-step form lives in ProviderForm; this
 // route wires it to createProviderWithDetails so licenses and facility
 // assignments captured in steps 3 and 4 are persisted alongside the provider.
+// A ?locationId search param (set by the launch flow) pre-selects the launch
+// location's group and facility so onboarding and the launch run in parallel.
+import { useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useActiveOrgId, useAuthStore } from "@/lib/auth-store";
+import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
   ProviderForm,
   emptyProviderFormState,
@@ -20,6 +24,9 @@ import {
 } from "@/services/providers";
 
 export const Route = createFileRoute("/providers/new")({
+  validateSearch: (search: Record<string, unknown>): { locationId?: string } => ({
+    locationId: typeof search.locationId === "string" ? search.locationId : undefined,
+  }),
   beforeLoad: () => {
     const { memberships, activeOrgId } = useAuthStore.getState();
     const role = memberships.find((m) => m.orgId === activeOrgId)?.role ?? null;
@@ -79,13 +86,29 @@ function Page() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
+  const { locationId } = Route.useSearch();
+  const locationQ = useLaunchLocation(locationId);
+  const launchLocation = locationId ? (locationQ.data ?? null) : null;
 
   const create = useMutation({
     mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["providers", orgId] });
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
     },
   });
+
+  const initial = useMemo(
+    () =>
+      launchLocation
+        ? {
+            ...emptyProviderFormState,
+            groupId: launchLocation.groupId ?? "",
+            facilityIds: [launchLocation.id],
+          }
+        : emptyProviderFormState,
+    [launchLocation],
+  );
 
   const onSubmit = async (form: ProviderFormState) => {
     try {
@@ -99,6 +122,11 @@ function Page() {
         toast.warning("Provider created, but some details did not save. Fix and retry.");
         return;
       }
+      if (launchLocation && form.facilityIds.includes(launchLocation.id)) {
+        toast.success(`Provider added and linked to ${launchLocation.name}`);
+        navigate({ to: "/launches/$id", params: { id: launchLocation.id } });
+        return;
+      }
       toast.success("Provider added");
       navigate({ to: "/providers/$id", params: { id: result.provider.id } });
     } catch (error) {
@@ -106,14 +134,22 @@ function Page() {
     }
   };
 
+  if (locationId && locationQ.isLoading) {
+    return <div className="h-32 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;
+  }
+
   return (
     <div className="max-w-4xl">
       <PageHeader
         title="Add provider"
-        description="Enter provider details. All fields are optional — save with as little or as much as you have."
+        description={
+          launchLocation
+            ? `Linked to launch ${launchLocation.name} on save. All fields are optional.`
+            : "Enter provider details. All fields are optional — save with as little or as much as you have."
+        }
       />
       <ProviderForm
-        initial={emptyProviderFormState}
+        initial={initial}
         submitLabel="Create provider"
         pendingLabel="Creating…"
         isPending={create.isPending}
