@@ -36,12 +36,15 @@ import { useProviders } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { US_STATES } from "@/components/providers/providerFormShared";
-import { isNewStateLaunch, transitionWarnings, type LocationRow } from "@/lib/launchLocations";
+import {
+  isNewStateLaunch,
+  launchDateFieldLabel,
+  transitionWarnings,
+  type LocationRow,
+} from "@/lib/launchLocations";
 import type { Facility } from "@/types";
 
 const NONE = "__none__";
-const TARGET_LABELS = new Set(["Planned", "Interviewing"]);
-const STARTS_LABELS = new Set(["Pending Fulfillment", "Ready for Launch", "Live"]);
 
 export function LaunchEditModal({
   location,
@@ -72,7 +75,10 @@ export function LaunchEditModal({
   const [groupId, setGroupId] = useState<string>(
     location?.groupId ?? (groupsQ.data?.length === 1 ? groupsQ.data[0].id : NONE),
   );
-  const [statusId, setStatusId] = useState<string>(defaultStatusId);
+  const [statusChoice, setStatusChoice] = useState<string>("");
+  // Status configs may still be loading when the modal mounts; fall back to
+  // the default until the user picks one.
+  const statusId = statusChoice || defaultStatusId;
   const [effectiveDate, setEffectiveDate] = useState(location?.effectiveDate ?? "");
   const [providerId, setProviderId] = useState<string>(NONE);
   const [error, setError] = useState<string | null>(null);
@@ -82,11 +88,7 @@ export function LaunchEditModal({
   const pending = createMut.isPending || updateMut.isPending;
 
   const selectedStatusLabel = statuses.find((s) => s.id === statusId)?.label ?? "";
-  const dateLabel = TARGET_LABELS.has(selectedStatusLabel)
-    ? "Target date"
-    : STARTS_LABELS.has(selectedStatusLabel)
-      ? "Start date"
-      : "Effective date";
+  const dateLabel = launchDateFieldLabel(selectedStatusLabel);
 
   // Soft transition checks (warn, never block) — only when the status moves.
   const warnings = useMemo(() => {
@@ -255,7 +257,7 @@ export function LaunchEditModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-[12px]">Status</Label>
-              <Select value={statusId} onValueChange={setStatusId}>
+              <Select value={statusId} onValueChange={setStatusChoice}>
                 <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>

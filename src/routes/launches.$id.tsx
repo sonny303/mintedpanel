@@ -194,11 +194,11 @@ function LaunchDetailPage() {
               {readiness.inNetwork} of {readiness.denominator} in-network
             </span>
           </span>
-        ) : (
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+        ) : locationCases.length === 0 ? (
+          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
             No cases yet
           </span>
-        )}
+        ) : null}
         {readiness?.contractGap && !newState && location.state ? (
           <span className="flex items-center gap-1 text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
             <AlertTriangle className="w-3.5 h-3.5" />
@@ -285,7 +285,7 @@ function LaunchDetailPage() {
       {addOpen ? (
         <AssignProviderDialog location={location} onClose={() => setAddOpen(false)} />
       ) : null}
-      {casesOpen ? (
+      {casesOpen && !assignmentsQ.isLoading && !providersQ.isLoading ? (
         <CreateCasesDialog
           location={location}
           linkedProviders={linked}

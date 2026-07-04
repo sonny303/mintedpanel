@@ -84,9 +84,13 @@ export function AssignProviderDialog({
           <Button
             disabled={providerId === NONE || assign.isPending}
             onClick={async () => {
-              await assign.mutateAsync({ providerId, facilityId: location.id });
-              toast.success("Provider linked");
-              onClose();
+              try {
+                await assign.mutateAsync({ providerId, facilityId: location.id });
+                toast.success("Provider linked");
+                onClose();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Could not link provider");
+              }
             }}
           >
             {assign.isPending ? "Linking…" : "Assign"}

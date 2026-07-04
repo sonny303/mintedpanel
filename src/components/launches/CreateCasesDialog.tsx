@@ -7,7 +7,7 @@
 // unique. Creation runs through the existing createCase path
 // (create_case_with_tasks RPC) so audit rows and SOP task seeding behave
 // exactly like manual creation.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -84,11 +84,14 @@ export function CreateCasesDialog({
   const groupsQ = useProviderGroups();
   const generate = useGenerateLaunchCases();
 
-  const [providerId, setProviderId] = useState(linkedProviders[0]?.id ?? "");
+  const [providerChoice, setProviderChoice] = useState("");
   const [rows, setRows] = useState<ChecklistRow[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<{ created: number; failed: number } | null>(null);
 
+  // Derived so a dialog mounted before the assignments query settles (the
+  // ?createCases=true deep link) still picks up the first linked provider.
+  const providerId = providerChoice || (linkedProviders[0]?.id ?? "");
   const provider = linkedProviders.find((p) => p.id === providerId) ?? null;
   const state = location.state;
 
@@ -156,7 +159,7 @@ export function CreateCasesDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only when the inputs that shape the checklist change
-  }, [providerId, state, payersQ.data, casesQ.data, msosQ.data]);
+  }, [providerId, state, payersQ.data, casesQ.data, msosQ.data, linkedProviders.length]);
 
   function toggle(payerId: string) {
     setSelected((prev) => {
@@ -182,7 +185,7 @@ export function CreateCasesDialog({
         provider.groupId ?? null,
       );
       const tasks = template
-        ? resolveTemplate(template, provider, group, null, mso ? { mso } : null, null)
+        ? resolveTemplate(template, provider, group, location, mso ? { mso } : null, null)
         : [];
       entries.push({
         input: {
@@ -245,7 +248,7 @@ export function CreateCasesDialog({
               <div className="mb-1 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)]">
                 Provider
               </div>
-              <Select value={providerId} onValueChange={setProviderId}>
+              <Select value={providerId} onValueChange={setProviderChoice}>
                 <SelectTrigger className="h-9 w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -310,7 +313,11 @@ export function CreateCasesDialog({
           {!result && state && linkedProviders.length > 0 ? (
             <Button
               disabled={generate.isPending || rows === null || selectableCount === 0}
-              onClick={() => void createCases()}
+              onClick={() =>
+                createCases().catch((e: unknown) =>
+                  toast.error(e instanceof Error ? e.message : "Case creation failed"),
+                )
+              }
             >
               {generate.isPending
                 ? "Creating…"

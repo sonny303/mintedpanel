@@ -30,7 +30,9 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 
 ### facilities
 
-`id, org_id, group_id, name, street, city, state, zip, is_active, created_at`.
+`id, org_id, group_id, name, street, city, state, zip, is_active, status_id, effective_date, created_at` (plus operational detail columns).
+
+A launch is a facilities row in a pre-active location-track status: `status_id` references a `status_configs` row with `track = 'location'` (Prospect → Planned → Interviewing → Pending Fulfillment → Ready for Launch → Live, plus Inactive), and `effective_date` holds the target/start date (month-only dates stored as the 1st). The Launches page is a filtered view of this table; cases link to a location through `credential_cases.facility_id`. The legacy `launches` table remains in the hosted database but is no longer read or written.
 
 ### providers
 
@@ -75,7 +77,7 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 
 ### status_configs
 
-`id, org_id, track, label, color, sort_order, required_fields, created_at` — `track ∈ {credentialing, contracting}`.
+`id, org_id, track, label, color, sort_order, required_fields, action_bucket, created_at` — `track ∈ {credentialing, contracting, location}`. The location track drives the Launches pipeline.
 
 ### status_history (APPEND-ONLY)
 

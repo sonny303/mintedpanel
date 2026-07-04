@@ -87,6 +87,18 @@ describe("splitLaunchSections", () => {
     expect(pipeline).toHaveLength(0);
   });
 
+  it("excludes soft-archived locations regardless of status", () => {
+    const { recentlyLaunched, pipeline } = splitLaunchSections(
+      [
+        row("Live", { id: "arch-live", effectiveDate: "2026-07-01", isActive: false }),
+        row("Planned", { id: "arch-plan", effectiveDate: "2026-08-01", isActive: false }),
+      ],
+      TODAY,
+    );
+    expect(recentlyLaunched).toHaveLength(0);
+    expect(pipeline).toHaveLength(0);
+  });
+
   it("sorts the pipeline by date ascending with no-date rows last", () => {
     const { pipeline } = splitLaunchSections(
       [
@@ -139,6 +151,11 @@ describe("launchDateDisplay", () => {
     expect(launchDateDisplay(null, "2026-08-01")).toBe("—");
     expect(launchDateDisplay("Inactive", "2026-08-01")).toBe("—");
   });
+
+  it("shows the bare date for admin-added statuses outside the seeded seven", () => {
+    expect(launchDateDisplay("Negotiating", "2026-08-01")).toBe("Aug 1, 2026");
+    expect(launchDateDisplay("Negotiating", null)).toBe("No date");
+  });
 });
 
 describe("isNewStateLaunch", () => {
@@ -170,6 +187,13 @@ describe("isNewStateLaunch", () => {
     expect(isNewStateLaunch(facility({ id: "x", state: null }), [])).toBe(false);
     const self = facility({ id: "self", state: "KS" });
     expect(isNewStateLaunch(self, [{ facility: self, status: status("Live") }])).toBe(true);
+  });
+
+  it("ignores soft-archived Live locations", () => {
+    const candidate = facility({ id: "new", state: "KS" });
+    expect(
+      isNewStateLaunch(candidate, [row("Live", { id: "arch", state: "KS", isActive: false })]),
+    ).toBe(true);
   });
 });
 

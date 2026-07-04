@@ -54,7 +54,7 @@ function LaunchesPage() {
   const [assignFor, setAssignFor] = useState<Facility | null>(null);
 
   const loading = locationsQ.isLoading || statusConfigsQ.isLoading || casesQ.isLoading;
-  const failed = locationsQ.isError;
+  const failed = locationsQ.isError || statusConfigsQ.isError;
 
   const { recentlyLaunched, pipeline } = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));

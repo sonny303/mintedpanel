@@ -16,6 +16,13 @@ export const INACTIVE_STATUS_LABEL = "Inactive";
 const TARGET_LABELS = new Set(["Planned", "Interviewing"]);
 const STARTS_LABELS = new Set(["Pending Fulfillment", "Ready for Launch", LIVE_STATUS_LABEL]);
 
+/** Form-field label for the effective date, switching with the status. */
+export function launchDateFieldLabel(statusLabel: string | null | undefined): string {
+  if (statusLabel && TARGET_LABELS.has(statusLabel)) return "Target date";
+  if (statusLabel && STARTS_LABELS.has(statusLabel)) return "Start date";
+  return "Effective date";
+}
+
 export interface LocationRow {
   facility: Facility;
   /** location-track status config, null for plain active locations */
@@ -39,13 +46,15 @@ export interface LaunchSections {
 
 /**
  * Splits locations into the two Launches-page sections. Rows with no location
- * status (plain active locations) and Inactive rows never appear. Live rows
- * older than the window drop off the page entirely.
+ * status (plain active locations), Inactive rows, and soft-archived rows
+ * (is_active = false) never appear. Live rows older than the window drop off
+ * the page entirely.
  */
 export function splitLaunchSections(rows: LocationRow[], today: Date): LaunchSections {
   const recentlyLaunched: LocationRow[] = [];
   const pipeline: LocationRow[] = [];
   for (const row of rows) {
+    if (!row.facility.isActive) continue;
     const label = row.status?.label ?? null;
     if (label === null || isInactiveLabel(label)) continue;
     if (isLiveLabel(label)) {
@@ -79,26 +88,27 @@ export function comparePipelineRows(a: LocationRow, b: LocationRow): number {
 /**
  * Row date display: "Target Mmm D, YYYY" early in the pipeline, "Starts
  * Mmm D, YYYY" once a provider is secured, nothing for Prospect/Inactive.
+ * Admin-added statuses outside the seeded seven show the bare date.
  */
 export function launchDateDisplay(
   statusLabel: string | null | undefined,
   effectiveDate: string | null | undefined,
 ): string {
-  if (!statusLabel || isInactiveLabel(statusLabel)) return "—";
+  if (!statusLabel || statusLabel === "Prospect" || isInactiveLabel(statusLabel)) return "—";
   const prefix = TARGET_LABELS.has(statusLabel)
     ? "Target"
     : STARTS_LABELS.has(statusLabel)
       ? "Starts"
       : null;
-  if (!prefix) return "—";
   if (!effectiveDate) return "No date";
-  return `${prefix} ${format(parseISO(effectiveDate), "MMM d, yyyy")}`;
+  const formatted = format(parseISO(effectiveDate), "MMM d, yyyy");
+  return prefix ? `${prefix} ${formatted}` : formatted;
 }
 
 /**
  * NEW STATE: the location's state has no Live location in the same group.
  * Locations without a location status count as live — they are plain active
- * sites that predate the pipeline.
+ * sites that predate the pipeline. Soft-archived locations don't count.
  */
 export function isNewStateLaunch(
   candidate: Facility,
@@ -108,6 +118,7 @@ export function isNewStateLaunch(
   return !all.some(
     (row) =>
       row.facility.id !== candidate.id &&
+      row.facility.isActive &&
       row.facility.groupId === candidate.groupId &&
       row.facility.state === candidate.state &&
       (row.status === null || isLiveLabel(row.status.label)),
