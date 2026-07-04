@@ -71,6 +71,7 @@ export type Database = {
           id: string;
           notes: string | null;
           org_id: string;
+          payer_group_id: string | null;
           payer_id: string | null;
           state: string;
           updated_at: string | null;
@@ -84,6 +85,7 @@ export type Database = {
           id?: string;
           notes?: string | null;
           org_id: string;
+          payer_group_id?: string | null;
           payer_id?: string | null;
           state: string;
           updated_at?: string | null;
@@ -97,6 +99,7 @@ export type Database = {
           id?: string;
           notes?: string | null;
           org_id?: string;
+          payer_group_id?: string | null;
           payer_id?: string | null;
           state?: string;
           updated_at?: string | null;
@@ -136,6 +139,7 @@ export type Database = {
         Row: {
           approved_date: string | null;
           assigned_to: string | null;
+          case_email_token: string;
           confirmed_effective_date: string | null;
           created_at: string | null;
           created_by: string | null;
@@ -157,6 +161,7 @@ export type Database = {
         Insert: {
           approved_date?: string | null;
           assigned_to?: string | null;
+          case_email_token?: string;
           confirmed_effective_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
@@ -178,6 +183,7 @@ export type Database = {
         Update: {
           approved_date?: string | null;
           assigned_to?: string | null;
+          case_email_token?: string;
           confirmed_effective_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
@@ -264,39 +270,90 @@ export type Database = {
       };
       facilities: {
         Row: {
+          accepting_new_patients: boolean | null;
+          ada_compliance: Json | null;
+          appointment_phone: string | null;
           city: string | null;
+          contact_name: string | null;
+          county: string | null;
           created_at: string;
+          effective_date: string | null;
+          email: string | null;
+          fax: string | null;
           group_id: string | null;
+          hours: Json | null;
           id: string;
+          interpreter_languages: string[] | null;
           is_active: boolean;
+          language_line: boolean | null;
+          languages_offered: string[] | null;
           name: string;
           org_id: string;
+          phone: string | null;
+          service_types: Json | null;
           state: string | null;
+          status_id: string | null;
           street: string | null;
+          suite: string | null;
+          treating_categories: Json | null;
           zip: string | null;
         };
         Insert: {
+          accepting_new_patients?: boolean | null;
+          ada_compliance?: Json | null;
+          appointment_phone?: string | null;
           city?: string | null;
+          contact_name?: string | null;
+          county?: string | null;
           created_at?: string;
+          effective_date?: string | null;
+          email?: string | null;
+          fax?: string | null;
           group_id?: string | null;
+          hours?: Json | null;
           id?: string;
+          interpreter_languages?: string[] | null;
           is_active?: boolean;
+          language_line?: boolean | null;
+          languages_offered?: string[] | null;
           name: string;
           org_id: string;
+          phone?: string | null;
+          service_types?: Json | null;
           state?: string | null;
+          status_id?: string | null;
           street?: string | null;
+          suite?: string | null;
+          treating_categories?: Json | null;
           zip?: string | null;
         };
         Update: {
+          accepting_new_patients?: boolean | null;
+          ada_compliance?: Json | null;
+          appointment_phone?: string | null;
           city?: string | null;
+          contact_name?: string | null;
+          county?: string | null;
           created_at?: string;
+          effective_date?: string | null;
+          email?: string | null;
+          fax?: string | null;
           group_id?: string | null;
+          hours?: Json | null;
           id?: string;
+          interpreter_languages?: string[] | null;
           is_active?: boolean;
+          language_line?: boolean | null;
+          languages_offered?: string[] | null;
           name?: string;
           org_id?: string;
+          phone?: string | null;
+          service_types?: Json | null;
           state?: string | null;
+          status_id?: string | null;
           street?: string | null;
+          suite?: string | null;
+          treating_categories?: Json | null;
           zip?: string | null;
         };
         Relationships: [
@@ -309,6 +366,137 @@ export type Database = {
           },
           {
             foreignKeyName: "facilities_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "facilities_status_id_fkey";
+            columns: ["status_id"];
+            isOneToOne: false;
+            referencedRelation: "status_configs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      fill_sessions: {
+        Row: {
+          case_id: string;
+          completed_at: string | null;
+          docs_attached: Json | null;
+          fields_filled: number;
+          fields_skipped: Json | null;
+          fill_mode: string;
+          id: string;
+          org_id: string;
+          performed_by: string | null;
+          portal_key: string;
+          provider_id: string | null;
+          started_at: string;
+        };
+        Insert: {
+          case_id: string;
+          completed_at?: string | null;
+          docs_attached?: Json | null;
+          fields_filled?: number;
+          fields_skipped?: Json | null;
+          fill_mode?: string;
+          id?: string;
+          org_id: string;
+          performed_by?: string | null;
+          portal_key: string;
+          provider_id?: string | null;
+          started_at?: string;
+        };
+        Update: {
+          case_id?: string;
+          completed_at?: string | null;
+          docs_attached?: Json | null;
+          fields_filled?: number;
+          fields_skipped?: Json | null;
+          fill_mode?: string;
+          id?: string;
+          org_id?: string;
+          performed_by?: string | null;
+          portal_key?: string;
+          provider_id?: string | null;
+          started_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "fill_sessions_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fill_sessions_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "fill_sessions_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      group_insurance_policies: {
+        Row: {
+          created_at: string | null;
+          group_id: string;
+          id: string;
+          insurance_type: string;
+          insurer_name: string;
+          notes: string | null;
+          org_id: string;
+          policy_end_date: string;
+          policy_number: string;
+          policy_start_date: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          created_at?: string | null;
+          group_id: string;
+          id?: string;
+          insurance_type: string;
+          insurer_name: string;
+          notes?: string | null;
+          org_id: string;
+          policy_end_date: string;
+          policy_number: string;
+          policy_start_date: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          created_at?: string | null;
+          group_id?: string;
+          id?: string;
+          insurance_type?: string;
+          insurer_name?: string;
+          notes?: string | null;
+          org_id?: string;
+          policy_end_date?: string;
+          policy_number?: string;
+          policy_start_date?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "group_insurance_policies_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "group_insurance_policies_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -392,63 +580,6 @@ export type Database = {
           },
           {
             foreignKeyName: "launches_org_id_fkey";
-            columns: ["org_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      group_insurance_policies: {
-        Row: {
-          created_at: string;
-          group_id: string;
-          id: string;
-          insurance_type: string;
-          insurer_name: string;
-          notes: string | null;
-          org_id: string;
-          policy_end_date: string;
-          policy_number: string;
-          policy_start_date: string;
-          updated_at: string;
-        };
-        Insert: {
-          created_at?: string;
-          group_id: string;
-          id?: string;
-          insurance_type: string;
-          insurer_name: string;
-          notes?: string | null;
-          org_id: string;
-          policy_end_date: string;
-          policy_number: string;
-          policy_start_date: string;
-          updated_at?: string;
-        };
-        Update: {
-          created_at?: string;
-          group_id?: string;
-          id?: string;
-          insurance_type?: string;
-          insurer_name?: string;
-          notes?: string | null;
-          org_id?: string;
-          policy_end_date?: string;
-          policy_number?: string;
-          policy_start_date?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "group_insurance_policies_group_id_fkey";
-            columns: ["group_id"];
-            isOneToOne: false;
-            referencedRelation: "provider_groups";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "group_insurance_policies_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -710,6 +841,112 @@ export type Database = {
           },
         ];
       };
+      pending_invites: {
+        Row: {
+          created_at: string;
+          email: string;
+          full_name: string | null;
+          id: string;
+          invited_by: string | null;
+          org_id: string;
+          role: string;
+        };
+        Insert: {
+          created_at?: string;
+          email: string;
+          full_name?: string | null;
+          id?: string;
+          invited_by?: string | null;
+          org_id: string;
+          role: string;
+        };
+        Update: {
+          created_at?: string;
+          email?: string;
+          full_name?: string | null;
+          id?: string;
+          invited_by?: string | null;
+          org_id?: string;
+          role?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "pending_invites_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      portal_field_maps: {
+        Row: {
+          created_at: string;
+          field_type: string;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          selector: string;
+          selector_fallbacks: Json | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          field_type: string;
+          hardcoded_value?: string | null;
+          id?: string;
+          map_type: string;
+          notes?: string | null;
+          org_id?: string | null;
+          page_step?: string | null;
+          portal_key: string;
+          selector: string;
+          selector_fallbacks?: Json | null;
+          source: string;
+          status?: string;
+          token?: string | null;
+          transform?: string | null;
+          updated_at?: string;
+          url_pattern?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          field_type?: string;
+          hardcoded_value?: string | null;
+          id?: string;
+          map_type?: string;
+          notes?: string | null;
+          org_id?: string | null;
+          page_step?: string | null;
+          portal_key?: string;
+          selector?: string;
+          selector_fallbacks?: Json | null;
+          source?: string;
+          status?: string;
+          token?: string | null;
+          transform?: string | null;
+          updated_at?: string;
+          url_pattern?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "portal_field_maps_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           created_at: string;
@@ -731,6 +968,80 @@ export type Database = {
         };
         Relationships: [];
       };
+      provider_documents: {
+        Row: {
+          case_id: string | null;
+          created_at: string;
+          doc_type: string;
+          effective_date: string | null;
+          expiration_date: string | null;
+          file_name: string;
+          file_path: string;
+          group_id: string | null;
+          id: string;
+          org_id: string;
+          provider_id: string | null;
+          uploaded_by: string | null;
+        };
+        Insert: {
+          case_id?: string | null;
+          created_at?: string;
+          doc_type: string;
+          effective_date?: string | null;
+          expiration_date?: string | null;
+          file_name: string;
+          file_path: string;
+          group_id?: string | null;
+          id?: string;
+          org_id: string;
+          provider_id?: string | null;
+          uploaded_by?: string | null;
+        };
+        Update: {
+          case_id?: string | null;
+          created_at?: string;
+          doc_type?: string;
+          effective_date?: string | null;
+          expiration_date?: string | null;
+          file_name?: string;
+          file_path?: string;
+          group_id?: string | null;
+          id?: string;
+          org_id?: string;
+          provider_id?: string | null;
+          uploaded_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_documents_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_documents_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_documents_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_documents_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       provider_facility_assignments: {
         Row: {
           created_at: string | null;
@@ -738,7 +1049,9 @@ export type Database = {
           id: string;
           is_primary: boolean | null;
           org_id: string;
+          practice_frequency: string | null;
           provider_id: string | null;
+          start_date: string | null;
         };
         Insert: {
           created_at?: string | null;
@@ -746,7 +1059,9 @@ export type Database = {
           id?: string;
           is_primary?: boolean | null;
           org_id: string;
+          practice_frequency?: string | null;
           provider_id?: string | null;
+          start_date?: string | null;
         };
         Update: {
           created_at?: string | null;
@@ -754,7 +1069,9 @@ export type Database = {
           id?: string;
           is_primary?: boolean | null;
           org_id?: string;
+          practice_frequency?: string | null;
           provider_id?: string | null;
+          start_date?: string | null;
         };
         Relationships: [
           {
@@ -782,34 +1099,139 @@ export type Database = {
       };
       provider_groups: {
         Row: {
+          billing_city: string | null;
+          billing_contact_name: string | null;
+          billing_email: string | null;
+          billing_fax: string | null;
+          billing_phone: string | null;
+          billing_state: string | null;
+          billing_street: string | null;
+          billing_suite: string | null;
+          billing_zip: string | null;
+          contract_signer_email: string | null;
+          contract_signer_name: string | null;
+          contracting_contact_email: string | null;
+          contracting_contact_name: string | null;
+          contracting_contact_title: string | null;
+          correspondence_city: string | null;
+          correspondence_contact_name: string | null;
+          correspondence_email: string | null;
+          correspondence_fax: string | null;
+          correspondence_phone: string | null;
+          correspondence_state: string | null;
+          correspondence_street: string | null;
+          correspondence_suite: string | null;
+          correspondence_zip: string | null;
           created_at: string;
+          credentialing_city: string | null;
+          credentialing_contact_name: string | null;
+          credentialing_email: string | null;
+          credentialing_fax: string | null;
+          credentialing_phone: string | null;
+          credentialing_state: string | null;
+          credentialing_street: string | null;
+          credentialing_suite: string | null;
+          credentialing_zip: string | null;
           id: string;
           is_active: boolean;
           name: string;
           npi_type2: string | null;
           org_id: string;
+          preferred_contact_method: string | null;
           states: string[] | null;
+          tax_id_type: string | null;
           tin: string | null;
+          website_url: string | null;
         };
         Insert: {
+          billing_city?: string | null;
+          billing_contact_name?: string | null;
+          billing_email?: string | null;
+          billing_fax?: string | null;
+          billing_phone?: string | null;
+          billing_state?: string | null;
+          billing_street?: string | null;
+          billing_suite?: string | null;
+          billing_zip?: string | null;
+          contract_signer_email?: string | null;
+          contract_signer_name?: string | null;
+          contracting_contact_email?: string | null;
+          contracting_contact_name?: string | null;
+          contracting_contact_title?: string | null;
+          correspondence_city?: string | null;
+          correspondence_contact_name?: string | null;
+          correspondence_email?: string | null;
+          correspondence_fax?: string | null;
+          correspondence_phone?: string | null;
+          correspondence_state?: string | null;
+          correspondence_street?: string | null;
+          correspondence_suite?: string | null;
+          correspondence_zip?: string | null;
           created_at?: string;
+          credentialing_city?: string | null;
+          credentialing_contact_name?: string | null;
+          credentialing_email?: string | null;
+          credentialing_fax?: string | null;
+          credentialing_phone?: string | null;
+          credentialing_state?: string | null;
+          credentialing_street?: string | null;
+          credentialing_suite?: string | null;
+          credentialing_zip?: string | null;
           id?: string;
           is_active?: boolean;
           name: string;
           npi_type2?: string | null;
           org_id: string;
+          preferred_contact_method?: string | null;
           states?: string[] | null;
+          tax_id_type?: string | null;
           tin?: string | null;
+          website_url?: string | null;
         };
         Update: {
+          billing_city?: string | null;
+          billing_contact_name?: string | null;
+          billing_email?: string | null;
+          billing_fax?: string | null;
+          billing_phone?: string | null;
+          billing_state?: string | null;
+          billing_street?: string | null;
+          billing_suite?: string | null;
+          billing_zip?: string | null;
+          contract_signer_email?: string | null;
+          contract_signer_name?: string | null;
+          contracting_contact_email?: string | null;
+          contracting_contact_name?: string | null;
+          contracting_contact_title?: string | null;
+          correspondence_city?: string | null;
+          correspondence_contact_name?: string | null;
+          correspondence_email?: string | null;
+          correspondence_fax?: string | null;
+          correspondence_phone?: string | null;
+          correspondence_state?: string | null;
+          correspondence_street?: string | null;
+          correspondence_suite?: string | null;
+          correspondence_zip?: string | null;
           created_at?: string;
+          credentialing_city?: string | null;
+          credentialing_contact_name?: string | null;
+          credentialing_email?: string | null;
+          credentialing_fax?: string | null;
+          credentialing_phone?: string | null;
+          credentialing_state?: string | null;
+          credentialing_street?: string | null;
+          credentialing_suite?: string | null;
+          credentialing_zip?: string | null;
           id?: string;
           is_active?: boolean;
           name?: string;
           npi_type2?: string | null;
           org_id?: string;
+          preferred_contact_method?: string | null;
           states?: string[] | null;
+          tax_id_type?: string | null;
           tin?: string | null;
+          website_url?: string | null;
         };
         Relationships: [
           {
@@ -823,29 +1245,43 @@ export type Database = {
       };
       providers: {
         Row: {
+          additional_certifications: Json | null;
+          age_groups_served: string[] | null;
+          board_certified: boolean | null;
           caqh_id: string | null;
           caqh_last_attested_date: string | null;
           created_at: string | null;
           credentials: string | null;
+          cultural_competency_training: boolean | null;
           date_of_birth: string | null;
+          dea_expiration_date: string | null;
           dea_number: string | null;
           degree: string | null;
           email: string | null;
+          ethnicity: string | null;
           first_name: string;
+          gender: string | null;
           graduation_date: string | null;
           group_id: string | null;
-          launch_id: string | null;
           home_city: string | null;
           home_state: string | null;
           home_street: string | null;
           home_zip: string | null;
           id: string;
           is_new_grad: boolean | null;
+          languages: string[] | null;
           last_name: string;
+          launch_id: string | null;
+          license_expiration_date: string | null;
+          license_issue_date: string | null;
+          license_number: string | null;
+          license_state: string | null;
           malpractice_carrier: string | null;
           malpractice_coverage_end: string | null;
           malpractice_coverage_start: string | null;
           malpractice_policy_number: string | null;
+          medicaid_attested: boolean | null;
+          middle_initial: string | null;
           npi: string | null;
           org_id: string;
           phone: string | null;
@@ -854,34 +1290,50 @@ export type Database = {
           ssn_last4: string | null;
           start_date: string | null;
           status: string;
+          sub_specialty: string | null;
+          suffix: string | null;
           taxonomy_code: string | null;
           terminated_date: string | null;
           updated_at: string | null;
         };
         Insert: {
+          additional_certifications?: Json | null;
+          age_groups_served?: string[] | null;
+          board_certified?: boolean | null;
           caqh_id?: string | null;
           caqh_last_attested_date?: string | null;
           created_at?: string | null;
           credentials?: string | null;
+          cultural_competency_training?: boolean | null;
           date_of_birth?: string | null;
+          dea_expiration_date?: string | null;
           dea_number?: string | null;
           degree?: string | null;
           email?: string | null;
+          ethnicity?: string | null;
           first_name: string;
+          gender?: string | null;
           graduation_date?: string | null;
           group_id?: string | null;
-          launch_id?: string | null;
           home_city?: string | null;
           home_state?: string | null;
           home_street?: string | null;
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          languages?: string[] | null;
           last_name: string;
+          launch_id?: string | null;
+          license_expiration_date?: string | null;
+          license_issue_date?: string | null;
+          license_number?: string | null;
+          license_state?: string | null;
           malpractice_carrier?: string | null;
           malpractice_coverage_end?: string | null;
           malpractice_coverage_start?: string | null;
           malpractice_policy_number?: string | null;
+          medicaid_attested?: boolean | null;
+          middle_initial?: string | null;
           npi?: string | null;
           org_id: string;
           phone?: string | null;
@@ -890,34 +1342,50 @@ export type Database = {
           ssn_last4?: string | null;
           start_date?: string | null;
           status?: string;
+          sub_specialty?: string | null;
+          suffix?: string | null;
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
         };
         Update: {
+          additional_certifications?: Json | null;
+          age_groups_served?: string[] | null;
+          board_certified?: boolean | null;
           caqh_id?: string | null;
           caqh_last_attested_date?: string | null;
           created_at?: string | null;
           credentials?: string | null;
+          cultural_competency_training?: boolean | null;
           date_of_birth?: string | null;
+          dea_expiration_date?: string | null;
           dea_number?: string | null;
           degree?: string | null;
           email?: string | null;
+          ethnicity?: string | null;
           first_name?: string;
+          gender?: string | null;
           graduation_date?: string | null;
           group_id?: string | null;
-          launch_id?: string | null;
           home_city?: string | null;
           home_state?: string | null;
           home_street?: string | null;
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          languages?: string[] | null;
           last_name?: string;
+          launch_id?: string | null;
+          license_expiration_date?: string | null;
+          license_issue_date?: string | null;
+          license_number?: string | null;
+          license_state?: string | null;
           malpractice_carrier?: string | null;
           malpractice_coverage_end?: string | null;
           malpractice_coverage_start?: string | null;
           malpractice_policy_number?: string | null;
+          medicaid_attested?: boolean | null;
+          middle_initial?: string | null;
           npi?: string | null;
           org_id?: string;
           phone?: string | null;
@@ -926,6 +1394,8 @@ export type Database = {
           ssn_last4?: string | null;
           start_date?: string | null;
           status?: string;
+          sub_specialty?: string | null;
+          suffix?: string | null;
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
@@ -939,6 +1409,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "providers_launch_id_fkey";
+            columns: ["launch_id"];
+            isOneToOne: false;
+            referencedRelation: "launches";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "providers_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
@@ -949,10 +1426,10 @@ export type Database = {
       };
       sop_templates: {
         Row: {
+          archived: boolean;
           created_at: string | null;
           group_id: string | null;
           id: string;
-          is_archived: boolean;
           name: string;
           org_id: string;
           payer_id: string | null;
@@ -962,10 +1439,10 @@ export type Database = {
           updated_at: string | null;
         };
         Insert: {
+          archived?: boolean;
           created_at?: string | null;
           group_id?: string | null;
           id?: string;
-          is_archived?: boolean;
           name: string;
           org_id: string;
           payer_id?: string | null;
@@ -975,10 +1452,10 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: {
+          archived?: boolean;
           created_at?: string | null;
           group_id?: string | null;
           id?: string;
-          is_archived?: boolean;
           name?: string;
           org_id?: string;
           payer_id?: string | null;
@@ -1067,6 +1544,7 @@ export type Database = {
       };
       status_configs: {
         Row: {
+          action_bucket: string;
           color: string;
           created_at: string | null;
           id: string;
@@ -1077,6 +1555,7 @@ export type Database = {
           track: string;
         };
         Insert: {
+          action_bucket: string;
           color: string;
           created_at?: string | null;
           id?: string;
@@ -1087,6 +1566,7 @@ export type Database = {
           track: string;
         };
         Update: {
+          action_bucket?: string;
           color?: string;
           created_at?: string | null;
           id?: string;
@@ -1316,18 +1796,21 @@ export type Database = {
       };
       user_table_prefs: {
         Row: {
+          id: string;
           page_key: string;
           prefs: Json;
           updated_at: string;
           user_id: string;
         };
         Insert: {
+          id?: string;
           page_key: string;
           prefs?: Json;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          id?: string;
           page_key?: string;
           prefs?: Json;
           updated_at?: string;
@@ -1340,6 +1823,11 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_invites: { Args: never; Returns: number };
+      create_case_with_tasks: {
+        Args: { p_input: Json; p_tasks?: Json };
+        Returns: Json;
+      };
       get_sop_field_tokens: { Args: never; Returns: Json };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
