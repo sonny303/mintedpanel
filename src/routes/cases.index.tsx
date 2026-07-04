@@ -239,7 +239,7 @@ function CasesWorkView() {
       ? `${row.provider.firstName} ${row.provider.lastName}`
       : "Unknown provider";
     const lead = (
-      <span className="text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+      <span className="text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
         {providerName}
         {row.provider?.credentials ? (
           <span className="font-normal text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
@@ -272,7 +272,7 @@ function CasesWorkView() {
   function groupHeader(g: PayerGroup) {
     return (
       <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+        <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
           {g.payerName}
         </span>
         <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
@@ -301,7 +301,7 @@ function CasesWorkView() {
     <div className="max-w-5xl mx-auto">
       <PageHeader title="Cases" description={`${totalPayers} payers · ${counts.all} open cases`} />
 
-      <div className="mb-4">
+      <div className="mb-6">
         <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 

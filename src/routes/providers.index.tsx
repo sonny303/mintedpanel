@@ -253,7 +253,7 @@ function ProvidersWorkView() {
         Pre-Credentialing
       </span>
     ) : (
-      <span className="text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+      <span className="text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
         {row.payerName}
       </span>
     );
@@ -278,14 +278,14 @@ function ProvidersWorkView() {
     return (
       <div className="flex flex-1 min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="w-8 h-8 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-primary)] flex-shrink-0">
+          <span className="w-7 h-7 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-primary)] flex-shrink-0">
             {initialsOf(g.provider)}
           </span>
           <span className="min-w-0 md:w-60">
             <span
               role="link"
               tabIndex={0}
-              className="block truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)] hover:underline"
+              className="block truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
                 openProvider();
@@ -343,7 +343,7 @@ function ProvidersWorkView() {
         }
       />
 
-      <div className="mb-4">
+      <div className="mb-6">
         <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 

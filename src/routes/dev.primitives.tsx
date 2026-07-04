@@ -53,7 +53,7 @@ function demoRow(
   return {
     id,
     lead: (
-      <span className="text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+      <span className="text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
         {payer}
       </span>
     ),
@@ -76,7 +76,7 @@ function PrimitivesPage() {
       id: "g1",
       header: (
         <div className="flex flex-1 min-w-0 items-center gap-3">
-          <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+          <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
             Sunrise Medical Group
           </span>
           <span className="hidden sm:flex items-center gap-2 ml-auto">
@@ -127,7 +127,7 @@ function PrimitivesPage() {
       id: "g2",
       header: (
         <div className="flex flex-1 min-w-0 items-center gap-3">
-          <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
+          <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
             Lakeview Health Partners
           </span>
           <span className="ml-auto" />

@@ -17,7 +17,7 @@ interface FilterCardsProps {
 
 export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3" role="group">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" role="group">
       {cards.map((card) => {
         const isSelected = card.id === selected;
         const labelColor = isSelected
@@ -31,19 +31,19 @@ export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
             type="button"
             aria-pressed={isSelected}
             onClick={() => onSelect(card.id)}
-            className={`rounded-[var(--mp-radius-md)] border px-4 py-3 text-left transition-colors ${
+            className={`rounded-[var(--mp-radius-md)] border p-4 text-left transition-colors ${
               isSelected
                 ? "border-mp-primary bg-mp-primary"
                 : "border-mp-border bg-mp-card hover:border-[color:var(--mp-ink-faint)]"
             }`}
           >
             <span
-              className={`block text-[var(--mp-text-2xs)] font-semibold uppercase tracking-wider ${labelColor}`}
+              className={`block text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider ${labelColor}`}
             >
               {card.label}
             </span>
             <span
-              className={`mt-1.5 block text-[var(--mp-text-2xl)] font-semibold leading-none tabular-nums ${
+              className={`mt-2 block text-[var(--mp-text-xl)] font-semibold leading-none tabular-nums ${
                 isSelected ? "text-white" : "text-[color:var(--mp-ink)]"
               }`}
             >

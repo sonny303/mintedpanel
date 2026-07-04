@@ -31,7 +31,7 @@ interface CaseTableProps {
 }
 
 const HEAD_CELL =
-  "py-2 text-left text-[var(--mp-text-2xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
+  "py-2.5 text-left text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
 
 function stop(e: MouseEvent) {
   e.stopPropagation();

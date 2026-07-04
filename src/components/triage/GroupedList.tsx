@@ -20,7 +20,7 @@ export function GroupedList({ groups }: GroupedListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {groups.map((group) => {
         const isCollapsed = collapsed[group.id] ?? false;
         return (
