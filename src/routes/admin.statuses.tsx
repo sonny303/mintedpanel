@@ -1,5 +1,6 @@
-// Admin → Statuses. Two tracks (credentialing, contracting) with add/edit
-// modal, drag-to-reorder, and in-use case counts. Admin-write; specialist read.
+// Admin → Statuses. Three tracks (credentialing, contracting, location) with
+// add/edit modal, drag-to-reorder, and in-use counts. Admin-write;
+// specialist read. The location track drives the Launches pipeline.
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { GripVertical, Plus } from "lucide-react";
@@ -31,6 +32,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { useCases } from "@/hooks/useCases";
 import { useContracts } from "@/hooks/useContracts";
+import { useLaunchLocations } from "@/hooks/useLaunches";
 import { useIsAdmin } from "@/lib/permissions";
 import type { StatusConfig, StatusTrack } from "@/types";
 
@@ -80,8 +82,10 @@ function AdminStatusesPage() {
 
   const credQ = useStatusConfigs("credentialing");
   const conQ = useStatusConfigs("contracting");
+  const locQ = useStatusConfigs("location");
   const casesQ = useCases();
   const contractsQ = useContracts();
+  const locationsQ = useLaunchLocations();
 
   const credInUse = useMemo(() => {
     const m = new Map<string, number>();
@@ -100,6 +104,15 @@ function AdminStatusesPage() {
     });
     return m;
   }, [contractsQ.data]);
+
+  const locInUse = useMemo(() => {
+    const m = new Map<string, number>();
+    (locationsQ.data ?? []).forEach((f) => {
+      if (!f.statusId) return;
+      m.set(f.statusId, (m.get(f.statusId) ?? 0) + 1);
+    });
+    return m;
+  }, [locationsQ.data]);
 
   const [editing, setEditing] = useState<{
     track: StatusTrack;
@@ -147,11 +160,32 @@ function AdminStatusesPage() {
         onEdit={(s) => setEditing({ track: "contracting", status: s })}
       />
 
+      <TrackSection
+        title="Location track"
+        description="Applies to locations — drives the Launches pipeline."
+        track="location"
+        statuses={locQ.data ?? []}
+        loading={locQ.isLoading}
+        isError={locQ.isError}
+        onRetry={() => locQ.refetch()}
+        inUse={locInUse}
+        canEdit={canEdit}
+        onAdd={() => setEditing({ track: "location", status: null })}
+        onEdit={(s) => setEditing({ track: "location", status: s })}
+      />
+
       <StatusEditModal
         open={editing !== null}
         track={editing?.track ?? "credentialing"}
         status={editing?.status ?? null}
-        existingCount={(editing?.track === "credentialing" ? credQ.data : conQ.data)?.length ?? 0}
+        existingCount={
+          (editing?.track === "credentialing"
+            ? credQ.data
+            : editing?.track === "contracting"
+              ? conQ.data
+              : locQ.data
+          )?.length ?? 0
+        }
         onClose={() => setEditing(null)}
       />
     </div>
@@ -449,7 +483,12 @@ function StatusEditModal({ open, track, status, existingCount, onClose }: Status
         <DialogHeader>
           <DialogTitle>{status ? "Edit status" : "Add status"}</DialogTitle>
           <DialogDescription>
-            {track === "credentialing" ? "Credentialing" : "Contracting"} track.
+            {track === "credentialing"
+              ? "Credentialing"
+              : track === "contracting"
+                ? "Contracting"
+                : "Location"}{" "}
+            track.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
