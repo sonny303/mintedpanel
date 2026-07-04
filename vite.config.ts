@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 // Replaces @lovable.dev/vite-tanstack-config with the equivalent explicit setup.
 // The wrapper's Lovable-editor-only plugins (componentTagger, hmr-gate, dev-server
 // bridge, sandbox detection, editor error loggers) are intentionally dropped; the
@@ -21,6 +22,12 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     define: envDefine,
+    // Vitest scope: unit tests live under src/. Kept explicit so the default
+    // glob never reaches the Playwright e2e specs in e2e/ (they use
+    // @playwright/test, not vitest, and are run by `npm run test:e2e`).
+    test: {
+      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    },
     // Client-scoped so React DevTools gets the dev react-dom; a global NODE_ENV
     // flip would emit jsxDEV, which the react-server SSR runtime can't resolve.
     ...(isDevBuild

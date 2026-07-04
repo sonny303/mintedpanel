@@ -11,10 +11,15 @@ tables.
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
 payers, credentialing cases, tasks/SOPs, touches, contracts, MSO routing, and
 location launches, all multi-tenant (`org_id` + RLS, roles admin/specialist/
-billing). React 19 + TypeScript + Vite + Tailwind v4 + shadcn/ui, TanStack
-Router (file-based) + TanStack Query, Zustand for auth/org state, Supabase
-(Postgres + GoTrue) for everything server-side. No app server of our own —
-the browser talks straight to Supabase under RLS.
+billing). React 19 + TypeScript + Vite + Tailwind v4 + shadcn/ui, **TanStack
+Start** (file-based routing on a nitro server, SSR-capable) + TanStack Query,
+Zustand for auth/org state, Supabase (Postgres + GoTrue) for everything
+server-side. The framework is TanStack Start, not a plain Vite SPA: `src/server.ts`
+
+- `src/start.ts` are a real (currently data-idle) server runtime with a
+  service-role client and JWT middleware wired but unused. Today no app server logic
+  of our own runs — the browser talks straight to Supabase under RLS. See
+  `docs/phase-0-audit.md` for the framework/deploy detail and the API-home plan.
 
 ## Running and verifying
 
@@ -42,21 +47,31 @@ return=representation` / `resolution=ignore-duplicates`, and the RPCs
 
 ## Database: repo vs hosted — read this before schema work
 
-The repo's `supabase/migrations/` is a **partial mirror** of the hosted
-database. Several hosted migrations were applied directly and have no repo
-file (e.g. `create_launches`, `add_action_bucket_to_status_configs`,
-`create_case_with_tasks_rpc`, invites/portal-fill infra). Consequences:
+`supabase/migrations/` is now a **single squashed baseline**
+(`20260704210000_baseline_live_schema.sql`) dumped from the live DB and
+verified to rebuild it exactly (fingerprint match; see
+`docs/migration-baseline.md`). The 15 old partial-mirror files are parked in
+`supabase/migrations_archive/` (kept per the additive rule, outside the
+migrations dir so the CLI ignores them). The baseline reflects the state after
+all 23 hosted migrations. Consequences:
 
-- Never assume a column/function is absent because repo migrations lack it —
-  check the live DB (MCP `list_migrations` / information_schema).
+- The **live DB is still the source of truth.** The baseline is a snapshot; if
+  the two ever diverge, regenerate a baseline from live rather than trusting the
+  file. Check the live DB (MCP `list_migrations` / information_schema) before
+  assuming a column/function's presence.
 - `src/integrations/supabase/types.ts` is **generated from the live schema**.
   After any DDL, regenerate via MCP `generate_typescript_types`, overwrite the
   file, and run prettier on it. It is not hand-edited.
-- New schema work: apply to the hosted DB via MCP `apply_migration` **and**
-  add the identical SQL as a new file in `supabase/migrations/`
-  (`YYYYMMDDHHMMSS_<uuid>.sql`). Guard statements that depend on hosted-only
-  objects (`to_regclass('public.launches')`, `ADD COLUMN IF NOT EXISTS`) so a
-  repo-only rebuild still passes.
+- New schema work (**repo-first**, full rule in `docs/migration-baseline.md`):
+  add the change as a **new** file in `supabase/migrations/`
+  (`YYYYMMDDHHMMSS_<slug>.sql`) — never edit the baseline or an archived file —
+  **and** apply the identical SQL to hosted via MCP `apply_migration`. Guard
+  statements that depend on hosted-only objects or elevated privileges
+  (`to_regclass('public.launches')`, `ADD COLUMN IF NOT EXISTS`,
+  `CREATE ... IF NOT EXISTS`, exception-guarded event triggers) so a repo-only
+  rebuild still passes.
+- Do **not** re-apply the baseline to the already-migrated hosted project (its
+  objects exist); it is for fresh rebuilds — local stacks, new projects, CI.
 - `supabase/seed.sql` is a local fixture with its own two org ids (different
   from the hosted demo orgs) and fixed UUIDs + `ON CONFLICT (id) DO NOTHING`.
 - Hosted demo data: two orgs — "Kansas Fitness Physio" (the rich demo) and

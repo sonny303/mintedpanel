@@ -1,5 +1,9 @@
 // Read/write per-user table preferences (visible columns + sort) stored in
 // public.user_table_prefs. Keyed by (user_id, page_key); prefs is JSONB.
+//
+// Currently unimported by the app — kept intentionally, not dead. To be revived
+// in the preferences chunk; it is backed by the live user_table_prefs table
+// (which already has rows). Do not delete.
 import { supabase } from "@/integrations/supabase/externalClient";
 import type { Json } from "@/integrations/supabase/types";
 
