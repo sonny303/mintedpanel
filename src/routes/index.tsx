@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
   beforeLoad: () => {
     const { session } = useAuthStore.getState();
     if (session) {
-      throw redirect({ to: "/providers", replace: true });
+      throw redirect({ to: "/home", replace: true });
     }
   },
   component: LandingPage,
