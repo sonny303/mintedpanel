@@ -113,9 +113,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22 (not 20): the SSR dev server constructs the Supabase client at
+      # module load, and @supabase/realtime-js needs a global WebSocket, which
+      # Node 20 lacks (added as a global in Node 22). On Node 20 SSR throws a 500
+      # and the webServer never comes up. The build job stays on Node 20 — it only
+      # builds, it never runs the server.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
