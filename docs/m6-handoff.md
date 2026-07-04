@@ -1,8 +1,8 @@
 # M6 Handoff — session resume notes
 
-Date: 2026-07-04. Written so any new Claude Code session (or human) can pick up
-exactly where the last session stopped. Everything M0–M5.5 is merged to `main`
-(PRs #1–#10) and deployed via Vercel. Go-live target: **ASAP** (per SS).
+Date: 2026-07-04 (updated after the M6 code pass). Everything M0–M5.5 is
+merged to `main` (PRs #1–#10) and deployed via Vercel. Go-live target:
+**ASAP** (per SS).
 
 ## Current state
 
@@ -15,25 +15,37 @@ exactly where the last session stopped. Everything M0–M5.5 is merged to `main`
 - **Prod DB (Supabase `fkvuhfsqcmujywzgczmc`)**: `launches` table + RLS live,
   10 launches imported (12-vs-10 row question still open with SS),
   4 director-providers linked, `providers.launch_id` live.
-- **Branch `claude/m6-cutover`** exists at `main` (d6393a9), no commits yet.
 
-## M6 remaining scope (spec v0.9 essentials)
+## M6 code scope — DONE (this branch)
 
-1. Delete legacy route components unreachable from the final nav. Known
-   candidates from prior audit (re-verify before deleting):
-   - `src/routes/tasks.index.tsx` — Tasks LIST page, removed from nav (A2).
-     NOTE: `/tasks/$id` task detail may still be linked (TaskDrawer,
-     admin.audit) — verify separately; only the list page was A2'd.
-   - `src/components/layout/TopBar.tsx` — retired from the layout at M1.
-   - Check `src/routes/welcome.tsx` reachability (invite-email entry — keep
-     if referenced by the invite flow in MembersPanel / edge function).
-2. Remove the `SHOW_HOME_NAV` / `SHOW_LAUNCHES_NAV` flags in
-   `src/components/layout/Sidebar.tsx` (nav is final).
-3. Dead-component + unused-dep sweep (grep for zero importers; respect
-   config-only deps: vite/nitro/lightningcss/tailwind/eslint/prettier/vitest,
-   `@fontsource/*` used via CSS `@import` in `src/styles.css`).
-4. Full route smoke pass on preview; every deletion listed in the PR.
-5. NOT in M6: Supabase client consolidation (`externalClient` stays), schema changes.
+1. Legacy routes deleted after re-verifying reachability:
+   - `src/routes/tasks.index.tsx` (Tasks list, A2'd from nav) and
+     `src/routes/tasks.tsx` (empty `<Outlet/>` layout — removing it makes
+     bare `/tasks` hit the root not-found page instead of a blank shell).
+     `/tasks/$id` detail KEPT (linked from TaskDrawer + admin.audit); its
+     breadcrumb/back links now root at Cases instead of the deleted list.
+   - `src/components/layout/TopBar.tsx` + the unused `topBarContent` prop
+     in `AppShell.tsx`.
+   - `src/routes/welcome.tsx` KEPT — invite-member edge function redirects
+     to `/welcome`.
+2. `SHOW_HOME_NAV` / `SHOW_LAUNCHES_NAV` flags removed from Sidebar (nav final).
+3. Dead-code sweep (zero importers, verified individually):
+   `src/components/landing/*` (14 files — landing page is inlined in
+   `routes/index.tsx`), `src/components/shared/TableToolkit.tsx` +
+   `QueryErrorRow.tsx`, `src/hooks/useTablePrefs.ts` (all three only served
+   the deleted Tasks list), `src/hooks/use-mobile.tsx` (shadcn scaffold),
+   `src/lib/config.server.ts` (template scaffold).
+4. Unused-dep sweep: every runtime dep verified in use. `@tanstack/router-core`,
+   `start-client-core`, `start-server-core` are not imported directly but KEPT —
+   they pin singleton versions across the Start beta dep tree.
+5. Verified: build ✓ · 34/34 tests ✓ · lint 0 errors (12 pre-existing
+   warnings) · tsc ✓ · 20-route Playwright smoke ✓ (unauthed; protected
+   routes redirect to /login, `/tasks` now 404s to the app not-found page).
+6. NOT in M6 (unchanged): Supabase client consolidation (`externalClient`
+   stays), schema changes.
+
+Remaining before merge: authenticated smoke pass on the Vercel preview
+(needs SS login), then merge + cancel Lovable (open item 5).
 
 ## MCP-side M6 (separate from code run)
 

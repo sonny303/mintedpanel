@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as ProgressRouteImport } from './routes/progress'
@@ -19,7 +18,6 @@ import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as TasksIndexRouteImport } from './routes/tasks.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
@@ -44,11 +42,6 @@ import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TasksRoute = TasksRouteImport.update({
-  id: '/tasks',
-  path: '/tasks',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -91,11 +84,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TasksIndexRoute = TasksIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => TasksRoute,
-} as any)
 const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -112,9 +100,9 @@ const CasesIndexRoute = CasesIndexRouteImport.update({
   getParentRoute: () => CasesRoute,
 } as any)
 const TasksIdRoute = TasksIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => TasksRoute,
+  id: '/tasks/$id',
+  path: '/tasks/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
   id: '/new',
@@ -206,7 +194,6 @@ export interface FileRoutesByFullPath {
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
-  '/tasks': typeof TasksRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
@@ -224,7 +211,6 @@ export interface FileRoutesByFullPath {
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
-  '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
@@ -251,7 +237,6 @@ export interface FileRoutesByTo {
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
   '/providers': typeof ProvidersIndexRoute
-  '/tasks': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
@@ -267,7 +252,6 @@ export interface FileRoutesById {
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
-  '/tasks': typeof TasksRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
@@ -285,7 +269,6 @@ export interface FileRoutesById {
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
-  '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
@@ -302,7 +285,6 @@ export interface FileRouteTypes {
     | '/progress'
     | '/providers'
     | '/reports'
-    | '/tasks'
     | '/welcome'
     | '/admin/audit'
     | '/admin/mso-routing'
@@ -320,7 +302,6 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/launches/'
     | '/providers/'
-    | '/tasks/'
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates/'
@@ -347,7 +328,6 @@ export interface FileRouteTypes {
     | '/cases'
     | '/launches'
     | '/providers'
-    | '/tasks'
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates'
@@ -362,7 +342,6 @@ export interface FileRouteTypes {
     | '/progress'
     | '/providers'
     | '/reports'
-    | '/tasks'
     | '/welcome'
     | '/admin/audit'
     | '/admin/mso-routing'
@@ -380,7 +359,6 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/launches/'
     | '/providers/'
-    | '/tasks/'
     | '/admin/templates/$id'
     | '/providers/$id/edit'
     | '/admin/templates/'
@@ -396,7 +374,6 @@ export interface RootRouteChildren {
   ProgressRoute: typeof ProgressRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
-  TasksRoute: typeof TasksRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
@@ -406,6 +383,7 @@ export interface RootRouteChildren {
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   AdminUsersRoute: typeof AdminUsersRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
+  TasksIdRoute: typeof TasksIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -415,13 +393,6 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tasks': {
-      id: '/tasks'
-      path: '/tasks'
-      fullPath: '/tasks'
-      preLoaderRoute: typeof TasksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -480,13 +451,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/tasks/': {
-      id: '/tasks/'
-      path: '/'
-      fullPath: '/tasks/'
-      preLoaderRoute: typeof TasksIndexRouteImport
-      parentRoute: typeof TasksRoute
-    }
     '/providers/': {
       id: '/providers/'
       path: '/'
@@ -510,10 +474,10 @@ declare module '@tanstack/react-router' {
     }
     '/tasks/$id': {
       id: '/tasks/$id'
-      path: '/$id'
+      path: '/tasks/$id'
       fullPath: '/tasks/$id'
       preLoaderRoute: typeof TasksIdRouteImport
-      parentRoute: typeof TasksRoute
+      parentRoute: typeof rootRouteImport
     }
     '/providers/new': {
       id: '/providers/new'
@@ -686,18 +650,6 @@ const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
   ProvidersRouteChildren,
 )
 
-interface TasksRouteChildren {
-  TasksIdRoute: typeof TasksIdRoute
-  TasksIndexRoute: typeof TasksIndexRoute
-}
-
-const TasksRouteChildren: TasksRouteChildren = {
-  TasksIdRoute: TasksIdRoute,
-  TasksIndexRoute: TasksIndexRoute,
-}
-
-const TasksRouteWithChildren = TasksRoute._addFileChildren(TasksRouteChildren)
-
 interface AdminTemplatesRouteChildren {
   AdminTemplatesIdRoute: typeof AdminTemplatesIdRoute
   AdminTemplatesIndexRoute: typeof AdminTemplatesIndexRoute
@@ -721,7 +673,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProgressRoute: ProgressRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
-  TasksRoute: TasksRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
@@ -731,6 +682,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   AdminUsersRoute: AdminUsersRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
+  TasksIdRoute: TasksIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
