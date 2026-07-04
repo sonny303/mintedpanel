@@ -20,6 +20,7 @@ export interface ProviderFilters {
 
 export interface ProviderInput {
   groupId?: string | null;
+  launchId?: string | null;
   firstName: string;
   lastName: string;
   credentials?: string | null;

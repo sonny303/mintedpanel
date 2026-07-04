@@ -316,6 +316,89 @@ export type Database = {
           },
         ];
       };
+      launches: {
+        Row: {
+          address: string | null;
+          city: string | null;
+          clinic_director_name: string | null;
+          clinic_director_provider_id: string | null;
+          confirmed_start_date: string | null;
+          created_at: string | null;
+          facility_id: string | null;
+          group_id: string;
+          gym_name: string | null;
+          id: string;
+          name: string;
+          org_id: string;
+          state: string;
+          status: string;
+          target_month: string | null;
+        };
+        Insert: {
+          address?: string | null;
+          city?: string | null;
+          clinic_director_name?: string | null;
+          clinic_director_provider_id?: string | null;
+          confirmed_start_date?: string | null;
+          created_at?: string | null;
+          facility_id?: string | null;
+          group_id: string;
+          gym_name?: string | null;
+          id?: string;
+          name: string;
+          org_id: string;
+          state: string;
+          status?: string;
+          target_month?: string | null;
+        };
+        Update: {
+          address?: string | null;
+          city?: string | null;
+          clinic_director_name?: string | null;
+          clinic_director_provider_id?: string | null;
+          confirmed_start_date?: string | null;
+          created_at?: string | null;
+          facility_id?: string | null;
+          group_id?: string;
+          gym_name?: string | null;
+          id?: string;
+          name?: string;
+          org_id?: string;
+          state?: string;
+          status?: string;
+          target_month?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "launches_clinic_director_provider_id_fkey";
+            columns: ["clinic_director_provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "launches_facility_id_fkey";
+            columns: ["facility_id"];
+            isOneToOne: false;
+            referencedRelation: "facilities";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "launches_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "launches_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       group_insurance_policies: {
         Row: {
           created_at: string;
@@ -751,6 +834,7 @@ export type Database = {
           first_name: string;
           graduation_date: string | null;
           group_id: string | null;
+          launch_id: string | null;
           home_city: string | null;
           home_state: string | null;
           home_street: string | null;
@@ -786,6 +870,7 @@ export type Database = {
           first_name: string;
           graduation_date?: string | null;
           group_id?: string | null;
+          launch_id?: string | null;
           home_city?: string | null;
           home_state?: string | null;
           home_street?: string | null;
@@ -821,6 +906,7 @@ export type Database = {
           first_name?: string;
           graduation_date?: string | null;
           group_id?: string | null;
+          launch_id?: string | null;
           home_city?: string | null;
           home_state?: string | null;
           home_street?: string | null;

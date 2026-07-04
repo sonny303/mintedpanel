@@ -34,7 +34,7 @@ import {
 
 // Nav items hidden until their milestone ships (B1 / spec nav section).
 const SHOW_HOME_NAV = false; // M5
-const SHOW_LAUNCHES_NAV = false; // M4
+const SHOW_LAUNCHES_NAV = true; // flipped on at M4
 
 type NavLink = {
   to: string;
