@@ -1,138 +1,88 @@
-// Launches pipeline at /launches (M4). Read view: fixed-palette status pills,
-// derived readiness (one definition: src/lib/launchReadiness.ts), NEW STATE
-// tags, and a recently-launched strip (live, started within 60 days).
+// Launches at /launches (launch PRD v2.1). A launch is a location in a
+// pre-active status, so this page is a filtered view of facilities: a
+// Recently Launched strip (Live, started within 30 days) and the Pipeline
+// (every pre-Live status, dated rows first). Statuses come from the
+// location track in Admin > Statuses.
 import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import { AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/triage/StatusPill";
-import { ProgressBar } from "@/components/triage/ProgressBar";
-import { useLaunches } from "@/hooks/useLaunches";
+import { useFacilityAssignments, useLaunchLocations } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
-import { useContracts } from "@/hooks/useContracts";
-import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { LAUNCH_STATUS_META } from "@/lib/launchDisplay";
-import { launchReadiness, isNewState, type LaunchReadiness } from "@/lib/launchReadiness";
-import type { Launch, Provider } from "@/types";
+import { useStatusConfigs } from "@/hooks/useAdmin";
+import {
+  isNewStateLaunch,
+  launchDateDisplay,
+  splitLaunchSections,
+  type LocationRow,
+} from "@/lib/launchLocations";
 
 export const Route = createFileRoute("/launches/")({
   component: LaunchesPage,
 });
 
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
-const RECENT_DAYS = 60;
-
-interface LaunchRow {
-  launch: Launch;
-  director: string | null;
-  readiness: LaunchReadiness;
+interface LaunchRow extends LocationRow {
+  providerNames: string[];
+  caseCount: number;
   newState: boolean;
-  providerCount: number;
 }
 
 function LaunchesPage() {
   const navigate = useNavigate();
-  const launchesQ = useLaunches();
+  const locationsQ = useLaunchLocations();
+  const statusConfigsQ = useStatusConfigs("location");
+  const assignmentsQ = useFacilityAssignments();
   const providersQ = useProviders();
   const casesQ = useCases();
-  const contractsQ = useContracts();
-  const payersQ = usePayers();
-  const statusConfigsQ = useStatusConfigs();
 
-  const loading = launchesQ.isLoading || providersQ.isLoading || casesQ.isLoading;
-  const failed = launchesQ.isError;
+  const loading = locationsQ.isLoading || statusConfigsQ.isLoading || casesQ.isLoading;
+  const failed = locationsQ.isError;
 
-  const rows: LaunchRow[] = useMemo(() => {
-    const launches = launchesQ.data ?? [];
-    const providers = providersQ.data ?? [];
-    const cases = casesQ.data ?? [];
+  const { recentlyLaunched, pipeline } = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
-    const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
-    const providerById = new Map(providers.map((p) => [p.id, p]));
-    const activePayerIds = (payersQ.data ?? [])
-      .filter((p) => p.isActive && p.name !== PRE_CRED_PAYER_NAME)
-      .map((p) => p.id);
+    const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
+    const rows: LocationRow[] = (locationsQ.data ?? []).map((facility) => ({
+      facility,
+      status: facility.statusId ? (statusById.get(facility.statusId) ?? null) : null,
+    }));
+    const sections = splitLaunchSections(rows, new Date());
 
-    return launches.map((launch) => {
-      const linked = providers.filter((p) => p.launchId === launch.id);
-      const linkedIds = new Set(linked.map((p) => p.id));
-      const launchCases = cases
-        .filter((c) => linkedIds.has(c.providerId))
-        .map((c) => ({
-          statusLabel: c.credentialingStatusId
-            ? (statusById.get(c.credentialingStatusId)?.label ?? null)
-            : null,
-          isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
-        }));
-      const contracted = new Set(
-        (contractsQ.data ?? [])
-          .filter(
-            (c) => c.groupId === launch.groupId && c.state === launch.state && c.payerId != null,
-          )
-          .map((c) => c.payerId as string),
-      );
-      const director: Provider | null = launch.clinicDirectorProviderId
-        ? (providerById.get(launch.clinicDirectorProviderId) ?? null)
-        : null;
-      return {
-        launch,
-        director: director
-          ? `${director.firstName} ${director.lastName}`
-          : (launch.clinicDirectorName ?? null),
-        readiness: launchReadiness({
-          cases: launchCases,
-          activePayerIds,
-          contractedPayerIdsInState: contracted,
-        }),
-        newState: isNewState(contracted),
-        providerCount: linked.length,
-      };
+    const decorate = (row: LocationRow): LaunchRow => ({
+      ...row,
+      providerNames: (assignmentsQ.data ?? [])
+        .filter((a) => a.facilityId === row.facility.id && a.providerId)
+        .map((a) => providerById.get(a.providerId as string))
+        .filter((p) => p != null)
+        .map((p) => `${p.firstName} ${p.lastName}`),
+      caseCount: (casesQ.data ?? []).filter((c) => c.facilityId === row.facility.id).length,
+      newState: isNewStateLaunch(row.facility, rows),
     });
-  }, [
-    launchesQ.data,
-    providersQ.data,
-    casesQ.data,
-    contractsQ.data,
-    payersQ.data,
-    statusConfigsQ.data,
-  ]);
 
-  const now = new Date();
-  const recentlyLaunched = rows.filter(
-    (r) =>
-      r.launch.status === "live" &&
-      r.launch.confirmedStartDate != null &&
-      differenceInCalendarDays(now, parseISO(r.launch.confirmedStartDate)) <= RECENT_DAYS &&
-      differenceInCalendarDays(now, parseISO(r.launch.confirmedStartDate)) >= 0,
-  );
-  const recentIds = new Set(recentlyLaunched.map((r) => r.launch.id));
-  const pipeline = rows.filter((r) => !recentIds.has(r.launch.id));
+    return {
+      recentlyLaunched: sections.recentlyLaunched.map(decorate),
+      pipeline: sections.pipeline.map(decorate),
+    };
+  }, [locationsQ.data, statusConfigsQ.data, assignmentsQ.data, providersQ.data, casesQ.data]);
 
-  function timing(l: Launch): string {
-    if (l.confirmedStartDate) return `Starts ${format(parseISO(l.confirmedStartDate), "MMM d")}`;
-    if (l.targetMonth) return `Target ${format(parseISO(l.targetMonth), "MMM yyyy")}`;
-    return "No date";
-  }
+  const total = recentlyLaunched.length + pipeline.length;
 
   function launchRow(r: LaunchRow) {
-    const meta = LAUNCH_STATUS_META[r.launch.status];
     return (
       <div
-        key={r.launch.id}
+        key={r.facility.id}
         role="link"
         tabIndex={0}
-        onClick={() => navigate({ to: "/launches/$id", params: { id: r.launch.id } })}
+        onClick={() => navigate({ to: "/launches/$id", params: { id: r.facility.id } })}
         onKeyDown={(e) => {
-          if (e.key === "Enter") navigate({ to: "/launches/$id", params: { id: r.launch.id } });
+          if (e.key === "Enter") navigate({ to: "/launches/$id", params: { id: r.facility.id } });
         }}
         className="cursor-pointer px-4 py-3 hover:bg-mp-muted/50 transition-colors"
       >
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
           <div className="flex items-center gap-2 md:w-56 md:flex-shrink-0">
-            <StatusPill label={meta.label} color={meta.color} />
+            {r.status ? <StatusPill label={r.status.label} color={r.status.color} /> : null}
             {r.newState ? (
               <span className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
                 NEW STATE
@@ -141,40 +91,26 @@ function LaunchesPage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
-              {r.launch.name}
+              {r.facility.name}
             </div>
             <div className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-              {[r.launch.gymName, [r.launch.city, r.launch.state].filter(Boolean).join(", ")]
-                .filter(Boolean)
-                .join(" · ")}
+              {[r.facility.city, r.facility.state].filter(Boolean).join(", ")}
             </div>
           </div>
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-28">
-            {timing(r.launch)}
+          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-36">
+            {launchDateDisplay(r.status?.label, r.facility.effectiveDate)}
           </span>
-          <span className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-32">
-            {r.director ?? "—"}
+          <span className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-40">
+            {r.providerNames.length > 0 ? r.providerNames.join(", ") : "—"}
           </span>
-          <span className="flex items-center gap-2 md:w-44">
-            {r.readiness.denominator > 0 ? (
-              <>
-                <span className="w-16">
-                  <ProgressBar value={r.readiness.inNetwork} max={r.readiness.denominator} />
-                </span>
-                <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
-                  {r.readiness.inNetwork} of {r.readiness.denominator} in-network
-                </span>
-              </>
+          <span className="md:w-24 text-[var(--mp-text-xs)]">
+            {r.caseCount > 0 ? (
+              <span className="tabular-nums text-[color:var(--mp-ink-secondary)]">
+                {r.caseCount} {r.caseCount === 1 ? "case" : "cases"}
+              </span>
             ) : (
-              <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-                No cases yet
-              </span>
+              <span className="text-[color:var(--mp-ink-faint)]">No cases yet</span>
             )}
-            {r.readiness.contractGap ? (
-              <span title="An active payer lacks a group contract in this state">
-                <AlertTriangle className="w-3.5 h-3.5 text-[color:var(--mp-warn)]" />
-              </span>
-            ) : null}
           </span>
         </div>
       </div>
@@ -185,7 +121,7 @@ function LaunchesPage() {
     <div className="max-w-5xl mx-auto">
       <PageHeader
         title="Launches"
-        description={`${rows.length} launches · ${pipeline.length} in pipeline`}
+        description={`${total} launches · ${pipeline.length} in pipeline`}
       />
 
       {failed ? (
@@ -198,8 +134,11 @@ function LaunchesPage() {
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
-        <EmptyState message="No launches yet" description="Imported launches appear here." />
+      ) : total === 0 ? (
+        <EmptyState
+          message="No launches yet"
+          description="Locations in a pipeline status appear here."
+        />
       ) : (
         <div className="space-y-5">
           {recentlyLaunched.length > 0 ? (
@@ -217,7 +156,13 @@ function LaunchesPage() {
               Pipeline
             </h2>
             <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
-              {pipeline.map(launchRow)}
+              {pipeline.length > 0 ? (
+                pipeline.map(launchRow)
+              ) : (
+                <div className="px-4 py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+                  Nothing in the pipeline.
+                </div>
+              )}
             </div>
           </section>
         </div>

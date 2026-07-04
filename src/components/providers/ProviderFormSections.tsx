@@ -13,9 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Field, FieldLabel } from "@/components/providers/FormField";
 
-const NO_LAUNCH = "__none__";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
-import { useLaunches } from "@/hooks/useLaunches";
 import {
   US_STATES,
   emptyLicenseRow,
@@ -268,7 +266,6 @@ export function LicensesSection({ form, errors, update }: SectionProps) {
 export function EmploymentSection({ form, errors, update }: SectionProps) {
   const groups = useProviderGroups();
   const facilities = useFacilities(form.groupId || null);
-  const launches = useLaunches();
 
   const toggleFacility = (id: string) => {
     const next = form.facilityIds.includes(id)
@@ -303,24 +300,6 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
       </Field>
       <Field label="Specialty">
         <Input value={form.specialty} onChange={(e) => update("specialty", e.target.value)} />
-      </Field>
-      <Field label="Launch (optional)">
-        <Select
-          value={form.launchId || NO_LAUNCH}
-          onValueChange={(v) => update("launchId", v === NO_LAUNCH ? "" : v)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="No launch" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_LAUNCH}>No launch</SelectItem>
-            {(launches.data ?? []).map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </Field>
       <div className="md:col-span-2">
         <FieldLabel>Facilities</FieldLabel>

@@ -2,7 +2,7 @@
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 
 export type AppRole = "specialist" | "billing" | "admin";
-export type StatusTrack = "credentialing" | "contracting";
+export type StatusTrack = "credentialing" | "contracting" | "location";
 export type TouchType = "call" | "email" | "portal" | "fax";
 export type TouchOutcome =
   "reached" | "left_voicemail" | "no_answer" | "response_received" | "submitted" | "no_response";
@@ -74,6 +74,19 @@ export interface Facility {
   state: string | null;
   zip: string | null;
   isActive: boolean;
+  /** location-track status_configs id; a launch is a location in a pre-Live status */
+  statusId: string | null;
+  /** target/start date; label switches by status (Target pre-fulfillment, Starts after) */
+  effectiveDate: string | null;
+  createdAt: string;
+}
+
+export interface FacilityAssignment {
+  id: string;
+  orgId: string;
+  providerId: string | null;
+  facilityId: string | null;
+  isPrimary: boolean | null;
   createdAt: string;
 }
 

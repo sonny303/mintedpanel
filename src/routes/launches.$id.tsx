@@ -1,12 +1,13 @@
-// Launch detail (M4): linked providers with case rollups, provider attach,
-// and the explicit generate-cases flow — preview first, then confirm. Cases
-// and SOP checklists are created through the existing createCase service path
-// (create_case_with_tasks RPC), so audit and task seeding match manual
+// Launch-location detail (launch PRD v2.1): the launch IS a facilities row.
+// Shows the location's pipeline status, its assigned providers (via
+// provider_facility_assignments) with per-location case rollups, provider
+// attach, and the explicit generate-cases flow — preview first, then confirm.
+// Cases and SOP checklists are created through the existing createCase service
+// path (create_case_with_tasks RPC), so audit and task seeding match manual
 // creation exactly. Idempotent: existing provider-payer-state combos skip.
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { AlertTriangle, Plus, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -27,7 +28,13 @@ import {
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
-import { useLaunch, useAttachProviderToLaunch, useGenerateLaunchCases } from "@/hooks/useLaunches";
+import {
+  useAssignProviderToFacility,
+  useFacilityAssignments,
+  useGenerateLaunchCases,
+  useLaunchLocation,
+  useLaunchLocations,
+} from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useContracts } from "@/hooks/useContracts";
@@ -36,10 +43,10 @@ import { useProviderGroups } from "@/hooks/useLookups";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { useCanWrite } from "@/lib/permissions";
-import { LAUNCH_STATUS_META } from "@/lib/launchDisplay";
-import { launchReadiness, isNewState } from "@/lib/launchReadiness";
+import { isNewStateLaunch, launchDateDisplay, type LocationRow } from "@/lib/launchLocations";
+import { launchReadiness } from "@/lib/launchReadiness";
 import type { GenerationEntry } from "@/services/launches";
-import type { Launch, Payer, Provider, SOPTemplate } from "@/types";
+import type { Payer, Provider, SOPTemplate } from "@/types";
 
 export const Route = createFileRoute("/launches/$id")({
   component: LaunchDetailPage,
@@ -79,16 +86,19 @@ function LaunchDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const canWrite = useCanWrite();
-  const launchQ = useLaunch(id);
+  const locationQ = useLaunchLocation(id);
+  const locationsQ = useLaunchLocations();
+  const assignmentsQ = useFacilityAssignments();
   const providersQ = useProviders();
   const casesQ = useCases();
   const contractsQ = useContracts();
   const payersQ = usePayers();
-  const statusConfigsQ = useStatusConfigs();
+  const locationStatusesQ = useStatusConfigs("location");
+  const credStatusesQ = useStatusConfigs("credentialing");
   const groupsQ = useProviderGroups();
   const msosQ = useMsos();
   const templatesQ = useTemplates();
-  const attach = useAttachProviderToLaunch();
+  const attach = useAssignProviderToFacility();
   const generate = useGenerateLaunchCases();
 
   const [addOpen, setAddOpen] = useState(false);
@@ -102,20 +112,32 @@ function LaunchDetailPage() {
     failed: number;
   } | null>(null);
 
-  const launch = launchQ.data ?? null;
-
-  const linked = useMemo(
-    () => (providersQ.data ?? []).filter((p) => p.launchId === id),
-    [providersQ.data, id],
-  );
-  const unlinked = useMemo(
-    () => (providersQ.data ?? []).filter((p) => p.launchId !== id && p.status !== "terminated"),
-    [providersQ.data, id],
+  const location = locationQ.data ?? null;
+  const status = useMemo(
+    () =>
+      location?.statusId
+        ? ((locationStatusesQ.data ?? []).find((s) => s.id === location.statusId) ?? null)
+        : null,
+    [location, locationStatusesQ.data],
   );
 
-  const statusById = useMemo(
-    () => new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s])),
-    [statusConfigsQ.data],
+  const linked = useMemo(() => {
+    const linkedIds = new Set(
+      (assignmentsQ.data ?? [])
+        .filter((a) => a.facilityId === id && a.providerId)
+        .map((a) => a.providerId as string),
+    );
+    return (providersQ.data ?? []).filter((p) => linkedIds.has(p.id));
+  }, [assignmentsQ.data, providersQ.data, id]);
+
+  const unlinked = useMemo(() => {
+    const linkedIds = new Set(linked.map((p) => p.id));
+    return (providersQ.data ?? []).filter((p) => !linkedIds.has(p.id) && p.status !== "terminated");
+  }, [providersQ.data, linked]);
+
+  const credStatusById = useMemo(
+    () => new Map((credStatusesQ.data ?? []).map((s) => [s.id, s])),
+    [credStatusesQ.data],
   );
   const payerById = useMemo(
     () => new Map((payersQ.data ?? []).map((p) => [p.id, p])),
@@ -126,39 +148,58 @@ function LaunchDetailPage() {
     [payersQ.data],
   );
 
+  /** cases linked to this location (credential_cases.facility_id) */
+  const locationCases = useMemo(
+    () => (casesQ.data ?? []).filter((c) => c.facilityId === id),
+    [casesQ.data, id],
+  );
+
   const contracted = useMemo(
     () =>
       new Set(
         (contractsQ.data ?? [])
           .filter(
-            (c) => launch && c.groupId === launch.groupId && c.state === launch.state && c.payerId,
+            (c) =>
+              location &&
+              location.state &&
+              c.groupId === location.groupId &&
+              c.state === location.state &&
+              c.payerId,
           )
           .map((c) => c.payerId as string),
       ),
-    [contractsQ.data, launch],
+    [contractsQ.data, location],
   );
 
   const readiness = useMemo(() => {
-    if (!launch) return null;
-    const linkedIds = new Set(linked.map((p) => p.id));
+    if (!location) return null;
     return launchReadiness({
-      cases: (casesQ.data ?? [])
-        .filter((c) => linkedIds.has(c.providerId))
-        .map((c) => ({
-          statusLabel: c.credentialingStatusId
-            ? (statusById.get(c.credentialingStatusId)?.label ?? null)
-            : null,
-          isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
-        })),
+      cases: locationCases.map((c) => ({
+        statusLabel: c.credentialingStatusId
+          ? (credStatusById.get(c.credentialingStatusId)?.label ?? null)
+          : null,
+        isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
+      })),
       activePayerIds: (payersQ.data ?? [])
         .filter((p) => p.isActive && p.name !== PRE_CRED_PAYER_NAME)
         .map((p) => p.id),
       contractedPayerIdsInState: contracted,
     });
-  }, [launch, linked, casesQ.data, statusById, payerById, payersQ.data, contracted]);
+  }, [location, locationCases, credStatusById, payerById, payersQ.data, contracted]);
+
+  const newState = useMemo(() => {
+    if (!location) return false;
+    const statusById = new Map((locationStatusesQ.data ?? []).map((s) => [s.id, s]));
+    const rows: LocationRow[] = (locationsQ.data ?? []).map((facility) => ({
+      facility,
+      status: facility.statusId ? (statusById.get(facility.statusId) ?? null) : null,
+    }));
+    return isNewStateLaunch(location, rows);
+  }, [location, locationsQ.data, locationStatusesQ.data]);
 
   async function buildPlan() {
-    if (!launch) return;
+    if (!location || !location.state) return;
+    const state = location.state;
     setPlanning(true);
     try {
       const cases = casesQ.data ?? [];
@@ -176,20 +217,19 @@ function LaunchDetailPage() {
           const rule = await qc.fetchQuery({
             queryKey: [
               "mso-routing-rule",
-              launch.orgId,
+              location.orgId,
               payer.id,
-              launch.state,
+              state,
               provider.specialty ?? "",
             ] as const,
-            queryFn: () => getMsoRoutingRule(payer.id, launch.state, provider.specialty ?? null),
+            queryFn: () => getMsoRoutingRule(payer.id, state, provider.specialty ?? null),
           });
           if (rule) resolved.push(payer);
         }
         const candidates = resolved.length > 0 && preCredPayer ? [preCredPayer, ...resolved] : [];
         for (const payer of candidates) {
           const exists = cases.some(
-            (c) =>
-              c.providerId === provider.id && c.payerId === payer.id && c.state === launch.state,
+            (c) => c.providerId === provider.id && c.payerId === payer.id && c.state === state,
           );
           if (exists) skips.push({ payer, reason: "Case exists" });
           else creates.push(payer);
@@ -203,21 +243,22 @@ function LaunchDetailPage() {
   }
 
   async function confirmGenerate() {
-    if (!launch || !plan) return;
-    const group = (groupsQ.data ?? []).find((g) => g.id === launch.groupId) ?? null;
+    if (!location || !location.state || !plan) return;
+    const state = location.state;
+    const group = (groupsQ.data ?? []).find((g) => g.id === location.groupId) ?? null;
     const entries: GenerationEntry[] = [];
     for (const line of plan) {
       for (const payer of line.creates) {
         const isPreCred = payer.name === PRE_CRED_PAYER_NAME;
         const rule = isPreCred
           ? null
-          : await getMsoRoutingRule(payer.id, launch.state, line.provider.specialty ?? null);
+          : await getMsoRoutingRule(payer.id, state, line.provider.specialty ?? null);
         const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
         const mso = msoId ? ((msosQ.data ?? []).find((m) => m.id === msoId) ?? null) : null;
         const template = pickTemplate(
           templatesQ.data ?? [],
           payer.id,
-          launch.state,
+          state,
           line.provider.groupId ?? null,
         );
         const tasks = template
@@ -227,9 +268,9 @@ function LaunchDetailPage() {
           input: {
             providerId: line.provider.id,
             payerId: payer.id,
-            state: launch.state,
-            groupId: line.provider.groupId ?? launch.groupId,
-            facilityId: launch.facilityId,
+            state,
+            groupId: line.provider.groupId ?? location.groupId,
+            facilityId: location.id,
             specialty: line.provider.specialty ?? null,
             msoId,
           },
@@ -246,7 +287,7 @@ function LaunchDetailPage() {
       }
     }
     const skippedCount = plan.reduce((n, l) => n + l.skips.length, 0);
-    const result = await generate.mutateAsync({ launch, entries });
+    const result = await generate.mutateAsync({ location, entries });
     setGenResult({
       created: result.created.length,
       skipped: skippedCount,
@@ -259,10 +300,10 @@ function LaunchDetailPage() {
     }
   }
 
-  if (launchQ.isLoading) {
+  if (locationQ.isLoading) {
     return <div className="h-32 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;
   }
-  if (!launch) {
+  if (!location) {
     return (
       <div className="p-8 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
         Launch not found.
@@ -270,31 +311,18 @@ function LaunchDetailPage() {
     );
   }
 
-  const meta = LAUNCH_STATUS_META[launch.status];
-  const director = launch.clinicDirectorProviderId
-    ? ((providersQ.data ?? []).find((p) => p.id === launch.clinicDirectorProviderId) ?? null)
-    : null;
-  const directorLabel = director
-    ? `${director.firstName} ${director.lastName}`
-    : (launch.clinicDirectorName ?? "—");
-  const newState = isNewState(contracted);
   const totalCreates = plan?.reduce((n, l) => n + l.creates.length, 0) ?? 0;
   const nothingConfigured =
     plan !== null && plan.every((l) => l.creates.length + l.skips.length === 0);
+  const dateText = launchDateDisplay(status?.label, location.effectiveDate);
 
   return (
     <div className="max-w-4xl mx-auto">
       <PageHeader
-        title={launch.name}
+        title={location.name}
         description={[
-          launch.gymName,
-          [launch.city, launch.state].filter(Boolean).join(", "),
-          launch.confirmedStartDate
-            ? `starts ${format(parseISO(launch.confirmedStartDate), "MMM d, yyyy")}`
-            : launch.targetMonth
-              ? `target ${format(parseISO(launch.targetMonth), "MMM yyyy")}`
-              : null,
-          `Director: ${directorLabel}`,
+          [location.city, location.state].filter(Boolean).join(", "),
+          dateText !== "—" ? dateText : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -323,10 +351,10 @@ function LaunchDetailPage() {
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <StatusPill label={meta.label} color={meta.color} />
-        {newState ? (
+        {status ? <StatusPill label={status.label} color={status.color} /> : null}
+        {newState && location.state ? (
           <span className="inline-flex items-center gap-1.5 rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-2 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-            NEW STATE — no group contracts in {launch.state}
+            NEW STATE — payer contracts for {location.state} may not exist yet
           </span>
         ) : null}
         {readiness && readiness.denominator > 0 ? (
@@ -338,11 +366,15 @@ function LaunchDetailPage() {
               {readiness.inNetwork} of {readiness.denominator} in-network
             </span>
           </span>
-        ) : null}
-        {readiness?.contractGap && !newState ? (
+        ) : (
+          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            No cases yet
+          </span>
+        )}
+        {readiness?.contractGap && !newState && location.state ? (
           <span className="flex items-center gap-1 text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
             <AlertTriangle className="w-3.5 h-3.5" />
-            Contract gap in {launch.state}
+            Contract gap in {location.state}
           </span>
         ) : null}
       </div>
@@ -358,14 +390,14 @@ function LaunchDetailPage() {
         ) : (
           <ul className="divide-y divide-[color:var(--mp-border)]">
             {linked.map((p) => {
-              const pCases = (casesQ.data ?? []).filter((c) => c.providerId === p.id);
+              const pCases = locationCases.filter((c) => c.providerId === p.id);
               const countable = pCases.filter(
                 (c) => payerById.get(c.payerId)?.name !== PRE_CRED_PAYER_NAME,
               );
               const inNet = countable.filter(
                 (c) =>
                   c.credentialingStatusId &&
-                  statusById.get(c.credentialingStatusId)?.label === "In-Network",
+                  credStatusById.get(c.credentialingStatusId)?.label === "In-Network",
               ).length;
               return (
                 <li
@@ -387,7 +419,7 @@ function LaunchDetailPage() {
                     ) : null}
                   </span>
                   <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-                    {pCases.length} {pCases.length === 1 ? "case" : "cases"}
+                    {pCases.length} {pCases.length === 1 ? "case" : "cases"} here
                   </span>
                   {countable.length > 0 ? (
                     <span className="flex items-center gap-2">
@@ -410,7 +442,7 @@ function LaunchDetailPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add provider to {launch.name}</DialogTitle>
+            <DialogTitle>Add provider to {location.name}</DialogTitle>
           </DialogHeader>
           <Select value={addProviderId} onValueChange={setAddProviderId}>
             <SelectTrigger>
@@ -432,7 +464,7 @@ function LaunchDetailPage() {
             <Button
               disabled={addProviderId === NONE || attach.isPending}
               onClick={async () => {
-                await attach.mutateAsync({ providerId: addProviderId, launchId: launch.id });
+                await attach.mutateAsync({ providerId: addProviderId, facilityId: location.id });
                 setAddProviderId(NONE);
                 setAddOpen(false);
                 toast.success("Provider linked");
@@ -448,7 +480,7 @@ function LaunchDetailPage() {
       <Dialog open={genOpen} onOpenChange={setGenOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Generate cases for {launch.name}</DialogTitle>
+            <DialogTitle>Generate cases for {location.name}</DialogTitle>
           </DialogHeader>
           {genResult ? (
             <div className="text-[var(--mp-text-sm)] text-[color:var(--mp-ink)] space-y-1">
@@ -457,6 +489,10 @@ function LaunchDetailPage() {
               {genResult.failed > 0 ? (
                 <p className="text-[color:var(--mp-danger)]">{genResult.failed} failed</p>
               ) : null}
+            </div>
+          ) : !location.state ? (
+            <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+              Set a state on this location before generating cases.
             </div>
           ) : planning || plan === null ? (
             <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
@@ -468,7 +504,7 @@ function LaunchDetailPage() {
             </div>
           ) : nothingConfigured ? (
             <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
-              No payers are configured for {launch.state}. Nothing to generate.
+              No payers are configured for {location.state}. Nothing to generate.
             </div>
           ) : (
             <div className="max-h-80 overflow-y-auto space-y-3">
@@ -488,7 +524,7 @@ function LaunchDetailPage() {
                           key={p.id}
                           className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]"
                         >
-                          + {p.name} · {launch.state}
+                          + {p.name} · {location.state}
                           {p.name === PRE_CRED_PAYER_NAME ? " (pre-cred)" : ""}
                         </li>
                       ))}

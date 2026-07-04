@@ -50,7 +50,6 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
     deaNumber: form.deaNumber.trim() || null,
     isNewGrad: form.isNewGrad,
     groupId: form.groupId || null,
-    launchId: form.launchId || null,
     specialty: form.specialty.trim() || null,
     startDate: form.startDate || null,
     degree: form.degree.trim() || null,
