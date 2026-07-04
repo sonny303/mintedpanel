@@ -176,13 +176,13 @@ function HomePage() {
         }}
         className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
       >
-        <span className="flex-1 min-w-0 truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+        <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
           {r.providerName}
           <span className="text-[color:var(--mp-ink-faint)] font-normal"> · {r.payerName}</span>
         </span>
         {cta === "Log touch" && overdueDays !== null ? (
           <span
-            className={`text-[var(--mp-text-xs)] ${
+            className={`text-[length:var(--mp-text-xs)] ${
               overdueDays > 0
                 ? "font-semibold text-[color:var(--mp-danger)]"
                 : "text-[color:var(--mp-ink-secondary)]"
@@ -206,7 +206,7 @@ function HomePage() {
   function section(title: string, count: number, viewAllTo: string, children: React.ReactNode) {
     if (count === 0) {
       return (
-        <div className="px-4 py-2.5 text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] border border-mp-border rounded-[var(--mp-radius-lg)] bg-mp-card">
+        <div className="px-4 py-2.5 text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] border border-mp-border rounded-[var(--mp-radius-lg)] bg-mp-card">
           {title} — clear
         </div>
       );
@@ -214,16 +214,16 @@ function HomePage() {
     return (
       <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-mp-border bg-mp-muted/60 px-4 py-2.5">
-          <span className="text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+          <span className="text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
             {title}
-            <span className="ml-2 tabular-nums text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
+            <span className="ml-2 tabular-nums text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
               {count}
             </span>
           </span>
           {count > SECTION_CAP ? (
             <Link
               to={viewAllTo}
-              className="text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-primary)] hover:underline"
+              className="text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-primary)] hover:underline"
             >
               View all
             </Link>
@@ -245,10 +245,10 @@ function HomePage() {
         </div>
       ) : allClear ? (
         <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-16 text-center">
-          <div className="text-[var(--mp-text-2xl)] font-semibold text-[color:var(--mp-primary)]">
+          <div className="text-[length:var(--mp-text-2xl)] font-semibold text-[color:var(--mp-primary)]">
             You're caught up.
           </div>
-          <p className="mt-2 text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+          <p className="mt-2 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
             Nothing needs your action right now.
           </p>
         </div>
@@ -287,10 +287,10 @@ function HomePage() {
                   }}
                   className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
                 >
-                  <span className="flex-1 min-w-0 truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+                  <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
                     {launch.name}
                   </span>
-                  <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+                  <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
                     Starts{" "}
                     {launch.confirmedStartDate
                       ? format(parseISO(launch.confirmedStartDate), "MMM d")
@@ -303,7 +303,7 @@ function HomePage() {
                         max={Math.max(readiness.denominator, 1)}
                       />
                     </span>
-                    <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
+                    <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
                       {readiness.inNetwork} of {readiness.denominator} in-network
                     </span>
                   </span>

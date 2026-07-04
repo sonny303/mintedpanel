@@ -31,14 +31,14 @@ export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
             }`}
           >
             <span
-              className={`block text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider ${
+              className={`block text-[length:var(--mp-text-2xs)] font-medium uppercase tracking-wider ${
                 isSelected ? "text-white/85" : "text-[color:var(--mp-ink-secondary)]"
               }`}
             >
               {card.label}
             </span>
             <span
-              className={`mt-1 block text-[var(--mp-text-2xl)] font-semibold leading-none tabular-nums ${
+              className={`mt-1 block text-[length:var(--mp-text-2xl)] font-semibold leading-none tabular-nums ${
                 isSelected ? "text-white" : "text-[color:var(--mp-ink)]"
               }`}
             >

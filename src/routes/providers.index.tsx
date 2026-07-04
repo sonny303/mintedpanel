@@ -249,11 +249,11 @@ function ProvidersWorkView() {
   function tableRow(row: WorkRow): CaseTableRow {
     const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
     const lead = row.isPreCred ? (
-      <span className="text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+      <span className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
         Pre-Credentialing
       </span>
     ) : (
-      <span className="text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+      <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
         {row.payerName}
       </span>
     );
@@ -278,14 +278,14 @@ function ProvidersWorkView() {
     return (
       <div className="flex flex-1 min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
+          <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
             {initialsOf(g.provider)}
           </span>
           <span className="min-w-0 md:w-60">
             <span
               role="link"
               tabIndex={0}
-              className="block truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
+              className="block truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
                 openProvider();
@@ -306,7 +306,7 @@ function ProvidersWorkView() {
                 </span>
               ) : null}
             </span>
-            <span className="block text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            <span className="block text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
               {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
               {g.oldestDays !== null ? (
                 <span className="md:hidden"> · {g.oldestDays}d oldest</span>
@@ -318,7 +318,7 @@ function ProvidersWorkView() {
           <span className="w-full max-w-44 md:w-40 md:flex-shrink-0">
             <ProgressBar value={g.inNetwork} max={g.denominator} />
           </span>
-          <span className="tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+          <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
             {g.inNetwork} of {g.denominator} in-network
           </span>
         </span>
@@ -330,7 +330,7 @@ function ProvidersWorkView() {
             />
           ) : null}
           {g.oldestDays !== null ? (
-            <span className="hidden md:inline tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+            <span className="hidden md:inline tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
               {g.oldestDays}d oldest
             </span>
           ) : null}
@@ -359,7 +359,7 @@ function ProvidersWorkView() {
       </div>
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
           Couldn't load the work view. Refresh to retry.
         </div>
       ) : loading ? (

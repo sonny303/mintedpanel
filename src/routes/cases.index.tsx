@@ -239,15 +239,15 @@ function CasesWorkView() {
       ? `${row.provider.firstName} ${row.provider.lastName}`
       : "Unknown provider";
     const lead = (
-      <span className="text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+      <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
         {providerName}
         {row.provider?.credentials ? (
-          <span className="font-normal text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
             {" "}
             {row.provider.credentials}
           </span>
         ) : null}
-        <span className="font-normal text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+        <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
           {" "}
           · {row.case.state}
         </span>
@@ -272,10 +272,10 @@ function CasesWorkView() {
   function groupHeader(g: PayerGroup) {
     return (
       <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+        <span className="truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
           {g.payerName}
         </span>
-        <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+        <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
           {g.rows.length} {g.rows.length === 1 ? "case" : "cases"}
         </span>
         {!g.isPreCred ? (
@@ -283,7 +283,7 @@ function CasesWorkView() {
             <span className="w-40">
               <ProgressBar value={g.inNetwork} max={g.rows.length} />
             </span>
-            <span className="tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
               {g.inNetwork} of {g.rows.length} in-network
             </span>
           </span>
@@ -308,7 +308,7 @@ function CasesWorkView() {
       </div>
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
           Couldn't load cases. Refresh to retry.
         </div>
       ) : loading ? (

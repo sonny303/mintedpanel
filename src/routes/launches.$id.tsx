@@ -264,7 +264,7 @@ function LaunchDetailPage() {
   }
   if (!launch) {
     return (
-      <div className="p-8 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+      <div className="p-8 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
         Launch not found.
       </div>
     );
@@ -336,13 +336,13 @@ function LaunchDetailPage() {
             <span className="w-24">
               <ProgressBar value={readiness.inNetwork} max={readiness.denominator} />
             </span>
-            <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
               {readiness.inNetwork} of {readiness.denominator} in-network
             </span>
           </span>
         ) : null}
         {readiness?.contractGap && !newState ? (
-          <span className="flex items-center gap-1 text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
+          <span className="flex items-center gap-1 text-[length:var(--mp-text-xs)] text-[color:var(--mp-warn)]">
             <AlertTriangle className="w-3.5 h-3.5" />
             Contract gap in {launch.state}
           </span>
@@ -350,11 +350,11 @@ function LaunchDetailPage() {
       </div>
 
       <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden">
-        <div className="border-b border-mp-border bg-mp-muted/60 px-4 py-2.5 text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+        <div className="border-b border-mp-border bg-mp-muted/60 px-4 py-2.5 text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
           Providers ({linked.length})
         </div>
         {linked.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+          <div className="px-4 py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
             No providers linked yet.
           </div>
         ) : (
@@ -380,15 +380,15 @@ function LaunchDetailPage() {
                   }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
                 >
-                  <span className="flex-1 min-w-0 truncate text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+                  <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
                     {p.firstName} {p.lastName}
                     {p.credentials ? (
-                      <span className="ml-1.5 text-[var(--mp-text-xs)] font-normal text-[color:var(--mp-ink-faint)]">
+                      <span className="ml-1.5 text-[length:var(--mp-text-xs)] font-normal text-[color:var(--mp-ink-faint)]">
                         {p.credentials}
                       </span>
                     ) : null}
                   </span>
-                  <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+                  <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
                     {pCases.length} {pCases.length === 1 ? "case" : "cases"}
                   </span>
                   {countable.length > 0 ? (
@@ -396,7 +396,7 @@ function LaunchDetailPage() {
                       <span className="w-16">
                         <ProgressBar value={inNet} max={countable.length} />
                       </span>
-                      <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
+                      <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
                         {inNet} of {countable.length}
                       </span>
                     </span>
@@ -453,7 +453,7 @@ function LaunchDetailPage() {
             <DialogTitle>Generate cases for {launch.name}</DialogTitle>
           </DialogHeader>
           {genResult ? (
-            <div className="text-[var(--mp-text-sm)] text-[color:var(--mp-ink)] space-y-1">
+            <div className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink)] space-y-1">
               <p>{genResult.created} created</p>
               <p>{genResult.skipped} skipped (already existed)</p>
               {genResult.failed > 0 ? (
@@ -461,26 +461,26 @@ function LaunchDetailPage() {
               ) : null}
             </div>
           ) : planning || plan === null ? (
-            <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+            <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
               Resolving payers through routing rules…
             </div>
           ) : linked.length === 0 ? (
-            <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+            <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
               No providers are linked to this launch.
             </div>
           ) : nothingConfigured ? (
-            <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+            <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
               No payers are configured for {launch.state}. Nothing to generate.
             </div>
           ) : (
             <div className="max-h-80 overflow-y-auto space-y-3">
               {plan.map((line) => (
                 <div key={line.provider.id}>
-                  <div className="text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+                  <div className="text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
                     {line.provider.firstName} {line.provider.lastName}
                   </div>
                   {line.creates.length === 0 && line.skips.length === 0 ? (
-                    <div className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+                    <div className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                       Nothing to create.
                     </div>
                   ) : (
@@ -488,7 +488,7 @@ function LaunchDetailPage() {
                       {line.creates.map((p) => (
                         <li
                           key={p.id}
-                          className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]"
+                          className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]"
                         >
                           + {p.name} · {launch.state}
                           {p.name === PRE_CRED_PAYER_NAME ? " (pre-cred)" : ""}
@@ -497,7 +497,7 @@ function LaunchDetailPage() {
                       {line.skips.map(({ payer, reason }) => (
                         <li
                           key={payer.id}
-                          className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] line-through"
+                          className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] line-through"
                         >
                           {payer.name} — {reason}
                         </li>

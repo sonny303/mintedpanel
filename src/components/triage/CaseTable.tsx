@@ -32,7 +32,7 @@ interface CaseTableProps {
 }
 
 const HEAD_CELL =
-  "py-3 text-left text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
+  "py-3 text-left text-[length:var(--mp-text-2xs)] font-medium uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
 
 function stop(e: MouseEvent) {
   e.stopPropagation();
@@ -46,7 +46,7 @@ function daysCell(row: CaseTableRow) {
   if (row.days === null) return null;
   return (
     <span
-      className={`tabular-nums text-[var(--mp-text-sm)] ${
+      className={`tabular-nums text-[length:var(--mp-text-sm)] ${
         row.daysStrong
           ? "font-semibold text-[color:var(--mp-ink)]"
           : "text-[color:var(--mp-ink-secondary)]"
@@ -61,7 +61,7 @@ function contractCell(row: CaseTableRow) {
   return row.contract ? (
     <StatusPill label={row.contract.label} color={row.contract.color} />
   ) : (
-    <span className="text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">–</span>
+    <span className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">–</span>
   );
 }
 
@@ -101,7 +101,7 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
                 />
               </td>
               <td className="whitespace-nowrap px-3 py-3">{contractCell(row)}</td>
-              <td className="whitespace-nowrap px-3 py-3 text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+              <td className="whitespace-nowrap px-3 py-3 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
                 {row.lastTouch}
               </td>
               <td className="whitespace-nowrap px-3 py-3">{daysCell(row)}</td>
@@ -138,7 +138,7 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {contractCell(row)}
-              <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                 {row.lastTouch}
               </span>
               {daysCell(row)}
