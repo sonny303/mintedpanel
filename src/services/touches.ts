@@ -75,24 +75,31 @@ export interface CaseFollowUp {
   caseId: string;
   touchDate: string;
   nextFollowUpDate: string | null;
+  notes: string | null;
 }
 
 export async function getLatestTouchFollowUps(): Promise<Map<string, CaseFollowUp>> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("touches")
-    .select("case_id, touch_date, next_follow_up_date")
+    .select("case_id, touch_date, next_follow_up_date, notes")
     .eq("org_id", orgId)
     .order("touch_date", { ascending: false });
   if (error) throw error;
   const latest = new Map<string, CaseFollowUp>();
   for (const row of data ?? []) {
-    const r = row as { case_id: string; touch_date: string; next_follow_up_date: string | null };
+    const r = row as {
+      case_id: string;
+      touch_date: string;
+      next_follow_up_date: string | null;
+      notes: string | null;
+    };
     if (!latest.has(r.case_id)) {
       latest.set(r.case_id, {
         caseId: r.case_id,
         touchDate: r.touch_date,
         nextFollowUpDate: r.next_follow_up_date,
+        notes: r.notes,
       });
     }
   }
