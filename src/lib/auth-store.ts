@@ -93,7 +93,7 @@ export const useAuthStore = create<AuthState>()(
         // Convert any pending_invites matching this user's email into
         // memberships before we read. Errors here are non-fatal.
         try {
-          const rpc = supabase.rpc as unknown as (name: string) => Promise<{
+          const rpc = supabase.rpc.bind(supabase) as unknown as (name: string) => Promise<{
             data: number | null;
             error: unknown;
           }>;

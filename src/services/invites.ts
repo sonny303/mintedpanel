@@ -168,7 +168,7 @@ export async function removeMembership(input: RemoveMembershipInput): Promise<vo
 }
 
 export async function claimInvites(): Promise<number> {
-  const rpc = supabase.rpc as unknown as (name: string) => Promise<{
+  const rpc = supabase.rpc.bind(supabase) as unknown as (name: string) => Promise<{
     data: number | null;
     error: { message: string } | null;
   }>;

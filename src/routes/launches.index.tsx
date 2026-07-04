@@ -142,6 +142,17 @@ function LaunchesPage() {
                   <DropdownMenuItem onClick={() => setAssignFor(r.facility)}>
                     Assign provider
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      navigate({
+                        to: "/launches/$id",
+                        params: { id: r.facility.id },
+                        search: { createCases: true },
+                      })
+                    }
+                  >
+                    Create cases
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </span>
