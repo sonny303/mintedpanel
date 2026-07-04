@@ -1,5 +1,6 @@
-// Triage RowCta (M1): inline row action button. Renders purely from props;
-// wiring to the case's next open task lands at M2.
+// Triage RowCta (M1/M2 fix): THE row-level action button — small secondary
+// variant, max-content width, one per row. Long labels truncate past ~28ch
+// with the full text preserved in the title attribute.
 interface RowCtaProps {
   label: string;
   onClick: () => void;
@@ -10,9 +11,10 @@ export function RowCta({ label, onClick }: RowCtaProps) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center rounded-[var(--mp-radius-sm)] bg-mp-primary-tint px-2.5 py-1 text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] transition-colors hover:bg-mp-primary hover:text-white whitespace-nowrap"
+      title={label}
+      className="inline-flex w-max max-w-[28ch] items-center rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card px-3 py-1.5 text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)] transition-colors hover:bg-mp-muted"
     >
-      {label}
+      <span className="truncate">{label}</span>
     </button>
   );
 }

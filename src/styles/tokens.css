@@ -67,14 +67,17 @@
   --mp-pending-tint: color-mix(in srgb, var(--mp-pending) 12%, white);
   --mp-neutral-tint: color-mix(in srgb, var(--mp-neutral) 14%, white);
 
-  /* Type scale (PLACEHOLDER steps within the sheet's stated 10.5–25px range) */
-  --mp-text-2xs: 10.5px;
+  /* Type scale — aligned to the Lovable-era ramp so both generations of
+   * pages share one classification system:
+   * 2xs overline/table header · xs meta · sm body/rows/nav · base card
+   * heading · lg section heading · 2xl stat number · 3xl page hero. */
+  --mp-text-2xs: 11px;
   --mp-text-xs: 12px;
   --mp-text-sm: 13px;
   --mp-text-base: 14px;
-  --mp-text-lg: 16px;
+  --mp-text-lg: 15px;
   --mp-text-xl: 18px;
-  --mp-text-2xl: 21px;
+  --mp-text-2xl: 20px;
   --mp-text-3xl: 25px;
 
   /* Radius */

@@ -228,24 +228,24 @@ export function CreateCasesDialog({
           <DialogTitle>Create cases for {location.name}</DialogTitle>
         </DialogHeader>
         {result ? (
-          <div className="text-[var(--mp-text-sm)] text-[color:var(--mp-ink)] space-y-1">
+          <div className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink)] space-y-1">
             <p>{result.created} created</p>
             {result.failed > 0 ? (
               <p className="text-[color:var(--mp-danger)]">{result.failed} failed</p>
             ) : null}
           </div>
         ) : !state ? (
-          <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+          <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
             Set a state on this location before creating cases.
           </div>
         ) : linkedProviders.length === 0 ? (
-          <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+          <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
             No provider is assigned to this launch yet. Assign one first.
           </div>
         ) : (
           <div className="space-y-3">
             <div>
-              <div className="mb-1 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)]">
+              <div className="mb-1 text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)]">
                 Provider
               </div>
               <Select value={providerId} onValueChange={setProviderChoice}>
@@ -262,11 +262,11 @@ export function CreateCasesDialog({
               </Select>
             </div>
             <div>
-              <div className="mb-1 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)]">
+              <div className="mb-1 text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)]">
                 Payers · one case per selection, linked to {location.name}
               </div>
               {rows === null ? (
-                <div className="py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+                <div className="py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
                   Resolving payers through routing rules…
                 </div>
               ) : (
@@ -280,7 +280,7 @@ export function CreateCasesDialog({
                         aria-label={`Select ${r.payerName}`}
                       />
                       <span
-                        className={`flex-1 min-w-0 truncate text-[var(--mp-text-sm)] ${
+                        className={`flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] ${
                           r.caseExists
                             ? "text-[color:var(--mp-ink-faint)] line-through"
                             : "text-[color:var(--mp-ink)]"
@@ -288,7 +288,7 @@ export function CreateCasesDialog({
                       >
                         {r.payerName}
                       </span>
-                      <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+                      <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
                         {r.caseExists
                           ? "Case exists"
                           : r.isPreCred

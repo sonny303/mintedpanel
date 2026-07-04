@@ -1,6 +1,8 @@
-// Shared chip semantics for the grouped work views (M2 Providers, M3 Cases).
-// Both pages import these instead of defining their own, so the four chip
-// counts can never drift between pivots — the M3 consistency requirement.
+// Shared filter-card semantics for the grouped work views (M2 Providers,
+// M3 Cases). Both pages import these instead of defining their own, so the
+// four card counts and the filtered lists can never drift between pivots —
+// the M3 consistency requirement.
+import type { ActionBadgeTone } from "@/components/triage/ActionBadge";
 import type { ActionState } from "./actionState";
 
 export type ChipId = "all" | "needs" | "inprog" | "awaiting";
@@ -32,4 +34,44 @@ export function chipCounts(states: readonly ActionState[]): ChipCounts {
     inprog: open.filter((s) => CHIP_STATES.inprog.includes(s)).length,
     awaiting: open.filter((s) => CHIP_STATES.awaiting.includes(s)).length,
   };
+}
+
+/**
+ * The list-filter predicate for a selected card. Shares CHIP_STATES and
+ * isOpenState with chipCounts, so a card that says N always filters the
+ * list down to exactly N rows.
+ */
+export function matchesChip(chip: ChipId, state: ActionState): boolean {
+  return chip === "all" ? isOpenState(state) : CHIP_STATES[chip].includes(state);
+}
+
+/** A case row is alert-tinted when it sits in the needs-your-action bucket. */
+export function isAlertState(state: ActionState): boolean {
+  return CHIP_STATES.needs.includes(state);
+}
+
+// Provider/payer rollup chip treatments, shared by both work views.
+export const ACTION_BADGE_TONE: Record<ActionState, ActionBadgeTone> = {
+  needs_action: "danger",
+  blocked: "warn",
+  stalled: "warn",
+  awaiting_effective: "pending",
+  on_track: "ok",
+  complete: "neutral",
+};
+
+export const ACTION_BADGE_NOUN: Record<ActionState, string> = {
+  needs_action: "needs action",
+  blocked: "blocked",
+  stalled: "stalled",
+  awaiting_effective: "awaiting effective",
+  on_track: "On track",
+  complete: "Complete",
+};
+
+/** Rollup chip label: counted for actionable states, plain for resting ones. */
+export function badgeLabel(worst: ActionState, count: number): string {
+  return worst === "on_track" || worst === "complete"
+    ? ACTION_BADGE_NOUN[worst]
+    : `${count} ${ACTION_BADGE_NOUN[worst]}`;
 }

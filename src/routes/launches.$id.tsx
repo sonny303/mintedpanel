@@ -136,7 +136,7 @@ function LaunchDetailPage() {
   }
   if (!location) {
     return (
-      <div className="p-8 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
+      <div className="p-8 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
         Launch not found.
       </div>
     );
@@ -177,8 +177,11 @@ function LaunchDetailPage() {
       <div className="mb-5 flex flex-wrap items-center gap-3">
         {status ? <StatusPill label={status.label} color={status.color} /> : null}
         {newState && location.state ? (
-          <span className="inline-flex items-center gap-1.5 rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-2 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-            NEW STATE — payer contracts for {location.state} may not exist yet
+          <span className="flex items-center gap-1.5">
+            <StatusPill label="New state" color="var(--mp-warn)" />
+            <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-warn)]">
+              Payer contracts for {location.state} may not exist yet
+            </span>
           </span>
         ) : null}
         {readiness && readiness.denominator > 0 ? (
@@ -186,15 +189,17 @@ function LaunchDetailPage() {
             <span className="w-24">
               <ProgressBar value={readiness.inNetwork} max={readiness.denominator} />
             </span>
-            <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
               {readiness.inNetwork} of {readiness.denominator} in-network
             </span>
           </span>
         ) : locationCases.length === 0 ? (
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">No cases yet</span>
+          <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-warn)]">
+            No cases yet
+          </span>
         ) : null}
         {readiness?.contractGap && !newState && location.state ? (
-          <span className="flex items-center gap-1 text-[var(--mp-text-xs)] text-[color:var(--mp-warn)]">
+          <span className="flex items-center gap-1 text-[length:var(--mp-text-xs)] text-[color:var(--mp-warn)]">
             <AlertTriangle className="w-3.5 h-3.5" />
             Contract gap in {location.state}
           </span>
@@ -203,13 +208,13 @@ function LaunchDetailPage() {
           canWrite ? (
             <button
               type="button"
-              className="text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
+              className="text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
               onClick={() => setEditOpen(true)}
             >
               Start date passed. Mark Live?
             </button>
           ) : (
-            <span className="text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)]">
+            <span className="text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-warn)]">
               Start date passed
             </span>
           )
@@ -217,11 +222,11 @@ function LaunchDetailPage() {
       </div>
 
       <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden">
-        <div className="border-b border-mp-border bg-mp-muted/60 px-4 py-2.5 text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+        <div className="border-b border-mp-border bg-mp-muted/60 px-4 py-2.5 text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
           Providers ({linked.length})
         </div>
         {linked.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+          <div className="px-4 py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
             No providers linked yet.
           </div>
         ) : (
@@ -247,15 +252,15 @@ function LaunchDetailPage() {
                   }}
                   className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
                 >
-                  <span className="flex-1 min-w-0 truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+                  <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
                     {p.firstName} {p.lastName}
                     {p.credentials ? (
-                      <span className="ml-1.5 text-[var(--mp-text-xs)] font-normal text-[color:var(--mp-ink-faint)]">
+                      <span className="ml-1.5 text-[length:var(--mp-text-xs)] font-normal text-[color:var(--mp-ink-faint)]">
                         {p.credentials}
                       </span>
                     ) : null}
                   </span>
-                  <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+                  <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
                     {pCases.length} {pCases.length === 1 ? "case" : "cases"} here
                   </span>
                   {countable.length > 0 ? (
@@ -263,7 +268,7 @@ function LaunchDetailPage() {
                       <span className="w-16">
                         <ProgressBar value={inNet} max={countable.length} />
                       </span>
-                      <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
+                      <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
                         {inNet} of {countable.length}
                       </span>
                     </span>

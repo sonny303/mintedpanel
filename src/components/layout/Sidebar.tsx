@@ -1,6 +1,5 @@
 // M1 shell sidebar: dark surface, org switcher, search trigger, main nav,
-// permission-gated ADMIN section, user footer. Home and Launches stay behind
-// flags until M5 / M4 (decisions B1 + spec nav).
+// permission-gated ADMIN section, user footer.
 import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -32,10 +31,6 @@ import {
   Check,
 } from "lucide-react";
 
-// Nav items hidden until their milestone ships (B1 / spec nav section).
-const SHOW_HOME_NAV = true; // flipped on at M5
-const SHOW_LAUNCHES_NAV = true; // flipped on at M4
-
 type NavLink = {
   to: string;
   label: string;
@@ -44,11 +39,10 @@ type NavLink = {
 };
 
 const mainNav: NavLink[] = [
-  // Home (M5) and Launches (M4) join here when their flags flip on.
-  ...(SHOW_HOME_NAV ? [{ to: "/home", label: "Home", icon: House }] : []),
+  { to: "/home", label: "Home", icon: House },
   { to: "/providers", label: "Providers", icon: Users },
   { to: "/cases", label: "Cases", icon: FileStack },
-  ...(SHOW_LAUNCHES_NAV ? [{ to: "/launches", label: "Launches", icon: Rocket }] : []),
+  { to: "/launches", label: "Launches", icon: Rocket },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
 

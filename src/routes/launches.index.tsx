@@ -100,21 +100,17 @@ function LaunchesPage() {
         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
           <div className="flex items-center gap-2 md:w-56 md:flex-shrink-0">
             {r.status ? <StatusPill label={r.status.label} color={r.status.color} /> : null}
-            {r.newState ? (
-              <span className="inline-flex items-center rounded-[var(--mp-radius-pill)] bg-mp-warn/15 px-1.5 py-0.5 text-[var(--mp-text-2xs)] font-bold tracking-wide text-[color:var(--mp-warn)]">
-                NEW STATE
-              </span>
-            ) : null}
+            {r.newState ? <StatusPill label="New state" color="var(--mp-warn)" /> : null}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
+            <div className="truncate text-[length:var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
               {r.facility.name}
             </div>
-            <div className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+            <div className="truncate text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
               {[r.facility.city, r.facility.state].filter(Boolean).join(", ")}
             </div>
           </div>
-          <span className="text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-36">
+          <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-36">
             <span className="block">
               {launchDateDisplay(r.status?.label, r.facility.effectiveDate)}
             </span>
@@ -122,7 +118,7 @@ function LaunchesPage() {
               canWrite ? (
                 <button
                   type="button"
-                  className="mt-0.5 block text-left text-[var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
+                  className="mt-0.5 block text-left text-[length:var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)] hover:underline"
                   onClick={(e) => {
                     e.stopPropagation();
                     setModal({ location: r.facility });
@@ -131,16 +127,16 @@ function LaunchesPage() {
                   Start date passed. Mark Live?
                 </button>
               ) : (
-                <span className="mt-0.5 block text-[var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)]">
+                <span className="mt-0.5 block text-[length:var(--mp-text-2xs)] font-semibold text-[color:var(--mp-warn)]">
                   Start date passed
                 </span>
               )
             ) : null}
           </span>
-          <span className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-40">
+          <span className="truncate text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] md:w-40">
             {r.providerNames.length > 0 ? r.providerNames.join(", ") : "—"}
           </span>
-          <span className="md:w-24 text-[var(--mp-text-xs)]">
+          <span className="md:w-24 text-[length:var(--mp-text-xs)]">
             {r.caseCount > 0 ? (
               <span className="tabular-nums text-[color:var(--mp-ink-secondary)]">
                 {r.caseCount} {r.caseCount === 1 ? "case" : "cases"}
@@ -200,7 +196,7 @@ function LaunchesPage() {
       />
 
       {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
           Couldn't load launches. Refresh to retry.
         </div>
       ) : loading ? (
@@ -226,7 +222,7 @@ function LaunchesPage() {
         <div className="space-y-5">
           {recentlyLaunched.length > 0 ? (
             <section>
-              <h2 className="mb-2 text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+              <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
                 Recently launched
               </h2>
               <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
@@ -235,14 +231,14 @@ function LaunchesPage() {
             </section>
           ) : null}
           <section>
-            <h2 className="mb-2 text-[var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+            <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
               Pipeline
             </h2>
             <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
               {pipeline.length > 0 ? (
                 pipeline.map(launchRow)
               ) : (
-                <div className="px-4 py-6 text-center text-[var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
+                <div className="px-4 py-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">
                   Nothing in the pipeline.
                 </div>
               )}

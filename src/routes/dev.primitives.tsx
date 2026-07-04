@@ -1,11 +1,12 @@
-// Storybook-style demo of the six M1 triage primitives, in both densities.
-// Behind an env flag: visible in dev, or when VITE_DEV_PRIMITIVES=1 is set
-// (add that var to the Vercel project to verify on a preview).
+// Storybook-style demo of the triage primitives. Behind an env flag: visible
+// in dev, or when VITE_DEV_PRIMITIVES=1 is set (add that var to the Vercel
+// project to verify on a preview).
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { SummaryChips } from "@/components/triage/SummaryChips";
-import { GroupedList, type GroupedListDensity } from "@/components/triage/GroupedList";
+import { FilterCards } from "@/components/triage/FilterCards";
+import { GroupedList } from "@/components/triage/GroupedList";
+import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ActionBadge, type ActionBadgeTone } from "@/components/triage/ActionBadge";
 import { ProgressBar } from "@/components/triage/ProgressBar";
@@ -20,18 +21,19 @@ export const Route = createFileRoute("/dev/primitives")({
   component: PrimitivesPage,
 });
 
-// Demo-only hues, standing in for status_configs.color until M2 wiring.
+// Demo-only hues, standing in for status_configs.color.
 const DEMO_BLUE = "#2563eb";
 const DEMO_TEAL = "#0891b2";
 const DEMO_GRAY = "#9ca3af";
 const DEMO_GREEN = "#059669";
+const DEMO_RED = "#dc2626";
 
 const TONES: ActionBadgeTone[] = ["ok", "info", "warn", "danger", "pending", "neutral"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-5">
-      <h2 className="mb-4 text-[var(--mp-text-sm)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+      <h2 className="mb-4 text-[length:var(--mp-text-sm)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
         {title}
       </h2>
       {children}
@@ -39,76 +41,113 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function demoRow(provider: string, payer: string, pill: React.ReactNode, cta: string) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="truncate text-[var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">
-          {provider}
-        </div>
-        <div className="truncate text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-          {payer}
-        </div>
-      </div>
-      {pill}
-      <span className="tabular-nums text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)] w-10 text-right">
-        34d
+function demoRow(
+  id: string,
+  payer: string,
+  status: CaseTableRow["status"],
+  contract: CaseTableRow["contract"],
+  days: number,
+  cta: string | null,
+  alert = false,
+): CaseTableRow {
+  return {
+    id,
+    lead: (
+      <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+        {payer}
       </span>
-      <RowCta label={cta} onClick={() => {}} />
-    </div>
-  );
+    ),
+    status,
+    contract,
+    lastTouch: "2d ago",
+    days,
+    daysStrong: alert,
+    action: cta ? { label: cta, onClick: () => {} } : null,
+    alert,
+    onOpen: () => {},
+  };
 }
 
 function PrimitivesPage() {
-  const [selectedChip, setSelectedChip] = useState<string | null>("all");
-  const [density, setDensity] = useState<GroupedListDensity>("comfortable");
+  const [selectedCard, setSelectedCard] = useState("all");
 
   const groups = [
     {
       id: "g1",
-      title: "Sunrise Medical Group",
-      count: 3,
-      progress: { value: 2, max: 3 },
-      rows: [
-        demoRow(
-          "Dr. Sonny Ali",
-          "Aetna · TX",
-          <StatusPill label="In Progress" color={DEMO_BLUE} suffix="awaiting CAQH docs" />,
-          "Request docs",
-        ),
-        demoRow(
-          "Dr. Mira Chen",
-          "UHC · TX",
-          <StatusPill label="Submitted" color={DEMO_TEAL} />,
-          "Follow up",
-        ),
-        demoRow(
-          "Dr. Ada Okafor",
-          "Cigna · OK",
-          <StatusPill label="Denied" color={DEMO_GRAY} suffix="appeal window 12d" />,
-          "Start appeal",
-        ),
-      ],
+      header: (
+        <div className="flex flex-1 min-w-0 items-center gap-3">
+          <span className="truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+            Sunrise Medical Group
+          </span>
+          <span className="hidden sm:flex items-center gap-2 ml-auto">
+            <span className="w-20">
+              <ProgressBar value={2} max={3} />
+            </span>
+            <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+              2 of 3 in-network
+            </span>
+          </span>
+          <ActionBadge tone="danger" text="1 needs action" />
+        </div>
+      ),
+      children: (
+        <CaseTable
+          leadLabel="Payer"
+          rows={[
+            demoRow(
+              "r1",
+              "Cigna",
+              { label: "Denied", color: DEMO_RED, suffix: "appeal filed" },
+              null,
+              21,
+              "Start appeal",
+              true,
+            ),
+            demoRow(
+              "r2",
+              "Aetna",
+              { label: "In Progress", color: DEMO_BLUE },
+              { label: "In-Network", color: DEMO_GREEN },
+              6,
+              "Request docs",
+            ),
+            demoRow(
+              "r3",
+              "UHC",
+              { label: "Submitted", color: DEMO_TEAL },
+              { label: "Not Started", color: DEMO_GRAY },
+              11,
+              null,
+            ),
+          ]}
+        />
+      ),
     },
     {
       id: "g2",
-      title: "Lakeview Health Partners",
-      count: 2,
-      progress: { value: 1, max: 2 },
-      rows: [
-        demoRow(
-          "Dr. Leah Park",
-          "BCBS · NM",
-          <StatusPill label="In-Network" color={DEMO_GREEN} />,
-          "View case",
-        ),
-        demoRow(
-          "Dr. Omar Reyes",
-          "Aetna · NM",
-          <StatusPill label="Not Started" color={DEMO_GRAY} suffix="pre-credentialing" />,
-          "Open checklist",
-        ),
-      ],
+      header: (
+        <div className="flex flex-1 min-w-0 items-center gap-3">
+          <span className="truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+            Lakeview Health Partners
+          </span>
+          <span className="ml-auto" />
+        </div>
+      ),
+      children: (
+        <CaseTable
+          leadLabel="Payer"
+          rows={[
+            demoRow(
+              "r4",
+              "BCBS",
+              { label: "In-Network", color: DEMO_GREEN },
+              { label: "In-Network", color: DEMO_GREEN },
+              3,
+              "View case",
+            ),
+          ]}
+        />
+      ),
     },
   ];
 
@@ -116,38 +155,19 @@ function PrimitivesPage() {
     <div className="max-w-4xl mx-auto space-y-5">
       <PageHeader
         title="Triage primitives"
-        description="M1 component demo — dev only, not linked from nav."
-        actions={
-          <div className="flex items-center gap-1 rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card p-0.5">
-            {(["comfortable", "compact"] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDensity(d)}
-                className={`rounded-[4px] px-2.5 py-1 text-[var(--mp-text-xs)] font-medium capitalize transition-colors ${
-                  density === d
-                    ? "bg-mp-primary text-white"
-                    : "text-[color:var(--mp-ink-secondary)] hover:bg-mp-muted"
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        }
+        description="Component demo — dev only, not linked from nav."
       />
 
-      <Section title="SummaryChips">
-        <SummaryChips
-          chips={[
-            { id: "all", label: "All open", n: 24 },
-            { id: "action", label: "Needs action", n: 7, warn: true },
-            { id: "waiting", label: "Waiting on payer", n: 11 },
-            { id: "stalled", label: "Stalled", n: 4, warn: true },
-            { id: "closed", label: "Closed 30d", n: 9 },
+      <Section title="FilterCards">
+        <FilterCards
+          cards={[
+            { id: "all", label: "All open cases", n: 42 },
+            { id: "needs", label: "Needs your action", n: 3 },
+            { id: "inprog", label: "In progress", n: 29 },
+            { id: "awaiting", label: "Awaiting effective date", n: 6 },
           ]}
-          selected={selectedChip}
-          onSelect={setSelectedChip}
+          selected={selectedCard}
+          onSelect={setSelectedCard}
         />
       </Section>
 
@@ -158,7 +178,7 @@ function PrimitivesPage() {
           <StatusPill label="In Progress" color={DEMO_BLUE} suffix="45d silent" />
           <StatusPill label="Submitted" color={DEMO_TEAL} />
           <StatusPill label="In-Network" color={DEMO_GREEN} />
-          <StatusPill label="Denied" color={DEMO_GRAY} suffix="appeal" />
+          <StatusPill label="Denied" color={DEMO_RED} suffix="appeal filed" />
         </div>
       </Section>
 
@@ -167,7 +187,7 @@ function PrimitivesPage() {
           {TONES.map((tone) => (
             <ActionBadge key={tone} tone={tone} text={tone === "warn" ? "Stalled" : tone} />
           ))}
-          <ActionBadge tone="danger" text="Blocked · CAQH docs" />
+          <ActionBadge tone="warn" text="Blocked · docs" />
         </div>
       </Section>
 
@@ -183,12 +203,15 @@ function PrimitivesPage() {
         <div className="flex flex-wrap items-center gap-3">
           <RowCta label="Start appeal" onClick={() => {}} />
           <RowCta label="Escalate" onClick={() => {}} />
-          <RowCta label="Request docs" onClick={() => {}} />
+          <RowCta
+            label="Chase the payer rep about the stalled recredentialing packet again"
+            onClick={() => {}}
+          />
         </div>
       </Section>
 
-      <Section title={`GroupedList — ${density}`}>
-        <GroupedList groups={groups} density={density} />
+      <Section title="GroupedList + CaseTable">
+        <GroupedList groups={groups} />
       </Section>
     </div>
   );
