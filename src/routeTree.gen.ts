@@ -13,6 +13,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
+import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
@@ -58,6 +59,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const ProvidersRoute = ProvidersRouteImport.update({
   id: '/providers',
   path: '/providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgressRoute = ProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/tasks': typeof TasksRouteWithChildren
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/tasks': typeof TasksRouteWithChildren
@@ -290,6 +299,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/progress'
     | '/providers'
     | '/reports'
     | '/tasks'
@@ -320,6 +330,7 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/login'
+    | '/progress'
     | '/reports'
     | '/welcome'
     | '/admin/audit'
@@ -348,6 +359,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/progress'
     | '/providers'
     | '/reports'
     | '/tasks'
@@ -381,6 +393,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ProgressRoute: typeof ProgressRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   TasksRoute: typeof TasksRouteWithChildren
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/providers'
       fullPath: '/providers'
       preLoaderRoute: typeof ProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/progress': {
+      id: '/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof ProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -698,6 +718,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  ProgressRoute: ProgressRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
   TasksRoute: TasksRouteWithChildren,
