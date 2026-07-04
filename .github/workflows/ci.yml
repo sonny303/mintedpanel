@@ -106,8 +106,8 @@ jobs:
 
   # Gate 0.5 — Playwright smoke skeleton. Boots the app via the Vite dev server
   # with dummy Supabase env vars (unauthenticated paths make no network call).
-  # One spec runs (login render); three write scenarios are test.skip (need a
-  # seeded tenant).
+  # Two specs run (login render, dashboard redirect); three write scenarios are
+  # test.skip (need a seeded tenant).
   e2e:
     name: Playwright smoke
     runs-on: ubuntu-latest
