@@ -14,14 +14,17 @@ import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TasksIndexRouteImport } from './routes/tasks.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
+import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
@@ -61,6 +64,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaunchesRoute = LaunchesRouteImport.update({
+  id: '/launches',
+  path: '/launches',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CasesRoute = CasesRouteImport.update({
   id: '/cases',
   path: '/cases',
@@ -81,6 +89,11 @@ const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersRoute,
 } as any)
+const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LaunchesRoute,
+} as any)
 const CasesIndexRoute = CasesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -100,6 +113,11 @@ const ProvidersIdRoute = ProvidersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => ProvidersRoute,
+} as any)
+const LaunchesIdRoute = LaunchesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => LaunchesRoute,
 } as any)
 const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
   id: '/dev/primitives',
@@ -170,6 +188,7 @@ const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -184,10 +203,12 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/launches/$id': typeof LaunchesIdRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
@@ -208,9 +229,11 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/launches/$id': typeof LaunchesIdRoute
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
+  '/launches': typeof LaunchesIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/tasks': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
@@ -222,6 +245,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -236,10 +260,12 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/launches/$id': typeof LaunchesIdRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/tasks/': typeof TasksIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
@@ -252,6 +278,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cases'
+    | '/launches'
     | '/login'
     | '/providers'
     | '/reports'
@@ -266,10 +293,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/launches/$id'
     | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases/'
+    | '/launches/'
     | '/providers/'
     | '/tasks/'
     | '/admin/templates/$id'
@@ -290,9 +319,11 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/launches/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases'
+    | '/launches'
     | '/providers'
     | '/tasks'
     | '/admin/templates/$id'
@@ -303,6 +334,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cases'
+    | '/launches'
     | '/login'
     | '/providers'
     | '/reports'
@@ -317,10 +349,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/launches/$id'
     | '/providers/$id'
     | '/providers/new'
     | '/tasks/$id'
     | '/cases/'
+    | '/launches/'
     | '/providers/'
     | '/tasks/'
     | '/admin/templates/$id'
@@ -332,6 +366,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
+  LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
@@ -384,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/launches': {
+      id: '/launches'
+      path: '/launches'
+      fullPath: '/launches'
+      preLoaderRoute: typeof LaunchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cases': {
       id: '/cases'
       path: '/cases'
@@ -412,6 +454,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIndexRouteImport
       parentRoute: typeof ProvidersRoute
     }
+    '/launches/': {
+      id: '/launches/'
+      path: '/'
+      fullPath: '/launches/'
+      preLoaderRoute: typeof LaunchesIndexRouteImport
+      parentRoute: typeof LaunchesRoute
+    }
     '/cases/': {
       id: '/cases/'
       path: '/'
@@ -439,6 +488,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/providers/$id'
       preLoaderRoute: typeof ProvidersIdRouteImport
       parentRoute: typeof ProvidersRoute
+    }
+    '/launches/$id': {
+      id: '/launches/$id'
+      path: '/$id'
+      fullPath: '/launches/$id'
+      preLoaderRoute: typeof LaunchesIdRouteImport
+      parentRoute: typeof LaunchesRoute
     }
     '/dev/primitives': {
       id: '/dev/primitives'
@@ -546,6 +602,20 @@ const CasesRouteChildren: CasesRouteChildren = {
 
 const CasesRouteWithChildren = CasesRoute._addFileChildren(CasesRouteChildren)
 
+interface LaunchesRouteChildren {
+  LaunchesIdRoute: typeof LaunchesIdRoute
+  LaunchesIndexRoute: typeof LaunchesIndexRoute
+}
+
+const LaunchesRouteChildren: LaunchesRouteChildren = {
+  LaunchesIdRoute: LaunchesIdRoute,
+  LaunchesIndexRoute: LaunchesIndexRoute,
+}
+
+const LaunchesRouteWithChildren = LaunchesRoute._addFileChildren(
+  LaunchesRouteChildren,
+)
+
 interface ProvidersIdRouteChildren {
   ProvidersIdEditRoute: typeof ProvidersIdEditRoute
   ProvidersIdIndexRoute: typeof ProvidersIdIndexRoute
@@ -605,6 +675,7 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
+  LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,

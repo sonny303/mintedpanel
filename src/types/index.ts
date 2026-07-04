@@ -37,6 +37,33 @@ export interface ProviderGroup {
   createdAt: string;
 }
 
+export type LaunchStatus =
+  | "prospect"
+  | "interviewing"
+  | "planned"
+  | "pending_fulfillment"
+  | "ready_for_launch"
+  | "live"
+  | "cancelled";
+
+export interface Launch {
+  id: string;
+  orgId: string;
+  groupId: string;
+  name: string;
+  gymName: string | null;
+  address: string | null;
+  city: string | null;
+  state: string;
+  status: LaunchStatus;
+  targetMonth: string | null;
+  confirmedStartDate: string | null;
+  clinicDirectorProviderId: string | null;
+  clinicDirectorName: string | null;
+  facilityId: string | null;
+  createdAt: string;
+}
+
 export interface Facility {
   id: string;
   orgId: string;
@@ -54,6 +81,7 @@ export interface Provider {
   id: string;
   orgId: string;
   groupId: string | null;
+  launchId: string | null;
   firstName: string;
   lastName: string;
   credentials: string | null;
