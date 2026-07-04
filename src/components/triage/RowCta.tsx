@@ -12,7 +12,7 @@ export function RowCta({ label, onClick }: RowCtaProps) {
       type="button"
       onClick={onClick}
       title={label}
-      className="inline-flex w-max max-w-[28ch] items-center rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card px-2.5 py-1 text-[var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-secondary)] transition-colors hover:bg-mp-muted hover:text-[color:var(--mp-ink)]"
+      className="inline-flex w-max max-w-[28ch] items-center rounded-[var(--mp-radius-sm)] border border-mp-border bg-mp-card px-3 py-1.5 text-[var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)] transition-colors hover:bg-mp-muted"
     >
       <span className="truncate">{label}</span>
     </button>

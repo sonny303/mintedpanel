@@ -17,7 +17,8 @@ export interface CaseTableRow {
   contract: { label: string; color: string } | null;
   lastTouch: string;
   days: number | null;
-  daysDanger?: boolean;
+  /** Emphasize the days figure (bold ink) — set on rows needing attention. */
+  daysStrong?: boolean;
   action?: { label: string; onClick: () => void } | null;
   /** Needs-your-action rows get the faint alert tint. */
   alert?: boolean;
@@ -31,7 +32,7 @@ interface CaseTableProps {
 }
 
 const HEAD_CELL =
-  "py-2.5 text-left text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
+  "py-3 text-left text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider text-[color:var(--mp-ink-faint)] whitespace-nowrap";
 
 function stop(e: MouseEvent) {
   e.stopPropagation();
@@ -46,8 +47,8 @@ function daysCell(row: CaseTableRow) {
   return (
     <span
       className={`tabular-nums text-[var(--mp-text-sm)] ${
-        row.daysDanger
-          ? "font-semibold text-[color:var(--mp-danger)]"
+        row.daysStrong
+          ? "font-semibold text-[color:var(--mp-ink)]"
           : "text-[color:var(--mp-ink-secondary)]"
       }`}
     >
@@ -89,24 +90,22 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
               tabIndex={0}
               onClick={row.onOpen}
               onKeyDown={(e) => rowKeyDown(e, row.onOpen)}
-              className={`h-10 cursor-pointer border-b border-mp-border/60 last:border-0 ${
-                row.alert ? "bg-mp-danger/5" : "hover:bg-mp-muted/40"
-              }`}
+              className={`cursor-pointer ${row.alert ? "bg-mp-danger/5" : "hover:bg-mp-muted/40"}`}
             >
-              <td className="w-full max-w-0 truncate py-1.5 pl-4 pr-3">{row.lead}</td>
-              <td className="whitespace-nowrap px-3 py-1.5">
+              <td className="w-full max-w-0 truncate py-3 pl-4 pr-3">{row.lead}</td>
+              <td className="whitespace-nowrap px-3 py-3">
                 <StatusPill
                   label={row.status.label}
                   color={row.status.color}
                   suffix={row.status.suffix}
                 />
               </td>
-              <td className="whitespace-nowrap px-3 py-1.5">{contractCell(row)}</td>
-              <td className="whitespace-nowrap px-3 py-1.5 text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+              <td className="whitespace-nowrap px-3 py-3">{contractCell(row)}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-[var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
                 {row.lastTouch}
               </td>
-              <td className="whitespace-nowrap px-3 py-1.5">{daysCell(row)}</td>
-              <td className="whitespace-nowrap py-1.5 pl-3 pr-4 text-right" onClick={stop}>
+              <td className="whitespace-nowrap px-3 py-3">{daysCell(row)}</td>
+              <td className="whitespace-nowrap py-3 pl-3 pr-4 text-right" onClick={stop}>
                 {row.action ? (
                   <RowCta label={row.action.label} onClick={row.action.onClick} />
                 ) : null}

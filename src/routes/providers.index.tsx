@@ -228,7 +228,7 @@ function ProvidersWorkView() {
   const counts = chipCounts(openRowsAll.map((r) => r.state));
   const cards = [
     { id: "all", label: "All open cases", n: counts.all },
-    { id: "needs", label: "Needs your action", n: counts.needs, alert: true },
+    { id: "needs", label: "Needs your action", n: counts.needs },
     { id: "inprog", label: "In progress", n: counts.inprog },
     { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
   ];
@@ -266,7 +266,7 @@ function ProvidersWorkView() {
         : null,
       lastTouch: row.lastTouchLabel,
       days: row.days,
-      daysDanger: isAlertState(row.state) || row.state === "stalled",
+      daysStrong: isAlertState(row.state) || row.state === "stalled",
       action: row.nextTask ? { label: row.nextTask.title, onClick: openCase } : null,
       alert: isAlertState(row.state),
       onOpen: openCase,
@@ -278,14 +278,14 @@ function ProvidersWorkView() {
     return (
       <div className="flex flex-1 min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="w-7 h-7 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-2xs)] font-bold text-[color:var(--mp-primary)] flex-shrink-0">
+          <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
             {initialsOf(g.provider)}
           </span>
           <span className="min-w-0 md:w-60">
             <span
               role="link"
               tabIndex={0}
-              className="block truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
+              className="block truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)] hover:underline"
               onClick={(e) => {
                 e.stopPropagation();
                 openProvider();
@@ -298,7 +298,13 @@ function ProvidersWorkView() {
               }}
             >
               {g.provider.firstName} {g.provider.lastName}
-              {g.provider.credentials ? `, ${g.provider.credentials}` : ""}
+              {g.provider.credentials ? "," : ""}
+              {g.provider.credentials ? (
+                <span className="font-normal text-[color:var(--mp-ink-secondary)]">
+                  {" "}
+                  {g.provider.credentials}
+                </span>
+              ) : null}
             </span>
             <span className="block text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
               {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
@@ -317,7 +323,12 @@ function ProvidersWorkView() {
           </span>
         </span>
         <span className="flex items-center gap-3">
-          <ActionBadge tone={ACTION_BADGE_TONE[g.worst]} text={badgeLabel(g.worst, g.worstCount)} />
+          {g.worst !== "on_track" && g.worst !== "complete" ? (
+            <ActionBadge
+              tone={ACTION_BADGE_TONE[g.worst]}
+              text={badgeLabel(g.worst, g.worstCount)}
+            />
+          ) : null}
           {g.oldestDays !== null ? (
             <span className="hidden md:inline tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
               {g.oldestDays}d oldest
@@ -329,7 +340,7 @@ function ProvidersWorkView() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <PageHeader
         title="Providers"
         description={`${totalProviders} providers · ${totalOpen} open cases`}

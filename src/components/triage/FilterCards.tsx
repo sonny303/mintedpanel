@@ -1,12 +1,10 @@
 // Triage FilterCards (M1/M2 fix): the four stat cards above the work views
 // ARE the filter — exactly one active at a time. Small uppercase label over a
-// large count, per the approved mockup. Alert cards tint their label when the
-// count is > 0 (and the card isn't the filled active one).
+// large count; active card fills primary, inactive cards stay white.
 export interface FilterCard {
   id: string;
   label: string;
   n: number;
-  alert?: boolean;
 }
 
 interface FilterCardsProps {
@@ -20,11 +18,6 @@ export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" role="group">
       {cards.map((card) => {
         const isSelected = card.id === selected;
-        const labelColor = isSelected
-          ? "text-white/85"
-          : card.alert && card.n > 0
-            ? "text-[color:var(--mp-danger)]"
-            : "text-[color:var(--mp-ink-faint)]";
         return (
           <button
             key={card.id}
@@ -38,12 +31,14 @@ export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
             }`}
           >
             <span
-              className={`block text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider ${labelColor}`}
+              className={`block text-[var(--mp-text-2xs)] font-medium uppercase tracking-wider ${
+                isSelected ? "text-white/85" : "text-[color:var(--mp-ink-secondary)]"
+              }`}
             >
               {card.label}
             </span>
             <span
-              className={`mt-2 block text-[var(--mp-text-xl)] font-semibold leading-none tabular-nums ${
+              className={`mt-2 block text-[var(--mp-text-3xl)] font-semibold leading-none tabular-nums ${
                 isSelected ? "text-white" : "text-[color:var(--mp-ink)]"
               }`}
             >

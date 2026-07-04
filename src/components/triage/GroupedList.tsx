@@ -32,7 +32,7 @@ export function GroupedList({ groups }: GroupedListProps) {
               type="button"
               aria-expanded={!isCollapsed}
               onClick={() => setCollapsed((prev) => ({ ...prev, [group.id]: !isCollapsed }))}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-mp-muted/40 transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-mp-muted/40 transition-colors"
             >
               {group.header}
               <ChevronDown

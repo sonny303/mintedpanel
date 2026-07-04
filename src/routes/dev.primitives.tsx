@@ -61,7 +61,7 @@ function demoRow(
     contract,
     lastTouch: "2d ago",
     days,
-    daysDanger: alert,
+    daysStrong: alert,
     action: cta ? { label: cta, onClick: () => {} } : null,
     alert,
     onOpen: () => {},
@@ -76,7 +76,7 @@ function PrimitivesPage() {
       id: "g1",
       header: (
         <div className="flex flex-1 min-w-0 items-center gap-3">
-          <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+          <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
             Sunrise Medical Group
           </span>
           <span className="hidden sm:flex items-center gap-2 ml-auto">
@@ -127,11 +127,10 @@ function PrimitivesPage() {
       id: "g2",
       header: (
         <div className="flex flex-1 min-w-0 items-center gap-3">
-          <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+          <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
             Lakeview Health Partners
           </span>
           <span className="ml-auto" />
-          <ActionBadge tone="ok" text="On track" />
         </div>
       ),
       children: (
@@ -163,7 +162,7 @@ function PrimitivesPage() {
         <FilterCards
           cards={[
             { id: "all", label: "All open cases", n: 42 },
-            { id: "needs", label: "Needs your action", n: 3, alert: true },
+            { id: "needs", label: "Needs your action", n: 3 },
             { id: "inprog", label: "In progress", n: 29 },
             { id: "awaiting", label: "Awaiting effective date", n: 6 },
           ]}

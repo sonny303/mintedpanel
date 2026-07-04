@@ -218,7 +218,7 @@ function CasesWorkView() {
   const counts = chipCounts(openRowsAll.map((r) => r.state));
   const cards = [
     { id: "all", label: "All open cases", n: counts.all },
-    { id: "needs", label: "Needs your action", n: counts.needs, alert: true },
+    { id: "needs", label: "Needs your action", n: counts.needs },
     { id: "inprog", label: "In progress", n: counts.inprog },
     { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
   ];
@@ -262,7 +262,7 @@ function CasesWorkView() {
         : null,
       lastTouch: row.lastTouchLabel,
       days: row.days,
-      daysDanger: isAlertState(row.state) || row.state === "stalled",
+      daysStrong: isAlertState(row.state) || row.state === "stalled",
       action: row.nextTask ? { label: row.nextTask.title, onClick: openCase } : null,
       alert: isAlertState(row.state),
       onOpen: openCase,
@@ -272,7 +272,7 @@ function CasesWorkView() {
   function groupHeader(g: PayerGroup) {
     return (
       <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="truncate text-[var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+        <span className="truncate text-[var(--mp-text-base)] font-semibold text-[color:var(--mp-ink)]">
           {g.payerName}
         </span>
         <span className="tabular-nums text-[var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
@@ -280,7 +280,7 @@ function CasesWorkView() {
         </span>
         {!g.isPreCred ? (
           <span className="hidden sm:flex items-center gap-2 ml-auto">
-            <span className="w-20">
+            <span className="w-40">
               <ProgressBar value={g.inNetwork} max={g.rows.length} />
             </span>
             <span className="tabular-nums whitespace-nowrap text-[var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
@@ -290,7 +290,9 @@ function CasesWorkView() {
         ) : (
           <span className="ml-auto" />
         )}
-        <ActionBadge tone={ACTION_BADGE_TONE[g.worst]} text={badgeLabel(g.worst, g.worstCount)} />
+        {g.worst !== "on_track" && g.worst !== "complete" ? (
+          <ActionBadge tone={ACTION_BADGE_TONE[g.worst]} text={badgeLabel(g.worst, g.worstCount)} />
+        ) : null}
       </div>
     );
   }
@@ -298,7 +300,7 @@ function CasesWorkView() {
   const totalPayers = groups.length;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <PageHeader title="Cases" description={`${totalPayers} payers · ${counts.all} open cases`} />
 
       <div className="mb-6">
