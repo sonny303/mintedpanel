@@ -411,8 +411,9 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   redirect; a separate check renders `/`, `/login`, `/privacy` outside
   `AppShell`). `/privacy` is the Chrome Web Store policy URL for the
   extension; its content mirrors `docs/privacy-policy.md` (edit the doc first,
-  keep the page in sync — placeholders in both must be filled before store
-  submission).
+  keep the page in sync). Entity/date/contact were filled 2026-07-05 (South
+  Park Physician Group, surapurs@gmail.com); the policy is a business
+  document — don't reword it without the owner.
 
 ## Known warts (pre-existing; don't "discover" them again)
 

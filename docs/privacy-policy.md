@@ -1,9 +1,9 @@
 # Privacy Policy
 
-**Effective date:** [FILL IN before publishing]
+**Effective date:** July 5, 2026
 **Applies to:** the Minted Panel web application and the Minted Panel Filler browser extension (together, "the Service").
 
-[LEGAL ENTITY NAME] ("we," "us") provides Minted Panel, a credentialing and contracting management platform for healthcare practice groups. This policy explains what information the Service handles and how.
+South Park Physician Group ("we," "us") provides Minted Panel, a credentialing and contracting management platform for healthcare practice groups. This policy explains what information the Service handles and how.
 
 ## Who our users are
 
@@ -54,4 +54,4 @@ If we make material changes, we will update this page and the effective date abo
 
 ## Contact
 
-Questions about this policy: [CONTACT EMAIL]
+Questions about this policy: surapurs@gmail.com
