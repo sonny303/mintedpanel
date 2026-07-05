@@ -1,13 +1,14 @@
-// Home / Today (M5): the login landing page. A cross-entity action queue —
-// only what needs Sowmya, ordered by urgency. Engine states come from
-// src/lib/actionState.ts, never recomputed ad hoc.
+// Home / Today (M5, polished in the Home lane pass): the login landing page.
+// A cross-entity action queue — only what needs Sowmya, ordered by urgency.
+// Engine states come from src/lib/actionState.ts, never recomputed ad hoc;
+// section shells and rows live in src/components/home/.
 import { useMemo } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { StatusPill } from "@/components/triage/StatusPill";
-import { ProgressBar } from "@/components/triage/ProgressBar";
-import { RowCta } from "@/components/triage/RowCta";
+import { HomeSection, HomeViewAllLink } from "@/components/home/HomeSection";
+import { HomeCaseRow } from "@/components/home/HomeCaseRow";
+import { HomeLaunchRow } from "@/components/home/HomeLaunchRow";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
@@ -15,8 +16,9 @@ import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates, useFollowUpsDue } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useLaunchLocations } from "@/hooks/useLaunches";
-import { getActionState, type ActionState } from "@/lib/actionState";
+import { getActionState, ACTION_STATE_SEVERITY, type ActionState } from "@/lib/actionState";
 import { launchReadiness } from "@/lib/launchReadiness";
+import { fmtDate } from "@/lib/format";
 import type { CredentialCase } from "@/types";
 
 export const Route = createFileRoute("/home")({
@@ -28,6 +30,8 @@ const SECTION_CAP = 10;
 const LAUNCH_RISK_WINDOW_DAYS = 30;
 const AT_RISK_STATUSES = new Set(["Pending Fulfillment", "Ready for Launch"]);
 
+const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
+
 interface QueueCase {
   case: CredentialCase;
   state: ActionState;
@@ -37,6 +41,8 @@ interface QueueCase {
   statusColor: string;
   nextTaskTitle: string | null;
   followUpDate: string | null;
+  /** The work views' Days figure: age since submitted (else created). */
+  days: number | null;
 }
 
 function HomePage() {
@@ -52,6 +58,7 @@ function HomePage() {
   const locationsQ = useLaunchLocations();
 
   const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
   const now = new Date();
 
   const rows: QueueCase[] = useMemo(() => {
@@ -71,24 +78,29 @@ function HomePage() {
         : null;
       const openTasks = openTasksByCase.get(c.id) ?? [];
       const provider = providerById.get(c.providerId);
+      const state = getActionState({
+        statusLabel: status?.label ?? null,
+        actionBucket: status?.actionBucket ?? null,
+        openTaskDueDates: openTasks.map((t) => t.dueDate),
+        lastTouchDate: lastTouchQ.data?.get(c.id) ?? null,
+        createdAt: c.createdAt,
+        confirmedEffectiveDate: c.confirmedEffectiveDate,
+        expectedEffectiveDate: c.expectedEffectiveDate,
+        now,
+      });
       return {
         case: c,
-        state: getActionState({
-          statusLabel: status?.label ?? null,
-          actionBucket: status?.actionBucket ?? null,
-          openTaskDueDates: openTasks.map((t) => t.dueDate),
-          lastTouchDate: lastTouchQ.data?.get(c.id) ?? null,
-          createdAt: c.createdAt,
-          confirmedEffectiveDate: c.confirmedEffectiveDate,
-          expectedEffectiveDate: c.expectedEffectiveDate,
-          now,
-        }),
+        state,
         providerName: provider ? `${provider.firstName} ${provider.lastName}` : "Unknown",
         payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
         statusLabel: status?.label ?? "No status",
         statusColor: status?.color ?? "var(--mp-neutral)",
         nextTaskTitle: openTasks[0]?.title ?? null,
         followUpDate: followUpsQ.data?.get(c.id)?.nextFollowUpDate ?? null,
+        days:
+          state === "complete"
+            ? null
+            : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt)),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is derived each render by design
@@ -102,7 +114,12 @@ function HomePage() {
     followUpsQ.data,
   ]);
 
-  const needsAction = rows.filter((r) => r.state === "needs_action" || r.state === "blocked");
+  // Worst state first, oldest first within a state — the work views' order.
+  const needsAction = rows
+    .filter((r) => r.state === "needs_action" || r.state === "blocked")
+    .sort(
+      (a, b) => severityRank(a.state) - severityRank(b.state) || (b.days ?? -1) - (a.days ?? -1),
+    );
 
   const followUps = rows
     .filter(
@@ -152,84 +169,16 @@ function HomePage() {
   const allClear =
     !loading && needsAction.length === 0 && followUps.length === 0 && launchesAtRisk.length === 0;
 
-  function caseRow(r: QueueCase, cta: string) {
-    const open = () => navigate({ to: "/cases/$id", params: { id: r.case.id } });
-    const overdueDays = r.followUpDate
-      ? differenceInCalendarDays(now, parseISO(r.followUpDate))
-      : null;
-    return (
-      <li
-        key={r.case.id}
-        role="link"
-        tabIndex={0}
-        onClick={open}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") open();
-        }}
-        className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
-      >
-        <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
-          {r.providerName}
-          <span className="text-[color:var(--mp-ink-faint)] font-normal"> · {r.payerName}</span>
-        </span>
-        {cta === "Log touch" && overdueDays !== null ? (
-          <span
-            className={`text-[length:var(--mp-text-xs)] ${
-              overdueDays > 0
-                ? "font-semibold text-[color:var(--mp-danger)]"
-                : "text-[color:var(--mp-ink-secondary)]"
-            }`}
-          >
-            Follow-up due {overdueDays === 0 ? "today" : `${overdueDays}d ago`}
-          </span>
-        ) : (
-          <StatusPill label={r.statusLabel} color={r.statusColor} />
-        )}
-        <span onClick={(e) => e.stopPropagation()}>
-          <RowCta
-            label={cta === "Log touch" ? "Log touch" : (r.nextTaskTitle ?? "Open case")}
-            onClick={open}
-          />
-        </span>
-      </li>
-    );
-  }
-
-  function section(title: string, count: number, viewAllTo: string, children: React.ReactNode) {
-    if (count === 0) {
-      return (
-        <div className="px-4 py-2.5 text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] border border-mp-border rounded-[var(--mp-radius-lg)] bg-mp-card">
-          {title} — clear
-        </div>
-      );
-    }
-    return (
-      <section className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-mp-border bg-mp-muted/60 px-4 py-2.5">
-          <span className="text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
-            {title}
-            <span className="ml-2 tabular-nums text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-ink-faint)]">
-              {count}
-            </span>
-          </span>
-          {count > SECTION_CAP ? (
-            <Link
-              to={viewAllTo}
-              className="text-[length:var(--mp-text-xs)] font-medium text-[color:var(--mp-primary)] hover:underline"
-            >
-              View all
-            </Link>
-          ) : null}
-        </div>
-        {children}
-      </section>
-    );
-  }
+  const openCase = (id: string) => () => navigate({ to: "/cases/$id", params: { id } });
 
   return (
     <div className="max-w-3xl mx-auto">
       <PageHeader title="Home" description={format(now, "EEEE, MMMM d")} />
-      {loading ? (
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load the queue. Refresh to retry.
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
@@ -246,63 +195,67 @@ function HomePage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {section(
-            "Needs your action",
-            needsAction.length,
-            "/cases",
+          <HomeSection
+            title="Needs your action"
+            count={needsAction.length}
+            viewAll={<HomeViewAllLink to="/providers" search={{ chip: "needs" }} />}
+          >
             <ul className="divide-y divide-[color:var(--mp-border)]">
-              {needsAction.slice(0, SECTION_CAP).map((r) => caseRow(r, "next-task"))}
-            </ul>,
-          )}
-          {section(
-            "Follow-ups due",
-            followUps.length,
-            "/cases",
+              {needsAction.slice(0, SECTION_CAP).map((r) => (
+                <HomeCaseRow
+                  key={r.case.id}
+                  variant="action"
+                  providerName={r.providerName}
+                  payerName={r.payerName}
+                  status={{ label: r.statusLabel, color: r.statusColor }}
+                  days={r.days}
+                  ctaLabel={r.nextTaskTitle ?? "Open case"}
+                  onOpen={openCase(r.case.id)}
+                />
+              ))}
+            </ul>
+          </HomeSection>
+          <HomeSection
+            title="Follow-ups due"
+            count={followUps.length}
+            viewAll={<HomeViewAllLink to="/cases" />}
+          >
             <ul className="divide-y divide-[color:var(--mp-border)]">
-              {followUps.slice(0, SECTION_CAP).map((r) => caseRow(r, "Log touch"))}
-            </ul>,
-          )}
-          {section(
-            "Launches at risk",
-            launchesAtRisk.length,
-            "/launches",
+              {followUps.slice(0, SECTION_CAP).map((r) => (
+                <HomeCaseRow
+                  key={r.case.id}
+                  variant="follow-up"
+                  providerName={r.providerName}
+                  payerName={r.payerName}
+                  status={{ label: r.statusLabel, color: r.statusColor }}
+                  days={r.days}
+                  overdueDays={
+                    r.followUpDate ? differenceInCalendarDays(now, parseISO(r.followUpDate)) : null
+                  }
+                  ctaLabel="Log touch"
+                  onOpen={openCase(r.case.id)}
+                />
+              ))}
+            </ul>
+          </HomeSection>
+          <HomeSection
+            title="Launches at risk"
+            count={launchesAtRisk.length}
+            viewAll={<HomeViewAllLink to="/launches" />}
+          >
             <ul className="divide-y divide-[color:var(--mp-border)]">
               {launchesAtRisk.slice(0, SECTION_CAP).map(({ launch, readiness }) => (
-                <li
+                <HomeLaunchRow
                   key={launch.id}
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => navigate({ to: "/launches/$id", params: { id: launch.id } })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter")
-                      navigate({ to: "/launches/$id", params: { id: launch.id } });
-                  }}
-                  className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
-                >
-                  <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
-                    {launch.name}
-                  </span>
-                  <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-                    Starts{" "}
-                    {launch.effectiveDate
-                      ? format(parseISO(launch.effectiveDate), "MMM d, yyyy")
-                      : "—"}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="w-16">
-                      <ProgressBar
-                        value={readiness.inNetwork}
-                        max={Math.max(readiness.denominator, 1)}
-                      />
-                    </span>
-                    <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)] whitespace-nowrap">
-                      {readiness.inNetwork} of {readiness.denominator} in-network
-                    </span>
-                  </span>
-                </li>
+                  name={launch.name}
+                  startsLabel={fmtDate(launch.effectiveDate)}
+                  inNetwork={readiness.inNetwork}
+                  denominator={readiness.denominator}
+                  onOpen={() => navigate({ to: "/launches/$id", params: { id: launch.id } })}
+                />
               ))}
-            </ul>,
-          )}
+            </ul>
+          </HomeSection>
         </div>
       )}
     </div>
