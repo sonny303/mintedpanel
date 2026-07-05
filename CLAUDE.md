@@ -154,7 +154,10 @@ them. The current surface:
   tokens are case-scoped and always come back `null` + listed in `unresolved`
   with a reason. **The most PHI-dense response in the system** (SSN last-4,
   DOB, home address, unmasked by design): `Cache-Control: no-store`, never log
-  the body, profile reads are NOT audited yet (SS decision pending — needs an
+  the body. Profile reads are NOT separately audited — locked decision, SS
+  2026-07-05 (recorded in `docs/minted-panel-release-plan.md`):
+  `fill_sessions` (POST /api/fill-events) is the access record. Revisit if a
+  customer or audit requires read-level PHI access logs (that would need an
   `audit_log.action_type` check-constraint migration to add a `READ` value).
 - `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
   rows (global, selectors are portal truths) + the caller's org overrides

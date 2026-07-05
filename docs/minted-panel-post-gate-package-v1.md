@@ -229,7 +229,7 @@ Gate green (done) -> Prompt 1 -> Prompt 2 -> MCP seed -> Prompt 3 -> extension M
 
 ## SS housekeeping (nothing blocks the prompts)
 
-- [ ] Decide: audit profile reads, or rely on fill_sessions (default: audit them).
+- [x] Decide: audit profile reads, or rely on fill_sessions (default: audit them). — Decided by SS 2026-07-05: rely on fill_sessions; profile reads not separately audited. Recorded in `docs/minted-panel-release-plan.md`.
 - [ ] Rotate `testsouthpark@minted.com`'s password (`Orange81` sat in chat history); update `SOUTHPARK_USER_PASSWORD` secret after.
 - [ ] Branch protection on `main`: require PR review + checks `build`, `Migration dry-run`, `Playwright smoke`.
 - [ ] Push this file to repo `docs/` so prompts are read verbatim at time of use.
