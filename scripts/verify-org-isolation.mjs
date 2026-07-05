@@ -22,6 +22,12 @@
 //   VERCEL_BYPASS_SECRET   Vercel "Protection Bypass for Automation" secret. If the
 //                          deploy has Deployment Protection on, set this so requests
 //                          carry x-vercel-protection-bypass and reach the app.
+//   EXPECTED_KANSAS_PROVIDERS / EXPECTED_SOUTHPARK_PROVIDERS
+//                          Per-org provider counts for assertions 1/2. Defaults
+//                          (6/4) match the mock fixtures; the workflow env pins
+//                          the LIVE demo counts, which move when demo/UAT
+//                          providers are added. A count mismatch is fixture
+//                          drift, not a leak — the leak checks are 1b/2b/2c/3.
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
@@ -162,12 +168,17 @@ function looksLikeVercelGate(r) {
   const kansasTok = await signIn(env.KANSAS_EMAIL, env.KANSAS_PASSWORD);
   const spTok = await signIn(env.SPVIEW_EMAIL, env.SPVIEW_PASSWORD);
 
-  // 1. Kansas view (single-org user, no x-org-id) = exactly 6, zero South Park.
+  // Expected per-org provider counts (see the env note in the header).
+  const KANSAS_COUNT = Number(env.EXPECTED_KANSAS_PROVIDERS ?? 6);
+  const SOUTHPARK_COUNT = Number(env.EXPECTED_SOUTHPARK_PROVIDERS ?? 4);
+
+  // 1. Kansas view (single-org user, no x-org-id) = the exact expected count,
+  //    zero South Park.
   const k = await apiGet("/api/providers?pageSize=100", { token: kansasTok });
   const kIds = idsOf(k.body);
   check(
-    "1. Kansas view returns exactly 6",
-    k.status === 200 && kIds.size === 6 && k.body?.meta?.total === 6,
+    `1. Kansas view returns exactly ${KANSAS_COUNT}`,
+    k.status === 200 && kIds.size === KANSAS_COUNT && k.body?.meta?.total === KANSAS_COUNT,
     `status=${k.status} count=${kIds.size} meta.total=${k.body?.meta?.total}` +
       (k.status !== 200 ? ` body=${(k.raw || "").slice(0, 100)}` : ""),
   );
@@ -178,12 +189,13 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
-  // 2. South Park view (single-org user, no x-org-id) = exactly 4, zero Kansas.
+  // 2. South Park view (single-org user, no x-org-id) = the exact expected
+  //    count, zero Kansas.
   const s = await apiGet("/api/providers?pageSize=100", { token: spTok });
   const sIds = idsOf(s.body);
   check(
-    "2. South Park view returns exactly 4",
-    s.status === 200 && sIds.size === 4 && s.body?.meta?.total === 4,
+    `2. South Park view returns exactly ${SOUTHPARK_COUNT}`,
+    s.status === 200 && sIds.size === SOUTHPARK_COUNT && s.body?.meta?.total === SOUTHPARK_COUNT,
     `status=${s.status} count=${sIds.size} meta.total=${s.body?.meta?.total}` +
       (s.status !== 200 ? ` body=${(s.raw || "").slice(0, 100)}` : ""),
   );

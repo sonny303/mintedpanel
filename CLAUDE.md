@@ -244,7 +244,11 @@ x-org-id`.
   assertions to `scripts/verify-org-isolation.mjs` before merge, plus pass/leak
   coverage in `scripts/mock-api-server.mjs`. Gate fixtures: the one South
   Park-scoped `portal_field_maps` row (id in the workflow env block, seeded via
-  MCP 2026-07-05) keeps the field-maps assertion non-vacuous.
+  MCP 2026-07-05) keeps the field-maps assertion non-vacuous. The expected
+  per-org provider counts also live in that env block
+  (`EXPECTED_KANSAS_PROVIDERS`/`EXPECTED_SOUTHPARK_PROVIDERS`) — adding or
+  removing a demo/UAT provider means updating the count there, or assertions
+  1/2 go red as fixture drift (not a leak; the leak checks are 1b/2b/2c/3).
 
 ### Locked decisions (2026-07-04, mirrored from the release plan)
 
