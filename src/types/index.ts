@@ -229,7 +229,7 @@ export interface Touch {
   nextFollowUpDate: string | null;
   notes: string | null;
   coordinatorId: string | null;
-  source: "manual" | "email_webhook";
+  source: "manual" | "email_webhook" | "extension";
   createdAt: string;
 }
 

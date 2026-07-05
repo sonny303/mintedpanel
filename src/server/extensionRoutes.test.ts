@@ -6,22 +6,26 @@ vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
+vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
+import { recordSubmissionTouch } from "@/services/submissionTouches";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleCreateFillEvent,
   handleListProviderCases,
+  handleCreateCaseTouch,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
+const recordTouchMock = vi.mocked(recordSubmissionTouch);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -157,6 +161,57 @@ describe("provider cases handler", () => {
       expect.objectContaining({ orgId: "org-1" }),
       PROVIDER_ID,
     );
+  });
+});
+
+describe("case touches handler", () => {
+  const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  it("rejects a billing (read-only) role with 403 without calling the service", async () => {
+    const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(recordTouchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "not-json-object"],
+    ["an array", [1, 2]],
+  ])("rejects %s body with 422 without calling the service", async (_name, badBody) => {
+    const res = await handleCreateCaseTouch(CASE_ID, badBody, ctx());
+    expect(res.status).toBe(422);
+    expect(recordTouchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([[404], [409], [422]])("maps a rejected result to a %i failure", async (status) => {
+    recordTouchMock.mockResolvedValue({
+      kind: "rejected",
+      status: status as 404 | 409 | 422,
+      message: "nope",
+    });
+    const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
+    expect(res.status).toBe(status);
+    expect((await body(res)).error).toBe("nope");
+  });
+
+  it("returns 201 for a created touch, forwarding the writer ctx and case id", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: { id: "t1" } as never });
+    const payload = { kind: "portal_submission", portal_key: "bcbs_ks_enrollment" };
+    const res = await handleCreateCaseTouch(CASE_ID, payload, ctx("admin"));
+    expect(res.status).toBe(201);
+    expect((await body(res)).data).toEqual({ id: "t1" });
+    expect(recordTouchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      CASE_ID,
+      payload,
+    );
+  });
+
+  it("returns 200 for a duplicate (idempotent replay)", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "duplicate", touch: { id: "t1" } as never });
+    const res = await handleCreateCaseTouch(CASE_ID, { kind: "portal_submission" }, ctx());
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ id: "t1" });
   });
 });
 

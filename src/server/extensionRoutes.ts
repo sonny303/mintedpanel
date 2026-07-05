@@ -6,6 +6,10 @@ import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
+import {
+  recordSubmissionTouch,
+  type SubmissionTouchInput,
+} from "@/services/submissionTouches";
 import { ok, fail } from "./envelope";
 import { isWriter, type AuthContext } from "./guard";
 
@@ -58,6 +62,28 @@ export async function handleListProviderCases(url: URL, ctx: AuthContext): Promi
   const rows = await listOpenProviderCases({ db: ctx.db, orgId: ctx.orgId }, providerId);
   if (!rows) return fail(404, "Provider not found");
   return ok(rows, { total: rows.length });
+}
+
+// POST /api/cases/:id/touches — the human pressed "Mark submitted" after
+// submitting the portal form themselves. Appends one submission touch
+// (source 'extension'), idempotent on the client-generated idempotency_id.
+// Never changes case status, never touches tasks. Writer roles only.
+export async function handleCreateCaseTouch(
+  caseId: string,
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot log touches");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const result = await recordSubmissionTouch(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+    caseId,
+    body as SubmissionTouchInput,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.touch, null, result.kind === "created" ? 201 : 200);
 }
 
 // POST /api/fill-events — log one fill session, idempotent on the

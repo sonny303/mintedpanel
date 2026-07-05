@@ -20,6 +20,7 @@
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
+//   touches     cross-org submission touch accepted and stored       (9, 9b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -36,7 +37,15 @@ export const FIXTURES = {
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
 
-export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents", "cases"];
+export const LEAK_MODES = [
+  "providers",
+  "spoof",
+  "fieldmaps",
+  "profile",
+  "fillevents",
+  "cases",
+  "touches",
+];
 
 const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
@@ -177,9 +186,10 @@ export async function createMockApiServer(options = {}) {
   if (leak && !LEAK_MODES.includes(leak)) {
     throw new Error(`Unknown leak mode "${leak}" (valid: ${LEAK_MODES.join(", ")})`);
   }
-  // In-memory fill_sessions store, keyed `${orgId}:${id}` (org-scoped
-  // idempotency, like the real handler).
+  // In-memory fill_sessions/touches stores, keyed `${orgId}:${id}` (org-scoped
+  // idempotency, like the real handlers).
   const fillSessions = new Map();
+  const touches = new Map();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -261,6 +271,42 @@ export async function createMockApiServer(options = {}) {
       if (!visible) return envelope(res, 404, null, "Provider not found");
       const rows = CASES.filter((c) => c.providerId === providerId).map(caseListRow);
       return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/cases/:id/touches (submission touch, idempotent) ---
+    const touchesMatch = url.pathname.match(/^\/api\/cases\/([^/]+)\/touches\/?$/);
+    if (touchesMatch) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot log touches");
+      }
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (leak !== "touches") {
+        // Real contract: validate case ownership BEFORE the idempotency
+        // lookup or any write. A cross-org case is a 404, nothing stored.
+        const caseOk = CASES.some((c) => c.id === touchesMatch[1] && c.orgId === orgId);
+        if (!caseOk) return envelope(res, 404, null, "Case not found");
+      }
+      const key = `${orgId}:${body.idempotency_id}`;
+      if (touches.has(key)) return envelope(res, 200, touches.get(key));
+      const touch = {
+        id: body.idempotency_id,
+        orgId,
+        caseId: touchesMatch[1],
+        touchDate: "2026-07-05",
+        touchType: "portal",
+        outcome: "submitted",
+        nextFollowUpDate: null,
+        notes: `Application submitted via ${body.portal_key}`,
+        coordinatorId: user.userId,
+        source: "extension",
+        createdAt: "2026-07-05T00:00:00Z",
+      };
+      touches.set(key, touch);
+      return envelope(res, 201, touch);
     }
 
     // --- /api/portal-field-maps ---

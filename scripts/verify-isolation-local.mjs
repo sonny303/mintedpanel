@@ -65,6 +65,7 @@ const EXPECTED_FAILS = {
   profile: ["6"],
   fillevents: ["7", "7b"],
   cases: ["8b"],
+  touches: ["9", "9b"],
 };
 
 function failedAssertions(output) {
