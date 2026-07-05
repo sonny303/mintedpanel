@@ -51,13 +51,15 @@ export function OrgPanel() {
             className="h-9"
           />
         </div>
-        <Button
-          disabled={!canEdit || !nameDirty || saveName.isPending || !currentName.trim()}
-          onClick={handleSaveName}
-          className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
-        >
-          {saveName.isPending ? "Saving…" : "Save"}
-        </Button>
+        {canEdit && (
+          <Button
+            disabled={!nameDirty || saveName.isPending || !currentName.trim()}
+            onClick={handleSaveName}
+            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+          >
+            {saveName.isPending ? "Saving…" : "Save"}
+          </Button>
+        )}
       </div>
       {nameErr ? <div className="mt-2 text-[12px] text-[#B91C1C]">{nameErr}</div> : null}
     </section>
