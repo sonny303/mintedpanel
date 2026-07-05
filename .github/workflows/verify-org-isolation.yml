@@ -1,11 +1,35 @@
 name: Verify org isolation
 
-# Manual gate: end-to-end multi-tenant isolation check for the provider API,
-# run against a real deploy from a GitHub runner (open egress). The Claude
-# sandbox cannot run it — its egress policy denies *.supabase.co and the deploy
-# host. It never uses the service-role key: it signs in as real users with the
-# anon key + passwords (service-role stays server-side on Vercel) and calls the
-# deploy with each user's Bearer JWT. Read-only.
+# End-to-end multi-tenant isolation gate for the /api surface, run against a
+# real deploy from a GitHub runner (open egress). The Claude sandbox cannot run
+# it — its egress policy denies *.supabase.co and the deploy host. It never
+# uses the service-role key: it signs in as real users with the anon key +
+# passwords (service-role stays server-side on Vercel) and calls the deploy
+# with each user's Bearer JWT.
+#
+# Triggers:
+#   - deployment_status (automatic): fires on every deployment event the Vercel
+#     GitHub integration reports. The `verify` job only RUNS when the deployment
+#     succeeded AND its environment is production (contains() is
+#     case-insensitive, so "Production" / "Production – <project>" both match).
+#     Preview deploys still create a workflow run, but `verify` shows as
+#     skipped — that is expected, not a failure. The `deployment-context` job
+#     logs the exact environment string each event reported, so the guard can
+#     be checked against reality at any time.
+#   - workflow_dispatch (manual): unchanged. Optionally override API_BASE for
+#     the run.
+#
+# deployment_status runs still hit API_BASE from repo secrets (the production
+# alias), NOT the event's deployment URL — preview URLs sit behind Vercel SSO,
+# and the production alias is the surface users actually hit.
+#
+# What a red run means: STOP-SHIP until a human reads it. A failed assertion
+# marked as a leak means cross-org data was visible on the production API. Do
+# not merge anything else, do not re-run and hope. Read the "Run org-isolation
+# checks" step log first: the preflight lines and any DIAGNOSIS block explain
+# whether the failure is an SSO gate/config issue (fix the setup) or a real
+# isolation breach (stop-ship). The same pass/fail table is written to the job
+# summary.
 #
 # Point API_BASE at the PRODUCTION deploy — preview deployments have Vercel
 # Authentication (SSO) in front, which blocks Bearer-authenticated API calls.
@@ -30,10 +54,39 @@ on:
         description: "Override API_BASE for this run (defaults to the API_BASE secret)"
         required: false
         type: string
+  deployment_status:
 
 jobs:
+  # Logs what the deploy integration actually reported, for every
+  # deployment_status event (preview and production, any state). This is the
+  # ground truth for the `verify` guard below — if Vercel ever changes its
+  # environment naming, this job's log shows the new string.
+  deployment-context:
+    name: Log deployment event context
+    if: github.event_name == 'deployment_status'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo deployment environment
+        env:
+          DS_STATE: ${{ github.event.deployment_status.state }}
+          DS_ENVIRONMENT: ${{ github.event.deployment.environment }}
+          DS_ENV_URL: ${{ github.event.deployment_status.environment_url }}
+          DS_SHA: ${{ github.event.deployment.sha }}
+        run: |
+          echo "deployment_status.state          = ${DS_STATE}"
+          echo "deployment.environment           = ${DS_ENVIRONMENT}"
+          echo "deployment_status.environment_url = ${DS_ENV_URL}"
+          echo "deployment.sha                   = ${DS_SHA}"
+
   verify:
     name: Provider API org isolation
+    # Run for: manual dispatch, or a SUCCESSFUL PRODUCTION deployment. The
+    # environment match is a case-insensitive contains() so both "Production"
+    # and "Production – <project>" qualify; preview environments never do.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       contains(github.event.deployment.environment, 'production'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +105,16 @@ jobs:
           SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
           SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
           KANSAS_PROVIDER_ID: 49ad83a8-d8b6-419d-8dcc-88c04a54c4da
+          # Chunk 4 fixtures. SOUTHPARK_FIELDMAP_ID is the ONE South
+          # Park-scoped portal_field_maps row (portal_key sp_test_portal,
+          # status proposed), seeded via Supabase MCP on 2026-07-05 so the
+          # "Kansas cannot read South Park field maps" assertion isn't vacuous.
+          # Assertion 5a proves the row still exists (South Park's own view);
+          # if it is ever reseeded, update this id — a stale id fails 5a as a
+          # fixture error, not a leak. SOUTHPARK_CASE_ID is a South Park
+          # credential_cases row for the must-reject fill-event POST.
+          SOUTHPARK_FIELDMAP_ID: 468238fc-ab35-4a4d-9569-bb7960f40328
+          SOUTHPARK_CASE_ID: d0e40000-0000-4000-a000-000000000065
           # --- from secrets ---
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}

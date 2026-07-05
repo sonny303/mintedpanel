@@ -1,0 +1,303 @@
+#!/usr/bin/env node
+// Local mock of the /api surface + the Supabase token endpoint, for running
+// the org-isolation gate in-sandbox (the "mock-and-run" pattern): a host
+// without prod credentials (the Claude sandbox, a laptop) can validate the
+// gate against a known-good server (pass mode) and against deliberately
+// broken servers (leak modes) to prove each assertion actually goes red.
+//
+// This mocks the CONTRACT of the real API (envelope shape, camelCase keys,
+// org scoping, status codes), not its implementation. Keep it in sync with
+// src/server/api.ts + the route handlers when endpoints change.
+//
+// Run directly:  node scripts/mock-api-server.mjs [--port 8787] [--leak <mode>]
+// Or in-process: import { createMockApiServer, FIXTURES } (see
+//                scripts/verify-isolation-local.mjs).
+//
+// Leak modes (each makes specific gate assertions fail):
+//   providers   cross-org provider rows leak into lists and GET-by-id (1, 1b, 2c, 3)
+//   spoof       x-org-id honored without a membership check          (4)
+//   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
+//   profile     cross-org provider profile served instead of 404     (6)
+//   fillevents  cross-org fill-event accepted and stored             (7, 7b)
+import { createServer } from "node:http";
+
+// Same fixture ids as the workflow env block, so the gate script needs no
+// special-casing between mock runs and real runs.
+export const FIXTURES = {
+  KANSAS_ORG: "20563fd6-8e95-46a0-8e1c-cb3b968b3c3d",
+  SOUTHPARK_ORG: "d0e40000-0000-4000-a000-000000000001",
+  KANSAS_PROVIDER_ID: "49ad83a8-d8b6-419d-8dcc-88c04a54c4da",
+  SOUTHPARK_PROVIDER_ID: "d0e40000-0000-4000-a000-000000000021",
+  SOUTHPARK_FIELDMAP_ID: "468238fc-ab35-4a4d-9569-bb7960f40328",
+  SOUTHPARK_CASE_ID: "d0e40000-0000-4000-a000-000000000065",
+  KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
+  KANSAS_EMAIL: "testkansas@minted.com",
+  SPVIEW_EMAIL: "testsouthpark@minted.com",
+};
+
+export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents"];
+
+const USERS = {
+  [FIXTURES.KANSAS_EMAIL]: {
+    token: "tok-kansas",
+    userId: "user-kansas",
+    orgId: FIXTURES.KANSAS_ORG,
+    role: "admin",
+  },
+  [FIXTURES.SPVIEW_EMAIL]: {
+    token: "tok-southpark",
+    userId: "user-southpark",
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    role: "billing",
+  },
+};
+
+function provider(id, orgId, firstName, lastName) {
+  return { id, orgId, firstName, lastName, status: "active" };
+}
+
+const PROVIDERS = [
+  provider(FIXTURES.KANSAS_PROVIDER_ID, FIXTURES.KANSAS_ORG, "Kay", "One"),
+  provider("k-prov-2", FIXTURES.KANSAS_ORG, "Kay", "Two"),
+  provider("k-prov-3", FIXTURES.KANSAS_ORG, "Kay", "Three"),
+  provider("k-prov-4", FIXTURES.KANSAS_ORG, "Kay", "Four"),
+  provider("k-prov-5", FIXTURES.KANSAS_ORG, "Kay", "Five"),
+  provider("k-prov-6", FIXTURES.KANSAS_ORG, "Kay", "Six"),
+  provider(FIXTURES.SOUTHPARK_PROVIDER_ID, FIXTURES.SOUTHPARK_ORG, "Eric", "Cartman"),
+  provider("sp-prov-2", FIXTURES.SOUTHPARK_ORG, "Kenny", "McCormick"),
+  provider("sp-prov-3", FIXTURES.SOUTHPARK_ORG, "Kyle", "Broflovski"),
+  provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh"),
+];
+
+const CASES = [
+  { id: FIXTURES.SOUTHPARK_CASE_ID, orgId: FIXTURES.SOUTHPARK_ORG },
+  { id: FIXTURES.KANSAS_CASE_ID, orgId: FIXTURES.KANSAS_ORG },
+];
+
+function fieldMapRow(id, orgId, portalKey, selector) {
+  return {
+    id,
+    orgId,
+    portalKey,
+    urlPattern: null,
+    pageStep: "1",
+    mapType: "web",
+    selector,
+    selectorFallbacks: null,
+    source: "token",
+    token: "provider.firstName",
+    hardcodedValue: null,
+    transform: null,
+    fieldType: "text",
+    notes: null,
+    status: "approved",
+    createdAt: "2026-07-01T00:00:00Z",
+    updatedAt: "2026-07-01T00:00:00Z",
+  };
+}
+
+const FIELD_MAPS = [
+  fieldMapRow("fm-global-1", null, "bcbs_ks_enrollment", "#firstName"),
+  fieldMapRow("fm-global-2", null, "bcbs_ks_enrollment", "#lastName"),
+  fieldMapRow("fm-global-3", null, "bcbs_ks_enrollment", "#npi"),
+  fieldMapRow(
+    FIXTURES.SOUTHPARK_FIELDMAP_ID,
+    FIXTURES.SOUTHPARK_ORG,
+    "sp_test_portal",
+    "#sp-test-field",
+  ),
+];
+
+function envelope(res, status, data, error = null, meta = null) {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify({ data, error, meta }));
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function profileFor(p) {
+  return {
+    provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
+    tokens: [
+      { token: "provider.firstName", value: p.firstName },
+      { token: "provider.lastName", value: p.lastName },
+      { token: "payer.name", value: null },
+    ],
+    unresolved: [
+      { token: "payer.name", reason: "case-scoped source (payers); resolve at fill time" },
+    ],
+  };
+}
+
+// Start the mock server. options: { port = 0, leak = null }. Returns
+// { server, port, baseUrl, close() }.
+export async function createMockApiServer(options = {}) {
+  const leak = options.leak ?? null;
+  if (leak && !LEAK_MODES.includes(leak)) {
+    throw new Error(`Unknown leak mode "${leak}" (valid: ${LEAK_MODES.join(", ")})`);
+  }
+  // In-memory fill_sessions store, keyed `${orgId}:${id}` (org-scoped
+  // idempotency, like the real handler).
+  const fillSessions = new Map();
+
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    const method = req.method.toUpperCase();
+
+    // --- mock GoTrue: password grant only ---
+    if (url.pathname === "/auth/v1/token" && method === "POST") {
+      const body = await readBody(req);
+      const user = USERS[body?.email];
+      if (!user) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_grant" }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ access_token: user.token, token_type: "bearer" }));
+      return;
+    }
+
+    if (!url.pathname.startsWith("/api")) return envelope(res, 404, null, "Not found");
+    if (method === "OPTIONS") {
+      res.writeHead(204, { vary: "Origin" });
+      res.end();
+      return;
+    }
+    if (url.pathname === "/api/health") return envelope(res, 200, "ok");
+
+    // --- auth: resolve the caller, then the org (x-org-id needs membership) ---
+    const auth = req.headers.authorization ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+    const user = Object.values(USERS).find((u) => u.token === token);
+    if (!user) return envelope(res, 401, null, "Missing or malformed Authorization header");
+    const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");
+    let orgId = user.orgId;
+    if (requestedOrg) {
+      if (requestedOrg !== user.orgId && leak !== "spoof") {
+        return envelope(res, 403, null, "Not a member of that org");
+      }
+      orgId = requestedOrg; // leak "spoof": honored without a membership check
+    }
+
+    // --- /api/providers/:id/profile ---
+    const profileMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/profile\/?$/);
+    if (profileMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const p = PROVIDERS.find((row) => row.id === profileMatch[1]);
+      const visible = p && (p.orgId === orgId || leak === "profile");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, profileFor(p));
+    }
+
+    // --- /api/providers and /api/providers/:id ---
+    const providersMatch = url.pathname.match(/^\/api\/providers(?:\/([^/]+))?\/?$/);
+    if (providersMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const id = providersMatch[1];
+      if (!id) {
+        let rows = PROVIDERS.filter((p) => p.orgId === orgId);
+        if (leak === "providers" && orgId === FIXTURES.KANSAS_ORG) {
+          rows = rows.concat(PROVIDERS.filter((p) => p.orgId === FIXTURES.SOUTHPARK_ORG));
+        }
+        return envelope(res, 200, rows, null, { total: rows.length, page: 1, pageSize: 100 });
+      }
+      const p = PROVIDERS.find((row) => row.id === id);
+      const visible = p && (p.orgId === orgId || leak === "providers");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      return envelope(res, 200, p);
+    }
+
+    // --- /api/portal-field-maps ---
+    if (/^\/api\/portal-field-maps\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const portalKey = url.searchParams.get("portal_key");
+      let rows = FIELD_MAPS.filter(
+        (r) => r.orgId === null || r.orgId === orgId || leak === "fieldmaps",
+      );
+      if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/fill-events ---
+    if (/^\/api\/fill-events\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot record fill events");
+      }
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      const key = `${orgId}:${body.id}`;
+      if (leak !== "fillevents") {
+        // Real contract: validate ownership BEFORE the idempotency lookup or
+        // any write. A cross-org case/provider is a 404, nothing stored.
+        const caseOk = CASES.some((c) => c.id === body.caseId && c.orgId === orgId);
+        if (!caseOk) return envelope(res, 404, null, "Case not found");
+        const providerOk =
+          body.providerId == null ||
+          PROVIDERS.some((p) => p.id === body.providerId && p.orgId === orgId);
+        if (!providerOk) return envelope(res, 404, null, "Provider not found");
+      }
+      if (fillSessions.has(key)) return envelope(res, 200, fillSessions.get(key));
+      const session = {
+        id: body.id,
+        orgId,
+        caseId: body.caseId,
+        providerId: body.providerId ?? null,
+        portalKey: body.portalKey,
+        fillMode: body.fillMode ?? "web",
+        startedAt: body.startedAt ?? new Date().toISOString(),
+        completedAt: body.completedAt ?? null,
+        fieldsFilled: body.fieldsFilled ?? 0,
+        fieldsSkipped: body.fieldsSkipped ?? null,
+        docsAttached: body.docsAttached ?? null,
+        performedBy: user.userId,
+      };
+      fillSessions.set(key, session);
+      return envelope(res, 201, session);
+    }
+
+    return envelope(res, 404, null, "Not found");
+  });
+
+  const port = await new Promise((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(options.port ?? 0, "127.0.0.1", () => resolve(server.address().port));
+  });
+  return {
+    server,
+    port,
+    baseUrl: `http://127.0.0.1:${port}`,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+// CLI entry: `node scripts/mock-api-server.mjs [--port N] [--leak mode]`
+const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop());
+if (isMain) {
+  const args = process.argv.slice(2);
+  const flag = (name) => {
+    const i = args.indexOf(`--${name}`);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const { baseUrl } = await createMockApiServer({
+    port: Number(flag("port") ?? 8787),
+    leak: flag("leak") ?? process.env.LEAK_MODE ?? null,
+  });
+  console.log(`mock api server listening on ${baseUrl} (leak=${flag("leak") ?? "none"})`);
+}

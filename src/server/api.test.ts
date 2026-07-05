@@ -12,14 +12,27 @@ vi.mock("./providerRoutes", () => ({
   handleCreateProvider: vi.fn(),
   handleUpdateProvider: vi.fn(),
 }));
+vi.mock("./extensionRoutes", () => ({
+  handleProviderProfile: vi.fn(),
+  handleListPortalFieldMaps: vi.fn(),
+  handleCreateFillEvent: vi.fn(),
+}));
 
 import { authenticate, GuardError } from "./guard";
 import { handleListProviders, handleGetProvider } from "./providerRoutes";
+import {
+  handleProviderProfile,
+  handleListPortalFieldMaps,
+  handleCreateFillEvent,
+} from "./extensionRoutes";
 import { handleApiRequest, isApiRequest } from "./api";
 
 const authenticateMock = vi.mocked(authenticate);
 const listMock = vi.mocked(handleListProviders);
 const getMock = vi.mocked(handleGetProvider);
+const profileMock = vi.mocked(handleProviderProfile);
+const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
+const fillEventsMock = vi.mocked(handleCreateFillEvent);
 
 async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
@@ -133,5 +146,92 @@ describe("handleApiRequest error handling — 500 for internal faults, no mask, 
     const res = await handleApiRequest(GET("/api/providers"));
     expect(res.status).toBe(403);
     expect((await body(res)).error).toBe("Your role cannot modify providers");
+  });
+});
+
+describe("isApiRequest — owns the whole /api/* prefix", () => {
+  it("matches any /api path, known route or not", () => {
+    expect(isApiRequest("/api")).toBe(true);
+    expect(isApiRequest("/api/portal-field-maps")).toBe(true);
+    expect(isApiRequest("/api/fill-events")).toBe(true);
+    expect(isApiRequest("/api/providers/p1/profile")).toBe(true);
+    expect(isApiRequest("/api/anything/else")).toBe(true);
+    expect(isApiRequest("/apiary")).toBe(false);
+    expect(isApiRequest("/")).toBe(false);
+  });
+});
+
+describe("handleApiRequest — extension routes and CORS preflight", () => {
+  it("OPTIONS anywhere under /api is a 204 preflight without auth", async () => {
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/anything", { method: "OPTIONS" }),
+    );
+    expect(res.status).toBe(204);
+    expect(authenticateMock).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/providers/p1/profile dispatches to the profile handler, not handleGetProvider", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    profileMock.mockResolvedValue(
+      new Response('{"data":{},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/providers/p1/profile?state=KS"));
+    expect(res.status).toBe(200);
+    expect(profileMock).toHaveBeenCalledWith("p1", expect.any(URL), expect.anything());
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/portal-field-maps dispatches with auth", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    fieldMapsMock.mockResolvedValue(
+      new Response('{"data":[],"error":null,"meta":{"total":0}}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/portal-field-maps?portal_key=availity"));
+    expect(res.status).toBe(200);
+    expect(authenticateMock).toHaveBeenCalledTimes(1);
+    expect(fieldMapsMock).toHaveBeenCalledWith(expect.any(URL), expect.anything());
+  });
+
+  it("POST /api/fill-events dispatches the parsed JSON body with auth", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    fillEventsMock.mockResolvedValue(
+      new Response('{"data":{},"error":null,"meta":null}', { status: 201 }),
+    );
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/fill-events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: "abc", portalKey: "availity" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(fillEventsMock).toHaveBeenCalledWith(
+      { id: "abc", portalKey: "availity" },
+      expect.anything(),
+    );
+  });
+
+  it("wrong methods on the extension routes are 405", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    const postMaps = await handleApiRequest(
+      new Request("https://x.test/api/portal-field-maps", { method: "POST" }),
+    );
+    expect(postMaps.status).toBe(405);
+    const getFills = await handleApiRequest(GET("/api/fill-events"));
+    expect(getFills.status).toBe(405);
+    const patchProfile = await handleApiRequest(
+      new Request("https://x.test/api/providers/p1/profile", { method: "PATCH" }),
+    );
+    expect(patchProfile.status).toBe(405);
+    expect(profileMock).not.toHaveBeenCalled();
+    expect(fieldMapsMock).not.toHaveBeenCalled();
+    expect(fillEventsMock).not.toHaveBeenCalled();
+  });
+
+  it("an unknown /api path is a JSON 404 envelope without auth", async () => {
+    const res = await handleApiRequest(GET("/api/nope"));
+    expect(res.status).toBe(404);
+    expect(await body(res)).toEqual({ data: null, error: "Not found", meta: null });
+    expect(authenticateMock).not.toHaveBeenCalled();
   });
 });

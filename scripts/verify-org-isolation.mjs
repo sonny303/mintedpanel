@@ -15,6 +15,9 @@
 //   KANSAS_EMAIL/PASSWORD  a Kansas-ONLY user (testkansas@minted.com, admin)
 //   SPVIEW_EMAIL/PASSWORD  a South-Park-ONLY user (testsouthpark@minted.com, billing)
 //   SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
+//   SOUTHPARK_FIELDMAP_ID  the one South Park-scoped portal_field_maps row
+//                          (seeded fixture; id lives in the workflow env block)
+//   SOUTHPARK_CASE_ID      a South Park credential_cases id (must-reject POST)
 // Optional:
 //   VERCEL_BYPASS_SECRET   Vercel "Protection Bypass for Automation" secret. If the
 //                          deploy has Deployment Protection on, set this so requests
@@ -22,6 +25,9 @@
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
+//
+// Near-read-only: the only POST (assertion 7) carries a payload the server
+// must REJECT before writing anything. Nothing here writes production data.
 //
 // Exit code: 0 = all pass, 1 = any assertion failed, 2 = missing env,
 // 3 = setup/network error. A cross-org row anywhere is a STOP-SHIP failure.
@@ -38,6 +44,8 @@ const REQUIRED = [
   "SOUTHPARK_ORG",
   "SOUTHPARK_PROVIDER_ID",
   "KANSAS_PROVIDER_ID",
+  "SOUTHPARK_FIELDMAP_ID",
+  "SOUTHPARK_CASE_ID",
 ];
 const missing = REQUIRED.filter((k) => !env[k]);
 if (missing.length) {
@@ -80,6 +88,30 @@ async function apiGet(path, { token, orgId } = {}) {
     body = JSON.parse(raw);
   } catch {
     /* non-JSON (e.g. an SSO HTML gate) → body stays null; raw holds the page */
+  }
+  return { status: res.status, body, raw };
+}
+
+// One POST against the deploy. Same header handling as apiGet.
+async function apiPost(path, payload, { token, orgId } = {}) {
+  const headers = { "content-type": "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (orgId) headers["x-org-id"] = orgId;
+  if (BYPASS) {
+    headers["x-vercel-protection-bypass"] = BYPASS;
+    headers["x-vercel-set-bypass-cookie"] = "true";
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text();
+  let body = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    /* non-JSON → body stays null; raw holds the page */
   }
   return { status: res.status, body, raw };
 }
@@ -194,6 +226,90 @@ function looksLikeVercelGate(r) {
     "4. Header-spoof (Kansas-only user, x-org-id=SouthPark) is denied",
     spoof.status === 403 && !spoofLeakedSP,
     `status=${spoof.status} (expect 403) returnedRows=${spoofIds.size} spLeaked=${spoofLeakedSP}`,
+    { leak: true },
+  );
+
+  // 5. Portal field maps (shared catalog): Kansas sees the global (org NULL)
+  //    rows and never another org's org-scoped rows. 5a first proves the
+  //    seeded South Park fixture row still exists (its OWN org can see it) —
+  //    without that, 5b/5c would pass vacuously against a stale/deleted
+  //    fixture. A 5a failure is a fixture error, not a leak: reseed the row
+  //    and update SOUTHPARK_FIELDMAP_ID in the workflow env.
+  const fm = await apiGet("/api/portal-field-maps", { token: kansasTok });
+  const fmRows = fm.body?.data ?? [];
+  const fmGlobal = fmRows.filter((r) => r.orgId === null);
+  check(
+    "5. Kansas field maps return the global catalog",
+    fm.status === 200 && fmGlobal.length >= 1,
+    `status=${fm.status} rows=${fmRows.length} globalRows=${fmGlobal.length}` +
+      (fm.status !== 200 ? ` body=${(fm.raw || "").slice(0, 100)}` : ""),
+  );
+  const spFm = await apiGet("/api/portal-field-maps", { token: spTok });
+  const spFmRows = spFm.body?.data ?? [];
+  const fixturePresent = spFmRows.some(
+    (r) => r.id === env.SOUTHPARK_FIELDMAP_ID && r.orgId === env.SOUTHPARK_ORG,
+  );
+  check(
+    "5a. South Park sees its own seeded fixture row (5b/5c not vacuous)",
+    spFm.status === 200 && fixturePresent,
+    `status=${spFm.status} fixturePresent=${fixturePresent}` +
+      (fixturePresent ? "" : " (fixture error — reseed + update SOUTHPARK_FIELDMAP_ID)"),
+  );
+  check(
+    "5b. Kansas field maps exclude the seeded South Park row",
+    !fmRows.some((r) => r.id === env.SOUTHPARK_FIELDMAP_ID),
+    `seededRowPresent=${fmRows.some((r) => r.id === env.SOUTHPARK_FIELDMAP_ID)}`,
+    { leak: true },
+  );
+  check(
+    "5c. Kansas field maps contain no South Park org-scoped row",
+    !fmRows.some((r) => r.orgId === env.SOUTHPARK_ORG),
+    `southParkOrgRows=${fmRows.filter((r) => r.orgId === env.SOUTHPARK_ORG).length}`,
+    { leak: true },
+  );
+
+  // 6. Provider profile (the PHI-dense endpoint): Kansas asking for a South
+  //    Park provider's profile must 404 with no data.
+  const prof = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}/profile`, {
+    token: kansasTok,
+  });
+  const profLeaked = prof.body?.data != null;
+  check(
+    "6. Kansas GET profile of a South Park provider -> 404, no data",
+    prof.status === 404 && !profLeaked,
+    `status=${prof.status} dataPresent=${profLeaked}`,
+    { leak: true },
+  );
+
+  // 7. Fill events (the one POST — a payload the server must REJECT): Kansas
+  //    posting a South Park provider/case must 404 before anything is written.
+  //    The repeat POST with the same idempotency id is the observable
+  //    follow-up: had the first call inserted before rejecting, an
+  //    idempotency-first implementation would return the stored row (200) on
+  //    the replay. The deterministic reject-before-insert proof lives in the
+  //    unit tests (no insert call on a rejected event); fill_sessions row
+  //    count can additionally be checked out-of-band after a run.
+  const fillPayload = {
+    id: crypto.randomUUID(),
+    caseId: env.SOUTHPARK_CASE_ID,
+    providerId: env.SOUTHPARK_PROVIDER_ID,
+    portalKey: "gate_must_reject",
+    fillMode: "web",
+    fieldsFilled: 0,
+  };
+  const fill = await apiPost("/api/fill-events", fillPayload, { token: kansasTok });
+  const fillLeaked = fill.status < 400 || fill.body?.data != null;
+  check(
+    "7. Kansas POST fill-event for South Park case/provider is rejected",
+    fill.status === 404 && !fillLeaked,
+    `status=${fill.status} (expect 404) dataPresent=${fill.body?.data != null}`,
+    { leak: true },
+  );
+  const fillReplay = await apiPost("/api/fill-events", fillPayload, { token: kansasTok });
+  check(
+    "7b. Replaying the rejected fill-event still rejects (nothing was stored)",
+    fillReplay.status === 404 && fillReplay.body?.data == null,
+    `status=${fillReplay.status} dataPresent=${fillReplay.body?.data != null}`,
     { leak: true },
   );
 

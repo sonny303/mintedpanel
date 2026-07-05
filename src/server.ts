@@ -43,8 +43,9 @@ export default {
       // Serve /api/* from our own router before falling through to SSR. This
       // version of TanStack Start has no file-based server-route API, so the
       // nitro fetch entry is the server-route path (see src/server/api.ts).
+      // The router owns the whole /api prefix — keep in sync with isApiRequest.
       const pathname = new URL(request.url).pathname;
-      if (pathname === "/api/health" || pathname.startsWith("/api/providers")) {
+      if (pathname === "/api" || pathname.startsWith("/api/")) {
         const { handleApiRequest } = await import("./server/api");
         return await handleApiRequest(request);
       }
