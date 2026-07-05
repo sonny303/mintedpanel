@@ -1,0 +1,53 @@
+name: Verify org isolation
+
+# Manual gate: end-to-end multi-tenant isolation check for the provider API,
+# run against a real deploy from a GitHub runner (open egress). The Claude
+# sandbox cannot run it — its egress policy denies *.supabase.co and the deploy
+# host. It never uses the service-role key: it signs in as real users with the
+# anon key + passwords (service-role stays server-side on Vercel) and calls the
+# deploy with each user's Bearer JWT. Read-only.
+#
+# Point API_BASE at the PRODUCTION deploy — preview deployments have Vercel
+# Authentication (SSO) in front, which blocks Bearer-authenticated API calls.
+#
+# Required repo secrets (minimal set):
+#   SUPABASE_ANON_KEY       the publishable/anon key
+#   API_BASE                production deploy base, e.g. https://<prod>.vercel.app
+#   KANSAS_USER_PASSWORD    password for sowmya@fitness.fit  (Kansas-only, billing)
+#   MULTIORG_USER_PASSWORD  password for test@minted.com     (Kansas + South Park admin)
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "Override API_BASE for this run (defaults to the API_BASE secret)"
+        required: false
+        type: string
+
+jobs:
+  verify:
+    name: Provider API org isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Run org-isolation checks
+        env:
+          # --- fixed, non-secret constants ---
+          SUPABASE_URL: https://fkvuhfsqcmujywzgczmc.supabase.co
+          KANSAS_EMAIL: sowmya@fitness.fit
+          SPVIEW_EMAIL: test@minted.com
+          KANSAS_ORG: 20563fd6-8e95-46a0-8e1c-cb3b968b3c3d
+          SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
+          SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
+          KANSAS_PROVIDER_ID: 49ad83a8-d8b6-419d-8dcc-88c04a54c4da
+          # --- from secrets ---
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}
+          KANSAS_PASSWORD: ${{ secrets.KANSAS_USER_PASSWORD }}
+          SPVIEW_PASSWORD: ${{ secrets.MULTIORG_USER_PASSWORD }}
+        run: node scripts/verify-org-isolation.mjs
