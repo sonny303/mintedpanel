@@ -34,14 +34,14 @@ value, so Option A needs a small migration before the code can land.
 
 ## Step 1 — SS makes the call
 
-- **Option A — audit profile reads** *(the package's default)*.
+- **Option A — audit profile reads** _(the package's default)_.
   Every profile fetch writes one `audit_log` row: who, which provider, when —
   metadata only, never the PHI values. Cost: one insert per fill + the
   check-constraint migration. Pick this if "who looked at provider PHI and
   when" must be answerable during an audit.
 - **Option B — rely on `fill_sessions` as the access record.**
   No DB or code change; `POST /api/fill-events` already logs completed fills.
-  Gap: a profile can be *read* without a fill event ever being posted
+  Gap: a profile can be _read_ without a fill event ever being posted
   (abandoned fill, token misuse, extension bug) and that read leaves no trace.
 
 If **B** → skip to Step 4. If **A** → continue in order. **Order matters:**
