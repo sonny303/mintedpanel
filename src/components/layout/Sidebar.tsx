@@ -25,6 +25,7 @@ import {
   UserCog,
   House,
   Rocket,
+  TrendingUp,
   ChevronDown,
   Search,
   LogOut,
@@ -45,6 +46,13 @@ const mainNav: NavLink[] = [
   { to: "/launches", label: "Launches", icon: Rocket },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
+
+// Owner-facing readout (Client Progress v1) — shown to admin and billing only.
+const clientProgressNav: NavLink = {
+  to: "/client-progress",
+  label: "Client Progress",
+  icon: TrendingUp,
+};
 
 const adminNav: NavLink[] = [
   { to: "/admin/statuses", label: "Statuses", icon: CheckCircle2 },
@@ -83,6 +91,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
+  const showClientProgress = active?.role === "admin" || active?.role === "billing";
   const activeOrgName = active?.orgName ?? "—";
   const multiOrg = memberships.length > 1;
   const [searchOpen, setSearchOpen] = useState(false);
@@ -190,7 +199,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       {searchOpen ? <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /> : null}
 
       <div className="flex-1 overflow-y-auto px-3 py-1 flex flex-col gap-6">
-        {renderNav(mainNav, "Main")}
+        {renderNav(showClientProgress ? [...mainNav, clientProgressNav] : mainNav, "Main")}
 
         {isAdmin ? (
           <div>

@@ -313,6 +313,23 @@ module-locally in both, keep in sync), resolve tokens via
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
 
+## Owner-facing views (two, overlapping — consolidation pending)
+
+- `/progress` (M5.5, not in the nav): per-provider owner view, every string
+  from `src/lib/ownerWording.ts`.
+- `/client-progress` (Client Progress v1, Jul 2026): nav entry "Client
+  Progress", page + entry gated to **admin and billing** roles. One card per
+  non-terminated provider; x-of-y in-network `ProgressBar` whose denominator
+  is the org's active payer set (pre-cred sentinel excluded; a payer whose
+  only case for the provider is "Not Required"/"OON" drops out); one line per
+  payer-with-case showing a locked owner wording (In progress / Submitted /
+  With payer / Approved / Active — mapped by label, unknown labels fall back
+  to `action_bucket`) via `src/lib/clientProgress.ts` (tested). Multi-state
+  payers are represented by their most advanced case. Read-only. Pieces:
+  `src/routes/client-progress.tsx`, `src/components/client-progress/`,
+  `src/hooks/useClientProgress.ts`, `src/services/clientProgress.ts` (own
+  narrow projection because `PROVIDER_LIST_COLUMNS` lacks `start_date`).
+
 ## UI conventions worth knowing
 
 - Create/edit modals: mount-when-editing pattern (`{modal ? <Modal .../> :
