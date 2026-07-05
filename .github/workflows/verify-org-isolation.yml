@@ -105,6 +105,16 @@ jobs:
           SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
           SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
           KANSAS_PROVIDER_ID: 49ad83a8-d8b6-419d-8dcc-88c04a54c4da
+          # Chunk 4 fixtures. SOUTHPARK_FIELDMAP_ID is the ONE South
+          # Park-scoped portal_field_maps row (portal_key sp_test_portal,
+          # status proposed), seeded via Supabase MCP on 2026-07-05 so the
+          # "Kansas cannot read South Park field maps" assertion isn't vacuous.
+          # Assertion 5a proves the row still exists (South Park's own view);
+          # if it is ever reseeded, update this id — a stale id fails 5a as a
+          # fixture error, not a leak. SOUTHPARK_CASE_ID is a South Park
+          # credential_cases row for the must-reject fill-event POST.
+          SOUTHPARK_FIELDMAP_ID: 468238fc-ab35-4a4d-9569-bb7960f40328
+          SOUTHPARK_CASE_ID: d0e40000-0000-4000-a000-000000000065
           # --- from secrets ---
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}

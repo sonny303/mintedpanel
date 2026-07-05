@@ -347,3 +347,43 @@ export interface CaseDetail extends CredentialCase {
   notes: Note[];
   statusHistory: StatusHistoryEntry[];
 }
+
+export type PortalFieldMapSource = "token" | "manual" | "manual_partial" | "hardcoded";
+export type PortalFieldMapStatus = "proposed" | "approved" | "retired";
+export type FillMode = "web" | "pdf";
+
+export interface PortalFieldMap {
+  id: string;
+  // null = shared global catalog row (portal truths); non-null = org override.
+  orgId: string | null;
+  portalKey: string;
+  urlPattern: string | null;
+  pageStep: string | null;
+  mapType: FillMode;
+  selector: string;
+  selectorFallbacks: string[] | null;
+  source: PortalFieldMapSource;
+  token: string | null;
+  hardcodedValue: string | null;
+  transform: string | null;
+  fieldType: "text" | "select" | "radio" | "checkbox" | "date" | "file";
+  notes: string | null;
+  status: PortalFieldMapStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FillSession {
+  id: string;
+  orgId: string;
+  caseId: string;
+  providerId: string | null;
+  portalKey: string;
+  fillMode: FillMode;
+  startedAt: string;
+  completedAt: string | null;
+  fieldsFilled: number;
+  fieldsSkipped: unknown;
+  docsAttached: unknown;
+  performedBy: string | null;
+}

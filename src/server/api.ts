@@ -2,22 +2,31 @@
 //
 // This TanStack Start version ships no file-based server-route API
 // (`createServerFileRoute` and friends are absent), so REST endpoints are served
-// from the nitro fetch entry instead. Every data route goes through the shared
-// `authenticate` guard; only /api/health is public.
+// from the nitro fetch entry instead. The router owns the whole /api/* prefix
+// (kept in sync with the check in src/server.ts): every data route goes through
+// the shared `authenticate` guard, only /api/health is public, unknown /api
+// paths get a JSON 404, and OPTIONS preflights are answered for the
+// API_CORS_ORIGINS allowlist (see ./cors.ts).
 import { ok, fail } from "./envelope";
 import { authenticate, GuardError } from "./guard";
+import { handlePreflight, withCors } from "./cors";
 
-// The provider handlers pull in the provider service (and its browser-client
-// import). They are loaded lazily so /api/health stays free of that graph and
-// proves the server-route path even when Supabase env is absent.
+// Route handlers pull in their services (and the Supabase client graph). They
+// are loaded lazily so /api/health stays free of that graph and proves the
+// server-route path even when Supabase env is absent.
 const loadProviderRoutes = () => import("./providerRoutes");
+const loadExtensionRoutes = () => import("./extensionRoutes");
 
+// `/api/providers/:id/profile` — must be matched before the generic :id route.
+const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
+const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
+const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
-  return pathname === "/api/health" || pathname.startsWith("/api/providers");
+  return pathname === "/api" || pathname.startsWith("/api/");
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
@@ -44,6 +53,13 @@ function toErrorResponse(error: unknown): Response {
 }
 
 export async function handleApiRequest(request: Request): Promise<Response> {
+  // Authorization/x-org-id always trigger a browser preflight; answer it
+  // before auth (a preflight carries no credentials by definition).
+  if (request.method.toUpperCase() === "OPTIONS") return handlePreflight(request);
+  return withCors(await routeApiRequest(request), request);
+}
+
+async function routeApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
   const method = request.method.toUpperCase();
@@ -54,9 +70,13 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     return ok("ok");
   }
 
-  const match = pathname.match(PROVIDERS_ROUTE);
-  if (!match) return fail(404, "Not found");
-  const id = match[1];
+  const profileMatch = pathname.match(PROVIDER_PROFILE_ROUTE);
+  const providersMatch = profileMatch ? null : pathname.match(PROVIDERS_ROUTE);
+  const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
+  const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
+  if (!profileMatch && !providersMatch && !isFieldMaps && !isFillEvents) {
+    return fail(404, "Not found");
+  }
 
   let ctx;
   try {
@@ -67,7 +87,24 @@ export async function handleApiRequest(request: Request): Promise<Response> {
   }
 
   try {
+    if (profileMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleProviderProfile(profileMatch[1], url, ctx);
+    }
+    if (isFieldMaps) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleListPortalFieldMaps(url, ctx);
+    }
+    if (isFillEvents) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleCreateFillEvent(await readJsonBody(request), ctx);
+    }
+
     const routes = await loadProviderRoutes();
+    const id = providersMatch?.[1];
     if (!id) {
       if (method === "GET") return await routes.handleListProviders(url, ctx);
       if (method === "POST")
