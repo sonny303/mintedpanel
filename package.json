@@ -1,4 +1,7 @@
 {
+  "engines": {
+    "node": "22.x"
+  },
   "name": "minted-panel",
   "private": true,
   "sideEffects": false,
