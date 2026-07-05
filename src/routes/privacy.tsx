@@ -80,8 +80,8 @@ function PrivacyPage() {
         <Body>
           <Lead>Provider credentialing data.</Lead> Information your organization enters about its
           healthcare providers, such as names, dates of birth, professional identifiers (NPI, CAQH
-          ID, license numbers), education, addresses, and partial Social Security numbers (last
-          four digits only; we never store full Social Security numbers). This data belongs to your
+          ID, license numbers), education, addresses, and partial Social Security numbers (last four
+          digits only; we never store full Social Security numbers). This data belongs to your
           organization and is visible only to members of your organization.
         </Body>
         <Body>
@@ -120,8 +120,8 @@ function PrivacyPage() {
         <Body>
           We use the information described above only to operate the Service: signing you in,
           filling forms you request, keeping your organization's records, and maintaining audit
-          trails. We do not use it for advertising. We do not sell it. We do not share it with
-          third parties except the infrastructure providers below.
+          trails. We do not use it for advertising. We do not sell it. We do not share it with third
+          parties except the infrastructure providers below.
         </Body>
 
         <SectionTitle>Service providers</SectionTitle>
@@ -141,8 +141,8 @@ function PrivacyPage() {
 
         <SectionTitle>Your organization's role</SectionTitle>
         <Body>
-          Your organization controls the provider data it enters into the Service and decides who
-          at the organization has access. Questions about specific records should go to your
+          Your organization controls the provider data it enters into the Service and decides who at
+          the organization has access. Questions about specific records should go to your
           organization's administrator first.
         </Body>
 
