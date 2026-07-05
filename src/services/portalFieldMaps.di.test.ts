@@ -155,4 +155,27 @@ describe("portal field map service — injected server context", () => {
     const { db } = makeFakeDb([{ data: null }]);
     await expect(listPortalFieldMaps(ctxWith(db))).resolves.toEqual([]);
   });
+
+  // Live rows are seeded by humans pasting from SOP templates, so the DB holds
+  // "{{provider.firstName}}" alongside bare "provider.firstName". The endpoint
+  // contract is the bare catalog form — the extension joins these strings
+  // literally against profile tokens (tonight's 0-fields-filled bug).
+  it("normalizes braced DB tokens to the bare catalog form at the read boundary", async () => {
+    const bracedRow = { ...dbRow, id: "m2", token: "{{provider.firstName}}" };
+    const spacedRow = { ...dbRow, id: "m3", token: " {{ group.tin }} " };
+    const { db } = makeFakeDb([{ data: [dbRow, bracedRow, spacedRow] }]);
+
+    const rows = await listPortalFieldMaps(ctxWith(db));
+
+    expect(rows.map((r) => r.token)).toEqual(["provider.npi", "provider.firstName", "group.tin"]);
+  });
+
+  it("leaves manual rows' null token as null", async () => {
+    const manualRow = { ...dbRow, id: "m4", source: "manual", token: null };
+    const { db } = makeFakeDb([{ data: [manualRow] }]);
+
+    const rows = await listPortalFieldMaps(ctxWith(db));
+
+    expect(rows[0].token).toBeNull();
+  });
 });

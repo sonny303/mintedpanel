@@ -169,6 +169,15 @@ them. The current surface:
 - `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
   rows (global, selectors are portal truths) + the caller's org overrides
   (`src/services/portalFieldMaps.ts`).
+- **Token format contract (2026-07-05 fields_filled=0 incident):** the
+  canonical token key is the BARE catalog form (`provider.firstName`);
+  `portal_field_maps.token` rows are human-pasted and may carry the braced
+  SOP-template form (`{{provider.firstName}}`). The SERVER owns normalization
+  (`src/lib/tokenFormat.ts` `normalizeTokenKey`), applied at the read boundary
+  in `portalFieldMaps.ts` and to catalog entries in `providerProfile.ts`, so
+  both endpoints emit bare keys and the extension's field-map → profile-token
+  join is a literal string match. The extension never strips braces. The
+  cross-endpoint join is pinned by `src/server/profileFieldMapJoin.test.ts`.
 - `POST /api/fill-events` — writes `fill_sessions`; the client-generated `id`
   (UUID) is the idempotency key AND the row PK — replays return the stored row
   (200) instead of inserting (201). case/provider/task ownership is validated
@@ -209,9 +218,10 @@ x-org-id`.
 - **Guard (`src/server/guard.ts`) — every data route runs through it.** The
   service-role client **bypasses RLS**, so tenant isolation is enforced in code:
   `authenticate()` verifies the JWT (`supabase.auth.getClaims`), resolves the
-  caller's membership (`org_id` + role, disambiguated by an optional `x-org-id`
-  header / `?orgId=`), and returns an `AuthContext` already scoped to that org
-  with a `writeAudit` closure. There is no path to a handler without a resolved
+  caller's membership (`org_id` + role, disambiguated by an `x-org-id`
+  header / `?orgId=` — REQUIRED for multi-org callers: omitting it is a loud
+  400, never a silently guessed first membership), and returns an
+  `AuthContext` already scoped to that org with a `writeAudit` closure. There is no path to a handler without a resolved
   ctx. `isWriter(ctx)` = admin|specialist (billing is read-only), mirroring the
   RLS write policies; handlers turn a false into a 403.
 - **Service reuse via DI, browser callers unchanged.** `src/services/providers.ts`
