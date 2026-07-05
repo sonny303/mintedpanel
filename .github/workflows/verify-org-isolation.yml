@@ -15,6 +15,10 @@ name: Verify org isolation
 #   API_BASE                 production deploy base, e.g. https://<prod>.vercel.app
 #   KANSAS_USER_PASSWORD     password for testkansas@minted.com     (Kansas-only, admin)
 #   SOUTHPARK_USER_PASSWORD  password for testsouthpark@minted.com  (South Park-only, billing)
+# Optional repo secret:
+#   VERCEL_AUTOMATION_BYPASS_SECRET  a Vercel "Protection Bypass for Automation"
+#     secret. Set this only if the deploy has Deployment Protection (SSO) on — the
+#     script then sends x-vercel-protection-bypass so requests reach the app.
 #
 # Both test users are single-org, so the normal views send no x-org-id; the only
 # x-org-id in the test is the assertion-4 spoof (Kansas user reaching for South Park).
@@ -53,4 +57,6 @@ jobs:
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}
           KANSAS_PASSWORD: ${{ secrets.KANSAS_USER_PASSWORD }}
           SPVIEW_PASSWORD: ${{ secrets.SOUTHPARK_USER_PASSWORD }}
+          # Optional — only needed if the deploy has Vercel Deployment Protection on.
+          VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: node scripts/verify-org-isolation.mjs
