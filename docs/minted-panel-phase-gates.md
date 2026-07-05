@@ -8,12 +8,14 @@ Later gates are stubbed as `## Gate N — TBD` with no invented content. Fill th
 in when the phase they guard is actually scoped — do not pre-invent criteria.
 
 Grounding: this repo is a **TanStack Start** app (nitro, SSR-capable) on React 19,
-Vite, Tailwind v4, shadcn/ui, with Supabase (Postgres + RLS) as the only backend
-today — the browser talks straight to Supabase under RLS; no app server logic of
-our own runs yet. The live Supabase project is the source of truth for schema, and
-`supabase/migrations/` is a single squashed baseline verified to rebuild it. See
-`docs/phase-0-audit.md` and `docs/migration-baseline.md` for the full picture the
-gates below assume.
+Vite, Tailwind v4, shadcn/ui, with Supabase (Postgres + RLS) as the backend. The
+browser still talks straight to Supabase under RLS for essentially everything; the
+one exception is the Chunk 3 pilot (PR #19) — the `/api/*` provider routes in
+`src/server/` now run on the nitro server behind a shared org/role guard, though no
+frontend hook consumes them yet. The live Supabase project is the source of truth
+for schema, and `supabase/migrations/` is a single squashed baseline verified to
+rebuild it. See `docs/phase-0-audit.md` and `docs/migration-baseline.md` for the
+full picture the gates below assume.
 
 ---
 

@@ -15,11 +15,16 @@ billing). React 19 + TypeScript + Vite + Tailwind v4 + shadcn/ui, **TanStack
 Start** (file-based routing on a nitro server, SSR-capable) + TanStack Query,
 Zustand for auth/org state, Supabase (Postgres + GoTrue) for everything
 server-side. The framework is TanStack Start, not a plain Vite SPA: `src/server.ts`
+and `src/start.ts` are a real server runtime.
 
-- `src/start.ts` are a real (currently data-idle) server runtime with a
-  service-role client and JWT middleware wired but unused. Today no app server logic
-  of our own runs — the browser talks straight to Supabase under RLS. See
-  `docs/phase-0-audit.md` for the framework/deploy detail and the API-home plan.
+As of the Chunk 3 pilot (PR #19) a **first slice of app server logic runs**: the
+`/api/*` routes in `src/server/` (health + provider CRUD) execute on the nitro
+server behind a shared org/role guard using the service-role client. The **bulk of
+data access is still browser → Supabase PostgREST under RLS** — only the provider
+routes have a server home, and no frontend hook calls them yet (they were added
+server-side only; browser callers are unchanged). See the "Server API layer"
+section below and `docs/phase-0-audit.md` for the framework/deploy detail and the
+API-home plan.
 
 ## Running and verifying
 
@@ -111,6 +116,52 @@ Component (src/routes/*, src/components/[module]/*)
   `useActiveOrgId()`, `useRole()`, `useCanWrite()`/`useIsAdmin()`
   (`src/lib/permissions.ts`). Switching org calls `queryClient.removeQueries()`.
 - Domain types: `src/types/index.ts` (additive only). One interface per table.
+
+### Server API layer (`src/server/*`, Chunk 3 pilot — PR #19)
+
+The first `/api` routes run on the nitro server. **This is a pilot slice, not a
+finished migration:** only providers have a server home, and **no frontend hook
+consumes these routes yet** — the browser still talks straight to Supabase for
+everything (providers included). Extend this layer per domain; don't assume a
+route exists just because the service does.
+
+- **Entry:** this TanStack Start version ships **no** file-based server-route API
+  (`createServerFileRoute` is absent), so `src/server.ts` (the nitro fetch entry)
+  intercepts `/api/health` + `/api/providers*` and delegates to
+  `src/server/api.ts` before SSR. Add new API prefixes in **both** places (the
+  `src/server.ts` check and `isApiRequest` in `api.ts`).
+- **Guard (`src/server/guard.ts`) — every data route runs through it.** The
+  service-role client **bypasses RLS**, so tenant isolation is enforced in code:
+  `authenticate()` verifies the JWT (`supabase.auth.getClaims`), resolves the
+  caller's membership (`org_id` + role, disambiguated by an optional `x-org-id`
+  header / `?orgId=`), and returns an `AuthContext` already scoped to that org
+  with a `writeAudit` closure. There is no path to a handler without a resolved
+  ctx. `isWriter(ctx)` = admin|specialist (billing is read-only), mirroring the
+  RLS write policies; handlers turn a false into a 403.
+- **Service reuse via DI, browser callers unchanged.** `src/services/providers.ts`
+  gained a `ProviderServiceCtx` (`{ db, orgId, writeAudit }`); its functions take
+  an **optional** ctx defaulting to `browserCtx()` (the RLS anon client +
+  `requireActiveOrg()`). Server routes inject a service-role ctx; the browser path
+  is untouched. No query logic is duplicated between layers. New server routes
+  should follow the same pattern — thread a ctx, never a second copy of the query.
+- **PHI + writes:** the list route returns an explicit **narrowed** column set
+  (`PROVIDER_LIST_COLUMNS` — no `ssn_last4`/`date_of_birth`/home address); never
+  `select('*')` in a list payload. Writes set `org_id` from the authenticated
+  membership (**never the request body** — it's stripped) and audit through the
+  service layer.
+- **Envelope:** `src/server/envelope.ts` — every response is `{ data, error, meta }`
+  via `ok(data, meta?, status?)` / `fail(status, message)`; list meta carries
+  `{ total, page, pageSize }`.
+- **Server-only, do not import client-side:** `src/server/serviceClient.ts` (the
+  service-role + auth clients) and everything it pulls. Vite's `**/server/**`
+  import-protection blocks a browser bundle from importing it. `api.ts`
+  lazy-imports `providerRoutes` so `/api/health` stays free of the Supabase graph.
+- **Tests:** handler + service-DI suites use a query-shape fake (supabase-js speaks
+  PostgREST, not raw Postgres, so a CI-Postgres integration test isn't feasible) —
+  `src/server/*.test.ts`, `src/services/providers.di.test.ts`.
+- **Env:** `src/server/env.ts` resolves `SUPABASE_URL ?? VITE_SUPABASE_URL` etc.
+  and `SUPABASE_SERVICE_ROLE_KEY` (server-only, no `VITE_` prefix; set on Vercel
+  Prod + Preview).
 
 ## Domain model in one breath
 
