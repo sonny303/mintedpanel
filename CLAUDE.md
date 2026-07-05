@@ -49,7 +49,15 @@ return=representation` / `resolution=ignore-duplicates`, and the RPCs
     (`claim_invites` → 0, `create_case_with_tasks` → synthesize the case row +
     tasks). Assert on the recorded request payloads as well as the UI. This
     harness verified the entire launch pivot; rebuild it from this recipe when
-    needed.
+    needed. Additions proven by the R1 go-live pass (2026-07-05): skip the
+    login flow by seeding localStorage in `addInitScript` — the GoTrue session
+    under `sb-<ref>-auth-token` plus zustand's `minted-panel-active-org` —
+    and synthesize `profiles` + `memberships` rows for the fixture user
+    (memberships embeds `organizations(name)`); fixture tables must also
+    include empty `notes` and `user_table_prefs` or those queries 404. The
+    repo's Playwright pin is newer than the sandbox browsers — launch with
+    `executablePath: "/opt/pw-browsers/chromium"`. This rig rendered all 20
+    routes as admin and billing for `docs/R1-GO-LIVE-FINDINGS.md`.
   - The **/api org-isolation gate** in-sandbox: `node
 scripts/verify-isolation-local.mjs` (mock-and-run) boots a fixture mock of
     the API contract and runs `scripts/verify-org-isolation.mjs` against it —
@@ -257,7 +265,12 @@ drag-to-reorder and an add/edit modal (fixed `TOKEN_COLORS` palette).
 Status pills: `src/components/triage/StatusPill.tsx` takes the raw hex from
 `status_configs.color` (color-mix tinting) — use this for DB-driven statuses.
 The legacy `src/components/StatusPill.tsx` + `hexToStatusColor` is for
-semantic one-offs.
+semantic one-offs, and since the R1 sweep it is the ONLY place pill styling
+lives: it carries `neutral` (warm gray), `brand` (Admin badge), and `violet`
+(audit TOUCH_LOGGED) variants, and admin payers/audit/mso-routing plus the
+settings panels all render through it. Don't hand-roll
+`rounded-[20px]`-style pill spans; neutral _tag_ chips (group name, via-MSO,
+Archived) are the deliberate exception.
 
 ## Launches = locations (launch PRD v2.1, built Jul 2026)
 
@@ -344,7 +357,17 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
 - `provider_facility_assignments.is_primary` is read (NewCaseModal facility
   default) but never written by the app.
 - `src/integrations/supabase/client.ts` is dead generated code — never import
-  it (`externalClient.ts` is the one).
+  it (`externalClient.ts` is the one). It has one dormant importer:
+  `start.ts` registers the generated `auth-attacher.ts` middleware, which
+  would throw on first use (the client wants `VITE_SUPABASE_PUBLISHABLE_KEY`,
+  which is never set) — harmless while the app has zero `createServerFn`
+  call sites, but remove middleware + both files before ever adding one.
+  The other two generated leftovers (`auth-middleware.ts`,
+  `client.server.ts`) were deleted in the R1 verification lane.
+- `beforeLoad` role guards (providers new/edit) read the zustand store,
+  which is EMPTY during a hard-load beforeLoad (init() runs after route
+  load) — they only guard client-side navigation. Any guarded route needs
+  the render-time `useRole()` backstop those two files now carry.
 - MSO routing matching is exact and case-sensitive (`'All'` is the only
   wildcard). Demo data was aligned Jul 2026: rules and providers both say
   `Physical Therapy` (rules previously said `PT` and never matched).
