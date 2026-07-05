@@ -83,6 +83,9 @@ export const useAuthStore = create<AuthState>()(
             }
           } else {
             set({ memberships: [], activeOrgId: null, fullName: null, initError: null });
+            // Event-driven sign-outs (token expiry, sign-out in another tab)
+            // must drop the previous session's cache just like signOut() does.
+            registeredQueryClient?.clear();
           }
         });
       },
