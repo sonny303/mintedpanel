@@ -28,6 +28,21 @@ async function readJsonBody(request: Request): Promise<unknown> {
   }
 }
 
+// Map a thrown error to a response. A GuardError carries its own status and a
+// safe, caller-facing message, so pass it through. Anything else is an internal
+// fault — e.g. a missing SUPABASE_SERVICE_ROLE_KEY making getServiceClient()
+// throw — so log the real error server-side (nitro/Vercel captures console.error)
+// and return a generic 500. This keeps a server misconfiguration from being
+// masked as a 401 and never leaks internal details in the response body.
+function toErrorResponse(error: unknown): Response {
+  if (error instanceof GuardError) return fail(error.status, error.message);
+  console.error(
+    "[api] internal error:",
+    error instanceof Error ? `${error.message}\n${error.stack}` : error,
+  );
+  return fail(500, "Internal server error");
+}
+
 export async function handleApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -48,8 +63,7 @@ export async function handleApiRequest(request: Request): Promise<Response> {
     const requestedOrgId = request.headers.get("x-org-id") ?? url.searchParams.get("orgId");
     ctx = await authenticate(request, requestedOrgId);
   } catch (error) {
-    if (error instanceof GuardError) return fail(error.status, error.message);
-    return fail(401, "Unauthorized");
+    return toErrorResponse(error);
   }
 
   try {
@@ -65,8 +79,6 @@ export async function handleApiRequest(request: Request): Promise<Response> {
       return await routes.handleUpdateProvider(id, await readJsonBody(request), ctx);
     return fail(405, "Method not allowed");
   } catch (error) {
-    if (error instanceof GuardError) return fail(error.status, error.message);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return fail(500, message);
+    return toErrorResponse(error);
   }
 }
