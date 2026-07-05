@@ -313,6 +313,34 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 8. Cases picker (GET /api/cases?providerId=): 8 first proves the fixture
+  //    linkage still holds (South Park's own user sees SOUTHPARK_CASE_ID on
+  //    SOUTHPARK_PROVIDER_ID) so 8b can't pass vacuously; then the Kansas
+  //    user asking for the South Park provider's cases must get zero rows —
+  //    a cross-org provider is indistinguishable from one with no cases.
+  const spCases = await apiGet(`/api/cases?providerId=${env.SOUTHPARK_PROVIDER_ID}`, {
+    token: spTok,
+  });
+  const spCaseIds = idsOf(spCases.body);
+  check(
+    "8. South Park sees its own provider's cases (8b not vacuous)",
+    spCases.status === 200 && spCaseIds.has(env.SOUTHPARK_CASE_ID),
+    `status=${spCases.status} rows=${spCaseIds.size} fixtureCasePresent=${spCaseIds.has(env.SOUTHPARK_CASE_ID)}` +
+      (spCaseIds.has(env.SOUTHPARK_CASE_ID)
+        ? ""
+        : " (fixture error — SOUTHPARK_CASE_ID must belong to SOUTHPARK_PROVIDER_ID)"),
+  );
+  const kCases = await apiGet(`/api/cases?providerId=${env.SOUTHPARK_PROVIDER_ID}`, {
+    token: kansasTok,
+  });
+  const kCaseRows = kCases.body?.data ?? [];
+  check(
+    "8b. Kansas cases view of a South Park provider returns zero rows",
+    kCases.status === 200 && kCaseRows.length === 0,
+    `status=${kCases.status} rows=${kCaseRows.length}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

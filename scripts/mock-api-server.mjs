@@ -19,6 +19,7 @@
 //   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
+//   cases       cross-org case rows leak from the case picker        (8b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -35,7 +36,7 @@ export const FIXTURES = {
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
 
-export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents"];
+export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents", "cases"];
 
 const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
@@ -69,9 +70,29 @@ const PROVIDERS = [
   provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh"),
 ];
 
+// Case rows carry the picker DTO fields; the fixture linkage mirrors the
+// live DB (SOUTHPARK_CASE_ID belongs to SOUTHPARK_PROVIDER_ID).
 const CASES = [
-  { id: FIXTURES.SOUTHPARK_CASE_ID, orgId: FIXTURES.SOUTHPARK_ORG },
-  { id: FIXTURES.KANSAS_CASE_ID, orgId: FIXTURES.KANSAS_ORG },
+  {
+    id: FIXTURES.SOUTHPARK_CASE_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    providerId: FIXTURES.SOUTHPARK_PROVIDER_ID,
+    payerId: "sp-payer-1",
+    payerName: "Anthem BCBS of Colorado",
+    state: "CO",
+    statusLabel: "Submitted",
+    submittedDate: null,
+  },
+  {
+    id: FIXTURES.KANSAS_CASE_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    providerId: FIXTURES.KANSAS_PROVIDER_ID,
+    payerId: "k-payer-1",
+    payerName: "BCBS of Kansas",
+    state: "KS",
+    statusLabel: "In Progress",
+    submittedDate: null,
+  },
 ];
 
 function fieldMapRow(id, orgId, portalKey, selector) {
@@ -229,6 +250,24 @@ export async function createMockApiServer(options = {}) {
         (r) => r.orgId === null || r.orgId === orgId || leak === "fieldmaps",
       );
       if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/cases (extension case picker) ---
+    if (/^\/api\/cases\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const providerId = url.searchParams.get("providerId");
+      if (!providerId) return envelope(res, 422, null, "providerId must be a UUID query param");
+      const rows = CASES.filter(
+        (c) => c.providerId === providerId && (c.orgId === orgId || leak === "cases"),
+      ).map(({ id, payerId, payerName, state, statusLabel, submittedDate }) => ({
+        id,
+        payerId,
+        payerName,
+        state,
+        statusLabel,
+        submittedDate,
+      }));
       return envelope(res, 200, rows, null, { total: rows.length });
     }
 

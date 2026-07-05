@@ -23,6 +23,7 @@ const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
 const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
+const CASES_ROUTE = /^\/api\/cases\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
@@ -74,7 +75,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const providersMatch = profileMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
-  if (!profileMatch && !providersMatch && !isFieldMaps && !isFillEvents) {
+  const isCases = CASES_ROUTE.test(pathname);
+  if (!profileMatch && !providersMatch && !isFieldMaps && !isFillEvents && !isCases) {
     return fail(404, "Not found");
   }
 
@@ -101,6 +103,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "POST") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleCreateFillEvent(await readJsonBody(request), ctx);
+    }
+    if (isCases) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleListCases(url, ctx);
     }
 
     const routes = await loadProviderRoutes();

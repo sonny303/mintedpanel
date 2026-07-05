@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { getNotesFor } from "@/services/lookups";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type {
   CaseDetail,
@@ -244,6 +245,64 @@ export async function updateCaseStatus(
   });
 
   return camelizeRow<CredentialCase>(updated);
+}
+
+// --- extension case picker (server-only surface, explicit ctx) ---
+// The Chrome extension needs a caseId to log a fill event (fill_sessions
+// validates org ownership), but has no general cases surface — this narrow
+// per-provider lookup is the consumer-pulled route's query. Like
+// portalFieldMaps/fillSessions there is no browser-default ctx: every caller
+// injects { db, orgId } (the API route passes the service-role client plus
+// the guard-resolved org).
+
+export interface CaseServiceCtx {
+  db: SupabaseClient<Database>;
+  orgId: string;
+}
+
+export interface CasePickerItem {
+  id: string;
+  payerId: string | null;
+  payerName: string | null;
+  state: string | null;
+  statusLabel: string | null;
+  submittedDate: string | null;
+}
+
+const CASE_PICKER_COLUMNS =
+  "id, payer_id, state, submitted_date, payers(name), status_configs(label)";
+
+interface CasePickerRow {
+  id: string;
+  payer_id: string | null;
+  state: string | null;
+  submitted_date: string | null;
+  payers: { name: string } | null;
+  status_configs: { label: string } | null;
+}
+
+// One provider's cases with payer + status labels for display, newest first.
+// A provider in another org yields zero rows — indistinguishable from a
+// provider with no cases.
+export async function listCasesForPicker(
+  ctx: CaseServiceCtx,
+  providerId: string,
+): Promise<CasePickerItem[]> {
+  const { data, error } = await ctx.db
+    .from("credential_cases")
+    .select(CASE_PICKER_COLUMNS)
+    .eq("org_id", ctx.orgId)
+    .eq("provider_id", providerId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as CasePickerRow[]).map((row) => ({
+    id: row.id,
+    payerId: row.payer_id,
+    payerName: row.payers?.name ?? null,
+    state: row.state,
+    statusLabel: row.status_configs?.label ?? null,
+    submittedDate: row.submitted_date,
+  }));
 }
 
 export async function getContractFor(

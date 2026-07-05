@@ -16,6 +16,7 @@ vi.mock("./extensionRoutes", () => ({
   handleProviderProfile: vi.fn(),
   handleListPortalFieldMaps: vi.fn(),
   handleCreateFillEvent: vi.fn(),
+  handleListCases: vi.fn(),
 }));
 
 import { authenticate, GuardError } from "./guard";
@@ -24,6 +25,7 @@ import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleCreateFillEvent,
+  handleListCases,
 } from "./extensionRoutes";
 import { handleApiRequest, isApiRequest } from "./api";
 
@@ -33,6 +35,7 @@ const getMock = vi.mocked(handleGetProvider);
 const profileMock = vi.mocked(handleProviderProfile);
 const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
+const casesMock = vi.mocked(handleListCases);
 
 async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
@@ -211,6 +214,17 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     );
   });
 
+  it("GET /api/cases dispatches with auth", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    casesMock.mockResolvedValue(
+      new Response('{"data":[],"error":null,"meta":{"total":0}}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/cases?providerId=p1"));
+    expect(res.status).toBe(200);
+    expect(authenticateMock).toHaveBeenCalledTimes(1);
+    expect(casesMock).toHaveBeenCalledWith(expect.any(URL), expect.anything());
+  });
+
   it("wrong methods on the extension routes are 405", async () => {
     authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
     const postMaps = await handleApiRequest(
@@ -223,9 +237,14 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
       new Request("https://x.test/api/providers/p1/profile", { method: "PATCH" }),
     );
     expect(patchProfile.status).toBe(405);
+    const postCases = await handleApiRequest(
+      new Request("https://x.test/api/cases", { method: "POST" }),
+    );
+    expect(postCases.status).toBe(405);
     expect(profileMock).not.toHaveBeenCalled();
     expect(fieldMapsMock).not.toHaveBeenCalled();
     expect(fillEventsMock).not.toHaveBeenCalled();
+    expect(casesMock).not.toHaveBeenCalled();
   });
 
   it("an unknown /api path is a JSON 404 envelope without auth", async () => {

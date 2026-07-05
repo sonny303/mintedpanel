@@ -2,6 +2,7 @@
 // maps, fill events. Same composition as providerRoutes.ts — inject the
 // authenticated server context into the service layer, never duplicate query
 // logic here.
+import { listCasesForPicker } from "@/services/cases";
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -41,6 +42,20 @@ export async function handleProviderProfile(
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  return ok(rows, { total: rows.length });
+}
+
+// GET /api/cases?providerId=<uuid> — the extension's case picker. A fill
+// event requires a caseId owned by the caller's org; this is the narrow
+// per-provider lookup that feeds it (providerId is required so the route
+// never becomes a general cases surface). Cross-org providerIds return zero
+// rows, indistinguishable from a provider with no cases.
+export async function handleListCases(url: URL, ctx: AuthContext): Promise<Response> {
+  const providerId = url.searchParams.get("providerId");
+  if (!providerId || !UUID_RE.test(providerId)) {
+    return fail(422, "providerId must be a UUID query param");
+  }
+  const rows = await listCasesForPicker({ db: ctx.db, orgId: ctx.orgId }, providerId);
   return ok(rows, { total: rows.length });
 }
 

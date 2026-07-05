@@ -19,8 +19,9 @@ and `src/start.ts` are a real server runtime.
 
 A slice of app server logic runs as `/api/*` routes in `src/server/` on the
 nitro server, behind a shared org/role guard using the service-role client:
-health + provider CRUD (Chunk 3 pilot, PR #19) and the three extension-facing
-endpoints (Chunk 4 — provider profile, portal field maps, fill events). The
+health + provider CRUD (Chunk 3 pilot, PR #19) and the extension-facing
+endpoints (Chunk 4 — provider profile, portal field maps, fill events; plus
+the case picker added 2026-07-05). The
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
@@ -158,6 +159,15 @@ them. The current surface:
   from the guard ctx, never the body. Optional `taskId` marks the task
   completed (org-checked, audited). Writer roles only (billing → 403).
   (`src/services/fillSessions.ts`)
+- `GET /api/cases?providerId=<uuid>` — the extension's case picker (added
+  2026-07-05, consumer-pulled: a fill event requires an org-owned caseId and
+  the extension had no way to look one up). `providerId` is a **required**
+  UUID param so this stays a narrow per-provider lookup, not a general cases
+  surface. Returns picker DTOs (`id`, `payerId`, `payerName`, `state`,
+  `statusLabel`, `submittedDate`), newest first, via `listCasesForPicker` in
+  `src/services/cases.ts` (server-only ctx like portalFieldMaps; the browser
+  `getCases` is untouched). Cross-org providerIds yield zero rows. Gate
+  assertions 8/8b + mock leak mode `cases` cover it.
 
 Layer mechanics:
 
@@ -217,8 +227,9 @@ x-org-id`.
    workflow UI are separate products. The current app UI keeps running on
    direct Supabase + RLS. Do not migrate current screens to the API.
 2. **Consumer-pulled API surface.** Routes get built only when a real consumer
-   pulls them. The extension pulls three. Cases/tasks/payers routes wait for
-   their consumer.
+   pulls them. The extension pulls four (profile, field maps, fill events,
+   and — pulled 2026-07-05 by the fill flow's caseId requirement — the narrow
+   case picker). Tasks/payers routes wait for their consumer.
 3. **R1 exit criteria revised.** "Zero direct Supabase calls in frontend" and
    RLS lockout deferred to the workflow-UI product. Dual data paths accepted
    deliberately: current UI guarded by RLS, API guarded by guard.ts + the gate.

@@ -64,6 +64,7 @@ const EXPECTED_FAILS = {
   fieldmaps: ["5b", "5c"],
   profile: ["6"],
   fillevents: ["7", "7b"],
+  cases: ["8b"],
 };
 
 function failedAssertions(output) {
