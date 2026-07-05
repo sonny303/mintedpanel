@@ -11,10 +11,10 @@ name: Verify org isolation
 # Authentication (SSO) in front, which blocks Bearer-authenticated API calls.
 #
 # Required repo secrets (minimal set):
-#   SUPABASE_ANON_KEY       the publishable/anon key
-#   API_BASE                production deploy base, e.g. https://<prod>.vercel.app
-#   KANSAS_USER_PASSWORD    password for sowmya@fitness.fit  (Kansas-only, billing)
-#   MULTIORG_USER_PASSWORD  password for test@minted.com     (Kansas + South Park admin)
+#   SUPABASE_ANON_KEY        the publishable/anon key
+#   API_BASE                 production deploy base, e.g. https://<prod>.vercel.app
+#   KANSAS_USER_PASSWORD     password for sowmya@fitness.fit        (Kansas-only, billing)
+#   SOUTHPARK_USER_PASSWORD  password for testsouthpark@minted.com  (South Park-only, billing)
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
           # --- fixed, non-secret constants ---
           SUPABASE_URL: https://fkvuhfsqcmujywzgczmc.supabase.co
           KANSAS_EMAIL: sowmya@fitness.fit
-          SPVIEW_EMAIL: test@minted.com
+          SPVIEW_EMAIL: testsouthpark@minted.com
           KANSAS_ORG: 20563fd6-8e95-46a0-8e1c-cb3b968b3c3d
           SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
           SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
@@ -49,5 +49,5 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}
           KANSAS_PASSWORD: ${{ secrets.KANSAS_USER_PASSWORD }}
-          SPVIEW_PASSWORD: ${{ secrets.MULTIORG_USER_PASSWORD }}
+          SPVIEW_PASSWORD: ${{ secrets.SOUTHPARK_USER_PASSWORD }}
         run: node scripts/verify-org-isolation.mjs

@@ -13,7 +13,7 @@
 //   SUPABASE_ANON_KEY      publishable/anon key
 //   API_BASE               PRODUCTION deploy base (preview SSO blocks Bearer auth)
 //   KANSAS_EMAIL/PASSWORD  a Kansas-ONLY user (sowmya@fitness.fit, billing)
-//   SPVIEW_EMAIL/PASSWORD  a South Park member (test@minted.com, multi-org admin)
+//   SPVIEW_EMAIL/PASSWORD  a South-Park-ONLY user (testsouthpark@minted.com, billing)
 //   KANSAS_ORG, SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
 //
 // Exit code: 0 = all pass, 1 = any assertion failed, 2 = missing env,
