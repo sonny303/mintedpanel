@@ -1,7 +1,6 @@
 import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
-import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -18,7 +17,11 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// No functionMiddleware: the generated attachSupabaseAuth middleware (and the
+// dead generated client.ts it imported) was removed Jul 2026 — there are zero
+// createServerFn call sites, and the client it depended on read an env var the
+// app never sets, so the first serverFn would have thrown. If serverFns are
+// ever introduced, attach auth against externalClient.ts instead.
 export const startInstance = createStart(() => ({
-  functionMiddleware: [attachSupabaseAuth],
   requestMiddleware: [errorMiddleware],
 }));

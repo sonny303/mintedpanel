@@ -326,12 +326,10 @@ module-locally in both, keep in sync), resolve tokens via
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
 
-## Owner-facing views (two, overlapping — consolidation pending)
+## Owner-facing view (one, consolidated Jul 2026)
 
-- `/progress` (M5.5, not in the nav): per-provider owner view, every string
-  from `src/lib/ownerWording.ts`.
-- `/client-progress` (Client Progress v1, Jul 2026): nav entry "Client
-  Progress", page + entry gated to **admin and billing** roles. One card per
+- `/client-progress` (Client Progress v1) is **the** owner view: nav entry
+  "Client Progress", page + entry gated to **admin and billing** roles. One card per
   non-terminated provider; x-of-y in-network `ProgressBar` whose denominator
   is the org's active payer set (pre-cred sentinel excluded; a payer whose
   only case for the provider is "Not Required"/"OON" drops out); one line per
@@ -342,6 +340,10 @@ are pre-filtered client-side; the DB unique constraint is the backstop.
   `src/routes/client-progress.tsx`, `src/components/client-progress/`,
   `src/hooks/useClientProgress.ts`, `src/services/clientProgress.ts` (own
   narrow projection because `PROVIDER_LIST_COLUMNS` lacks `start_date`).
+- The older M5.5 owner view at `/progress` was folded into it: the route file
+  remains only as a redirect to `/client-progress` (the URL had been shared
+  with owners out-of-band), and `src/lib/ownerWording.ts` + its test were
+  deleted with the page they served.
 
 ## UI conventions worth knowing
 
@@ -377,14 +379,13 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   are effectively write-once at creation plus launch-flow inserts.
 - `provider_facility_assignments.is_primary` is read (NewCaseModal facility
   default) but never written by the app.
-- `src/integrations/supabase/client.ts` is dead generated code — never import
-  it (`externalClient.ts` is the one). It has one dormant importer:
-  `start.ts` registers the generated `auth-attacher.ts` middleware, which
-  would throw on first use (the client wants `VITE_SUPABASE_PUBLISHABLE_KEY`,
-  which is never set) — harmless while the app has zero `createServerFn`
-  call sites, but remove middleware + both files before ever adding one.
-  The other two generated leftovers (`auth-middleware.ts`,
-  `client.server.ts`) were deleted in the R1 verification lane.
+- The generated Supabase scaffold is fully gone (Jul 2026): `auth-middleware.ts`
+  and `client.server.ts` were deleted in the R1 verification lane; the dead
+  `client.ts` and the `auth-attacher.ts` middleware `start.ts` registered were
+  deleted in the consolidation pass (zero `createServerFn` call sites existed,
+  and that client read `VITE_SUPABASE_PUBLISHABLE_KEY`, which is never set).
+  `externalClient.ts` is the only Supabase client. If serverFns are ever
+  introduced, attach auth against `externalClient.ts`.
 - `beforeLoad` role guards (providers new/edit) read the zustand store,
   which is EMPTY during a hard-load beforeLoad (init() runs after route
   load) — they only guard client-side navigation. Any guarded route needs

@@ -33,7 +33,7 @@ The ONLY valid Supabase client import is:
 import { supabase } from "@/integrations/supabase/externalClient";
 ```
 
-`src/integrations/supabase/client.ts` is auto-generated dead code pointing at an abandoned database. Never import it. `externalClient.ts` currently hardcodes the URL and publishable key; the production fix is env-based config wired in at deploy time — do not refactor it speculatively.
+The auto-generated `client.ts` (dead code pointing at an abandoned database) and the `auth-attacher.ts` middleware that imported it were deleted in Jul 2026. If a generated Supabase scaffold ever reappears, delete it — never import it. `externalClient.ts` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from the environment (see `.env.example`).
 
 ## Routing rules
 
