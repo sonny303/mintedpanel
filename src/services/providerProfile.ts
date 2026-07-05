@@ -28,6 +28,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { Provider } from "@/types";
 
 export interface ProviderProfileServiceCtx {
@@ -122,7 +123,11 @@ function parseCatalog(raw: Json): CatalogEntry[] {
       typeof (item as Row).token === "string" &&
       typeof (item as Row).column === "string"
     ) {
-      entries.push(item as unknown as CatalogEntry);
+      const entry = item as unknown as CatalogEntry;
+      // The catalog emits bare tokens today; normalizing pins this side of
+      // the extension's field-map join to the canonical form regardless
+      // (see lib/tokenFormat.ts — the server owns token normalization).
+      entries.push({ ...entry, token: normalizeTokenKey(entry.token) });
     }
   }
   if (entries.length === 0) {

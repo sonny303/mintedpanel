@@ -10,6 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 
 export interface PortalFieldMapServiceCtx {
@@ -39,5 +40,9 @@ export async function listPortalFieldMaps(
   if (filters.portalKey) query = query.eq("portal_key", filters.portalKey);
   const { data, error } = await query;
   if (error) throw error;
-  return camelizeRow<PortalFieldMap[]>(data ?? []);
+  const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
+  // DB rows hold whatever form a human pasted ("{{provider.firstName}}" or
+  // bare); the endpoint's contract is the bare catalog form so the extension
+  // can join token → profile token literally (see lib/tokenFormat.ts).
+  return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
 }

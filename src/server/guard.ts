@@ -48,6 +48,7 @@ export function getBearerToken(request: Request): string {
 // Authenticate the request and resolve the caller's org membership.
 // `requestedOrgId` (from an `x-org-id` header or `?orgId=`) disambiguates users
 // who belong to more than one org; the caller must actually be a member of it.
+// Multi-org callers MUST send it — omitting it is a 400, never a guessed org.
 export async function authenticate(
   request: Request,
   requestedOrgId?: string | null,
@@ -73,10 +74,21 @@ export async function authenticate(
   const { data: memberships, error: membershipError } = await membershipQuery;
   if (membershipError) throw new GuardError(500, "Failed to resolve membership");
 
-  const membership = (memberships ?? [])[0] as { org_id: string; role: AppRole } | undefined;
-  if (!membership) {
+  const membershipRows = (memberships ?? []) as Array<{ org_id: string; role: AppRole }>;
+  if (membershipRows.length === 0) {
     throw new GuardError(403, requestedOrgId ? "Not a member of that org" : "No org membership");
   }
+  // A multi-org caller with no x-org-id must fail LOUDLY, never fall through
+  // to an arbitrary first row: the service key bypasses RLS, so a guessed org
+  // silently serves the wrong tenant's view (which reads as "no value in
+  // Minted Panel" in the extension instead of an actionable error).
+  if (!requestedOrgId && membershipRows.length > 1) {
+    throw new GuardError(
+      400,
+      "You belong to multiple orgs; send an x-org-id header (or ?orgId=) to choose one",
+    );
+  }
+  const membership = membershipRows[0];
   const orgId = membership.org_id;
   const role = membership.role;
 
