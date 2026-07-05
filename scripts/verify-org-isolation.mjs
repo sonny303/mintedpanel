@@ -313,6 +313,29 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 8. Cases dropdown endpoint: Kansas listing its own provider's open cases
+  //    works (proves 8b isn't vacuous against a dead route)...
+  const ownCases = await apiGet(`/api/cases?providerId=${env.KANSAS_PROVIDER_ID}`, {
+    token: kansasTok,
+  });
+  check(
+    "8. Kansas lists own provider's open cases",
+    ownCases.status === 200 && Array.isArray(ownCases.body?.data),
+    `status=${ownCases.status} rows=${(ownCases.body?.data ?? []).length}` +
+      (ownCases.status !== 200 ? ` body=${(ownCases.raw || "").slice(0, 100)}` : ""),
+  );
+  //    ...and asking for a South Park provider's cases must 404 with no rows.
+  const xCases = await apiGet(`/api/cases?providerId=${env.SOUTHPARK_PROVIDER_ID}`, {
+    token: kansasTok,
+  });
+  const casesLeaked = xCases.body?.data != null;
+  check(
+    "8b. Kansas GET cases of a South Park provider -> 404, no rows",
+    xCases.status === 404 && !casesLeaked,
+    `status=${xCases.status} dataPresent=${casesLeaked}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

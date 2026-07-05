@@ -19,6 +19,7 @@
 //   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
+//   cases       cross-org provider's case list served instead of 404 (8b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -35,7 +36,7 @@ export const FIXTURES = {
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
 
-export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents"];
+export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents", "cases"];
 
 const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
@@ -69,10 +70,38 @@ const PROVIDERS = [
   provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh"),
 ];
 
+// Case rows carry the dropdown projection of GET /api/cases (open cases only —
+// the mock serves them all as open).
 const CASES = [
-  { id: FIXTURES.SOUTHPARK_CASE_ID, orgId: FIXTURES.SOUTHPARK_ORG },
-  { id: FIXTURES.KANSAS_CASE_ID, orgId: FIXTURES.KANSAS_ORG },
+  {
+    id: FIXTURES.SOUTHPARK_CASE_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    providerId: FIXTURES.SOUTHPARK_PROVIDER_ID,
+    payerName: "South Park Health",
+    state: "CO",
+    status: "In Progress",
+    submittedDate: null,
+  },
+  {
+    id: FIXTURES.KANSAS_CASE_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    providerId: FIXTURES.KANSAS_PROVIDER_ID,
+    payerName: "BCBS of Kansas",
+    state: "KS",
+    status: "Submitted",
+    submittedDate: "2026-06-01",
+  },
 ];
+
+function caseListRow(c) {
+  return {
+    id: c.id,
+    payerName: c.payerName,
+    state: c.state,
+    status: c.status,
+    submittedDate: c.submittedDate,
+  };
+}
 
 function fieldMapRow(id, orgId, portalKey, selector) {
   return {
@@ -219,6 +248,19 @@ export async function createMockApiServer(options = {}) {
       const visible = p && (p.orgId === orgId || leak === "providers");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       return envelope(res, 200, p);
+    }
+
+    // --- /api/cases?providerId= (open-case dropdown) ---
+    if (/^\/api\/cases\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const providerId = url.searchParams.get("providerId");
+      if (!providerId) return envelope(res, 422, null, "providerId must be a UUID query parameter");
+      const p = PROVIDERS.find((row) => row.id === providerId);
+      // Real contract: a provider outside the caller's org is a 404, no rows.
+      const visible = p && (p.orgId === orgId || leak === "cases");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      const rows = CASES.filter((c) => c.providerId === providerId).map(caseListRow);
+      return envelope(res, 200, rows, null, { total: rows.length });
     }
 
     // --- /api/portal-field-maps ---

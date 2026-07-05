@@ -5,6 +5,7 @@
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
+import { listOpenProviderCases } from "@/services/providerCases";
 import { ok, fail } from "./envelope";
 import { isWriter, type AuthContext } from "./guard";
 
@@ -41,6 +42,21 @@ export async function handleProviderProfile(
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  return ok(rows, { total: rows.length });
+}
+
+// GET /api/cases?providerId=<uuid> — the popup's case dropdown: the provider's
+// OPEN cases (open = credentialing status not in the config's 'complete'
+// action bucket — see providerCases.ts). The provider must belong to the
+// caller's org: a cross-org providerId is a 404, same contract the isolation
+// gate proves for the provider routes.
+export async function handleListProviderCases(url: URL, ctx: AuthContext): Promise<Response> {
+  const providerId = url.searchParams.get("providerId");
+  if (!providerId || !UUID_RE.test(providerId)) {
+    return fail(422, "providerId must be a UUID query parameter");
+  }
+  const rows = await listOpenProviderCases({ db: ctx.db, orgId: ctx.orgId }, providerId);
+  if (!rows) return fail(404, "Provider not found");
   return ok(rows, { total: rows.length });
 }
 

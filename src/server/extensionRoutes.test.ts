@@ -5,19 +5,23 @@ import type { AuthContext } from "./guard";
 vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
+vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
+import { listOpenProviderCases } from "@/services/providerCases";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleCreateFillEvent,
+  handleListProviderCases,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
+const listCasesMock = vi.mocked(listOpenProviderCases);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -113,6 +117,46 @@ describe("portal field maps handler", () => {
     expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
     });
+  });
+});
+
+describe("provider cases handler", () => {
+  const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
+  const url = (qs: string) => new URL(`https://x.test/api/cases${qs}`);
+
+  it("rejects a missing providerId with 422 before touching the service", async () => {
+    const res = await handleListProviderCases(url(""), ctx());
+    expect(res.status).toBe(422);
+    expect(listCasesMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-UUID providerId with 422 before touching the service", async () => {
+    const res = await handleListProviderCases(url("?providerId=not-a-uuid"), ctx());
+    expect(res.status).toBe(422);
+    expect(listCasesMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the provider is outside the org (service returns null)", async () => {
+    listCasesMock.mockResolvedValue(null);
+    const res = await handleListProviderCases(url(`?providerId=${PROVIDER_ID}`), ctx());
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Provider not found");
+  });
+
+  it("returns the open cases with meta.total, forwarding the org-scoped ctx", async () => {
+    const rows = [
+      { id: "c1", payerName: "Aetna", state: "KS", status: "Submitted", submittedDate: null },
+    ];
+    listCasesMock.mockResolvedValue(rows);
+    const res = await handleListProviderCases(url(`?providerId=${PROVIDER_ID}`), ctx("billing"));
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual(rows);
+    expect(b.meta).toEqual({ total: 1 });
+    expect(listCasesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+    );
   });
 });
 
