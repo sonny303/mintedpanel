@@ -15,6 +15,10 @@
 //   KANSAS_EMAIL/PASSWORD  a Kansas-ONLY user (testkansas@minted.com, admin)
 //   SPVIEW_EMAIL/PASSWORD  a South-Park-ONLY user (testsouthpark@minted.com, billing)
 //   SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
+// Optional:
+//   VERCEL_BYPASS_SECRET   Vercel "Protection Bypass for Automation" secret. If the
+//                          deploy has Deployment Protection on, set this so requests
+//                          carry x-vercel-protection-bypass and reach the app.
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
@@ -42,6 +46,7 @@ if (missing.length) {
 }
 
 const API_BASE = env.API_BASE.replace(/\/+$/, "");
+const BYPASS = env.VERCEL_BYPASS_SECRET || "";
 
 async function signIn(email, password) {
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -56,20 +61,27 @@ async function signIn(email, password) {
   return body.access_token;
 }
 
-async function apiGet(path, token, orgId) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      ...(orgId ? { "x-org-id": orgId } : {}),
-    },
-  });
+// One GET against the deploy. Adds the Bearer + x-org-id when given, and the
+// Vercel protection-bypass header when a secret is configured. Returns the
+// parsed JSON body when possible plus the raw text (so a non-JSON SSO gate is
+// visible in the logs).
+async function apiGet(path, { token, orgId } = {}) {
+  const headers = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (orgId) headers["x-org-id"] = orgId;
+  if (BYPASS) {
+    headers["x-vercel-protection-bypass"] = BYPASS;
+    headers["x-vercel-set-bypass-cookie"] = "true";
+  }
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  const raw = await res.text();
   let body = null;
   try {
-    body = await res.json();
+    body = JSON.parse(raw);
   } catch {
-    /* non-JSON (e.g. an SSO HTML gate) → leave null so assertions fail loudly */
+    /* non-JSON (e.g. an SSO HTML gate) → body stays null; raw holds the page */
   }
-  return { status: res.status, body };
+  return { status: res.status, body, raw };
 }
 
 const rows = [];
@@ -84,18 +96,48 @@ function idsOf(body) {
   return new Set((body?.data ?? []).map((r) => r.id));
 }
 
+function looksLikeVercelGate(r) {
+  // Vercel Authentication returns an HTML interstitial, not our JSON envelope.
+  const s = (r.raw || "").toLowerCase();
+  return (
+    r.body === null && (s.includes("authenticat") || s.includes("vercel") || s.includes("<html"))
+  );
+}
+
 (async () => {
-  console.log(`API_BASE = ${API_BASE}`);
+  console.log(`API_BASE host reachable check — bypass secret ${BYPASS ? "SET" : "not set"}`);
+
+  // Preflight: prove the deploy is reachable and that OUR guard (JSON envelope),
+  // not a Vercel SSO gate (HTML), is answering. /api/health is public in-app.
+  const health = await apiGet("/api/health");
+  console.log(
+    `preflight GET /api/health          -> status=${health.status} body=${(health.raw || "").slice(0, 120)}`,
+  );
+  const noAuth = await apiGet("/api/providers");
+  console.log(
+    `preflight GET /api/providers noauth -> status=${noAuth.status} body=${(noAuth.raw || "").slice(0, 160)}`,
+  );
+  if (looksLikeVercelGate(health) || looksLikeVercelGate(noAuth)) {
+    console.error(
+      "\nDIAGNOSIS: the deploy is behind Vercel Deployment Protection (SSO) — an HTML\n" +
+        "gate is answering instead of the app's JSON. Bearer auth can't get past it.\n" +
+        "Fix: point API_BASE at a public production deploy, or set VERCEL_BYPASS_SECRET\n" +
+        "(a Vercel 'Protection Bypass for Automation' secret) so requests carry the\n" +
+        "x-vercel-protection-bypass header.\n",
+    );
+  }
+
   const kansasTok = await signIn(env.KANSAS_EMAIL, env.KANSAS_PASSWORD);
   const spTok = await signIn(env.SPVIEW_EMAIL, env.SPVIEW_PASSWORD);
 
   // 1. Kansas view (single-org user, no x-org-id) = exactly 6, zero South Park.
-  const k = await apiGet("/api/providers?pageSize=100", kansasTok);
+  const k = await apiGet("/api/providers?pageSize=100", { token: kansasTok });
   const kIds = idsOf(k.body);
   check(
     "1. Kansas view returns exactly 6",
     k.status === 200 && kIds.size === 6 && k.body?.meta?.total === 6,
-    `status=${k.status} count=${kIds.size} meta.total=${k.body?.meta?.total}`,
+    `status=${k.status} count=${kIds.size} meta.total=${k.body?.meta?.total}` +
+      (k.status !== 200 ? ` body=${(k.raw || "").slice(0, 100)}` : ""),
   );
   check(
     "1b. Kansas view contains no South Park provider id",
@@ -105,12 +147,13 @@ function idsOf(body) {
   );
 
   // 2. South Park view (single-org user, no x-org-id) = exactly 4, zero Kansas.
-  const s = await apiGet("/api/providers?pageSize=100", spTok);
+  const s = await apiGet("/api/providers?pageSize=100", { token: spTok });
   const sIds = idsOf(s.body);
   check(
     "2. South Park view returns exactly 4",
     s.status === 200 && sIds.size === 4 && s.body?.meta?.total === 4,
-    `status=${s.status} count=${sIds.size} meta.total=${s.body?.meta?.total}`,
+    `status=${s.status} count=${sIds.size} meta.total=${s.body?.meta?.total}` +
+      (s.status !== 200 ? ` body=${(s.raw || "").slice(0, 100)}` : ""),
   );
   check(
     "2b. South Park view contains no known Kansas provider id",
@@ -127,7 +170,7 @@ function idsOf(body) {
   );
 
   // 3. Kansas view: GET a South Park provider by id -> 404, no row leaked.
-  const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, kansasTok);
+  const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, { token: kansasTok });
   const leakedRow = x.status === 200 && x.body?.data?.id === env.SOUTHPARK_PROVIDER_ID;
   check(
     "3. Kansas view GET-by-id on a South Park provider -> 404",
@@ -139,7 +182,10 @@ function idsOf(body) {
   // 4. HEADER-SPOOF (the real one): a Kansas-only user sends x-org-id for South
   //    Park, an org they are NOT a member of. Must be DENIED and must never
   //    return South Park's data.
-  const spoof = await apiGet("/api/providers?pageSize=100", kansasTok, env.SOUTHPARK_ORG);
+  const spoof = await apiGet("/api/providers?pageSize=100", {
+    token: kansasTok,
+    orgId: env.SOUTHPARK_ORG,
+  });
   const spoofIds = idsOf(spoof.body);
   const spoofLeakedSP =
     spoofIds.has(env.SOUTHPARK_PROVIDER_ID) ||
@@ -176,8 +222,6 @@ function idsOf(body) {
     const { appendFileSync } = await import("node:fs");
     const md = [
       "## Provider API — org isolation",
-      "",
-      `\`API_BASE\` = ${API_BASE}`,
       "",
       "| Assertion | Result |",
       "| --- | --- |",
