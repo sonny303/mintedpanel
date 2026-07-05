@@ -105,6 +105,14 @@ jobs:
           SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
           SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
           KANSAS_PROVIDER_ID: 49ad83a8-d8b6-419d-8dcc-88c04a54c4da
+          # LIVE demo-org provider counts for assertions 1/2 (script defaults
+          # 6/4 match the mock fixtures). Demo data moves — adding/removing a
+          # demo or UAT provider changes these; update the number HERE, not in
+          # the script. A stale count fails assertion 1/2 as fixture drift,
+          # never as a leak (the leak checks are 1b/2b/2c/3). Went 6 -> 7 on
+          # 2026-07-05 when "UAT: Test Provider" was added to Kansas.
+          EXPECTED_KANSAS_PROVIDERS: "7"
+          EXPECTED_SOUTHPARK_PROVIDERS: "4"
           # Chunk 4 fixtures. SOUTHPARK_FIELDMAP_ID is the ONE South
           # Park-scoped portal_field_maps row (portal_key sp_test_portal,
           # status proposed), seeded via Supabase MCP on 2026-07-05 so the
