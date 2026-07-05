@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -236,13 +237,9 @@ function AdminMsoRoutingPage() {
                       <td className="px-3 h-10 align-middle">{r.specialty}</td>
                       <td className="px-3 h-10 align-middle">
                         {r.routeType === "direct" ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
-                            Direct
-                          </span>
+                          <StatusPill status="green" label="Direct" />
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]">
-                            MSO · {mso?.name ?? "—"}
-                          </span>
+                          <StatusPill status="blue" label={`MSO · ${mso?.name ?? "—"}`} />
                         )}
                       </td>
                       <td className="px-3 h-10 align-middle text-muted-foreground max-w-[280px] truncate">

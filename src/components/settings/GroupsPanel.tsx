@@ -24,6 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
+import { StatusPill } from "@/components/StatusPill";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useCreateProviderGroup, useUpdateProviderGroup } from "@/hooks/useOrgSettings";
 import { useIsAdmin } from "@/lib/permissions";
@@ -101,13 +102,9 @@ export function GroupsPanel() {
                 </td>
                 <td className="px-3 h-10 align-middle">
                   {g.isActive ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
-                      Active
-                    </span>
+                    <StatusPill status="green" label="Active" />
                   ) : (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#F5F5F4] text-[#57534E] border-[#E8E5E0]">
-                      Inactive
-                    </span>
+                    <StatusPill status="neutral" label="Inactive" />
                   )}
                 </td>
                 <td className="px-3 h-10 align-middle text-right">

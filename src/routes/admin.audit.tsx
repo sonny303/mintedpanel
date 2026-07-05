@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -45,21 +46,15 @@ const ACTION_TYPES: AuditActionType[] = [
 const PAGE_SIZE = 50;
 
 function ActionPill({ action }: { action: AuditActionType }) {
-  const styles: Record<AuditActionType, string> = {
-    CREATE: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]",
-    UPDATE: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
-    DELETE: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
-    STATUS_CHANGE: "bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]",
-    TOUCH_LOGGED: "bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]",
-    TERMINATION: "bg-[#FEF2F2] text-[#B91C1C] border-[#FECACA]",
+  const tones: Record<AuditActionType, StatusColor> = {
+    CREATE: "green",
+    UPDATE: "blue",
+    DELETE: "red",
+    STATUS_CHANGE: "amber",
+    TOUCH_LOGGED: "violet",
+    TERMINATION: "red",
   };
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border ${styles[action]}`}
-    >
-      {action}
-    </span>
-  );
+  return <StatusPill status={tones[action]} label={action} />;
 }
 
 function EntityLink({ entry }: { entry: AuditLogEntry }) {
