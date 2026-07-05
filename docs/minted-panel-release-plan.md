@@ -29,7 +29,14 @@ decisions — when a decision is added or changed here, update the mirror.
 
 ### Profile-read audit (2026-07-05)
 
-Profile reads on `GET /api/providers/:id/profile` are NOT separately audited;
+~~Profile reads on `GET /api/providers/:id/profile` are NOT separately audited;
 `fill_sessions` (`POST /api/fill-events`) is the access record. Decided by SS
 2026-07-05. Revisit if a customer or audit requires read-level PHI access
-logs.
+logs.~~
+
+**Superseded same day** by R2 Workbench locked decision 4 (2026-07-05):
+profile reads ARE audited — one `audit_log` row per successful read
+(`action_type 'READ'`, actor, provider id, route; never the response body or
+any token value). Migration `20260705190000_audit_log_read_action_type.sql`
+added `READ` to the `audit_log.action_type` check constraint. `fill_sessions`
+remains the fill-attempt record; `audit_log` is now also the read record.

@@ -313,6 +313,59 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 8. Cases dropdown endpoint: Kansas listing its own provider's open cases
+  //    works (proves 8b isn't vacuous against a dead route)...
+  const ownCases = await apiGet(`/api/cases?providerId=${env.KANSAS_PROVIDER_ID}`, {
+    token: kansasTok,
+  });
+  check(
+    "8. Kansas lists own provider's open cases",
+    ownCases.status === 200 && Array.isArray(ownCases.body?.data),
+    `status=${ownCases.status} rows=${(ownCases.body?.data ?? []).length}` +
+      (ownCases.status !== 200 ? ` body=${(ownCases.raw || "").slice(0, 100)}` : ""),
+  );
+  //    ...and asking for a South Park provider's cases must 404 with no rows.
+  const xCases = await apiGet(`/api/cases?providerId=${env.SOUTHPARK_PROVIDER_ID}`, {
+    token: kansasTok,
+  });
+  const casesLeaked = xCases.body?.data != null;
+  check(
+    "8b. Kansas GET cases of a South Park provider -> 404, no rows",
+    xCases.status === 404 && !casesLeaked,
+    `status=${xCases.status} dataPresent=${casesLeaked}`,
+    { leak: true },
+  );
+
+  // 9. Submission touches (the second must-reject POST): Kansas posting a
+  //    touch on a South Park case must 404 before anything is written. Like
+  //    assertion 7, the replay with the same idempotency id is the observable
+  //    nothing-was-written follow-up: had the first call inserted before
+  //    rejecting, the replay would return the stored row (200) instead.
+  const touchPayload = {
+    kind: "portal_submission",
+    portal_key: "gate_must_reject",
+    idempotency_id: crypto.randomUUID(),
+  };
+  const touch = await apiPost(`/api/cases/${env.SOUTHPARK_CASE_ID}/touches`, touchPayload, {
+    token: kansasTok,
+  });
+  const touchLeaked = touch.status < 400 || touch.body?.data != null;
+  check(
+    "9. Kansas POST touch on a South Park case is rejected",
+    touch.status === 404 && !touchLeaked,
+    `status=${touch.status} (expect 404) dataPresent=${touch.body?.data != null}`,
+    { leak: true },
+  );
+  const touchReplay = await apiPost(`/api/cases/${env.SOUTHPARK_CASE_ID}/touches`, touchPayload, {
+    token: kansasTok,
+  });
+  check(
+    "9b. Replaying the rejected touch still rejects (nothing was written)",
+    touchReplay.status === 404 && touchReplay.body?.data == null,
+    `status=${touchReplay.status} dataPresent=${touchReplay.body?.data != null}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

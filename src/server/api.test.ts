@@ -16,6 +16,8 @@ vi.mock("./extensionRoutes", () => ({
   handleProviderProfile: vi.fn(),
   handleListPortalFieldMaps: vi.fn(),
   handleCreateFillEvent: vi.fn(),
+  handleListProviderCases: vi.fn(),
+  handleCreateCaseTouch: vi.fn(),
 }));
 
 import { authenticate, GuardError } from "./guard";
@@ -24,6 +26,8 @@ import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleCreateFillEvent,
+  handleListProviderCases,
+  handleCreateCaseTouch,
 } from "./extensionRoutes";
 import { handleApiRequest, isApiRequest } from "./api";
 
@@ -33,6 +37,8 @@ const getMock = vi.mocked(handleGetProvider);
 const profileMock = vi.mocked(handleProviderProfile);
 const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
+const casesMock = vi.mocked(handleListProviderCases);
+const caseTouchMock = vi.mocked(handleCreateCaseTouch);
 
 async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
@@ -211,6 +217,37 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     );
   });
 
+  it("GET /api/cases dispatches with auth", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    casesMock.mockResolvedValue(
+      new Response('{"data":[],"error":null,"meta":{"total":0}}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/cases?providerId=p1"));
+    expect(res.status).toBe(200);
+    expect(authenticateMock).toHaveBeenCalledTimes(1);
+    expect(casesMock).toHaveBeenCalledWith(expect.any(URL), expect.anything());
+  });
+
+  it("POST /api/cases/:id/touches dispatches the case id and parsed body with auth", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
+    caseTouchMock.mockResolvedValue(
+      new Response('{"data":{},"error":null,"meta":null}', { status: 201 }),
+    );
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/cases/case-1/touches", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "portal_submission", idempotency_id: "abc" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(caseTouchMock).toHaveBeenCalledWith(
+      "case-1",
+      { kind: "portal_submission", idempotency_id: "abc" },
+      expect.anything(),
+    );
+  });
+
   it("wrong methods on the extension routes are 405", async () => {
     authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
     const postMaps = await handleApiRequest(
@@ -219,6 +256,13 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(postMaps.status).toBe(405);
     const getFills = await handleApiRequest(GET("/api/fill-events"));
     expect(getFills.status).toBe(405);
+    const postCases = await handleApiRequest(
+      new Request("https://x.test/api/cases", { method: "POST" }),
+    );
+    expect(postCases.status).toBe(405);
+    const getTouches = await handleApiRequest(GET("/api/cases/case-1/touches"));
+    expect(getTouches.status).toBe(405);
+    expect(caseTouchMock).not.toHaveBeenCalled();
     const patchProfile = await handleApiRequest(
       new Request("https://x.test/api/providers/p1/profile", { method: "PATCH" }),
     );
@@ -226,6 +270,7 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(profileMock).not.toHaveBeenCalled();
     expect(fieldMapsMock).not.toHaveBeenCalled();
     expect(fillEventsMock).not.toHaveBeenCalled();
+    expect(casesMock).not.toHaveBeenCalled();
   });
 
   it("an unknown /api path is a JSON 404 envelope without auth", async () => {

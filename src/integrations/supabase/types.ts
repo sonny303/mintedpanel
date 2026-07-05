@@ -1555,7 +1555,7 @@ export type Database = {
           track: string;
         };
         Insert: {
-          action_bucket: string;
+          action_bucket?: string;
           color: string;
           created_at?: string | null;
           id?: string;

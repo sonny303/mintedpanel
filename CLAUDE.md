@@ -19,8 +19,9 @@ and `src/start.ts` are a real server runtime.
 
 A slice of app server logic runs as `/api/*` routes in `src/server/` on the
 nitro server, behind a shared org/role guard using the service-role client:
-health + provider CRUD (Chunk 3 pilot, PR #19) and the three extension-facing
-endpoints (Chunk 4 — provider profile, portal field maps, fill events). The
+health + provider CRUD (Chunk 3 pilot, PR #19) and the five extension-facing
+endpoints (Chunk 4 — provider profile, portal field maps, fill events; R2
+Workbench — open cases, submission touches). The
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
@@ -68,10 +69,12 @@ scripts/verify-isolation-local.mjs` (mock-and-run) boots a fixture mock of
 
 ## Database: repo vs hosted — read this before schema work
 
-`supabase/migrations/` is now a **single squashed baseline**
+`supabase/migrations/` is a **squashed baseline**
 (`20260704210000_baseline_live_schema.sql`) dumped from the live DB and
 verified to rebuild it exactly (fingerprint match; see
-`docs/migration-baseline.md`). The 15 old partial-mirror files are parked in
+`docs/migration-baseline.md`), plus post-baseline migrations (first:
+`20260705190000_audit_log_read_action_type.sql`, adding `READ` to the
+`audit_log.action_type` check — applied to hosted the same day). The 15 old partial-mirror files are parked in
 `supabase/migrations_archive/` (kept per the additive rule, outside the
 migrations dir so the CLI ignores them). The baseline reflects the state after
 all 23 hosted migrations. Consequences:
@@ -152,13 +155,17 @@ them. The current surface:
   `?state` selects the state license; primary-else-sole assignment selects the
   facility; sole policy selects group insurance; `payers`/`msos`/`contracts`
   tokens are case-scoped and always come back `null` + listed in `unresolved`
-  with a reason. **The most PHI-dense response in the system** (SSN last-4,
-  DOB, home address, unmasked by design): `Cache-Control: no-store`, never log
-  the body. Profile reads are NOT separately audited — locked decision, SS
-  2026-07-05 (recorded in `docs/minted-panel-release-plan.md`):
-  `fill_sessions` (POST /api/fill-events) is the access record. Revisit if a
-  customer or audit requires read-level PHI access logs (that would need an
-  `audit_log.action_type` check-constraint migration to add a `READ` value).
+  with a reason. The `{{user.*}}` token family (`user.name` from
+  user_metadata full_name/name, `user.email` from the JWT claim — no schema
+  backing) is appended by the route via `src/server/userTokens.ts`;
+  empty-resolution notes surface in the envelope's `meta.notes`. **The most
+  PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
+  by design): `Cache-Control: no-store`, never log the body. Every successful
+  profile read writes one `audit_log` row (`action_type 'READ'`, actor,
+  provider, route — never the body or token values; a failed audit write
+  fails the request) — R2 locked decision 4, 2026-07-05, superseding the
+  same-day rely-on-fill_sessions decision (both recorded in
+  `docs/minted-panel-release-plan.md`).
 - `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
   rows (global, selectors are portal truths) + the caller's org overrides
   (`src/services/portalFieldMaps.ts`).
@@ -169,6 +176,22 @@ them. The current surface:
   from the guard ctx, never the body. Optional `taskId` marks the task
   completed (org-checked, audited). Writer roles only (billing → 403).
   (`src/services/fillSessions.ts`)
+- `GET /api/cases?providerId=<uuid>` — the popup's case dropdown (R2): the
+  provider's OPEN cases, `{ id, payerName, state, status, submittedDate }`.
+  Open = credentialing status not in the `action_bucket 'complete'` bucket —
+  derived from `status_configs`, never from labels; status-less cases count
+  as open. Cross-org providerId → 404. (`src/services/providerCases.ts`)
+- `POST /api/cases/:id/touches` — the "Mark submitted" business log (R2):
+  ONE append-only touch (`touch_type 'portal'`, `outcome 'submitted'`,
+  `source 'extension'`, text "Application submitted via <portal label>").
+  **Snake_case body keys per the locked R2 contract** (`kind:
+'portal_submission'`, `portal_key`, `fill_session_id?`, `note?`,
+  `idempotency_id`) — unlike fill-events' camelCase. `idempotency_id` is the
+  touch PK (same replay semantics as fill-events); case + fill-session
+  ownership checked before any write; never a status change, never a task
+  write. Portal label is derived from `portal_key` (no server-side portal
+  catalog exists — labels live in the extension).
+  (`src/services/submissionTouches.ts`)
 
 Layer mechanics:
 
@@ -204,7 +227,8 @@ x-org-id`.
   service layer.
 - **Envelope:** `src/server/envelope.ts` — every response is `{ data, error, meta }`
   via `ok(data, meta?, status?)` / `fail(status, message)`; list meta carries
-  `{ total, page, pageSize }`.
+  `{ total, page, pageSize }`; `meta.notes` (string[]) carries non-fatal
+  resolution notes (currently only empty `{{user.*}}` tokens).
 - **Server-only, do not import client-side:** `src/server/serviceClient.ts` (the
   service-role + auth clients) and everything it pulls. Vite's `**/server/**`
   import-protection blocks a browser bundle from importing it. `api.ts`
@@ -228,7 +252,8 @@ x-org-id`.
    workflow UI are separate products. The current app UI keeps running on
    direct Supabase + RLS. Do not migrate current screens to the API.
 2. **Consumer-pulled API surface.** Routes get built only when a real consumer
-   pulls them. The extension pulls three. Cases/tasks/payers routes wait for
+   pulls them. The extension pulls five (profile, field maps, fill events,
+   open cases, submission touches). Other cases/tasks/payers routes wait for
    their consumer.
 3. **R1 exit criteria revised.** "Zero direct Supabase calls in frontend" and
    RLS lockout deferred to the workflow-UI product. Dual data paths accepted
@@ -237,6 +262,19 @@ x-org-id`.
 5. **Server misconfig returns 500, never 401** (PR #24).
 6. **Portal field maps are a shared catalog.** `org_id NULL` = global, org rows
    = overrides. The endpoint contract reflects this.
+
+### Locked decisions (R2 Workbench, 2026-07-05)
+
+1. **Case selection in the popup is REQUIRED.** No case, no fill
+   (extension-side; the panel serves the dropdown via GET /api/cases).
+2. **Fill event = machine log, submission touch = business log.** The
+   extension logs "submitted" as an append-only touch only after the human
+   submits the portal form. Never a status change from the extension (v1).
+3. **Profile endpoint reads are audited** — one `READ` audit row per read,
+   never the body. Supersedes the same-day rely-on-fill_sessions decision.
+4. **`{{user.name}}`/`{{user.email}}` resolve from auth/JWT metadata.** No
+   schema change.
+5. **The extension never submits portal forms. Unchanged, forever.**
 
 ## Domain model in one breath
 

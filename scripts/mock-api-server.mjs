@@ -19,6 +19,8 @@
 //   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
+//   cases       cross-org provider's case list served instead of 404 (8b)
+//   touches     cross-org submission touch accepted and stored       (9, 9b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -35,18 +37,30 @@ export const FIXTURES = {
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
 
-export const LEAK_MODES = ["providers", "spoof", "fieldmaps", "profile", "fillevents"];
+export const LEAK_MODES = [
+  "providers",
+  "spoof",
+  "fieldmaps",
+  "profile",
+  "fillevents",
+  "cases",
+  "touches",
+];
 
 const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
     token: "tok-kansas",
     userId: "user-kansas",
+    email: FIXTURES.KANSAS_EMAIL,
+    fullName: "Test Kansas",
     orgId: FIXTURES.KANSAS_ORG,
     role: "admin",
   },
   [FIXTURES.SPVIEW_EMAIL]: {
     token: "tok-southpark",
     userId: "user-southpark",
+    email: FIXTURES.SPVIEW_EMAIL,
+    fullName: "Test South Park",
     orgId: FIXTURES.SOUTHPARK_ORG,
     role: "billing",
   },
@@ -69,10 +83,38 @@ const PROVIDERS = [
   provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh"),
 ];
 
+// Case rows carry the dropdown projection of GET /api/cases (open cases only —
+// the mock serves them all as open).
 const CASES = [
-  { id: FIXTURES.SOUTHPARK_CASE_ID, orgId: FIXTURES.SOUTHPARK_ORG },
-  { id: FIXTURES.KANSAS_CASE_ID, orgId: FIXTURES.KANSAS_ORG },
+  {
+    id: FIXTURES.SOUTHPARK_CASE_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    providerId: FIXTURES.SOUTHPARK_PROVIDER_ID,
+    payerName: "South Park Health",
+    state: "CO",
+    status: "In Progress",
+    submittedDate: null,
+  },
+  {
+    id: FIXTURES.KANSAS_CASE_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    providerId: FIXTURES.KANSAS_PROVIDER_ID,
+    payerName: "BCBS of Kansas",
+    state: "KS",
+    status: "Submitted",
+    submittedDate: "2026-06-01",
+  },
 ];
+
+function caseListRow(c) {
+  return {
+    id: c.id,
+    payerName: c.payerName,
+    state: c.state,
+    status: c.status,
+    submittedDate: c.submittedDate,
+  };
+}
 
 function fieldMapRow(id, orgId, portalKey, selector) {
   return {
@@ -127,13 +169,16 @@ function readBody(req) {
   });
 }
 
-function profileFor(p) {
+function profileFor(p, user) {
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
     tokens: [
       { token: "provider.firstName", value: p.firstName },
       { token: "provider.lastName", value: p.lastName },
       { token: "payer.name", value: null },
+      // {{user.*}} rides along, resolved from the caller's JWT metadata.
+      { token: "user.name", value: user.fullName },
+      { token: "user.email", value: user.email },
     ],
     unresolved: [
       { token: "payer.name", reason: "case-scoped source (payers); resolve at fill time" },
@@ -148,9 +193,10 @@ export async function createMockApiServer(options = {}) {
   if (leak && !LEAK_MODES.includes(leak)) {
     throw new Error(`Unknown leak mode "${leak}" (valid: ${LEAK_MODES.join(", ")})`);
   }
-  // In-memory fill_sessions store, keyed `${orgId}:${id}` (org-scoped
-  // idempotency, like the real handler).
+  // In-memory fill_sessions/touches stores, keyed `${orgId}:${id}` (org-scoped
+  // idempotency, like the real handlers).
   const fillSessions = new Map();
+  const touches = new Map();
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -200,7 +246,7 @@ export async function createMockApiServer(options = {}) {
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       res.setHeader("cache-control", "no-store");
-      return envelope(res, 200, profileFor(p));
+      return envelope(res, 200, profileFor(p, user));
     }
 
     // --- /api/providers and /api/providers/:id ---
@@ -219,6 +265,55 @@ export async function createMockApiServer(options = {}) {
       const visible = p && (p.orgId === orgId || leak === "providers");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       return envelope(res, 200, p);
+    }
+
+    // --- /api/cases?providerId= (open-case dropdown) ---
+    if (/^\/api\/cases\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const providerId = url.searchParams.get("providerId");
+      if (!providerId) return envelope(res, 422, null, "providerId must be a UUID query parameter");
+      const p = PROVIDERS.find((row) => row.id === providerId);
+      // Real contract: a provider outside the caller's org is a 404, no rows.
+      const visible = p && (p.orgId === orgId || leak === "cases");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      const rows = CASES.filter((c) => c.providerId === providerId).map(caseListRow);
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/cases/:id/touches (submission touch, idempotent) ---
+    const touchesMatch = url.pathname.match(/^\/api\/cases\/([^/]+)\/touches\/?$/);
+    if (touchesMatch) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot log touches");
+      }
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (leak !== "touches") {
+        // Real contract: validate case ownership BEFORE the idempotency
+        // lookup or any write. A cross-org case is a 404, nothing stored.
+        const caseOk = CASES.some((c) => c.id === touchesMatch[1] && c.orgId === orgId);
+        if (!caseOk) return envelope(res, 404, null, "Case not found");
+      }
+      const key = `${orgId}:${body.idempotency_id}`;
+      if (touches.has(key)) return envelope(res, 200, touches.get(key));
+      const touch = {
+        id: body.idempotency_id,
+        orgId,
+        caseId: touchesMatch[1],
+        touchDate: "2026-07-05",
+        touchType: "portal",
+        outcome: "submitted",
+        nextFollowUpDate: null,
+        notes: `Application submitted via ${body.portal_key}`,
+        coordinatorId: user.userId,
+        source: "extension",
+        createdAt: "2026-07-05T00:00:00Z",
+      };
+      touches.set(key, touch);
+      return envelope(res, 201, touch);
     }
 
     // --- /api/portal-field-maps ---
