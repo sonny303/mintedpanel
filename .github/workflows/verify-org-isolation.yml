@@ -13,8 +13,11 @@ name: Verify org isolation
 # Required repo secrets (minimal set):
 #   SUPABASE_ANON_KEY        the publishable/anon key
 #   API_BASE                 production deploy base, e.g. https://<prod>.vercel.app
-#   KANSAS_USER_PASSWORD     password for sowmya@fitness.fit        (Kansas-only, billing)
+#   KANSAS_USER_PASSWORD     password for testkansas@minted.com     (Kansas-only, admin)
 #   SOUTHPARK_USER_PASSWORD  password for testsouthpark@minted.com  (South Park-only, billing)
+#
+# Both test users are single-org, so the normal views send no x-org-id; the only
+# x-org-id in the test is the assertion-4 spoof (Kansas user reaching for South Park).
 
 on:
   workflow_dispatch:
@@ -39,9 +42,9 @@ jobs:
         env:
           # --- fixed, non-secret constants ---
           SUPABASE_URL: https://fkvuhfsqcmujywzgczmc.supabase.co
-          KANSAS_EMAIL: sowmya@fitness.fit
+          KANSAS_EMAIL: testkansas@minted.com
           SPVIEW_EMAIL: testsouthpark@minted.com
-          KANSAS_ORG: 20563fd6-8e95-46a0-8e1c-cb3b968b3c3d
+          # Only the assertion-4 spoof needs an org id (Kansas user reaching for South Park).
           SOUTHPARK_ORG: d0e40000-0000-4000-a000-000000000001
           SOUTHPARK_PROVIDER_ID: d0e40000-0000-4000-a000-000000000021
           KANSAS_PROVIDER_ID: 49ad83a8-d8b6-419d-8dcc-88c04a54c4da

@@ -12,9 +12,12 @@
 //   SUPABASE_URL           e.g. https://fkvuhfsqcmujywzgczmc.supabase.co
 //   SUPABASE_ANON_KEY      publishable/anon key
 //   API_BASE               PRODUCTION deploy base (preview SSO blocks Bearer auth)
-//   KANSAS_EMAIL/PASSWORD  a Kansas-ONLY user (sowmya@fitness.fit, billing)
+//   KANSAS_EMAIL/PASSWORD  a Kansas-ONLY user (testkansas@minted.com, admin)
 //   SPVIEW_EMAIL/PASSWORD  a South-Park-ONLY user (testsouthpark@minted.com, billing)
-//   KANSAS_ORG, SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
+//   SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
+//
+// Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
+// each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
 //
 // Exit code: 0 = all pass, 1 = any assertion failed, 2 = missing env,
 // 3 = setup/network error. A cross-org row anywhere is a STOP-SHIP failure.
@@ -28,7 +31,6 @@ const REQUIRED = [
   "KANSAS_PASSWORD",
   "SPVIEW_EMAIL",
   "SPVIEW_PASSWORD",
-  "KANSAS_ORG",
   "SOUTHPARK_ORG",
   "SOUTHPARK_PROVIDER_ID",
   "KANSAS_PROVIDER_ID",
@@ -87,8 +89,8 @@ function idsOf(body) {
   const kansasTok = await signIn(env.KANSAS_EMAIL, env.KANSAS_PASSWORD);
   const spTok = await signIn(env.SPVIEW_EMAIL, env.SPVIEW_PASSWORD);
 
-  // 1. Kansas view (x-org-id Kansas) = exactly 6, zero South Park.
-  const k = await apiGet("/api/providers?pageSize=100", kansasTok, env.KANSAS_ORG);
+  // 1. Kansas view (single-org user, no x-org-id) = exactly 6, zero South Park.
+  const k = await apiGet("/api/providers?pageSize=100", kansasTok);
   const kIds = idsOf(k.body);
   check(
     "1. Kansas view returns exactly 6",
@@ -102,8 +104,8 @@ function idsOf(body) {
     { leak: true },
   );
 
-  // 2. South Park view (x-org-id South Park) = exactly 4, zero Kansas.
-  const s = await apiGet("/api/providers?pageSize=100", spTok, env.SOUTHPARK_ORG);
+  // 2. South Park view (single-org user, no x-org-id) = exactly 4, zero Kansas.
+  const s = await apiGet("/api/providers?pageSize=100", spTok);
   const sIds = idsOf(s.body);
   check(
     "2. South Park view returns exactly 4",
@@ -125,7 +127,7 @@ function idsOf(body) {
   );
 
   // 3. Kansas view: GET a South Park provider by id -> 404, no row leaked.
-  const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, kansasTok, env.KANSAS_ORG);
+  const x = await apiGet(`/api/providers/${env.SOUTHPARK_PROVIDER_ID}`, kansasTok);
   const leakedRow = x.status === 200 && x.body?.data?.id === env.SOUTHPARK_PROVIDER_ID;
   check(
     "3. Kansas view GET-by-id on a South Park provider -> 404",
