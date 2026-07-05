@@ -13,6 +13,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as ProgressRouteImport } from './routes/progress'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
@@ -58,6 +59,11 @@ const ProvidersRoute = ProvidersRouteImport.update({
 const ProgressRoute = ProgressRouteImport.update({
   id: '/progress',
   path: '/progress',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/client-progress': typeof ClientProgressRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
@@ -258,6 +266,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
@@ -292,6 +301,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
@@ -322,6 +332,7 @@ export interface FileRouteTypes {
     | '/client-progress'
     | '/home'
     | '/login'
+    | '/privacy'
     | '/progress'
     | '/reports'
     | '/welcome'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
@@ -384,6 +396,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   ProgressRoute: typeof ProgressRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
@@ -427,6 +440,13 @@ declare module '@tanstack/react-router' {
       path: '/progress'
       fullPath: '/progress'
       preLoaderRoute: typeof ProgressRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -691,6 +711,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   ProgressRoute: ProgressRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,

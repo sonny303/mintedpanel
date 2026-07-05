@@ -161,7 +161,10 @@ function RootComponent() {
   // Dev-only demo routes (env-flag-gated) skip the session redirect but still
   // render inside the shell, so shell + primitives are verifiable without auth.
   const isDevRoute = pathname.startsWith("/dev");
-  const isPublicRoute = isAuthRoute || isRootRoute || isDevRoute;
+  // /privacy is fully public (Chrome Web Store requires a hosted policy URL
+  // reachable without sign-in): no session redirect, rendered outside AppShell.
+  const isPrivacyRoute = pathname === "/privacy";
+  const isPublicRoute = isAuthRoute || isRootRoute || isDevRoute || isPrivacyRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
@@ -216,7 +219,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthRoute || isRootRoute ? (
+      {isAuthRoute || isRootRoute || isPrivacyRoute ? (
         <Outlet />
       ) : (
         <AppShell>

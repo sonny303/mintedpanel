@@ -368,6 +368,13 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   components live in `src/components/home/`.
 - Design tokens `var(--mp-*)` on triage/launch surfaces; hex-token classes on
   admin surfaces. Follow whichever the file you're editing already uses.
+- Public (no-session) routes are `/` (landing), `/login`, `/dev*`, and
+  `/privacy` — the list lives in `__root.tsx` (`isPublicRoute` skips the login
+  redirect; a separate check renders `/`, `/login`, `/privacy` outside
+  `AppShell`). `/privacy` is the Chrome Web Store policy URL for the
+  extension; its content mirrors `docs/privacy-policy.md` (edit the doc first,
+  keep the page in sync — placeholders in both must be filled before store
+  submission).
 
 ## Known warts (pre-existing; don't "discover" them again)
 
