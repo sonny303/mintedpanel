@@ -164,7 +164,7 @@ export function ChangeStatusDialog({
           ))}
 
           {needsContractWarning ? (
-            <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-md p-3 space-y-2">
+            <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-md p-3 space-y-2">
               <div className="flex items-start gap-2 text-[#92400E]">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                 <p className="text-[13px] font-medium">

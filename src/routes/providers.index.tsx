@@ -4,7 +4,8 @@
 // name → legacy provider detail, row/CTA → case detail. No writes.
 import React, { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -163,7 +164,7 @@ function ProvidersWorkView() {
         state === "stalled"
           ? `${daysSilent({ lastTouchDate, createdAt: c.createdAt }, now)}d silent`
           : state === "awaiting_effective" && effective
-            ? `eff ${format(parseISO(effective), "MMM d")}`
+            ? `eff ${fmtDate(effective)}`
             : undefined;
 
       const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);

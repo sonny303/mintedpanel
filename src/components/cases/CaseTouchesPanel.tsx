@@ -122,14 +122,14 @@ export function CaseTouchesPanel({
                       </span>
                       <Badge
                         variant="outline"
-                        className="text-[10px] h-5 px-1.5 font-medium bg-background gap-1 text-muted-foreground"
+                        className="text-[11px] h-5 px-1.5 font-medium bg-background gap-1 text-muted-foreground"
                       >
                         <Icon className="w-3 h-3" /> {TOUCH_TYPE_LABEL[t.touchType]}
                       </Badge>
                       {t.source && t.source !== "manual" ? (
                         <Badge
                           variant="secondary"
-                          className="text-[10px] h-5 px-1.5 font-medium border border-border bg-muted/30"
+                          className="text-[11px] h-5 px-1.5 font-medium border border-border bg-muted/30"
                         >
                           email
                         </Badge>

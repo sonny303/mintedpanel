@@ -1,7 +1,7 @@
 // Tasks card on the case detail page. Sequential lock: a task is locked
 // until previous tasks are completed. Row click opens the TaskDrawer.
 import { useRef, useState } from "react";
-import { differenceInDays, format, parseISO } from "date-fns";
+import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -188,7 +188,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
                         overdue ? "text-[#DC2626] font-semibold" : "text-muted-foreground"
                       }`}
                     >
-                      {t.dueDate ? format(parseISO(t.dueDate), "MMM dd") : "TBD"}
+                      {t.dueDate ? fmtDate(t.dueDate) : "TBD"}
                     </span>
                   </div>
                 );

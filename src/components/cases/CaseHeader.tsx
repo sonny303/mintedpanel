@@ -36,7 +36,7 @@ export function CaseHeader({
           ) : (
             providerName
           )}
-          <Badge variant="secondary" className="font-normal text-[10px] uppercase tracking-wide">
+          <Badge variant="secondary" className="font-normal text-[11px] uppercase tracking-wide">
             Initial Credentialing
           </Badge>
         </h1>
@@ -55,7 +55,7 @@ export function CaseHeader({
 
       <div className="flex items-center gap-6">
         <div className="flex flex-col items-end gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
             Credentialing
           </span>
           <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export function CaseHeader({
         </div>
         <Separator orientation="vertical" className="h-8" />
         <div className="flex flex-col items-end gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
             Group Contract
           </span>
           <div className="flex items-center gap-2">

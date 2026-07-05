@@ -16,6 +16,7 @@ import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
@@ -72,6 +73,11 @@ const LaunchesRoute = LaunchesRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientProgressRoute = ClientProgressRouteImport.update({
+  id: '/client-progress',
+  path: '/client-progress',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CasesRoute = CasesRouteImport.update({
@@ -188,6 +194,7 @@ const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/client-progress': typeof ClientProgressRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/client-progress': typeof ClientProgressRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/progress': typeof ProgressRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
+  '/client-progress': typeof ClientProgressRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -279,6 +288,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cases'
+    | '/client-progress'
     | '/home'
     | '/launches'
     | '/login'
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/client-progress'
     | '/home'
     | '/login'
     | '/progress'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/cases'
+    | '/client-progress'
     | '/home'
     | '/launches'
     | '/login'
@@ -368,6 +380,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
+  ClientProgressRoute: typeof ClientProgressRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -435,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/client-progress': {
+      id: '/client-progress'
+      path: '/client-progress'
+      fullPath: '/client-progress'
+      preLoaderRoute: typeof ClientProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cases': {
@@ -667,6 +687,7 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
+  ClientProgressRoute: ClientProgressRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
