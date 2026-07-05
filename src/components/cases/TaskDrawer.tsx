@@ -155,7 +155,7 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-[#E8E5E0] p-4">
               <div className="min-w-0 flex-1 space-y-2">
-                <DialogPrimitive.Title className="text-[16px] font-semibold text-foreground">
+                <DialogPrimitive.Title className="text-[15px] font-semibold text-foreground">
                   {task.title}
                 </DialogPrimitive.Title>
                 <div className="flex flex-wrap items-center gap-2 text-[12px]">

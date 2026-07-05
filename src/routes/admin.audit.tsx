@@ -65,7 +65,7 @@ function ActionPill({ action }: { action: AuditActionType }) {
 function EntityLink({ entry }: { entry: AuditLogEntry }) {
   const { entityType, entityId } = entry;
   const label = (
-    <span className="text-tertiary">
+    <span className="text-muted-foreground">
       <span className="font-medium text-foreground">{entityType}</span>
       {entityId ? <span className="ml-1 text-[12px]">#{entityId.slice(0, 8)}</span> : null}
     </span>
@@ -114,13 +114,17 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
     return (
       <div className="grid grid-cols-2 gap-4 text-[12px] font-mono">
         <div>
-          <div className="text-tertiary uppercase tracking-wider text-[10px] mb-1">Before</div>
+          <div className="text-muted-foreground uppercase tracking-wider text-[11px] mb-1">
+            Before
+          </div>
           <pre className="whitespace-pre-wrap break-words p-3 border border-border rounded-md bg-[#FAFAF9]">
             {formatValue(before)}
           </pre>
         </div>
         <div>
-          <div className="text-tertiary uppercase tracking-wider text-[10px] mb-1">After</div>
+          <div className="text-muted-foreground uppercase tracking-wider text-[11px] mb-1">
+            After
+          </div>
           <pre className="whitespace-pre-wrap break-words p-3 border border-border rounded-md bg-[#FAFAF9]">
             {formatValue(after)}
           </pre>
@@ -141,7 +145,7 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
 
   return (
     <div className="border border-border rounded-md overflow-hidden">
-      <div className="grid grid-cols-[180px_1fr_1fr] text-[10px] uppercase tracking-wider text-tertiary bg-[#FAFAF9] border-b border-border">
+      <div className="grid grid-cols-[180px_1fr_1fr] text-[11px] uppercase tracking-wider text-muted-foreground bg-[#FAFAF9] border-b border-border">
         <div className="px-3 py-2">Field</div>
         <div className="px-3 py-2 border-l border-border">Before</div>
         <div className="px-3 py-2 border-l border-border">After</div>
@@ -232,7 +236,7 @@ function AdminAuditPage() {
       <PageHeader title="Audit Log" description="Read-only history of organization activity." />
 
       <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-md bg-[#FAFAF9] text-[13px] text-foreground">
-        <Lock className="h-4 w-4 text-tertiary" />
+        <Lock className="h-4 w-4 text-muted-foreground" />
         Audit entries can never be edited or deleted, by anyone, including admins.
       </div>
 
@@ -337,17 +341,19 @@ function AdminAuditPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-8" />
-              <TableHead className="text-xs uppercase tracking-wider text-tertiary">
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">
                 Timestamp
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-tertiary">User</TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-tertiary">
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">
+                User
+              </TableHead>
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">
                 Action
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-tertiary">
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">
                 Entity
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-tertiary">
+              <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">
                 Description
               </TableHead>
             </TableRow>
@@ -382,16 +388,16 @@ function AdminAuditPage() {
                     <TableRow className="h-10 cursor-pointer" onClick={() => toggleExpand(r.id)}>
                       <TableCell className="px-3">
                         {isOpen ? (
-                          <ChevronDown className="h-4 w-4 text-tertiary" />
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 text-tertiary" />
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
                       </TableCell>
                       <TableCell className="px-3 tabular-nums text-[13px]">
                         {format(parseISO(r.ts), "yyyy-MM-dd HH:mm:ss")}
                       </TableCell>
                       <TableCell className="px-3 text-[13px]">
-                        {r.userName ?? <span className="text-tertiary">—</span>}
+                        {r.userName ?? <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="px-3">
                         <ActionPill action={r.actionType} />
@@ -400,7 +406,7 @@ function AdminAuditPage() {
                         <EntityLink entry={r} />
                       </TableCell>
                       <TableCell className="px-3 text-[13px] text-foreground">
-                        {r.description ?? <span className="text-tertiary">—</span>}
+                        {r.description ?? <span className="text-muted-foreground">—</span>}
                       </TableCell>
                     </TableRow>
                     {isOpen ? (
@@ -418,7 +424,7 @@ function AdminAuditPage() {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between text-[13px] text-tertiary">
+      <div className="flex items-center justify-between text-[13px] text-muted-foreground">
         <div>
           Showing {pageRows.length === 0 ? 0 : page * PAGE_SIZE + 1}–
           {page * PAGE_SIZE + pageRows.length} of {rows.length}
