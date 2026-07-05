@@ -53,6 +53,7 @@ function HomePage() {
   const locationsQ = useLaunchLocations();
 
   const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
+  const failed = casesQ.isError || providersQ.isError || statusConfigsQ.isError;
   const now = new Date();
 
   const rows: QueueCase[] = useMemo(() => {
@@ -230,7 +231,11 @@ function HomePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <PageHeader title="Home" description={format(now, "EEEE, MMMM d")} />
-      {loading ? (
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load the action queue. Refresh to retry.
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />

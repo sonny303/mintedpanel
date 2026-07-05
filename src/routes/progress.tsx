@@ -42,6 +42,7 @@ function ProgressPage() {
 
   const now = new Date();
   const loading = providersQ.isLoading || casesQ.isLoading || statusConfigsQ.isLoading;
+  const failed = providersQ.isError || casesQ.isError || statusConfigsQ.isError;
 
   const model = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
@@ -117,7 +118,11 @@ function ProgressPage() {
         title="Client progress"
         description={`${model.active} of ${model.denominator} insurer enrollments active · Updated ${format(now, "MMM d, h:mm a")}`}
       />
-      {loading ? (
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load progress. Refresh to retry.
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-24 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
