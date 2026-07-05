@@ -2,7 +2,7 @@
 // under its provider row; the action engine (src/lib/actionState.ts) drives
 // card counts, row states, and worst-state rollups. Read-and-navigate only:
 // name → legacy provider detail, row/CTA → case detail. No writes.
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { fmtDate } from "@/lib/format";
@@ -39,7 +39,14 @@ import {
 } from "@/lib/workView";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
+// The selected filter card lives in the URL (?chip=needs|inprog|awaiting; no
+// param = all) so other pages — the Home queue's "view all" — can deep-link a
+// filtered work view. Unknown values fall back to all.
 export const Route = createFileRoute("/providers/")({
+  validateSearch: (search: Record<string, unknown>): { chip?: Exclude<ChipId, "all"> } => {
+    const chip = search.chip;
+    return chip === "needs" || chip === "inprog" || chip === "awaiting" ? { chip } : {};
+  },
   component: ProvidersWorkView,
 });
 
@@ -87,7 +94,14 @@ function ProvidersWorkView() {
   const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
 
-  const [chip, setChip] = useState<ChipId>("all");
+  const { chip: chipParam } = Route.useSearch();
+  const chip: ChipId = chipParam ?? "all";
+  const setChip = (id: ChipId) =>
+    navigate({
+      to: "/providers",
+      search: id === "all" ? {} : { chip: id },
+      replace: true,
+    });
 
   const loading =
     providersQ.isLoading ||

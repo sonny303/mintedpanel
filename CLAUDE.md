@@ -357,6 +357,10 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   `__root.tsx`.
 - Feature tables are hand-rolled `<table>` markup (see `admin.payers.tsx`);
   work-list pages use row-card lists, not tables. `PageHeader` on every route.
+- The Providers work view's filter card is URL-driven
+  (`/providers?chip=needs|inprog|awaiting`, no param = all) so other pages can
+  deep-link a filtered view — Home's "View all" uses it. Home's section/row
+  components live in `src/components/home/`.
 - Design tokens `var(--mp-*)` on triage/launch surfaces; hex-token classes on
   admin surfaces. Follow whichever the file you're editing already uses.
 
