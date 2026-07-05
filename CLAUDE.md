@@ -456,6 +456,20 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
   `{{facility.*}}` tokens resolve empty there; the launch kickoff passes the
   location.
 
+## Shared state ownership (parallel lanes)
+
+When multiple Claude Code lanes run in parallel, these pieces of shared state
+have exactly one owner at a time:
+
+1. **`portal_field_maps` rows change via Supabase MCP only, never in code
+   sessions.** Code (the extension's `portals.ts`) and the DB `url_pattern`
+   change together — one actor, same day.
+2. **CLAUDE.md is edited by at most one lane per day** — the last lane to
+   close.
+3. **Gate expected-count env values** (`EXPECTED_KANSAS_PROVIDERS` /
+   `EXPECTED_SOUTHPARK_PROVIDERS` in the isolation-gate workflow env block)
+   are owned by whichever lane changes demo-org data, in the same PR.
+
 ## Keep this file honest — session-end ritual
 
 At the end of every Claude Code session that changes this repo, before the
