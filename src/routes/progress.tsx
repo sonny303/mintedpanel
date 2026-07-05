@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { ActionBadge } from "@/components/triage/ActionBadge";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { useProviders } from "@/hooks/useProviders";
@@ -121,6 +122,13 @@ function ProgressPage() {
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-24 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
+        </div>
+      ) : model.cards.length === 0 ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-5 py-12">
+          <EmptyState
+            message="Nothing to show yet"
+            description="Provider enrollment progress will appear here once credentialing begins."
+          />
         </div>
       ) : (
         <div className="space-y-4">

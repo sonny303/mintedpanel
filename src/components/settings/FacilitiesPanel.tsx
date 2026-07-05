@@ -65,81 +65,107 @@ export function FacilitiesPanel() {
         )}
       </div>
       <div className="divide-y divide-[#E8E5E0]">
-        {[
-          ...(groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name })),
-          { id: "__none__", name: "Unassigned" },
-        ].map((g) => {
-          const list = facilitiesByGroup.get(g.id) ?? [];
-          if (list.length === 0 && g.id === "__none__") return null;
-          return (
-            <div key={g.id} className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[13px] font-medium text-foreground">
-                  {g.name}
-                  <span className="ml-2 text-muted-foreground font-normal">({list.length})</span>
-                </div>
-                {canEdit && g.id !== "__none__" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2"
-                    onClick={() => setModal({ facility: null, defaultGroupId: g.id })}
-                  >
-                    Add to group
-                  </Button>
-                )}
-              </div>
-              {list.length === 0 ? (
-                <div className="py-4">
-                  <EmptyState message="No facilities yet" />
-                </div>
-              ) : (
-                <ul className="space-y-1">
-                  {list.map((f) => (
-                    <li
-                      key={f.id}
-                      className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2 hover:bg-[#FAFAF9]"
+        {groupsQ.isLoading || facilitiesQ.isLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="h-10 rounded-md bg-[#FAFAF9] animate-pulse" />
+            ))}
+          </div>
+        ) : groupsQ.isError || facilitiesQ.isError ? (
+          <div className="px-3 py-12 text-center">
+            <EmptyState
+              message="Failed to load facilities"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (groupsQ.isError) groupsQ.refetch();
+                    if (facilitiesQ.isError) facilitiesQ.refetch();
+                  }}
+                >
+                  Retry
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          [
+            ...(groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name })),
+            { id: "__none__", name: "Unassigned" },
+          ].map((g) => {
+            const list = facilitiesByGroup.get(g.id) ?? [];
+            if (list.length === 0 && g.id === "__none__") return null;
+            return (
+              <div key={g.id} className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[13px] font-medium text-foreground">
+                    {g.name}
+                    <span className="ml-2 text-muted-foreground font-normal">({list.length})</span>
+                  </div>
+                  {canEdit && g.id !== "__none__" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] px-2"
+                      onClick={() => setModal({ facility: null, defaultGroupId: g.id })}
                     >
-                      <div>
-                        <div className="text-[13px] font-medium">{f.name}</div>
-                        <div className="text-[12px] text-muted-foreground">
-                          {[f.street, f.city, f.state, f.zip].filter(Boolean).join(", ") || "—"}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {f.isActive ? null : (
-                          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                            Inactive
-                          </span>
-                        )}
-                        {canEdit && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px] px-2"
-                            onClick={() =>
-                              setModal({
-                                facility: f,
-                                defaultGroupId: f.groupId,
-                              })
-                            }
-                          >
-                            Edit
-                          </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {g.id !== "__none__" ? (
-                <div className="mt-4">
-                  <InsurancePanel groupId={g.id} canEdit={canEdit} />
+                      Add to group
+                    </Button>
+                  )}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
+                {list.length === 0 ? (
+                  <div className="py-4">
+                    <EmptyState message="No facilities yet" />
+                  </div>
+                ) : (
+                  <ul className="space-y-1">
+                    {list.map((f) => (
+                      <li
+                        key={f.id}
+                        className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2 hover:bg-[#FAFAF9]"
+                      >
+                        <div>
+                          <div className="text-[13px] font-medium">{f.name}</div>
+                          <div className="text-[12px] text-muted-foreground">
+                            {[f.street, f.city, f.state, f.zip].filter(Boolean).join(", ") || "—"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {f.isActive ? null : (
+                            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                              Inactive
+                            </span>
+                          )}
+                          {canEdit && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px] px-2"
+                              onClick={() =>
+                                setModal({
+                                  facility: f,
+                                  defaultGroupId: f.groupId,
+                                })
+                              }
+                            >
+                              Edit
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {g.id !== "__none__" ? (
+                  <div className="mt-4">
+                    <InsurancePanel groupId={g.id} canEdit={canEdit} />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {modal ? (
