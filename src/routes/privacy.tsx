@@ -1,8 +1,7 @@
 // Public privacy policy page — the hosted policy URL required by the Chrome
 // Web Store listing for the Minted Panel Filler extension.
 // Content mirrors docs/privacy-policy.md: edit that document first, then keep
-// this page in sync. Placeholders ([FILL IN...], [LEGAL ENTITY NAME],
-// [CONTACT EMAIL]) must be replaced before the URL is published.
+// this page in sync.
 // Fully public: __root.tsx lists /privacy as a public route (no session
 // redirect) and renders it outside AppShell, so nothing here may depend on
 // auth or org context.
@@ -52,16 +51,16 @@ function PrivacyPage() {
         <h1 className="text-3xl font-semibold text-foreground">Privacy Policy</h1>
 
         <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
-          <Lead>Effective date:</Lead> [FILL IN before publishing]
+          <Lead>Effective date:</Lead> July 5, 2026
           <br />
           <Lead>Applies to:</Lead> the Minted Panel web application and the Minted Panel Filler
           browser extension (together, "the Service").
         </p>
 
         <Body>
-          [LEGAL ENTITY NAME] ("we," "us") provides Minted Panel, a credentialing and contracting
-          management platform for healthcare practice groups. This policy explains what information
-          the Service handles and how.
+          South Park Physician Group ("we," "us") provides Minted Panel, a credentialing and
+          contracting management platform for healthcare practice groups. This policy explains what
+          information the Service handles and how.
         </Body>
 
         <SectionTitle>Who our users are</SectionTitle>
@@ -159,7 +158,12 @@ function PrivacyPage() {
         </Body>
 
         <SectionTitle>Contact</SectionTitle>
-        <Body>Questions about this policy: [CONTACT EMAIL]</Body>
+        <Body>
+          Questions about this policy:{" "}
+          <a href="mailto:surapurs@gmail.com" className="text-foreground underline">
+            surapurs@gmail.com
+          </a>
+        </Body>
       </main>
     </div>
   );
