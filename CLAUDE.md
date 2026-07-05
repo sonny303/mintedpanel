@@ -17,14 +17,15 @@ Zustand for auth/org state, Supabase (Postgres + GoTrue) for everything
 server-side. The framework is TanStack Start, not a plain Vite SPA: `src/server.ts`
 and `src/start.ts` are a real server runtime.
 
-As of the Chunk 3 pilot (PR #19) a **first slice of app server logic runs**: the
-`/api/*` routes in `src/server/` (health + provider CRUD) execute on the nitro
-server behind a shared org/role guard using the service-role client. The **bulk of
-data access is still browser → Supabase PostgREST under RLS** — only the provider
-routes have a server home, and no frontend hook calls them yet (they were added
-server-side only; browser callers are unchanged). See the "Server API layer"
-section below and `docs/phase-0-audit.md` for the framework/deploy detail and the
-API-home plan.
+A slice of app server logic runs as `/api/*` routes in `src/server/` on the
+nitro server, behind a shared org/role guard using the service-role client:
+health + provider CRUD (Chunk 3 pilot, PR #19) and the three extension-facing
+endpoints (Chunk 4 — provider profile, portal field maps, fill events). The
+**bulk of data access is still browser → Supabase PostgREST under RLS**, and
+**no frontend hook calls the API routes** — by locked decision (below), the
+current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
+extension. See the "Server API layer" section below and `docs/phase-0-audit.md`
+for the framework/deploy detail.
 
 ## Running and verifying
 
@@ -49,6 +50,13 @@ return=representation` / `resolution=ignore-duplicates`, and the RPCs
     tasks). Assert on the recorded request payloads as well as the UI. This
     harness verified the entire launch pivot; rebuild it from this recipe when
     needed.
+  - The **/api org-isolation gate** in-sandbox: `node
+scripts/verify-isolation-local.mjs` (mock-and-run) boots a fixture mock of
+    the API contract and runs `scripts/verify-org-isolation.mjs` against it —
+    once expecting green, once per leak mode expecting red. The real gate runs
+    on GitHub runners against the production deploy: automatically on every
+    successful production deployment (`deployment_status` trigger) and via
+    manual dispatch. A red gate run is stop-ship until a human reads it.
 
 ## Database: repo vs hosted — read this before schema work
 
@@ -90,7 +98,11 @@ all 23 hosted migrations. Consequences:
   `sort_order`. Returns the case as jsonb.
 - `claim_invites()` — converts `pending_invites` for the caller's email into
   memberships.
-- `get_sop_field_tokens()` — closed token list for SOP templates.
+- `get_sop_field_tokens()` — the token **catalog**: `[{ table, token, column }]`
+  for 132 tokens across 9 tables — which fields exist and where they live, not
+  per-provider values. Client SOP templates use it as the closed token list;
+  the server resolves actual values in `src/services/providerProfile.ts` for
+  the profile endpoint.
 - **Gotcha:** `supabase.rpc` must be called bound. Extracting the method
   (`const rpc = supabase.rpc as ...`) throws `Cannot read properties of
 undefined (reading 'rest')` at call time. Use
@@ -117,19 +129,49 @@ Component (src/routes/*, src/components/[module]/*)
   (`src/lib/permissions.ts`). Switching org calls `queryClient.removeQueries()`.
 - Domain types: `src/types/index.ts` (additive only). One interface per table.
 
-### Server API layer (`src/server/*`, Chunk 3 pilot — PR #19)
+### Server API layer (`src/server/*` — Chunk 3 pilot PR #19, Chunk 4 extension endpoints)
 
-The first `/api` routes run on the nitro server. **This is a pilot slice, not a
-finished migration:** only providers have a server home, and **no frontend hook
-consumes these routes yet** — the browser still talks straight to Supabase for
-everything (providers included). Extend this layer per domain; don't assume a
-route exists just because the service does.
+`/api` routes run on the nitro server. **No frontend hook consumes them** — the
+browser still talks straight to Supabase for everything. That is deliberate
+(locked decisions below): routes get built only when a real consumer pulls
+them. The current surface:
+
+- `GET /api/health` (public) · provider CRUD (`GET/POST /api/providers`,
+  `GET/PATCH /api/providers/:id`) — Chunk 3.
+- `GET /api/providers/:id/profile?state=XX` — the fill engine's payload: the
+  provider row + every catalog token resolved to a value server-side
+  (`src/services/providerProfile.ts`). Deterministic source-row picking:
+  `?state` selects the state license; primary-else-sole assignment selects the
+  facility; sole policy selects group insurance; `payers`/`msos`/`contracts`
+  tokens are case-scoped and always come back `null` + listed in `unresolved`
+  with a reason. **The most PHI-dense response in the system** (SSN last-4,
+  DOB, home address, unmasked by design): `Cache-Control: no-store`, never log
+  the body, profile reads are NOT audited yet (SS decision pending — needs an
+  `audit_log.action_type` check-constraint migration to add a `READ` value).
+- `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
+  rows (global, selectors are portal truths) + the caller's org overrides
+  (`src/services/portalFieldMaps.ts`).
+- `POST /api/fill-events` — writes `fill_sessions`; the client-generated `id`
+  (UUID) is the idempotency key AND the row PK — replays return the stored row
+  (200) instead of inserting (201). case/provider/task ownership is validated
+  against the resolved org **before any write**; `org_id`/`performed_by` come
+  from the guard ctx, never the body. Optional `taskId` marks the task
+  completed (org-checked, audited). Writer roles only (billing → 403).
+  (`src/services/fillSessions.ts`)
+
+Layer mechanics:
 
 - **Entry:** this TanStack Start version ships **no** file-based server-route API
   (`createServerFileRoute` is absent), so `src/server.ts` (the nitro fetch entry)
-  intercepts `/api/health` + `/api/providers*` and delegates to
-  `src/server/api.ts` before SSR. Add new API prefixes in **both** places (the
-  `src/server.ts` check and `isApiRequest` in `api.ts`).
+  intercepts the whole **`/api` prefix** and delegates to `src/server/api.ts`
+  before SSR (unknown `/api/*` paths are a JSON 404, not SSR). Keep the
+  `src/server.ts` check and `isApiRequest` in `api.ts` in sync.
+- **CORS (`src/server/cors.ts`):** env allowlist `API_CORS_ORIGINS`
+  (comma-separated exact origins; must include `chrome-extension://<id>` once
+  the extension id exists). Default empty = no CORS headers ever. OPTIONS
+  preflights are answered 204 for all of `/api/*` (an Authorization header
+  always triggers one); allow-headers are `authorization, content-type,
+x-org-id`.
 - **Guard (`src/server/guard.ts`) — every data route runs through it.** The
   service-role client **bypasses RLS**, so tenant isolation is enforced in code:
   `authenticate()` verifies the JWT (`supabase.auth.getClaims`), resolves the
@@ -158,10 +200,32 @@ route exists just because the service does.
   lazy-imports `providerRoutes` so `/api/health` stays free of the Supabase graph.
 - **Tests:** handler + service-DI suites use a query-shape fake (supabase-js speaks
   PostgREST, not raw Postgres, so a CI-Postgres integration test isn't feasible) —
-  `src/server/*.test.ts`, `src/services/providers.di.test.ts`.
+  `src/server/*.test.ts`, `src/services/*.di.test.ts`.
 - **Env:** `src/server/env.ts` resolves `SUPABASE_URL ?? VITE_SUPABASE_URL` etc.
   and `SUPABASE_SERVICE_ROLE_KEY` (server-only, no `VITE_` prefix; set on Vercel
-  Prod + Preview).
+  Prod + Preview). `API_CORS_ORIGINS` is read directly in `cors.ts`.
+- **The gate is the wall.** The service key bypasses RLS on API paths; guard.ts
+  is the only isolation enforcement there. Every new resource route adds
+  assertions to `scripts/verify-org-isolation.mjs` before merge, plus pass/leak
+  coverage in `scripts/mock-api-server.mjs`. Gate fixtures: the one South
+  Park-scoped `portal_field_maps` row (id in the workflow env block, seeded via
+  MCP 2026-07-05) keeps the field-maps assertion non-vacuous.
+
+### Locked decisions (2026-07-04, mirrored from the release plan)
+
+1. **Three products, one backend.** API core, Chrome extension, and a future
+   workflow UI are separate products. The current app UI keeps running on
+   direct Supabase + RLS. Do not migrate current screens to the API.
+2. **Consumer-pulled API surface.** Routes get built only when a real consumer
+   pulls them. The extension pulls three. Cases/tasks/payers routes wait for
+   their consumer.
+3. **R1 exit criteria revised.** "Zero direct Supabase calls in frontend" and
+   RLS lockout deferred to the workflow-UI product. Dual data paths accepted
+   deliberately: current UI guarded by RLS, API guarded by guard.ts + the gate.
+4. **The gate is the wall.** Red gate = stop-ship.
+5. **Server misconfig returns 500, never 401** (PR #24).
+6. **Portal field maps are a shared catalog.** `org_id NULL` = global, org rows
+   = overrides. The endpoint contract reflects this.
 
 ## Domain model in one breath
 
