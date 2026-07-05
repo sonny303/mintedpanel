@@ -40,6 +40,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      // Serve /api/* from our own router before falling through to SSR. This
+      // version of TanStack Start has no file-based server-route API, so the
+      // nitro fetch entry is the server-route path (see src/server/api.ts).
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/api/health" || pathname.startsWith("/api/providers")) {
+        const { handleApiRequest } = await import("./server/api");
+        return await handleApiRequest(request);
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

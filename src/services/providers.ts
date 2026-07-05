@@ -1,7 +1,15 @@
 // Provider CRUD with org filtering and audit logging.
+//
+// Dependency-injection seam: the four functions the API layer pilots
+// (listProviders/getProviders, getProvider, createProvider, updateProvider)
+// accept an optional `ProviderServiceCtx`. Browser callers omit it and get the
+// auth-store-backed default (client-direct hooks, unchanged). The server API
+// routes pass a ctx built from the service-role client and the org resolved from
+// the authenticated membership. The query logic itself is written once.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
-import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { Provider, ProviderStatus } from "@/types";
 
@@ -50,22 +58,68 @@ export interface ProviderInput {
   malpracticeCoverageEnd?: string | null;
 }
 
-// specialty and email ride along for MSO routing resolution and SOP tokens in
-// the launch case-kickoff flow, which works off this list projection.
+// The list projection is PHI-safe by construction: no ssn_last4, date_of_birth,
+// or home_* columns are ever selected here. specialty and email ride along for
+// MSO routing resolution and SOP tokens in the launch case-kickoff flow, which
+// works off this list projection.
 const PROVIDER_LIST_COLUMNS =
   "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, updated_at";
 
-export async function getProviders(filters: ProviderFilters = {}): Promise<Provider[]> {
-  const orgId = requireActiveOrg();
+// Per-request context injected by callers. `db` is the Supabase client to use
+// (browser anon client under RLS, or the server service-role client), `orgId`
+// scopes every query, and `writeAudit` records the mutation.
+export interface ProviderServiceCtx {
+  db: SupabaseClient<Database>;
+  orgId: string;
+  writeAudit: (input: AuditInput) => Promise<void>;
+}
+
+// Default context for browser callers: the anon client + active org from the
+// auth store + the store-backed audit writer. Evaluated lazily, only when a
+// caller omits an explicit ctx.
+function browserCtx(): ProviderServiceCtx {
+  return { db: supabase, orgId: requireActiveOrg(), writeAudit };
+}
+
+export interface ListProvidersOptions {
+  // 1-based page; when set, the result is paginated and `total` is an exact count.
+  page?: number;
+  pageSize?: number;
+  sortColumn?: string;
+  sortAscending?: boolean;
+}
+
+export interface ProviderPage {
+  rows: Provider[];
+  total: number;
+}
+
+const SORTABLE_COLUMNS = new Set(["last_name", "first_name", "created_at", "updated_at", "status"]);
+
+// Single source of the provider list query. Serves both the browser
+// (unpaginated) and the API list route (paginated with exact total).
+export async function listProviders(
+  ctx: ProviderServiceCtx,
+  filters: ProviderFilters = {},
+  options: ListProvidersOptions = {},
+): Promise<ProviderPage> {
+  const { db, orgId } = ctx;
   let selectStr = PROVIDER_LIST_COLUMNS;
   if (filters.state) selectStr += ", state_licenses!inner(state, org_id)";
   if (filters.payerId) selectStr += ", credential_cases!inner(payer_id, org_id)";
 
-  let query = supabase
+  const paged = typeof options.page === "number";
+  const sortColumn =
+    options.sortColumn && SORTABLE_COLUMNS.has(options.sortColumn)
+      ? options.sortColumn
+      : "last_name";
+  const ascending = options.sortAscending ?? true;
+
+  let query = db
     .from("providers")
-    .select(selectStr)
+    .select(selectStr, paged ? { count: "exact" } : {})
     .eq("org_id", orgId)
-    .order("last_name", { ascending: true });
+    .order(sortColumn, { ascending });
 
   if (filters.groupId) query = query.eq("group_id", filters.groupId);
   if (filters.status) query = query.eq("status", filters.status);
@@ -84,38 +138,60 @@ export async function getProviders(filters: ProviderFilters = {}): Promise<Provi
       .eq("credential_cases.payer_id", filters.payerId);
   }
 
-  const { data, error } = await query;
+  if (paged) {
+    const pageSize = Math.min(Math.max(options.pageSize ?? 25, 1), 100);
+    const page = Math.max(options.page ?? 1, 1);
+    const from = (page - 1) * pageSize;
+    query = query.range(from, from + pageSize - 1);
+  }
+
+  const { data, error, count } = await query;
   if (error) throw error;
   const stripped = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => {
     const { state_licenses: _sl, credential_cases: _cc, ...rest } = row;
     return rest;
   });
-  return camelizeRow<Provider[]>(stripped);
+  const rows = camelizeRow<Provider[]>(stripped);
+  return { rows, total: paged ? (count ?? rows.length) : rows.length };
 }
 
-export async function getProvider(id: string): Promise<Provider | null> {
-  const orgId = requireActiveOrg();
-  const { data, error } = await supabase
+export async function getProviders(
+  filters: ProviderFilters = {},
+  ctx: ProviderServiceCtx = browserCtx(),
+): Promise<Provider[]> {
+  const { rows } = await listProviders(ctx, filters);
+  return rows;
+}
+
+export async function getProvider(
+  id: string,
+  ctx: ProviderServiceCtx = browserCtx(),
+): Promise<Provider | null> {
+  const { data, error } = await ctx.db
     .from("providers")
     .select("*")
     .eq("id", id)
-    .eq("org_id", orgId)
+    .eq("org_id", ctx.orgId)
     .maybeSingle();
   if (error) throw error;
   return data ? camelizeRow<Provider>(data) : null;
 }
 
-export async function createProvider(input: ProviderInput): Promise<Provider> {
-  const orgId = requireActiveOrg();
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
-  const { data, error } = await supabase
+export async function createProvider(
+  input: ProviderInput,
+  ctx: ProviderServiceCtx = browserCtx(),
+): Promise<Provider> {
+  // org_id comes from the context only; never trust a client-supplied org.
+  const { orgId: _o1, org_id: _o2, ...clean } = input as unknown as Record<string, unknown>;
+  const payload = { ...snakeizeRow<Record<string, unknown>>(clean), org_id: ctx.orgId };
+  const { data, error } = await ctx.db
     .from("providers")
     .insert(payload as unknown as ProviderInsert)
     .select("*")
     .single();
   if (error) throw error;
   const created = camelizeRow<Provider>(data);
-  await writeAudit({
+  await ctx.writeAudit({
     actionType: "CREATE",
     entityType: "provider",
     entityId: created.id,
@@ -125,21 +201,25 @@ export async function createProvider(input: ProviderInput): Promise<Provider> {
   return created;
 }
 
-export async function updateProvider(id: string, patch: Partial<ProviderInput>): Promise<Provider> {
-  const orgId = requireActiveOrg();
-  const before = await getProvider(id);
-  const payload = snakeizeRow<Record<string, unknown>>(patch);
-  const { data, error } = await supabase
+export async function updateProvider(
+  id: string,
+  patch: Partial<ProviderInput>,
+  ctx: ProviderServiceCtx = browserCtx(),
+): Promise<Provider> {
+  const before = await getProvider(id, ctx);
+  // Strip any client-supplied org so a write can never move a row across tenants.
+  const { orgId: _o1, org_id: _o2, ...clean } = patch as unknown as Record<string, unknown>;
+  const payload = snakeizeRow<Record<string, unknown>>(clean);
+  const { data, error } = await ctx.db
     .from("providers")
     .update(payload as unknown as ProviderUpdate)
-
     .eq("id", id)
-    .eq("org_id", orgId)
+    .eq("org_id", ctx.orgId)
     .select("*")
     .single();
   if (error) throw error;
   const after = camelizeRow<Provider>(data);
-  await writeAudit({
+  await ctx.writeAudit({
     actionType: "UPDATE",
     entityType: "provider",
     entityId: id,
