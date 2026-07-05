@@ -5,7 +5,6 @@
 import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import { fmtDate } from "@/lib/format";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { HomeSection, HomeViewAllLink } from "@/components/home/HomeSection";
 import { HomeCaseRow } from "@/components/home/HomeCaseRow";
