@@ -5,6 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/format";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   CredentialsSection,
@@ -252,7 +253,10 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
       <Section title="Credentials" step={2}>
         <Row label="NPI" value={form.npi} />
         <Row label="CAQH ID" value={form.isNewGrad ? "New grad" : form.caqhId} />
-        <Row label="CAQH attested" value={form.caqhLastAttestedDate} />
+        <Row
+          label="CAQH attested"
+          value={form.caqhLastAttestedDate ? fmtDate(form.caqhLastAttestedDate) : ""}
+        />
         <Row label="Taxonomy" value={form.taxonomyCode} />
         <Row label="DEA" value={form.deaNumber} />
       </Section>
@@ -260,8 +264,8 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <div className="md:col-span-2 space-y-1">
           {form.licenses.map((l, i) => (
             <div key={i} className="text-sm text-foreground">
-              {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {l.issueDate || "—"} →{" "}
-              {l.expirationDate || "—"}
+              {l.state || "—"} · {l.number || "—"} · {l.type || "—"} · {fmtDate(l.issueDate)} →{" "}
+              {fmtDate(l.expirationDate)}
             </div>
           ))}
         </div>
@@ -270,7 +274,7 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <Row label="Group" value={groupName} />
         <Row label="Facilities" value={facilityNames} />
         <Row label="Specialty" value={form.specialty} />
-        <Row label="Start date" value={form.startDate} />
+        <Row label="Start date" value={form.startDate ? fmtDate(form.startDate) : ""} />
         <Row label="Degree" value={form.degree} />
         <Row label="School" value={form.schoolName} />
         <Row label="Graduation" value={form.graduationDate} />

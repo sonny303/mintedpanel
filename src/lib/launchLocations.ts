@@ -3,7 +3,8 @@
 // Launches page is a filtered view of locations. Statuses are org-configurable
 // status_configs rows, matched by label — the same idiom the case pipeline
 // uses for "In-Network". Pure functions only; no I/O.
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import type { Facility, StatusConfig } from "@/types";
 
 /** Live rows stay in Recently Launched for this many days, then drop off. */
@@ -101,7 +102,7 @@ export function launchDateDisplay(
       ? "Starts"
       : null;
   if (!effectiveDate) return "No date";
-  const formatted = format(parseISO(effectiveDate), "MMM d, yyyy");
+  const formatted = fmtDate(effectiveDate);
   return prefix ? `${prefix} ${formatted}` : formatted;
 }
 

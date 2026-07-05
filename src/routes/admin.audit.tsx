@@ -3,7 +3,7 @@
 // before/after diff for each entry.
 import { useMemo, useState, Fragment } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { format, parseISO } from "date-fns";
+import { fmtDateTime } from "@/lib/format";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
@@ -394,7 +394,7 @@ function AdminAuditPage() {
                         )}
                       </TableCell>
                       <TableCell className="px-3 tabular-nums text-[13px]">
-                        {format(parseISO(r.ts), "yyyy-MM-dd HH:mm:ss")}
+                        {fmtDateTime(r.ts)}
                       </TableCell>
                       <TableCell className="px-3 text-[13px]">
                         {r.userName ?? <span className="text-muted-foreground">—</span>}
