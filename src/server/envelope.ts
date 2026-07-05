@@ -3,6 +3,9 @@ export interface ApiMeta {
   total?: number;
   page?: number;
   pageSize?: number;
+  // Non-fatal resolution notes (e.g. a user token resolved to empty because
+  // the auth metadata has no name). Advisory only; data is still complete.
+  notes?: string[];
 }
 
 export interface ApiEnvelope<T> {

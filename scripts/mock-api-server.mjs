@@ -51,12 +51,16 @@ const USERS = {
   [FIXTURES.KANSAS_EMAIL]: {
     token: "tok-kansas",
     userId: "user-kansas",
+    email: FIXTURES.KANSAS_EMAIL,
+    fullName: "Test Kansas",
     orgId: FIXTURES.KANSAS_ORG,
     role: "admin",
   },
   [FIXTURES.SPVIEW_EMAIL]: {
     token: "tok-southpark",
     userId: "user-southpark",
+    email: FIXTURES.SPVIEW_EMAIL,
+    fullName: "Test South Park",
     orgId: FIXTURES.SOUTHPARK_ORG,
     role: "billing",
   },
@@ -165,13 +169,16 @@ function readBody(req) {
   });
 }
 
-function profileFor(p) {
+function profileFor(p, user) {
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
     tokens: [
       { token: "provider.firstName", value: p.firstName },
       { token: "provider.lastName", value: p.lastName },
       { token: "payer.name", value: null },
+      // {{user.*}} rides along, resolved from the caller's JWT metadata.
+      { token: "user.name", value: user.fullName },
+      { token: "user.email", value: user.email },
     ],
     unresolved: [
       { token: "payer.name", reason: "case-scoped source (payers); resolve at fill time" },
@@ -239,7 +246,7 @@ export async function createMockApiServer(options = {}) {
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       res.setHeader("cache-control", "no-store");
-      return envelope(res, 200, profileFor(p));
+      return envelope(res, 200, profileFor(p, user));
     }
 
     // --- /api/providers and /api/providers/:id ---

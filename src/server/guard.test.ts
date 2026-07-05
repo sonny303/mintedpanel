@@ -11,6 +11,8 @@ function ctx(role: AuthContext["role"]): AuthContext {
     orgId: "org-1",
     role,
     userName: "Tester",
+    email: "tester@minted.com",
+    userMetadata: null,
     // not exercised in these unit tests
     db: {} as AuthContext["db"],
     writeAudit: async () => {},

@@ -41,6 +41,7 @@ const ACTION_TYPES: AuditActionType[] = [
   "STATUS_CHANGE",
   "TOUCH_LOGGED",
   "TERMINATION",
+  "READ",
 ];
 
 const PAGE_SIZE = 50;
@@ -53,6 +54,7 @@ function ActionPill({ action }: { action: AuditActionType }) {
     STATUS_CHANGE: "amber",
     TOUCH_LOGGED: "violet",
     TERMINATION: "red",
+    READ: "neutral",
   };
   return <StatusPill status={tones[action]} label={action} />;
 }

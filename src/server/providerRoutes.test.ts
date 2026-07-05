@@ -28,6 +28,8 @@ function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
     orgId: "org-1",
     role,
     userName: "Tester",
+    email: "tester@minted.com",
+    userMetadata: null,
     db: {} as AuthContext["db"],
     writeAudit: vi.fn().mockResolvedValue(undefined),
   };

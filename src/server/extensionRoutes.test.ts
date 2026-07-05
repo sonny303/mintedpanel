@@ -33,6 +33,8 @@ function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
     orgId: "org-1",
     role,
     userName: "Tester",
+    email: "tester@minted.com",
+    userMetadata: { full_name: "Tess Tester" },
     db: {} as AuthContext["db"],
     writeAudit: vi.fn().mockResolvedValue(undefined),
   };
@@ -47,12 +49,20 @@ beforeEach(() => vi.clearAllMocks());
 describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
+  // What the ctx() JWT resolves to (see resolveUserTokens).
+  const USER_TOKENS = [
+    { token: "user.name", value: "Tess Tester" },
+    { token: "user.email", value: "tester@minted.com" },
+  ];
 
-  it("returns 404 when the profile is missing (cross-org or nonexistent)", async () => {
+  it("returns 404 when the profile is missing (cross-org or nonexistent), without auditing", async () => {
     getProfileMock.mockResolvedValue(null);
-    const res = await handleProviderProfile(PROVIDER_ID, url(), ctx());
+    const c = ctx();
+    const res = await handleProviderProfile(PROVIDER_ID, url(), c);
     expect(res.status).toBe(404);
     expect((await body(res)).error).toBe("Provider not found");
+    // A 404 is not a PHI read — no READ audit row.
+    expect(c.writeAudit).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a non-UUID id without touching the service", async () => {
@@ -62,7 +72,7 @@ describe("provider profile handler", () => {
     expect(getProfileMock).not.toHaveBeenCalled();
   });
 
-  it("returns 200 with Cache-Control: no-store (PHI-dense payload)", async () => {
+  it("returns 200 with Cache-Control: no-store (PHI-dense payload) and the user tokens appended", async () => {
     getProfileMock.mockResolvedValue({
       provider: { id: PROVIDER_ID } as never,
       tokens: [],
@@ -71,11 +81,81 @@ describe("provider profile handler", () => {
     const res = await handleProviderProfile(PROVIDER_ID, url(), ctx());
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect((await body(res)).data).toEqual({
+    const b = await body(res);
+    expect(b.data).toEqual({
       provider: { id: PROVIDER_ID },
+      tokens: USER_TOKENS,
+      unresolved: [],
+    });
+    // Both user tokens resolved -> no notes.
+    expect(b.meta).toBeNull();
+  });
+
+  it("appends user tokens AFTER the catalog tokens without disturbing them", async () => {
+    getProfileMock.mockResolvedValue({
+      provider: { id: PROVIDER_ID } as never,
+      tokens: [{ token: "provider.firstName", value: "Pat" }],
+      unresolved: [],
+    });
+    const res = await handleProviderProfile(PROVIDER_ID, url(), ctx());
+    const b = await body(res);
+    expect((b.data as { tokens: unknown }).tokens).toEqual([
+      { token: "provider.firstName", value: "Pat" },
+      ...USER_TOKENS,
+    ]);
+  });
+
+  it("resolves missing auth metadata to empty-string tokens and notes it in meta", async () => {
+    getProfileMock.mockResolvedValue({
+      provider: { id: PROVIDER_ID } as never,
       tokens: [],
       unresolved: [],
     });
+    const bare = { ...ctx(), email: null, userMetadata: null };
+    const res = await handleProviderProfile(PROVIDER_ID, url(), bare);
+    const b = await body(res);
+    expect((b.data as { tokens: unknown }).tokens).toEqual([
+      { token: "user.name", value: "" },
+      { token: "user.email", value: "" },
+    ]);
+    expect(b.meta?.notes).toHaveLength(2);
+  });
+
+  it("writes exactly one READ audit row per successful read — never the body or token values", async () => {
+    getProfileMock.mockResolvedValue({
+      provider: { id: PROVIDER_ID, ssnLast4: "6789" } as never,
+      tokens: [{ token: "provider.ssnLast4", value: "6789" }],
+      unresolved: [],
+    });
+    const c = ctx();
+    const res = await handleProviderProfile(PROVIDER_ID, url("?state=ks"), c);
+    expect(res.status).toBe(200);
+    expect(c.writeAudit).toHaveBeenCalledTimes(1);
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "READ",
+        entityType: "provider",
+        entityId: PROVIDER_ID,
+        after: { route: "/api/providers/:id/profile", state: "KS" },
+      }),
+    );
+    // The audit payload must not carry PHI/token values from the response.
+    const auditArg = JSON.stringify(vi.mocked(c.writeAudit).mock.calls[0][0]);
+    expect(auditArg).not.toContain("6789");
+    expect(auditArg).not.toContain("Tess Tester");
+  });
+
+  it("a failed audit write fails the request (no un-audited PHI read)", async () => {
+    getProfileMock.mockResolvedValue({
+      provider: { id: PROVIDER_ID } as never,
+      tokens: [],
+      unresolved: [],
+    });
+    const c = ctx();
+    vi.mocked(c.writeAudit).mockRejectedValue(new Error("audit_log insert failed"));
+    await expect(handleProviderProfile(PROVIDER_ID, url(), c)).rejects.toThrow(
+      "audit_log insert failed",
+    );
   });
 
   it("uppercases a valid ?state and forwards it with the org-scoped ctx", async () => {

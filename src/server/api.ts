@@ -123,7 +123,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
     if (caseTouchesMatch) {
       if (method !== "POST") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
-      return await routes.handleCreateCaseTouch(caseTouchesMatch[1], await readJsonBody(request), ctx);
+      return await routes.handleCreateCaseTouch(
+        caseTouchesMatch[1],
+        await readJsonBody(request),
+        ctx,
+      );
     }
 
     const routes = await loadProviderRoutes();

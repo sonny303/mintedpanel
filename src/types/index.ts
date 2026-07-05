@@ -10,7 +10,7 @@ export type ProviderStatus = "onboarding" | "active" | "terminated";
 export type TaskStatus = "not_started" | "in_progress" | "completed" | "blocked";
 export type NoteEntityType = "case" | "task" | "provider";
 export type AuditActionType =
-  "CREATE" | "UPDATE" | "DELETE" | "STATUS_CHANGE" | "TOUCH_LOGGED" | "TERMINATION";
+  "CREATE" | "UPDATE" | "DELETE" | "STATUS_CHANGE" | "TOUCH_LOGGED" | "TERMINATION" | "READ";
 export type MsoRouteType = "direct" | "mso";
 
 export interface Organization {

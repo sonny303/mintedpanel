@@ -16,6 +16,11 @@ export interface AuthContext {
   orgId: string;
   role: AppRole;
   userName: string | null;
+  // JWT email claim and raw user_metadata — the {{user.*}} token sources
+  // (see ./userTokens.ts). Metadata is caller-controlled display data: fine
+  // for form-fill values, never for authorization decisions.
+  email: string | null;
+  userMetadata: Record<string, unknown> | null;
   db: SupabaseClient<Database>; // service-role; already org-scoped by callers
   writeAudit: (input: AuditInput) => Promise<void>;
 }
@@ -55,6 +60,11 @@ export async function authenticate(
   }
   const userId = claimData.claims.sub as string;
   const email = (claimData.claims.email as string | undefined) ?? null;
+  const rawMetadata = (claimData.claims as Record<string, unknown>).user_metadata;
+  const userMetadata =
+    rawMetadata && typeof rawMetadata === "object" && !Array.isArray(rawMetadata)
+      ? (rawMetadata as Record<string, unknown>)
+      : null;
 
   const db = getServiceClient();
 
@@ -92,7 +102,7 @@ export async function authenticate(
     if (error) throw error;
   };
 
-  return { userId, orgId, role, userName, db, writeAudit };
+  return { userId, orgId, role, userName, email, userMetadata, db, writeAudit };
 }
 
 // Writers = specialist or admin, mirroring the RLS write policies. billing is

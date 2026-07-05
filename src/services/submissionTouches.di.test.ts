@@ -212,9 +212,9 @@ describe("recordSubmissionTouch — happy path", () => {
     );
     // This route logs a touch, nothing else: no case update, no task write.
     expect(captures.every((c) => c.table !== "tasks")).toBe(true);
-    expect(captures.filter((c) => c.table === "credential_cases").every((c) => c.op === "select")).toBe(
-      true,
-    );
+    expect(
+      captures.filter((c) => c.table === "credential_cases").every((c) => c.op === "select"),
+    ).toBe(true);
   });
 
   it("appends the optional note to the touch text and records fill_session_id in the audit", async () => {
