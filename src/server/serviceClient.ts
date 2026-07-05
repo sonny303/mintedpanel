@@ -26,8 +26,7 @@ export function getServiceClient(): SupabaseClient<Database> {
 }
 
 // Anon client bound to the caller's JWT — used only to verify the token via
-// getClaims (the same technique as the generated auth-middleware.ts). Not cached
-// because it carries a per-request Authorization header.
+// getClaims. Not cached because it carries a per-request Authorization header.
 export function getAuthClient(token: string): SupabaseClient<Database> {
   const { url, anonKey } = resolveServerSupabaseEnv();
   if (!url || !anonKey) {

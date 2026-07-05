@@ -4,6 +4,7 @@
 import { useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { fmtDate } from "@/lib/format";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
@@ -52,6 +53,7 @@ function HomePage() {
   const locationsQ = useLaunchLocations();
 
   const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
+  const failed = casesQ.isError || providersQ.isError || statusConfigsQ.isError;
   const now = new Date();
 
   const rows: QueueCase[] = useMemo(() => {
@@ -229,7 +231,11 @@ function HomePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <PageHeader title="Home" description={format(now, "EEEE, MMMM d")} />
-      {loading ? (
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load the action queue. Refresh to retry.
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
@@ -283,10 +289,7 @@ function HomePage() {
                     {launch.name}
                   </span>
                   <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-                    Starts{" "}
-                    {launch.effectiveDate
-                      ? format(parseISO(launch.effectiveDate), "MMM d, yyyy")
-                      : "—"}
+                    Starts {fmtDate(launch.effectiveDate)}
                   </span>
                   <span className="flex items-center gap-2">
                     <span className="w-16">

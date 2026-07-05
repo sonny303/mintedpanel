@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
+import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
 import {
   useCreateGroupInsurancePolicy,
@@ -34,27 +35,18 @@ function insuranceTypeLabel(t: InsuranceType): string {
   return t === "professional_liability" ? "Professional Liability" : "General Liability";
 }
 
-function policyStatus(start: string, end: string): { label: string; cls: string } {
+function policyStatus(start: string, end: string): { label: string; status: StatusColor } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const s = new Date(start);
   const e = new Date(end);
   if (today < s) {
-    return {
-      label: "Future",
-      cls: "bg-[#F5F5F4] text-[#9CA3AF] border-[#E8E5E0]",
-    };
+    return { label: "Future", status: "neutral" as const };
   }
   if (today > e) {
-    return {
-      label: "Expired",
-      cls: "bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]",
-    };
+    return { label: "Expired", status: "red" as const };
   }
-  return {
-    label: "Active",
-    cls: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]",
-  };
+  return { label: "Active", status: "green" as const };
 }
 
 export function InsurancePanel({ groupId, canEdit }: { groupId: string; canEdit: boolean }) {
@@ -134,11 +126,7 @@ export function InsurancePanel({ groupId, canEdit }: { groupId: string; canEdit:
                     {fmtDate(p.policyEndDate)}
                   </td>
                   <td className="px-3 h-10 align-middle">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border ${status.cls}`}
-                    >
-                      {status.label}
-                    </span>
+                    <StatusPill status={status.status} label={status.label} />
                   </td>
                 </tr>
               );

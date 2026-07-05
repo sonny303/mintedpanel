@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
+import { StatusPill } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
 import { useAuthStore, useActiveMembership, type AppRole } from "@/lib/auth-store";
 import { useIsAdmin } from "@/lib/permissions";
@@ -37,25 +38,9 @@ import { DuplicateInviteError, type PendingInvite } from "@/services/invites";
 import type { MembershipRow } from "@/services/orgSettings";
 
 function roleBadge(role: AppRole) {
-  if (role === "specialist") {
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
-        Specialist
-      </span>
-    );
-  }
-  if (role === "billing") {
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#F5F5F4] text-[#57534E] border-[#E8E5E0]">
-        Billing
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#E7F0EC] text-[#1B4D3E] border-[#C8DBD4]">
-      Admin
-    </span>
-  );
+  if (role === "specialist") return <StatusPill status="green" label="Specialist" />;
+  if (role === "billing") return <StatusPill status="neutral" label="Billing" />;
+  return <StatusPill status="brand" label="Admin" />;
 }
 
 function InviteDialog({

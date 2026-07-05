@@ -302,7 +302,7 @@ function ReorderableSection({
           </Button>
         )}
       </div>
-      <div>
+      <div className="overflow-x-auto">
         {loading ? (
           <table className="w-full">
             <tbody>
@@ -347,7 +347,7 @@ function ReorderableSection({
                     setDragId(null);
                   }
                 }}
-                className={`flex items-center gap-3 px-4 h-12 border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${
+                className={`flex min-w-max items-center gap-3 px-4 h-12 border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${
                   dragId === s.id ? "opacity-50" : ""
                 }`}
               >

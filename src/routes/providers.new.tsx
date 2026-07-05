@@ -3,12 +3,12 @@
 // assignments captured in steps 3 and 4 are persisted alongside the provider.
 // A ?locationId search param (set by the launch flow) pre-selects the launch
 // location's group and facility so onboarding and the launch run in parallel.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useActiveOrgId, useAuthStore } from "@/lib/auth-store";
+import { useActiveOrgId, useAuthStore, useRole } from "@/lib/auth-store";
 import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
   ProviderForm,
@@ -84,6 +84,13 @@ function toLicenseInputs(form: ProviderFormState): LicenseInput[] {
 
 function Page() {
   const navigate = useNavigate();
+  // Render-time backstop for the beforeLoad guard: on a hard load the store
+  // has no memberships yet when beforeLoad runs, so billing must also be
+  // turned away here (writes are still RLS-blocked either way).
+  const role = useRole();
+  useEffect(() => {
+    if (role === "billing") navigate({ to: "/providers", replace: true });
+  }, [role, navigate]);
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   const { locationId } = Route.useSearch();
@@ -133,6 +140,10 @@ function Page() {
       toast.error(error instanceof Error ? error.message : "Failed to create provider");
     }
   };
+
+  if (role === "billing") {
+    return null;
+  }
 
   if (locationId && locationQ.isLoading) {
     return <div className="h-32 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;

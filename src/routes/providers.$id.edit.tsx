@@ -1,14 +1,14 @@
 // Edit Provider page: pre-fills the shared 5-step form with the existing
 // provider and licenses, saves via updateProviderWithLicenses. Billing role
 // is redirected before the page renders.
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProvider, useUpdateProviderWithLicenses } from "@/hooks/useProviders";
 import { useStateLicensesByProvider } from "@/hooks/useLookups";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, useRole } from "@/lib/auth-store";
 import {
   emptyProviderFormState,
   type ProviderFormState,
@@ -31,6 +31,13 @@ export const Route = createFileRoute("/providers/$id/edit")({
 function EditPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  // Render-time backstop for the beforeLoad guard: on a hard load the store
+  // has no memberships yet when beforeLoad runs, so billing must also be
+  // turned away here (writes are still RLS-blocked either way).
+  const role = useRole();
+  useEffect(() => {
+    if (role === "billing") navigate({ to: "/providers", replace: true });
+  }, [role, navigate]);
   const providerQ = useProvider(id);
   const licensesQ = useStateLicensesByProvider(id);
   const update = useUpdateProviderWithLicenses(id);
@@ -122,6 +129,10 @@ function EditPage() {
     toast.success("Provider updated");
     navigate({ to: "/providers/$id", params: { id } });
   };
+
+  if (role === "billing") {
+    return null;
+  }
 
   if (providerQ.isLoading || licensesQ.isLoading || !initial) {
     return (

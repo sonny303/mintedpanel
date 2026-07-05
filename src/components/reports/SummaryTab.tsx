@@ -363,7 +363,7 @@ export function SummaryTab() {
                     height={50}
                   />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6B7280" }} />
-                  <RTooltip cursor={{ fill: "#F9FAFB" }} />
+                  <RTooltip cursor={{ fill: "#FAFAF9" }} />
                   <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                     {statusBars.map((r) => (
                       <Cell key={r.id} fill={r.color} />
@@ -416,7 +416,7 @@ export function SummaryTab() {
                     width={140}
                     tick={{ fontSize: 11, fill: "#374151" }}
                   />
-                  <RTooltip cursor={{ fill: "#F9FAFB" }} />
+                  <RTooltip cursor={{ fill: "#FAFAF9" }} />
                   <Bar dataKey="count" fill="#1B4D3E" radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -482,7 +482,7 @@ export function SummaryTab() {
                         ? `${r.variance} d faster`
                         : `+${r.variance} d slower`;
                 return (
-                  <tr key={r.payerId} className="border-t border-[#E8E5E0] h-10 hover:bg-[#F9FAFB]">
+                  <tr key={r.payerId} className="border-t border-[#E8E5E0] h-10 hover:bg-[#FAFAF9]">
                     <td className="px-4">{r.payerName}</td>
                     <td className="px-4 text-right tabular-nums">{r.avg}</td>
                     <td className="px-4 text-right tabular-nums">{r.count}</td>
@@ -531,7 +531,7 @@ export function SummaryTab() {
               </tr>
             ) : (
               coordinatorRows.map((r) => (
-                <tr key={r.id} className="border-t border-[#E8E5E0] h-10 hover:bg-[#F9FAFB]">
+                <tr key={r.id} className="border-t border-[#E8E5E0] h-10 hover:bg-[#FAFAF9]">
                   <td className="px-4">{r.name}</td>
                   <td className="px-4 text-right tabular-nums">{r.openCases}</td>
                   <td className="px-4 text-right tabular-nums">{r.overdueTasks}</td>

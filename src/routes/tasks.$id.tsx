@@ -102,7 +102,13 @@ function TaskDetailPage() {
   useEffect(() => {
     if (!task) return;
     if (allComplete && task.status !== "completed" && !updateStatusM.isPending) {
-      updateStatusM.mutate({ id: task.id, status: "completed" });
+      updateStatusM.mutate(
+        { id: task.id, status: "completed" },
+        {
+          onError: (err: unknown) =>
+            toast.error(err instanceof Error ? err.message : "Could not update status"),
+        },
+      );
     }
   }, [allComplete, task, updateStatusM]);
 
@@ -403,7 +409,7 @@ function TaskDetailPage() {
                     <div className="flex-1 min-w-0 space-y-3">
                       <div className="flex items-start gap-2">
                         <p
-                          className={`text-[14px] leading-[1.6] ${
+                          className={`text-[14px] leading-relaxed ${
                             isChecked ? "text-muted-foreground" : "text-foreground font-medium"
                           }`}
                         >
@@ -415,7 +421,7 @@ function TaskDetailPage() {
                       </div>
 
                       {fields.length > 0 ? (
-                        <div className="bg-[#F9FAFB] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
+                        <div className="bg-[#FAFAF9] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
                           {fields.map((field, fi) => (
                             <div
                               key={`${field.label}-${fi}`}

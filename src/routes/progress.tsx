@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { ActionBadge } from "@/components/triage/ActionBadge";
 import { StatusPill } from "@/components/triage/StatusPill";
 import { useProviders } from "@/hooks/useProviders";
@@ -41,6 +42,7 @@ function ProgressPage() {
 
   const now = new Date();
   const loading = providersQ.isLoading || casesQ.isLoading || statusConfigsQ.isLoading;
+  const failed = providersQ.isError || casesQ.isError || statusConfigsQ.isError;
 
   const model = useMemo(() => {
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
@@ -116,11 +118,22 @@ function ProgressPage() {
         title="Client progress"
         description={`${model.active} of ${model.denominator} insurer enrollments active · Updated ${format(now, "MMM d, h:mm a")}`}
       />
-      {loading ? (
+      {failed ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
+          Couldn't load progress. Refresh to retry.
+        </div>
+      ) : loading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-24 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
+        </div>
+      ) : model.cards.length === 0 ? (
+        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-5 py-12">
+          <EmptyState
+            message="Nothing to show yet"
+            description="Provider enrollment progress will appear here once credentialing begins."
+          />
         </div>
       ) : (
         <div className="space-y-4">

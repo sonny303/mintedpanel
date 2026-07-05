@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -186,85 +187,83 @@ function AdminMsoRoutingPage() {
 
       {/* Rules table */}
       <div className="border border-[#E8E5E0] rounded-md overflow-hidden bg-white">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-              {["Payer", "State", "Specialty", "Route", "Notes", ""].map((h, i) => (
-                <th
-                  key={i}
-                  className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rulesQ.isLoading ? (
-              <TableSkeletonRows rows={6} cols={6} />
-            ) : rulesQ.isError ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-12 text-center">
-                  <EmptyState
-                    message="Failed to load routing rules"
-                    action={
-                      <Button variant="outline" size="sm" onClick={() => rulesQ.refetch()}>
-                        Retry
-                      </Button>
-                    }
-                  />
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-12">
-                  <EmptyState message="No rules match these filters" />
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r) => {
-                const payer = r.payerId ? payerById.get(r.payerId) : null;
-                const mso = r.msoId ? msoById.get(r.msoId) : null;
-                return (
-                  <tr
-                    key={r.id}
-                    className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
+                {["Payer", "State", "Specialty", "Route", "Notes", ""].map((h, i) => (
+                  <th
+                    key={i}
+                    className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
                   >
-                    <td className="px-3 h-10 align-middle">{payer?.name ?? "—"}</td>
-                    <td className="px-3 h-10 align-middle">{r.state}</td>
-                    <td className="px-3 h-10 align-middle">{r.specialty}</td>
-                    <td className="px-3 h-10 align-middle">
-                      {r.routeType === "direct" ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
-                          Direct
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]">
-                          MSO · {mso?.name ?? "—"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground max-w-[280px] truncate">
-                      {r.notes ?? "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-right">
-                      {canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px] px-2"
-                          onClick={() => setRuleModal({ rule: r })}
-                        >
-                          Edit
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rulesQ.isLoading ? (
+                <TableSkeletonRows rows={6} cols={6} />
+              ) : rulesQ.isError ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-12 text-center">
+                    <EmptyState
+                      message="Failed to load routing rules"
+                      action={
+                        <Button variant="outline" size="sm" onClick={() => rulesQ.refetch()}>
+                          Retry
                         </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      }
+                    />
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-12">
+                    <EmptyState message="No rules match these filters" />
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((r) => {
+                  const payer = r.payerId ? payerById.get(r.payerId) : null;
+                  const mso = r.msoId ? msoById.get(r.msoId) : null;
+                  return (
+                    <tr
+                      key={r.id}
+                      className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
+                    >
+                      <td className="px-3 h-10 align-middle">{payer?.name ?? "—"}</td>
+                      <td className="px-3 h-10 align-middle">{r.state}</td>
+                      <td className="px-3 h-10 align-middle">{r.specialty}</td>
+                      <td className="px-3 h-10 align-middle">
+                        {r.routeType === "direct" ? (
+                          <StatusPill status="green" label="Direct" />
+                        ) : (
+                          <StatusPill status="blue" label={`MSO · ${mso?.name ?? "—"}`} />
+                        )}
+                      </td>
+                      <td className="px-3 h-10 align-middle text-muted-foreground max-w-[280px] truncate">
+                        {r.notes ?? "—"}
+                      </td>
+                      <td className="px-3 h-10 align-middle text-right">
+                        {canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            onClick={() => setRuleModal({ rule: r })}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* MSOs sub-section */}

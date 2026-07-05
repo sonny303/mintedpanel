@@ -3,8 +3,11 @@
 // NEW tag). Cells show the contracting StatusPill from status_configs plus a
 // future effective date; a dash means no contract.
 import { useMemo } from "react";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/triage/StatusPill";
+import { fmtDate } from "@/lib/format";
 import { useContracts } from "@/hooks/useContracts";
 import { useLaunchLocations } from "@/hooks/useLaunches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
@@ -53,7 +56,7 @@ export function ContractMatrixTab() {
       const futureEff =
         contract.effectiveDate &&
         differenceInCalendarDays(parseISO(contract.effectiveDate), now) > 0
-          ? format(parseISO(contract.effectiveDate), "MMM d, yyyy")
+          ? fmtDate(contract.effectiveDate)
           : null;
       return { status, futureEff };
     }
@@ -63,6 +66,37 @@ export function ContractMatrixTab() {
 
   if (contractsQ.isLoading || payersQ.isLoading) {
     return <div className="h-40 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />;
+  }
+
+  const isError =
+    contractsQ.isError || locationsQ.isError || payersQ.isError || statusConfigsQ.isError;
+  if (isError) {
+    const retry = () => {
+      if (contractsQ.isError) contractsQ.refetch();
+      if (locationsQ.isError) locationsQ.refetch();
+      if (payersQ.isError) payersQ.refetch();
+      if (statusConfigsQ.isError) statusConfigsQ.refetch();
+    };
+    return (
+      <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-3 py-12 text-center">
+        <EmptyState
+          message="Failed to load the contracts matrix"
+          action={
+            <Button variant="outline" size="sm" onClick={retry}>
+              Retry
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (payers.length === 0 || states.length === 0) {
+    return (
+      <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-3 py-12 text-center">
+        <EmptyState message="No contracts yet" />
+      </div>
+    );
   }
 
   return (

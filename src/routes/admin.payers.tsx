@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,13 +54,9 @@ const EMPTY: PayerInput = {
 
 function YesNoPill({ value }: { value: boolean }) {
   return value ? (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]">
-      Yes
-    </span>
+    <StatusPill status="green" label="Yes" />
   ) : (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border bg-[#F5F5F4] text-[#57534E] border-[#E8E5E0]">
-      No
-    </span>
+    <StatusPill status="neutral" label="No" />
   );
 }
 
