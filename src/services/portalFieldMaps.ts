@@ -147,16 +147,25 @@ export async function reproposeFieldMap(
   previous: { token: string | null; source: PortalFieldMap["source"] },
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
-  return updateFieldMapRow(orgId, id, {
+  const row = await updateFieldMapRow(orgId, id, {
     status: "proposed",
     source: previous.source,
     token: previous.token,
   });
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal_field_map",
+    entityId: id,
+    after: { status: "proposed", source: previous.source, token: previous.token },
+    description: `Reverted field map "${row.fieldLabel ?? id}" to proposed (undo)`,
+  });
+  return row;
 }
 
 export interface BatchApproveItem {
   id: string;
   token: string;
+  fieldLabel: string | null;
 }
 
 // The confirm-all-N screen: approve the high-confidence batch. One audit row

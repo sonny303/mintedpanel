@@ -95,6 +95,32 @@ describe("resolvedSuggestionToken", () => {
     expect(resolvedSuggestionToken(row({ token: "provider.npi" }), dict)).toBe("provider.npi");
     expect(resolvedSuggestionToken(row({}), dict)).toBeNull();
   });
+
+  it("uses a suggested rule's token only when the row captured none of its own", () => {
+    const dict = buildDictionaryMap([dictEntry("npi", "provider.bar", "suggested")]);
+    // row has no token -> the remembered suggested token is offered
+    expect(resolvedSuggestionToken(row({ fieldLabel: "NPI" }), dict)).toBe("provider.bar");
+    // row has its own token -> the suggested rule does NOT override it
+    expect(resolvedSuggestionToken(row({ fieldLabel: "NPI", token: "provider.foo" }), dict)).toBe(
+      "provider.foo",
+    );
+  });
+});
+
+describe("toTrainingCard high-without-token downgrade", () => {
+  it("does not batch or lead with a high-confidence row that has no token to suggest", () => {
+    const rows = [
+      row({ id: "highNoTok", confidence: 95 }), // high score, token null -> downgraded
+      row({ id: "med", confidence: 50, token: "provider.npi" }),
+    ];
+    const { batch, cards } = splitBatch(rows, []);
+    expect(batch).toHaveLength(0); // nothing to confirm-all
+    // both are medium now; capture order preserved, so the no-token card does
+    // NOT jump ahead as a "High / No suggestion" lead card
+    expect(cards.map((c) => c.confidence)).toEqual(["medium", "medium"]);
+    expect(cards[0].row.id).toBe("highNoTok");
+    expect(cards.find((c) => c.row.id === "highNoTok")?.suggestedToken).toBeNull();
+  });
 });
 
 describe("splitBatch", () => {

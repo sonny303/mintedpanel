@@ -34,7 +34,8 @@ export function buildDictionaryMap(
 }
 
 // The token a suggestion resolves to: a confirmed dictionary rule for the row's
-// label overrides the row's own captured token; otherwise the captured token.
+// label overrides the row's own captured token; a suggested rule only fills in
+// when the row captured no token of its own; otherwise the captured token.
 export function resolvedSuggestionToken(
   row: PortalFieldMap,
   dict: Map<string, FieldDictionaryEntry>,
@@ -42,7 +43,9 @@ export function resolvedSuggestionToken(
   const label = normalizeFieldLabel(row.fieldLabel);
   const entry = label ? dict.get(label) : undefined;
   if (entry?.status === "confirmed") return entry.token;
-  return row.token ?? null;
+  if (row.token != null) return row.token;
+  if (entry?.status === "suggested") return entry.token;
+  return null;
 }
 
 export function resolveConfidence(
@@ -65,14 +68,18 @@ export function resolveConfidence(
   return "low";
 }
 
+// Provenance must agree with resolvedSuggestionToken: "dictionary" only when a
+// dictionary entry actually supplied the token (confirmed always; suggested only
+// when the row had no token of its own). A row's own captured token is "label".
 function provenanceOf(
   row: PortalFieldMap,
   dict: Map<string, FieldDictionaryEntry>,
 ): Provenance {
   const label = normalizeFieldLabel(row.fieldLabel);
   const entry = label ? dict.get(label) : undefined;
-  if (entry && entry.status !== "rejected") return "dictionary";
+  if (entry?.status === "confirmed") return "dictionary";
   if (row.token != null) return "label";
+  if (entry?.status === "suggested") return "dictionary";
   return "none";
 }
 
@@ -80,10 +87,16 @@ export function toTrainingCard(
   row: PortalFieldMap,
   dict: Map<string, FieldDictionaryEntry>,
 ): TrainingCard {
+  const suggestedToken = resolvedSuggestionToken(row, dict);
+  let confidence = resolveConfidence(row, dict);
+  // A "high" rating with nothing to suggest isn't actionable as high: it needs
+  // the same manual attention as a medium card and must not lead the deck or
+  // batch. Downgrade so the badge, batch guard, and ordering all agree.
+  if (confidence === "high" && suggestedToken == null) confidence = "medium";
   return {
     row,
-    confidence: resolveConfidence(row, dict),
-    suggestedToken: resolvedSuggestionToken(row, dict),
+    confidence,
+    suggestedToken,
     provenance: provenanceOf(row, dict),
   };
 }

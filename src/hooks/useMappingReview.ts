@@ -83,10 +83,25 @@ export function useReproposeField() {
   });
 }
 
+// Confirm-all also teaches the dictionary (one suggested entry per approved
+// label), mirroring the one-by-one Approve path, and returns how many labels
+// were learned so the session tally stays accurate. Dictionary learning is
+// best-effort and never fails the batch.
 export function useBatchApprove() {
   return useMutation({
-    mutationFn: ({ items, portalKey }: { items: BatchApproveItem[]; portalKey: string }) =>
-      batchApproveFieldMaps(items, portalKey),
+    mutationFn: async ({ items, portalKey }: { items: BatchApproveItem[]; portalKey: string }) => {
+      const count = await batchApproveFieldMaps(items, portalKey);
+      let learned = 0;
+      for (const item of items) {
+        try {
+          const r = await upsertDictionaryEntry(item.fieldLabel, normalizeTokenKey(item.token));
+          if (r.learned) learned += 1;
+        } catch {
+          // best-effort; a learning failure never fails the batch
+        }
+      }
+      return { count, learned };
+    },
   });
 }
 

@@ -4,7 +4,7 @@
 // hooks. Mutations persist and invalidate their source queries; the /fix-it deck
 // itself is driven from local state so it never reorders under the user.
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import { useProviders } from "@/hooks/useProviders";
@@ -36,12 +36,18 @@ export function useFixitQueue(): UseFixitQueueResult {
   const mapsQ = usePortalFieldMaps();
   const dictQ = useFieldDictionary();
 
+  // Every query feeds buildFixitQueue, so the deck must not seed until all have
+  // loaded — a partial seed would freeze an incomplete deck (missing dictionary
+  // cards, "the payer" fallback names, wrong impact order) on a cold deep-load.
   const isLoading =
     providersQ.isLoading ||
     casesQ.isLoading ||
+    tasksQ.isLoading ||
+    payersQ.isLoading ||
     statusConfigsQ.isLoading ||
     portalsQ.isLoading ||
-    mapsQ.isLoading;
+    mapsQ.isLoading ||
+    dictQ.isLoading;
   const isError =
     providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
 
@@ -120,9 +126,9 @@ export function useSaveProviderField() {
   return useMutation({
     mutationFn: ({ providerId, patch }: { providerId: string; patch: Partial<ProviderInput> }) =>
       updateProvider(providerId, patch),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.providers(orgId) });
-      qc.invalidateQueries({ queryKey: ["provider", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, variables.providerId) });
     },
   });
 }

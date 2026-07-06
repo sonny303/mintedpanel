@@ -427,6 +427,63 @@ are pre-filtered client-side; the DB unique constraint is the backstop.
   with owners out-of-band), and `src/lib/ownerWording.ts` + its test were
   deleted with the page they served.
 
+## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06)
+
+Three connected browser surfaces where users **find and kick off** fill-coverage
+cleanup — the Chrome extension is where they *do* the fills. Product law
+(locked): **no timers / speed mechanics / streaks anywhere**; corrections are
+celebrated as "good catches", never penalized; the Fix-it deck is ordered by
+**soonest blocked fill, never by ease**.
+
+- **Schema (migration `20260706120000_cleanup_surfaces_schema.sql`, applied
+  hosted + repo):** new `portals` (org-scoped payer-portal registry, unique
+  `(org_id, portal_key)`) and `field_dictionary` (org-scoped
+  `label_normalized → token` memory, unique `(org_id, label_normalized)`,
+  status `suggested|confirmed|rejected`) tables — RLS mirrors `payers` (member
+  SELECT, writer INSERT/UPDATE). `portal_field_maps` gained
+  `field_label/form_section/confidence`. **Browser RLS on
+  `portal_field_maps`/`fill_sessions` already existed** (member+global SELECT,
+  writer INSERT/UPDATE on own-org rows) and is reused — the app now reads/writes
+  these tables directly under RLS, so both files became **dual** (server ctx
+  path + browser readers/mutations), like `providers.ts`; their `*.di.test.ts`
+  now `vi.mock` `externalClient`.
+- **Surface 1 — Fix-it queue** (`/fix-it` + a Home section + a writer-only
+  sidebar entry with live count): impact-ordered deck of three card types
+  (provider data gap / dictionary confirm / train-this-form). Pure derivation in
+  `src/lib/fixitQueue.ts` (+tests) from existing caches; editable-gap fields
+  whitelisted in `src/lib/fixitFields.ts` (scoped to `PROVIDER_LIST_COLUMNS` so
+  the list projection never reads `undefined` and false-flags a gap). Weekly
+  "good catch" counter in `src/lib/goodCatches.ts` (client-local, `typeof
+  window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
+  queue; save/skip/dictionary mutations). Skip → `createFollowUpTask`
+  (`services/tasks.ts`).
+- **Surface 2 — Mapping review** (`/portals/$portalKey/train`): card-by-card
+  training. High-confidence fields batch into one confirm screen; the rest go
+  one at a time (Approve/Edit/Manual, keys A/E/M, U undo). Confidence + batch
+  split in `src/lib/mappingConfidence.ts` (+tests); dictionary learns on each
+  approval (`services/fieldDictionary.ts` `upsertDictionaryEntry`); token picker
+  over the closed catalog (`services/tokenCatalog.ts` = `get_sop_field_tokens` +
+  the `user.*` family). Training mutations live in `portalFieldMaps.ts`
+  (`approveFieldMap`/`markFieldMapManual`/`reproposeFieldMap`/
+  `batchApproveFieldMaps` — tokens normalized to bare form at the write
+  boundary). Hook `src/hooks/useMappingReview.ts`. **The deck is seeded once
+  into local reducer state** so persisting a decision never re-splits it
+  mid-flow; caches invalidate on finish/exit. Completing a pass calls
+  `markPortalVerified`.
+- **Surface 3 — Portals admin** (`/admin/portals`, under the Admin nav group):
+  registry table — inline URL edit (`updatePortalUrl` clears verification +
+  stamps `url_changed_at` → "Needs re-verify" pill), mapped/proposed counts
+  (from `portal_field_maps`), verification status, last fill result (latest
+  `fill_sessions` row per `portal_key`), view-fields dialog, Train action.
+  Service `src/services/portals.ts`, hook `src/hooks/usePortals.ts` (also serves
+  the field-map + last-fill readers Surfaces 1–2 reuse). Query keys added under
+  `queryKeys` (`portals`, `portalFieldMaps`, `lastFills`, `fieldDictionary`,
+  `tokenCatalog`, `fixit`). Domain types `Portal`, `FieldDictionaryEntry` +
+  `PortalFieldMap.{fieldLabel,formSection,confidence}` in `src/types/index.ts`.
+- **Shared label normalizer:** `src/lib/tokenFormat.ts` `normalizeFieldLabel`
+  (lowercase, collapse whitespace, strip trailing `:`/`*`) is the
+  `field_dictionary.label_normalized` key.
+
 ## UI conventions worth knowing
 
 - Create/edit modals: mount-when-editing pattern (`{modal ? <Modal .../> :

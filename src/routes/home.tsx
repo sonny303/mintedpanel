@@ -60,8 +60,14 @@ function HomePage() {
   const lastTouchQ = useLastTouchDates();
   const followUpsQ = useFollowUpsDue();
   const locationsQ = useLaunchLocations();
+  const canWrite = useCanWrite();
+  const fixit = useFixitQueue();
 
-  const loading = casesQ.isLoading || providersQ.isLoading || statusConfigsQ.isLoading;
+  const loading =
+    casesQ.isLoading ||
+    providersQ.isLoading ||
+    statusConfigsQ.isLoading ||
+    (canWrite && fixit.isLoading);
   const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
   const now = new Date();
 
@@ -170,8 +176,6 @@ function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is derived each render by design
   }, [locationsQ.data, casesQ.data, contractsQ.data, payersQ.data, statusConfigsQ.data]);
 
-  const canWrite = useCanWrite();
-  const fixit = useFixitQueue();
   const fixitCards = canWrite ? fixit.cards : [];
 
   const allClear =

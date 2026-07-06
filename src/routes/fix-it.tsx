@@ -510,7 +510,7 @@ function TrainCard({
             Later
           </Button>
           <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)]">
-            ~3 minutes · opens mapping review
+            opens mapping review
           </span>
         </>
       }

@@ -43,7 +43,6 @@ export const queryKeys = {
   lastFills: (orgId: string) => ["last-fills", orgId] as const,
   fieldDictionary: (orgId: string) => ["field-dictionary", orgId] as const,
   tokenCatalog: (orgId: string) => ["token-catalog", orgId] as const,
-  fixit: (orgId: string) => ["fixit", orgId] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

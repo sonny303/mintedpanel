@@ -70,7 +70,7 @@ interface Session {
 
 type Action =
   | { type: "SEED"; payload: Session }
-  | { type: "CONFIRM_BATCH" }
+  | { type: "CONFIRM_BATCH"; learned: number }
   | { type: "REVIEW_ONE_BY_ONE" }
   | {
       type: "DECIDE";
@@ -90,6 +90,7 @@ function reducer(state: Session | null, action: Action): Session | null {
         ...state,
         batchConfirmed: true,
         decisionsCount: state.decisionsCount + 1,
+        learnedCount: state.learnedCount + action.learned,
         phase: state.cards.length > 0 ? "cards" : "done",
       };
     case "REVIEW_ONE_BY_ONE":
@@ -200,10 +201,11 @@ function TrainPage() {
 
   // Refresh the downstream caches when leaving (finish or navigate away).
   function invalidateDownstream() {
+    // The Fix-it queue is derived from these caches (no "fixit" query exists),
+    // so invalidating its sources is what refreshes the deck downstream.
     qc.invalidateQueries({ queryKey: queryKeys.portalFieldMaps(orgId, portalKey) });
     qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.fieldDictionary(orgId) });
-    qc.invalidateQueries({ queryKey: queryKeys.fixit(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.lastFills(orgId) });
   }
   const invalidateRef = useRef(invalidateDownstream);
@@ -223,10 +225,11 @@ function TrainPage() {
     );
   }
 
-  const loading = portalsQ.isLoading || mapsQ.isLoading || dictQ.isLoading || !seeded;
+  const loading =
+    portalsQ.isLoading || mapsQ.isLoading || dictQ.isLoading || catalogQ.isLoading || !seeded;
   if (loading) return <TrainSkeleton />;
 
-  if (mapsQ.isError || dictQ.isError) {
+  if (mapsQ.isError || dictQ.isError || catalogQ.isError) {
     return (
       <div className="py-16">
         <EmptyState
@@ -238,6 +241,7 @@ function TrainPage() {
               onClick={() => {
                 mapsQ.refetch();
                 dictQ.refetch();
+                catalogQ.refetch();
               }}
             >
               Retry
@@ -299,7 +303,7 @@ function TrainPage() {
         <BatchScreen
           session={s}
           portalKey={portalKey}
-          onConfirmed={() => dispatch({ type: "CONFIRM_BATCH" })}
+          onConfirmed={(learned) => dispatch({ type: "CONFIRM_BATCH", learned })}
           onReviewOneByOne={() => dispatch({ type: "REVIEW_ONE_BY_ONE" })}
         />
       ) : null}
@@ -394,7 +398,7 @@ function BatchScreen({
 }: {
   session: Session;
   portalKey: string;
-  onConfirmed: () => void;
+  onConfirmed: (learned: number) => void;
   onReviewOneByOne: () => void;
 }) {
   const batchMut = useBatchApprove();
@@ -429,11 +433,15 @@ function BatchScreen({
   async function confirmAll() {
     setPending(true);
     try {
-      await batchMut.mutateAsync({
-        items: session.batch.map((c) => ({ id: c.row.id, token: c.suggestedToken as string })),
+      const res = await batchMut.mutateAsync({
+        items: session.batch.map((c) => ({
+          id: c.row.id,
+          token: c.suggestedToken as string,
+          fieldLabel: c.row.fieldLabel,
+        })),
         portalKey,
       });
-      onConfirmed();
+      onConfirmed(res.learned);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't confirm the batch — retry.");
     } finally {
@@ -625,7 +633,10 @@ function CardScreen({
         <TokenPicker
           catalog={catalog}
           initialToken={card.suggestedToken}
+          canCancel={card.suggestedToken != null}
+          busy={busy}
           onCancel={() => setPickerOpen(card.suggestedToken == null ? true : false)}
+          onManual={markManual}
           onPick={(token) => approveToken(token, card.suggestedToken != null && token !== card.suggestedToken)}
         />
       ) : (
@@ -687,12 +698,18 @@ function provenanceText(card: TrainingCard): string {
 function TokenPicker({
   catalog,
   initialToken,
+  canCancel,
+  busy,
   onPick,
+  onManual,
   onCancel,
 }: {
   catalog: TokenCatalogEntry[];
   initialToken: string | null;
+  canCancel: boolean;
+  busy: boolean;
   onPick: (token: string) => void;
+  onManual: () => void;
   onCancel: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -745,7 +762,7 @@ function TokenPicker({
       e.preventDefault();
       const chosen = filtered[sel];
       if (chosen) onPick(chosen.token);
-    } else if (e.key === "Escape") {
+    } else if (e.key === "Escape" && canCancel) {
       e.preventDefault();
       onCancel();
     }
@@ -797,11 +814,23 @@ function TokenPicker({
           ))
         )}
       </div>
-      <div className="flex gap-3.5 border-t border-mp-border px-3.5 py-2 text-[11px] text-[color:var(--mp-ink-faint)]">
+      <div className="flex items-center gap-3.5 border-t border-mp-border px-3.5 py-2 text-[11px] text-[color:var(--mp-ink-faint)]">
         <span>↑↓ navigate</span>
         <span>Enter select</span>
-        <span>Esc cancel</span>
-        <span className="ml-auto">{catalog.length} tokens · closed catalog</span>
+        {canCancel ? <span>Esc cancel</span> : null}
+        <div className="ml-auto flex items-center gap-3">
+          <span>{catalog.length} tokens · closed catalog</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] px-2"
+            onClick={onManual}
+            disabled={busy}
+          >
+            Mark manual
+          </Button>
+        </div>
       </div>
     </div>
   );
