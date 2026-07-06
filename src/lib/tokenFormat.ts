@@ -20,3 +20,18 @@ export function normalizeTokenKey(raw: string | null | undefined): string | null
   const braced = /^\{\{\s*([\s\S]*?)\s*\}\}$/.exec(trimmed);
   return braced ? braced[1] : trimmed;
 }
+
+// Canonical form of a captured form-field LABEL, used as the dictionary key
+// (field_dictionary.label_normalized) so the same human-facing label always
+// resolves to one entry regardless of casing / trailing punctuation. Lowercase,
+// collapse inner whitespace, strip a trailing ":" or "*" (required-field marks).
+export function normalizeFieldLabel(raw: string): string;
+export function normalizeFieldLabel(raw: string | null | undefined): string | null;
+export function normalizeFieldLabel(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  return raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[\s:*]+$/, "")
+    .toLowerCase();
+}

@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+
+// The module now also exposes browser readers/mutations that import the anon
+// client at load; stub it so this ctx-only suite needs no real env (matches
+// providers.di.test.ts).
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 
 import { listPortalFieldMaps, type PortalFieldMapServiceCtx } from "./portalFieldMaps";
 

@@ -47,6 +47,45 @@ export async function createTasksForCase(inputs: CaseTaskInput[]): Promise<Task[
   return created;
 }
 
+// A single follow-up task, created when a Fix-it card is skipped. Distinct from
+// the SOP auto-generation path (createTasksForCase) — this is a human deferring
+// one piece of data collection, audited as such.
+export interface FollowUpTaskInput {
+  caseId: string;
+  providerId: string;
+  title: string;
+  dueDate: string | null;
+}
+
+export async function createFollowUpTask(input: FollowUpTaskInput): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert({
+      org_id: orgId,
+      case_id: input.caseId,
+      provider_id: input.providerId,
+      title: input.title,
+      description: null,
+      status: "not_started" as const,
+      sort_order: 100,
+      due_date: input.dueDate,
+      is_auto_generated: false,
+    } as never)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const task = camelizeRow<Task>(data);
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "task",
+    entityId: task.id,
+    after: { caseId: input.caseId, title: input.title, dueDate: input.dueDate },
+    description: `Follow-up task created: ${input.title}`,
+  });
+  return task;
+}
+
 export interface TaskFilters {
   caseId?: string;
   status?: TaskStatus;

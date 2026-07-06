@@ -369,6 +369,10 @@ export interface PortalFieldMap {
   fieldType: "text" | "select" | "radio" | "checkbox" | "date" | "file";
   notes: string | null;
   status: PortalFieldMapStatus;
+  // Cleanup surfaces (2026-07-06): captured per proposed row for training.
+  fieldLabel: string | null;
+  formSection: string | null;
+  confidence: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -386,4 +390,36 @@ export interface FillSession {
   fieldsSkipped: unknown;
   docsAttached: unknown;
   performedBy: string | null;
+}
+
+// Cleanup surfaces (2026-07-06): the portals registry (Surface 3) and the
+// org-scoped label -> token dictionary that Mapping review (Surface 2) learns
+// and the Fix-it queue (Surface 1) confirms.
+export interface Portal {
+  id: string;
+  orgId: string;
+  portalKey: string;
+  name: string;
+  payerId: string | null;
+  formUrl: string | null;
+  isVerified: boolean;
+  lastVerifiedAt: string | null;
+  urlChangedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FieldDictionaryStatus = "suggested" | "confirmed" | "rejected";
+
+export interface FieldDictionaryEntry {
+  id: string;
+  orgId: string;
+  labelNormalized: string;
+  token: string;
+  status: FieldDictionaryStatus;
+  seenCount: number;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -1,6 +1,6 @@
 // M1 shell sidebar: dark surface, org switcher, search trigger, main nav,
 // permission-gated ADMIN section, user footer.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   DropdownMenu,
@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SearchDialog } from "@/components/layout/SearchDialog";
 import { useAuthStore, useActiveMembership } from "@/lib/auth-store";
-import { useIsAdmin } from "@/lib/permissions";
+import { useIsAdmin, useCanWrite } from "@/lib/permissions";
+import { useFixitQueue } from "@/hooks/useFixit";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 import {
   Users,
@@ -30,6 +31,8 @@ import {
   Search,
   LogOut,
   Check,
+  Globe,
+  Zap,
 } from "lucide-react";
 
 type NavLink = {
@@ -47,6 +50,10 @@ const mainNav: NavLink[] = [
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
+// Cleanup entry point (Fix-it queue) — writers only, shown directly under Home
+// with a live count of pending cards.
+const fixitNav: NavLink = { to: "/fix-it", label: "Fix-it", icon: Zap };
+
 // Owner-facing readout (Client Progress v1) — shown to admin and billing only.
 const clientProgressNav: NavLink = {
   to: "/client-progress",
@@ -59,6 +66,7 @@ const adminNav: NavLink[] = [
   { to: "/admin/templates", label: "Templates", icon: FileText },
   { to: "/admin/mso-routing", label: "MSO Routing", icon: Network },
   { to: "/admin/payers", label: "Payers", icon: Building2 },
+  { to: "/admin/portals", label: "Portals", icon: Globe },
   { to: "/admin/audit", label: "Audit Log", icon: FileStack },
   { to: "/admin/settings", label: "Group & Locations", icon: Building2 },
   { to: "/admin/users", label: "Users", icon: UserCog },
@@ -80,10 +88,40 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+const navItemClass = (activeItem: boolean) =>
+  `flex items-center gap-3 px-3 py-2 rounded-[var(--mp-radius-sm)] text-[13px] transition-colors ${
+    activeItem
+      ? "bg-white/10 text-white font-medium"
+      : "text-white/60 hover:text-white hover:bg-white/5"
+  }`;
+
+// Fix-it nav item with a live pending-card count. Its own component so the
+// derived-queue hook only runs for writers (who see the entry).
+function FixitNavItem({ active, onNavigate }: { active: boolean; onNavigate?: () => void }) {
+  const { cards } = useFixitQueue();
+  return (
+    <Link
+      to={fixitNav.to}
+      aria-current={active ? "page" : undefined}
+      className={navItemClass(active)}
+      onClick={onNavigate}
+    >
+      <Zap className="w-4 h-4" />
+      {fixitNav.label}
+      {cards.length > 0 ? (
+        <span className="ml-auto rounded-full bg-white/15 text-white text-[11px] font-medium px-1.5 tabular-nums">
+          {cards.length}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 export function Sidebar({ onNavigate }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const isAdmin = useIsAdmin();
+  const canWrite = useCanWrite();
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const setActiveOrg = useAuthStore((s) => s.setActiveOrg);
@@ -99,37 +137,49 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const isActive = (to: string, exact?: boolean) =>
     exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
 
-  const itemClass = (activeItem: boolean) =>
-    `flex items-center gap-3 px-3 py-2 rounded-[var(--mp-radius-sm)] text-[13px] transition-colors ${
-      activeItem
-        ? "bg-white/10 text-white font-medium"
-        : "text-white/60 hover:text-white hover:bg-white/5"
-    }`;
-
   async function handleSignOut() {
     await signOut();
     navigate({ to: "/login", replace: true });
   }
 
+  function renderNavItem(item: NavLink) {
+    const Icon = item.icon;
+    const activeItem = isActive(item.to, item.exact);
+    return (
+      <Link
+        key={item.to}
+        to={item.to}
+        aria-current={activeItem ? "page" : undefined}
+        className={navItemClass(activeItem)}
+        onClick={onNavigate}
+      >
+        <Icon className="w-4 h-4" />
+        {item.label}
+      </Link>
+    );
+  }
+
   function renderNav(items: NavLink[], label: string) {
     return (
       <nav className="space-y-0.5" aria-label={label}>
-        {items.map((item) => {
-          const Icon = item.icon;
-          const activeItem = isActive(item.to, item.exact);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              aria-current={activeItem ? "page" : undefined}
-              className={itemClass(activeItem)}
-              onClick={onNavigate}
-            >
-              <Icon className="w-4 h-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+        {items.map(renderNavItem)}
+      </nav>
+    );
+  }
+
+  // Main nav with the writer-only Fix-it entry injected directly under Home.
+  const mainItems = showClientProgress ? [...mainNav, clientProgressNav] : mainNav;
+  function renderMainNav() {
+    return (
+      <nav className="space-y-0.5" aria-label="Main">
+        {mainItems.map((item) => (
+          <Fragment key={item.to}>
+            {renderNavItem(item)}
+            {item.to === "/home" && canWrite ? (
+              <FixitNavItem active={isActive(fixitNav.to)} onNavigate={onNavigate} />
+            ) : null}
+          </Fragment>
+        ))}
       </nav>
     );
   }
@@ -199,7 +249,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       {searchOpen ? <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /> : null}
 
       <div className="flex-1 overflow-y-auto px-3 py-1 flex flex-col gap-6">
-        {renderNav(showClientProgress ? [...mainNav, clientProgressNav] : mainNav, "Main")}
+        {renderMainNav()}
 
         {isAdmin ? (
           <div>
