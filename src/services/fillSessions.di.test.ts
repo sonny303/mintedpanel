@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
+// fillSessions now also exposes a browser reader that imports the anon client
+// at load; stub it so this ctx-only suite needs no real env.
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
+
 import {
   recordFillEvent,
   type FillEventInput,

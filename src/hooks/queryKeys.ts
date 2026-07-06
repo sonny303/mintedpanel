@@ -36,6 +36,14 @@ export const queryKeys = {
     ["state-licenses", orgId, providerId] as const,
   notes: (orgId: string, entityType: string, entityId: string) =>
     ["notes", orgId, entityType, entityId] as const,
+  // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).
+  portals: (orgId: string) => ["portals", orgId] as const,
+  portalFieldMaps: (orgId: string, portalKey?: string) =>
+    ["portal-field-maps", orgId, portalKey ?? "all"] as const,
+  lastFills: (orgId: string) => ["last-fills", orgId] as const,
+  fieldDictionary: (orgId: string) => ["field-dictionary", orgId] as const,
+  tokenCatalog: (orgId: string) => ["token-catalog", orgId] as const,
+  fixit: (orgId: string) => ["fixit", orgId] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

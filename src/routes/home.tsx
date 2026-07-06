@@ -16,6 +16,10 @@ import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates, useFollowUpsDue } from "@/hooks/useTouches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useLaunchLocations } from "@/hooks/useLaunches";
+import { useFixitQueue } from "@/hooks/useFixit";
+import { useCanWrite } from "@/lib/permissions";
+import { RowCta } from "@/components/triage/RowCta";
+import type { FixitCard } from "@/lib/fixitQueue";
 import { getActionState, ACTION_STATE_SEVERITY, type ActionState } from "@/lib/actionState";
 import { launchReadiness } from "@/lib/launchReadiness";
 import { fmtDate } from "@/lib/format";
@@ -166,10 +170,19 @@ function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is derived each render by design
   }, [locationsQ.data, casesQ.data, contractsQ.data, payersQ.data, statusConfigsQ.data]);
 
+  const canWrite = useCanWrite();
+  const fixit = useFixitQueue();
+  const fixitCards = canWrite ? fixit.cards : [];
+
   const allClear =
-    !loading && needsAction.length === 0 && followUps.length === 0 && launchesAtRisk.length === 0;
+    !loading &&
+    needsAction.length === 0 &&
+    followUps.length === 0 &&
+    launchesAtRisk.length === 0 &&
+    fixitCards.length === 0;
 
   const openCase = (id: string) => () => navigate({ to: "/cases/$id", params: { id } });
+  const openFixit = () => navigate({ to: "/fix-it" });
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -195,6 +208,19 @@ function HomePage() {
         </div>
       ) : (
         <div className="space-y-4">
+          {canWrite ? (
+            <HomeSection
+              title="Fix-it queue"
+              count={fixitCards.length}
+              viewAll={<HomeViewAllLink to="/fix-it" />}
+            >
+              <ul className="divide-y divide-[color:var(--mp-border)]">
+                {fixitCards.slice(0, 3).map((card) => (
+                  <FixitHomeRow key={card.id} card={card} onOpen={openFixit} />
+                ))}
+              </ul>
+            </HomeSection>
+          ) : null}
           <HomeSection
             title="Needs your action"
             count={needsAction.length}
@@ -259,5 +285,61 @@ function HomePage() {
         </div>
       )}
     </div>
+  );
+}
+
+// One Fix-it card as a Home row: subject + impact + a CTA into the deck.
+function FixitHomeRow({ card, onOpen }: { card: FixitCard; onOpen: () => void }) {
+  let subject = "";
+  let detail = "";
+  let impact = "";
+  let dated = false;
+  let cta = "Fix";
+  if (card.gap) {
+    subject = card.gap.providerName;
+    detail = `missing ${card.gap.fieldLabel}`;
+    impact = card.sortDate
+      ? `blocks ${card.gap.payerName} · fill due ${fmtDate(card.sortDate)}`
+      : `blocks ${card.gap.payerName}`;
+    dated = Boolean(card.sortDate);
+    cta = "Fix";
+  } else if (card.dictionary) {
+    subject = "Confirm";
+    detail = `"${card.dictionary.label}" → ${card.dictionary.token}`;
+    impact = `seen on ${card.dictionary.seenCount} forms`;
+    cta = "Review";
+  } else if (card.train) {
+    subject = "Train";
+    detail = card.train.portalName;
+    impact = `${card.train.total - card.train.matched} fields need your call`;
+    cta = "Train";
+  }
+  return (
+    <li
+      role="link"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen();
+      }}
+      className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
+    >
+      <span className="flex-1 min-w-0 truncate text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
+        {subject}
+        <span className="text-[color:var(--mp-ink-faint)] font-normal"> · {detail}</span>
+      </span>
+      <span
+        className={`text-[length:var(--mp-text-xs)] ${
+          dated
+            ? "font-medium text-[color:var(--mp-warn)]"
+            : "text-[color:var(--mp-ink-secondary)]"
+        }`}
+      >
+        {impact}
+      </span>
+      <span onClick={(e) => e.stopPropagation()}>
+        <RowCta label={cta} onClick={onOpen} />
+      </span>
+    </li>
   );
 }

@@ -8,8 +8,9 @@
 //
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
-import type { AuditInput } from "@/lib/audit";
+import { requireActiveOrg, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
 import type { FillMode, FillSession } from "@/types";
 
@@ -242,4 +243,21 @@ export async function recordFillEvent(
   if (input.taskId != null) await completeTaskForFill(ctx, input.taskId);
 
   return { kind: "created", session };
+}
+
+// ---------------------------------------------------------------------------
+// Browser path (RLS-guarded) — Portals admin's "last fill" column. Returns the
+// org's recent fill sessions (most recent first); the hook reduces to the
+// latest row per portal_key.
+// ---------------------------------------------------------------------------
+export async function listRecentFillsFromApp(limit = 200): Promise<FillSession[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("fill_sessions")
+    .select(FILL_SESSION_COLUMNS)
+    .eq("org_id", orgId)
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => toFillSession(row as Record<string, unknown>));
 }

@@ -380,6 +380,53 @@ export type Database = {
           },
         ];
       };
+      field_dictionary: {
+        Row: {
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          id: string;
+          label_normalized: string;
+          org_id: string;
+          seen_count: number;
+          status: string;
+          token: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          label_normalized: string;
+          org_id: string;
+          seen_count?: number;
+          status?: string;
+          token: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          id?: string;
+          label_normalized?: string;
+          org_id?: string;
+          seen_count?: number;
+          status?: string;
+          token?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "field_dictionary_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       fill_sessions: {
         Row: {
           case_id: string;
@@ -881,8 +928,11 @@ export type Database = {
       };
       portal_field_maps: {
         Row: {
+          confidence: number | null;
           created_at: string;
+          field_label: string | null;
           field_type: string;
+          form_section: string | null;
           hardcoded_value: string | null;
           id: string;
           map_type: string;
@@ -900,8 +950,11 @@ export type Database = {
           url_pattern: string | null;
         };
         Insert: {
+          confidence?: number | null;
           created_at?: string;
+          field_label?: string | null;
           field_type: string;
+          form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
           map_type: string;
@@ -919,8 +972,11 @@ export type Database = {
           url_pattern?: string | null;
         };
         Update: {
+          confidence?: number | null;
           created_at?: string;
+          field_label?: string | null;
           field_type?: string;
+          form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
           map_type?: string;
@@ -943,6 +999,63 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      portals: {
+        Row: {
+          created_at: string;
+          form_url: string | null;
+          id: string;
+          is_verified: boolean;
+          last_verified_at: string | null;
+          name: string;
+          org_id: string;
+          payer_id: string | null;
+          portal_key: string;
+          updated_at: string;
+          url_changed_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          form_url?: string | null;
+          id?: string;
+          is_verified?: boolean;
+          last_verified_at?: string | null;
+          name: string;
+          org_id: string;
+          payer_id?: string | null;
+          portal_key: string;
+          updated_at?: string;
+          url_changed_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          form_url?: string | null;
+          id?: string;
+          is_verified?: boolean;
+          last_verified_at?: string | null;
+          name?: string;
+          org_id?: string;
+          payer_id?: string | null;
+          portal_key?: string;
+          updated_at?: string;
+          url_changed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "portals_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "portals_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
             referencedColumns: ["id"];
           },
         ];

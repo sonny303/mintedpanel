@@ -1,0 +1,157 @@
+// Fix-it queue (Surface 1) data + mutations. The queue is DERIVED from existing
+// caches (providers, cases, tasks, payers, status configs, portals, field maps,
+// dictionary) via buildFixitQueue — no new server round-trips beyond the portals
+// hooks. Mutations persist and invalidate their source queries; the /fix-it deck
+// itself is driven from local state so it never reorders under the user.
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useActiveOrgId } from "@/lib/auth-store";
+import { queryKeys } from "@/hooks/queryKeys";
+import { useProviders } from "@/hooks/useProviders";
+import { useCases } from "@/hooks/useCases";
+import { useTasks } from "@/hooks/useTasks";
+import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
+import { useFieldDictionary } from "@/hooks/useMappingReview";
+import { updateProvider, type ProviderInput } from "@/services/providers";
+import { createFollowUpTask } from "@/services/tasks";
+import { decideDictionaryEntry } from "@/services/fieldDictionary";
+import { buildFixitQueue, type FixitCard, type OpenCaseLite } from "@/lib/fixitQueue";
+import type { FieldDictionaryStatus } from "@/types";
+
+export interface UseFixitQueueResult {
+  cards: FixitCard[];
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+}
+
+export function useFixitQueue(): UseFixitQueueResult {
+  const providersQ = useProviders();
+  const casesQ = useCases();
+  const tasksQ = useTasks();
+  const payersQ = usePayers();
+  const statusConfigsQ = useStatusConfigs();
+  const portalsQ = usePortals();
+  const mapsQ = usePortalFieldMaps();
+  const dictQ = useFieldDictionary();
+
+  const isLoading =
+    providersQ.isLoading ||
+    casesQ.isLoading ||
+    statusConfigsQ.isLoading ||
+    portalsQ.isLoading ||
+    mapsQ.isLoading;
+  const isError =
+    providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
+
+  const cards = useMemo(() => {
+    const providers = providersQ.data ?? [];
+    const cases = casesQ.data ?? [];
+    const tasks = tasksQ.data ?? [];
+    const payers = payersQ.data ?? [];
+    const statusConfigs = statusConfigsQ.data ?? [];
+    const portals = portalsQ.data ?? [];
+    const maps = mapsQ.data ?? [];
+    const dictionary = dictQ.data ?? [];
+    if (providers.length === 0 && cases.length === 0) return [];
+
+    const statusById = new Map(statusConfigs.map((s) => [s.id, s]));
+    const payerNameById = new Map(payers.map((p) => [p.id, p.name]));
+
+    // Earliest open-task due date per case.
+    const earliestDueByCase = new Map<string, string | null>();
+    for (const t of tasks) {
+      if (!t.caseId || t.status === "completed" || !t.dueDate) continue;
+      const cur = earliestDueByCase.get(t.caseId) ?? null;
+      earliestDueByCase.set(t.caseId, cur == null || t.dueDate < cur ? t.dueDate : cur);
+    }
+
+    const openCases: OpenCaseLite[] = [];
+    for (const c of cases) {
+      const status = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : undefined;
+      const isOpen = (status?.actionBucket ?? null) !== "complete"; // status-less counts as open
+      if (!isOpen) continue;
+      openCases.push({
+        caseId: c.id,
+        providerId: c.providerId,
+        payerId: c.payerId,
+        payerName: payerNameById.get(c.payerId) ?? "the payer",
+        state: c.state,
+        nextDueDate: earliestDueByCase.get(c.id) ?? c.expectedEffectiveDate ?? null,
+      });
+    }
+
+    return buildFixitQueue({
+      providers,
+      openCases,
+      portals: portals.map((p) => ({ portalKey: p.portalKey, name: p.name, payerId: p.payerId })),
+      fieldMaps: maps,
+      dictionary,
+    });
+  }, [
+    providersQ.data,
+    casesQ.data,
+    tasksQ.data,
+    payersQ.data,
+    statusConfigsQ.data,
+    portalsQ.data,
+    mapsQ.data,
+    dictQ.data,
+  ]);
+
+  return {
+    cards,
+    isLoading,
+    isError,
+    refetch: () => {
+      providersQ.refetch();
+      casesQ.refetch();
+      portalsQ.refetch();
+      mapsQ.refetch();
+      dictQ.refetch();
+    },
+  };
+}
+
+export function useSaveProviderField() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({ providerId, patch }: { providerId: string; patch: Partial<ProviderInput> }) =>
+      updateProvider(providerId, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.providers(orgId) });
+      qc.invalidateQueries({ queryKey: ["provider", orgId] });
+    },
+  });
+}
+
+export function useSkipToFollowUp() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      caseId: string;
+      providerId: string;
+      title: string;
+      dueDate: string | null;
+    }) => createFollowUpTask(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tasks(orgId) }),
+  });
+}
+
+export function useDecideDictionary() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: Extract<FieldDictionaryStatus, "confirmed" | "rejected">;
+    }) => decideDictionaryEntry(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.fieldDictionary(orgId) }),
+  });
+}

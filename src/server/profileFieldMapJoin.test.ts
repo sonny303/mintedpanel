@@ -12,6 +12,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { ApiEnvelope } from "./envelope";
 import type { AuthContext } from "./guard";
+// portalFieldMaps now also exposes browser readers that import the anon client
+// at load; stub it (this suite runs the real handler/services over fake dbs and
+// never touches the anon client).
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 import { handleProviderProfile } from "./extensionRoutes";
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import type { ProfileToken } from "@/services/providerProfile";

@@ -17,6 +17,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as FixItRouteImport } from './routes/fix-it'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
@@ -33,12 +34,14 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
+import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -79,6 +82,11 @@ const LaunchesRoute = LaunchesRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FixItRoute = FixItRouteImport.update({
+  id: '/fix-it',
+  path: '/fix-it',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientProgressRoute = ClientProgressRouteImport.update({
@@ -161,6 +169,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/admin/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPortalsRoute = AdminPortalsRouteImport.update({
+  id: '/admin/portals',
+  path: '/admin/portals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminPayersRoute = AdminPayersRouteImport.update({
   id: '/admin/payers',
   path: '/admin/payers',
@@ -191,6 +204,11 @@ const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
   path: '/edit',
   getParentRoute: () => ProvidersIdRoute,
 } as any)
+const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
+  id: '/portals/$portalKey/train',
+  path: '/portals/$portalKey/train',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -201,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/fix-it': typeof FixItRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -212,6 +231,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
+  '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
@@ -226,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
@@ -233,6 +254,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/client-progress': typeof ClientProgressRoute
+  '/fix-it': typeof FixItRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -242,6 +264,7 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
+  '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/users': typeof AdminUsersRoute
@@ -254,6 +277,7 @@ export interface FileRoutesByTo {
   '/launches': typeof LaunchesIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
@@ -263,6 +287,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/fix-it': typeof FixItRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -274,6 +299,7 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
+  '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
@@ -288,6 +314,7 @@ export interface FileRoutesById {
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
@@ -298,6 +325,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/fix-it'
     | '/home'
     | '/launches'
     | '/login'
@@ -309,6 +337,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
+    | '/admin/portals'
     | '/admin/settings'
     | '/admin/statuses'
     | '/admin/templates'
@@ -323,6 +352,7 @@ export interface FileRouteTypes {
     | '/launches/'
     | '/providers/'
     | '/admin/templates/$id'
+    | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/templates/'
     | '/providers/$id/'
@@ -330,6 +360,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/client-progress'
+    | '/fix-it'
     | '/home'
     | '/login'
     | '/privacy'
@@ -339,6 +370,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
+    | '/admin/portals'
     | '/admin/settings'
     | '/admin/statuses'
     | '/admin/users'
@@ -351,6 +383,7 @@ export interface FileRouteTypes {
     | '/launches'
     | '/providers'
     | '/admin/templates/$id'
+    | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/templates'
     | '/providers/$id'
@@ -359,6 +392,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/fix-it'
     | '/home'
     | '/launches'
     | '/login'
@@ -370,6 +404,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/mso-routing'
     | '/admin/payers'
+    | '/admin/portals'
     | '/admin/settings'
     | '/admin/statuses'
     | '/admin/templates'
@@ -384,6 +419,7 @@ export interface FileRouteTypes {
     | '/launches/'
     | '/providers/'
     | '/admin/templates/$id'
+    | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/templates/'
     | '/providers/$id/'
@@ -393,6 +429,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
   ClientProgressRoute: typeof ClientProgressRoute
+  FixItRoute: typeof FixItRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -404,12 +441,14 @@ export interface RootRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
   AdminPayersRoute: typeof AdminPayersRoute
+  AdminPortalsRoute: typeof AdminPortalsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   AdminUsersRoute: typeof AdminUsersRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   TasksIdRoute: typeof TasksIdRoute
+  PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -468,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fix-it': {
+      id: '/fix-it'
+      path: '/fix-it'
+      fullPath: '/fix-it'
+      preLoaderRoute: typeof FixItRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/client-progress': {
@@ -582,6 +628,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/portals': {
+      id: '/admin/portals'
+      path: '/admin/portals'
+      fullPath: '/admin/portals'
+      preLoaderRoute: typeof AdminPortalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/payers': {
       id: '/admin/payers'
       path: '/admin/payers'
@@ -623,6 +676,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/providers/$id/edit'
       preLoaderRoute: typeof ProvidersIdEditRouteImport
       parentRoute: typeof ProvidersIdRoute
+    }
+    '/portals/$portalKey/train': {
+      id: '/portals/$portalKey/train'
+      path: '/portals/$portalKey/train'
+      fullPath: '/portals/$portalKey/train'
+      preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/templates/$id': {
       id: '/admin/templates/$id'
@@ -708,6 +768,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
   ClientProgressRoute: ClientProgressRoute,
+  FixItRoute: FixItRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
@@ -719,12 +780,14 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
   AdminPayersRoute: AdminPayersRoute,
+  AdminPortalsRoute: AdminPortalsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   AdminUsersRoute: AdminUsersRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   TasksIdRoute: TasksIdRoute,
+  PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
