@@ -19,9 +19,10 @@ and `src/start.ts` are a real server runtime.
 
 A slice of app server logic runs as `/api/*` routes in `src/server/` on the
 nitro server, behind a shared org/role guard using the service-role client:
-health + provider CRUD (Chunk 3 pilot, PR #19) and the five extension-facing
+health + provider CRUD (Chunk 3 pilot, PR #19) and the six extension-facing
 endpoints (Chunk 4 — provider profile, portal field maps, fill events; R2
-Workbench — open cases, submission touches). The
+Workbench — open cases, submission touches; 2026-07-06 — org discovery
+`/api/me/orgs`, plus facility awareness on the profile). The
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
@@ -149,13 +150,30 @@ them. The current surface:
 
 - `GET /api/health` (public) · provider CRUD (`GET/POST /api/providers`,
   `GET/PATCH /api/providers/:id`) — Chunk 3.
-- `GET /api/providers/:id/profile?state=XX` — the fill engine's payload: the
-  provider row + every catalog token resolved to a value server-side
-  (`src/services/providerProfile.ts`). Deterministic source-row picking:
-  `?state` selects the state license; primary-else-sole assignment selects the
-  facility; sole policy selects group insurance; `payers`/`msos`/`contracts`
-  tokens are case-scoped and always come back `null` + listed in `unresolved`
-  with a reason. The `{{user.*}}` token family (`user.name` from
+- `GET /api/me/orgs` — the caller's own memberships, `{ orgId, orgName, role }`
+  rows derived from the JWT user id only (`src/services/orgMemberships.ts`).
+  Runs on `authenticateUser` (the guard's JWT-only step, no org resolution):
+  it is the org-discovery endpoint a multi-org caller needs BEFORE it can send
+  `x-org-id`, so the guard's multi-org 400 deliberately doesn't apply. Zero
+  memberships = empty list, not an error. Gate assertions 10/10b pin "own
+  memberships only".
+- `GET /api/providers/:id/profile?state=XX&facilityId=<uuid>` — the fill
+  engine's payload: the provider row + every catalog token resolved to a value
+  server-side (`src/services/providerProfile.ts`). Deterministic source-row
+  picking: `?state` selects the state license; sole policy selects group
+  insurance; `payers`/`msos`/`contracts` tokens are case-scoped and always
+  come back `null` + listed in `unresolved` with a reason. Facility awareness
+  (2026-07-06): the response carries `facilities: [{ id, name }]` (the
+  provider's org-scoped facility set via provider_facility_assignments) and
+  `selected_facility_id`; `?facilityId` must be in that set (cross-org or
+  unassigned → 404 "Facility not found for this provider", gate assertion 11);
+  no param + sole facility auto-selects; no param + several →
+  facility._/assignment._ tokens come back null with
+  `meta.needs_facility: true` — the server NEVER guesses (the old
+  primary-assignment heuristic is deliberately gone; `assignment.*` follows
+  the same selection because the assignment is the link row). The snake_case
+  keys (`selected_facility_id`, `needs_facility`) are the locked wire
+  contract, like the touches body. The `{{user.*}}` token family (`user.name` from
   user_metadata full_name/name, `user.email` from the JWT claim — no schema
   backing) is appended by the route via `src/server/userTokens.ts`; users set
   their own full_name in Settings → Profile (`ProfilePanel` →
@@ -226,7 +244,10 @@ x-org-id`.
   400, never a silently guessed first membership), and returns an
   `AuthContext` already scoped to that org with a `writeAudit` closure. There is no path to a handler without a resolved
   ctx. `isWriter(ctx)` = admin|specialist (billing is read-only), mirroring the
-  RLS write policies; handlers turn a false into a 403.
+  RLS write policies; handlers turn a false into a 403. `authenticateUser()`
+  is the JWT-only first step (verify token, no membership query), split out
+  2026-07-06 for `/api/me/orgs` — the ONLY route on it; every other data route
+  stays on the full `authenticate()`.
 - **Service reuse via DI, browser callers unchanged.** `src/services/providers.ts`
   gained a `ProviderServiceCtx` (`{ db, orgId, writeAudit }`); its functions take
   an **optional** ctx defaulting to `browserCtx()` (the RLS anon client +
@@ -241,7 +262,8 @@ x-org-id`.
 - **Envelope:** `src/server/envelope.ts` — every response is `{ data, error, meta }`
   via `ok(data, meta?, status?)` / `fail(status, message)`; list meta carries
   `{ total, page, pageSize }`; `meta.notes` (string[]) carries non-fatal
-  resolution notes (currently only empty `{{user.*}}` tokens).
+  resolution notes (currently only empty `{{user.*}}` tokens);
+  `meta.needs_facility` (profile route only) flags an ambiguous facility set.
 - **Server-only, do not import client-side:** `src/server/serviceClient.ts` (the
   service-role + auth clients) and everything it pulls. Vite's `**/server/**`
   import-protection blocks a browser bundle from importing it. `api.ts`
@@ -257,7 +279,9 @@ x-org-id`.
   assertions to `scripts/verify-org-isolation.mjs` before merge, plus pass/leak
   coverage in `scripts/mock-api-server.mjs`. Gate fixtures: the one South
   Park-scoped `portal_field_maps` row (id in the workflow env block, seeded via
-  MCP 2026-07-05) keeps the field-maps assertion non-vacuous. The expected
+  MCP 2026-07-05) keeps the field-maps assertion non-vacuous, and
+  `SOUTHPARK_FACILITY_ID` (Casa Bonita Clinic, existing demo data) is the
+  must-404 `?facilityId` of assertion 11. The expected
   per-org provider counts also live in that env block
   (`EXPECTED_KANSAS_PROVIDERS`/`EXPECTED_SOUTHPARK_PROVIDERS`) — adding or
   removing a demo/UAT provider means updating the count there, or assertions
@@ -269,9 +293,9 @@ x-org-id`.
    workflow UI are separate products. The current app UI keeps running on
    direct Supabase + RLS. Do not migrate current screens to the API.
 2. **Consumer-pulled API surface.** Routes get built only when a real consumer
-   pulls them. The extension pulls five (profile, field maps, fill events,
-   open cases, submission touches). Other cases/tasks/payers routes wait for
-   their consumer.
+   pulls them. The extension pulls six (profile, field maps, fill events,
+   open cases, submission touches, org discovery). Other cases/tasks/payers
+   routes wait for their consumer.
 3. **R1 exit criteria revised.** "Zero direct Supabase calls in frontend" and
    RLS lockout deferred to the workflow-UI product. Dual data paths accepted
    deliberately: current UI guarded by RLS, API guarded by guard.ts + the gate.

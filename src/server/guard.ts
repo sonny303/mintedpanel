@@ -11,6 +11,17 @@ import { getAuthClient, getServiceClient } from "./serviceClient";
 
 export type AppRole = "admin" | "specialist" | "billing";
 
+// The JWT-verified caller BEFORE org resolution — what authenticateUser()
+// returns. Handlers on this context may only query by the authenticated
+// userId; they have no org scope (the db client is service-role and bypasses
+// RLS, same as AuthContext.db).
+export interface UserContext {
+  userId: string;
+  email: string | null;
+  userMetadata: Record<string, unknown> | null;
+  db: SupabaseClient<Database>;
+}
+
 export interface AuthContext {
   userId: string;
   orgId: string;
@@ -45,14 +56,11 @@ export function getBearerToken(request: Request): string {
   return token;
 }
 
-// Authenticate the request and resolve the caller's org membership.
-// `requestedOrgId` (from an `x-org-id` header or `?orgId=`) disambiguates users
-// who belong to more than one org; the caller must actually be a member of it.
-// Multi-org callers MUST send it — omitting it is a 400, never a guessed org.
-export async function authenticate(
-  request: Request,
-  requestedOrgId?: string | null,
-): Promise<AuthContext> {
+// Verify the caller's JWT only — no org resolution, no membership query. This
+// is the auth step for USER-scoped routes (GET /api/me/orgs): org discovery
+// must work for a multi-org caller BEFORE they can send x-org-id, so the
+// multi-org 400 in authenticate() must not apply there.
+export async function authenticateUser(request: Request): Promise<UserContext> {
   const token = getBearerToken(request);
 
   const { data: claimData, error: claimError } = await getAuthClient(token).auth.getClaims(token);
@@ -68,6 +76,19 @@ export async function authenticate(
       : null;
 
   const db = getServiceClient();
+
+  return { userId, email, userMetadata, db };
+}
+
+// Authenticate the request and resolve the caller's org membership.
+// `requestedOrgId` (from an `x-org-id` header or `?orgId=`) disambiguates users
+// who belong to more than one org; the caller must actually be a member of it.
+// Multi-org callers MUST send it — omitting it is a 400, never a guessed org.
+export async function authenticate(
+  request: Request,
+  requestedOrgId?: string | null,
+): Promise<AuthContext> {
+  const { userId, email, userMetadata, db } = await authenticateUser(request);
 
   let membershipQuery = db.from("memberships").select("org_id, role").eq("user_id", userId);
   if (requestedOrgId) membershipQuery = membershipQuery.eq("org_id", requestedOrgId);

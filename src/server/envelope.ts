@@ -6,6 +6,11 @@ export interface ApiMeta {
   // Non-fatal resolution notes (e.g. a user token resolved to empty because
   // the auth metadata has no name). Advisory only; data is still complete.
   notes?: string[];
+  // GET /api/providers/:id/profile only: the provider has several facilities
+  // and no ?facilityId was sent, so facility.*/assignment.* tokens are empty
+  // — the client must ask the user to pick; the server never guesses.
+  // snake_case is the wire contract (see ProviderProfile in providerProfile.ts).
+  needs_facility?: boolean;
 }
 
 export interface ApiEnvelope<T> {

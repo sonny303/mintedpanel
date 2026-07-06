@@ -18,6 +18,8 @@
 //   SOUTHPARK_FIELDMAP_ID  the one South Park-scoped portal_field_maps row
 //                          (seeded fixture; id lives in the workflow env block)
 //   SOUTHPARK_CASE_ID      a South Park credential_cases id (must-reject POST)
+//   SOUTHPARK_FACILITY_ID  a South Park facilities id (the must-404 profile
+//                          ?facilityId in assertion 11)
 // Optional:
 //   VERCEL_BYPASS_SECRET   Vercel "Protection Bypass for Automation" secret. If the
 //                          deploy has Deployment Protection on, set this so requests
@@ -52,6 +54,7 @@ const REQUIRED = [
   "KANSAS_PROVIDER_ID",
   "SOUTHPARK_FIELDMAP_ID",
   "SOUTHPARK_CASE_ID",
+  "SOUTHPARK_FACILITY_ID",
 ];
 const missing = REQUIRED.filter((k) => !env[k]);
 if (missing.length) {
@@ -375,6 +378,47 @@ function looksLikeVercelGate(r) {
     "9b. Replaying the rejected touch still rejects (nothing was written)",
     touchReplay.status === 404 && touchReplay.body?.data == null,
     `status=${touchReplay.status} dataPresent=${touchReplay.body?.data != null}`,
+    { leak: true },
+  );
+
+  // 10. Org discovery (GET /api/me/orgs): the caller's OWN memberships only,
+  //     derived from the JWT user id — no org header involved. testkansas is
+  //     a Kansas-only fixture user, so exactly one row with the endpoint's
+  //     three columns; a different count is fixture drift, while 10b is the
+  //     leak half: the South Park org must never appear in Kansas's response.
+  const kOrgs = await apiGet("/api/me/orgs", { token: kansasTok });
+  const kOrgRows = kOrgs.body?.data ?? [];
+  const kOrgShapeOk =
+    kOrgRows.length === 1 &&
+    typeof kOrgRows[0]?.orgId === "string" &&
+    typeof kOrgRows[0]?.orgName === "string" &&
+    typeof kOrgRows[0]?.role === "string";
+  check(
+    "10. Kansas /api/me/orgs returns exactly the caller's own membership",
+    kOrgs.status === 200 && kOrgShapeOk,
+    `status=${kOrgs.status} rows=${kOrgRows.length}` +
+      (kOrgs.status !== 200 ? ` body=${(kOrgs.raw || "").slice(0, 100)}` : ""),
+  );
+  const spOrgLeaked = kOrgRows.some((r) => r?.orgId === env.SOUTHPARK_ORG);
+  check(
+    "10b. Kansas /api/me/orgs never contains the South Park org",
+    !spOrgLeaked,
+    `southParkOrgPresent=${spOrgLeaked}`,
+    { leak: true },
+  );
+
+  // 11. Facility awareness on the profile endpoint: a Kansas provider's
+  //     profile requested with a South Park facilityId must 404 with no data
+  //     — facility.* tokens must never resolve from another org's facility.
+  const xFac = await apiGet(
+    `/api/providers/${env.KANSAS_PROVIDER_ID}/profile?facilityId=${env.SOUTHPARK_FACILITY_ID}`,
+    { token: kansasTok },
+  );
+  const facLeaked = xFac.status < 400 || xFac.body?.data != null;
+  check(
+    "11. Kansas GET own profile with a South Park facilityId -> 404, no data",
+    xFac.status === 404 && !facLeaked,
+    `status=${xFac.status} (expect 404) dataPresent=${xFac.body?.data != null}`,
     { leak: true },
   );
 

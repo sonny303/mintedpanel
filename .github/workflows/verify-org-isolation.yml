@@ -123,6 +123,10 @@ jobs:
           # credential_cases row for the must-reject fill-event POST.
           SOUTHPARK_FIELDMAP_ID: 468238fc-ab35-4a4d-9569-bb7960f40328
           SOUTHPARK_CASE_ID: d0e40000-0000-4000-a000-000000000065
+          # SOUTHPARK_FACILITY_ID is a South Park facilities row ("Casa Bonita
+          # Clinic", demo data): assertion 11 proves a Kansas profile request
+          # naming it as ?facilityId is a 404, never a token source.
+          SOUTHPARK_FACILITY_ID: d0e40000-0000-4000-a000-000000000011
           # --- from secrets ---
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}

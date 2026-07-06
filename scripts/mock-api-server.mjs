@@ -21,6 +21,8 @@
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
 //   touches     cross-org submission touch accepted and stored       (9, 9b)
+//   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
+//   facility    cross-org profile facilityId honored instead of 404  (11)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -33,6 +35,8 @@ export const FIXTURES = {
   SOUTHPARK_FIELDMAP_ID: "468238fc-ab35-4a4d-9569-bb7960f40328",
   SOUTHPARK_CASE_ID: "d0e40000-0000-4000-a000-000000000065",
   KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
+  KANSAS_FACILITY_ID: "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
+  SOUTHPARK_FACILITY_ID: "d0e40000-0000-4000-a000-000000000011",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
@@ -45,6 +49,8 @@ export const LEAK_MODES = [
   "fillevents",
   "cases",
   "touches",
+  "meorgs",
+  "facility",
 ];
 
 const USERS = {
@@ -54,6 +60,7 @@ const USERS = {
     email: FIXTURES.KANSAS_EMAIL,
     fullName: "Test Kansas",
     orgId: FIXTURES.KANSAS_ORG,
+    orgName: "Kansas Fitness Physio",
     role: "admin",
   },
   [FIXTURES.SPVIEW_EMAIL]: {
@@ -62,9 +69,30 @@ const USERS = {
     email: FIXTURES.SPVIEW_EMAIL,
     fullName: "Test South Park",
     orgId: FIXTURES.SOUTHPARK_ORG,
+    orgName: "South Park Physician Group",
     role: "billing",
   },
 };
+
+// One facility per org (mirrors the live fixtures: the Kansas gate provider has
+// exactly one assigned facility, so its profile auto-selects it).
+const FACILITIES = [
+  {
+    id: FIXTURES.KANSAS_FACILITY_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    name: "Fitness Physio - Leavenworth",
+  },
+  {
+    id: FIXTURES.SOUTHPARK_FACILITY_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    name: "Casa Bonita Clinic",
+  },
+];
+
+// Every provider is assigned all of its org's facilities.
+function facilitiesOf(provider) {
+  return FACILITIES.filter((f) => f.orgId === provider.orgId);
+}
 
 function provider(id, orgId, firstName, lastName) {
   return { id, orgId, firstName, lastName, status: "active" };
@@ -169,12 +197,15 @@ function readBody(req) {
   });
 }
 
-function profileFor(p, user) {
+function profileFor(p, user, { facilities, selectedFacilityId }) {
+  const selected = FACILITIES.find((f) => f.id === selectedFacilityId) ?? null;
   return {
     provider: { ...p, npi: "1234567890", ssnLast4: "0000", dateOfBirth: "1980-01-01" },
     tokens: [
       { token: "provider.firstName", value: p.firstName },
       { token: "provider.lastName", value: p.lastName },
+      // facility.* resolves from the selected facility only — never a guess.
+      { token: "facility.name", value: selected ? selected.name : null },
       { token: "payer.name", value: null },
       // {{user.*}} rides along, resolved from the caller's JWT metadata.
       { token: "user.name", value: user.fullName },
@@ -183,6 +214,8 @@ function profileFor(p, user) {
     unresolved: [
       { token: "payer.name", reason: "case-scoped source (payers); resolve at fill time" },
     ],
+    facilities: facilities.map(({ id, name }) => ({ id, name })),
+    selected_facility_id: selectedFacilityId,
   };
 }
 
@@ -229,6 +262,23 @@ export async function createMockApiServer(options = {}) {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
     const user = Object.values(USERS).find((u) => u.token === token);
     if (!user) return envelope(res, 401, null, "Missing or malformed Authorization header");
+
+    // --- /api/me/orgs (user-scoped: sits BEFORE org resolution, like the real
+    // route runs on authenticateUser — x-org-id is irrelevant to it) ---
+    if (/^\/api\/me\/orgs\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      let rows = [{ orgId: user.orgId, orgName: user.orgName, role: user.role }];
+      if (leak === "meorgs") {
+        // Broken server: other users' membership rows leak into the response.
+        rows = rows.concat(
+          Object.values(USERS)
+            .filter((u) => u.orgId !== user.orgId)
+            .map((u) => ({ orgId: u.orgId, orgName: u.orgName, role: u.role })),
+        );
+      }
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
     const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");
     let orgId = user.orgId;
     if (requestedOrg) {
@@ -245,8 +295,35 @@ export async function createMockApiServer(options = {}) {
       const p = PROVIDERS.find((row) => row.id === profileMatch[1]);
       const visible = p && (p.orgId === orgId || leak === "profile");
       if (!visible) return envelope(res, 404, null, "Provider not found");
+      // Facility awareness: ?facilityId must be in the caller's org AND the
+      // provider's facility set (else 404); the sole facility auto-selects;
+      // several without a choice -> tokens empty + meta.needs_facility. Leak
+      // "facility": the checks are skipped and a cross-org facility is served.
+      const requestedFacility = url.searchParams.get("facilityId");
+      const provFacilities = facilitiesOf(p);
+      let selectedFacilityId = null;
+      let needsFacility = false;
+      if (requestedFacility) {
+        const okFacility = provFacilities.some(
+          (f) => f.id === requestedFacility && f.orgId === orgId,
+        );
+        if (!okFacility && leak !== "facility") {
+          return envelope(res, 404, null, "Facility not found for this provider");
+        }
+        selectedFacilityId = requestedFacility;
+      } else if (provFacilities.length === 1) {
+        selectedFacilityId = provFacilities[0].id;
+      } else if (provFacilities.length > 1) {
+        needsFacility = true;
+      }
       res.setHeader("cache-control", "no-store");
-      return envelope(res, 200, profileFor(p, user));
+      return envelope(
+        res,
+        200,
+        profileFor(p, user, { facilities: provFacilities, selectedFacilityId }),
+        null,
+        needsFacility ? { needs_facility: true } : null,
+      );
     }
 
     // --- /api/providers and /api/providers/:id ---
