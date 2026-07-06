@@ -8,7 +8,7 @@
 // paths get a JSON 404, and OPTIONS preflights are answered for the
 // API_CORS_ORIGINS allowlist (see ./cors.ts).
 import { ok, fail } from "./envelope";
-import { authenticate, GuardError } from "./guard";
+import { authenticate, authenticateUser, GuardError } from "./guard";
 import { handlePreflight, withCors } from "./cors";
 
 // Route handlers pull in their services (and the Supabase client graph). They
@@ -27,6 +27,8 @@ const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
 const CASES_ROUTE = /^\/api\/cases\/?$/;
 // `/api/cases/:id/touches` — the extension's "Mark submitted" business log.
 const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
+// `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
+const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
@@ -80,15 +82,32 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
+  const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   if (
     !profileMatch &&
     !providersMatch &&
     !isFieldMaps &&
     !isFillEvents &&
     !isCases &&
-    !caseTouchesMatch
+    !caseTouchesMatch &&
+    !isMeOrgs
   ) {
     return fail(404, "Not found");
+  }
+
+  // /api/me/orgs runs on the user-only auth step — no org resolution. It is
+  // the org-discovery endpoint a multi-org caller needs BEFORE it can send
+  // x-org-id, so the guard's multi-org 400 must not apply here; the service
+  // filters by the JWT-verified user id alone.
+  if (isMeOrgs) {
+    if (method !== "GET") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      return await routes.handleListMyOrgs(user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
   }
 
   let ctx;

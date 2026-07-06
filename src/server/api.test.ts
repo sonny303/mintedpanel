@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ApiEnvelope } from "./envelope";
 
-// Keep the real GuardError (used for instanceof in api.ts); mock authenticate.
+// Keep the real GuardError (used for instanceof in api.ts); mock both auth steps.
 vi.mock("./guard", async () => {
   const actual = await vi.importActual<typeof import("./guard")>("./guard");
-  return { ...actual, authenticate: vi.fn() };
+  return { ...actual, authenticate: vi.fn(), authenticateUser: vi.fn() };
 });
 vi.mock("./providerRoutes", () => ({
   handleListProviders: vi.fn(),
@@ -18,9 +18,10 @@ vi.mock("./extensionRoutes", () => ({
   handleCreateFillEvent: vi.fn(),
   handleListProviderCases: vi.fn(),
   handleCreateCaseTouch: vi.fn(),
+  handleListMyOrgs: vi.fn(),
 }));
 
-import { authenticate, GuardError } from "./guard";
+import { authenticate, authenticateUser, GuardError } from "./guard";
 import { handleListProviders, handleGetProvider } from "./providerRoutes";
 import {
   handleProviderProfile,
@@ -28,10 +29,13 @@ import {
   handleCreateFillEvent,
   handleListProviderCases,
   handleCreateCaseTouch,
+  handleListMyOrgs,
 } from "./extensionRoutes";
 import { handleApiRequest, isApiRequest } from "./api";
 
 const authenticateMock = vi.mocked(authenticate);
+const authenticateUserMock = vi.mocked(authenticateUser);
+const meOrgsMock = vi.mocked(handleListMyOrgs);
 const listMock = vi.mocked(handleListProviders);
 const getMock = vi.mocked(handleGetProvider);
 const profileMock = vi.mocked(handleProviderProfile);
@@ -152,6 +156,47 @@ describe("handleApiRequest error handling — 500 for internal faults, no mask, 
     const res = await handleApiRequest(GET("/api/providers"));
     expect(res.status).toBe(403);
     expect((await body(res)).error).toBe("Your role cannot modify providers");
+  });
+});
+
+describe("handleApiRequest — /api/me/orgs (user-scoped auth, no org resolution)", () => {
+  it("GET dispatches through authenticateUser, never the org-resolving authenticate", async () => {
+    // A multi-org caller without x-org-id would get a 400 from authenticate();
+    // this endpoint exists to answer that caller, so it must not run it.
+    authenticateUserMock.mockResolvedValue({ userId: "u1" } as never);
+    meOrgsMock.mockResolvedValue(
+      new Response('{"data":[],"error":null,"meta":{"total":0}}', { status: 200 }),
+    );
+
+    const res = await handleApiRequest(GET("/api/me/orgs"));
+
+    expect(res.status).toBe(200);
+    expect(authenticateUserMock).toHaveBeenCalledTimes(1);
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(meOrgsMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1" }));
+  });
+
+  it("still requires a Bearer JWT: a 401 GuardError maps through", async () => {
+    authenticateUserMock.mockRejectedValue(new GuardError(401, "Invalid or expired token"));
+    const res = await handleApiRequest(GET("/api/me/orgs"));
+    expect(res.status).toBe(401);
+    expect((await body(res)).error).toBe("Invalid or expired token");
+    expect(meOrgsMock).not.toHaveBeenCalled();
+  });
+
+  it("a non-GuardError (server misconfig) is a 500, never a 401", async () => {
+    authenticateUserMock.mockRejectedValue(new Error("supabaseKey is required."));
+    const res = await handleApiRequest(GET("/api/me/orgs"));
+    expect(res.status).toBe(500);
+    expect((await body(res)).error).toBe("Internal server error");
+  });
+
+  it("POST /api/me/orgs is 405", async () => {
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/me/orgs", { method: "POST" }),
+    );
+    expect(res.status).toBe(405);
+    expect(meOrgsMock).not.toHaveBeenCalled();
   });
 });
 

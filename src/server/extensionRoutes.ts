@@ -6,18 +6,29 @@ import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
+import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
-import { ok, fail } from "./envelope";
-import { isWriter, type AuthContext } from "./guard";
+import { ok, fail, type ApiMeta } from "./envelope";
+import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
 
 const STATE_RE = /^[A-Za-z]{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// GET /api/providers/:id/profile[?state=XX] — everything the fill engine needs
-// for one provider, resolved server-side. The most PHI-dense response in the
-// system (SSN last-4, DOB, home address — unmasked by design for form fill):
-// Cache-Control: no-store, and nothing here may ever log the response body.
+// GET /api/me/orgs — the caller's own org memberships (org id, name, role),
+// derived from the JWT-verified user id and nothing else. This is the org
+// discovery endpoint a multi-org caller needs BEFORE it can send x-org-id, so
+// it runs on the user-only auth step (authenticateUser), not the org guard.
+export async function handleListMyOrgs(user: UserContext): Promise<Response> {
+  const rows = await listUserOrgMemberships({ db: user.db }, user.userId);
+  return ok(rows, { total: rows.length });
+}
+
+// GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the
+// fill engine needs for one provider, resolved server-side. The most PHI-dense
+// response in the system (SSN last-4, DOB, home address — unmasked by design
+// for form fill): Cache-Control: no-store, and nothing here may ever log the
+// response body.
 export async function handleProviderProfile(
   id: string,
   url: URL,
@@ -32,8 +43,27 @@ export async function handleProviderProfile(
     if (!STATE_RE.test(stateRaw)) return fail(422, "state must be a two-letter code");
     state = stateRaw.toUpperCase();
   }
-  const profile = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, { state });
-  if (!profile) return fail(404, "Provider not found");
+  // Explicit facility selection for the facility.*/assignment.* tokens. A
+  // non-UUID can't be a facility — same early 404 the set-membership check
+  // below would produce, without a uuid-cast 500.
+  const facilityIdRaw = url.searchParams.get("facilityId");
+  let facilityId: string | undefined;
+  if (facilityIdRaw != null && facilityIdRaw !== "") {
+    if (!UUID_RE.test(facilityIdRaw)) return fail(404, "Facility not found for this provider");
+    facilityId = facilityIdRaw;
+  }
+
+  const result = await getProviderProfile({ db: ctx.db, orgId: ctx.orgId }, id, {
+    state,
+    facilityId,
+  });
+  if (result.kind === "provider_not_found") return fail(404, "Provider not found");
+  // A facilityId outside the caller's org or this provider's facility set —
+  // the isolation gate's assertion 11. Not a read: no audit row, no data.
+  if (result.kind === "facility_not_found") {
+    return fail(404, "Facility not found for this provider");
+  }
+  const { profile, needsFacility } = result;
 
   // {{user.*}} tokens ride along with the catalog tokens (R2 locked decision
   // 5); resolution notes surface in meta, never as errors.
@@ -48,11 +78,20 @@ export async function handleProviderProfile(
     actionType: "READ",
     entityType: "provider",
     entityId: id,
-    after: { route: "/api/providers/:id/profile", state: state ?? null },
+    after: {
+      route: "/api/providers/:id/profile",
+      state: state ?? null,
+      facilityId: profile.selected_facility_id,
+    },
     description: "Provider profile read (extension fill payload)",
   });
 
-  const response = ok(profile, userTokens.notes.length ? { notes: userTokens.notes } : null);
+  const meta: ApiMeta = {};
+  if (userTokens.notes.length) meta.notes = userTokens.notes;
+  // Several facilities and no ?facilityId: facility tokens came back empty and
+  // the client must ask the user to pick — the server never guesses.
+  if (needsFacility) meta.needs_facility = true;
+  const response = ok(profile, Object.keys(meta).length ? meta : null);
   response.headers.set("cache-control", "no-store");
   return response;
 }

@@ -3,7 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("./serviceClient", () => ({ getAuthClient: vi.fn(), getServiceClient: vi.fn() }));
 
 import { getAuthClient, getServiceClient } from "./serviceClient";
-import { authenticate, getBearerToken, isWriter, GuardError, type AuthContext } from "./guard";
+import {
+  authenticate,
+  authenticateUser,
+  getBearerToken,
+  isWriter,
+  GuardError,
+  type AuthContext,
+} from "./guard";
 
 function req(headers: Record<string, string> = {}): Request {
   return new Request("https://example.test/api/providers", { headers });
@@ -97,6 +104,46 @@ function fakeServiceDb(memberships: Array<{ org_id: string; role: string }>) {
     },
   };
 }
+
+describe("guard.authenticateUser — user-only auth step (no org resolution)", () => {
+  const request = () => req({ authorization: "Bearer tok" });
+
+  it("verifies the JWT and returns the user without ever querying the db", async () => {
+    vi.mocked(getAuthClient).mockReturnValue(fakeAuthClient() as never);
+    // The whole point of this step: a multi-org caller must be able to list
+    // their orgs BEFORE sending x-org-id, so no membership query may run.
+    vi.mocked(getServiceClient).mockReturnValue({
+      from: () => {
+        throw new Error("authenticateUser must not query the db");
+      },
+    } as never);
+
+    const user = await authenticateUser(request());
+
+    expect(user.userId).toBe("u1");
+    expect(user.email).toBe("tester@minted.com");
+    expect(user.userMetadata).toEqual({});
+    expect(user.db).toBeDefined();
+  });
+
+  it("rejects an invalid or expired token with 401", async () => {
+    vi.mocked(getAuthClient).mockReturnValue({
+      auth: { getClaims: async () => ({ data: null, error: new Error("bad token") }) },
+    } as never);
+
+    await expect(authenticateUser(request())).rejects.toMatchObject({
+      name: "GuardError",
+      status: 401,
+    });
+  });
+
+  it("rejects a missing Authorization header with 401", async () => {
+    await expect(authenticateUser(req())).rejects.toMatchObject({
+      name: "GuardError",
+      status: 401,
+    });
+  });
+});
 
 describe("guard.authenticate — org resolution", () => {
   const TWO_ORGS = [

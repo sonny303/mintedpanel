@@ -5,17 +5,21 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import {
   getProviderProfile,
   type ProviderProfile,
+  type ProviderProfileResult,
   type ProviderProfileServiceCtx,
 } from "./providerProfile";
 
-// Minimal chainable fake of the supabase-js query builder, keyed by table name
-// (getProviderProfile queries each source table at most once, partly inside a
-// Promise.all). Also fakes `.rpc()` for the get_sop_field_tokens catalog.
+// Minimal chainable fake of the supabase-js query builder, keyed by table name.
+// A table may be queried more than once (facilities: the id/name facility set,
+// then the selected facility's full row) — give it an ARRAY of results and each
+// from() call consumes the next one, in call order. Also fakes `.rpc()` for the
+// get_sop_field_tokens catalog.
 interface Captured {
   table: string;
   selectCols?: string;
   filters: Array<[string, unknown]>;
-  orders: Array<[string, { ascending: boolean; nullsFirst?: boolean }]>;
+  ins: Array<[string, unknown[]]>;
+  orders: Array<[string, { ascending: boolean; nullsFirst?: boolean } | undefined]>;
 }
 
 interface FakeResult {
@@ -23,15 +27,26 @@ interface FakeResult {
   error?: unknown;
 }
 
-function makeFakeDb(tables: Record<string, FakeResult>, catalog: FakeResult = { data: null }) {
+function makeFakeDb(
+  tables: Record<string, FakeResult | FakeResult[]>,
+  catalog: FakeResult = { data: null },
+) {
   const captures: Captured[] = [];
   const rpcCalls: string[] = [];
+  const queues = new Map<string, FakeResult[]>();
 
   const db = {
     from(table: string) {
-      const cap: Captured = { table, filters: [], orders: [] };
+      const cap: Captured = { table, filters: [], ins: [], orders: [] };
       captures.push(cap);
-      const result = () => tables[table] ?? { data: null };
+      const configured = tables[table];
+      let fixed: FakeResult;
+      if (Array.isArray(configured)) {
+        if (!queues.has(table)) queues.set(table, [...configured]);
+        fixed = queues.get(table)?.shift() ?? { data: null };
+      } else {
+        fixed = configured ?? { data: null };
+      }
       const builder: Record<string, unknown> = {
         select(cols: string) {
           cap.selectCols = cols;
@@ -41,13 +56,17 @@ function makeFakeDb(tables: Record<string, FakeResult>, catalog: FakeResult = { 
           cap.filters.push([col, val]);
           return builder;
         },
-        order(col: string, opts: { ascending: boolean; nullsFirst?: boolean }) {
+        in(col: string, vals: unknown[]) {
+          cap.ins.push([col, vals]);
+          return builder;
+        },
+        order(col: string, opts?: { ascending: boolean; nullsFirst?: boolean }) {
           cap.orders.push([col, opts]);
           return builder;
         },
-        maybeSingle: () => Promise.resolve(result()),
+        maybeSingle: () => Promise.resolve(fixed),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
-          Promise.resolve(result()).then(res, rej),
+          Promise.resolve(fixed).then(res, rej),
       };
       return builder;
     },
@@ -68,6 +87,7 @@ const CATALOG: Json = [
   { table: "provider_groups", token: "group.name", column: "name" },
   { table: "state_licenses", token: "license.licenseNumber", column: "license_number" },
   { table: "facilities", token: "facility.name", column: "name" },
+  { table: "provider_facility_assignments", token: "assignment.isPrimary", column: "is_primary" },
   {
     table: "group_insurance_policies",
     token: "groupInsurance.policyNumber",
@@ -87,25 +107,31 @@ const providerRow = {
 const groupRow = { id: "g1", name: "Group One" };
 const licenseKS = { id: "l1", state: "KS", license_number: "KS-100", issue_date: "2024-01-01" };
 const licenseMO = { id: "l2", state: "MO", license_number: "MO-200", issue_date: "2023-06-01" };
-const assignmentRow = { id: "a1", facility_id: "f1", is_primary: true };
-const facilityRow = { id: "f1", name: "Main Clinic" };
+const assignmentF1 = { id: "a1", facility_id: "f1", is_primary: true };
+const assignmentF2 = { id: "a2", facility_id: "f2", is_primary: false };
+const facilityListF1 = { id: "f1", name: "Main Clinic" };
+const facilityListF2 = { id: "f2", name: "Second Clinic" };
+const facilityRowF1 = { id: "f1", name: "Main Clinic" };
+const facilityRowF2 = { id: "f2", name: "Second Clinic" };
 const policyRow = { id: "gp1", policy_number: "POL-9" };
 
-function happyTables(): Record<string, FakeResult> {
+function happyTables(): Record<string, FakeResult | FakeResult[]> {
   return {
     providers: { data: providerRow },
     provider_groups: { data: groupRow },
     state_licenses: { data: [licenseKS] },
-    provider_facility_assignments: { data: [assignmentRow] },
+    provider_facility_assignments: { data: [assignmentF1] },
     group_insurance_policies: { data: [policyRow] },
-    facilities: { data: facilityRow },
+    // Queried twice: the org-scoped facility set (id, name), then the selected
+    // facility's full-column row.
+    facilities: [{ data: [facilityListF1] }, { data: facilityRowF1 }],
   };
 }
 
-function must(profile: ProviderProfile | null): ProviderProfile {
-  expect(profile).not.toBeNull();
-  if (profile === null) throw new Error("expected a profile");
-  return profile;
+function must(result: ProviderProfileResult): ProviderProfile {
+  expect(result.kind).toBe("ok");
+  if (result.kind !== "ok") throw new Error("expected an ok profile result");
+  return result.profile;
 }
 
 function valueOf(profile: ProviderProfile, token: string): Json | null | undefined {
@@ -117,7 +143,7 @@ function reasonFor(profile: ProviderProfile, token: string): string {
 }
 
 describe("provider profile service — injected server context", () => {
-  it("a provider outside the org resolves to null before the catalog is read", async () => {
+  it("a provider outside the org resolves to provider_not_found before the catalog is read", async () => {
     const { db, captures, rpcCalls } = makeFakeDb(
       { providers: { data: null } },
       {
@@ -125,9 +151,9 @@ describe("provider profile service — injected server context", () => {
       },
     );
 
-    const profile = await getProviderProfile(ctxWith(db), "p1");
+    const result = await getProviderProfile(ctxWith(db), "p1");
 
-    expect(profile).toBeNull();
+    expect(result).toEqual({ kind: "provider_not_found" });
     expect(captures).toHaveLength(1);
     expect(captures[0].table).toBe("providers");
     expect(captures[0].filters).toContainEqual(["id", "p1"]);
@@ -147,7 +173,12 @@ describe("provider profile service — injected server context", () => {
     expect(valueOf(profile, "group.name")).toBe("Group One");
     expect(valueOf(profile, "license.licenseNumber")).toBe("KS-100");
     expect(valueOf(profile, "facility.name")).toBe("Main Clinic");
+    expect(valueOf(profile, "assignment.isPrimary")).toBe(true);
     expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("POL-9");
+
+    // A sole facility is auto-selected and reported in the payload.
+    expect(profile.facilities).toEqual([{ id: "f1", name: "Main Clinic" }]);
+    expect(profile.selected_facility_id).toBe("f1");
 
     // Case-scoped sources are never resolved from a provider profile.
     expect(valueOf(profile, "payer.name")).toBeNull();
@@ -163,9 +194,14 @@ describe("provider profile service — injected server context", () => {
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
-    // The facility is fetched from the picked assignment.
-    const facilityCap = captures.find((c) => c.table === "facilities");
-    expect(facilityCap?.filters).toContainEqual(["id", "f1"]);
+    // The facility set is fetched by the assignments' facility ids (id + name
+    // only), then the selected facility's full row by id.
+    const facilityCaps = captures.filter((c) => c.table === "facilities");
+    expect(facilityCaps).toHaveLength(2);
+    expect(facilityCaps[0].selectCols).toBe("id, name");
+    expect(facilityCaps[0].ins).toEqual([["id", ["f1"]]]);
+    expect(facilityCaps[0].orders.map(([col]) => col)).toEqual(["name", "id"]);
+    expect(facilityCaps[1].filters).toContainEqual(["id", "f1"]);
     // Licenses come back newest-first so ?state picks deterministically.
     const licenseCap = captures.find((c) => c.table === "state_licenses");
     expect(licenseCap?.orders).toEqual([["issue_date", { ascending: false, nullsFirst: false }]]);
@@ -193,13 +229,92 @@ describe("provider profile service — injected server context", () => {
     expect(reasonFor(profile, "license.licenseNumber")).toContain("?state");
   });
 
+  it("several facilities without ?facilityId stay empty with needsFacility — a primary is NOT auto-picked", async () => {
+    const tables = happyTables();
+    // Two facilities, one marked primary: the old primary-assignment heuristic
+    // must not resurface — the server never guesses, the client asks the user.
+    tables.provider_facility_assignments = { data: [assignmentF1, assignmentF2] };
+    tables.facilities = [{ data: [facilityListF1, facilityListF2] }];
+    const { db, captures } = makeFakeDb(tables, { data: CATALOG });
+
+    const result = await getProviderProfile(ctxWith(db), "p1");
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+
+    expect(result.needsFacility).toBe(true);
+    const profile = result.profile;
+    expect(profile.selected_facility_id).toBeNull();
+    expect(profile.facilities).toEqual([
+      { id: "f1", name: "Main Clinic" },
+      { id: "f2", name: "Second Clinic" },
+    ]);
+    expect(valueOf(profile, "facility.name")).toBeNull();
+    expect(reasonFor(profile, "facility.name")).toContain("?facilityId=");
+    expect(valueOf(profile, "assignment.isPrimary")).toBeNull();
+    expect(reasonFor(profile, "assignment.isPrimary")).toContain("?facilityId=");
+    // Non-facility tokens are untouched by the ambiguity.
+    expect(valueOf(profile, "provider.firstName")).toBe("Ana");
+    // No full facility row is fetched when nothing was selected.
+    expect(captures.filter((c) => c.table === "facilities")).toHaveLength(1);
+  });
+
+  it("?facilityId selects among several facilities; assignment tokens follow the selection", async () => {
+    const tables = happyTables();
+    tables.provider_facility_assignments = { data: [assignmentF1, assignmentF2] };
+    tables.facilities = [{ data: [facilityListF1, facilityListF2] }, { data: facilityRowF2 }];
+    const { db } = makeFakeDb(tables, { data: CATALOG });
+
+    const result = await getProviderProfile(ctxWith(db), "p1", { facilityId: "f2" });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+
+    expect(result.needsFacility).toBe(false);
+    const profile = result.profile;
+    expect(profile.selected_facility_id).toBe("f2");
+    expect(valueOf(profile, "facility.name")).toBe("Second Clinic");
+    // The f2 assignment row, not the primary f1 one.
+    expect(valueOf(profile, "assignment.isPrimary")).toBe(false);
+  });
+
+  it("a ?facilityId outside the provider's set or the org is facility_not_found, resolving nothing", async () => {
+    // The org-scoped facility-set query is what enforces both halves: a
+    // cross-org id and an unassigned same-org id both fall out of the set.
+    const { db, captures, rpcCalls } = makeFakeDb(happyTables(), { data: CATALOG });
+
+    const result = await getProviderProfile(ctxWith(db), "p1", { facilityId: "f-other" });
+
+    expect(result).toEqual({ kind: "facility_not_found" });
+    // Only the id/name set was read; no full facility row, no token resolution.
+    expect(captures.filter((c) => c.table === "facilities")).toHaveLength(1);
+    expect(rpcCalls).toEqual(["get_sop_field_tokens"]);
+  });
+
+  it("a provider with no assignments resolves facility and assignment tokens to null without a facilities query", async () => {
+    const tables = happyTables();
+    tables.provider_facility_assignments = { data: [] };
+    const { db, captures } = makeFakeDb(tables, { data: CATALOG });
+
+    const result = await getProviderProfile(ctxWith(db), "p1");
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+
+    expect(result.needsFacility).toBe(false);
+    const profile = result.profile;
+    expect(profile.facilities).toEqual([]);
+    expect(profile.selected_facility_id).toBeNull();
+    expect(valueOf(profile, "facility.name")).toBeNull();
+    expect(reasonFor(profile, "facility.name")).toBe("provider has no facility assignments");
+    expect(valueOf(profile, "assignment.isPrimary")).toBeNull();
+    expect(captures.some((c) => c.table === "facilities")).toBe(false);
+  });
+
   it("a provider with no group leaves group and policy tokens unresolved, without group queries", async () => {
     const { db, captures } = makeFakeDb(
       {
         providers: { data: { ...providerRow, group_id: null } },
         state_licenses: { data: [licenseKS] },
-        provider_facility_assignments: { data: [assignmentRow] },
-        facilities: { data: facilityRow },
+        provider_facility_assignments: { data: [assignmentF1] },
+        facilities: [{ data: [facilityListF1] }, { data: facilityRowF1 }],
       },
       { data: CATALOG },
     );

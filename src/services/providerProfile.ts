@@ -11,9 +11,17 @@
 //   provider_groups               the provider's group (via group_id)
 //   state_licenses                the ?state match (newest by issue_date), else
 //                                 the sole license, else unresolved
-//   provider_facility_assignments the single primary assignment, else the sole
-//                                 assignment, else unresolved
-//   facilities                    the picked assignment's facility
+//   facilities                    the ?facilityId match (validated against the
+//                                 provider's org-scoped facility set — outside
+//                                 it is facility_not_found, a 404), else the
+//                                 provider's sole facility, else unresolved
+//                                 with needsFacility flagged: with several
+//                                 facilities the server never guesses (the old
+//                                 primary-assignment heuristic is deliberately
+//                                 gone — the client asks the user instead)
+//   provider_facility_assignments the assignment row of the selected facility
+//                                 (the assignment IS the provider↔facility
+//                                 link, so it follows the same selection)
 //   group_insurance_policies      the group's sole policy, else unresolved
 //   payers / msos / contracts     never resolved here — those are case-scoped
 //                                 (which payer? which contract?) and belong to
@@ -22,7 +30,10 @@
 //
 // Every catalog token appears in `tokens` (value null when unresolved); every
 // null-by-ambiguity token also appears in `unresolved` with the reason, so the
-// fill engine can tell "empty field" from "couldn't pick a source row".
+// fill engine can tell "empty field" from "couldn't pick a source row". The
+// profile also carries the provider's resolvable facility set (`facilities`)
+// and which one was used (`selected_facility_id`) so the extension can render
+// a facility picker.
 //
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -46,17 +57,40 @@ export interface UnresolvedToken {
   reason: string;
 }
 
+export interface ProviderProfileFacility {
+  id: string;
+  name: string;
+}
+
 export interface ProviderProfile {
   provider: Provider;
   tokens: ProfileToken[];
   unresolved: UnresolvedToken[];
+  // The provider's resolvable facility set (org-scoped, via
+  // provider_facility_assignments) and the facility the facility.*/
+  // assignment.* tokens were resolved from (null when none was selectable).
+  // snake_case keys are the wire contract, pinned by the route tests and the
+  // isolation gate — like the R2 touches body, not the camelCase row payloads.
+  facilities: ProviderProfileFacility[];
+  selected_facility_id: string | null;
 }
 
 export interface ProviderProfileOptions {
   // Two-letter state filter: selects the state license (the portal being
   // filled is state-specific, mirroring sopResolver's stateLicenseNumber).
   state?: string;
+  // Explicit facility selection for the facility.*/assignment.* tokens. Must
+  // be in the caller's org AND the provider's facility set, else the result
+  // is facility_not_found (the route's 404) — cross-org ids resolve nothing.
+  facilityId?: string;
 }
+
+// getProviderProfile result: both not-found kinds map to a 404 at the route,
+// with messages that tell the extension WHICH reference was bad.
+export type ProviderProfileResult =
+  | { kind: "ok"; profile: ProviderProfile; needsFacility: boolean }
+  | { kind: "provider_not_found" }
+  | { kind: "facility_not_found" };
 
 // Explicit projections: every column the token catalog references for the
 // table, plus the keys resolution needs. Never select('*') here.
@@ -150,16 +184,47 @@ function pickLicense(licenses: Row[], state: string | undefined): SourcePick {
   };
 }
 
-function pickAssignment(assignments: Row[]): SourcePick {
-  if (assignments.length === 0) {
-    return { row: null, reason: "provider has no facility assignments" };
+// Which facility (if any) the facility.*/assignment.* tokens resolve from.
+// `facilities` is the provider's org-scoped facility set; an explicit
+// facilityId outside it is invalid (the caller either crossed orgs or named a
+// facility this provider isn't assigned to). With several facilities and no
+// explicit choice the tokens stay empty and needsFacility is flagged — the
+// server never guesses, not even at a primary assignment.
+interface FacilitySelection {
+  facility: ProviderProfileFacility | null;
+  invalid: boolean;
+  needsFacility: boolean;
+  reason?: string;
+}
+
+function selectFacility(
+  facilities: ProviderProfileFacility[],
+  hasAssignments: boolean,
+  facilityId: string | undefined,
+): FacilitySelection {
+  if (facilityId) {
+    const match = facilities.find((f) => f.id === facilityId) ?? null;
+    if (!match) return { facility: null, invalid: true, needsFacility: false };
+    return { facility: match, invalid: false, needsFacility: false };
   }
-  const primary = assignments.filter((a) => a.is_primary === true);
-  if (primary.length === 1) return { row: primary[0] };
-  if (assignments.length === 1) return { row: assignments[0] };
+  if (facilities.length === 1) {
+    return { facility: facilities[0], invalid: false, needsFacility: false };
+  }
+  if (facilities.length === 0) {
+    return {
+      facility: null,
+      invalid: false,
+      needsFacility: false,
+      reason: hasAssignments
+        ? "assigned facility not found"
+        : "provider has no facility assignments",
+    };
+  }
   return {
-    row: null,
-    reason: `provider has ${assignments.length} facility assignments and no single primary; facility tokens are ambiguous`,
+    facility: null,
+    invalid: false,
+    needsFacility: true,
+    reason: `provider has ${facilities.length} facilities; pass ?facilityId= to select one`,
   };
 }
 
@@ -177,7 +242,7 @@ export async function getProviderProfile(
   ctx: ProviderProfileServiceCtx,
   providerId: string,
   options: ProviderProfileOptions = {},
-): Promise<ProviderProfile | null> {
+): Promise<ProviderProfileResult> {
   const { db, orgId } = ctx;
 
   // Org membership check first: a provider in another org is a 404, the same
@@ -189,7 +254,7 @@ export async function getProviderProfile(
     .eq("org_id", orgId)
     .maybeSingle();
   if (providerErr) throw providerErr;
-  if (!providerRow) return null;
+  if (!providerRow) return { kind: "provider_not_found" };
   const provider = providerRow as unknown as Row;
   const groupId = (provider.group_id as string | null) ?? null;
 
@@ -235,23 +300,58 @@ export async function getProviderProfile(
   const policies = (policyRes.data ?? []) as unknown as Row[];
 
   const licensePick = pickLicense(licenses, options.state);
-  const assignmentPick = pickAssignment(assignments);
   const policyPick = pickPolicy(policies, group != null);
 
+  // The provider→facility linkage is provider_facility_assignments (unique
+  // (provider_id, facility_id)); the resolvable facility set is every assigned
+  // facility that still exists in the caller's org. Fetched id+name only —
+  // this list is part of the response payload, not a token source.
+  const assignmentFacilityIds = [
+    ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
+  ];
+  let facilities: ProviderProfileFacility[] = [];
+  if (assignmentFacilityIds.length > 0) {
+    const { data: facilityRows, error: facilityListErr } = await db
+      .from("facilities")
+      .select("id, name")
+      .in("id", assignmentFacilityIds)
+      .eq("org_id", orgId)
+      .order("name")
+      .order("id");
+    if (facilityListErr) throw facilityListErr;
+    facilities = ((facilityRows ?? []) as Array<{ id: string; name: string | null }>).map((f) => ({
+      id: f.id,
+      name: f.name ?? "",
+    }));
+  }
+
+  const selection = selectFacility(facilities, assignments.length > 0, options.facilityId);
+  if (selection.invalid) return { kind: "facility_not_found" };
+  const selectedFacilityId = selection.facility?.id ?? null;
+
+  // The assignment row follows the facility selection — it IS the link row of
+  // the selected facility, so assignment.* and facility.* always agree.
   let facilityPick: SourcePick;
-  if (assignmentPick.row) {
+  let assignmentPick: SourcePick;
+  if (selectedFacilityId) {
     const { data: facilityRow, error: facilityErr } = await db
       .from("facilities")
       .select(PROFILE_FACILITY_COLUMNS)
-      .eq("id", assignmentPick.row.facility_id as string)
+      .eq("id", selectedFacilityId)
       .eq("org_id", orgId)
       .maybeSingle();
     if (facilityErr) throw facilityErr;
     facilityPick = facilityRow
       ? { row: facilityRow as unknown as Row }
       : { row: null, reason: "assigned facility not found" };
+    const assignmentRow = assignments.find((a) => a.facility_id === selectedFacilityId) ?? null;
+    assignmentPick = assignmentRow
+      ? { row: assignmentRow }
+      : { row: null, reason: "assigned facility not found" };
   } else {
-    facilityPick = { row: null, reason: assignmentPick.reason };
+    const reason = selection.reason ?? "facility not resolved";
+    facilityPick = { row: null, reason };
+    assignmentPick = { row: null, reason };
   }
 
   const picks: Record<string, SourcePick> = {
@@ -296,5 +396,15 @@ export async function getProviderProfile(
     tokens.push({ token: entry.token, value: (pick.row[entry.column] ?? null) as Json | null });
   }
 
-  return { provider: camelizeRow<Provider>(provider), tokens, unresolved };
+  return {
+    kind: "ok",
+    profile: {
+      provider: camelizeRow<Provider>(provider),
+      tokens,
+      unresolved,
+      facilities,
+      selected_facility_id: selectedFacilityId,
+    },
+    needsFacility: selection.needsFacility,
+  };
 }

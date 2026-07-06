@@ -1,24 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ApiEnvelope } from "./envelope";
-import type { AuthContext } from "./guard";
+import type { AuthContext, UserContext } from "./guard";
+import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
 vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
+vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
+import { listUserOrgMemberships } from "@/services/orgMemberships";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCreateCaseTouch,
+  handleListMyOrgs,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
@@ -26,6 +30,7 @@ const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
+const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -48,6 +53,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
+  const FACILITY_ID = "aaaa1111-2222-4333-8444-555566667777";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
   // What the ctx() JWT resolves to (see resolveUserTokens).
   const USER_TOKENS = [
@@ -55,8 +61,27 @@ describe("provider profile handler", () => {
     { token: "user.email", value: "tester@minted.com" },
   ];
 
-  it("returns 404 when the profile is missing (cross-org or nonexistent), without auditing", async () => {
-    getProfileMock.mockResolvedValue(null);
+  // The service's ok result: single facility, auto-selected (the common case).
+  function okResult(
+    profile: Partial<ProviderProfile> = {},
+    needsFacility = false,
+  ): ProviderProfileResult {
+    return {
+      kind: "ok",
+      profile: {
+        provider: { id: PROVIDER_ID } as never,
+        tokens: [],
+        unresolved: [],
+        facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+        selected_facility_id: FACILITY_ID,
+        ...profile,
+      },
+      needsFacility,
+    };
+  }
+
+  it("returns 404 when the provider is missing (cross-org or nonexistent), without auditing", async () => {
+    getProfileMock.mockResolvedValue({ kind: "provider_not_found" });
     const c = ctx();
     const res = await handleProviderProfile(PROVIDER_ID, url(), c);
     expect(res.status).toBe(404);
@@ -73,11 +98,7 @@ describe("provider profile handler", () => {
   });
 
   it("returns 200 with Cache-Control: no-store (PHI-dense payload) and the user tokens appended", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID } as never,
-      tokens: [],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(okResult());
     const res = await handleProviderProfile(PROVIDER_ID, url(), ctx());
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -86,17 +107,17 @@ describe("provider profile handler", () => {
       provider: { id: PROVIDER_ID },
       tokens: USER_TOKENS,
       unresolved: [],
+      facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+      selected_facility_id: FACILITY_ID,
     });
-    // Both user tokens resolved -> no notes.
+    // Both user tokens resolved, facility selected -> no meta at all.
     expect(b.meta).toBeNull();
   });
 
   it("appends user tokens AFTER the catalog tokens without disturbing them", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID } as never,
-      tokens: [{ token: "provider.firstName", value: "Pat" }],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(
+      okResult({ tokens: [{ token: "provider.firstName", value: "Pat" }] }),
+    );
     const res = await handleProviderProfile(PROVIDER_ID, url(), ctx());
     const b = await body(res);
     expect((b.data as { tokens: unknown }).tokens).toEqual([
@@ -106,11 +127,7 @@ describe("provider profile handler", () => {
   });
 
   it("resolves missing auth metadata to empty-string tokens and notes it in meta", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID } as never,
-      tokens: [],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(okResult());
     const bare = { ...ctx(), email: null, userMetadata: null };
     const res = await handleProviderProfile(PROVIDER_ID, url(), bare);
     const b = await body(res);
@@ -122,11 +139,12 @@ describe("provider profile handler", () => {
   });
 
   it("writes exactly one READ audit row per successful read — never the body or token values", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID, ssnLast4: "6789" } as never,
-      tokens: [{ token: "provider.ssnLast4", value: "6789" }],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(
+      okResult({
+        provider: { id: PROVIDER_ID, ssnLast4: "6789" } as never,
+        tokens: [{ token: "provider.ssnLast4", value: "6789" }],
+      }),
+    );
     const c = ctx();
     const res = await handleProviderProfile(PROVIDER_ID, url("?state=ks"), c);
     expect(res.status).toBe(200);
@@ -136,7 +154,11 @@ describe("provider profile handler", () => {
         actionType: "READ",
         entityType: "provider",
         entityId: PROVIDER_ID,
-        after: { route: "/api/providers/:id/profile", state: "KS" },
+        after: {
+          route: "/api/providers/:id/profile",
+          state: "KS",
+          facilityId: FACILITY_ID,
+        },
       }),
     );
     // The audit payload must not carry PHI/token values from the response.
@@ -146,11 +168,7 @@ describe("provider profile handler", () => {
   });
 
   it("a failed audit write fails the request (no un-audited PHI read)", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID } as never,
-      tokens: [],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(okResult());
     const c = ctx();
     vi.mocked(c.writeAudit).mockRejectedValue(new Error("audit_log insert failed"));
     await expect(handleProviderProfile(PROVIDER_ID, url(), c)).rejects.toThrow(
@@ -159,16 +177,12 @@ describe("provider profile handler", () => {
   });
 
   it("uppercases a valid ?state and forwards it with the org-scoped ctx", async () => {
-    getProfileMock.mockResolvedValue({
-      provider: { id: PROVIDER_ID } as never,
-      tokens: [],
-      unresolved: [],
-    });
+    getProfileMock.mockResolvedValue(okResult());
     await handleProviderProfile(PROVIDER_ID, url("?state=ks"), ctx());
     expect(getProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       PROVIDER_ID,
-      { state: "KS" },
+      { state: "KS", facilityId: undefined },
     );
   });
 
@@ -176,6 +190,96 @@ describe("provider profile handler", () => {
     const res = await handleProviderProfile(PROVIDER_ID, url("?state=kansas"), ctx());
     expect(res.status).toBe(422);
     expect(getProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("forwards ?facilityId to the service", async () => {
+    getProfileMock.mockResolvedValue(okResult());
+    await handleProviderProfile(PROVIDER_ID, url(`?facilityId=${FACILITY_ID}`), ctx());
+    expect(getProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+      { state: undefined, facilityId: FACILITY_ID },
+    );
+  });
+
+  it("returns 404 for a non-UUID ?facilityId without touching the service", async () => {
+    const res = await handleProviderProfile(PROVIDER_ID, url("?facilityId=not-a-uuid"), ctx());
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Facility not found for this provider");
+    expect(getProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the facility is outside the org or the provider's set, without auditing", async () => {
+    // The isolation-gate contract (assertion 11): a cross-org facilityId
+    // resolves nothing — not a read, no data, no audit row.
+    getProfileMock.mockResolvedValue({ kind: "facility_not_found" });
+    const c = ctx();
+    const res = await handleProviderProfile(PROVIDER_ID, url(`?facilityId=${FACILITY_ID}`), c);
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Facility not found for this provider");
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("flags meta.needs_facility when several facilities need a user choice", async () => {
+    const facilities = [
+      { id: FACILITY_ID, name: "Main Clinic" },
+      { id: "bbbb1111-2222-4333-8444-555566667777", name: "Second Clinic" },
+    ];
+    getProfileMock.mockResolvedValue(okResult({ facilities, selected_facility_id: null }, true));
+    const c = ctx();
+    const res = await handleProviderProfile(PROVIDER_ID, url(), c);
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.meta).toEqual({ needs_facility: true });
+    expect((b.data as { selected_facility_id: unknown }).selected_facility_id).toBeNull();
+    expect((b.data as { facilities: unknown }).facilities).toEqual(facilities);
+    // Still a PHI read (non-facility tokens are served): audited, no facility.
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ after: expect.objectContaining({ facilityId: null }) }),
+    );
+  });
+
+  it("merges needs_facility with user-token notes in one meta object", async () => {
+    getProfileMock.mockResolvedValue(okResult({ selected_facility_id: null }, true));
+    const bare = { ...ctx(), email: null, userMetadata: null };
+    const res = await handleProviderProfile(PROVIDER_ID, url(), bare);
+    const b = await body(res);
+    expect(b.meta?.needs_facility).toBe(true);
+    expect(b.meta?.notes).toHaveLength(2);
+  });
+});
+
+describe("me orgs handler", () => {
+  function userCtx(): UserContext {
+    return {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+  }
+
+  it("returns the caller's memberships with meta.total, queried by the JWT user id", async () => {
+    const rows = [
+      { orgId: "org-1", orgName: "Kansas Fitness Physio", role: "admin" },
+      { orgId: "org-2", orgName: "South Park Physician Group", role: "billing" },
+    ];
+    listMyOrgsMock.mockResolvedValue(rows);
+    const res = await handleListMyOrgs(userCtx());
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual(rows);
+    expect(b.meta).toEqual({ total: 2 });
+    expect(listMyOrgsMock).toHaveBeenCalledWith(expect.objectContaining({ db: {} }), "u1");
+  });
+
+  it("returns an empty list (not an error) for a user with no memberships", async () => {
+    listMyOrgsMock.mockResolvedValue([]);
+    const res = await handleListMyOrgs(userCtx());
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual([]);
+    expect(b.meta).toEqual({ total: 0 });
   });
 });
 
