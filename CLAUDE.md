@@ -157,7 +157,10 @@ them. The current surface:
   tokens are case-scoped and always come back `null` + listed in `unresolved`
   with a reason. The `{{user.*}}` token family (`user.name` from
   user_metadata full_name/name, `user.email` from the JWT claim — no schema
-  backing) is appended by the route via `src/server/userTokens.ts`;
+  backing) is appended by the route via `src/server/userTokens.ts`; users set
+  their own full_name in Settings → Profile (`ProfilePanel` →
+  `src/services/userProfile.ts`, `supabase.auth.updateUser` — separate from
+  `profiles.full_name`, which the sidebar/store display reads);
   empty-resolution notes surface in the envelope's `meta.notes`. **The most
   PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
   by design): `Cache-Control: no-store`, never log the body. Every successful
