@@ -10,6 +10,15 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useActiveOrgId, useAuthStore, useRole } from "@/lib/auth-store";
 import { useLaunchLocation } from "@/hooks/useLaunches";
+import { useCreateCase } from "@/hooks/useCases";
+import { useMsos, usePayers, useSops } from "@/hooks/useAdmin";
+import { useProviderGroups } from "@/hooks/useLookups";
+import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
+import { queryKeys } from "@/hooks/queryKeys";
+import { getMsoRoutingRule } from "@/services/lookups";
+import { resolveTemplate } from "@/lib/sopResolver";
+import { deriveStarterCases, type StarterLicense } from "@/lib/starterCases";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import {
   ProviderForm,
   emptyProviderFormState,
@@ -22,6 +31,18 @@ import {
   type LicenseInput,
   type ProviderInput,
 } from "@/services/providers";
+import type { MsoRoutingRule, Provider } from "@/types";
+
+function starterSummary(res: { created: number; skipped: number }): string {
+  const parts: string[] = [];
+  if (res.created > 0) {
+    parts.push(`${res.created} starter case${res.created === 1 ? "" : "s"} attached`);
+  }
+  if (res.skipped > 0) {
+    parts.push(`${res.skipped} skipped (no home-state license)`);
+  }
+  return parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
+}
 
 export const Route = createFileRoute("/providers/new")({
   validateSearch: (search: Record<string, unknown>): { locationId?: string } => ({
@@ -97,6 +118,15 @@ function Page() {
   const locationQ = useLaunchLocation(locationId);
   const launchLocation = locationId ? (locationQ.data ?? null) : null;
 
+  // Starter-pack inputs (Epic 1c). Assignments drive which global payers are
+  // flagged `starter`; there are none today, so the derivation below no-ops.
+  const assignmentsQ = useOrgPayerAssignments();
+  const payersQ = usePayers();
+  const templatesQ = useSops();
+  const msosQ = useMsos();
+  const groupsQ = useProviderGroups();
+  const createCase = useCreateCase();
+
   const create = useMutation({
     mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
     onSuccess: () => {
@@ -104,6 +134,97 @@ function Page() {
       qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
     },
   });
+
+  // Attach a credentialing case for every assigned + starter payer to the
+  // just-created provider, reusing the same routing/template/createCase path as
+  // NewCaseModal and CreateCasesDialog. Best-effort: a failed case never undoes
+  // the created provider. Returns counts for the success toast.
+  const attachStarterCases = async (
+    created: Provider,
+    form: ProviderFormState,
+  ): Promise<{ created: number; skipped: number }> => {
+    const starterPayerIds = new Set(
+      (assignmentsQ.data ?? []).filter((a) => a.starter).map((a) => a.payerId),
+    );
+    if (starterPayerIds.size === 0) return { created: 0, skipped: 0 };
+    const starterPayers = (payersQ.data ?? []).filter(
+      (p) => p.isActive && starterPayerIds.has(p.id),
+    );
+    if (starterPayers.length === 0) return { created: 0, skipped: 0 };
+
+    const licenses: StarterLicense[] = toLicenseInputs(form).map((l) => ({
+      state: l.state,
+      licenseNumber: l.licenseNumber,
+    }));
+    const homeState = (created.homeState ?? "").trim();
+
+    // Resolve routing once per starter payer at the provider's home state
+    // (the pre-cred sentinel never routes), then feed a sync resolver to the
+    // pure derivation.
+    const routingByPayer = new Map<string, MsoRoutingRule | null>();
+    if (homeState) {
+      for (const p of starterPayers) {
+        if (p.name === PRE_CRED_PAYER_NAME) {
+          routingByPayer.set(p.id, null);
+          continue;
+        }
+        const resolved = await qc.fetchQuery({
+          queryKey: queryKeys.msoRoutingRule(orgId, p.id, homeState, created.specialty ?? ""),
+          queryFn: () => getMsoRoutingRule(p.id, homeState, created.specialty ?? null),
+        });
+        routingByPayer.set(p.id, resolved);
+      }
+    }
+
+    const plan = deriveStarterCases({
+      provider: created,
+      starterPayers,
+      licenses,
+      templates: templatesQ.data ?? [],
+      msos: msosQ.data ?? [],
+      existingCases: [],
+      resolveRouting: (payerId) => routingByPayer.get(payerId) ?? null,
+    });
+
+    const group = (groupsQ.data ?? []).find((g) => g.id === created.groupId) ?? null;
+    let createdCount = 0;
+    for (const entry of plan.toCreate) {
+      const tasks = entry.template
+        ? resolveTemplate(
+            entry.template,
+            created,
+            group,
+            null,
+            entry.mso ? { mso: entry.mso } : null,
+            entry.licenseNumber,
+          )
+        : [];
+      try {
+        await createCase.mutateAsync({
+          input: {
+            providerId: created.id,
+            payerId: entry.payer.id,
+            state: entry.state,
+            groupId: created.groupId ?? null,
+            facilityId: null,
+            specialty: created.specialty ?? null,
+            msoId: entry.msoId,
+          },
+          tasks: tasks.map((t) => ({
+            title: t.title,
+            description: t.description,
+            sopContent: t.sopContent,
+            sortOrder: t.sortOrder,
+            dueDate: t.dueDate,
+          })),
+        });
+        createdCount += 1;
+      } catch {
+        // best-effort: a failed starter case must not fail provider creation
+      }
+    }
+    return { created: createdCount, skipped: plan.skipped.length };
+  };
 
   const initial = useMemo(
     () =>
@@ -129,12 +250,15 @@ function Page() {
         toast.warning("Provider created, but some details did not save. Fix and retry.");
         return;
       }
+      const starter = await attachStarterCases(result.provider, form);
       if (launchLocation && form.facilityIds.includes(launchLocation.id)) {
-        toast.success(`Provider added and linked to ${launchLocation.name}`);
+        toast.success(
+          `Provider added and linked to ${launchLocation.name}${starterSummary(starter)}`,
+        );
         navigate({ to: "/launches/$id", params: { id: launchLocation.id } });
         return;
       }
-      toast.success("Provider added");
+      toast.success(`Provider created${starterSummary(starter)}`);
       navigate({ to: "/providers/$id", params: { id: result.provider.id } });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create provider");

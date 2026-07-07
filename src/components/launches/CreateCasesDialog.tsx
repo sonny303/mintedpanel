@@ -32,29 +32,10 @@ import { useProviderGroups } from "@/hooks/useLookups";
 import { useGenerateLaunchCases } from "@/hooks/useLaunches";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { pickTemplate } from "@/lib/pickTemplate";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { GenerationEntry } from "@/services/launches";
-import type { Facility, MsoRoutingRule, Provider, SOPTemplate } from "@/types";
-
-// Same matcher as NewCaseModal.pickTemplate — duplicated because the modal
-// keeps it module-local and lib code must not import from components.
-function pickTemplate(
-  templates: SOPTemplate[],
-  payerId: string,
-  state: string,
-  groupId: string | null,
-): SOPTemplate | null {
-  const active = templates.filter((t) => {
-    const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
-    return !(row.archived ?? row.isArchived ?? false);
-  });
-  const exact = active.find(
-    (t) =>
-      t.payerId === payerId && t.state === state && (t.groupId === groupId || t.groupId === null),
-  );
-  if (exact) return exact;
-  return active.find((t) => t.payerId === payerId && t.state === state) ?? null;
-}
+import type { Facility, MsoRoutingRule, Provider } from "@/types";
 
 interface ChecklistRow {
   payerId: string;
