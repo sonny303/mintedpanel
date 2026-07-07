@@ -123,6 +123,18 @@ export interface Provider {
   malpracticePolicyNumber: string | null;
   malpracticeCoverageStart: string | null;
   malpracticeCoverageEnd: string | null;
+  middleInitial: string | null;
+  suffix: string | null;
+  gender: string | null;
+  ethnicity: string | null;
+  deaExpirationDate: string | null;
+  boardCertified: boolean | null;
+  subSpecialty: string | null;
+  languages: string[] | null;
+  medicaidAttested: boolean | null;
+  culturalCompetencyTraining: boolean | null;
+  additionalCertifications: unknown[] | null;
+  ageGroupsServed: string[] | null;
   licenseNumber: string | null;
   licenseState: string | null;
   licenseIssueDate: string | null;
@@ -202,7 +214,7 @@ export interface CredentialCase {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
-  caseEmailToken: string | null;
+  caseEmailToken: string;
 }
 
 export interface Contract {
@@ -229,7 +241,7 @@ export interface Touch {
   nextFollowUpDate: string | null;
   notes: string | null;
   coordinatorId: string | null;
-  source: "manual" | "email_webhook" | "extension";
+  source: "manual" | "email" | "extension";
   createdAt: string;
 }
 
