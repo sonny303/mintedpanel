@@ -7,6 +7,7 @@ vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
+vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
 
@@ -14,6 +15,7 @@ import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
+import { getCaseContext } from "@/services/caseContext";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import {
@@ -21,6 +23,7 @@ import {
   handleListPortalFieldMaps,
   handleCreateFillEvent,
   handleListProviderCases,
+  handleCaseContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
 } from "./extensionRoutes";
@@ -29,6 +32,7 @@ const listMapsMock = vi.mocked(listPortalFieldMaps);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
+const getCaseContextMock = vi.mocked(getCaseContext);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 
@@ -353,6 +357,51 @@ describe("provider cases handler", () => {
     expect(listCasesMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       PROVIDER_ID,
+    );
+  });
+});
+
+describe("case context handler", () => {
+  const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  it("returns 404 for a non-UUID case id without touching the service", async () => {
+    const res = await handleCaseContext("not-a-uuid", ctx());
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Case not found");
+    expect(getCaseContextMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the case is outside the org (service returns null)", async () => {
+    getCaseContextMock.mockResolvedValue(null);
+    const res = await handleCaseContext(CASE_ID, ctx());
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Case not found");
+  });
+
+  it("returns 200 with the context projection, forwarding the org-scoped ctx (billing may read)", async () => {
+    const context = {
+      referenceNumbers: ["REF-42"],
+      latestNote: {
+        content: "call the rep tomorrow",
+        createdAt: "2026-07-06T10:00:00Z",
+        authorName: "Nadia Rep",
+      },
+      latestTouch: {
+        touchDate: "2026-07-05",
+        touchType: "portal",
+        outcome: "submitted",
+        note: "Application submitted via Availity",
+      },
+    };
+    getCaseContextMock.mockResolvedValue(context);
+    const res = await handleCaseContext(CASE_ID, ctx("billing"));
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual(context);
+    expect(b.meta).toBeNull();
+    expect(getCaseContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      CASE_ID,
     );
   });
 });
