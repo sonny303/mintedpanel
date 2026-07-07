@@ -54,8 +54,9 @@ export function useLogTouch() {
   return useMutation({
     mutationFn: (vars: LogTouchVars) => logTouch(vars.caseId, vars.input),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: queryKeys.touches(orgId, vars.caseId) });
-      qc.invalidateQueries({ queryKey: ["touches", orgId, "last-per-case"] });
+      // Prefix invalidation catches every touch variant (per-case,
+      // last-per-case, and the Home "Follow-ups due" latest-follow-ups queue).
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },

@@ -176,3 +176,28 @@ export async function claimInvites(): Promise<number> {
   if (error) throw new Error(error.message);
   return typeof data === "number" ? data : 0;
 }
+
+export interface InviteMemberInput {
+  email: string;
+  orgId: string | null;
+  fullName: string | null;
+}
+
+export interface InviteMemberResult {
+  data: { alreadyExists?: boolean } | null;
+  error: { message: string } | null;
+}
+
+// Invokes the invite-member edge function (sends the invite email) after the
+// pending_invites row is written. Email delivery failure is soft — the caller
+// surfaces it as a warning, never a throw — so this mirrors functions.invoke's
+// { data, error } shape rather than throwing on error.
+export async function inviteMember(input: InviteMemberInput): Promise<InviteMemberResult> {
+  const { data, error } = await supabase.functions.invoke("invite-member", {
+    body: { email: input.email, orgId: input.orgId, fullName: input.fullName },
+  });
+  return {
+    data: (data as { alreadyExists?: boolean } | null) ?? null,
+    error: error ? { message: error.message } : null,
+  };
+}

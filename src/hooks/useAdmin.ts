@@ -225,11 +225,14 @@ export function useUpdateStatusConfig(id: string) {
   });
 }
 
-export function useAuditLog(filters: AuditFilters = {}) {
+export function useAuditLog(
+  filters: AuditFilters = {},
+  options?: { enabled?: boolean },
+) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.auditLog(orgId, filters),
     queryFn: () => listAuditLog(filters),
-    enabled: orgId !== "no-org",
+    enabled: orgId !== "no-org" && (options?.enabled ?? true),
   });
 }

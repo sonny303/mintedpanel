@@ -33,8 +33,7 @@ import {
   useRemoveMembership,
   useRevokePendingInvite,
 } from "@/hooks/useInvites";
-import { supabase } from "@/integrations/supabase/externalClient";
-import { DuplicateInviteError, type PendingInvite } from "@/services/invites";
+import { DuplicateInviteError, inviteMember, type PendingInvite } from "@/services/invites";
 import type { MembershipRow } from "@/services/orgSettings";
 
 function roleBadge(role: AppRole) {
@@ -79,15 +78,16 @@ function InviteDialog({
         role,
         fullName: fullName.trim() || null,
       });
-      const { data: inviteResp, error: fnError } = await supabase.functions.invoke(
-        "invite-member",
-        { body: { email: trimmed, orgId: activeOrgId, fullName: fullName.trim() || null } },
-      );
+      const { data: inviteResp, error: fnError } = await inviteMember({
+        email: trimmed,
+        orgId: activeOrgId,
+        fullName: fullName.trim() || null,
+      });
       if (fnError) {
         toast.warning(
           `Invite saved but email failed to send: ${fnError.message}. Ask the user to sign in and they'll be added automatically.`,
         );
-      } else if ((inviteResp as { alreadyExists?: boolean } | null)?.alreadyExists) {
+      } else if (inviteResp?.alreadyExists) {
         toast.success("Already has an account — they'll get access next time they sign in.");
       } else {
         toast.success(`Invite sent to ${trimmed}`);

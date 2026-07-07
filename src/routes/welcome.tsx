@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/externalClient";
+import { claimInvites } from "@/services/invites";
 import { useAuthStore } from "@/lib/auth-store";
 
 export const Route = createFileRoute("/welcome")({
@@ -45,12 +46,7 @@ function WelcomePage() {
     try {
       const { error: pwError } = await supabase.auth.updateUser({ password });
       if (pwError) throw pwError;
-      const rpc = supabase.rpc.bind(supabase) as unknown as (name: string) => Promise<{
-        data: number | null;
-        error: { message: string } | null;
-      }>;
-      const { error: claimError } = await rpc("claim_invites");
-      if (claimError) throw claimError;
+      await claimInvites();
       await loadMemberships();
       navigate({ to: "/cases" });
     } catch (err) {

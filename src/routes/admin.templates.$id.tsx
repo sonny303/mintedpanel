@@ -2,9 +2,7 @@
 // reorderable SOP steps and closed token data fields, plus live preview.
 import { createFileRoute, useBlocker, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Archive, ArchiveRestore, Copy, Plus, Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/externalClient";
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
@@ -21,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateTemplate, usePayers, useTemplate, useUpdateTemplate } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
+import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { useIsAdmin } from "@/lib/permissions";
 import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
 import { TokenHelpPanel } from "@/components/templates/TokenHelpPanel";
@@ -61,22 +60,10 @@ const TOKEN_GROUP_LABELS: Record<string, string> = {
   facility: "Facility",
   mso: "MSO",
   group_insurance: "Group Insurance",
+  user: "User",
 };
 
-const TOKEN_GROUP_ORDER = ["provider", "group", "facility", "mso", "group_insurance"];
-
-function useSopFieldTokens() {
-  return useQuery({
-    queryKey: ["sop-field-tokens"] as const,
-    queryFn: async (): Promise<SopFieldToken[]> => {
-      const { data, error } = await supabase.rpc("get_sop_field_tokens" as never);
-      if (error) throw error;
-      return (data ?? []) as SopFieldToken[];
-    },
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-}
+const TOKEN_GROUP_ORDER = ["provider", "group", "facility", "mso", "group_insurance", "user"];
 
 const US_STATES = [
   "AL",
@@ -198,7 +185,7 @@ function TemplateEditor() {
   const groupsQ = useProviderGroups();
   const updateMut = useUpdateTemplate(id);
   const createMut = useCreateTemplate();
-  const tokensQ = useSopFieldTokens();
+  const tokensQ = useTokenCatalog();
   const tokens = tokensQ.data ?? [];
   const groupedTokens = useMemo(() => {
     const map = new Map<string, SopFieldToken[]>();
