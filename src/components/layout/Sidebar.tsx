@@ -63,7 +63,7 @@ const clientProgressNav: NavLink = {
 
 const adminNav: NavLink[] = [
   { to: "/admin/statuses", label: "Statuses", icon: CheckCircle2 },
-  { to: "/admin/sops", label: "SOPs", icon: FileText },
+  { to: "/admin/templates", label: "Templates", icon: FileText },
   { to: "/admin/mso-routing", label: "MSO Routing", icon: Network },
   { to: "/admin/payers", label: "Payers", icon: Building2 },
   { to: "/admin/portals", label: "Portals", icon: Globe },
