@@ -8,36 +8,6 @@ export type Database = {
   };
   public: {
     Tables: {
-      communication_event: {
-        Row: {
-          channel: string;
-          created_at: string | null;
-          created_by: string | null;
-          id: string;
-          occurred_at: string;
-          org_id: string;
-          payer_id: string;
-        };
-        Insert: {
-          channel: string;
-          created_at?: string | null;
-          created_by?: string | null;
-          id?: string;
-          occurred_at?: string;
-          org_id: string;
-          payer_id: string;
-        };
-        Update: {
-          channel?: string;
-          created_at?: string | null;
-          created_by?: string | null;
-          id?: string;
-          occurred_at?: string;
-          org_id?: string;
-          payer_id?: string;
-        };
-        Relationships: [];
-      };
       audit_log: {
         Row: {
           action_type: string;
@@ -87,6 +57,44 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      communication_event: {
+        Row: {
+          channel: string;
+          created_at: string | null;
+          created_by: string | null;
+          id: string;
+          occurred_at: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Insert: {
+          channel: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Update: {
+          channel?: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id?: string;
+          payer_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "communication_event_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
             referencedColumns: ["id"];
           },
         ];
@@ -871,6 +879,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      org_payer_assignments: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          starter: boolean;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          starter?: boolean;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          starter?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "org_payer_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_payer_assignments_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organizations: {
         Row: {
           created_at: string;
@@ -897,7 +944,7 @@ export type Database = {
           id: string;
           is_active: boolean | null;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_billing_id: string | null;
           portal_url: string | null;
           prior_auth_vendor: string | null;
@@ -914,7 +961,7 @@ export type Database = {
           id?: string;
           is_active?: boolean | null;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_billing_id?: string | null;
           portal_url?: string | null;
           prior_auth_vendor?: string | null;
@@ -931,7 +978,7 @@ export type Database = {
           id?: string;
           is_active?: boolean | null;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_billing_id?: string | null;
           portal_url?: string | null;
           prior_auth_vendor?: string | null;
@@ -1607,7 +1654,7 @@ export type Database = {
           group_id: string | null;
           id: string;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_id: string | null;
           specialty: string | null;
           state: string | null;
@@ -1620,7 +1667,7 @@ export type Database = {
           group_id?: string | null;
           id?: string;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_id?: string | null;
           specialty?: string | null;
           state?: string | null;
@@ -1633,7 +1680,7 @@ export type Database = {
           group_id?: string | null;
           id?: string;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_id?: string | null;
           specialty?: string | null;
           state?: string | null;
@@ -1961,6 +2008,13 @@ export type Database = {
             columns: ["case_id"];
             isOneToOne: false;
             referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_communication_event_id_fkey";
+            columns: ["communication_event_id"];
+            isOneToOne: false;
+            referencedRelation: "communication_event";
             referencedColumns: ["id"];
           },
           {

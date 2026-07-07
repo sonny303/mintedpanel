@@ -38,6 +38,10 @@ function runGate(baseUrl) {
         SOUTHPARK_FIELDMAP_ID: FIXTURES.SOUTHPARK_FIELDMAP_ID,
         SOUTHPARK_CASE_ID: FIXTURES.SOUTHPARK_CASE_ID,
         SOUTHPARK_FACILITY_ID: FIXTURES.SOUTHPARK_FACILITY_ID,
+        // Assertion 13 (task-ownership isolation) fixtures — always set here so
+        // the mock run exercises it; optional in the real gate.
+        KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
+        SOUTHPARK_TASK_ID: FIXTURES.SOUTHPARK_TASK_ID,
         VERCEL_BYPASS_SECRET: "",
         GITHUB_STEP_SUMMARY: "",
       },
@@ -69,6 +73,7 @@ const EXPECTED_FAILS = {
   fillevents: ["7", "7b"],
   cases: ["8b"],
   touches: ["9", "9b"],
+  tasks: ["13"],
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],

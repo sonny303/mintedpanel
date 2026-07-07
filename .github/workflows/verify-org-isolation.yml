@@ -127,6 +127,14 @@ jobs:
           # Clinic", demo data): assertion 11 proves a Kansas profile request
           # naming it as ?facilityId is a 404, never a token source.
           SOUTHPARK_FACILITY_ID: d0e40000-0000-4000-a000-000000000011
+          # Assertion 13 (PR C, submission-touch task-ownership isolation):
+          # KANSAS_CASE_ID is a real Kansas credential_cases row (the valid POST
+          # target), SOUTHPARK_TASK_ID a real South Park tasks row (the cross-org
+          # task_id that must 404 before any write). Both are demo data; the task
+          # check runs before the anchor insert, so this never writes to the
+          # Kansas case. A stale id fails 13 as a fixture error, not a leak.
+          KANSAS_CASE_ID: 07ab5b29-99b6-43d3-a41f-c231e99a9864
+          SOUTHPARK_TASK_ID: 00f2ba06-644e-46f0-a224-a39c609dc40a
           # --- from secrets ---
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           API_BASE: ${{ github.event.inputs.api_base || secrets.API_BASE }}

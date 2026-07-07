@@ -333,7 +333,16 @@ describe("provider cases handler", () => {
 
   it("returns the open cases with meta.total, forwarding the org-scoped ctx", async () => {
     const rows = [
-      { id: "c1", payerName: "Aetna", state: "KS", status: "Submitted", submittedDate: null },
+      {
+        id: "c1",
+        payerName: "Aetna",
+        state: "KS",
+        status: "Submitted",
+        submittedDate: null,
+        payerReferenceId: "REF-123",
+        latestNote: { text: "waiting on payer", author: "Ann", at: "2026-07-06T00:00:00Z" },
+        lastSubmittedAt: "2026-07-05T00:00:00Z",
+      },
     ];
     listCasesMock.mockResolvedValue(rows);
     const res = await handleListProviderCases(url(`?providerId=${PROVIDER_ID}`), ctx("billing"));

@@ -30,6 +30,12 @@
 //                          the LIVE demo counts, which move when demo/UAT
 //                          providers are added. A count mismatch is fixture
 //                          drift, not a leak — the leak checks are 1b/2b/2c/3.
+//   KANSAS_CASE_ID + SOUTHPARK_TASK_ID
+//                          Fixtures for assertion 13 (submission-touch
+//                          task-ownership isolation): a Kansas case (valid POST
+//                          target) + a South Park task id (the cross-org task_id
+//                          that must 404). Both must be set or assertion 13 is
+//                          skipped; the in-sandbox mock run always sets them.
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
@@ -473,6 +479,35 @@ function looksLikeVercelGate(r) {
     `status=${patchX.status} (expect 404) dataPresent=${patchX.body?.data != null}`,
     { leak: true },
   );
+
+  // 13. Submission-touch task-ownership isolation (PR C, Story 7): a Kansas
+  //     writer posting a touch on their OWN case but naming a South Park
+  //     task_id must 404 "Task not found" BEFORE any write — the task close is
+  //     the extension's only cross-org write surface added by the touchlog
+  //     bridge. Safe against production: the task check runs before the anchor
+  //     insert, so nothing lands on the real Kansas case. Optional — skipped
+  //     unless both fixtures are configured (KANSAS_CASE_ID + SOUTHPARK_TASK_ID);
+  //     the in-sandbox mock run always sets them.
+  if (env.KANSAS_CASE_ID && env.SOUTHPARK_TASK_ID) {
+    const taskSpoof = {
+      kind: "portal_submission",
+      portal_key: "gate_must_reject",
+      idempotency_id: crypto.randomUUID(),
+      task_id: env.SOUTHPARK_TASK_ID,
+    };
+    const t13 = await apiPost(`/api/cases/${env.KANSAS_CASE_ID}/touches`, taskSpoof, {
+      token: kansasTok,
+    });
+    const t13Leaked = t13.status < 400 || t13.body?.data != null;
+    check(
+      "13. Kansas POST touch with a South Park task_id is rejected before any write",
+      t13.status === 404 && !t13Leaked,
+      `status=${t13.status} (expect 404) dataPresent=${t13.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  13. task-ownership isolation — KANSAS_CASE_ID / SOUTHPARK_TASK_ID not set");
+  }
 
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
