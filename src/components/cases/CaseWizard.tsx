@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
+import { planGmailHandoff } from "@/lib/gmailCompose";
 import {
   splitOnUnresolvedTokens,
   findUnresolvedTokens,
@@ -40,6 +41,23 @@ async function copyText(text: string, what: string) {
   } catch {
     toast.error("Could not copy to clipboard");
   }
+}
+
+// Gmail compose hand-off (P9): open a prefilled Gmail draft; the human sends.
+// Never auto-sends. Falls back to subject-only + clipboard for over-long bodies.
+async function openInGmail(subject: string, body: string) {
+  const { url, bodyToClipboard } = planGmailHandoff(subject, body);
+  if (bodyToClipboard) {
+    try {
+      await navigator.clipboard.writeText(body);
+      toast.message("Email body copied — paste it into the Gmail draft", {
+        description: "The body was too long for the compose link.",
+      });
+    } catch {
+      toast.error("Could not copy the email body");
+    }
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function CopyInlineButton({ text, what }: { text: string; what: string }) {
@@ -150,6 +168,20 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
             <HighlightedText text={body} />
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163f33]"
+          onClick={() => openInGmail(subject, body)}
+        >
+          <Mail className="h-3.5 w-3.5" />
+          Open in Gmail
+        </Button>
+        <span className="text-[12px] text-muted-foreground">
+          Opens a prefilled draft — review and send it yourself.
+        </span>
       </div>
     </div>
   );
