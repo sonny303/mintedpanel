@@ -3,6 +3,8 @@
 // location's payer cases at In-Network (pre-cred excluded), plus a
 // contract-gap flag when any active payer lacks a group contract in the
 // location's state.
+import { IN_NETWORK_LABEL } from "./statusLabels";
+
 export interface ReadinessCaseInput {
   /** status_configs.label for the case, if any */
   statusLabel: string | null;
@@ -30,7 +32,7 @@ export interface LaunchReadiness {
 
 export function launchReadiness(input: ReadinessInput): LaunchReadiness {
   const countable = input.cases.filter((c) => !c.isPreCred);
-  const inNetwork = countable.filter((c) => c.statusLabel === "In-Network").length;
+  const inNetwork = countable.filter((c) => c.statusLabel === IN_NETWORK_LABEL).length;
   const denominator = countable.length;
   const contractGap = input.activePayerIds.some((id) => !input.contractedPayerIdsInState.has(id));
   return {

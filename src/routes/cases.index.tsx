@@ -35,13 +35,12 @@ import {
   matchesChip,
   type ChipId,
 } from "@/lib/workView";
+import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/cases/")({
   component: CasesWorkView,
 });
-
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 interface CaseRow {
   case: CredentialCase;
@@ -191,7 +190,7 @@ function CasesWorkView() {
         openRows,
         worst: worstActionState(openRows.map((r) => r.state)) ?? "complete",
         worstCount: 0,
-        inNetwork: rows.filter((r) => r.statusLabel === "In-Network").length,
+        inNetwork: rows.filter((r) => r.statusLabel === IN_NETWORK_LABEL).length,
       });
     }
     for (const g of built) {

@@ -23,16 +23,20 @@ import type { FixitCard } from "@/lib/fixitQueue";
 import { getActionState, ACTION_STATE_SEVERITY, type ActionState } from "@/lib/actionState";
 import { launchReadiness } from "@/lib/launchReadiness";
 import { fmtDate } from "@/lib/format";
+import {
+  PENDING_FULFILLMENT_LABEL,
+  PRE_CRED_PAYER_NAME,
+  READY_FOR_LAUNCH_LABEL,
+} from "@/lib/statusLabels";
 import type { CredentialCase } from "@/types";
 
 export const Route = createFileRoute("/home")({
   component: HomePage,
 });
 
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 const SECTION_CAP = 10;
 const LAUNCH_RISK_WINDOW_DAYS = 30;
-const AT_RISK_STATUSES = new Set(["Pending Fulfillment", "Ready for Launch"]);
+const AT_RISK_STATUSES = new Set([PENDING_FULFILLMENT_LABEL, READY_FOR_LAUNCH_LABEL]);
 
 const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 

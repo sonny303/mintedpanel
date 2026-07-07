@@ -12,9 +12,8 @@ import { useContracts } from "@/hooks/useContracts";
 import { useLaunchLocations } from "@/hooks/useLaunches";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { isInactiveLabel } from "@/lib/launchLocations";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { Contract } from "@/types";
-
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 export function ContractMatrixTab() {
   const contractsQ = useContracts();
