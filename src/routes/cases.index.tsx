@@ -36,6 +36,10 @@ import {
   type ChipId,
 } from "@/lib/workView";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { Button } from "@/components/ui/button";
+import { Phone } from "lucide-react";
+import { useCanWrite } from "@/lib/permissions";
+import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 export const Route = createFileRoute("/cases/")({
@@ -77,8 +81,10 @@ function CasesWorkView() {
   const payersQ = usePayers();
   const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
+  const canWrite = useCanWrite();
 
   const [chip, setChip] = useState<ChipId>("all");
+  const [batchOpen, setBatchOpen] = useState(false);
 
   const loading =
     providersQ.isLoading ||
@@ -301,7 +307,20 @@ function CasesWorkView() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <PageHeader title="Cases" description={`${totalPayers} payers · ${counts.all} open cases`} />
+      <PageHeader
+        title="Cases"
+        description={`${totalPayers} payers · ${counts.all} open cases`}
+        actions={
+          canWrite ? (
+            <Button variant="outline" size="sm" className="h-8" onClick={() => setBatchOpen(true)}>
+              <Phone className="w-4 h-4 mr-1" /> Log payer call
+            </Button>
+          ) : null
+        }
+      />
+      {batchOpen ? (
+        <BatchTouchpointDialog open={batchOpen} onClose={() => setBatchOpen(false)} />
+      ) : null}
 
       <div className="mb-6">
         <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />

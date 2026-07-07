@@ -126,12 +126,76 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
       created_at: t.created_at,
     }));
 
+  // Story 8: resolve each batch-call child touchpoint to a "Part of {payer}
+  // {channel} call, N cases" summary (payer name + total children in that event).
+  const eventIds = Array.from(
+    new Set(
+      rawTouches
+        .map((t) => t.communication_event_id as string | null)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const batchMap = new Map<
+    string,
+    { payer_name: string; channel_label: string; case_count: number }
+  >();
+  if (eventIds.length > 0) {
+    const { data: events, error: evErr } = await supabase
+      .from("communication_event")
+      .select("id, channel, payer_id")
+      .eq("org_id", orgId)
+      .in("id", eventIds);
+    if (evErr) throw evErr;
+    const evRows = (events ?? []) as Array<{ id: string; channel: string; payer_id: string }>;
+    const payerIds = Array.from(new Set(evRows.map((e) => e.payer_id)));
+    const payerNames = new Map<string, string>();
+    if (payerIds.length > 0) {
+      const { data: payers, error: pErr } = await supabase
+        .from("payers")
+        .select("id, name")
+        .in("id", payerIds);
+      if (pErr) throw pErr;
+      for (const p of payers ?? []) payerNames.set(p.id as string, (p.name as string) ?? "payer");
+    }
+    // Count children across ALL cases in each event (not just this case's row).
+    const counts = new Map<string, number>();
+    const { data: childRows, error: cErr } = await supabase
+      .from("touches")
+      .select("communication_event_id")
+      .eq("org_id", orgId)
+      .in("communication_event_id", eventIds);
+    if (cErr) throw cErr;
+    for (const row of (childRows ?? []) as Array<{ communication_event_id: string | null }>) {
+      const eid = row.communication_event_id;
+      if (eid) counts.set(eid, (counts.get(eid) ?? 0) + 1);
+    }
+    for (const e of evRows) {
+      batchMap.set(e.id, {
+        payer_name: payerNames.get(e.payer_id) ?? "payer",
+        channel_label: channelWord(e.channel),
+        case_count: counts.get(e.id) ?? 1,
+      });
+    }
+  }
+  const enrichedTouches = rawTouches.map((t) => ({
+    ...t,
+    batch_summary: t.communication_event_id
+      ? (batchMap.get(t.communication_event_id as string) ?? null)
+      : null,
+  }));
+
   const merged = {
     ...(data as Record<string, unknown>),
+    touches: enrichedTouches,
     status_history: enrichedHistory,
     notes,
   };
   return camelizeRow<CaseDetail>(merged);
+}
+
+// The channel word used in "Part of {payer} {word} call" (touch_type -> word).
+function channelWord(touchType: string): string {
+  return touchType === "call" ? "phone" : touchType;
 }
 
 // Story 2: latest-wins payer reference / submission ID on the case. History is

@@ -181,7 +181,11 @@ function TouchlogRow({
       variant="secondary"
       className="text-[11px] h-5 px-1.5 font-medium border border-border bg-muted/30"
     >
-      Part of a batch call
+      {t.batchSummary
+        ? `Part of ${t.batchSummary.payerName} ${t.batchSummary.channelLabel} call, ${t.batchSummary.caseCount} case${
+            t.batchSummary.caseCount === 1 ? "" : "s"
+          }`
+        : "Part of a batch call"}
     </Badge>
   ) : null;
 

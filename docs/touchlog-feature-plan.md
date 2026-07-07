@@ -57,7 +57,7 @@ App:
   touch/Add note, "Got reference number" → payer reference); `TaskDrawer` and
   `/tasks/$id` render the task-filtered slice; payer reference row on case detail.
 
-### PR B — Batch touchpoint (app): Story 8 — **NEXT** (depends on A)
+### PR B — Batch touchpoint (app): Story 8 — **DONE (this session)** (depends on A)
 - Migration: `communication_event (id, org_id, payer_id, channel, occurred_at,
   created_by, created_at)` + FK `touches.communication_event_id`, RLS mirroring
   `payers`/`touches`.

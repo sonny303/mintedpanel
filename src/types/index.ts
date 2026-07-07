@@ -285,6 +285,9 @@ export interface Touch {
   communicationEventId: string | null;
   source: "manual" | "email" | "extension";
   createdAt: string;
+  // Story 8: present only on batch-call children (communicationEventId set),
+  // resolved by getCase for the "Part of {payer} {channel} call, N cases" line.
+  batchSummary?: { payerName: string; channelLabel: string; caseCount: number } | null;
 }
 
 export interface SOPStepDataField {

@@ -8,6 +8,36 @@ export type Database = {
   };
   public: {
     Tables: {
+      communication_event: {
+        Row: {
+          channel: string;
+          created_at: string | null;
+          created_by: string | null;
+          id: string;
+          occurred_at: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Insert: {
+          channel: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Update: {
+          channel?: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id?: string;
+          payer_id?: string;
+        };
+        Relationships: [];
+      };
       audit_log: {
         Row: {
           action_type: string;
