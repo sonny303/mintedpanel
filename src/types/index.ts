@@ -262,11 +262,22 @@ export interface SOPStepDataField {
   value: string;
 }
 
+/** How a step is carried out. Absent = "online_form" (backward compat). */
+export type SOPStepType = "draft_email" | "online_form" | "pdf";
+
+/** A draft-email step body; carries {{token}} placeholders from the closed catalog. */
+export interface SOPEmailTemplate {
+  subject: string;
+  body: string;
+}
+
 export interface SOPStep {
   id: string;
   order: number;
   label: string;
   detail?: string;
+  stepType?: SOPStepType;
+  emailTemplate?: SOPEmailTemplate;
   isCompleted: boolean;
   completedAt?: string | null;
   completedBy?: string | null;
@@ -340,6 +351,8 @@ export interface SOPTaskDefinition {
   steps: {
     label: string;
     detail?: string;
+    stepType?: SOPStepType;
+    emailTemplate?: SOPEmailTemplate;
     dataFields?: { label: string; token: string }[];
   }[];
 }

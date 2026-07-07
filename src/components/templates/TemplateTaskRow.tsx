@@ -14,16 +14,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
+import type { SOPStepType } from "@/types";
 
 interface DataField {
   label: string;
   token: string;
 }
 
+interface EmailTemplate {
+  subject: string;
+  body: string;
+}
+
 interface EditableStep {
   id: string;
   label: string;
   detail: string;
+  stepType: SOPStepType;
+  emailTemplate: EmailTemplate;
   dataFields: DataField[];
 }
 
@@ -50,6 +58,12 @@ interface TokenGroup {
 interface DragStep {
   taskId: string;
   stepId: string;
+}
+
+// Append a {{token}} placeholder to the email body, spacing it off prior text.
+function appendToken(body: string, token: string): string {
+  const sep = body.length > 0 && !/\s$/.test(body) ? " " : "";
+  return `${body}${sep}{{${token}}}`;
 }
 
 export interface TemplateTaskRowProps {
@@ -200,44 +214,61 @@ export function TemplateTaskRow({
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <Label className="text-xs">Data fields</Label>
-                    {canEdit ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => addDataField(task.id, step.id)}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add field
-                      </Button>
-                    ) : null}
-                  </div>
-                  {step.dataFields.length === 0 ? (
-                    <EmptyState message="No data fields yet" />
-                  ) : (
-                    <div className="space-y-2">
-                      {step.dataFields.map((field, i) => (
-                        <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                          <Input
-                            placeholder="Label"
-                            value={field.label}
-                            onChange={(e) =>
-                              updateDataField(task.id, step.id, i, {
-                                label: e.target.value,
+                  <Label className="text-xs">Step type</Label>
+                  <Select
+                    value={step.stepType}
+                    onValueChange={(v) =>
+                      updateStep(task.id, step.id, { stepType: v as SOPStepType })
+                    }
+                    disabled={!canEdit}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="online_form">Online form</SelectItem>
+                      <SelectItem value="draft_email">Draft email</SelectItem>
+                      <SelectItem value="pdf" disabled>
+                        PDF (coming soon)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {step.stepType === "draft_email" ? (
+                  <div className="space-y-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
+                    <p className="text-[11px] text-[#92400E]">
+                      Tokens like {"{{provider.firstName}}"} resolve when the task is created.
+                    </p>
+                    <div>
+                      <Label className="text-xs">Subject</Label>
+                      <Input
+                        value={step.emailTemplate.subject}
+                        onChange={(e) =>
+                          updateStep(task.id, step.id, {
+                            emailTemplate: { ...step.emailTemplate, subject: e.target.value },
+                          })
+                        }
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs">Body</Label>
+                        {canEdit ? (
+                          <Select
+                            value=""
+                            onValueChange={(token) =>
+                              updateStep(task.id, step.id, {
+                                emailTemplate: {
+                                  ...step.emailTemplate,
+                                  body: appendToken(step.emailTemplate.body, token),
+                                },
                               })
                             }
-                            disabled={!canEdit}
-                          />
-                          <Select
-                            value={field.token}
-                            onValueChange={(v) =>
-                              updateDataField(task.id, step.id, i, { token: v })
-                            }
-                            disabled={!canEdit}
                           >
-                            <SelectTrigger>
-                              <SelectValue />
+                            <SelectTrigger className="h-7 w-[160px] text-xs">
+                              <SelectValue placeholder="Insert token" />
                             </SelectTrigger>
                             <SelectContent>
                               {groupedTokens.map((grp) => (
@@ -254,21 +285,92 @@ export function TemplateTaskRow({
                               ))}
                             </SelectContent>
                           </Select>
-                          {canEdit ? (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => removeDataField(task.id, step.id, i)}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          ) : null}
-                        </div>
-                      ))}
+                        ) : null}
+                      </div>
+                      <Textarea
+                        value={step.emailTemplate.body}
+                        onChange={(e) =>
+                          updateStep(task.id, step.id, {
+                            emailTemplate: { ...step.emailTemplate, body: e.target.value },
+                          })
+                        }
+                        disabled={!canEdit}
+                        rows={5}
+                      />
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-xs">Data fields</Label>
+                      {canEdit ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => addDataField(task.id, step.id)}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add field
+                        </Button>
+                      ) : null}
+                    </div>
+                    {step.dataFields.length === 0 ? (
+                      <EmptyState message="No data fields yet" />
+                    ) : (
+                      <div className="space-y-2">
+                        {step.dataFields.map((field, i) => (
+                          <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                            <Input
+                              placeholder="Label"
+                              value={field.label}
+                              onChange={(e) =>
+                                updateDataField(task.id, step.id, i, {
+                                  label: e.target.value,
+                                })
+                              }
+                              disabled={!canEdit}
+                            />
+                            <Select
+                              value={field.token}
+                              onValueChange={(v) =>
+                                updateDataField(task.id, step.id, i, { token: v })
+                              }
+                              disabled={!canEdit}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {groupedTokens.map((grp) => (
+                                  <div key={grp.prefix}>
+                                    <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                                      {grp.label}
+                                    </div>
+                                    {grp.items.map((t) => (
+                                      <SelectItem key={t.token} value={t.token}>
+                                        {t.token}
+                                      </SelectItem>
+                                    ))}
+                                  </div>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {canEdit ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removeDataField(task.id, step.id, i)}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {canEdit ? (
                 <Button

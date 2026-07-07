@@ -570,12 +570,13 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
 - MSO routing matching is exact and case-sensitive (`'All'` is the only
   wildcard). Demo data was aligned Jul 2026: rules and providers both say
   `Physical Therapy` (rules previously said `PT` and never matched).
-- `supabase/seed.sql` stores `sop_templates.task_definitions` in a legacy
-  shape (`{title, dayOffset, sopStepTemplates:[{step, dataFieldTokens}]}`)
-  that `sopResolver.resolveTemplate` cannot read (it expects
-  `{dueOffsetDays, steps:[{label, dataFields}]}`, which is what ALL hosted
-  templates use). A local rebuild seeded from that file breaks task seeding
-  until the definitions are normalized.
+- `supabase/seed.sql` — the `sop_templates.task_definitions` were normalized
+  to the canonical `{dueOffsetDays, steps:[{label, stepType, dataFields}]}`
+  shape (P3, 2026-07-07) with `stepType: "online_form"` on each step plus one
+  `draft_email` example, so a local rebuild now seeds tasks correctly. Still
+  legacy: the pre-resolved `tasks` seed rows carry `sop_content` in the old
+  `{steps:[{step, dataFieldTokens}]}` shape (not what `SOPStep` expects) — a
+  separate, cosmetic-on-local-rebuild issue, out of P3 scope.
 - NewCaseModal still passes `facility: null` into `resolveTemplate`, so
   `{{facility.*}}` tokens resolve empty there; the launch kickoff passes the
   location.
