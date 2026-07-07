@@ -2074,6 +2074,7 @@ export type Database = {
         Args: { p_input: Json; p_tasks?: Json };
         Returns: Json;
       };
+      create_organization: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };

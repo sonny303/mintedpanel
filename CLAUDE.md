@@ -108,6 +108,23 @@ all 23 hosted migrations. Consequences:
   insert + initial `status_history` row + tasks + two `audit_log` rows;
   `created_by` from `auth.uid()`; default credentialing status = lowest
   `sort_order`. Returns the case as jsonb.
+- `create_organization(p_name text) RETURNS uuid` — **the exception to this
+  section's "hosted-only" heading: it IS a repo migration**
+  (`20260707140000_create_organization_rpc.sql`, repo + hosted). SECURITY
+  DEFINER, EXECUTE granted to `authenticated`. Privileged BOOTSTRAP for
+  self-serve org intake (Epic 2a): `organizations` has no INSERT policy and
+  memberships/status_configs INSERT require pre-existing admin — a chicken/egg
+  an org's first member can't satisfy under RLS. Inserts the org, adds the
+  caller (`auth.uid()`) as an ADMIN membership, seeds the 22 canonical
+  `status_configs` (credentialing 9 / contracting 6 / location 7), writes a
+  CREATE audit row, returns the new org id. Any authenticated user may call it.
+  Frontend path: `src/services/organizations.ts` → `src/hooks/useOrganizations.ts`
+  (`useCreateOrganization` — on success refetches memberships, switches active
+  org via the store's org-switch path, navigates Home); intake UI is the
+  no-org bootstrap screen (`src/components/org/NoOrgScreen.tsx`, rendered by
+  `__root.tsx` when `memberships.length === 0`) and Admin → Settings →
+  Organization (`src/components/settings/CreateOrgPanel.tsx` →
+  `src/components/org/CreateOrganizationModal.tsx`).
 - `claim_invites()` — converts `pending_invites` for the caller's email into
   memberships.
 - `get_sop_field_tokens()` — the token **catalog**: `[{ table, token, column }]`

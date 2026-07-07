@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "@/components/layout/AppShell";
+import { NoOrgScreen } from "@/components/org/NoOrgScreen";
 import { useAuthStore, registerQueryClient } from "@/lib/auth-store";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -170,6 +171,7 @@ function RootComponent() {
   const initialized = useAuthStore((s) => s.initialized);
   const session = useAuthStore((s) => s.session);
   const initError = useAuthStore((s) => s.initError);
+  const memberships = useAuthStore((s) => s.memberships);
 
   useEffect(() => {
     registerQueryClient(queryClient);
@@ -221,6 +223,10 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {isAuthRoute || isRootRoute || isPrivacyRoute ? (
         <Outlet />
+      ) : memberships.length === 0 ? (
+        // Signed in but part of no org yet — bootstrap the first org before the
+        // app shell (which mounts org-scoped hooks) ever renders.
+        <NoOrgScreen />
       ) : (
         <AppShell>
           <Outlet />

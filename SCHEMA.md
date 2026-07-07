@@ -14,7 +14,11 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 
 ### organizations
 
-`id, name, created_at` — tenant root.
+`id, name, created_at` — tenant root. Created via the SECURITY DEFINER
+`create_organization(p_name text) RETURNS uuid` RPC (self-serve intake): there
+is no INSERT policy on this table — the RPC inserts the org, the caller's admin
+membership, the canonical `status_configs` seed, and a CREATE audit row as the
+definer (migration `20260707140000_create_organization_rpc.sql`).
 
 ### memberships
 

@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrgPanel } from "@/components/settings/OrgPanel";
+import { CreateOrgPanel } from "@/components/settings/CreateOrgPanel";
 import { GroupsPanel } from "@/components/settings/GroupsPanel";
 import { FacilitiesPanel } from "@/components/settings/FacilitiesPanel";
 import { MembersPanel } from "@/components/settings/MembersPanel";
@@ -31,6 +32,7 @@ function AdminSettingsPage() {
           <OrgPanel />
           <GroupsPanel />
           <FacilitiesPanel />
+          <CreateOrgPanel />
         </TabsContent>
         <TabsContent value="team" className="mt-6">
           <MembersPanel />
