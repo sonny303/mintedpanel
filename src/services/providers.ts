@@ -56,6 +56,11 @@ export interface ProviderInput {
   malpracticePolicyNumber?: string | null;
   malpracticeCoverageStart?: string | null;
   malpracticeCoverageEnd?: string | null;
+  // Onboarding-import flag (Epic 2e). Optional; when omitted the column is not
+  // written and the DB default (false) applies, so browser callers are
+  // unchanged. The CSV import sets it from the per-import toggle. Rides through
+  // snakeizeRow → reference_only on insert.
+  referenceOnly?: boolean;
 }
 
 // The list projection is PHI-safe by construction: no ssn_last4, date_of_birth,

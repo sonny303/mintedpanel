@@ -37,6 +37,7 @@ import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
+import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
@@ -187,6 +188,11 @@ const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
   path: '/admin/mso-routing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminImportRoute = AdminImportRouteImport.update({
+  id: '/admin/import',
+  path: '/admin/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminAuditRoute = AdminAuditRouteImport.update({
   id: '/admin/audit',
   path: '/admin/audit',
@@ -247,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
+  '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
+  '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
@@ -320,6 +328,7 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/welcome': typeof WelcomeRoute
   '/admin/audit': typeof AdminAuditRoute
+  '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
@@ -361,6 +370,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/welcome'
     | '/admin/audit'
+    | '/admin/import'
     | '/admin/mso-routing'
     | '/admin/payers'
     | '/admin/portals'
@@ -397,6 +407,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/welcome'
     | '/admin/audit'
+    | '/admin/import'
     | '/admin/mso-routing'
     | '/admin/payers'
     | '/admin/portals'
@@ -433,6 +444,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/welcome'
     | '/admin/audit'
+    | '/admin/import'
     | '/admin/mso-routing'
     | '/admin/payers'
     | '/admin/portals'
@@ -473,6 +485,7 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRoute
   WelcomeRoute: typeof WelcomeRoute
   AdminAuditRoute: typeof AdminAuditRoute
+  AdminImportRoute: typeof AdminImportRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
   AdminPayersRoute: typeof AdminPayersRoute
   AdminPortalsRoute: typeof AdminPortalsRoute
@@ -684,6 +697,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminMsoRoutingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/import': {
+      id: '/admin/import'
+      path: '/admin/import'
+      fullPath: '/admin/import'
+      preLoaderRoute: typeof AdminImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/audit': {
       id: '/admin/audit'
       path: '/admin/audit'
@@ -848,6 +868,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRoute,
   WelcomeRoute: WelcomeRoute,
   AdminAuditRoute: AdminAuditRoute,
+  AdminImportRoute: AdminImportRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
   AdminPayersRoute: AdminPayersRoute,
   AdminPortalsRoute: AdminPortalsRoute,

@@ -32,6 +32,7 @@ import {
   Check,
   Globe,
   Zap,
+  Upload,
 } from "lucide-react";
 
 type NavLink = {
@@ -67,6 +68,7 @@ const adminNav: NavLink[] = [
   { to: "/admin/payers", label: "Payers", icon: Building2 },
   { to: "/admin/portals", label: "Portals", icon: Globe },
   { to: "/admin/audit", label: "Audit Log", icon: FileStack },
+  { to: "/admin/import", label: "Import", icon: Upload },
   { to: "/admin/settings", label: "Group & Locations", icon: Building2 },
 ];
 
