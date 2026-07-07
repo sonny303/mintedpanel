@@ -417,9 +417,51 @@ reference providers' cases from the action queue and reference locations from
 section, out of the chip counts/filters/badges; the launches list + detail
 render the chip and suppress the go-live nudge. `reference_only` rides in
 `PROVIDER_LIST_COLUMNS`; facilities load it via `select("*")`. Domain types:
-`Provider.referenceOnly` / `Facility.referenceOnly`. **Nothing sets the flag
-true yet** — the migration/onboarding writer that marks rows reference-only is a
-later PR, so the flag is inert until then.
+`Provider.referenceOnly` / `Facility.referenceOnly`. The CSV onboarding import
+(below) is the first writer that sets the flag true (via its default-on toggle);
+outside that path the flag stays false.
+
+### CSV onboarding packages (Epic 2c, P6 PR3, 2026-07-07)
+
+Admin-only wizard at **`/admin/import`** (Admin nav → "Import") that onboards a
+three-file CSV package — `facilities.csv`, `providers.csv`,
+`provider_facility_assignments.csv` — into the org. **Deterministic app logic,
+no LLM/AI ingestion; no schema change** (`reference_only` already existed).
+
+- **Pure core `src/lib/csvImport.ts` (+ `.test.ts`, 28 cases):**
+  hand-rolled RFC4180-ish parser (quoted fields, embedded commas/newlines, `""`
+  escape, CRLF/LF; records carry the 1-based source line) — **no CSV dep added**.
+  `parseImportPackage(pkg)` returns `{ facilities, providers, assignments,
+errors }`. Errors are line-numbered `{ file, line, column, message }`
+  (required-field-missing, bad date, bad npi/ssn/state format, duplicate id,
+  unknown provider/facility referenced by an assignment). Coercion helpers
+  `coerceDate` (ISO / M/D/YYYY / YYYY/M/D → ISO), `coerceBool`,
+  `coerceStringArray` (the `license_states` shorthand → extra state-only
+  licenses). Header sets are normalized (case/space-insensitive): facilities
+  `ref,name,group_name,street,city,state,zip`; providers
+  `ref,first_name,last_name,credentials,email,phone,npi,caqh_id,specialty,
+taxonomy_code,dea_number,date_of_birth,ssn_last4,start_date,home_*,is_new_grad,
+group_name,license_state,license_number,license_type,license_issue_date,
+license_expiration_date,license_states`; assignments
+  `provider_ref,facility_ref,is_primary`. A row's identity `keys` (facility:
+  ref+name; provider: ref+npi+email) is how an assignment resolves its
+  `provider_ref`/`facility_ref` to a real created id — done deterministically
+  by lowercased key match; `group_name` resolves to an existing group id.
+- **Commit `src/services/importCommit.ts`** `commitImport(parsed, {
+referenceOnly, groups })` writes through the EXISTING services only —
+  `createFacility` (orgSettings), `createProviderWithDetails`,
+  `assignProviderToFacility` (launches) — so org_id/audit/RLS are inherited, no
+  hand-rolled inserts. Best-effort per row with a `CommitSummary`
+  (created/failed counts + failure list). `ProviderInput` and `FacilityInput`
+  gained an optional `referenceOnly?: boolean` (rides `snakeizeRow →
+reference_only`; omitted → DB default false, so browser callers are
+  unchanged); the import passes the wizard toggle (**default on**).
+- **Route `src/routes/admin.import.tsx`:** three file inputs → Parse (preview
+  tables + distinct line-numbered errors list) → reference_only toggle → Commit
+  (created/failed summary). Admin-gated by a render-time `useIsAdmin()`
+  backstop. Invalidates providers/facilities/facility-assignments caches on
+  success. Ships the feature only — **does not import demo data**, so the gate
+  expected-counts are unchanged.
 
 ### Statuses pattern
 

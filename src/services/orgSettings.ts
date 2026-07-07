@@ -142,6 +142,10 @@ export interface FacilityInput {
   state?: string | null;
   zip?: string | null;
   isActive?: boolean;
+  // Onboarding-import flag (Epic 2e). Optional; omitted → DB default (false)
+  // so existing panel callers are unchanged. The CSV import sets it from the
+  // per-import toggle. Rides through snakeizeRow → reference_only.
+  referenceOnly?: boolean;
 }
 
 export async function listFacilities(): Promise<Facility[]> {
