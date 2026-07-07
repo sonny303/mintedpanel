@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/CopyButton";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,6 +22,7 @@ import { useCanWrite } from "@/lib/permissions";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
+import { CaseWizard } from "@/components/cases/CaseWizard";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
 import { CaseHistoryPanel } from "@/components/cases/CaseHistoryPanel";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
@@ -51,6 +53,7 @@ function CaseDetailPage() {
   const createNoteM = useCreateNote();
 
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [taskView, setTaskView] = useState("list");
 
   const statusById = useMemo(() => {
     const m = new Map<string, StatusConfig>();
@@ -171,7 +174,18 @@ function CaseDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
-            <CaseTasksPanel tasks={tasks} />
+            <Tabs value={taskView} onValueChange={setTaskView}>
+              <TabsList className="mb-3">
+                <TabsTrigger value="list">List</TabsTrigger>
+                <TabsTrigger value="wizard">Wizard</TabsTrigger>
+              </TabsList>
+              <TabsContent value="list" className="mt-0">
+                <CaseTasksPanel tasks={tasks} />
+              </TabsContent>
+              <TabsContent value="wizard" className="mt-0">
+                <CaseWizard tasks={tasks} />
+              </TabsContent>
+            </Tabs>
             <CaseTouchesPanel
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}
