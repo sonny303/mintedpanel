@@ -255,10 +255,14 @@ x-org-id`.
   is untouched. No query logic is duplicated between layers. New server routes
   should follow the same pattern — thread a ctx, never a second copy of the query.
 - **PHI + writes:** the list route returns an explicit **narrowed** column set
-  (`PROVIDER_LIST_COLUMNS` — no `ssn_last4`/`date_of_birth`/home address); never
-  `select('*')` in a list payload. Writes set `org_id` from the authenticated
-  membership (**never the request body** — it's stripped) and audit through the
-  service layer.
+  (`PROVIDER_LIST_COLUMNS` — no `ssn_last4`, `date_of_birth`, or home-address
+  columns (street/city/zip); `home_state` is deliberately included for
+  routing/display, not an address); never `select('*')` in a list payload.
+  Writes set `org_id` from the authenticated membership (**never the request
+  body** — it's stripped) and audit through the service layer. `PATCH
+  /api/providers/:id` mirrors the GET handler's not-found detection: a
+  cross-org or nonexistent id is a 404 (never the 500 the raw `.single()`
+  would raise), pinned by gate assertion 12.
 - **Envelope:** `src/server/envelope.ts` — every response is `{ data, error, meta }`
   via `ok(data, meta?, status?)` / `fail(status, message)`; list meta carries
   `{ total, page, pageSize }`; `meta.notes` (string[]) carries non-fatal

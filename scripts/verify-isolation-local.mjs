@@ -60,7 +60,9 @@ function runGate(baseUrl) {
 // would mask a dead assertion), so each leak mode also pins the exact set of
 // assertions expected to fail — any extra or missing failure is a harness bug.
 const EXPECTED_FAILS = {
-  providers: ["1", "1b", "2c", "3"],
+  // The "providers" leak also lets a cross-org PATCH land (assertion 12). The
+  // list is sorted lexicographically to match failedAssertions()'s .sort().
+  providers: ["1", "12", "1b", "2c", "3"],
   spoof: ["4"],
   fieldmaps: ["5b", "5c"],
   profile: ["6"],

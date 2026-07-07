@@ -109,6 +109,7 @@ describe("provider route handlers", () => {
   });
 
   it("update requires a writer and returns 200", async () => {
+    getProviderMock.mockResolvedValue({ id: "p1" } as never);
     updateProviderMock.mockResolvedValue({ id: "p1", firstName: "New" } as never);
     const blocked = await handleUpdateProvider("p1", { firstName: "New" }, ctx("billing"));
     expect(blocked.status).toBe(403);
@@ -116,5 +117,16 @@ describe("provider route handlers", () => {
     const ok = await handleUpdateProvider("p1", { firstName: "New" }, ctx("admin"));
     expect(ok.status).toBe(200);
     expect((await body(ok)).data).toEqual({ id: "p1", firstName: "New" });
+  });
+
+  it("update returns 404 for a cross-org / nonexistent id (never a 500)", async () => {
+    // getProvider is org-scoped, so a cross-org or unknown id resolves to null —
+    // the same not-found signal the GET handler uses.
+    getProviderMock.mockResolvedValue(null);
+    const res = await handleUpdateProvider("nope", { firstName: "New" }, ctx("admin"));
+    expect(res.status).toBe(404);
+    expect((await body(res)).error).toBe("Provider not found");
+    // The update never runs once the row is absent (no cross-org write attempt).
+    expect(updateProviderMock).not.toHaveBeenCalled();
   });
 });
