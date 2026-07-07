@@ -5,17 +5,26 @@
 // uses for "In-Network". Pure functions only; no I/O.
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { fmtDate } from "@/lib/format";
-import { LIVE_LABEL, PENDING_FULFILLMENT_LABEL, READY_FOR_LAUNCH_LABEL } from "./statusLabels";
+import { canonicalLabel } from "./canonicalStatuses";
+import {
+  INACTIVE_LABEL,
+  INTERVIEWING_LABEL,
+  LIVE_LABEL,
+  PENDING_FULFILLMENT_LABEL,
+  PLANNED_LABEL,
+  PROSPECT_LABEL,
+  READY_FOR_LAUNCH_LABEL,
+} from "./statusLabels";
 import type { Facility, StatusConfig } from "@/types";
 
 /** Live rows stay in Recently Launched for this many days, then drop off. */
 export const RECENTLY_LAUNCHED_DAYS = 30;
 
 export const LIVE_STATUS_LABEL = LIVE_LABEL;
-export const INACTIVE_STATUS_LABEL = "Inactive";
+export const INACTIVE_STATUS_LABEL = INACTIVE_LABEL;
 
 /** Early-pipeline statuses show the date as a target, later ones as a start. */
-const TARGET_LABELS = new Set(["Planned", "Interviewing"]);
+const TARGET_LABELS = new Set([PLANNED_LABEL, INTERVIEWING_LABEL]);
 const STARTS_LABELS = new Set([
   PENDING_FULFILLMENT_LABEL,
   READY_FOR_LAUNCH_LABEL,
@@ -24,8 +33,9 @@ const STARTS_LABELS = new Set([
 
 /** Form-field label for the effective date, switching with the status. */
 export function launchDateFieldLabel(statusLabel: string | null | undefined): string {
-  if (statusLabel && TARGET_LABELS.has(statusLabel)) return "Target date";
-  if (statusLabel && STARTS_LABELS.has(statusLabel)) return "Start date";
+  const label = statusLabel != null ? canonicalLabel(statusLabel) : statusLabel;
+  if (label && TARGET_LABELS.has(label)) return "Target date";
+  if (label && STARTS_LABELS.has(label)) return "Start date";
   return "Effective date";
 }
 
@@ -36,11 +46,11 @@ export interface LocationRow {
 }
 
 export function isLiveLabel(label: string | null | undefined): boolean {
-  return label === LIVE_STATUS_LABEL;
+  return label != null && canonicalLabel(label) === LIVE_STATUS_LABEL;
 }
 
 export function isInactiveLabel(label: string | null | undefined): boolean {
-  return label === INACTIVE_STATUS_LABEL;
+  return label != null && canonicalLabel(label) === INACTIVE_STATUS_LABEL;
 }
 
 export interface LaunchSections {
@@ -100,12 +110,9 @@ export function launchDateDisplay(
   statusLabel: string | null | undefined,
   effectiveDate: string | null | undefined,
 ): string {
-  if (!statusLabel || statusLabel === "Prospect" || isInactiveLabel(statusLabel)) return "—";
-  const prefix = TARGET_LABELS.has(statusLabel)
-    ? "Target"
-    : STARTS_LABELS.has(statusLabel)
-      ? "Starts"
-      : null;
+  const label = statusLabel != null ? canonicalLabel(statusLabel) : statusLabel;
+  if (!label || label === PROSPECT_LABEL || isInactiveLabel(label)) return "—";
+  const prefix = TARGET_LABELS.has(label) ? "Target" : STARTS_LABELS.has(label) ? "Starts" : null;
   if (!effectiveDate) return "No date";
   const formatted = fmtDate(effectiveDate);
   return prefix ? `${prefix} ${formatted}` : formatted;
@@ -148,10 +155,11 @@ export interface TransitionCheckInput {
 /** Soft transition checks — warn, never block. */
 export function transitionWarnings(input: TransitionCheckInput): string[] {
   const warnings: string[] = [];
-  if (input.toStatusLabel === READY_FOR_LAUNCH_LABEL && !input.hasProvider) {
+  const toLabel = canonicalLabel(input.toStatusLabel);
+  if (toLabel === READY_FOR_LAUNCH_LABEL && !input.hasProvider) {
     warnings.push("No provider is assigned to this location yet.");
   }
-  if (isLiveLabel(input.toStatusLabel) && input.linkedCaseCount === 0) {
+  if (isLiveLabel(toLabel) && input.linkedCaseCount === 0) {
     warnings.push("No credentialing cases are linked to this location yet.");
   }
   return warnings;

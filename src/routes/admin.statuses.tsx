@@ -1,5 +1,8 @@
-// Admin → Statuses. Three tracks (credentialing, contracting, location) with
-// add/edit modal, drag-to-reorder, and in-use counts. Admin-write;
+// Admin → Statuses. Three tracks (credentialing, contracting, location) that
+// are READ-MOSTLY: the canonical status set is code-owned (src/lib/
+// canonicalStatuses.ts) and seeded per org by the create_organization RPC.
+// Admins can drag-to-reorder and recolor (+ edit a status's required fields);
+// adding, deleting, or renaming a status is not offered in the UI. Admin-write;
 // specialist read. The location track drives the Launches pipeline.
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -26,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useStatusConfigs, useCreateStatusConfig, useUpdateStatusConfig } from "@/hooks/useAdmin";
+import { useStatusConfigs, useUpdateStatusConfig } from "@/hooks/useAdmin";
 import { updateStatusConfig } from "@/services/statusConfigs";
 import { useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
@@ -116,19 +119,25 @@ function AdminStatusesPage() {
 
   const [editing, setEditing] = useState<{
     track: StatusTrack;
-    status: StatusConfig | null;
+    status: StatusConfig;
   } | null>(null);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Statuses"
-        description="Configure the credentialing and contracting workflow stages."
+        description="Reorder and recolor the credentialing, contracting, and location stages."
       />
+
+      <div className="border border-[#E8E5E0] rounded-md bg-[#FAFAF9] px-4 py-3 text-[13px] text-muted-foreground">
+        The canonical status set is code-owned (<code>src/lib/canonicalStatuses.ts</code>) and
+        seeded for every organization. You can reorder and recolor statuses here; adding, removing,
+        or renaming a status is managed in code.
+      </div>
 
       {!canEdit && (
         <div className="border border-[#E8E5E0] rounded-md bg-[#FAFAF9] px-4 py-3 text-[13px] text-muted-foreground">
-          Read-only view. Only admins can edit statuses.
+          Read-only view. Only admins can reorder or recolor statuses.
         </div>
       )}
 
@@ -142,7 +151,6 @@ function AdminStatusesPage() {
         onRetry={() => credQ.refetch()}
         inUse={credInUse}
         canEdit={canEdit}
-        onAdd={() => setEditing({ track: "credentialing", status: null })}
         onEdit={(s) => setEditing({ track: "credentialing", status: s })}
       />
 
@@ -156,7 +164,6 @@ function AdminStatusesPage() {
         onRetry={() => conQ.refetch()}
         inUse={conInUse}
         canEdit={canEdit}
-        onAdd={() => setEditing({ track: "contracting", status: null })}
         onEdit={(s) => setEditing({ track: "contracting", status: s })}
       />
 
@@ -170,7 +177,6 @@ function AdminStatusesPage() {
         onRetry={() => locQ.refetch()}
         inUse={locInUse}
         canEdit={canEdit}
-        onAdd={() => setEditing({ track: "location", status: null })}
         onEdit={(s) => setEditing({ track: "location", status: s })}
       />
 
@@ -178,14 +184,6 @@ function AdminStatusesPage() {
         open={editing !== null}
         track={editing?.track ?? "credentialing"}
         status={editing?.status ?? null}
-        existingCount={
-          (editing?.track === "credentialing"
-            ? credQ.data
-            : editing?.track === "contracting"
-              ? conQ.data
-              : locQ.data
-          )?.length ?? 0
-        }
         onClose={() => setEditing(null)}
       />
     </div>
@@ -202,7 +200,6 @@ interface TrackSectionProps {
   onRetry: () => void;
   inUse: Map<string, number>;
   canEdit: boolean;
-  onAdd: () => void;
   onEdit: (s: StatusConfig) => void;
 }
 
@@ -216,7 +213,6 @@ function TrackSection({
   onRetry,
   inUse,
   canEdit,
-  onAdd,
   onEdit,
 }: TrackSectionProps) {
   const qc = useQueryClient();
@@ -259,7 +255,6 @@ function TrackSection({
       onRetry={onRetry}
       inUse={inUse}
       canEdit={canEdit}
-      onAdd={onAdd}
       onEdit={onEdit}
       dragId={dragId}
       setDragId={setDragId}
@@ -283,7 +278,6 @@ function ReorderableSection({
   onRetry,
   inUse,
   canEdit,
-  onAdd,
   onEdit,
   dragId,
   setDragId,
@@ -296,11 +290,6 @@ function ReorderableSection({
           <h2 className="text-[14px] font-medium">{title}</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">{description}</p>
         </div>
-        {canEdit && (
-          <Button onClick={onAdd} className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9">
-            <Plus className="w-4 h-4 mr-1" /> Add status
-          </Button>
-        )}
       </div>
       <div className="overflow-x-auto">
         {loading ? (
@@ -385,26 +374,22 @@ interface StatusEditModalProps {
   open: boolean;
   track: StatusTrack;
   status: StatusConfig | null;
-  existingCount: number;
   onClose: () => void;
 }
 
-function StatusEditModal({ open, track, status, existingCount, onClose }: StatusEditModalProps) {
-  const createM = useCreateStatusConfig();
+// Edit-only: recolor + required-fields. The label is code-owned (canonical set)
+// and shown read-only; there is no create path (new-org seeding uses the RPC).
+function StatusEditModal({ open, track, status, onClose }: StatusEditModalProps) {
   const updateM = useUpdateStatusConfig(status?.id ?? "");
 
-  const [label, setLabel] = useState("");
   const [color, setColor] = useState(TOKEN_COLORS[0].value);
   const [fields, setFields] = useState<RequiredFieldDef[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
 
-  const hydrateKey = status?.id ?? (open ? "new" : null);
-  if (open && hydrateKey !== hydratedFor) {
-    setLabel(status?.label ?? "");
-    setColor(status?.color ?? TOKEN_COLORS[0].value);
-    setFields(
-      status ? (status.requiredFields as unknown as unknown[]).map(normalizeRequiredField) : [],
-    );
+  const hydrateKey = status?.id ?? null;
+  if (open && status && hydrateKey !== hydratedFor) {
+    setColor(status.color ?? TOKEN_COLORS[0].value);
+    setFields((status.requiredFields as unknown as unknown[]).map(normalizeRequiredField));
     setHydratedFor(hydrateKey);
   }
   if (!open && hydratedFor !== null) {
@@ -426,10 +411,6 @@ function StatusEditModal({ open, track, status, existingCount, onClose }: Status
   }
 
   async function handleSubmit() {
-    if (!label.trim()) {
-      toast.error("Label is required.");
-      return;
-    }
     if (!TOKEN_COLORS.some((c) => c.value === color)) {
       toast.error("Pick a color from the palette.");
       return;
@@ -454,23 +435,11 @@ function StatusEditModal({ open, track, status, existingCount, onClose }: Status
     }));
 
     try {
-      if (status) {
-        await updateM.mutateAsync({
-          label: label.trim(),
-          color,
-          requiredFields: cleanFields as unknown as string[],
-        });
-        toast.success("Status updated.");
-      } else {
-        await createM.mutateAsync({
-          track,
-          label: label.trim(),
-          color,
-          sortOrder: (existingCount + 1) * 10,
-          requiredFields: cleanFields as unknown as string[],
-        });
-        toast.success("Status added.");
-      }
+      await updateM.mutateAsync({
+        color,
+        requiredFields: cleanFields as unknown as string[],
+      });
+      toast.success("Status updated.");
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed.");
@@ -481,22 +450,22 @@ function StatusEditModal({ open, track, status, existingCount, onClose }: Status
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{status ? "Edit status" : "Add status"}</DialogTitle>
+          <DialogTitle>Edit status</DialogTitle>
           <DialogDescription>
             {track === "credentialing"
               ? "Credentialing"
               : track === "contracting"
                 ? "Contracting"
                 : "Location"}{" "}
-            track.
+            track. Labels are code-owned — edit the color and required fields here.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>
-              Label <span className="text-[#DC2626]">*</span>
-            </Label>
-            <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+            <Label>Label</Label>
+            <div className="flex h-9 items-center rounded-md border border-[#E8E5E0] bg-[#FAFAF9] px-3 text-[13px] text-muted-foreground">
+              {status?.label ?? ""}
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Color</Label>
@@ -628,9 +597,9 @@ function StatusEditModal({ open, track, status, existingCount, onClose }: Status
           <Button
             onClick={handleSubmit}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
-            disabled={createM.isPending || updateM.isPending}
+            disabled={updateM.isPending}
           >
-            {status ? "Save changes" : "Add status"}
+            Save changes
           </Button>
         </DialogFooter>
       </DialogContent>

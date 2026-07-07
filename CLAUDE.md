@@ -482,16 +482,40 @@ reference_only`; omitted → DB default false, so browser callers are
 `status_configs` rows per org with `track ∈ {credentialing, contracting,
 location}`, `label`, `color` (hex), `sort_order`, `required_fields`,
 `action_bucket` (`ours|waiting_payer|waiting_provider|complete` — drives the
-Home action engine, `src/lib/actionState.ts`). Admin > Statuses
-(`src/routes/admin.statuses.tsx`) renders one `TrackSection` per track with
-drag-to-reorder and an add/edit modal (fixed `TOKEN_COLORS` palette).
+Home action engine, `src/lib/actionState.ts`).
+
+**The canonical status set is code-owned (Epic 6 finale, P11, 2026-07-07):**
+`src/lib/canonicalStatuses.ts` holds all 22 canonical rows as typed data
+(`CANONICAL_STATUSES` per track: credentialing 9 / contracting 6 / location 7 —
+`ALL_CANONICAL_STATUSES` flat; `ActionBucket`/`ACTION_BUCKETS` closed set). This
+**mirrors the `create_organization` RPC seed by hand** (the RPC is SQL and can't
+import TS, so keep the two consistent — the mirror is asserted well-formed in
+`canonicalStatuses.test.ts`). No migration/relabel shipped: both live demo orgs
+already carry exactly this set (zero divergence). Because the set is code-owned,
+**Admin > Statuses (`src/routes/admin.statuses.tsx`) is now READ-MOSTLY** — one
+`TrackSection` per track with drag-to-reorder + recolor (and required-fields
+editing) via `updateStatusConfig`; the **add-status / delete / label-edit UI was
+removed** (create/edit-label is gone; new-org seeding uses the RPC, not the UI).
+The `createStatusConfig` service + `useCreateStatusConfig` hook stay defined but
+have no UI caller.
+
 **Semantics are matched by label** across the app ("In-Network", "Live",
 "Pre-Credentialing Setup") — the codebase idiom, not ids. The shared label
-constants (`PRE_CRED_PAYER_NAME`, `IN_NETWORK_LABEL`, `PENDING_FULFILLMENT_LABEL`,
-`READY_FOR_LAUNCH_LABEL`, `LIVE_LABEL`, `NOT_REQUIRED_LABEL`, `OON_LABEL`) live in
-one place — `src/lib/statusLabels.ts` (centralized 2026-07-07); import from there,
-never re-hardcode a label literal (a one-char drift silently breaks by-label
-matching). This is the single edit point for Epic 6's statuses-to-code work.
+constants (`PRE_CRED_PAYER_NAME` + all 17 status labels: `NOT_STARTED_LABEL`,
+`IN_NETWORK_LABEL`, `OON_LABEL`, `IN_PROGRESS_LABEL`, `WAITING_ON_PROVIDER_LABEL`,
+`SUBMITTED_LABEL`, `APPROVED_LABEL`, `DENIED_LABEL`, `NOT_REQUIRED_LABEL`,
+`CONTRACTED_LABEL`, `PROSPECT_LABEL`, `PLANNED_LABEL`, `INTERVIEWING_LABEL`,
+`PENDING_FULFILLMENT_LABEL`, `READY_FOR_LAUNCH_LABEL`, `LIVE_LABEL`,
+`INACTIVE_LABEL`) live in one place — `src/lib/statusLabels.ts`; import from
+there, never re-hardcode a label literal (a one-char drift silently breaks
+by-label matching). This is the single edit point for statuses-to-code work.
+The pure by-label matchers (`actionState.ts`, `clientProgress.ts`,
+`launchLocations.ts`, `launchReadiness.ts`) route the incoming label through
+`canonicalLabel(label)` before comparing, applying `STATUS_LABEL_COMPAT`
+(`canonicalStatuses.ts`) — the **single place to reconcile a divergent org's
+label → canonical**. `STATUS_LABEL_COMPAT` is EMPTY today (orgs already match),
+so `canonicalLabel` is a no-op identity; the day an imported org ships a
+non-canonical label, one entry there fixes matching everywhere at once.
 
 Status pills: `src/components/triage/StatusPill.tsx` takes the raw hex from
 `status_configs.color` (color-mix tinting) — use this for DB-driven statuses.
