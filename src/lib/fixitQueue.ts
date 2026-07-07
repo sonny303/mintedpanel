@@ -153,7 +153,9 @@ export function buildFixitQueue(input: BuildFixitInput): FixitCard[] {
         return maps.some((m) => m.source === "token" && m.token === token);
       });
       if (blocking.length === 0) continue;
-      blocking.sort((x, y) => (x.nextDueDate ?? FAR_FUTURE).localeCompare(y.nextDueDate ?? FAR_FUTURE));
+      blocking.sort((x, y) =>
+        (x.nextDueDate ?? FAR_FUTURE).localeCompare(y.nextDueDate ?? FAR_FUTURE),
+      );
       const soonest = blocking[0];
       const portal = portalByPayer.get(soonest.payerId)!;
       const approved = approvedByKey.get(portal.portalKey) ?? [];
@@ -187,7 +189,12 @@ export function buildFixitQueue(input: BuildFixitInput): FixitCard[] {
       kind: "dictionary_confirm",
       sortDate: null, // affects every future form; no single blocked fill
       fieldsUnlocked: e.seenCount,
-      dictionary: { entryId: e.id, label: e.labelNormalized, token: e.token, seenCount: e.seenCount },
+      dictionary: {
+        entryId: e.id,
+        label: e.labelNormalized,
+        token: e.token,
+        seenCount: e.seenCount,
+      },
     });
   }
 

@@ -99,16 +99,29 @@ After applying: regenerate `src/integrations/supabase/types.ts` via MCP
 export type FieldDictionaryStatus = "suggested" | "confirmed" | "rejected";
 
 export interface Portal {
-  id: string; orgId: string; portalKey: string; name: string;
-  payerId: string | null; formUrl: string | null;
-  isVerified: boolean; lastVerifiedAt: string | null;
-  urlChangedAt: string | null; createdAt: string; updatedAt: string;
+  id: string;
+  orgId: string;
+  portalKey: string;
+  name: string;
+  payerId: string | null;
+  formUrl: string | null;
+  isVerified: boolean;
+  lastVerifiedAt: string | null;
+  urlChangedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface FieldDictionaryEntry {
-  id: string; orgId: string; labelNormalized: string; token: string;
-  status: FieldDictionaryStatus; seenCount: number;
-  decidedAt: string | null; decidedBy: string | null;
-  createdAt: string; updatedAt: string;
+  id: string;
+  orgId: string;
+  labelNormalized: string;
+  token: string;
+  status: FieldDictionaryStatus;
+  seenCount: number;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -121,11 +134,11 @@ Browser pattern (mirror `payers.ts`): `externalClient` import,
 `requireActiveOrg()`, `writeAudit` on mutations, `camelizeRow`.
 
 ```ts
-export async function listPortals(): Promise<Portal[]>            // org rows, order name asc
-export async function createPortal(input: PortalInput): Promise<Portal>
+export async function listPortals(): Promise<Portal[]>; // org rows, order name asc
+export async function createPortal(input: PortalInput): Promise<Portal>;
 // PortalInput = { name, portalKey, payerId?, formUrl? } — portalKey slugified
 // from name in the modal, editable; org_id from requireActiveOrg().
-export async function updatePortalUrl(id: string, formUrl: string): Promise<Portal>
+export async function updatePortalUrl(id: string, formUrl: string): Promise<Portal>;
 // Sets form_url, is_verified = false, url_changed_at = now(), updated_at.
 // Audit: UPDATE portal, before/after { formUrl, isVerified }.
 ```
@@ -134,7 +147,7 @@ export async function updatePortalUrl(id: string, formUrl: string): Promise<Port
 path untouched): add a browser-side reader + count helpers at the bottom:
 
 ```ts
-export async function listPortalFieldMapsFromApp(portalKey?: string): Promise<PortalFieldMap[]>
+export async function listPortalFieldMapsFromApp(portalKey?: string): Promise<PortalFieldMap[]>;
 // externalClient + requireActiveOrg(); same .or(`org_id.is.null,org_id.eq.${orgId}`)
 // filter and normalizeTokenKey mapping as listPortalFieldMaps.
 ```
@@ -182,11 +195,11 @@ table in a `border-[#E8E5E0] rounded-md bg-white` card):
   kebab (`DropdownMenu`).
 - **Status pill logic** (legacy `StatusPill`):
   `isVerified` → green "Verified"; `!isVerified && urlChangedAt &&
-  lastVerifiedAt` → amber "Needs re-verify"; else neutral "Unverified".
+lastVerifiedAt` → amber "Needs re-verify"; else neutral "Unverified".
 - **Last fill cell**: latest fill session for the key —
   `fieldsFilled > 0` → green "`{fieldsFilled} of {mapped}`" + muted "· MMM d";
   `fieldsFilled === 0` → red "Failed · MMM d"; none → muted "No fills yet".
-  (Denominator is the *current* mapped count — an approximation; fine for v1.)
+  (Denominator is the _current_ mapped count — an approximation; fine for v1.)
 - Rows with `proposed > 0` show a visible `Train` row-button instead of
   relying on the kebab.
 - Row kebab: **Edit URL** (inline editor), **View fields** (dialog),
@@ -251,7 +264,7 @@ this key already exists."
 4. Add portal enforces unique key per org with a friendly error.
 5. All four states (loading/rows/empty/error) reachable; no `select('*')`
    in list payloads; no console.log/TODO; `npx tsc --noEmit` and `npm run
-   lint`/`test` green.
+lint`/`test` green.
 6. Browser can read `portal_field_maps` under RLS; cross-org rows are
    invisible (verify with the second demo org); `/api` responses unchanged
    (spot-check `scripts/verify-isolation-local.mjs` still green).

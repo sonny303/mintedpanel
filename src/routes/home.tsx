@@ -338,9 +338,7 @@ function FixitHomeRow({ card, onOpen }: { card: FixitCard; onOpen: () => void })
       </span>
       <span
         className={`text-[length:var(--mp-text-xs)] ${
-          dated
-            ? "font-medium text-[color:var(--mp-warn)]"
-            : "text-[color:var(--mp-ink-secondary)]"
+          dated ? "font-medium text-[color:var(--mp-warn)]" : "text-[color:var(--mp-ink-secondary)]"
         }`}
       >
         {impact}

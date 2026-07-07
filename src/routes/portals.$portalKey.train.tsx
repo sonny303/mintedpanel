@@ -271,7 +271,12 @@ function TrainPage() {
   const formName = portal.name;
 
   // Fully trained: no proposed rows to decide and nothing was done this visit.
-  if (s.phase === "done" && s.decisionsCount === 0 && s.batch.length === 0 && s.cards.length === 0) {
+  if (
+    s.phase === "done" &&
+    s.decisionsCount === 0 &&
+    s.batch.length === 0 &&
+    s.cards.length === 0
+  ) {
     return (
       <div className="mx-auto max-w-[720px] py-6">
         <TrainHeader formName={formName} onExit={exit} decided={s.total} total={s.total} />
@@ -317,10 +322,15 @@ function TrainPage() {
         />
       ) : null}
       {s.phase === "done" ? (
-        <DoneScreen session={s} portal={portal} onExit={exit} onFixNext={() => {
-          invalidateDownstream();
-          navigate({ to: "/fix-it" });
-        }} />
+        <DoneScreen
+          session={s}
+          portal={portal}
+          onExit={exit}
+          onFixNext={() => {
+            invalidateDownstream();
+            navigate({ to: "/fix-it" });
+          }}
+        />
       ) : null}
     </div>
   );
@@ -373,7 +383,10 @@ function TrainHeader({
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="h-full bg-[color:var(--mp-primary)] rounded-full" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full bg-[color:var(--mp-primary)] rounded-full"
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <div className="flex items-center justify-between text-[11.5px] text-[color:var(--mp-ink-faint)] mt-2 tabular-nums">
         <span>
@@ -536,7 +549,11 @@ function CardScreen({
     if (!card || busy) return;
     setBusy(true);
     try {
-      const res = await approveMut.mutateAsync({ id: card.row.id, token, fieldLabel: card.row.fieldLabel });
+      const res = await approveMut.mutateAsync({
+        id: card.row.id,
+        token,
+        fieldLabel: card.row.fieldLabel,
+      });
       if (override) bumpGoodCatches(orgId, currentUserId() ?? "anon", 1);
       dispatch({
         type: "DECIDE",
@@ -579,7 +596,10 @@ function CardScreen({
     if (!prevCard) return;
     setBusy(true);
     try {
-      await reproposeMut.mutateAsync({ id: prevCard.row.id, previous: session.lastAction.previous });
+      await reproposeMut.mutateAsync({
+        id: prevCard.row.id,
+        previous: session.lastAction.previous,
+      });
       dispatch({ type: "UNDO" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't undo — retry.");
@@ -637,7 +657,9 @@ function CardScreen({
           busy={busy}
           onCancel={() => setPickerOpen(card.suggestedToken == null ? true : false)}
           onManual={markManual}
-          onPick={(token) => approveToken(token, card.suggestedToken != null && token !== card.suggestedToken)}
+          onPick={(token) =>
+            approveToken(token, card.suggestedToken != null && token !== card.suggestedToken)
+          }
         />
       ) : (
         <>
@@ -645,7 +667,9 @@ function CardScreen({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
               Suggested
             </span>
-            {card.suggestedToken ? <TokenChip token={card.suggestedToken} /> : (
+            {card.suggestedToken ? (
+              <TokenChip token={card.suggestedToken} />
+            ) : (
               <span className="text-[12.5px] text-[color:var(--mp-ink-faint)]">No suggestion</span>
             )}
             <ConfidenceBadge confidence={card.confidence} />
@@ -663,7 +687,12 @@ function CardScreen({
                 Approve <KeyCap k="A" light />
               </Button>
             ) : null}
-            <Button variant="outline" className="h-9" onClick={() => setPickerOpen(true)} disabled={busy}>
+            <Button
+              variant="outline"
+              className="h-9"
+              onClick={() => setPickerOpen(true)}
+              disabled={busy}
+            >
               Edit <KeyCap k="E" />
             </Button>
             <Button variant="outline" className="h-9" onClick={markManual} disabled={busy}>
@@ -857,7 +886,8 @@ function DoneScreen({
     if (ranRef.current) return;
     ranRef.current = true;
     finishMut.mutate(portal.id, {
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't mark the form verified."),
+      onError: (e) =>
+        toast.error(e instanceof Error ? e.message : "Couldn't mark the form verified."),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -881,8 +911,8 @@ function DoneScreen({
       </div>
       {totalManual > 0 ? (
         <p className="text-[11.5px] text-[color:var(--mp-ink-faint)] mt-3">
-          {totalManual} field{totalManual === 1 ? "" : "s"} stay manual (e-signatures, uploads, one-off
-          values).
+          {totalManual} field{totalManual === 1 ? "" : "s"} stay manual (e-signatures, uploads,
+          one-off values).
         </p>
       ) : null}
 
@@ -916,7 +946,9 @@ function Stat({
     <div className={`flex-1 px-4 py-3.5 ${divider ? "border-l border-mp-border" : ""}`}>
       <div className="text-[20px] font-semibold tracking-tight text-[color:var(--mp-ink)] tabular-nums">
         {value}
-        {sub ? <span className="text-[13px] font-normal text-[color:var(--mp-ink-faint)]"> {sub}</span> : null}
+        {sub ? (
+          <span className="text-[13px] font-normal text-[color:var(--mp-ink-faint)]"> {sub}</span>
+        ) : null}
       </div>
       <div className="text-[11.5px] text-[color:var(--mp-ink-secondary)] mt-0.5">{label}</div>
     </div>

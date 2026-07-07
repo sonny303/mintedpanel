@@ -4,12 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
-import {
-  createPortal,
-  listPortals,
-  updatePortalUrl,
-  type PortalInput,
-} from "@/services/portals";
+import { createPortal, listPortals, updatePortalUrl, type PortalInput } from "@/services/portals";
 import { listPortalFieldMapsFromApp } from "@/services/portalFieldMaps";
 import { listRecentFillsFromApp } from "@/services/fillSessions";
 import type { FillSession } from "@/types";
@@ -66,8 +61,7 @@ export function useUpdatePortalUrl() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
-    mutationFn: ({ id, formUrl }: { id: string; formUrl: string }) =>
-      updatePortalUrl(id, formUrl),
+    mutationFn: ({ id, formUrl }: { id: string; formUrl: string }) => updatePortalUrl(id, formUrl),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portals(orgId) }),
   });
 }

@@ -126,10 +126,7 @@ function AdminPortalsPage() {
   }, [portalsQ.data, mapsQ.data, lastFillsQ.data, payersQ.data]);
 
   const fieldsForViewed = useMemo(
-    () =>
-      viewFieldsKey
-        ? (mapsQ.data ?? []).filter((m) => m.portalKey === viewFieldsKey)
-        : [],
+    () => (viewFieldsKey ? (mapsQ.data ?? []).filter((m) => m.portalKey === viewFieldsKey) : []),
     [viewFieldsKey, mapsQ.data],
   );
   const viewedPortal = rows.find((r) => r.portal.portalKey === viewFieldsKey)?.portal ?? null;
@@ -443,7 +440,10 @@ function ViewFieldsDialog({
                     key={f.id}
                     className="flex items-center gap-3 px-5 py-2 border-b border-[#EFF1EF] last:border-b-0"
                   >
-                    <span className="flex-1 text-[13px] font-medium truncate" title={f.fieldLabel ?? f.selector}>
+                    <span
+                      className="flex-1 text-[13px] font-medium truncate"
+                      title={f.fieldLabel ?? f.selector}
+                    >
                       {f.fieldLabel ?? f.selector}
                     </span>
                     {f.source === "manual" || f.source === "manual_partial" ? (
@@ -455,7 +455,9 @@ function ViewFieldsDialog({
                         {f.token ?? "—"}
                       </span>
                     )}
-                    <span className="text-[11px] text-[#99A49B] w-10 text-right">{f.fieldType}</span>
+                    <span className="text-[11px] text-[#99A49B] w-10 text-right">
+                      {f.fieldType}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -536,11 +538,7 @@ function AddPortalModal({ onClose }: { onClose: () => void }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Couldn't add the portal — retry.";
       // Unique (org_id, portal_key) violation → a friendlier message.
-      setError(
-        /duplicate|unique/i.test(msg)
-          ? "A portal with this key already exists."
-          : msg,
-      );
+      setError(/duplicate|unique/i.test(msg) ? "A portal with this key already exists." : msg);
     }
   }
 

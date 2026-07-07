@@ -11,11 +11,11 @@ card types, session summary, and the small services/mutations they need.
 
 ## Card types and their writes
 
-| Type | Trigger | Actions | Writes |
-|------|---------|---------|--------|
-| `provider_gap` | An approved field map's token resolves empty for a provider with an upcoming fill | inline input → **Save** / **Skip for now** | Save: `updateProvider` (existing service, audited). Skip: `createTasksForCase` one task on the blocking case — title "Collect {field label} for {provider first name}", `due_date` = blocked fill date |
-| `dictionary_confirm` | `field_dictionary` row `status='suggested'` and `seen_count >= 2` | **Yes, always** / **No, keep asking** | Yes → `status='confirmed'`; No → `status='rejected'` (+1 good catch). Both stamp `decided_at/by`, audit UPDATE |
-| `train_form` | A portal with `proposed > 0` field maps | **Train this form** / **Later** | Train → navigate `/portals/$portalKey/train`. Later → card drops to queue tail for this session (no write) |
+| Type                 | Trigger                                                                           | Actions                                    | Writes                                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `provider_gap`       | An approved field map's token resolves empty for a provider with an upcoming fill | inline input → **Save** / **Skip for now** | Save: `updateProvider` (existing service, audited). Skip: `createTasksForCase` one task on the blocking case — title "Collect {field label} for {provider first name}", `due_date` = blocked fill date |
+| `dictionary_confirm` | `field_dictionary` row `status='suggested'` and `seen_count >= 2`                 | **Yes, always** / **No, keep asking**      | Yes → `status='confirmed'`; No → `status='rejected'` (+1 good catch). Both stamp `decided_at/by`, audit UPDATE                                                                                         |
+| `train_form`         | A portal with `proposed > 0` field maps                                           | **Train this form** / **Later**            | Train → navigate `/portals/$portalKey/train`. Later → card drops to queue tail for this session (no write)                                                                                             |
 
 No other card types in v1. Cards never expire silently — they leave the
 queue only via an action or because the underlying gap closed.
@@ -37,8 +37,8 @@ export function buildFixitQueue(input: {
 
 - **Gap detection, v1 scope:** only tokens in the `provider.*` family that
   map to inline-editable columns — the whitelist in
-  `src/lib/fixitFields.ts` (below). Other families (license.*, facility.*,
-  group.*) are out of scope for v1 cards; the coverage *meter* still counts
+  `src/lib/fixitFields.ts` (below). Other families (license._, facility._,
+  group.*) are out of scope for v1 cards; the coverage _meter_ still counts
   them via general resolution where the data is already in the client cache,
   else treats them as resolved (documented approximation).
 - **One card per (provider, field)** even when several cases are blocked;
@@ -50,7 +50,7 @@ export function buildFixitQueue(input: {
   else null. Tie-break: fields unlocked desc, then provider name. **No
   weighting by effort anywhere.**
 - **Coverage meter numbers:** `coverageFor(provider, portal)` → `{filled,
-  total, gain}` where `gain` = fields this card's token unlocks (a token can
+total, gain}` where `gain` = fields this card's token unlocks (a token can
   back several fields).
 
 `src/lib/fixitFields.ts` — the editable-field registry:
@@ -85,7 +85,7 @@ export const FIXIT_FIELDS: Record<string /* bare token */, {
   the underlying queries).
 - Home (`src/routes/home.tsx`): new section ABOVE "Needs action" using the
   existing `HomeSection` shell — title "Fix-it queue", count, `HomeViewAllLink
-  to="/fix-it"`, top **3** cards as rows (mockup 1.1): left = bold
+to="/fix-it"`, top **3** cards as rows (mockup 1.1): left = bold
   subject + muted detail ("Brian Nguyen · missing CAQH ID"), middle = impact
   meta (amber `text-[color:var(--mp-warn)]` when dated: "blocks BCBS KS ·
   fill due Jul 9"), right `RowCta` ("Fix" / "Review" / "Train") linking to
@@ -159,7 +159,8 @@ doesn't know." + the good-catch chip.
 ### Loading / error
 
 Skeleton: one card-shaped `Skeleton` block in the deck. Error: red error box
-+ Retry.
+
+- Retry.
 
 ## Good-catch counter
 

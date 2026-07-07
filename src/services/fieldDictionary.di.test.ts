@@ -162,7 +162,11 @@ describe("upsertDictionaryEntry — audit + upsert race", () => {
     // Only the converging update audits (the failed insert must not).
     expect(writeAuditMock).toHaveBeenCalledTimes(1);
     expect(writeAuditMock).toHaveBeenCalledWith(
-      expect.objectContaining({ actionType: "UPDATE", entityType: "field_dictionary", entityId: "fd-1" }),
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "field_dictionary",
+        entityId: "fd-1",
+      }),
     );
   });
 

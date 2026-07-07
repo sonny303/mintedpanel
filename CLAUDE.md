@@ -260,7 +260,7 @@ x-org-id`.
   routing/display, not an address); never `select('*')` in a list payload.
   Writes set `org_id` from the authenticated membership (**never the request
   body** — it's stripped) and audit through the service layer. `PATCH
-  /api/providers/:id` mirrors the GET handler's not-found detection: a
+/api/providers/:id` mirrors the GET handler's not-found detection: a
   cross-org or nonexistent id is a 404 (never the 500 the raw `.single()`
   would raise), pinned by gate assertion 12.
 - **Envelope:** `src/server/envelope.ts` — every response is `{ data, error, meta }`
@@ -439,7 +439,7 @@ are pre-filtered client-side; the DB unique constraint is the backstop.
 ## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06)
 
 Three connected browser surfaces where users **find and kick off** fill-coverage
-cleanup — the Chrome extension is where they *do* the fills. Product law
+cleanup — the Chrome extension is where they _do_ the fills. Product law
 (locked): **no timers / speed mechanics / streaks anywhere**; corrections are
 celebrated as "good catches", never penalized; the Fix-it deck is ordered by
 **soonest blocked fill, never by ease**.
@@ -463,7 +463,7 @@ celebrated as "good catches", never penalized; the Fix-it deck is ordered by
   whitelisted in `src/lib/fixitFields.ts` (scoped to `PROVIDER_LIST_COLUMNS` so
   the list projection never reads `undefined` and false-flags a gap). Weekly
   "good catch" counter in `src/lib/goodCatches.ts` (client-local, `typeof
-  window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
+window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
   queue; save/skip/dictionary mutations). Skip → `createFollowUpTask`
   (`services/tasks.ts`).
 - **Surface 2 — Mapping review** (`/portals/$portalKey/train`): card-by-card

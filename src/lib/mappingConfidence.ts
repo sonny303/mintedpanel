@@ -71,10 +71,7 @@ export function resolveConfidence(
 // Provenance must agree with resolvedSuggestionToken: "dictionary" only when a
 // dictionary entry actually supplied the token (confirmed always; suggested only
 // when the row had no token of its own). A row's own captured token is "label".
-function provenanceOf(
-  row: PortalFieldMap,
-  dict: Map<string, FieldDictionaryEntry>,
-): Provenance {
+function provenanceOf(row: PortalFieldMap, dict: Map<string, FieldDictionaryEntry>): Provenance {
   const label = normalizeFieldLabel(row.fieldLabel);
   const entry = label ? dict.get(label) : undefined;
   if (entry?.status === "confirmed") return "dictionary";
@@ -106,10 +103,7 @@ const TIER_RANK: Record<Confidence, number> = { high: 0, medium: 1, low: 2 };
 // High-confidence rows that resolve to a token batch into the confirm-all
 // screen. Everything else becomes cards, medium before low, preserving capture
 // order within a tier (a stable sort over the incoming order).
-export function splitBatch(
-  rows: PortalFieldMap[],
-  entries: FieldDictionaryEntry[],
-): SplitResult {
+export function splitBatch(rows: PortalFieldMap[], entries: FieldDictionaryEntry[]): SplitResult {
   const dict = buildDictionaryMap(entries);
   const batch: TrainingCard[] = [];
   const cards: TrainingCard[] = [];
