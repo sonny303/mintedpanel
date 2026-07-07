@@ -417,6 +417,51 @@ module-locally in both, keep in sync), resolve tokens via
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
 
+## Touchlog — single case-activity spine (Stories 1–3, 8; 2026-07-07)
+
+`touches` is now THE touchlog: `entry_type ∈ {touchpoint, note, system_event,
+task_update}` (migration `20260707120000`). Only touchpoints carry
+`touch_type`/`outcome` (both nullable now; a shape CHECK enforces them present
+for touchpoints). New columns `task_id` (FK → tasks) and `communication_event_id`
+(FK → communication_event, Story 8). Channel widened with `mail`; the outcome
+CHECK now allows the Story 3 taxonomy ∪ legacy codes.
+
+- **The three note stores collapsed into the touchlog.** The old `notes` table's
+  case/task rows were migrated to `note` entries (`20260707120100`, backup
+  `notes_pre_touchlog_backup`) and the `notes` table is now **dormant for
+  case/task** — the app reads/writes those through `touches`. Provider notes
+  still use `notes` (`useNotes("provider")` / `CaseNotesPanel` on the provider
+  page — do NOT repoint those). Per the additive rule the table is kept, not
+  dropped.
+- **Service/hooks:** `src/services/touches.ts` — `logNote`, `getTaskTouchlog`,
+  `logTouch` (sets entry_type); stalled/follow-up reads are scoped to
+  `entry_type='touchpoint'`. `useLogNote`/`useTaskTouchlog` in `useTouches.ts`.
+  `getCase` derives the case Notes list AND batch summaries from the touches
+  embed (no second query for notes).
+- **Taxonomy (Story 3):** `src/lib/touchOutcomes.ts` (+test) is the channel →
+  outcomes source of truth (Phone maps to touch_type `call`). Edit the taxonomy
+  there; `TouchOutcome` in `types/index.ts` is the closed union the DB CHECK
+  mirrors. "Got reference number" prompts to write `payer_reference_id`.
+- **UI:** `CaseTouchesPanel` is the unified timeline (all entry types, Add
+  touch/Add note); `TaskDrawer` + `/tasks/$id` render the `task_id` slice;
+  `credential_cases.payer_reference_id` (latest-wins) has an inline editor on
+  case detail.
+- **Story 8 batch touchpoint:** `communication_event` parent (payer + channel +
+  occurred_at) + child touchpoints (`communication_event_id` set). Service
+  `communicationEvents.ts` (`logBatchTouchpoint`, `getCasesForPayer`), hook
+  `useCommunicationEvents.ts`, `BatchTouchpointDialog` launched from the Cases
+  work-list ("Log payer call", writer-gated). Timeline shows "Part of {payer}
+  {channel} call, N cases". `types.ts` carries a **hand-added**
+  `communication_event` block (MCP `generate_typescript_types` was unavailable) —
+  normalize on the next regen.
+- **Extension write-back + safeguards (Stories 4–7, 9–11) are NOT built yet** —
+  they are the extension repo + a server bridge. Full design + PR sequence in
+  `docs/touchlog-feature-plan.md`. Server bridge (PR C) extends
+  `submissionTouches.ts` (payer_reference_id write, WIP note entry, task close +
+  `system_event` "Form submitted to {payer}") and adds latest-note / last-submit
+  read fields to `providerCases.ts` — keep every write org-scoped from ctx so the
+  isolation gate stays green.
+
 ## Owner-facing view (one, consolidated Jul 2026)
 
 - `/client-progress` (Client Progress v1) is **the** owner view: nav entry
