@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/CopyButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { fmtDate } from "@/lib/format";
+import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
   useCase,
   useContractFor,
@@ -78,6 +79,13 @@ function CaseDetailPage() {
     const found = (coordinatorsQ.data ?? []).find((x) => x.id === c.assignedTo);
     return found?.fullName ?? found?.email ?? "—";
   }, [c?.assignedTo, coordinatorsQ.data]);
+
+  // token -> value map for the Wizard's pdf-step form filler, from the data this
+  // page already holds (no extra fetch). PHI stays in the browser.
+  const wizardTokenValues = useMemo(
+    () => buildProviderTokenValues(c?.provider ?? null, c?.group ?? null, c?.facility ?? null),
+    [c?.provider, c?.group, c?.facility],
+  );
 
   if (caseQ.isLoading) {
     return (
@@ -187,7 +195,7 @@ function CaseDetailPage() {
                 <CaseTasksPanel tasks={tasks} />
               </TabsContent>
               <TabsContent value="wizard" className="mt-0">
-                <CaseWizard tasks={tasks} />
+                <CaseWizard tasks={tasks} tokenValues={wizardTokenValues} />
               </TabsContent>
             </Tabs>
             <CaseTouchesPanel

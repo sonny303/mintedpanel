@@ -4,8 +4,10 @@
 // updates the case's task/bucket state) and advances; Back steps to the prior
 // task. Steps render by stepType: online_form (label + resolved data fields),
 // draft_email (resolved subject/body with copy-to-clipboard and unresolved
-// {{token}} highlighting), and pdf (coming-soon placeholder).
-import { useMemo, useState } from "react";
+// {{token}} highlighting), and pdf (upload a fillable AcroForm → map its field
+// names to catalog tokens via the org's confirmed field_dictionary → fill from
+// the case's provider data → download locally; human-in-loop, never submitted).
+import { useEffect, useMemo, useState } from "react";
 import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -15,12 +17,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Download,
   FileText,
   Loader2,
   Mail,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { fmtDate } from "@/lib/format";
@@ -30,7 +34,10 @@ import {
   findUnresolvedTokens,
   firstIncompleteTaskIndex,
 } from "@/lib/caseWizard";
+import { pdfFillFileStem } from "@/lib/pdfFill";
+import { analyzePdfForm, fillAndDownloadPdf, type PdfAnalysis } from "@/lib/pdfFillClient";
 import { useUpdateTaskStatus } from "@/hooks/useTasks";
+import { useFieldDictionary } from "@/hooks/useMappingReview";
 import { useCanWrite } from "@/lib/permissions";
 import type { SOPStep, Task } from "@/types";
 
@@ -187,15 +194,149 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
   );
 }
 
-function PdfStep() {
+// Upload a fillable PDF, map its field names to catalog tokens via the org's
+// confirmed field_dictionary (the SAME memory the portal mapper trains), fill
+// from this case's provider data, and download locally. pdf-lib is loaded lazily
+// (client-only) by the pdfFillClient helpers. Nothing is ever submitted.
+function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
+  const dictQ = useFieldDictionary();
+  const dictionary = useMemo(() => dictQ.data ?? [], [dictQ.data]);
+  const [file, setFile] = useState<File | null>(null);
+  const [analysis, setAnalysis] = useState<PdfAnalysis | null>(null);
+  const [busy, setBusy] = useState<"analyze" | "generate" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-analyze whenever the file, the loaded dictionary, or the token values
+  // change — this also covers the dictionary loading AFTER the file was picked.
+  useEffect(() => {
+    if (!file) {
+      setAnalysis(null);
+      return;
+    }
+    let cancelled = false;
+    setBusy("analyze");
+    setError(null);
+    analyzePdfForm(file, dictionary, tokenValues)
+      .then((result) => {
+        if (!cancelled) setAnalysis(result);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAnalysis(null);
+        setError("Could not read this file as a fillable PDF form.");
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file, dictionary, tokenValues]);
+
+  const willFill = analysis?.fill ?? [];
+  const wontFill = analysis?.unfilled ?? [];
+  const noFields = analysis != null && analysis.fieldNames.length === 0;
+
+  const handleGenerate = async () => {
+    if (!file) return;
+    setBusy("generate");
+    try {
+      const result = await fillAndDownloadPdf(
+        file,
+        dictionary,
+        tokenValues,
+        pdfFillFileStem(step.label),
+      );
+      setAnalysis(result);
+      toast.success("Filled PDF downloaded");
+    } catch {
+      toast.error("Could not generate the filled PDF");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
-    <div className="rounded-md border border-[#E8E5E0] bg-muted/30 p-4 text-[13px] text-muted-foreground">
-      PDF form filling is coming soon. For now, complete this document manually.
+    <div className="space-y-3">
+      <p className="text-[13px] text-muted-foreground">
+        Upload the payer&apos;s fillable PDF. Fields are matched to your saved form dictionary and
+        filled from this provider&apos;s data — review and submit it yourself.
+      </p>
+
+      <Input
+        type="file"
+        accept="application/pdf,.pdf"
+        className="text-[13px]"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
+
+      {busy === "analyze" ? (
+        <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading form fields…
+        </p>
+      ) : null}
+
+      {error ? (
+        <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[12px] text-[#B91C1C]">
+          {error}
+        </div>
+      ) : null}
+
+      {analysis && !error ? (
+        noFields ? (
+          <div className="rounded-md border border-[#E8E5E0] bg-muted/30 p-3 text-[12px] text-muted-foreground">
+            This PDF has no fillable form fields — complete it manually.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-[12px] text-muted-foreground">
+              {analysis.fieldNames.length} form{" "}
+              {analysis.fieldNames.length === 1 ? "field" : "fields"} · {willFill.length} will fill
+              · {wontFill.length} left blank
+            </div>
+
+            {willFill.length > 0 ? (
+              <div className="rounded-md border border-[#E8E5E0] p-3 text-[12px]">
+                <div className="mb-1 flex items-center gap-1.5 font-medium text-[#1B4D3E]">
+                  <Check className="h-3.5 w-3.5" /> Will fill
+                </div>
+                <div className="text-foreground">{willFill.map((p) => p.field).join(", ")}</div>
+              </div>
+            ) : null}
+
+            {wontFill.length > 0 ? (
+              <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[12px] text-[#92400E]">
+                <div className="font-medium">Won&apos;t fill — complete these by hand:</div>
+                <div className="mt-1">{wontFill.map((f) => f.field).join(", ")}</div>
+              </div>
+            ) : null}
+          </div>
+        )
+      ) : null}
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163f33]"
+          disabled={!file || busy !== null || willFill.length === 0}
+          onClick={handleGenerate}
+        >
+          {busy === "generate" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          Generate PDF
+        </Button>
+        <span className="text-[12px] text-muted-foreground">
+          Downloads locally — nothing is submitted.
+        </span>
+      </div>
     </div>
   );
 }
 
-function StepBlock({ step }: { step: SOPStep }) {
+function StepBlock({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
   const stepType = step.stepType ?? "online_form";
   const icon =
     stepType === "draft_email" ? (
@@ -219,7 +360,7 @@ function StepBlock({ step }: { step: SOPStep }) {
       {stepType === "draft_email" ? (
         <DraftEmailStep step={step} />
       ) : stepType === "pdf" ? (
-        <PdfStep />
+        <PdfStep step={step} tokenValues={tokenValues} />
       ) : (
         <OnlineFormStep step={step} />
       )}
@@ -227,7 +368,15 @@ function StepBlock({ step }: { step: SOPStep }) {
   );
 }
 
-export function CaseWizard({ tasks }: { tasks: Task[] }) {
+export function CaseWizard({
+  tasks,
+  tokenValues = {},
+}: {
+  tasks: Task[];
+  // token -> value map (bare catalog tokens) built from the case's provider data
+  // for the pdf-step form filler; defaults to empty for tasks with no pdf step.
+  tokenValues?: Record<string, string>;
+}) {
   const canEdit = useCanWrite();
   const updateStatusM = useUpdateTaskStatus();
   // Seed on the first task still needing work; the deck remounts (and re-seeds)
@@ -321,7 +470,7 @@ export function CaseWizard({ tasks }: { tasks: Task[] }) {
           {steps.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">No SOP steps defined for this task.</p>
           ) : (
-            steps.map((step) => <StepBlock key={step.id} step={step} />)
+            steps.map((step) => <StepBlock key={step.id} step={step} tokenValues={tokenValues} />)
           )}
         </div>
 
