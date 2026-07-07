@@ -29,6 +29,19 @@ export function usePortalFieldMaps(portalKey?: string) {
   });
 }
 
+// The raw recent-fills list (no reduction), sharing useLastFills' cache key and
+// reader. The payer scorecard needs per-case fill counts, which the
+// latest-per-portal reduction would collapse.
+export function useRecentFills() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.lastFills(orgId),
+    queryFn: () => listRecentFillsFromApp(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
+  });
+}
+
 // Latest fill session per portal_key (the list arrives newest-first, so the
 // first row seen for a key is the most recent).
 export function useLastFills() {
