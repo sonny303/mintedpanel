@@ -826,6 +826,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      org_payer_assignments: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          starter: boolean;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          starter?: boolean;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          starter?: boolean;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "org_payer_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_payer_assignments_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payers: {
         Row: {
           avg_decision_days: number | null;
@@ -834,7 +873,7 @@ export type Database = {
           id: string;
           is_active: boolean | null;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_billing_id: string | null;
           portal_url: string | null;
           prior_auth_vendor: string | null;
@@ -851,7 +890,7 @@ export type Database = {
           id?: string;
           is_active?: boolean | null;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_billing_id?: string | null;
           portal_url?: string | null;
           prior_auth_vendor?: string | null;
@@ -868,7 +907,7 @@ export type Database = {
           id?: string;
           is_active?: boolean | null;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_billing_id?: string | null;
           portal_url?: string | null;
           prior_auth_vendor?: string | null;
@@ -1544,7 +1583,7 @@ export type Database = {
           group_id: string | null;
           id: string;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_id: string | null;
           specialty: string | null;
           state: string | null;
@@ -1557,7 +1596,7 @@ export type Database = {
           group_id?: string | null;
           id?: string;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_id?: string | null;
           specialty?: string | null;
           state?: string | null;
@@ -1570,7 +1609,7 @@ export type Database = {
           group_id?: string | null;
           id?: string;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_id?: string | null;
           specialty?: string | null;
           state?: string | null;
