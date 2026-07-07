@@ -337,6 +337,27 @@ seeded from `sop_templates` via `src/lib/sopResolver.ts` — closed token list) 
 `status_configs` (tracks below) · append-only: `touches`, `status_history`,
 `audit_log`.
 
+### Global payer/SOP catalog (P2, 2026-07-07 — reverses locked decision #1 for payers/SOPs)
+
+`payers` and `sop_templates` are now dual: **`org_id` is nullable**, and a
+NULL row is a **global-catalog** definition (platform-managed via the
+service-role client, never by org users). An org sees a global payer only via a
+row in **`org_payer_assignments`** (`org_id, payer_id, starter`, unique
+`(org_id, payer_id)`); a global SOP is visible when the org is assigned the
+SOP's `payer_id`. SELECT policy = `(org_id IN user_org_ids()) OR (org_id IS NULL
+AND assigned)`; the own-org disjunct is unchanged and writes stay own-org-only,
+so this was **additive and inert for existing data** (zero global rows at apply
+time). `listPayers`/`listTemplates` read `.or(org_id.eq.<org>,org_id.is.null)`
+(the `portal_field_maps` shared-catalog pattern). Migration
+`20260707060000_global_catalog_org_assignment.sql` (repo + hosted). **Catalog
+isolation is a BROWSER-RLS concern — the /api org-isolation gate does not cover
+it** (payers/SOPs aren't an /api resource); it is verified directly by
+`scripts/verify-catalog-rls.sql` (rolled-back simulation: global visible only to
+the assigned org, no cross-org leak, org users can't forge a global row —
+confirmed on prod 2026-07-07). Converting existing org payers to global rows is
+a separate, human-supervised step. The assignment CRUD service/UI + starter-pack
+consumer land in P4.
+
 ### Statuses pattern
 
 `status_configs` rows per org with `track ∈ {credentialing, contracting,

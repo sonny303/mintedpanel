@@ -36,10 +36,13 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
 
 export async function listTemplates(): Promise<SOPTemplate[]> {
   const orgId = requireActiveOrg();
+  // Own-org rows plus global-catalog SOPs (org_id NULL). RLS returns only global
+  // SOPs whose payer the org is assigned (org_payer_assignments); no global SOPs
+  // exist yet, so this is behaviour-identical to the prior own-org query today.
   const { data, error } = await supabase
     .from("sop_templates")
     .select("*")
-    .eq("org_id", orgId)
+    .or(`org_id.eq.${orgId},org_id.is.null`)
     .order("name");
   if (error) throw error;
   return camelizeRow<SOPTemplate[]>(data ?? []).map(normalizeTemplate);
