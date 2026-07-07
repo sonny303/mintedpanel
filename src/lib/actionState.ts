@@ -2,6 +2,8 @@
 // its status bucket, open tasks, last touch, and effective dates. Pure and
 // deterministic — rules evaluate top-down, first match wins (see build spec).
 import { differenceInCalendarDays, parseISO } from "date-fns";
+import { canonicalLabel } from "./canonicalStatuses";
+import { APPROVED_LABEL } from "./statusLabels";
 
 export type ActionState =
   "needs_action" | "blocked" | "awaiting_effective" | "stalled" | "on_track" | "complete";
@@ -39,6 +41,9 @@ export interface ActionStateInput {
 
 export function getActionState(input: ActionStateInput): ActionState {
   const now = input.now ?? new Date();
+  // Normalize a divergent org label to its canonical form before matching
+  // (no-op today; STATUS_LABEL_COMPAT is empty).
+  const statusLabel = input.statusLabel != null ? canonicalLabel(input.statusLabel) : null;
 
   const hasDueOrOverdueTask = input.openTaskDueDates.some(
     (due) => due != null && differenceInCalendarDays(now, parseISO(due)) >= 0,
@@ -55,7 +60,7 @@ export function getActionState(input: ActionStateInput): ActionState {
   // effective date.
   const effective = input.confirmedEffectiveDate ?? input.expectedEffectiveDate;
   if (
-    input.statusLabel === "Approved" &&
+    statusLabel === APPROVED_LABEL &&
     effective != null &&
     differenceInCalendarDays(parseISO(effective), now) > 0
   ) {

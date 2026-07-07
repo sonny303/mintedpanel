@@ -3,11 +3,18 @@
 // internal labels and action buckets never leak past ownerStatusKey. Pure
 // logic, tested in clientProgress.test.ts.
 import type { CredentialCase, Payer, StatusConfig } from "@/types";
+import { canonicalLabel } from "./canonicalStatuses";
 import {
+  APPROVED_LABEL,
+  DENIED_LABEL,
   IN_NETWORK_LABEL,
+  IN_PROGRESS_LABEL,
   NOT_REQUIRED_LABEL,
+  NOT_STARTED_LABEL,
   OON_LABEL,
   PRE_CRED_PAYER_NAME,
+  SUBMITTED_LABEL,
+  WAITING_ON_PROVIDER_LABEL,
 } from "./statusLabels";
 
 // Re-exported for existing importers (e.g. clientProgress.test.ts) that pull
@@ -33,29 +40,32 @@ export const OWNER_STATUSES: Record<OwnerStatusKey, OwnerStatusDisplay> = {
   active: { label: "Active", color: "var(--mp-ok)", rank: 4 },
 };
 
-// The credentialing labels both seeded orgs share, mapped explicitly. null =
-// the owner never sees the row (the org opted the provider out of the payer).
+// The canonical credentialing labels both seeded orgs share, mapped explicitly.
+// null = the owner never sees the row (the org opted the provider out of the
+// payer).
 const LABEL_TO_KEY: Record<string, OwnerStatusKey | null> = {
   [IN_NETWORK_LABEL]: "active",
-  Approved: "approved",
-  Submitted: "submitted",
-  "In Progress": "in_progress",
-  "Not Started": "in_progress",
-  "Waiting on Provider": "in_progress",
-  Denied: "in_progress",
+  [APPROVED_LABEL]: "approved",
+  [SUBMITTED_LABEL]: "submitted",
+  [IN_PROGRESS_LABEL]: "in_progress",
+  [NOT_STARTED_LABEL]: "in_progress",
+  [WAITING_ON_PROVIDER_LABEL]: "in_progress",
+  [DENIED_LABEL]: "in_progress",
   [OON_LABEL]: null,
   [NOT_REQUIRED_LABEL]: null,
 };
 
 /**
  * Statuses are org-configurable, so unknown labels fall back to the action
- * bucket — the owner still only ever sees one of the five locked wordings.
+ * bucket — the owner still only ever sees one of the five locked wordings. The
+ * label is normalized through the canonical compat map first (no-op today).
  */
 export function ownerStatusKey(
   statusLabel: string | null,
   actionBucket: string | null,
 ): OwnerStatusKey | null {
-  if (statusLabel != null && statusLabel in LABEL_TO_KEY) return LABEL_TO_KEY[statusLabel];
+  const label = statusLabel != null ? canonicalLabel(statusLabel) : null;
+  if (label != null && label in LABEL_TO_KEY) return LABEL_TO_KEY[label];
   if (actionBucket === "complete") return "approved";
   if (actionBucket === "waiting_payer") return "with_payer";
   return "in_progress";

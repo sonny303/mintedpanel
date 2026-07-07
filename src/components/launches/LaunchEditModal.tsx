@@ -42,6 +42,7 @@ import {
   transitionWarnings,
   type LocationRow,
 } from "@/lib/launchLocations";
+import { PROSPECT_LABEL } from "@/lib/statusLabels";
 import type { Facility } from "@/types";
 
 const NONE = "__none__";
@@ -66,7 +67,10 @@ export function LaunchEditModal({
     [statusesQ.data],
   );
   const defaultStatusId =
-    location?.statusId ?? statuses.find((s) => s.label === "Prospect")?.id ?? statuses[0]?.id ?? "";
+    location?.statusId ??
+    statuses.find((s) => s.label === PROSPECT_LABEL)?.id ??
+    statuses[0]?.id ??
+    "";
 
   const [name, setName] = useState(location?.name ?? "");
   const [street, setStreet] = useState(location?.street ?? "");
