@@ -4,9 +4,9 @@
 // name → legacy provider detail, row/CTA → case detail. No writes.
 import React, { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInCalendarDays, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { fmtDate } from "@/lib/format";
-import { Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
@@ -39,6 +39,8 @@ import {
   type ChipId,
 } from "@/lib/workView";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { buildRosterCsv, type RosterRowInput } from "@/lib/rosterExport";
+import { downloadCsvText } from "@/lib/csv";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 // The selected filter card lives in the URL (?chip=needs|inprog|awaiting; no
@@ -81,6 +83,27 @@ interface WorkGroup {
 
 function initialsOf(p: Provider): string {
   return `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`.toUpperCase();
+}
+
+// Roster CSV row from a work group. group/facility name is left empty here —
+// the groups cache isn't loaded on this page and adding it would be a new
+// query; the summary covers every case for the provider, not just the
+// chip-filtered subset.
+function toRosterRow(g: WorkGroup): RosterRowInput {
+  return {
+    firstName: g.provider.firstName,
+    lastName: g.provider.lastName,
+    credentials: g.provider.credentials,
+    npi: g.provider.npi,
+    specialty: g.provider.specialty,
+    homeState: g.provider.homeState,
+    groupOrFacility: null,
+    cases: g.rows.map((r) => ({
+      payerName: r.payerName,
+      state: r.case.state,
+      statusLabel: r.statusLabel,
+    })),
+  };
 }
 
 const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
@@ -269,6 +292,20 @@ function ProvidersWorkView() {
   const totalProviders = groups.length;
   const totalOpen = openRowsAll.length;
 
+  // The roster exports exactly the providers on screen: the chip-filtered
+  // worked groups plus the always-visible reference section.
+  const exportGroups = useMemo(
+    () => [...visibleGroups.map((v) => v.group), ...referenceGroups],
+    [visibleGroups, referenceGroups],
+  );
+  function handleExportRoster() {
+    if (exportGroups.length === 0) return;
+    downloadCsvText(
+      `roster-${format(new Date(), "yyyy-MM-dd")}.csv`,
+      buildRosterCsv(exportGroups.map(toRosterRow)),
+    );
+  }
+
   function tableRow(row: WorkRow): CaseTableRow {
     const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
     const lead = row.isPreCred ? (
@@ -401,12 +438,23 @@ function ProvidersWorkView() {
         title="Providers"
         description={`${totalProviders} providers · ${totalOpen} open cases`}
         actions={
-          canWrite ? (
-            <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
-              <Plus className="w-4 h-4" />
-              New Provider
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-9 gap-2"
+              onClick={handleExportRoster}
+              disabled={exportGroups.length === 0}
+            >
+              <Download className="w-4 h-4" />
+              Export roster
             </Button>
-          ) : null
+            {canWrite ? (
+              <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
+                <Plus className="w-4 h-4" />
+                New Provider
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
