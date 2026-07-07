@@ -76,6 +76,7 @@ function credCase(over: Partial<CredentialCase>): CredentialCase {
     createdAt: "",
     updatedAt: "",
     caseEmailToken: "tok",
+    payerReferenceId: null,
     ...over,
   };
 }

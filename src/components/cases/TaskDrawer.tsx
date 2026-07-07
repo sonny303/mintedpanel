@@ -29,7 +29,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
-import { useCreateNote, useNotes } from "@/hooks/useLookups";
+import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
@@ -70,10 +70,10 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
   const taskQ = useTask(open && taskId ? taskId : undefined);
   const task = taskQ.data ?? fallbackTask;
 
-  const notesQ = useNotes("task", open && taskId ? taskId : undefined);
+  const touchlogQ = useTaskTouchlog(open && taskId ? taskId : undefined);
   const updateStatusM = useUpdateTaskStatus();
   const completeStepM = useCompleteSOPStep();
-  const createNoteM = useCreateNote();
+  const logNoteM = useLogNote();
 
   const [noteDraft, setNoteDraft] = useState("");
   useEffect(() => {
@@ -131,8 +131,12 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
   const handleAddNote = () => {
     const content = noteDraft.trim();
     if (!content) return;
-    createNoteM.mutate(
-      { entityType: "task", entityId: task.id, content },
+    if (!task.caseId) {
+      toast.error("This task is not linked to a case, so notes can't be logged.");
+      return;
+    }
+    logNoteM.mutate(
+      { caseId: task.caseId, input: { content, taskId: task.id } },
       {
         onSuccess: () => setNoteDraft(""),
         onError: (err: unknown) =>
@@ -141,7 +145,7 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
     );
   };
 
-  const notes = notesQ.data ?? [];
+  const entries = touchlogQ.data ?? [];
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
@@ -297,22 +301,22 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
                 )}
               </div>
 
-              {/* Notes */}
+              {/* Activity — the task-filtered slice of the touchlog */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-[14px] font-semibold">Notes</h3>
+                  <h3 className="text-[14px] font-semibold">Activity</h3>
                 </div>
 
-                {notesQ.isLoading ? (
-                  <p className="text-[13px] text-muted-foreground">Loading notes…</p>
-                ) : notesQ.isError ? (
-                  <p className="text-[13px] text-muted-foreground">Could not load notes.</p>
-                ) : notes.length === 0 ? (
-                  <EmptyState message="No notes yet" />
+                {touchlogQ.isLoading ? (
+                  <p className="text-[13px] text-muted-foreground">Loading activity…</p>
+                ) : touchlogQ.isError ? (
+                  <p className="text-[13px] text-muted-foreground">Could not load activity.</p>
+                ) : entries.length === 0 ? (
+                  <EmptyState message="No activity yet" />
                 ) : (
                   <div className="space-y-3">
-                    {notes.map((n) => (
+                    {entries.map((n) => (
                       <div key={n.id} className="flex gap-2">
                         <div className="h-7 w-7 rounded-full bg-[#1B4D3E]/10 border border-[#1B4D3E]/20 flex items-center justify-center text-[#1B4D3E] font-medium text-[11px] flex-shrink-0">
                           {initialsOf(n.authorName)}
@@ -322,6 +326,11 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
                             <span className="font-semibold text-foreground">
                               {n.authorName ?? "—"}
                             </span>
+                            {n.entryType !== "note" ? (
+                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground border border-border rounded px-1 py-0.5">
+                                {n.entryType === "task_update" ? "Task update" : "System"}
+                              </span>
+                            ) : null}
                             <span className="text-muted-foreground tabular-nums">
                               {fmtDateTime(n.createdAt)}
                             </span>
@@ -349,7 +358,7 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
                         size="sm"
                         variant="outline"
                         onClick={handleAddNote}
-                        disabled={!noteDraft.trim() || createNoteM.isPending}
+                        disabled={!noteDraft.trim() || logNoteM.isPending}
                       >
                         Add note
                       </Button>

@@ -61,6 +61,44 @@ export type Database = {
           },
         ];
       };
+      communication_event: {
+        Row: {
+          channel: string;
+          created_at: string | null;
+          created_by: string | null;
+          id: string;
+          occurred_at: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Insert: {
+          channel: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id: string;
+          payer_id: string;
+        };
+        Update: {
+          channel?: string;
+          created_at?: string | null;
+          created_by?: string | null;
+          id?: string;
+          occurred_at?: string;
+          org_id?: string;
+          payer_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "communication_event_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       contracts: {
         Row: {
           contracting_status_id: string | null;
@@ -151,6 +189,7 @@ export type Database = {
           mso_id: string | null;
           org_id: string;
           payer_id: string;
+          payer_reference_id: string | null;
           provider_id: string;
           specialty: string | null;
           state: string;
@@ -173,6 +212,7 @@ export type Database = {
           mso_id?: string | null;
           org_id: string;
           payer_id: string;
+          payer_reference_id?: string | null;
           provider_id: string;
           specialty?: string | null;
           state: string;
@@ -195,6 +235,7 @@ export type Database = {
           mso_id?: string | null;
           org_id?: string;
           payer_id?: string;
+          payer_reference_id?: string | null;
           provider_id?: string;
           specialty?: string | null;
           state?: string;
@@ -808,21 +849,33 @@ export type Database = {
           },
         ];
       };
-      organizations: {
+      notes_pre_touchlog_backup: {
         Row: {
-          created_at: string;
-          id: string;
-          name: string;
+          author_id: string | null;
+          content: string | null;
+          created_at: string | null;
+          entity_id: string | null;
+          entity_type: string | null;
+          id: string | null;
+          org_id: string | null;
         };
         Insert: {
-          created_at?: string;
-          id?: string;
-          name: string;
+          author_id?: string | null;
+          content?: string | null;
+          created_at?: string | null;
+          entity_id?: string | null;
+          entity_type?: string | null;
+          id?: string | null;
+          org_id?: string | null;
         };
         Update: {
-          created_at?: string;
-          id?: string;
-          name?: string;
+          author_id?: string | null;
+          content?: string | null;
+          created_at?: string | null;
+          entity_id?: string | null;
+          entity_type?: string | null;
+          id?: string | null;
+          org_id?: string | null;
         };
         Relationships: [];
       };
@@ -864,6 +917,24 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      organizations: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+        };
+        Relationships: [];
       };
       payers: {
         Row: {
@@ -1885,42 +1956,51 @@ export type Database = {
       touches: {
         Row: {
           case_id: string;
+          communication_event_id: string | null;
           coordinator_id: string | null;
           created_at: string | null;
+          entry_type: string;
           id: string;
           next_follow_up_date: string | null;
           notes: string | null;
           org_id: string;
-          outcome: string;
+          outcome: string | null;
           source: string | null;
+          task_id: string | null;
           touch_date: string;
-          touch_type: string;
+          touch_type: string | null;
         };
         Insert: {
           case_id: string;
+          communication_event_id?: string | null;
           coordinator_id?: string | null;
           created_at?: string | null;
+          entry_type?: string;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
           org_id: string;
-          outcome: string;
+          outcome?: string | null;
           source?: string | null;
+          task_id?: string | null;
           touch_date: string;
-          touch_type: string;
+          touch_type?: string | null;
         };
         Update: {
           case_id?: string;
+          communication_event_id?: string | null;
           coordinator_id?: string | null;
           created_at?: string | null;
+          entry_type?: string;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
           org_id?: string;
-          outcome?: string;
+          outcome?: string | null;
           source?: string | null;
+          task_id?: string | null;
           touch_date?: string;
-          touch_type?: string;
+          touch_type?: string | null;
         };
         Relationships: [
           {
@@ -1928,6 +2008,13 @@ export type Database = {
             columns: ["case_id"];
             isOneToOne: false;
             referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_communication_event_id_fkey";
+            columns: ["communication_event_id"];
+            isOneToOne: false;
+            referencedRelation: "communication_event";
             referencedColumns: ["id"];
           },
           {
@@ -1942,6 +2029,13 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
             referencedColumns: ["id"];
           },
         ];

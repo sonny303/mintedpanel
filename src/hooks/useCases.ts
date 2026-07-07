@@ -8,6 +8,7 @@ import {
   getCase,
   getCases,
   getContractFor,
+  setPayerReference,
   updateCaseStatus,
   type CaseFilters,
   type CaseInput,
@@ -63,6 +64,25 @@ export function useCreateCase() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface SetPayerReferenceVars {
+  caseId: string;
+  value: string | null;
+}
+
+// Story 2: overwrite the case's payer reference / submission ID (latest wins).
+export function useSetPayerReference() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: SetPayerReferenceVars) => setPayerReference(vars.caseId, vars.value),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

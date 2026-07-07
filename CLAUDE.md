@@ -207,21 +207,32 @@ them. The current surface:
   completed (org-checked, audited). Writer roles only (billing → 403).
   (`src/services/fillSessions.ts`)
 - `GET /api/cases?providerId=<uuid>` — the popup's case dropdown (R2): the
-  provider's OPEN cases, `{ id, payerName, state, status, submittedDate }`.
-  Open = credentialing status not in the `action_bucket 'complete'` bucket —
-  derived from `status_configs`, never from labels; status-less cases count
-  as open. Cross-org providerId → 404. (`src/services/providerCases.ts`)
-- `POST /api/cases/:id/touches` — the "Mark submitted" business log (R2):
-  ONE append-only touch (`touch_type 'portal'`, `outcome 'submitted'`,
-  `source 'extension'`, text "Application submitted via <portal label>").
+  provider's OPEN cases, `{ id, payerName, state, status, submittedDate,
+payerReferenceId, latestNote, lastSubmittedAt }`. Open = credentialing status
+  not in the `action_bucket 'complete'` bucket — derived from `status_configs`,
+  never from labels; status-less cases count as open. Cross-org providerId →
+  404. The last three fields (PR C) are derived from ONE org-scoped touchlog
+  read over the open case ids: `payerReferenceId` (case column, Story 5
+  prefill), `latestNote {text,author,at}` (newest `entry_type='note'`,
+  author-resolved via `profiles`, Story 11), `lastSubmittedAt` (newest
+  `outcome='submitted'` touch, Story 10 dup guard — keyed off the submission
+  touchpoint, NOT text-matching the system_event). (`src/services/providerCases.ts`)
+- `POST /api/cases/:id/touches` — the "Mark submitted" business log. R2 core:
+  ONE append-only anchor touchpoint (`touch_type 'portal'`, `outcome
+'submitted'`, `source 'extension'`, text "Application submitted via <portal
+  label>"); `idempotency_id` is its PK (same replay semantics as fill-events).
   **Snake_case body keys per the locked R2 contract** (`kind:
 'portal_submission'`, `portal_key`, `fill_session_id?`, `note?`,
-  `idempotency_id`) — unlike fill-events' camelCase. `idempotency_id` is the
-  touch PK (same replay semantics as fill-events); case + fill-session
-  ownership checked before any write; never a status change, never a task
-  write. Portal label is derived from `portal_key` (no server-side portal
-  catalog exists — labels live in the extension).
-  (`src/services/submissionTouches.ts`)
+  `idempotency_id`) — unlike fill-events' camelCase. **PR C write-back** (all
+  optional, snake_case): `payer_reference_id` overwrites the case's latest-wins
+  ref (Story 5); `wip_note` → a `note` entry (Story 6); every submit also writes
+  a `system_event` "Form submitted to {payer}"; `task_id` (org-validated) marks
+  the SOP task done + writes a `task_update` entry (Story 7, close-decision (c));
+  `pdf_filename` → a second system_event. Case, fill-session, AND task ownership
+  are all checked before ANY write (task_id is gate assertion 13); org + user
+  from ctx. Replays short-circuit at the anchor and re-run no side effects. Never
+  a status change. Portal label derived from `portal_key` (no server-side portal
+  catalog — labels live in the extension). (`src/services/submissionTouches.ts`)
 
 Layer mechanics:
 
@@ -283,9 +294,12 @@ x-org-id`.
   assertions to `scripts/verify-org-isolation.mjs` before merge, plus pass/leak
   coverage in `scripts/mock-api-server.mjs`. Gate fixtures: the one South
   Park-scoped `portal_field_maps` row (id in the workflow env block, seeded via
-  MCP 2026-07-05) keeps the field-maps assertion non-vacuous, and
+  MCP 2026-07-05) keeps the field-maps assertion non-vacuous,
   `SOUTHPARK_FACILITY_ID` (Casa Bonita Clinic, existing demo data) is the
-  must-404 `?facilityId` of assertion 11. The expected
+  must-404 `?facilityId` of assertion 11, and `KANSAS_CASE_ID` +
+  `SOUTHPARK_TASK_ID` (both demo data) drive assertion 13 (a Kansas touch POST
+  naming a cross-org task_id → 404 before any write; the gate skips 13 if either
+  env is unset, but the in-sandbox mock run always sets them). The expected
   per-org provider counts also live in that env block
   (`EXPECTED_KANSAS_PROVIDERS`/`EXPECTED_SOUTHPARK_PROVIDERS`) — adding or
   removing a demo/UAT provider means updating the count there, or assertions
@@ -449,6 +463,62 @@ module-locally in both, keep in sync), resolve tokens via
 `resolveTemplate(template, provider, group, facility, {mso}, licenseNumber)`,
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
+
+## Touchlog — single case-activity spine (Stories 1–3, 8; 2026-07-07)
+
+`touches` is now THE touchlog: `entry_type ∈ {touchpoint, note, system_event,
+task_update}` (migration `20260707120000`). Only touchpoints carry
+`touch_type`/`outcome` (both nullable now; a shape CHECK enforces them present
+for touchpoints). New columns `task_id` (FK → tasks) and `communication_event_id`
+(FK → communication_event, Story 8). Channel widened with `mail`; the outcome
+CHECK now allows the Story 3 taxonomy ∪ legacy codes.
+
+- **The three note stores collapsed into the touchlog.** The old `notes` table's
+  case/task rows were migrated to `note` entries (`20260707120100`, backup
+  `notes_pre_touchlog_backup`) and the `notes` table is now **dormant for
+  case/task** — the app reads/writes those through `touches`. Provider notes
+  still use `notes` (`useNotes("provider")` / `CaseNotesPanel` on the provider
+  page — do NOT repoint those). Per the additive rule the table is kept, not
+  dropped.
+- **Service/hooks:** `src/services/touches.ts` — `logNote`, `getTaskTouchlog`,
+  `logTouch` (sets entry_type); stalled/follow-up reads are scoped to
+  `entry_type='touchpoint'`. `useLogNote`/`useTaskTouchlog` in `useTouches.ts`.
+  `getCase` derives the case Notes list AND batch summaries from the touches
+  embed (no second query for notes).
+- **Taxonomy (Story 3):** `src/lib/touchOutcomes.ts` (+test) is the channel →
+  outcomes source of truth (Phone maps to touch_type `call`). Edit the taxonomy
+  there; `TouchOutcome` in `types/index.ts` is the closed union the DB CHECK
+  mirrors. "Got reference number" prompts to write `payer_reference_id`.
+- **UI:** `CaseTouchesPanel` is the unified timeline (all entry types, Add
+  touch/Add note); `TaskDrawer` + `/tasks/$id` render the `task_id` slice;
+  `credential_cases.payer_reference_id` (latest-wins) has an inline editor on
+  case detail.
+- **Story 8 batch touchpoint:** `communication_event` parent (payer + channel +
+  occurred_at) + child touchpoints (`communication_event_id` set). Service
+  `communicationEvents.ts` (`logBatchTouchpoint`, `getCasesForPayer`), hook
+  `useCommunicationEvents.ts`, `BatchTouchpointDialog` launched from the Cases
+  work-list ("Log payer call", writer-gated). Timeline shows "Part of {payer}
+  {channel} call, N cases". `types.ts` carries a **hand-added**
+  `communication_event` block (MCP `generate_typescript_types` was unavailable) —
+  normalize on the next regen.
+- **Extension write-back + safeguards (Stories 4–7, 9–11) are BUILT** (PR C
+  server bridge + PR D extension, 2026-07-07; full trail in
+  `docs/touchlog-feature-plan.md`). PR C needed **no migration** — every column
+  already existed. `submissionTouches.ts` now layers optional write-back on the
+  same `POST /api/cases/:id/touches`: `payer_reference_id` overwrites the case's
+  latest-wins ref (Story 5, audited); `wip_note` → a `note` entry, task-linked
+  when `task_id` given (Story 6); every submit writes a `system_event` "Form
+  submitted to {payer}", and an explicit `task_id` is org-validated, marked done,
+  and recorded as a `task_update` entry (Story 7, **close-decision (c)**: the
+  extension passes the task_id — `fill_sessions` has no `task_id` column, so the
+  fill-session route was rejected); optional `pdf_filename` → a second
+  system_event. `providerCases.ts` `GET /api/cases` rows gained `payerReferenceId`
+  (prefill), author-resolved `latestNote` (Story 11), and `lastSubmittedAt` (the
+  latest `outcome 'submitted'` touchpoint, Story 10 dup guard). Isolation gate
+  **assertion 13** (cross-org `task_id` → 404 before any write) + a `tasks` leak
+  mode cover the new write; the workflow env carries `KANSAS_CASE_ID` +
+  `SOUTHPARK_TASK_ID` fixtures (optional — the gate skips 13 if unset). Every
+  write stays org-scoped from ctx.
 
 ## Owner-facing view (one, consolidated Jul 2026)
 

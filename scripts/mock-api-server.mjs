@@ -21,6 +21,7 @@
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
 //   touches     cross-org submission touch accepted and stored       (9, 9b)
+//   tasks       cross-org task_id closed by a submission touch        (13)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 import { createServer } from "node:http";
@@ -37,6 +38,10 @@ export const FIXTURES = {
   KANSAS_CASE_ID: "b7a90000-0000-4000-a000-0000000000c1",
   KANSAS_FACILITY_ID: "5f190f0d-2c5c-49f7-8953-aa05cd0a9d64",
   SOUTHPARK_FACILITY_ID: "d0e40000-0000-4000-a000-000000000011",
+  // Tasks for the submission-touch task-ownership assertion (13). The South
+  // Park task is the cross-org task_id a Kansas caller must be denied.
+  KANSAS_TASK_ID: "b7a90000-0000-4000-a000-0000000000d1",
+  SOUTHPARK_TASK_ID: "d0e40000-0000-4000-a000-000000000071",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
@@ -49,6 +54,7 @@ export const LEAK_MODES = [
   "fillevents",
   "cases",
   "touches",
+  "tasks",
   "meorgs",
   "facility",
 ];
@@ -134,6 +140,9 @@ const CASES = [
   },
 ];
 
+// PR C read fields (Stories 5/10/11) ride on the same dropdown row. The mock
+// serves stable values so the extension contract stays pinned; isolation is
+// what the gate checks, not the exact note text.
 function caseListRow(c) {
   return {
     id: c.id,
@@ -141,8 +150,18 @@ function caseListRow(c) {
     state: c.state,
     status: c.status,
     submittedDate: c.submittedDate,
+    payerReferenceId: c.payerReferenceId ?? null,
+    latestNote: c.latestNote ?? null,
+    lastSubmittedAt: c.lastSubmittedAt ?? null,
   };
 }
+
+// Tasks for the submission-touch task-ownership assertion (13): a Kansas caller
+// naming the South Park task_id must be denied before any write.
+const TASKS = [
+  { id: FIXTURES.KANSAS_TASK_ID, orgId: FIXTURES.KANSAS_ORG },
+  { id: FIXTURES.SOUTHPARK_TASK_ID, orgId: FIXTURES.SOUTHPARK_ORG },
+];
 
 function fieldMapRow(id, orgId, portalKey, selector) {
   return {
@@ -426,6 +445,13 @@ export async function createMockApiServer(options = {}) {
         // lookup or any write. A cross-org case is a 404, nothing stored.
         const caseOk = CASES.some((c) => c.id === touchesMatch[1] && c.orgId === orgId);
         if (!caseOk) return envelope(res, 404, null, "Case not found");
+      }
+      // PR C Story 7: an optional task_id is validated the same way — a
+      // cross-org task_id is a 404 before any write (assertion 13). Leak
+      // "tasks": the check is skipped and the cross-org task is accepted.
+      if (body.task_id != null && leak !== "tasks") {
+        const taskOk = TASKS.some((t) => t.id === body.task_id && t.orgId === orgId);
+        if (!taskOk) return envelope(res, 404, null, "Task not found");
       }
       const key = `${orgId}:${body.idempotency_id}`;
       if (touches.has(key)) return envelope(res, 200, touches.get(key));

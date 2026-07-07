@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { CopyButton } from "@/components/CopyButton";
 import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useCase } from "@/hooks/useCases";
-import { useCreateNote, useNotes } from "@/hooks/useLookups";
+import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
 import type { SOPStep, TaskStatus } from "@/types";
 
@@ -76,11 +76,11 @@ function TaskDetailPage() {
   const taskQ = useTask(id);
   const task = taskQ.data ?? null;
   const caseQ = useCase(task?.caseId ?? undefined);
-  const notesQ = useNotes("task", id);
+  const touchlogQ = useTaskTouchlog(id);
 
   const completeStepM = useCompleteSOPStep();
   const updateStatusM = useUpdateTaskStatus();
-  const createNoteM = useCreateNote();
+  const logNoteM = useLogNote();
 
   const [noteDraft, setNoteDraft] = useState("");
 
@@ -196,12 +196,16 @@ function TaskDetailPage() {
   const handleAddNote = () => {
     const content = noteDraft.trim();
     if (!content) return;
-    createNoteM.mutate(
-      { entityType: "task", entityId: task.id, content },
+    if (!task.caseId) {
+      toast.error("This task is not linked to a case, so notes can't be logged.");
+      return;
+    }
+    logNoteM.mutate(
+      { caseId: task.caseId, input: { content, taskId: task.id } },
       {
         onSuccess: () => {
           setNoteDraft("");
-          notesQ.refetch();
+          touchlogQ.refetch();
         },
         onError: (err: unknown) =>
           toast.error(err instanceof Error ? err.message : "Could not add note"),
@@ -450,21 +454,21 @@ function TaskDetailPage() {
         <Card className="shadow-none border-[#E8E5E0]">
           <div className="p-4 pb-2 border-b border-[#E8E5E0] flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-[14px] font-semibold">Notes</h2>
+            <h2 className="text-[14px] font-semibold">Activity</h2>
           </div>
           <CardContent className="p-4 space-y-4">
-            {notesQ.isLoading ? (
+            {touchlogQ.isLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-12 w-full" />
                 <Skeleton className="h-12 w-full" />
               </div>
-            ) : notesQ.isError ? (
-              <p className="text-[13px] text-muted-foreground">Could not load notes.</p>
-            ) : (notesQ.data ?? []).length === 0 ? (
-              <EmptyState message="No notes yet" />
+            ) : touchlogQ.isError ? (
+              <p className="text-[13px] text-muted-foreground">Could not load activity.</p>
+            ) : (touchlogQ.data ?? []).length === 0 ? (
+              <EmptyState message="No activity yet" />
             ) : (
               <div className="space-y-4">
-                {(notesQ.data ?? []).map((n) => (
+                {(touchlogQ.data ?? []).map((n) => (
                   <div key={n.id} className="flex gap-3">
                     <div className="h-7 w-7 rounded-full bg-[#1B4D3E]/10 border border-[#1B4D3E]/20 flex items-center justify-center text-[#1B4D3E] font-medium text-[11px] flex-shrink-0">
                       {initialsOf(n.authorName)}
@@ -472,6 +476,11 @@ function TaskDetailPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 text-[12px]">
                         <span className="font-semibold text-foreground">{n.authorName ?? "—"}</span>
+                        {n.entryType !== "note" ? (
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground border border-border rounded px-1 py-0.5">
+                            {n.entryType === "task_update" ? "Task update" : "System"}
+                          </span>
+                        ) : null}
                         <span className="text-muted-foreground tabular-nums">
                           {fmtDateTime(n.createdAt)}
                         </span>
@@ -498,9 +507,9 @@ function TaskDetailPage() {
                   <Button
                     size="sm"
                     onClick={handleAddNote}
-                    disabled={!noteDraft.trim() || createNoteM.isPending}
+                    disabled={!noteDraft.trim() || logNoteM.isPending}
                   >
-                    {createNoteM.isPending ? "Saving…" : "Add note"}
+                    {logNoteM.isPending ? "Saving…" : "Add note"}
                   </Button>
                 </div>
               </div>

@@ -11,11 +11,13 @@ import {
 } from "./submissionTouches";
 
 // Minimal chainable fake of the supabase-js query builder — same pattern as
-// fillSessions.di.test.ts. Results consume in call order, which is
-// deterministic in recordSubmissionTouch.
+// fillSessions.di.test.ts. Results consume in call order (via maybeSingle /
+// single) which is deterministic in recordSubmissionTouch. Bare inserts with no
+// .select().single() (the note/system_event/task_update entries) resolve to the
+// builder itself, so `{ error }` is undefined and they consume no result.
 interface Captured {
   table?: string;
-  op: "select" | "insert";
+  op: "select" | "insert" | "update";
   selectCols?: string;
   payload?: Record<string, unknown>;
   filters: Array<[string, unknown]>;
@@ -40,6 +42,11 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           cap.payload = payload;
           return builder;
         },
+        update(payload: Record<string, unknown>) {
+          cap.op = "update";
+          cap.payload = payload;
+          return builder;
+        },
         eq(col: string, val: unknown) {
           cap.filters.push([col, val]);
           return builder;
@@ -61,6 +68,7 @@ function ctxWith(db: SupabaseClient<Database>, writeAudit = vi.fn().mockResolved
 const TOUCH_ID = "11111111-2222-4333-8444-555555555555";
 const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const FILL_SESSION_ID = "99999999-8888-4777-8666-121212121212";
+const TASK_ID = "cccccccc-dddd-4eee-8fff-000000000000";
 
 const baseInput: SubmissionTouchInput = {
   kind: "portal_submission",
@@ -74,14 +82,22 @@ const storedRow = {
   org_id: "org-1",
   case_id: CASE_ID,
   touch_date: "2026-07-05",
+  entry_type: "touchpoint",
   touch_type: "portal",
   outcome: "submitted",
   next_follow_up_date: null,
   notes: "Application submitted via BCBS KS Enrollment",
   coordinator_id: "user-1",
+  task_id: null,
+  communication_event_id: null,
   source: "extension",
   created_at: "2026-07-05T00:00:00Z",
 };
+
+// Convenience: the entry-type of a captured touches insert.
+function touchInserts(captures: Captured[]) {
+  return captures.filter((c) => c.table === "touches" && c.op === "insert");
+}
 
 function expectRejected(result: RecordSubmissionTouchResult, status: 404 | 409 | 422): void {
   expect(result.kind).toBe("rejected");
@@ -108,6 +124,15 @@ describe("recordSubmissionTouch — shape validation rejects before any DB call"
     ["blank portal_key", CASE_ID, { ...baseInput, portal_key: "  " }, 422],
     ["non-UUID fill_session_id", CASE_ID, { ...baseInput, fill_session_id: "fs-1" }, 422],
     ["non-string note", CASE_ID, { ...baseInput, note: 42 as never }, 422],
+    [
+      "non-string payer_reference_id",
+      CASE_ID,
+      { ...baseInput, payer_reference_id: 42 as never },
+      422,
+    ],
+    ["non-string wip_note", CASE_ID, { ...baseInput, wip_note: 42 as never }, 422],
+    ["non-UUID task_id", CASE_ID, { ...baseInput, task_id: "task-1" }, 422],
+    ["non-string pdf_filename", CASE_ID, { ...baseInput, pdf_filename: 42 as never }, 422],
   ];
 
   it.each(cases)("%s rejects with zero queries", async (_name, caseId, input, status) => {
@@ -156,11 +181,26 @@ describe("recordSubmissionTouch — org validation rejects before any write", ()
     expect(captures.some((c) => c.op === "insert")).toBe(false);
     expect(writeAudit).not.toHaveBeenCalled();
   });
+
+  it("a task outside the org is a 404 before any write (isolation gate assertion 13)", async () => {
+    // case lookup ok, task lookup miss (cross-org) -> 404 before idempotency.
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: null }]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, task_id: TASK_ID });
+
+    expectRejected(result, 404);
+    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "tasks"]);
+    expect(captures[1].filters).toContainEqual(["id", TASK_ID]);
+    expect(captures[1].filters).toContainEqual(["org_id", "org-1"]);
+    expect(captures.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
 });
 
-describe("recordSubmissionTouch — happy path", () => {
-  it("inserts one touch with identity from ctx even when the body smuggles it", async () => {
-    // Sequence: case lookup, idempotency lookup (miss), insert.
+describe("recordSubmissionTouch — happy path (R2 core)", () => {
+  it("inserts the anchor touchpoint with identity from ctx even when the body smuggles it", async () => {
+    // Sequence: case lookup, idempotency lookup (miss), anchor insert.
     const { db, captures } = makeFakeDb([
       { data: { id: CASE_ID } },
       { data: null },
@@ -180,22 +220,23 @@ describe("recordSubmissionTouch — happy path", () => {
     expect(result.touch.orgId).toBe("org-1");
     expect(result.touch.source).toBe("extension");
 
-    const insertCap = captures.find((c) => c.op === "insert");
-    expect(insertCap?.table).toBe("touches");
-    expect(insertCap?.payload).toMatchObject({
+    const anchor = touchInserts(captures)[0];
+    expect(anchor?.payload).toMatchObject({
       id: TOUCH_ID,
       org_id: "org-1",
       case_id: CASE_ID,
+      entry_type: "touchpoint",
       touch_type: "portal",
       outcome: "submitted",
       coordinator_id: "user-1",
       source: "extension",
       notes: "Application submitted via BCBS KS Enrollment",
     });
-    expect(insertCap?.payload?.touch_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(JSON.stringify(insertCap?.payload)).not.toContain("org-EVIL");
-    expect(JSON.stringify(insertCap?.payload)).not.toContain("intruder");
+    expect(anchor?.payload?.touch_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(JSON.stringify(anchor?.payload)).not.toContain("org-EVIL");
+    expect(JSON.stringify(anchor?.payload)).not.toContain("intruder");
 
+    // No task_id / payer ref / wip note / pdf -> only the TOUCH_LOGGED audit.
     expect(writeAudit).toHaveBeenCalledTimes(1);
     expect(writeAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -206,15 +247,51 @@ describe("recordSubmissionTouch — happy path", () => {
           caseId: CASE_ID,
           portalKey: "bcbs_ks_enrollment",
           fillSessionId: null,
+          taskId: null,
           source: "extension",
         }),
       }),
     );
-    // This route logs a touch, nothing else: no case update, no task write.
+    // No task write, and the case is only ever read (no payer-ref update here).
     expect(captures.every((c) => c.table !== "tasks")).toBe(true);
     expect(
       captures.filter((c) => c.table === "credential_cases").every((c) => c.op === "select"),
     ).toBe(true);
+  });
+
+  it("always writes a 'Form submitted to {payer}' system_event, payer name from the case", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payers: { name: "Aetna" } } },
+      { data: null },
+      { data: storedRow },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, baseInput);
+
+    const inserts = touchInserts(captures);
+    const sysEvent = inserts.find((c) => c.payload?.entry_type === "system_event");
+    expect(sysEvent?.payload).toMatchObject({
+      org_id: "org-1",
+      case_id: CASE_ID,
+      entry_type: "system_event",
+      notes: "Form submitted to Aetna",
+      source: "extension",
+    });
+  });
+
+  it("falls back to the portal label when the case has no payer name", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: storedRow },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, baseInput);
+
+    const sysEvent = touchInserts(captures).find((c) => c.payload?.entry_type === "system_event");
+    expect(sysEvent?.payload?.notes).toBe("Form submitted to BCBS KS Enrollment");
   });
 
   it("appends the optional note to the touch text and records fill_session_id in the audit", async () => {
@@ -232,8 +309,8 @@ describe("recordSubmissionTouch — happy path", () => {
       note: "confirmation #12345",
     });
 
-    const insertCap = captures.find((c) => c.op === "insert");
-    expect(insertCap?.payload?.notes).toBe(
+    const anchor = touchInserts(captures)[0];
+    expect(anchor?.payload?.notes).toBe(
       "Application submitted via BCBS KS Enrollment — confirmation #12345",
     );
     expect(writeAudit).toHaveBeenCalledWith(
@@ -241,6 +318,149 @@ describe("recordSubmissionTouch — happy path", () => {
         after: expect.objectContaining({ fillSessionId: FILL_SESSION_ID }),
       }),
     );
+  });
+});
+
+describe("recordSubmissionTouch — Stories 5/6/7 write-back", () => {
+  it("overwrites the payer reference (Story 5) and audits the case update", async () => {
+    // case, idempotency(miss), payer-ref update, anchor insert.
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: { id: CASE_ID } },
+      { data: storedRow },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, payer_reference_id: "  REF-9  " });
+
+    const refUpdate = captures.find((c) => c.table === "credential_cases" && c.op === "update");
+    expect(refUpdate?.payload).toEqual({ payer_reference_id: "REF-9" });
+    expect(refUpdate?.filters).toContainEqual(["org_id", "org-1"]);
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "case",
+        entityId: CASE_ID,
+        after: { payerReferenceId: "REF-9" },
+      }),
+    );
+    // A whitespace-trimmed non-empty value writes; the TOUCH_LOGGED audit flags it.
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "TOUCH_LOGGED",
+        after: expect.objectContaining({ payerReferenceSet: true }),
+      }),
+    );
+  });
+
+  it("a blank payer reference is a no-op (never clears the latest-wins value)", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: storedRow },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, payer_reference_id: "   " });
+
+    expect(captures.some((c) => c.table === "credential_cases" && c.op === "update")).toBe(false);
+  });
+
+  it("writes a task-linked note for the wip_note (Story 6)", async () => {
+    // case, task lookup, idempotency(miss), anchor insert, task update.
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: { id: TASK_ID, status: "not_started" } },
+      { data: null },
+      { data: storedRow },
+      { data: { id: TASK_ID } },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, {
+      ...baseInput,
+      task_id: TASK_ID,
+      wip_note: "left the CAQH section blank",
+    });
+
+    const note = touchInserts(captures).find((c) => c.payload?.entry_type === "note");
+    expect(note?.payload).toMatchObject({
+      entry_type: "note",
+      case_id: CASE_ID,
+      task_id: TASK_ID,
+      notes: "left the CAQH section blank",
+      source: "extension",
+    });
+  });
+
+  it("closes the linked task and records a task_update (Story 7), auditing the task", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payers: { name: "Cigna" } } },
+      { data: { id: TASK_ID, status: "not_started" } },
+      { data: null },
+      { data: storedRow },
+      { data: { id: TASK_ID } },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, {
+      ...baseInput,
+      task_id: TASK_ID,
+      pdf_filename: "aetna_app.pdf",
+    });
+
+    // Task marked completed.
+    const taskUpdate = captures.find((c) => c.table === "tasks" && c.op === "update");
+    expect(taskUpdate?.payload).toMatchObject({ status: "completed" });
+    expect(taskUpdate?.filters).toContainEqual(["id", TASK_ID]);
+    expect(taskUpdate?.filters).toContainEqual(["org_id", "org-1"]);
+
+    // task_update entry references the task.
+    const taskEntry = touchInserts(captures).find((c) => c.payload?.entry_type === "task_update");
+    expect(taskEntry?.payload).toMatchObject({ entry_type: "task_update", task_id: TASK_ID });
+    expect(String(taskEntry?.payload?.notes)).toContain(TASK_ID);
+
+    // PDF -> a second system_event.
+    const sysEvents = touchInserts(captures).filter(
+      (c) => c.payload?.entry_type === "system_event",
+    );
+    expect(sysEvents.map((c) => c.payload?.notes)).toEqual(
+      expect.arrayContaining(["Form submitted to Cigna", "PDF attached: aetna_app.pdf"]),
+    );
+
+    // Audits: task UPDATE + the TOUCH_LOGGED (payer already set? no -> just these two).
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "UPDATE",
+        entityType: "task",
+        entityId: TASK_ID,
+        before: { status: "not_started" },
+        after: { status: "completed" },
+      }),
+    );
+    expect(writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: "TOUCH_LOGGED",
+        after: expect.objectContaining({ taskId: TASK_ID, pdfAttached: true }),
+      }),
+    );
+  });
+
+  it("leaves an already-completed task alone (no task_update, no task audit)", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: { id: TASK_ID, status: "completed" } },
+      { data: null },
+      { data: storedRow },
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, task_id: TASK_ID });
+
+    expect(captures.some((c) => c.table === "tasks" && c.op === "update")).toBe(false);
+    expect(touchInserts(captures).some((c) => c.payload?.entry_type === "task_update")).toBe(false);
+    expect(writeAudit).not.toHaveBeenCalledWith(expect.objectContaining({ entityType: "task" }));
   });
 });
 
@@ -265,8 +485,8 @@ describe("recordSubmissionTouch — idempotency", () => {
   });
 
   it("a same-org insert race resolves to the stored row, not a 409", async () => {
-    // Sequence: case lookup, idempotency lookup (miss), insert fails 23505,
-    // post-conflict lookup finds the winner's row.
+    // Sequence: case lookup, idempotency lookup (miss), anchor insert fails
+    // 23505, post-conflict lookup finds the winner's row.
     const { db, captures } = makeFakeDb([
       { data: { id: CASE_ID } },
       { data: null },

@@ -3,19 +3,10 @@
 // also append status_history and audit_log.
 
 import { supabase } from "@/integrations/supabase/externalClient";
-import { getNotesFor } from "@/services/lookups";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import type { Database, Json } from "@/integrations/supabase/types";
-import type {
-  CaseDetail,
-  Contract,
-  CredentialCase,
-  Note,
-  StatusHistoryEntry,
-  Task,
-  Touch,
-} from "@/types";
+import type { CaseDetail, Contract, CredentialCase, StatusHistoryEntry, Task } from "@/types";
 
 type CredentialCaseUpdate = Database["public"]["Tables"]["credential_cases"]["Update"];
 
@@ -82,23 +73,28 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const notes = await getNotesFor("case", id);
 
-  // Enrich status_history with author names for "changed by {name}".
+  const rawTouches =
+    ((data as Record<string, unknown>).touches as Array<Record<string, unknown>> | null) ?? [];
   const rawHistory =
     ((data as Record<string, unknown>).status_history as Array<Record<string, unknown>> | null) ??
     [];
-  const changedByIds = Array.from(
+
+  // One profiles fetch covers status-history authors and touchlog note authors.
+  const personIds = Array.from(
     new Set(
-      rawHistory.map((h) => h.changed_by as string | null).filter((v): v is string => Boolean(v)),
+      [
+        ...rawHistory.map((h) => h.changed_by as string | null),
+        ...rawTouches.map((t) => t.coordinator_id as string | null),
+      ].filter((v): v is string => Boolean(v)),
     ),
   );
   const nameMap = new Map<string, string | null>();
-  if (changedByIds.length > 0) {
+  if (personIds.length > 0) {
     const { data: profs, error: profErr } = await supabase
       .from("profiles")
       .select("id, full_name, email")
-      .in("id", changedByIds);
+      .in("id", personIds);
     if (profErr) throw profErr;
     for (const p of profs ?? []) {
       const name = (p.full_name as string | null) ?? (p.email as string | null) ?? null;
@@ -110,12 +106,119 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     changed_by_name: h.changed_by ? (nameMap.get(h.changed_by as string) ?? null) : null,
   }));
 
+  // Story 1: case internal notes now live in the touchlog as note entries
+  // (entry_type = 'note', task_id NULL). Derive the case Notes list from there
+  // rather than the dormant `notes` table (its case/task rows were migrated in).
+  const notes = rawTouches
+    .filter((t) => t.entry_type === "note" && !t.task_id)
+    .sort(
+      (a, b) =>
+        new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime(),
+    )
+    .map((t) => ({
+      id: t.id,
+      org_id: t.org_id,
+      entity_type: "case",
+      entity_id: id,
+      content: t.notes,
+      author_id: t.coordinator_id,
+      author_name: t.coordinator_id ? (nameMap.get(t.coordinator_id as string) ?? null) : null,
+      created_at: t.created_at,
+    }));
+
+  // Story 8: resolve each batch-call child touchpoint to a "Part of {payer}
+  // {channel} call, N cases" summary (payer name + total children in that event).
+  const eventIds = Array.from(
+    new Set(
+      rawTouches
+        .map((t) => t.communication_event_id as string | null)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const batchMap = new Map<
+    string,
+    { payer_name: string; channel_label: string; case_count: number }
+  >();
+  if (eventIds.length > 0) {
+    const { data: events, error: evErr } = await supabase
+      .from("communication_event")
+      .select("id, channel, payer_id")
+      .eq("org_id", orgId)
+      .in("id", eventIds);
+    if (evErr) throw evErr;
+    const evRows = (events ?? []) as Array<{ id: string; channel: string; payer_id: string }>;
+    const payerIds = Array.from(new Set(evRows.map((e) => e.payer_id)));
+    const payerNames = new Map<string, string>();
+    if (payerIds.length > 0) {
+      const { data: payers, error: pErr } = await supabase
+        .from("payers")
+        .select("id, name")
+        .in("id", payerIds);
+      if (pErr) throw pErr;
+      for (const p of payers ?? []) payerNames.set(p.id as string, (p.name as string) ?? "payer");
+    }
+    // Count children across ALL cases in each event (not just this case's row).
+    const counts = new Map<string, number>();
+    const { data: childRows, error: cErr } = await supabase
+      .from("touches")
+      .select("communication_event_id")
+      .eq("org_id", orgId)
+      .in("communication_event_id", eventIds);
+    if (cErr) throw cErr;
+    for (const row of (childRows ?? []) as Array<{ communication_event_id: string | null }>) {
+      const eid = row.communication_event_id;
+      if (eid) counts.set(eid, (counts.get(eid) ?? 0) + 1);
+    }
+    for (const e of evRows) {
+      batchMap.set(e.id, {
+        payer_name: payerNames.get(e.payer_id) ?? "payer",
+        channel_label: channelWord(e.channel),
+        case_count: counts.get(e.id) ?? 1,
+      });
+    }
+  }
+  const enrichedTouches = rawTouches.map((t) => ({
+    ...t,
+    batch_summary: t.communication_event_id
+      ? (batchMap.get(t.communication_event_id as string) ?? null)
+      : null,
+  }));
+
   const merged = {
     ...(data as Record<string, unknown>),
+    touches: enrichedTouches,
     status_history: enrichedHistory,
     notes,
   };
   return camelizeRow<CaseDetail>(merged);
+}
+
+// The channel word used in "Part of {payer} {word} call" (touch_type -> word).
+function channelWord(touchType: string): string {
+  return touchType === "call" ? "phone" : touchType;
+}
+
+// Story 2: latest-wins payer reference / submission ID on the case. History is
+// kept in the touchlog (system_event), not here — this column just overwrites.
+export async function setPayerReference(caseId: string, value: string | null): Promise<void> {
+  const orgId = requireActiveOrg();
+  const trimmed = value && value.trim() ? value.trim() : null;
+  const { data, error } = await supabase
+    .from("credential_cases")
+    .update({ payer_reference_id: trimmed } as CredentialCaseUpdate)
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .select("id, payer_reference_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Case not found");
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "case",
+    entityId: caseId,
+    after: { payerReferenceId: trimmed },
+    description: "Updated payer reference ID",
+  });
 }
 
 export interface AppendStatusHistoryInput {
