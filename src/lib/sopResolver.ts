@@ -7,7 +7,9 @@ import type {
   Mso,
   Provider,
   ProviderGroup,
+  SOPEmailTemplate,
   SOPStep,
+  SOPStepType,
   SOPTaskDefinition,
   SOPTemplate,
 } from "@/types";
@@ -75,21 +77,33 @@ function definitionToInsert(
     typeof definition.dueOffsetDays === "number"
       ? offsetDate(baseDateIso, definition.dueOffsetDays)
       : null;
-  const steps: SOPStep[] = definition.steps.map((step, idx) => ({
-    id: `step-${idx}`,
-    order: idx,
-    label: interpolate(step.label, tokens),
-    detail: step.detail ? interpolate(step.detail, tokens) : undefined,
-    isCompleted: false,
-    completedAt: null,
-    completedBy: null,
-    dataFields: (step.dataFields ?? [])
-      .map((f) => ({
-        label: f.label,
-        value: Object.prototype.hasOwnProperty.call(tokens, f.token) ? tokens[f.token] : "",
-      }))
-      .filter((f) => f.label && f.value),
-  }));
+  const steps: SOPStep[] = definition.steps.map((step, idx) => {
+    const stepType: SOPStepType = step.stepType ?? "online_form";
+    const emailTemplate: SOPEmailTemplate | undefined =
+      stepType === "draft_email" && step.emailTemplate
+        ? {
+            subject: interpolate(step.emailTemplate.subject, tokens),
+            body: interpolate(step.emailTemplate.body, tokens),
+          }
+        : undefined;
+    return {
+      id: `step-${idx}`,
+      order: idx,
+      label: interpolate(step.label, tokens),
+      detail: step.detail ? interpolate(step.detail, tokens) : undefined,
+      stepType,
+      emailTemplate,
+      isCompleted: false,
+      completedAt: null,
+      completedBy: null,
+      dataFields: (step.dataFields ?? [])
+        .map((f) => ({
+          label: f.label,
+          value: Object.prototype.hasOwnProperty.call(tokens, f.token) ? tokens[f.token] : "",
+        }))
+        .filter((f) => f.label && f.value),
+    };
+  });
   return {
     title: interpolate(definition.title, tokens),
     description: definition.description ? interpolate(definition.description, tokens) : null,

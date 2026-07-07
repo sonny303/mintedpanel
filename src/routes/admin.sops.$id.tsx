@@ -24,7 +24,7 @@ import { useIsAdmin } from "@/lib/permissions";
 import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
 import { TokenHelpPanel } from "@/components/templates/TokenHelpPanel";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
-import type { SOPTaskDefinition, SOPTemplate } from "@/types";
+import type { SOPStepType, SOPTaskDefinition, SOPTemplate } from "@/types";
 
 type EditableTemplate = SOPTemplate & { archived?: boolean; isArchived?: boolean };
 
@@ -33,10 +33,17 @@ interface DataField {
   token: string;
 }
 
+interface EmailTemplate {
+  subject: string;
+  body: string;
+}
+
 interface EditableStep {
   id: string;
   label: string;
   detail: string;
+  stepType: SOPStepType;
+  emailTemplate: EmailTemplate;
   dataFields: DataField[];
 }
 
@@ -145,11 +152,22 @@ function toEditable(defs: SOPTaskDefinition[] | null | undefined): EditableTask[
     description: d.description ?? "",
     dueOffsetDays: d.dueOffsetDays ?? i * 7,
     steps: (d.steps ?? []).map((s) => {
-      const raw = s as { label?: string; detail?: string; dataFields?: DataField[] };
+      const raw = s as {
+        label?: string;
+        detail?: string;
+        stepType?: SOPStepType;
+        emailTemplate?: { subject?: string; body?: string };
+        dataFields?: DataField[];
+      };
       return {
         id: randId(),
         label: raw.label ?? "",
         detail: raw.detail ?? "",
+        stepType: raw.stepType ?? "online_form",
+        emailTemplate: {
+          subject: raw.emailTemplate?.subject ?? "",
+          body: raw.emailTemplate?.body ?? "",
+        },
         dataFields: (raw.dataFields ?? []).filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),
@@ -167,6 +185,10 @@ function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
     steps: t.steps.map((s) => ({
       label: s.label,
       detail: s.detail,
+      stepType: s.stepType,
+      ...(s.stepType === "draft_email"
+        ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
+        : {}),
       dataFields: s.dataFields.filter((f) => typeof f.token === "string" && f.token.includes(".")),
     })) as SOPTaskDefinition["steps"],
   }));
@@ -298,7 +320,17 @@ function TemplateEditor() {
         t.id === taskId
           ? {
               ...t,
-              steps: [...t.steps, { id: randId(), label: "New step", detail: "", dataFields: [] }],
+              steps: [
+                ...t.steps,
+                {
+                  id: randId(),
+                  label: "New step",
+                  detail: "",
+                  stepType: "online_form",
+                  emailTemplate: { subject: "", body: "" },
+                  dataFields: [],
+                },
+              ],
             }
           : t,
       ),
