@@ -5,7 +5,8 @@
 // ?createCases=true (the row's one-click path) starts case creation directly.
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Pencil, Plus, Wand2 } from "lucide-react";
+import { format } from "date-fns";
+import { AlertTriangle, Download, Pencil, Plus, Wand2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AssignProviderDialog } from "@/components/launches/AssignProviderDialog";
 import { CreateCasesDialog } from "@/components/launches/CreateCasesDialog";
@@ -28,6 +29,8 @@ import {
 } from "@/lib/launchLocations";
 import { launchReadiness } from "@/lib/launchReadiness";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { buildRosterCsv, type RosterRowInput } from "@/lib/rosterExport";
+import { downloadCsvText } from "@/lib/csv";
 
 export const Route = createFileRoute("/launches/$id")({
   validateSearch: (search: Record<string, unknown>): { createCases?: boolean } => ({
@@ -144,6 +147,32 @@ function LaunchDetailPage() {
 
   const dateText = launchDateDisplay(status?.label, location.effectiveDate);
 
+  // Roster export scoped to this launch: its assigned providers, each with the
+  // cases linked to this location. Reuses caches already on the page.
+  const facilityName = location.name;
+  function handleExportRoster() {
+    const rows: RosterRowInput[] = linked.map((p) => {
+      const pCases = locationCases.filter((c) => c.providerId === p.id);
+      return {
+        firstName: p.firstName,
+        lastName: p.lastName,
+        credentials: p.credentials,
+        npi: p.npi,
+        specialty: p.specialty,
+        homeState: p.homeState,
+        groupOrFacility: facilityName,
+        cases: pCases.map((c) => ({
+          payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
+          state: c.state,
+          statusLabel: c.credentialingStatusId
+            ? (credStatusById.get(c.credentialingStatusId)?.label ?? "No status")
+            : "No status",
+        })),
+      };
+    });
+    downloadCsvText(`roster-${format(new Date(), "yyyy-MM-dd")}.csv`, buildRosterCsv(rows));
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <PageHeader
@@ -155,22 +184,33 @@ function LaunchDetailPage() {
           .filter(Boolean)
           .join(" · ")}
         actions={
-          canWrite ? (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="h-9 gap-2" onClick={() => setEditOpen(true)}>
-                <Pencil className="w-4 h-4" />
-                Edit launch
-              </Button>
-              <Button variant="outline" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
-                <Plus className="w-4 h-4" />
-                Add provider
-              </Button>
-              <Button className="h-9 gap-2" onClick={() => setCasesOpen(true)}>
-                <Wand2 className="w-4 h-4" />
-                Create cases
-              </Button>
-            </div>
-          ) : null
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-9 gap-2"
+              onClick={handleExportRoster}
+              disabled={linked.length === 0}
+            >
+              <Download className="w-4 h-4" />
+              Export roster
+            </Button>
+            {canWrite ? (
+              <>
+                <Button variant="outline" className="h-9 gap-2" onClick={() => setEditOpen(true)}>
+                  <Pencil className="w-4 h-4" />
+                  Edit launch
+                </Button>
+                <Button variant="outline" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
+                  <Plus className="w-4 h-4" />
+                  Add provider
+                </Button>
+                <Button className="h-9 gap-2" onClick={() => setCasesOpen(true)}>
+                  <Wand2 className="w-4 h-4" />
+                  Create cases
+                </Button>
+              </>
+            ) : null}
+          </div>
         }
       />
 
