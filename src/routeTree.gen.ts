@@ -44,6 +44,7 @@ import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.template
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
@@ -223,6 +224,11 @@ const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
   path: '/portals/$portalKey/train',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminTemplatesRoute,
+} as any)
 const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -272,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/providers/': typeof ProvidersIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
@@ -306,6 +313,7 @@ export interface FileRoutesByTo {
   '/providers': typeof ProvidersIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops': typeof AdminSopsIndexRoute
@@ -347,6 +355,7 @@ export interface FileRoutesById {
   '/providers/': typeof ProvidersIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
+  '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
@@ -389,6 +398,7 @@ export interface FileRouteTypes {
     | '/providers/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
+    | '/admin/templates/new'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops/'
@@ -423,6 +433,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
+    | '/admin/templates/new'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops'
@@ -463,6 +474,7 @@ export interface FileRouteTypes {
     | '/providers/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
+    | '/admin/templates/new'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops/'
@@ -746,6 +758,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/templates/new': {
+      id: '/admin/templates/new'
+      path: '/new'
+      fullPath: '/admin/templates/new'
+      preLoaderRoute: typeof AdminTemplatesNewRouteImport
+      parentRoute: typeof AdminTemplatesRoute
+    }
     '/admin/templates/$id': {
       id: '/admin/templates/$id'
       path: '/$id'
@@ -842,11 +861,13 @@ const AdminSopsRouteWithChildren = AdminSopsRoute._addFileChildren(
 
 interface AdminTemplatesRouteChildren {
   AdminTemplatesIdRoute: typeof AdminTemplatesIdRoute
+  AdminTemplatesNewRoute: typeof AdminTemplatesNewRoute
   AdminTemplatesIndexRoute: typeof AdminTemplatesIndexRoute
 }
 
 const AdminTemplatesRouteChildren: AdminTemplatesRouteChildren = {
   AdminTemplatesIdRoute: AdminTemplatesIdRoute,
+  AdminTemplatesNewRoute: AdminTemplatesNewRoute,
   AdminTemplatesIndexRoute: AdminTemplatesIndexRoute,
 }
 

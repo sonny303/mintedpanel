@@ -581,6 +581,32 @@ module-locally in both, keep in sync), resolve tokens via
 then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
 are pre-filtered client-side; the DB unique constraint is the backstop.
 
+## SOP template authoring — Admin > Templates wizard (2026-07-07)
+
+Templates are authored org-level at **`/admin/templates`** (nav label
+"Templates", FileText icon), NOT per-case. The list
+(`src/routes/admin.templates.index.tsx`) shows one row per `sop_templates` row
+(match key Payer/State/Specialty/Group, task count, last updated; archived
+hidden by default). **`+ New Template`** (admin-only) opens a **4-step wizard**
+(`src/components/templates/TemplateWizard.tsx`: Basics → Tasks → Steps & fields
+→ Review) at `/admin/templates/new`; a row click opens the same wizard pre-filled
+at `/admin/templates/$id`. Save is ONE write (`createTemplate`/`updateTemplate`
+in `src/services/templates.ts`, audited) on the final step; unsaved-changes
+guarded via `useBlocker`. The wizard writes the SAME `task_definitions` jsonb
+shape the old editor did (converters in
+`src/components/templates/editableTemplate.ts` — `toEditable`/`fromEditable`;
+data-field tokens stay BARE for the resolver, `step_type`/`email_template`
+preserved), so `sopResolver.ts` + case auto-generation are untouched. Token
+picker pulls the live catalog from `get_sop_field_tokens()` via `useTokenCatalog`.
+Admin-only edit; specialists get a read-only wizard; the whole Admin nav group is
+already hidden from billing. **Retired:** the old single-page editor at
+`/admin/sops/$id` (and the `TokenHelpPanel` component it used) is gone;
+`/admin/sops` + `/admin/sops/$id` are now redirect shells → `/admin/templates`
+(param-preserving), mirroring the earlier `/admin/templates`→`/admin/sops`
+redirects which were flipped back. Reused: `TemplateTaskRow`,
+`DiscardConfirmDialog`, and the `useSops`/`useSop`/`useCreateSop`/`useUpdateSop`
+hooks (`useAdmin.ts`).
+
 ## Touchlog — single case-activity spine (Stories 1–3, 8; 2026-07-07)
 
 `touches` is now THE touchlog: `entry_type ∈ {touchpoint, note, system_event,
