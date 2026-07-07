@@ -66,8 +66,7 @@ export function BatchTouchpointDialog({ open, onClose }: { open: boolean; onClos
     () =>
       (casesQ.data ?? []).filter(
         (c) =>
-          !c.credentialingStatusId ||
-          openBucketById.get(c.credentialingStatusId) !== "complete",
+          !c.credentialingStatusId || openBucketById.get(c.credentialingStatusId) !== "complete",
       ),
     [casesQ.data, openBucketById],
   );
@@ -97,14 +96,20 @@ export function BatchTouchpointDialog({ open, onClose }: { open: boolean; onClos
       ...prev,
       [caseId]: checked
         ? { selected: true, outcome: defaultOutcome, note: "", reference: "" }
-        : { ...(prev[caseId] ?? { outcome: defaultOutcome, note: "", reference: "" }), selected: false },
+        : {
+            ...(prev[caseId] ?? { outcome: defaultOutcome, note: "", reference: "" }),
+            selected: false,
+          },
     }));
   };
 
   const setRow = (caseId: string, patch: Partial<RowState>) => {
     setRows((prev) => ({
       ...prev,
-      [caseId]: { ...(prev[caseId] ?? { selected: true, outcome: defaultOutcome, note: "", reference: "" }), ...patch },
+      [caseId]: {
+        ...(prev[caseId] ?? { selected: true, outcome: defaultOutcome, note: "", reference: "" }),
+        ...patch,
+      },
     }));
   };
 
@@ -130,7 +135,9 @@ export function BatchTouchpointDialog({ open, onClose }: { open: boolean; onClos
       for (const { caseId, r } of refWrites) {
         await setReferenceM.mutateAsync({ caseId, value: r.reference.trim() });
       }
-      toast.success(`Logged call across ${selected.length} case${selected.length === 1 ? "" : "s"}`);
+      toast.success(
+        `Logged call across ${selected.length} case${selected.length === 1 ? "" : "s"}`,
+      );
       closeAndReset();
     } catch (e) {
       toast.error((e as Error).message);
@@ -150,7 +157,9 @@ export function BatchTouchpointDialog({ open, onClose }: { open: boolean; onClos
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Payer</Label>
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Payer
+            </Label>
             <Select
               value={payerId}
               onValueChange={(v) => {

@@ -7,15 +7,15 @@ whole feature — keep it honest as PRs land.
 
 ## Locked decisions (from the spec)
 
-| Item | Call |
-|---|---|
-| Payer reference / submission ID | One field on the case, latest wins |
-| The note stores | Full merge into touchlog; notes optionally task-linked |
-| Submit through the extension | Marks the linked task done |
-| Close-a-case off touchlog | Out of scope, later feature |
-| Batch: what you select | Cases directly, scoped to one payer + channel |
-| Batch: storage | One parent `communication_event`, one child touchpoint per case |
-| Batch: notes | Per case, own box, no shared call note |
+| Item                            | Call                                                            |
+| ------------------------------- | --------------------------------------------------------------- |
+| Payer reference / submission ID | One field on the case, latest wins                              |
+| The note stores                 | Full merge into touchlog; notes optionally task-linked          |
+| Submit through the extension    | Marks the linked task done                                      |
+| Close-a-case off touchlog       | Out of scope, later feature                                     |
+| Batch: what you select          | Cases directly, scoped to one payer + channel                   |
+| Batch: storage                  | One parent `communication_event`, one child touchpoint per case |
+| Batch: notes                    | Per case, own box, no shared call note                          |
 
 **Additive-rule reconciliation (important):** `AGENTS.md` forbids dropping or
 restructuring tables/columns, and `touches` is append-only. Story 1's "remove the
@@ -26,18 +26,20 @@ dropped. A hard-remove would need an explicit rule override.
 
 ## Verify-items (confirmed in-repo)
 
-| Item | Finding |
-|---|---|
-| `entry_type` already exists? | No. `touches` was touchpoint-only; added `entry_type` |
-| Where task comments + case notes live | One polymorphic `notes` table (`entity_type` case/task/provider) |
-| Extension knows `task_id` at submit? | **No** — it knows `caseId` + `fillSessionId` only. Story 7 resolves the task server-side |
-| Case → one payer? | Yes: `payer_id NOT NULL`, unique `(provider,payer,state)`. Batch scoping is clean |
+| Item                                        | Finding                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `entry_type` already exists?                | No. `touches` was touchpoint-only; added `entry_type`                                            |
+| Where task comments + case notes live       | One polymorphic `notes` table (`entity_type` case/task/provider)                                 |
+| Extension knows `task_id` at submit?        | **No** — it knows `caseId` + `fillSessionId` only. Story 7 resolves the task server-side         |
+| Case → one payer?                           | Yes: `payer_id NOT NULL`, unique `(provider,payer,state)`. Batch scoping is clean                |
 | Filler exposes field map + required fields? | Yes: `/api/portal-field-maps` + `/api/providers/:id/profile` `unresolved[]`. Story 9 diffs these |
 
 ## PR sequence & status
 
 ### PR A — Foundation (app): Stories 1, 2, 3 — **DONE (this session)**
+
 Schema (repo migrations + applied hosted):
+
 - `20260707120000_touchlog_entry_types.sql` — `touches.entry_type` (touchpoint |
   note | system_event | task_update), nullable `touch_type`/`outcome`, new
   `task_id` + `communication_event_id`, widened channel (`+mail`) and the Story 3
@@ -48,6 +50,7 @@ Schema (repo migrations + applied hosted):
 - `20260707120200_case_payer_reference_id.sql` — `credential_cases.payer_reference_id`.
 
 App:
+
 - `src/lib/touchOutcomes.ts` (+test) — channel-aware taxonomy (Story 3).
 - `src/services/touches.ts` — `logNote`, `getTaskTouchlog`, entry_type on inserts;
   stalled/follow-up reads scoped to touchpoints.
@@ -58,8 +61,9 @@ App:
   `/tasks/$id` render the task-filtered slice; payer reference row on case detail.
 
 ### PR B — Batch touchpoint (app): Story 8 — **DONE (this session)** (depends on A)
+
 - Migration: `communication_event (id, org_id, payer_id, channel, occurred_at,
-  created_by, created_at)` + FK `touches.communication_event_id`, RLS mirroring
+created_by, created_at)` + FK `touches.communication_event_id`, RLS mirroring
   `payers`/`touches`.
 - Service `communicationEvents.ts` — one parent + N child touchpoints in a
   transaction (or ordered inserts); each child a `touchpoint` with
@@ -70,8 +74,10 @@ App:
   that case's payer_reference_id.
 
 ### PR C — Extension-facing server endpoints (app) — **DONE** (depends on A)
+
 No migration — every column already existed (`touches.entry_type`/`task_id`,
 `credential_cases.payer_reference_id`).
+
 - Extended `POST /api/cases/:id/touches` (`submissionTouches.ts`): optional
   `payer_reference_id` overwrites the case's latest-wins reference (Story 5,
   audited as a case UPDATE); optional `wip_note` → a touchlog `note` entry,
@@ -82,7 +88,7 @@ No migration — every column already existed (`touches.entry_type`/`task_id`,
 - Read fields on `GET /api/cases` (`providerCases.ts`): `payerReferenceId`
   (Story 5 prefill), author-resolved `latestNote` (Story 11), and
   `lastSubmittedAt` — the most recent submission touchpoint's `outcome
-  'submitted'` timestamp, a more robust signal than text-matching the
+'submitted'` timestamp, a more robust signal than text-matching the
   system_event (Story 10 duplicate guard).
 - Gate: new assertion 13 (a cross-org `task_id` on a submission touch is a 404
   before any write) + a `tasks` leak mode in the mock; the in-sandbox gate is
@@ -93,9 +99,11 @@ No migration — every column already existed (`touches.entry_type`/`task_id`,
   the table doesn't have). Closes nothing when the extension supplies no task.
 
 ### PR D — Workbench extension: Stories 4, 5, 6, 7, 9, 10, 11 — **DONE** (depends on A + C)
+
 minted-extension `claude/autonomous-task-completion-raagkt`; typecheck + lint +
 build clean. Vanilla TS + DOM — no runtime harness in-sandbox; verified via a
 CSS/DOM screenshot smoke test.
+
 - 4: NPI, license #, CAQH ID, TIN/EIN, DEA on the card with copy buttons, greyed
   empty state. The worker projects the five non-PHI identifiers from the profile
   tokens it already fetches (`GET_PROVIDER_FACILITIES`) — the PHI payload never
@@ -113,6 +121,7 @@ CSS/DOM screenshot smoke test.
 - 11: the selected case's latest touchlog note under the case picker.
 
 ## Out of scope (captured, not built)
+
 - Closing a case off touchlog (later feature).
 - Multi-reference history on the case field (latest-wins only; history in touchlog).
 - Batch touchpoints from the extension (Panel Cases workflow only).
