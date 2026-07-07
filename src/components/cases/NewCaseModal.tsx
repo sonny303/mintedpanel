@@ -36,7 +36,7 @@ import {
   useMsoRoutingRule,
   useStateLicensesByProvider,
 } from "@/hooks/useLookups";
-import { useMsos, usePayers, useTemplates } from "@/hooks/useAdmin";
+import { useMsos, usePayers, useSops } from "@/hooks/useAdmin";
 import { useActiveOrgId } from "@/lib/auth-store";
 import type { Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
@@ -74,7 +74,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
 
   const payersQ = usePayers();
   const msosQ = useMsos();
-  const templatesQ = useTemplates();
+  const templatesQ = useSops();
   const licensesQ = useStateLicensesByProvider(provider.id);
   const facilitiesQ = useFacilities(provider.groupId ?? null);
   const coordinatorsQ = useCoordinators();

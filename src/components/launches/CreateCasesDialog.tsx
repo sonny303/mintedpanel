@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCases } from "@/hooks/useCases";
-import { usePayers, useMsos, useTemplates } from "@/hooks/useAdmin";
+import { usePayers, useMsos, useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useGenerateLaunchCases } from "@/hooks/useLaunches";
 import { getMsoRoutingRule } from "@/services/lookups";
@@ -79,7 +79,7 @@ export function CreateCasesDialog({
   const casesQ = useCases();
   const payersQ = usePayers();
   const msosQ = useMsos();
-  const templatesQ = useTemplates();
+  const templatesQ = useSops();
   const groupsQ = useProviderGroups();
   const generate = useGenerateLaunchCases();
 

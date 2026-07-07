@@ -32,6 +32,7 @@ import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
+import { Route as AdminSopsRouteImport } from './routes/admin.sops'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
@@ -39,9 +40,11 @@ import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
+import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
+import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -158,6 +161,11 @@ const AdminStatusesRoute = AdminStatusesRouteImport.update({
   path: '/admin/statuses',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminSopsRoute = AdminSopsRouteImport.update({
+  id: '/admin/sops',
+  path: '/admin/sops',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/admin/settings',
   path: '/admin/settings',
@@ -193,6 +201,11 @@ const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminTemplatesRoute,
 } as any)
+const AdminSopsIndexRoute = AdminSopsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminSopsRoute,
+} as any)
 const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -207,6 +220,11 @@ const AdminTemplatesIdRoute = AdminTemplatesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AdminTemplatesRoute,
+} as any)
+const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminSopsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -227,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
@@ -238,9 +257,11 @@ export interface FileRoutesByFullPath {
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
 }
@@ -268,9 +289,11 @@ export interface FileRoutesByTo {
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
   '/providers': typeof ProvidersIndexRoute
+  '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
 }
@@ -293,6 +316,7 @@ export interface FileRoutesById {
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
   '/cases/$id': typeof CasesIdRoute
@@ -304,9 +328,11 @@ export interface FileRoutesById {
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
 }
@@ -330,6 +356,7 @@ export interface FileRouteTypes {
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
+    | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
     | '/cases/$id'
@@ -341,9 +368,11 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/launches/'
     | '/providers/'
+    | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/sops/'
     | '/admin/templates/'
     | '/providers/$id/'
   fileRoutesByTo: FileRoutesByTo
@@ -371,9 +400,11 @@ export interface FileRouteTypes {
     | '/cases'
     | '/launches'
     | '/providers'
+    | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/sops'
     | '/admin/templates'
     | '/providers/$id'
   id:
@@ -395,6 +426,7 @@ export interface FileRouteTypes {
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
+    | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
     | '/cases/$id'
@@ -406,9 +438,11 @@ export interface FileRouteTypes {
     | '/cases/'
     | '/launches/'
     | '/providers/'
+    | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/sops/'
     | '/admin/templates/'
     | '/providers/$id/'
   fileRoutesById: FileRoutesById
@@ -431,6 +465,7 @@ export interface RootRouteChildren {
   AdminPayersRoute: typeof AdminPayersRoute
   AdminPortalsRoute: typeof AdminPortalsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminSopsRoute: typeof AdminSopsRouteWithChildren
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   DevPrimitivesRoute: typeof DevPrimitivesRoute
@@ -601,6 +636,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminStatusesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/sops': {
+      id: '/admin/sops'
+      path: '/admin/sops'
+      fullPath: '/admin/sops'
+      preLoaderRoute: typeof AdminSopsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/admin/settings'
@@ -650,6 +692,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTemplatesIndexRouteImport
       parentRoute: typeof AdminTemplatesRoute
     }
+    '/admin/sops/': {
+      id: '/admin/sops/'
+      path: '/'
+      fullPath: '/admin/sops/'
+      preLoaderRoute: typeof AdminSopsIndexRouteImport
+      parentRoute: typeof AdminSopsRoute
+    }
     '/providers/$id/edit': {
       id: '/providers/$id/edit'
       path: '/edit'
@@ -670,6 +719,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/templates/$id'
       preLoaderRoute: typeof AdminTemplatesIdRouteImport
       parentRoute: typeof AdminTemplatesRoute
+    }
+    '/admin/sops/$id': {
+      id: '/admin/sops/$id'
+      path: '/$id'
+      fullPath: '/admin/sops/$id'
+      preLoaderRoute: typeof AdminSopsIdRouteImport
+      parentRoute: typeof AdminSopsRoute
     }
   }
 }
@@ -730,6 +786,20 @@ const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
   ProvidersRouteChildren,
 )
 
+interface AdminSopsRouteChildren {
+  AdminSopsIdRoute: typeof AdminSopsIdRoute
+  AdminSopsIndexRoute: typeof AdminSopsIndexRoute
+}
+
+const AdminSopsRouteChildren: AdminSopsRouteChildren = {
+  AdminSopsIdRoute: AdminSopsIdRoute,
+  AdminSopsIndexRoute: AdminSopsIndexRoute,
+}
+
+const AdminSopsRouteWithChildren = AdminSopsRoute._addFileChildren(
+  AdminSopsRouteChildren,
+)
+
 interface AdminTemplatesRouteChildren {
   AdminTemplatesIdRoute: typeof AdminTemplatesIdRoute
   AdminTemplatesIndexRoute: typeof AdminTemplatesIndexRoute
@@ -762,6 +832,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminPayersRoute: AdminPayersRoute,
   AdminPortalsRoute: AdminPortalsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminSopsRoute: AdminSopsRouteWithChildren,
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   DevPrimitivesRoute: DevPrimitivesRoute,
