@@ -346,7 +346,12 @@ Home action engine, `src/lib/actionState.ts`). Admin > Statuses
 (`src/routes/admin.statuses.tsx`) renders one `TrackSection` per track with
 drag-to-reorder and an add/edit modal (fixed `TOKEN_COLORS` palette).
 **Semantics are matched by label** across the app ("In-Network", "Live",
-"Pre-Credentialing Setup") — the codebase idiom, not ids.
+"Pre-Credentialing Setup") — the codebase idiom, not ids. The shared label
+constants (`PRE_CRED_PAYER_NAME`, `IN_NETWORK_LABEL`, `PENDING_FULFILLMENT_LABEL`,
+`READY_FOR_LAUNCH_LABEL`, `LIVE_LABEL`, `NOT_REQUIRED_LABEL`, `OON_LABEL`) live in
+one place — `src/lib/statusLabels.ts` (centralized 2026-07-07); import from there,
+never re-hardcode a label literal (a one-char drift silently breaks by-label
+matching). This is the single edit point for Epic 6's statuses-to-code work.
 
 Status pills: `src/components/triage/StatusPill.tsx` takes the raw hex from
 `status_configs.color` (color-mix tinting) — use this for DB-driven statuses.
@@ -553,6 +558,13 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
 - NewCaseModal still passes `facility: null` into `resolveTemplate`, so
   `{{facility.*}}` tokens resolve empty there; the launch kickoff passes the
   location.
+- `Touch.source` (`src/types/index.ts`) was widened to include `"email"`
+  (2026-07-07, P0-e) ahead of the specced inbound-email→touch writer, but the
+  live `touches_source_check` constraint still allows only
+  `manual|email_webhook|extension`. No current path writes `"email"` (writers use
+  `manual`/`extension`), so nothing breaks — but that webhook MUST ship a
+  migration adding `'email'` to the constraint before it inserts, or the INSERT
+  fails the CHECK. The type is ahead of the DB by design.
 
 ## Shared state ownership (parallel lanes)
 
