@@ -27,6 +27,8 @@ const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
 const CASES_ROUTE = /^\/api\/cases\/?$/;
 // `/api/cases/:id/touches` — the extension's "Mark submitted" business log.
 const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
+// `/api/cases/:id/context` — the Workbench's post-selection case context read.
+const CASE_CONTEXT_ROUTE = /^\/api\/cases\/([^/]+)\/context\/?$/;
 // `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
 const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
 
@@ -82,6 +84,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
+  const caseContextMatch = pathname.match(CASE_CONTEXT_ROUTE);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   if (
     !profileMatch &&
@@ -90,6 +93,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isFillEvents &&
     !isCases &&
     !caseTouchesMatch &&
+    !caseContextMatch &&
     !isMeOrgs
   ) {
     return fail(404, "Not found");
@@ -147,6 +151,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
         await readJsonBody(request),
         ctx,
       );
+    }
+    if (caseContextMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleCaseContext(caseContextMatch[1], ctx);
     }
 
     const routes = await loadProviderRoutes();

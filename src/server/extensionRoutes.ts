@@ -6,6 +6,7 @@ import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
+import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { ok, fail, type ApiMeta } from "./envelope";
@@ -117,6 +118,20 @@ export async function handleListProviderCases(url: URL, ctx: AuthContext): Promi
   const rows = await listOpenProviderCases({ db: ctx.db, orgId: ctx.orgId }, providerId);
   if (!rows) return fail(404, "Provider not found");
   return ok(rows, { total: rows.length });
+}
+
+// GET /api/cases/:id/context — the Workbench pulls this after case selection so
+// the filler sees the case's reference number(s) + latest note/touch without
+// leaving the portal tab. The case must belong to the resolved org: a cross-org
+// or nonexistent id is a 404 (the service returns null), mirroring the other
+// case handlers. Read-only, PHI-minimal — no role gate, no audit.
+export async function handleCaseContext(caseId: string, ctx: AuthContext): Promise<Response> {
+  // A non-UUID path segment can't be a case — 404 here rather than a Postgres
+  // uuid-cast 500 (the profile/touches-route precedent).
+  if (!UUID_RE.test(caseId)) return fail(404, "Case not found");
+  const context = await getCaseContext({ db: ctx.db, orgId: ctx.orgId }, caseId);
+  if (!context) return fail(404, "Case not found");
+  return ok(context);
 }
 
 // POST /api/cases/:id/touches — the human pressed "Mark submitted" after

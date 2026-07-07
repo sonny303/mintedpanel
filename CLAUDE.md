@@ -19,10 +19,10 @@ and `src/start.ts` are a real server runtime.
 
 A slice of app server logic runs as `/api/*` routes in `src/server/` on the
 nitro server, behind a shared org/role guard using the service-role client:
-health + provider CRUD (Chunk 3 pilot, PR #19) and the six extension-facing
+health + provider CRUD (Chunk 3 pilot, PR #19) and the seven extension-facing
 endpoints (Chunk 4 — provider profile, portal field maps, fill events; R2
 Workbench — open cases, submission touches; 2026-07-06 — org discovery
-`/api/me/orgs`, plus facility awareness on the profile). The
+`/api/me/orgs`, plus facility awareness on the profile; P8 — case context). The
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
@@ -249,6 +249,20 @@ payerReferenceId, latestNote, lastSubmittedAt }`. Open = credentialing status
   from ctx. Replays short-circuit at the anchor and re-run no side effects. Never
   a status change. Portal label derived from `portal_key` (no server-side portal
   catalog — labels live in the extension). (`src/services/submissionTouches.ts`)
+- `GET /api/cases/:id/context` — the Workbench pulls this after case selection
+  so the filler sees the case's reference + latest note/touch without leaving
+  the portal tab (P8, Epic 3d). Returns `{ referenceNumbers, latestNote,
+latestTouch }` for the ONE org-owned case; a cross-org or nonexistent id → 404
+  (case ownership `maybeSingle` miss, mirrors the other case handlers).
+  `referenceNumbers` = `credential_cases.payer_reference_id` as a 0/1-element
+  array (latest-wins column, not touch history); `latestNote {content,
+createdAt, authorName}` = newest touchlog `entry_type='note'` (author-resolved
+  via `profiles`); `latestTouch {touchDate, touchType, outcome, note}` = newest
+  `entry_type='touchpoint'`. Note + touch come from ONE org-scoped touchlog read
+  — it reads the touchlog spine, NOT the dormant `notes` table (case notes moved
+  there in Story 1). PHI-minimal, read-only (billing may read), no audit. No
+  migration. Gate assertion 14/14b (Kansas reads own context; cross-org South
+  Park case context → 404) + a `casecontext` leak mode. (`src/services/caseContext.ts`)
 
 Layer mechanics:
 
@@ -327,9 +341,9 @@ x-org-id`.
    workflow UI are separate products. The current app UI keeps running on
    direct Supabase + RLS. Do not migrate current screens to the API.
 2. **Consumer-pulled API surface.** Routes get built only when a real consumer
-   pulls them. The extension pulls six (profile, field maps, fill events,
-   open cases, submission touches, org discovery). Other cases/tasks/payers
-   routes wait for their consumer.
+   pulls them. The extension pulls seven (profile, field maps, fill events,
+   open cases, submission touches, org discovery, case context). Other
+   cases/tasks/payers routes wait for their consumer.
 3. **R1 exit criteria revised.** "Zero direct Supabase calls in frontend" and
    RLS lockout deferred to the workflow-UI product. Dual data paths accepted
    deliberately: current UI guarded by RLS, API guarded by guard.ts + the gate.

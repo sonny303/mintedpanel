@@ -22,6 +22,7 @@
 //   cases       cross-org provider's case list served instead of 404 (8b)
 //   touches     cross-org submission touch accepted and stored       (9, 9b)
 //   tasks       cross-org task_id closed by a submission touch        (13)
+//   casecontext cross-org case context served instead of 404         (14b)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 import { createServer } from "node:http";
@@ -55,6 +56,7 @@ export const LEAK_MODES = [
   "cases",
   "touches",
   "tasks",
+  "casecontext",
   "meorgs",
   "facility",
 ];
@@ -470,6 +472,22 @@ export async function createMockApiServer(options = {}) {
       };
       touches.set(key, touch);
       return envelope(res, 201, touch);
+    }
+
+    // --- /api/cases/:id/context (Workbench post-selection read) ---
+    const contextMatch = url.pathname.match(/^\/api\/cases\/([^/]+)\/context\/?$/);
+    if (contextMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const c = CASES.find((row) => row.id === contextMatch[1]);
+      // Real contract: a case outside the caller's org is a 404, no data. Leak
+      // "casecontext": the org check is skipped and a cross-org case is served.
+      const visible = c && (c.orgId === orgId || leak === "casecontext");
+      if (!visible) return envelope(res, 404, null, "Case not found");
+      return envelope(res, 200, {
+        referenceNumbers: c.payerReferenceId ? [c.payerReferenceId] : [],
+        latestNote: c.latestNote ?? null,
+        latestTouch: c.latestTouch ?? null,
+      });
     }
 
     // --- /api/portal-field-maps ---

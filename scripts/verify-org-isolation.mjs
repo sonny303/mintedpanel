@@ -17,7 +17,8 @@
 //   SOUTHPARK_ORG, SOUTHPARK_PROVIDER_ID, KANSAS_PROVIDER_ID
 //   SOUTHPARK_FIELDMAP_ID  the one South Park-scoped portal_field_maps row
 //                          (seeded fixture; id lives in the workflow env block)
-//   SOUTHPARK_CASE_ID      a South Park credential_cases id (must-reject POST)
+//   SOUTHPARK_CASE_ID      a South Park credential_cases id (must-reject POST in
+//                          assertion 9; must-404 GET context in assertion 14b)
 //   SOUTHPARK_FACILITY_ID  a South Park facilities id (the must-404 profile
 //                          ?facilityId in assertion 11)
 // Optional:
@@ -508,6 +509,34 @@ function looksLikeVercelGate(r) {
   } else {
     console.log("SKIP  13. task-ownership isolation — KANSAS_CASE_ID / SOUTHPARK_TASK_ID not set");
   }
+
+  // 14. Case context endpoint (P8): the Workbench reads a case's reference
+  //     number(s) + latest note/touch after selection. Kansas reading its OWN
+  //     case context works (proves 14b isn't vacuous against a dead route —
+  //     conditional on KANSAS_CASE_ID, which the in-sandbox mock run always
+  //     sets)...
+  if (env.KANSAS_CASE_ID) {
+    const ownCtx = await apiGet(`/api/cases/${env.KANSAS_CASE_ID}/context`, { token: kansasTok });
+    check(
+      "14. Kansas reads its own case context",
+      ownCtx.status === 200 &&
+        ownCtx.body?.data != null &&
+        Array.isArray(ownCtx.body.data.referenceNumbers),
+      `status=${ownCtx.status}` +
+        (ownCtx.status !== 200 ? ` body=${(ownCtx.raw || "").slice(0, 100)}` : ""),
+    );
+  } else {
+    console.log("SKIP  14. own case context — KANSAS_CASE_ID not set");
+  }
+  //     ...and reading a South Park case's context must 404 with no data.
+  const xCtx = await apiGet(`/api/cases/${env.SOUTHPARK_CASE_ID}/context`, { token: kansasTok });
+  const ctxLeaked = xCtx.status < 400 || xCtx.body?.data != null;
+  check(
+    "14b. Kansas GET context of a South Park case -> 404, no data",
+    xCtx.status === 404 && !ctxLeaked,
+    `status=${xCtx.status} (expect 404) dataPresent=${xCtx.body?.data != null}`,
+    { leak: true },
+  );
 
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));

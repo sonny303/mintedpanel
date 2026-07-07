@@ -74,6 +74,7 @@ const EXPECTED_FAILS = {
   cases: ["8b"],
   touches: ["9", "9b"],
   tasks: ["13"],
+  casecontext: ["14b"],
   // The leaked extra membership row breaks both the exact-count shape check
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],

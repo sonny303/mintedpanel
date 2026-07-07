@@ -17,6 +17,7 @@ vi.mock("./extensionRoutes", () => ({
   handleListPortalFieldMaps: vi.fn(),
   handleCreateFillEvent: vi.fn(),
   handleListProviderCases: vi.fn(),
+  handleCaseContext: vi.fn(),
   handleCreateCaseTouch: vi.fn(),
   handleListMyOrgs: vi.fn(),
 }));
@@ -28,6 +29,7 @@ import {
   handleListPortalFieldMaps,
   handleCreateFillEvent,
   handleListProviderCases,
+  handleCaseContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
 } from "./extensionRoutes";
@@ -42,6 +44,7 @@ const profileMock = vi.mocked(handleProviderProfile);
 const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
+const caseContextMock = vi.mocked(handleCaseContext);
 const caseTouchMock = vi.mocked(handleCreateCaseTouch);
 
 async function body(res: Response): Promise<ApiEnvelope<unknown>> {
@@ -271,6 +274,27 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(res.status).toBe(200);
     expect(authenticateMock).toHaveBeenCalledTimes(1);
     expect(casesMock).toHaveBeenCalledWith(expect.any(URL), expect.anything());
+  });
+
+  it("GET /api/cases/:id/context dispatches the case id with auth, not the touches handler", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    caseContextMock.mockResolvedValue(
+      new Response('{"data":{},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/cases/case-1/context"));
+    expect(res.status).toBe(200);
+    expect(caseContextMock).toHaveBeenCalledWith("case-1", expect.anything());
+    expect(caseTouchMock).not.toHaveBeenCalled();
+    expect(casesMock).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/cases/:id/context is 405", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/cases/case-1/context", { method: "POST" }),
+    );
+    expect(res.status).toBe(405);
+    expect(caseContextMock).not.toHaveBeenCalled();
   });
 
   it("POST /api/cases/:id/touches dispatches the case id and parsed body with auth", async () => {
