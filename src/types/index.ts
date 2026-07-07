@@ -195,6 +195,18 @@ export interface Payer {
   createdAt: string;
 }
 
+// Global catalog (P2): payers/sop_templates with orgId NULL are platform-managed
+// global rows; an org sees a global payer only via a row in this join table.
+// `starter` flags the org's starter-pack payers (Epic 1c / P4). RLS: member
+// SELECT own-org, admin write own-org.
+export interface OrgPayerAssignment {
+  id: string;
+  orgId: string;
+  payerId: string;
+  starter: boolean;
+  createdAt: string;
+}
+
 export interface Mso {
   id: string;
   orgId: string;
@@ -295,11 +307,22 @@ export interface SOPStepDataField {
   value: string;
 }
 
+/** How a step is carried out. Absent = "online_form" (backward compat). */
+export type SOPStepType = "draft_email" | "online_form" | "pdf";
+
+/** A draft-email step body; carries {{token}} placeholders from the closed catalog. */
+export interface SOPEmailTemplate {
+  subject: string;
+  body: string;
+}
+
 export interface SOPStep {
   id: string;
   order: number;
   label: string;
   detail?: string;
+  stepType?: SOPStepType;
+  emailTemplate?: SOPEmailTemplate;
   isCompleted: boolean;
   completedAt?: string | null;
   completedBy?: string | null;
@@ -373,6 +396,8 @@ export interface SOPTaskDefinition {
   steps: {
     label: string;
     detail?: string;
+    stepType?: SOPStepType;
+    emailTemplate?: SOPEmailTemplate;
     dataFields?: { label: string; token: string }[];
   }[];
 }

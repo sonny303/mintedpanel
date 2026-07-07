@@ -351,6 +351,39 @@ seeded from `sop_templates` via `src/lib/sopResolver.ts` — closed token list) 
 `status_configs` (tracks below) · append-only: `touches`, `status_history`,
 `audit_log`.
 
+### Global payer/SOP catalog (P2, 2026-07-07 — reverses locked decision #1 for payers/SOPs)
+
+`payers` and `sop_templates` are now dual: **`org_id` is nullable**, and a
+NULL row is a **global-catalog** definition (platform-managed via the
+service-role client, never by org users). An org sees a global payer only via a
+row in **`org_payer_assignments`** (`org_id, payer_id, starter`, unique
+`(org_id, payer_id)`); a global SOP is visible when the org is assigned the
+SOP's `payer_id`. SELECT policy = `(org_id IN user_org_ids()) OR (org_id IS NULL
+AND assigned)`; the own-org disjunct is unchanged and writes stay own-org-only,
+so this was **additive and inert for existing data** (zero global rows at apply
+time). `listPayers`/`listTemplates` read `.or(org_id.eq.<org>,org_id.is.null)`
+(the `portal_field_maps` shared-catalog pattern). Migration
+`20260707060000_global_catalog_org_assignment.sql` (repo + hosted). **Catalog
+isolation is a BROWSER-RLS concern — the /api org-isolation gate does not cover
+it** (payers/SOPs aren't an /api resource); it is verified directly by
+`scripts/verify-catalog-rls.sql` (rolled-back simulation: global visible only to
+the assigned org, no cross-org leak, org users can't forge a global row —
+confirmed on prod 2026-07-07). Converting existing org payers to global rows is
+a separate, human-supervised step. Assignment reads + the starter flag ship in
+**P4**: `src/services/orgPayerAssignments.ts` (`listAssignments`/`setStarter`,
+admin-only UPDATE, audited) + `src/hooks/useOrgPayerAssignments.ts`; Admin >
+Payers renders a "Starter" toggle only for assigned global payers. On provider
+create, `src/routes/providers.new.tsx` auto-attaches cases for the org's
+assigned+starter payers via the pure `src/lib/starterCases.ts` derivation →
+`createCase`/`create_case_with_tasks` (opens at the provider's `home_state`,
+skips payers with no home-state license, skips existing combos; `facility: null`
+so `{{facility.*}}` resolve empty — the launch `CreateCasesDialog` stays the
+facility-linked path). **Inert until a global payer is assigned+flagged starter**
+(zero assignments today). The formerly-duplicated `pickTemplate` is now centralized
+in `src/lib/pickTemplate.ts` (both `NewCaseModal` and `CreateCasesDialog` import
+it; a null-group template counts as an "exact" match, so array order decides among
+exact candidates).
+
 ### Statuses pattern
 
 `status_configs` rows per org with `track ∈ {credentialing, contracting,
@@ -619,12 +652,13 @@ null}` with `<Dialog open onOpenChange={(o) => !o && onClose()}>`), nullable
 - MSO routing matching is exact and case-sensitive (`'All'` is the only
   wildcard). Demo data was aligned Jul 2026: rules and providers both say
   `Physical Therapy` (rules previously said `PT` and never matched).
-- `supabase/seed.sql` stores `sop_templates.task_definitions` in a legacy
-  shape (`{title, dayOffset, sopStepTemplates:[{step, dataFieldTokens}]}`)
-  that `sopResolver.resolveTemplate` cannot read (it expects
-  `{dueOffsetDays, steps:[{label, dataFields}]}`, which is what ALL hosted
-  templates use). A local rebuild seeded from that file breaks task seeding
-  until the definitions are normalized.
+- `supabase/seed.sql` — the `sop_templates.task_definitions` were normalized
+  to the canonical `{dueOffsetDays, steps:[{label, stepType, dataFields}]}`
+  shape (P3, 2026-07-07) with `stepType: "online_form"` on each step plus one
+  `draft_email` example, so a local rebuild now seeds tasks correctly. Still
+  legacy: the pre-resolved `tasks` seed rows carry `sop_content` in the old
+  `{steps:[{step, dataFieldTokens}]}` shape (not what `SOPStep` expects) — a
+  separate, cosmetic-on-local-rebuild issue, out of P3 scope.
 - NewCaseModal still passes `facility: null` into `resolveTemplate`, so
   `{{facility.*}}` tokens resolve empty there; the launch kickoff passes the
   location.

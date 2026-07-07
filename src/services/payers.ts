@@ -21,10 +21,14 @@ export interface PayerInput {
 
 export async function listPayers(): Promise<Payer[]> {
   const orgId = requireActiveOrg();
+  // Own-org rows plus global-catalog rows (org_id NULL). RLS gates which global
+  // rows are returned to the org_payer_assignments-subscribed ones, so this
+  // mirrors the portal_field_maps shared-catalog read. No global payers exist
+  // yet, so this is behaviour-identical to the prior own-org-only query today.
   const { data, error } = await supabase
     .from("payers")
     .select("*")
-    .eq("org_id", orgId)
+    .or(`org_id.eq.${orgId},org_id.is.null`)
     .order("name");
   if (error) throw error;
   return camelizeRow<Payer[]>(data ?? []);

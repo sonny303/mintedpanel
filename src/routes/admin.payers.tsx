@@ -1,7 +1,7 @@
 // Admin → Payers list and edit. Every payer field exposed in modal because
 // these values drive submission guidance and billing rules for coordinators.
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
@@ -29,8 +29,10 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePayers, useCreatePayer, useUpdatePayer } from "@/hooks/useAdmin";
+import { useOrgPayerAssignments, useSetStarter } from "@/hooks/useOrgPayerAssignments";
 import { useIsAdmin } from "@/lib/permissions";
-import type { Payer } from "@/types";
+import { useRole } from "@/lib/auth-store";
+import type { OrgPayerAssignment, Payer } from "@/types";
 import type { PayerInput } from "@/services/payers";
 
 export const Route = createFileRoute("/admin/payers")({
@@ -62,8 +64,20 @@ function YesNoPill({ value }: { value: boolean }) {
 
 function AdminPayersPage() {
   const canEdit = useIsAdmin();
+  const role = useRole();
+  const canViewScorecard = role === "admin" || role === "billing";
   const payersQ = usePayers();
+  const assignmentsQ = useOrgPayerAssignments();
   const [editing, setEditing] = useState<{ payer: Payer | null } | null>(null);
+
+  // Only assigned global-catalog payers carry a starter toggle; org-scoped
+  // payers have no assignment row. Zero assignments exist today, so no toggle
+  // renders until a global payer is assigned to this org.
+  const assignmentByPayer = useMemo(() => {
+    const m = new Map<string, OrgPayerAssignment>();
+    for (const a of assignmentsQ.data ?? []) m.set(a.payerId, a);
+    return m;
+  }, [assignmentsQ.data]);
 
   return (
     <div className="space-y-6">
@@ -102,6 +116,7 @@ function AdminPayersPage() {
                   "Prior auth",
                   "Billing ID",
                   "Portal",
+                  "Starter",
                   "",
                 ].map((h, i) => (
                   <th
@@ -115,10 +130,10 @@ function AdminPayersPage() {
             </thead>
             <tbody>
               {payersQ.isLoading ? (
-                <TableSkeletonRows rows={8} cols={11} />
+                <TableSkeletonRows rows={8} cols={12} />
               ) : payersQ.isError ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-12 text-center">
+                  <td colSpan={12} className="px-3 py-12 text-center">
                     <EmptyState
                       message="Failed to load payers"
                       action={
@@ -131,7 +146,7 @@ function AdminPayersPage() {
                 </tr>
               ) : (payersQ.data ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-12">
+                  <td colSpan={12} className="px-3 py-12">
                     <EmptyState message="No payers yet" />
                   </td>
                 </tr>
@@ -202,20 +217,41 @@ function AdminPayersPage() {
                         "—"
                       )}
                     </td>
+                    <td className="px-3 h-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                      <StarterToggle
+                        assignment={assignmentByPayer.get(p.id) ?? null}
+                        payerName={p.name}
+                        canEdit={canEdit}
+                      />
+                    </td>
                     <td
                       className="px-3 h-10 align-middle text-right"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px] px-2"
-                          onClick={() => setEditing({ payer: p })}
-                        >
-                          Edit
-                        </Button>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {canViewScorecard && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            asChild
+                          >
+                            <Link to="/admin/payers/$id/scorecard" params={{ id: p.id }}>
+                              Scorecard
+                            </Link>
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            onClick={() => setEditing({ payer: p })}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -227,6 +263,40 @@ function AdminPayersPage() {
 
       {editing ? <PayerEditModal payer={editing.payer} onClose={() => setEditing(null)} /> : null}
     </div>
+  );
+}
+
+function StarterToggle({
+  assignment,
+  payerName,
+  canEdit,
+}: {
+  assignment: OrgPayerAssignment | null;
+  payerName: string;
+  canEdit: boolean;
+}) {
+  const setStarter = useSetStarter();
+  // Org-scoped payers (no assignment row) are not part of the global starter
+  // pack, so no toggle is shown.
+  if (!assignment) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <Switch
+      checked={assignment.starter}
+      disabled={!canEdit || setStarter.isPending}
+      aria-label={`Toggle starter pack for ${payerName}`}
+      onCheckedChange={(v) =>
+        setStarter.mutate(
+          { payerId: assignment.payerId, starter: v },
+          {
+            onSuccess: () =>
+              toast.success(v ? "Added to starter pack" : "Removed from starter pack"),
+            onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
+          },
+        )
+      }
+    />
   );
 }
 

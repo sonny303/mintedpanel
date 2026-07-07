@@ -27,6 +27,7 @@ import { StatusPill } from "@/components/StatusPill";
 import { getMsoRoutingRule } from "@/services/lookups";
 
 import { resolveTemplate } from "@/lib/sopResolver";
+import { pickTemplate } from "@/lib/pickTemplate";
 import { queryKeys } from "@/hooks/queryKeys";
 import { useCases, useContractFor, useCreateCase } from "@/hooks/useCases";
 import { useFacilityAssignments } from "@/hooks/useLaunches";
@@ -36,9 +37,9 @@ import {
   useMsoRoutingRule,
   useStateLicensesByProvider,
 } from "@/hooks/useLookups";
-import { useMsos, usePayers, useTemplates } from "@/hooks/useAdmin";
+import { useMsos, usePayers, useSops } from "@/hooks/useAdmin";
 import { useActiveOrgId } from "@/lib/auth-store";
-import type { Payer, Provider, ProviderGroup, SOPTemplate } from "@/types";
+import type { Payer, Provider, ProviderGroup } from "@/types";
 
 interface NewCaseModalProps {
   open: boolean;
@@ -49,24 +50,6 @@ interface NewCaseModalProps {
 
 const NONE = "__none__";
 
-function pickTemplate(
-  templates: SOPTemplate[],
-  payerId: string,
-  state: string,
-  groupId: string | null,
-): SOPTemplate | null {
-  const active = templates.filter((t) => {
-    const row = t as SOPTemplate & { archived?: boolean; isArchived?: boolean };
-    return !(row.archived ?? row.isArchived ?? false);
-  });
-  const exact = active.find(
-    (t) =>
-      t.payerId === payerId && t.state === state && (t.groupId === groupId || t.groupId === null),
-  );
-  if (exact) return exact;
-  return active.find((t) => t.payerId === payerId && t.state === state) ?? null;
-}
-
 export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseModalProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -74,7 +57,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
 
   const payersQ = usePayers();
   const msosQ = useMsos();
-  const templatesQ = useTemplates();
+  const templatesQ = useSops();
   const licensesQ = useStateLicensesByProvider(provider.id);
   const facilitiesQ = useFacilities(provider.groupId ?? null);
   const coordinatorsQ = useCoordinators();

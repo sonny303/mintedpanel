@@ -145,7 +145,7 @@ export function useUpdateRoutingRule(id: string) {
   });
 }
 
-export function useTemplates() {
+export function useSops() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.templates(orgId),
@@ -155,7 +155,7 @@ export function useTemplates() {
   });
 }
 
-export function useTemplate(id: string | undefined) {
+export function useSop(id: string | undefined) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.template(orgId, id ?? ""),
@@ -164,7 +164,7 @@ export function useTemplate(id: string | undefined) {
   });
 }
 
-export function useCreateTemplate() {
+export function useCreateSop() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
@@ -173,7 +173,7 @@ export function useCreateTemplate() {
   });
 }
 
-export function useUpdateTemplate(id: string) {
+export function useUpdateSop(id: string) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
