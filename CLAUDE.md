@@ -400,6 +400,27 @@ in `src/lib/pickTemplate.ts` (both `NewCaseModal` and `CreateCasesDialog` import
 it; a null-group template counts as an "exact" match, so array order decides among
 exact candidates).
 
+### Reference-only data (Epic 2e, P6 PR2, 2026-07-07)
+
+`providers` and `facilities` carry `reference_only boolean NOT NULL DEFAULT
+false` (migration `20260707150000_reference_only_flag.sql`, repo + hosted;
+additive, all existing rows `false`). A reference-only row is migrated/onboard-
+existing data that exists to be **referenced, not worked**, so it is SKIPPED by
+the work surfaces: the action engine / Home queues (`src/routes/home.tsx` drops
+reference providers' cases from the action queue and reference locations from
+"Launches at risk") and the Fix-it queue (`buildFixitQueue` in
+`src/lib/fixitQueue.ts` filters reference providers before the gap pass — so no
+`provider_gap` card). It stays VISIBLE in the work views with a neutral
+"Reference" chip (`StatusPill status="neutral"` from the legacy
+`src/components/StatusPill.tsx`): the providers work view
+(`providers.index.tsx`) lists reference providers in a separate "Reference"
+section, out of the chip counts/filters/badges; the launches list + detail
+render the chip and suppress the go-live nudge. `reference_only` rides in
+`PROVIDER_LIST_COLUMNS`; facilities load it via `select("*")`. Domain types:
+`Provider.referenceOnly` / `Facility.referenceOnly`. **Nothing sets the flag
+true yet** — the migration/onboarding writer that marks rows reference-only is a
+later PR, so the flag is inert until then.
+
 ### Statuses pattern
 
 `status_configs` rows per org with `track ∈ {credentialing, contracting,

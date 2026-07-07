@@ -86,37 +86,41 @@ function HomePage() {
       list.push({ title: t.title, dueDate: t.dueDate });
       openTasksByCase.set(t.caseId, list);
     }
-    return (casesQ.data ?? []).map((c) => {
-      const status = c.credentialingStatusId
-        ? (statusById.get(c.credentialingStatusId) ?? null)
-        : null;
-      const openTasks = openTasksByCase.get(c.id) ?? [];
-      const provider = providerById.get(c.providerId);
-      const state = getActionState({
-        statusLabel: status?.label ?? null,
-        actionBucket: status?.actionBucket ?? null,
-        openTaskDueDates: openTasks.map((t) => t.dueDate),
-        lastTouchDate: lastTouchQ.data?.get(c.id) ?? null,
-        createdAt: c.createdAt,
-        confirmedEffectiveDate: c.confirmedEffectiveDate,
-        expectedEffectiveDate: c.expectedEffectiveDate,
-        now,
+    // Reference-only providers (migrated/onboard-existing) are never worked, so
+    // their cases never enter the action queue (Epic 2e).
+    return (casesQ.data ?? [])
+      .filter((c) => !providerById.get(c.providerId)?.referenceOnly)
+      .map((c) => {
+        const status = c.credentialingStatusId
+          ? (statusById.get(c.credentialingStatusId) ?? null)
+          : null;
+        const openTasks = openTasksByCase.get(c.id) ?? [];
+        const provider = providerById.get(c.providerId);
+        const state = getActionState({
+          statusLabel: status?.label ?? null,
+          actionBucket: status?.actionBucket ?? null,
+          openTaskDueDates: openTasks.map((t) => t.dueDate),
+          lastTouchDate: lastTouchQ.data?.get(c.id) ?? null,
+          createdAt: c.createdAt,
+          confirmedEffectiveDate: c.confirmedEffectiveDate,
+          expectedEffectiveDate: c.expectedEffectiveDate,
+          now,
+        });
+        return {
+          case: c,
+          state,
+          providerName: provider ? `${provider.firstName} ${provider.lastName}` : "Unknown",
+          payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
+          statusLabel: status?.label ?? "No status",
+          statusColor: status?.color ?? "var(--mp-neutral)",
+          nextTaskTitle: openTasks[0]?.title ?? null,
+          followUpDate: followUpsQ.data?.get(c.id)?.nextFollowUpDate ?? null,
+          days:
+            state === "complete"
+              ? null
+              : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt)),
+        };
       });
-      return {
-        case: c,
-        state,
-        providerName: provider ? `${provider.firstName} ${provider.lastName}` : "Unknown",
-        payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
-        statusLabel: status?.label ?? "No status",
-        statusColor: status?.color ?? "var(--mp-neutral)",
-        nextTaskTitle: openTasks[0]?.title ?? null,
-        followUpDate: followUpsQ.data?.get(c.id)?.nextFollowUpDate ?? null,
-        days:
-          state === "complete"
-            ? null
-            : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt)),
-      };
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is derived each render by design
   }, [
     casesQ.data,
@@ -152,6 +156,8 @@ function HomePage() {
       .map((p) => p.id);
     return (locationsQ.data ?? [])
       .filter((l) => {
+        // Reference-only locations are never worked, so never "at risk" (Epic 2e).
+        if (l.referenceOnly) return false;
         const label = l.statusId ? statusById.get(l.statusId)?.label : null;
         if (!label || !AT_RISK_STATUSES.has(label) || !l.effectiveDate) return false;
         const daysOut = differenceInCalendarDays(parseISO(l.effectiveDate), now);

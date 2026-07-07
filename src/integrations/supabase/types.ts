@@ -331,6 +331,7 @@ export type Database = {
           name: string;
           org_id: string;
           phone: string | null;
+          reference_only: boolean;
           service_types: Json | null;
           state: string | null;
           status_id: string | null;
@@ -360,6 +361,7 @@ export type Database = {
           name: string;
           org_id: string;
           phone?: string | null;
+          reference_only?: boolean;
           service_types?: Json | null;
           state?: string | null;
           status_id?: string | null;
@@ -389,6 +391,7 @@ export type Database = {
           name?: string;
           org_id?: string;
           phone?: string | null;
+          reference_only?: boolean;
           service_types?: Json | null;
           state?: string | null;
           status_id?: string | null;
@@ -1508,6 +1511,7 @@ export type Database = {
           npi: string | null;
           org_id: string;
           phone: string | null;
+          reference_only: boolean;
           school_name: string | null;
           specialty: string | null;
           ssn_last4: string | null;
@@ -1560,6 +1564,7 @@ export type Database = {
           npi?: string | null;
           org_id: string;
           phone?: string | null;
+          reference_only?: boolean;
           school_name?: string | null;
           specialty?: string | null;
           ssn_last4?: string | null;
@@ -1612,6 +1617,7 @@ export type Database = {
           npi?: string | null;
           org_id?: string;
           phone?: string | null;
+          reference_only?: boolean;
           school_name?: string | null;
           specialty?: string | null;
           ssn_last4?: string | null;

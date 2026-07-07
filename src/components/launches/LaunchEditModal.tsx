@@ -125,6 +125,7 @@ export function LaunchEditModal({
         isActive: true,
         statusId: null,
         effectiveDate: null,
+        referenceOnly: false,
         createdAt: "",
       }),
       groupId,
