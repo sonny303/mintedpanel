@@ -355,8 +355,20 @@ it** (payers/SOPs aren't an /api resource); it is verified directly by
 `scripts/verify-catalog-rls.sql` (rolled-back simulation: global visible only to
 the assigned org, no cross-org leak, org users can't forge a global row —
 confirmed on prod 2026-07-07). Converting existing org payers to global rows is
-a separate, human-supervised step. The assignment CRUD service/UI + starter-pack
-consumer land in P4.
+a separate, human-supervised step. Assignment reads + the starter flag ship in
+**P4**: `src/services/orgPayerAssignments.ts` (`listAssignments`/`setStarter`,
+admin-only UPDATE, audited) + `src/hooks/useOrgPayerAssignments.ts`; Admin >
+Payers renders a "Starter" toggle only for assigned global payers. On provider
+create, `src/routes/providers.new.tsx` auto-attaches cases for the org's
+assigned+starter payers via the pure `src/lib/starterCases.ts` derivation →
+`createCase`/`create_case_with_tasks` (opens at the provider's `home_state`,
+skips payers with no home-state license, skips existing combos; `facility: null`
+so `{{facility.*}}` resolve empty — the launch `CreateCasesDialog` stays the
+facility-linked path). **Inert until a global payer is assigned+flagged starter**
+(zero assignments today). The formerly-duplicated `pickTemplate` is now centralized
+in `src/lib/pickTemplate.ts` (both `NewCaseModal` and `CreateCasesDialog` import
+it; a null-group template counts as an "exact" match, so array order decides among
+exact candidates).
 
 ### Statuses pattern
 
