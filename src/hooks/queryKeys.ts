@@ -9,6 +9,7 @@ export const queryKeys = {
   contract: (orgId: string, key: unknown) => ["contract", orgId, key] as const,
   contracts: (orgId: string, filters?: unknown) => ["contracts", orgId, filters ?? {}] as const,
   touches: (orgId: string, caseId: string) => ["touches", orgId, caseId] as const,
+  taskTouchlog: (orgId: string, taskId: string) => ["task-touchlog", orgId, taskId] as const,
   tasks: (orgId: string, filters?: unknown) => ["tasks", orgId, filters ?? {}] as const,
   task: (orgId: string, id: string) => ["task", orgId, id] as const,
   payers: (orgId: string) => ["payers", orgId] as const,

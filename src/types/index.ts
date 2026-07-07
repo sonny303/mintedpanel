@@ -3,9 +3,43 @@
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
-export type TouchType = "call" | "email" | "portal" | "fax";
+export type TouchType = "call" | "email" | "portal" | "fax" | "mail";
+// Channel-aware outcome codes (Story 3). Labels + per-channel grouping live in
+// src/lib/touchOutcomes.ts; this union is the closed set the DB check allows.
 export type TouchOutcome =
-  "reached" | "left_voicemail" | "no_answer" | "response_received" | "submitted" | "no_response";
+  // legacy (kept so pre-taxonomy rows stay valid)
+  | "reached"
+  | "left_voicemail"
+  | "no_answer"
+  | "response_received"
+  | "submitted"
+  | "no_response"
+  | "form_filled"
+  // email
+  | "sent"
+  | "reply_received"
+  | "info_requested"
+  | "approved"
+  | "denied"
+  | "no_response_yet"
+  // portal
+  | "draft_saved"
+  | "under_review"
+  | "submission_error"
+  // phone
+  | "spoke_with_rep"
+  | "callback_scheduled"
+  | "got_reference_number"
+  | "directed_to_portal_or_email"
+  // fax
+  | "confirmed_received"
+  | "failed"
+  | "no_confirmation"
+  // mail
+  | "delivered"
+  | "returned";
+// Touchlog discriminator (Story 1): one append-only table, four entry kinds.
+export type TouchEntryType = "touchpoint" | "note" | "system_event" | "task_update";
 export type ProviderStatus = "onboarding" | "active" | "terminated";
 export type TaskStatus = "not_started" | "in_progress" | "completed" | "blocked";
 export type NoteEntityType = "case" | "task" | "provider";
@@ -215,6 +249,9 @@ export interface CredentialCase {
   createdAt: string;
   updatedAt: string;
   caseEmailToken: string;
+  // Story 2: latest payer reference / submission ID, latest-wins. History lives
+  // in the touchlog as system_event entries, not here.
+  payerReferenceId: string | null;
 }
 
 export interface Contract {
@@ -236,11 +273,16 @@ export interface Touch {
   orgId: string;
   caseId: string;
   touchDate: string;
-  touchType: TouchType;
-  outcome: TouchOutcome;
+  entryType: TouchEntryType;
+  // Null for note / system_event / task_update entries — they carry their text
+  // in `notes` and have no channel or outcome.
+  touchType: TouchType | null;
+  outcome: TouchOutcome | null;
   nextFollowUpDate: string | null;
   notes: string | null;
   coordinatorId: string | null;
+  taskId: string | null;
+  communicationEventId: string | null;
   source: "manual" | "email" | "extension";
   createdAt: string;
 }

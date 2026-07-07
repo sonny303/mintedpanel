@@ -151,6 +151,7 @@ export type Database = {
           mso_id: string | null;
           org_id: string;
           payer_id: string;
+          payer_reference_id: string | null;
           provider_id: string;
           specialty: string | null;
           state: string;
@@ -173,6 +174,7 @@ export type Database = {
           mso_id?: string | null;
           org_id: string;
           payer_id: string;
+          payer_reference_id?: string | null;
           provider_id: string;
           specialty?: string | null;
           state: string;
@@ -195,6 +197,7 @@ export type Database = {
           mso_id?: string | null;
           org_id?: string;
           payer_id?: string;
+          payer_reference_id?: string | null;
           provider_id?: string;
           specialty?: string | null;
           state?: string;
@@ -807,6 +810,36 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      notes_pre_touchlog_backup: {
+        Row: {
+          author_id: string | null;
+          content: string | null;
+          created_at: string | null;
+          entity_id: string | null;
+          entity_type: string | null;
+          id: string | null;
+          org_id: string | null;
+        };
+        Insert: {
+          author_id?: string | null;
+          content?: string | null;
+          created_at?: string | null;
+          entity_id?: string | null;
+          entity_type?: string | null;
+          id?: string | null;
+          org_id?: string | null;
+        };
+        Update: {
+          author_id?: string | null;
+          content?: string | null;
+          created_at?: string | null;
+          entity_id?: string | null;
+          entity_type?: string | null;
+          id?: string | null;
+          org_id?: string | null;
+        };
+        Relationships: [];
       };
       organizations: {
         Row: {
@@ -1846,42 +1879,51 @@ export type Database = {
       touches: {
         Row: {
           case_id: string;
+          communication_event_id: string | null;
           coordinator_id: string | null;
           created_at: string | null;
+          entry_type: string;
           id: string;
           next_follow_up_date: string | null;
           notes: string | null;
           org_id: string;
-          outcome: string;
+          outcome: string | null;
           source: string | null;
+          task_id: string | null;
           touch_date: string;
-          touch_type: string;
+          touch_type: string | null;
         };
         Insert: {
           case_id: string;
+          communication_event_id?: string | null;
           coordinator_id?: string | null;
           created_at?: string | null;
+          entry_type?: string;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
           org_id: string;
-          outcome: string;
+          outcome?: string | null;
           source?: string | null;
+          task_id?: string | null;
           touch_date: string;
-          touch_type: string;
+          touch_type?: string | null;
         };
         Update: {
           case_id?: string;
+          communication_event_id?: string | null;
           coordinator_id?: string | null;
           created_at?: string | null;
+          entry_type?: string;
           id?: string;
           next_follow_up_date?: string | null;
           notes?: string | null;
           org_id?: string;
-          outcome?: string;
+          outcome?: string | null;
           source?: string | null;
+          task_id?: string | null;
           touch_date?: string;
-          touch_type?: string;
+          touch_type?: string | null;
         };
         Relationships: [
           {
@@ -1903,6 +1945,13 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "tasks";
             referencedColumns: ["id"];
           },
         ];
@@ -1962,12 +2011,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -1987,12 +2036,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -2011,12 +2061,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -2035,12 +2086,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -2051,12 +2103,13 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

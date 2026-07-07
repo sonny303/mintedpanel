@@ -7,23 +7,24 @@ import { AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/CopyButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { fmtDate } from "@/lib/format";
-import { useCase, useContractFor, useUpdateCaseStatus } from "@/hooks/useCases";
+import { useCase, useContractFor, useSetPayerReference, useUpdateCaseStatus } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
-import { useCoordinators, useCreateNote, useMsoRoutingRule } from "@/hooks/useLookups";
-import { useLogTouch } from "@/hooks/useTouches";
+import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
+import { useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { useCanWrite } from "@/lib/permissions";
+import { Pencil } from "lucide-react";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
 import { CaseHistoryPanel } from "@/components/cases/CaseHistoryPanel";
-import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 import { ChangeStatusDialog } from "@/components/cases/ChangeStatusDialog";
 
 export const Route = createFileRoute("/cases/$id")({
@@ -48,7 +49,8 @@ function CaseDetailPage() {
 
   const updateStatusM = useUpdateCaseStatus();
   const logTouchM = useLogTouch();
-  const createNoteM = useCreateNote();
+  const logNoteM = useLogNote();
+  const setReferenceM = useSetPayerReference();
 
   const [statusModalOpen, setStatusModalOpen] = useState(false);
 
@@ -118,9 +120,6 @@ function CaseDetailPage() {
   const statusHistory = (c.statusHistory ?? [])
     .slice()
     .sort((a, b) => parseISO(b.changedAt).getTime() - parseISO(a.changedAt).getTime());
-  const notes = (c.notes ?? [])
-    .slice()
-    .sort((a, b) => parseISO(b.createdAt).getTime() - parseISO(a.createdAt).getTime());
 
   const daysOpen = c.submittedDate ? differenceInDays(new Date(), parseISO(c.submittedDate)) : null;
 
@@ -176,11 +175,28 @@ function CaseDetailPage() {
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}
               canEdit={canEdit}
-              saving={logTouchM.isPending}
+              savingTouch={logTouchM.isPending}
+              savingNote={logNoteM.isPending}
               onSaveTouch={async (input) => {
                 try {
                   await logTouchM.mutateAsync({ caseId: c.id, input });
                   toast.success("Touch logged");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+              onSaveNote={async (content) => {
+                try {
+                  await logNoteM.mutateAsync({ caseId: c.id, input: { content } });
+                  toast.success("Note added");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+              onSetReference={async (value) => {
+                try {
+                  await setReferenceM.mutateAsync({ caseId: c.id, value });
+                  toast.success("Payer reference saved");
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
@@ -242,29 +258,25 @@ function CaseDetailPage() {
                   <IdRow label="Taxonomy" value={c.provider?.taxonomyCode ?? null} />
                   <IdRow label="Group NPI" value={c.group?.npiType2 ?? null} />
                   <IdRow label="Group TIN" value={c.group?.tin ?? null} />
+                  <Separator className="my-2" />
+                  <PayerReferenceRow
+                    value={c.payerReferenceId}
+                    canEdit={canEdit}
+                    saving={setReferenceM.isPending}
+                    onSave={async (value) => {
+                      try {
+                        await setReferenceM.mutateAsync({ caseId: c.id, value });
+                        toast.success("Payer reference saved");
+                      } catch (e) {
+                        toast.error((e as Error).message);
+                      }
+                    }}
+                  />
                 </dl>
               </CardContent>
             </Card>
 
             <CaseHistoryPanel history={statusHistory} statusById={statusById} />
-
-            <CaseNotesPanel
-              notes={notes}
-              canEdit={canEdit}
-              saving={createNoteM.isPending}
-              onSaveNote={async (content) => {
-                try {
-                  await createNoteM.mutateAsync({
-                    entityType: "case",
-                    entityId: c.id,
-                    content,
-                  });
-                  toast.success("Note added");
-                } catch (e) {
-                  toast.error((e as Error).message);
-                }
-              }}
-            />
           </div>
         </div>
       </div>
@@ -316,6 +328,86 @@ function IdRow({ label, value }: { label: string; value: string | null }) {
       <dd className="flex items-center gap-2">
         <span className="font-medium tabular-nums">{value ?? "—"}</span>
         {value ? <CopyButton value={value} label={label} /> : null}
+      </dd>
+    </div>
+  );
+}
+
+// Story 2: latest payer reference / submission ID with inline edit (latest wins).
+function PayerReferenceRow({
+  value,
+  canEdit,
+  saving,
+  onSave,
+}: {
+  value: string | null;
+  canEdit: boolean;
+  saving: boolean;
+  onSave: (value: string | null) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  if (editing) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <dt className="text-muted-foreground shrink-0">Payer reference</dt>
+        <dd className="flex items-center gap-1.5">
+          <Input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Reference / submission ID"
+            className="h-7 w-40 text-[13px]"
+          />
+          <Button
+            size="sm"
+            className="h-7 px-2"
+            disabled={saving}
+            onClick={async () => {
+              await onSave(draft.trim() ? draft.trim() : null);
+              setEditing(false);
+            }}
+          >
+            Save
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2"
+            disabled={saving}
+            onClick={() => {
+              setDraft(value ?? "");
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </dd>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-muted-foreground">Payer reference</dt>
+      <dd className="flex items-center gap-2">
+        <span className="font-medium tabular-nums">{value ?? "—"}</span>
+        {value ? <CopyButton value={value} label="Payer reference" /> : null}
+        {canEdit ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground"
+            onClick={() => {
+              setDraft(value ?? "");
+              setEditing(true);
+            }}
+            aria-label="Edit payer reference"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        ) : null}
       </dd>
     </div>
   );
