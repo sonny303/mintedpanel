@@ -37,3 +37,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code agent worktree scratch (transient, never commit)
+.claude/worktrees/

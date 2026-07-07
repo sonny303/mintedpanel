@@ -32,10 +32,9 @@ import { useProviderGroups } from "@/hooks/useLookups";
 import { useGenerateLaunchCases } from "@/hooks/useLaunches";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { GenerationEntry } from "@/services/launches";
 import type { Facility, MsoRoutingRule, Provider, SOPTemplate } from "@/types";
-
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 // Same matcher as NewCaseModal.pickTemplate — duplicated because the modal
 // keeps it module-local and lib code must not import from components.

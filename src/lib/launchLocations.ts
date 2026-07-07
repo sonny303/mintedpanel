@@ -5,17 +5,22 @@
 // uses for "In-Network". Pure functions only; no I/O.
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { fmtDate } from "@/lib/format";
+import { LIVE_LABEL, PENDING_FULFILLMENT_LABEL, READY_FOR_LAUNCH_LABEL } from "./statusLabels";
 import type { Facility, StatusConfig } from "@/types";
 
 /** Live rows stay in Recently Launched for this many days, then drop off. */
 export const RECENTLY_LAUNCHED_DAYS = 30;
 
-export const LIVE_STATUS_LABEL = "Live";
+export const LIVE_STATUS_LABEL = LIVE_LABEL;
 export const INACTIVE_STATUS_LABEL = "Inactive";
 
 /** Early-pipeline statuses show the date as a target, later ones as a start. */
 const TARGET_LABELS = new Set(["Planned", "Interviewing"]);
-const STARTS_LABELS = new Set(["Pending Fulfillment", "Ready for Launch", LIVE_STATUS_LABEL]);
+const STARTS_LABELS = new Set([
+  PENDING_FULFILLMENT_LABEL,
+  READY_FOR_LAUNCH_LABEL,
+  LIVE_STATUS_LABEL,
+]);
 
 /** Form-field label for the effective date, switching with the status. */
 export function launchDateFieldLabel(statusLabel: string | null | undefined): string {
@@ -143,7 +148,7 @@ export interface TransitionCheckInput {
 /** Soft transition checks — warn, never block. */
 export function transitionWarnings(input: TransitionCheckInput): string[] {
   const warnings: string[] = [];
-  if (input.toStatusLabel === "Ready for Launch" && !input.hasProvider) {
+  if (input.toStatusLabel === READY_FOR_LAUNCH_LABEL && !input.hasProvider) {
     warnings.push("No provider is assigned to this location yet.");
   }
   if (isLiveLabel(input.toStatusLabel) && input.linkedCaseCount === 0) {

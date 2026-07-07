@@ -37,6 +37,7 @@ import {
   matchesChip,
   type ChipId,
 } from "@/lib/workView";
+import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 // The selected filter card lives in the URL (?chip=needs|inprog|awaiting; no
@@ -49,8 +50,6 @@ export const Route = createFileRoute("/providers/")({
   },
   component: ProvidersWorkView,
 });
-
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 interface WorkRow {
   case: CredentialCase;
@@ -215,7 +214,7 @@ function ProvidersWorkView() {
         openRows,
         worst,
         worstCount: openRows.filter((r) => r.state === worst).length,
-        inNetwork: nonPreCred.filter((r) => r.statusLabel === "In-Network").length,
+        inNetwork: nonPreCred.filter((r) => r.statusLabel === IN_NETWORK_LABEL).length,
         denominator: nonPreCred.length,
         oldestDays: openRows.reduce<number | null>(
           (max, r) => (r.days !== null && (max === null || r.days > max) ? r.days : max),

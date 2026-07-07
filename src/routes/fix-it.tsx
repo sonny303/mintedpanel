@@ -76,7 +76,11 @@ function reducer(state: Session | null, action: Action): Session | null {
         coverageWins: action.win ? [...state.coverageWins, action.win] : state.coverageWins,
       };
     case "SKIP_GAP":
-      return { ...advance, cleared: state.cleared + 1, followUps: [...state.followUps, action.followUp] };
+      return {
+        ...advance,
+        cleared: state.cleared + 1,
+        followUps: [...state.followUps, action.followUp],
+      };
     case "DICT_YES":
       return { ...advance, cleared: state.cleared + 1 };
     case "DICT_NO":
@@ -121,14 +125,18 @@ function FixItPage() {
 
   const catchChip = (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C8DBD4] bg-[color:var(--mp-primary-tint)] px-2.5 py-1 text-[12px] font-medium text-[color:var(--mp-primary)]">
-      <CheckCircle2 className="w-3.5 h-3.5" /> {weeklyCatches} good catch{weeklyCatches === 1 ? "" : "es"} this week
+      <CheckCircle2 className="w-3.5 h-3.5" /> {weeklyCatches} good catch
+      {weeklyCatches === 1 ? "" : "es"} this week
     </span>
   );
 
   if (isLoading || !seeded) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Fix-it queue" description="Each card is one decision. Clearing it improves tomorrow's fills." />
+        <PageHeader
+          title="Fix-it queue"
+          description="Each card is one decision. Clearing it improves tomorrow's fills."
+        />
         <div className="mx-auto max-w-[600px]">
           <Skeleton className="h-64 w-full rounded-[var(--mp-radius-lg)]" />
         </div>
@@ -193,7 +201,9 @@ function FixItPage() {
               onGoodCatch={() =>
                 setWeeklyCatches(bumpGoodCatches(orgId, currentUserId() ?? "anon", 1))
               }
-              onTrain={(portalKey) => navigate({ to: "/portals/$portalKey/train", params: { portalKey } })}
+              onTrain={(portalKey) =>
+                navigate({ to: "/portals/$portalKey/train", params: { portalKey } })
+              }
             />
             <div className="mt-2.5 mx-2.5 h-2.5 rounded-b-[var(--mp-radius-lg)] border border-t-0 border-mp-border bg-mp-card" />
             <div className="mt-1 mx-5 h-2.5 rounded-b-[var(--mp-radius-lg)] border border-t-0 border-mp-border bg-mp-card opacity-60" />
@@ -248,7 +258,9 @@ function CardShell({
   return (
     <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-5">
       <div className="flex items-center justify-between gap-3">
-        <span className={`text-[10.5px] font-semibold uppercase tracking-wider rounded-[4px] px-1.5 py-1 ${toneClass}`}>
+        <span
+          className={`text-[10.5px] font-semibold uppercase tracking-wider rounded-[4px] px-1.5 py-1 ${toneClass}`}
+        >
           {chip}
         </span>
         <span
@@ -297,11 +309,18 @@ function GapCard({ card, dispatch }: { card: FixitCard; dispatch: React.Dispatch
     try {
       const patch = { [def!.column]: trimmed } as Partial<ProviderInput>;
       await saveMut.mutateAsync({ providerId: gap.providerId, patch });
-      toast.success(`Saved — ${firstName} is now ${Math.min(cov.filled + cov.gain, cov.total)}/${cov.total} for ${gap.payerName}`);
+      toast.success(
+        `Saved — ${firstName} is now ${Math.min(cov.filled + cov.gain, cov.total)}/${cov.total} for ${gap.payerName}`,
+      );
       dispatch({
         type: "SAVE_GAP",
         win: reachesFull
-          ? { providerName: gap.providerName, payerName: gap.payerName, portalName: gap.portalName, total: cov.total }
+          ? {
+              providerName: gap.providerName,
+              payerName: gap.payerName,
+              portalName: gap.portalName,
+              total: cov.total,
+            }
           : undefined,
       });
     } catch (e) {
@@ -341,7 +360,9 @@ function GapCard({ card, dispatch }: { card: FixitCard; dispatch: React.Dispatch
       impactDated={Boolean(card.sortDate)}
       title={`${gap.providerName} is missing ${aOrAn(gap.fieldLabel)}.`}
       why={`The ${gap.portalName} fill for ${gap.payerName} stops short without it.${
-        gap.moreCount > 0 ? ` +${gap.moreCount} more fill${gap.moreCount === 1 ? "" : "s"} blocked.` : ""
+        gap.moreCount > 0
+          ? ` +${gap.moreCount} more fill${gap.moreCount === 1 ? "" : "s"} blocked.`
+          : ""
       }`}
       footer={
         <>
@@ -373,7 +394,10 @@ function GapCard({ card, dispatch }: { card: FixitCard; dispatch: React.Dispatch
             </b>
           </div>
           <div className="h-1.5 rounded-full bg-[color:var(--mp-muted)] overflow-hidden flex">
-            <div className="h-full bg-[color:var(--mp-primary)]" style={{ width: `${filledPct}%` }} />
+            <div
+              className="h-full bg-[color:var(--mp-primary)]"
+              style={{ width: `${filledPct}%` }}
+            />
             <div className="h-full bg-[#7fc79f]" style={{ width: `${gainPct}%` }} />
           </div>
           {cov.gain > 0 ? (
@@ -384,7 +408,10 @@ function GapCard({ card, dispatch }: { card: FixitCard; dispatch: React.Dispatch
           ) : null}
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="fixit-input" className="text-[12px] font-medium text-[color:var(--mp-ink)]">
+          <label
+            htmlFor="fixit-input"
+            className="text-[12px] font-medium text-[color:var(--mp-ink)]"
+          >
             {def?.label ?? gap.fieldLabel}
           </label>
           <Input
@@ -454,7 +481,12 @@ function DictionaryCard({
           >
             Yes, always
           </Button>
-          <Button variant="outline" className="h-9" onClick={() => decide("rejected")} disabled={busy}>
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={() => decide("rejected")}
+            disabled={busy}
+          >
             No, keep asking
           </Button>
           <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)] text-right max-w-[240px]">
@@ -506,7 +538,11 @@ function TrainCard({
           >
             Train this form
           </Button>
-          <Button variant="outline" className="h-9" onClick={() => dispatch({ type: "TRAIN_LATER" })}>
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={() => dispatch({ type: "TRAIN_LATER" })}
+          >
             Later
           </Button>
           <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)]">
@@ -523,7 +559,10 @@ function TrainCard({
           </b>
         </div>
         <div className="h-1.5 rounded-full bg-[color:var(--mp-muted)] overflow-hidden">
-          <div className="h-full bg-[color:var(--mp-primary)]" style={{ width: `${matchedPct}%` }} />
+          <div
+            className="h-full bg-[color:var(--mp-primary)]"
+            style={{ width: `${matchedPct}%` }}
+          />
         </div>
       </div>
     </CardShell>
@@ -555,7 +594,8 @@ function SessionSummary({
     lines.push(
       <>
         <b>
-          {session.followUps.length} follow-up task{session.followUps.length === 1 ? "" : "s"} created
+          {session.followUps.length} follow-up task{session.followUps.length === 1 ? "" : "s"}{" "}
+          created
         </b>{" "}
         — &ldquo;{f.title}&rdquo;{f.dueDate ? `, due ${fmtDate(f.dueDate)}` : ""}.
       </>,
@@ -583,7 +623,10 @@ function SessionSummary({
       {lines.length > 0 ? (
         <div className="mx-auto max-w-[430px] text-left flex flex-col gap-2.5 mt-5">
           {lines.map((line, i) => (
-            <div key={i} className="flex gap-2.5 text-[13px] text-[color:var(--mp-ink)] items-baseline">
+            <div
+              key={i}
+              className="flex gap-2.5 text-[13px] text-[color:var(--mp-ink)] items-baseline"
+            >
               <span className="flex-none w-1.5 h-1.5 rounded-full bg-[color:var(--mp-ok)] translate-y-[-2px]" />
               <div className="text-[color:var(--mp-ink-secondary)]">{line}</div>
             </div>

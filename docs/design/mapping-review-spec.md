@@ -17,19 +17,20 @@ suggested `token`, optional `confidence` (0–100).
 
 Decisions write immediately (resumable by construction):
 
-| Action | Row update | Extra |
-|--------|-----------|-------|
-| Approve (A) | `status='approved'`, `source='token'`, token = suggestion | dictionary upsert (below) |
-| Edit (E) → pick token | `status='approved'`, `source='token'`, token = picked | dictionary upsert; +1 good catch (overrode a suggestion) |
-| Manual (M) | `status='approved'`, `source='manual'`, `token=null` | counted out of auto-fill coverage |
-| Confirm all N | one `update … in (ids)` to approved | one audit row (`description: "Batch-approved N field maps (portal)"`) |
-| Undo (U) | previous row back to `status='proposed'` (restore prior token/source) | decrements session tallies; single-level undo is enough for v1 |
+| Action                | Row update                                                            | Extra                                                                 |
+| --------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Approve (A)           | `status='approved'`, `source='token'`, token = suggestion             | dictionary upsert (below)                                             |
+| Edit (E) → pick token | `status='approved'`, `source='token'`, token = picked                 | dictionary upsert; +1 good catch (overrode a suggestion)              |
+| Manual (M)            | `status='approved'`, `source='manual'`, `token=null`                  | counted out of auto-fill coverage                                     |
+| Confirm all N         | one `update … in (ids)` to approved                                   | one audit row (`description: "Batch-approved N field maps (portal)"`) |
+| Undo (U)              | previous row back to `status='proposed'` (restore prior token/source) | decrements session tallies; single-level undo is enough for v1        |
 
 Token normalization: always store the **bare catalog form** via
 `normalizeTokenKey` (`src/lib/tokenFormat.ts`) — same contract the server
 enforces at its read boundary.
 
 **Dictionary upsert** (on every token approval, `field_dictionary`):
+
 - No row for `(org, normalizeFieldLabel(label))` → insert `suggested`,
   `seen_count=1`, token = approved token.
 - Row exists, same token → `seen_count + 1`.
@@ -45,11 +46,11 @@ enforces at its read boundary.
 
 ```ts
 export type Confidence = "high" | "medium" | "low";
-export function resolveConfidence(row, dictionary): Confidence
+export function resolveConfidence(row, dictionary): Confidence;
 // confirmed dictionary rule matches normalizeFieldLabel(row.fieldLabel) → "high"
 // row.confidence >= 80 → "high";  >= 40 or any token suggestion → "medium"
 // else → "low"
-export function splitBatch(rows, dictionary): { batch: Row[]; cards: Row[] }
+export function splitBatch(rows, dictionary): { batch: Row[]; cards: Row[] };
 // batch = high-confidence rows WITH a token; everything else → cards,
 // ordered: form_section capture order, then medium before low.
 ```
@@ -100,7 +101,7 @@ One card per field:
 
 - Eyebrow: "Section {n} · {form_section}" — muted uppercase.
 - Field label **quoted**, 21px semibold: `"County of Primary Practice
-  Location"`. Under it muted: "`{field_type}` · required on the form" (when
+Location"`. Under it muted: "`{field_type}` · required on the form" (when
   captured as required).
 - Suggestion row (`bg-[#FAFAF9]` bordered): "SUGGESTED" cap label · token
   chip · confidence badge · right muted provenance ("dictionary rule" /
@@ -136,16 +137,16 @@ manual: {first three labels}." Buttons: outline "Back to Portals" · primary
 "Fix next card in queue" (→ `/fix-it`, only when the Fix-it PR is live;
 until then "Done" → `/admin/portals`).
 
-- *auto-fills* = approved rows with `source token|hardcoded` (denominator =
+- _auto-fills_ = approved rows with `source token|hardcoded` (denominator =
   all approved rows).
-- *your decisions* = per-card decisions this session (batch counts as one
+- _your decisions_ = per-card decisions this session (batch counts as one
   decision per… no: batch = N approved but "decisions" counts **card-flow
   decisions + 1 for the batch**? No — mockup says decisions: 10 with 34
   batched: it's the count of individual calls the human made = card decisions
-  + (batch confirmed ? 1 : 0) … Lock: **"Your decisions" = number of cards
-  decided one-at-a-time + 1 if the batch was confirmed as a whole.** The
-  point of the number is "the machine did the rest."
-- *labels learned* = dictionary upserts this session (created or bumped).
+  - (batch confirmed ? 1 : 0) … Lock: **"Your decisions" = number of cards
+    decided one-at-a-time + 1 if the batch was confirmed as a whole.** The
+    point of the number is "the machine did the rest."
+- _labels learned_ = dictionary upserts this session (created or bumped).
 
 ### Edge states
 

@@ -1,8 +1,8 @@
 // Admin → Audit log viewer. Strictly read-only; the audit_log table is
 // append-only at the database level. Filters, paginated table, and a
 // before/after diff for each entry.
-import { useMemo, useState, Fragment } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState, Fragment } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { fmtDateTime } from "@/lib/format";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuditLog } from "@/hooks/useAdmin";
+import { useIsAdmin } from "@/lib/permissions";
 import type { AuditActionType, AuditLogEntry } from "@/types";
 
 export const Route = createFileRoute("/admin/audit")({
@@ -166,6 +167,15 @@ function DiffView({ before, after }: { before: unknown; after: unknown }) {
 }
 
 function AdminAuditPage() {
+  const navigate = useNavigate();
+  // Render-time backstop: the Admin nav is admin-gated, but a specialist or
+  // billing user navigating directly to /admin/audit must not see audit data.
+  // Mirrors the useRole() backstops on providers new/edit.
+  const isAdmin = useIsAdmin();
+  useEffect(() => {
+    if (!isAdmin) navigate({ to: "/home", replace: true });
+  }, [isAdmin, navigate]);
+
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [userId, setUserId] = useState<string>("all");
@@ -185,7 +195,9 @@ function AdminAuditPage() {
     [actionType, entityType, userId, dateFrom],
   );
 
-  const auditQ = useAuditLog(filters);
+  // Gate the fetch itself, not just the render: a non-admin deep-linking here
+  // should never pull audit_log rows into their cache before the redirect fires.
+  const auditQ = useAuditLog(filters, { enabled: isAdmin });
   const allRows = auditQ.data ?? [];
 
   const rows = useMemo(() => {
@@ -226,6 +238,10 @@ function AdminAuditPage() {
     setActionType("all");
     setEntityType("all");
     setPage(0);
+  }
+
+  if (!isAdmin) {
+    return null;
   }
 
   return (

@@ -36,7 +36,8 @@ A launch is a facilities row in a pre-active location-track status: `status_id` 
 
 ### providers
 
-`id, org_id, group_id, first_name, last_name, credentials, date_of_birth, ssn_last4, email, phone, home_*, npi, caqh_id, caqh_last_attested_date, dea_number, taxonomy_code, specialty, start_date, status, is_new_grad, terminated_date, degree, school_name, graduation_date, malpractice_*, created_at, updated_at`.
+`id, org_id, group_id, first_name, last_name, middle_initial, suffix, credentials, date_of_birth, gender, ethnicity, ssn_last4, email, phone, home_*, npi, caqh_id, caqh_last_attested_date, dea_number, dea_expiration_date, taxonomy_code, specialty, sub_specialty, board_certified, languages, medicaid_attested, cultural_competency_training, additional_certifications, age_groups_served, start_date, status, is_new_grad, terminated_date, degree, school_name, graduation_date, malpractice_*, license_number, license_state, license_issue_date, license_expiration_date, created_at, updated_at`.
+Demographic/attestation/license fields (all nullable per the live schema): `middle_initial`, `suffix`, `gender`, `ethnicity`, `sub_specialty` (text); `board_certified`, `medicaid_attested`, `cultural_competency_training` (boolean, default false); `languages`, `age_groups_served` (text[], default `{}`); `additional_certifications` (jsonb, default `[]`); `dea_expiration_date`, `license_issue_date`, `license_expiration_date` (date); `license_number`, `license_state` (text) — a denormalized primary-license mirror carried on the provider alongside the per-state `state_licenses` rows.
 
 ### provider_facility_assignments
 
@@ -60,8 +61,8 @@ A launch is a facilities row in a pre-active location-track status: `status_id` 
 
 ### credential_cases
 
-`id, org_id, provider_id, group_id, facility_id, payer_id, state, specialty, credentialing_status_id, mso_id, submitted_date, approved_date, expected_effective_date, confirmed_effective_date, termination_date, assigned_to, created_by, created_at, updated_at`.
-**Unique** `(provider_id, payer_id, state)`. Credentialing status only.
+`id, org_id, provider_id, group_id, facility_id, payer_id, state, specialty, credentialing_status_id, mso_id, submitted_date, approved_date, expected_effective_date, confirmed_effective_date, termination_date, assigned_to, created_by, case_email_token, created_at, updated_at`.
+**Unique** `(provider_id, payer_id, state)`. Credentialing status only. `case_email_token` is `text NOT NULL` (default `substr(md5(gen_random_uuid()::text), 1, 12)`) — the opaque per-case token the inbound email-to-touch webhook resolves back to `case_id` + `org_id` (see below).
 
 ### contracts
 

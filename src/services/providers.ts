@@ -59,9 +59,10 @@ export interface ProviderInput {
 }
 
 // The list projection is PHI-safe by construction: no ssn_last4, date_of_birth,
-// or home_* columns are ever selected here. specialty and email ride along for
-// MSO routing resolution and SOP tokens in the launch case-kickoff flow, which
-// works off this list projection.
+// or home-address columns (home_street/home_city/home_zip) are ever selected
+// here. home_state is deliberately included — it drives MSO routing and display,
+// not an address. specialty and email ride along for MSO routing resolution and
+// SOP tokens in the launch case-kickoff flow, which works off this list projection.
 const PROVIDER_LIST_COLUMNS =
   "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, updated_at";
 
@@ -534,6 +535,7 @@ export async function terminateProvider(
     const { data: payers, error: payersErr } = await supabase
       .from("payers")
       .select("id, name")
+      .eq("org_id", orgId)
       .in("id", payerIds);
     if (payersErr) throw payersErr;
     for (const p of payers ?? []) payerNameById.set(p.id as string, p.name as string);

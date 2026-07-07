@@ -3,8 +3,16 @@
 // internal labels and action buckets never leak past ownerStatusKey. Pure
 // logic, tested in clientProgress.test.ts.
 import type { CredentialCase, Payer, StatusConfig } from "@/types";
+import {
+  IN_NETWORK_LABEL,
+  NOT_REQUIRED_LABEL,
+  OON_LABEL,
+  PRE_CRED_PAYER_NAME,
+} from "./statusLabels";
 
-export const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
+// Re-exported for existing importers (e.g. clientProgress.test.ts) that pull
+// the sentinel payer name from this module.
+export { PRE_CRED_PAYER_NAME };
 
 export type OwnerStatusKey = "in_progress" | "submitted" | "with_payer" | "approved" | "active";
 
@@ -28,15 +36,15 @@ export const OWNER_STATUSES: Record<OwnerStatusKey, OwnerStatusDisplay> = {
 // The credentialing labels both seeded orgs share, mapped explicitly. null =
 // the owner never sees the row (the org opted the provider out of the payer).
 const LABEL_TO_KEY: Record<string, OwnerStatusKey | null> = {
-  "In-Network": "active",
+  [IN_NETWORK_LABEL]: "active",
   Approved: "approved",
   Submitted: "submitted",
   "In Progress": "in_progress",
   "Not Started": "in_progress",
   "Waiting on Provider": "in_progress",
   Denied: "in_progress",
-  OON: null,
-  "Not Required": null,
+  [OON_LABEL]: null,
+  [NOT_REQUIRED_LABEL]: null,
 };
 
 /**

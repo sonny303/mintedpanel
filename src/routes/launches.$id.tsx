@@ -26,6 +26,7 @@ import {
   type LocationRow,
 } from "@/lib/launchLocations";
 import { launchReadiness } from "@/lib/launchReadiness";
+import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 
 export const Route = createFileRoute("/launches/$id")({
   validateSearch: (search: Record<string, unknown>): { createCases?: boolean } => ({
@@ -33,8 +34,6 @@ export const Route = createFileRoute("/launches/$id")({
   }),
   component: LaunchDetailPage,
 });
-
-const PRE_CRED_PAYER_NAME = "Pre-Credentialing Setup";
 
 function LaunchDetailPage() {
   const { id } = Route.useParams();
@@ -239,7 +238,7 @@ function LaunchDetailPage() {
               const inNet = countable.filter(
                 (c) =>
                   c.credentialingStatusId &&
-                  credStatusById.get(c.credentialingStatusId)?.label === "In-Network",
+                  credStatusById.get(c.credentialingStatusId)?.label === IN_NETWORK_LABEL,
               ).length;
               return (
                 <li

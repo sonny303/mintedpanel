@@ -3,7 +3,7 @@
 // matching sop_templates when one exists.
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, ExternalLink } from "lucide-react";
 import {
@@ -24,12 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/StatusPill";
-import { supabase } from "@/integrations/supabase/externalClient";
-import { camelizeRow } from "@/lib/case";
-import { getMsoRoutingRule, type StateLicense } from "@/services/lookups";
+import { getMsoRoutingRule } from "@/services/lookups";
 
 import { resolveTemplate } from "@/lib/sopResolver";
-import { useCases, useCreateCase } from "@/hooks/useCases";
+import { queryKeys } from "@/hooks/queryKeys";
+import { useCases, useContractFor, useCreateCase } from "@/hooks/useCases";
+import { useFacilityAssignments } from "@/hooks/useLaunches";
 import {
   useCoordinators,
   useFacilities,
@@ -79,39 +79,38 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
   const facilitiesQ = useFacilities(provider.groupId ?? null);
   const coordinatorsQ = useCoordinators();
   const existingCasesQ = useCases({ providerId: provider.id });
+  const assignmentsQ = useFacilityAssignments();
   const createCase = useCreateCase();
 
-  const activeLicensesQ = useQuery({
-    queryKey: ["state-licenses-active", orgId, provider.id],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data, error } = await supabase
-        .from("state_licenses")
-        .select("*")
-        .eq("org_id", orgId)
-        .eq("provider_id", provider.id)
-        .eq("status", "active")
-        .order("expiration_date", { ascending: false });
-      if (error) throw error;
-      return camelizeRow<StateLicense[]>(data ?? []);
-    },
-    enabled: open && Boolean(orgId),
-  });
+  // Active licenses ordered latest-expiration-first, derived from the already
+  // loaded useStateLicensesByProvider result (no redundant fetch). Mirrors the
+  // old status='active' + expiration_date-desc read; used only to default the
+  // state select.
+  const activeLicensesByExpiry = useMemo(
+    () =>
+      (licensesQ.data ?? [])
+        .filter((l) => l.status === "active")
+        .slice()
+        .sort((a, b) => {
+          const av = a.expirationDate;
+          const bv = b.expirationDate;
+          if (av === bv) return 0;
+          if (av === null) return -1; // nulls first, matching PostgREST desc default
+          if (bv === null) return 1;
+          return av < bv ? 1 : -1; // expiration_date descending
+        }),
+    [licensesQ.data],
+  );
 
-  const assignmentsQ = useQuery({
-    queryKey: ["provider-facility-assignments", orgId, provider.id],
-    queryFn: async () => {
-      if (!orgId) return [];
-      const { data, error } = await supabase
-        .from("provider_facility_assignments")
-        .select("facility_id, is_primary")
-        .eq("org_id", orgId)
-        .eq("provider_id", provider.id);
-      if (error) throw error;
-      return (data ?? []) as { facility_id: string; is_primary: boolean }[];
-    },
-    enabled: open && Boolean(orgId),
-  });
+  // This provider's facility assignments, shaped like the old direct read so
+  // the default-selection logic below is unchanged.
+  const providerAssignments = useMemo(
+    () =>
+      (assignmentsQ.data ?? [])
+        .filter((a) => a.providerId === provider.id && a.facilityId)
+        .map((a) => ({ facility_id: a.facilityId as string, is_primary: Boolean(a.isPrimary) })),
+    [assignmentsQ.data, provider.id],
+  );
 
   const [selectedPayerIds, setSelectedPayerIds] = useState<string[]>([]);
   const [state, setState] = useState<string>("");
@@ -126,21 +125,19 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
       return;
     }
     if (defaultsApplied) return;
-    if (activeLicensesQ.isLoading || assignmentsQ.isLoading) return;
+    if (licensesQ.isLoading || assignmentsQ.isLoading) return;
 
     if (!state) {
-      const active = activeLicensesQ.data ?? [];
-      if (active.length > 0) {
-        setState(active[0].state);
+      if (activeLicensesByExpiry.length > 0) {
+        setState(activeLicensesByExpiry[0].state);
       }
     }
 
     if (facilityId === NONE) {
-      const assignments = assignmentsQ.data ?? [];
-      if (assignments.length === 1) {
-        setFacilityId(assignments[0].facility_id);
-      } else if (assignments.length > 1) {
-        const primary = assignments.find((a) => a.is_primary);
+      if (providerAssignments.length === 1) {
+        setFacilityId(providerAssignments[0].facility_id);
+      } else if (providerAssignments.length > 1) {
+        const primary = providerAssignments.find((a) => a.is_primary);
         if (primary) {
           setFacilityId(primary.facility_id);
         }
@@ -151,10 +148,10 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
   }, [
     open,
     defaultsApplied,
-    activeLicensesQ.isLoading,
-    activeLicensesQ.data,
+    licensesQ.isLoading,
     assignmentsQ.isLoading,
-    assignmentsQ.data,
+    activeLicensesByExpiry,
+    providerAssignments,
     state,
     facilityId,
   ]);
@@ -231,13 +228,7 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
           }
 
           const rule = await qc.fetchQuery({
-            queryKey: [
-              "mso-routing-rule",
-              orgId,
-              payerId,
-              state,
-              provider.specialty ?? "",
-            ] as const,
+            queryKey: queryKeys.msoRoutingRule(orgId, payerId, state, provider.specialty ?? ""),
             queryFn: () => getMsoRoutingRule(payerId, state, provider.specialty ?? null),
           });
           const msoId = rule?.routeType === "mso" ? (rule.msoId ?? null) : null;
@@ -480,26 +471,17 @@ function PayerPreviewRow({
       ? ((msosQ.data ?? []).find((m) => m.id === rule.msoId) ?? null)
       : null;
 
-  // Inline contract lookup — show amber when missing.
-  const [contractStatus, setContractStatus] = useState<"loading" | "present" | "missing">(
-    "loading",
-  );
-  useEffect(() => {
-    if (!groupId || !orgId) {
-      setContractStatus("missing");
-      return;
-    }
-    setContractStatus("loading");
-    void supabase
-      .from("contracts")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("group_id", groupId)
-      .eq("payer_id", payer.id)
-      .eq("state", state)
-      .maybeSingle()
-      .then(({ data }) => setContractStatus(data ? "present" : "missing"));
-  }, [groupId, orgId, payer.id, state]);
+  // Contract lookup via the shared cache (queryKeys.contract) — show amber when
+  // missing. Reuses the same reader the case detail view uses.
+  const contractQ = useContractFor(groupId ?? undefined, payer.id, state);
+  const contractStatus: "loading" | "present" | "missing" =
+    !groupId || !orgId
+      ? "missing"
+      : contractQ.isLoading
+        ? "loading"
+        : contractQ.data
+          ? "present"
+          : "missing";
 
   return (
     <div className="px-3 py-2 flex items-center justify-between gap-3 text-[13px]">

@@ -34,8 +34,11 @@
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
 //
-// Near-read-only: the only POST (assertion 7) carries a payload the server
-// must REJECT before writing anything. Nothing here writes production data.
+// Near-read-only: the write attempts (POST assertions 7/9, PATCH assertion 12)
+// all target another org's case/provider, which the server must REJECT (404)
+// before writing anything. Provider POST-create is intentionally NOT exercised
+// here — a real create would drift the demo-org counts assertions 1/2 pin.
+// Nothing here writes production data.
 //
 // Exit code: 0 = all pass, 1 = any assertion failed, 2 = missing env,
 // 3 = setup/network error. A cross-org row anywhere is a STOP-SHIP failure.
@@ -112,6 +115,30 @@ async function apiPost(path, payload, { token, orgId } = {}) {
   }
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const raw = await res.text();
+  let body = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    /* non-JSON → body stays null; raw holds the page */
+  }
+  return { status: res.status, body, raw };
+}
+
+// One PATCH against the deploy. Same header handling as apiPost.
+async function apiPatch(path, payload, { token, orgId } = {}) {
+  const headers = { "content-type": "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+  if (orgId) headers["x-org-id"] = orgId;
+  if (BYPASS) {
+    headers["x-vercel-protection-bypass"] = BYPASS;
+    headers["x-vercel-set-bypass-cookie"] = "true";
+  }
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
     headers,
     body: JSON.stringify(payload),
   });
@@ -419,6 +446,31 @@ function looksLikeVercelGate(r) {
     "11. Kansas GET own profile with a South Park facilityId -> 404, no data",
     xFac.status === 404 && !facLeaked,
     `status=${xFac.status} (expect 404) dataPresent=${xFac.body?.data != null}`,
+    { leak: true },
+  );
+
+  // 12. Provider WRITE isolation (the PATCH must-reject): a Kansas writer
+  //     PATCHing a South Park provider by id must 404 like the GET-by-id
+  //     (assertion 3) — never 200, never a cross-org write. This is safe to
+  //     run against production because a cross-org id is rejected BEFORE any
+  //     write (getProvider -> null -> 404), so nothing is mutated.
+  //
+  //     POST /api/providers is deliberately NOT asserted here: a real create
+  //     would insert a live Kansas provider and drift the
+  //     EXPECTED_KANSAS_PROVIDERS count that assertions 1/2 pin. POST
+  //     org-scoping (body org_id stripped, row lands in the caller's org and is
+  //     invisible cross-org) is covered by the mock (scripts/mock-api-server.mjs)
+  //     and the handler unit tests instead.
+  const patchX = await apiPatch(
+    `/api/providers/${env.SOUTHPARK_PROVIDER_ID}`,
+    { firstName: "GateShouldReject" },
+    { token: kansasTok },
+  );
+  const patchLeaked = patchX.status < 400 || patchX.body?.data != null;
+  check(
+    "12. Kansas PATCH a South Park provider -> 404, no cross-org write",
+    patchX.status === 404 && !patchLeaked,
+    `status=${patchX.status} (expect 404) dataPresent=${patchX.body?.data != null}`,
     { leak: true },
   );
 

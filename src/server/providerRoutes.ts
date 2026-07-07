@@ -77,6 +77,12 @@ export async function handleUpdateProvider(
 ): Promise<Response> {
   if (!isWriter(ctx)) return fail(403, "Your role cannot modify providers");
   if (!body || typeof body !== "object") return fail(422, "Request body must be a JSON object");
-  const updated = await updateProvider(id, body as Partial<ProviderInput>, serviceCtx(ctx));
+  const svc = serviceCtx(ctx);
+  // Mirror the GET handler's not-found detection (getProvider -> null) so a
+  // cross-org or nonexistent id is a 404, not the generic 500 that
+  // updateProvider's .single() would raise on zero matched rows.
+  const existing = await getProvider(id, svc);
+  if (!existing) return fail(404, "Provider not found");
+  const updated = await updateProvider(id, body as Partial<ProviderInput>, svc);
   return ok(updated);
 }

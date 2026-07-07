@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildFixitQueue, coverageFor, type BuildFixitInput, type OpenCaseLite } from "./fixitQueue";
+import {
+  buildFixitQueue,
+  coverageFor,
+  type BuildFixitInput,
+  type OpenCaseLite,
+} from "./fixitQueue";
 import type { FieldDictionaryEntry, PortalFieldMap, Provider } from "@/types";
 
 function provider(p: Partial<Provider> = {}): Provider {
@@ -36,6 +41,18 @@ function provider(p: Partial<Provider> = {}): Provider {
     malpracticePolicyNumber: null,
     malpracticeCoverageStart: null,
     malpracticeCoverageEnd: null,
+    middleInitial: null,
+    suffix: null,
+    gender: null,
+    ethnicity: null,
+    deaExpirationDate: null,
+    boardCertified: null,
+    subSpecialty: null,
+    languages: null,
+    medicaidAttested: null,
+    culturalCompetencyTraining: null,
+    additionalCertifications: null,
+    ageGroupsServed: null,
     licenseNumber: null,
     licenseState: null,
     licenseIssueDate: null,
@@ -48,7 +65,9 @@ function provider(p: Partial<Provider> = {}): Provider {
 
 function map(p: Partial<PortalFieldMap> & { portalKey: string }): PortalFieldMap {
   return {
-    id: p.id ?? `m-${Math.round((p.confidence ?? 0) + (p.token?.length ?? 0))}-${p.portalKey}-${p.token ?? "x"}`,
+    id:
+      p.id ??
+      `m-${Math.round((p.confidence ?? 0) + (p.token?.length ?? 0))}-${p.portalKey}-${p.token ?? "x"}`,
     orgId: "org-1",
     urlPattern: null,
     pageStep: null,
@@ -149,7 +168,12 @@ describe("buildFixitQueue — provider gaps", () => {
       ...emptyInput,
       providers: [provider({ caqhId: null })],
       openCases: [
-        openCase({ caseId: "c1", payerId: "pay-1", payerName: "BCBS KS", nextDueDate: "2026-07-20" }),
+        openCase({
+          caseId: "c1",
+          payerId: "pay-1",
+          payerName: "BCBS KS",
+          nextDueDate: "2026-07-20",
+        }),
         openCase({ caseId: "c2", payerId: "pay-2", payerName: "Aetna", nextDueDate: "2026-07-09" }),
       ],
       portals: [

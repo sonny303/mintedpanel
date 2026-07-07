@@ -23,7 +23,6 @@ import {
   Network,
   Building2,
   CheckCircle2,
-  UserCog,
   House,
   Rocket,
   TrendingUp,
@@ -69,7 +68,6 @@ const adminNav: NavLink[] = [
   { to: "/admin/portals", label: "Portals", icon: Globe },
   { to: "/admin/audit", label: "Audit Log", icon: FileStack },
   { to: "/admin/settings", label: "Group & Locations", icon: Building2 },
-  { to: "/admin/users", label: "Users", icon: UserCog },
 ];
 
 function initialsOf(name: string | null, email: string | null): string {

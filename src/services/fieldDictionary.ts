@@ -39,13 +39,18 @@ export async function upsertDictionaryEntry(
   const labelNormalized = normalizeFieldLabel(labelRaw);
   if (!labelNormalized) return { entry: null, learned: false };
 
-  const { data: existingRow, error: readErr } = await supabase
-    .from("field_dictionary")
-    .select(COLUMNS)
-    .eq("org_id", orgId)
-    .eq("label_normalized", labelNormalized)
-    .maybeSingle();
-  if (readErr) throw readErr;
+  const readExisting = async () => {
+    const { data, error } = await supabase
+      .from("field_dictionary")
+      .select(COLUMNS)
+      .eq("org_id", orgId)
+      .eq("label_normalized", labelNormalized)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+
+  let existingRow = await readExisting();
 
   if (!existingRow) {
     const { data, error } = await supabase
@@ -59,8 +64,24 @@ export async function upsertDictionaryEntry(
       } as never)
       .select(COLUMNS)
       .single();
-    if (error) throw error;
-    return { entry: camelizeRow<FieldDictionaryEntry>(data), learned: true };
+    if (!error) {
+      const entry = camelizeRow<FieldDictionaryEntry>(data);
+      await writeAudit({
+        actionType: "CREATE",
+        entityType: "field_dictionary",
+        entityId: entry.id,
+        after: { labelNormalized: entry.labelNormalized, token: entry.token, status: entry.status },
+        description: `Dictionary rule learned: "${entry.labelNormalized}" → ${entry.token}`,
+      });
+      return { entry, learned: true };
+    }
+    // Concurrent first-approval: another writer inserted the same
+    // (org_id, label_normalized) between our read and insert, so the unique
+    // constraint rejects us with 23505. Re-read the now-present row and
+    // converge through the update path instead of surfacing a 500.
+    if (error.code !== "23505") throw error;
+    existingRow = await readExisting();
+    if (!existingRow) throw error;
   }
 
   const existing = camelizeRow<FieldDictionaryEntry>(existingRow);
@@ -86,7 +107,15 @@ export async function upsertDictionaryEntry(
     .select(COLUMNS)
     .single();
   if (error) throw error;
-  return { entry: camelizeRow<FieldDictionaryEntry>(data), learned: true };
+  const entry = camelizeRow<FieldDictionaryEntry>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "field_dictionary",
+    entityId: entry.id,
+    after: { labelNormalized: entry.labelNormalized, token: entry.token, status: entry.status },
+    description: `Dictionary rule updated: "${entry.labelNormalized}" → ${entry.token}`,
+  });
+  return { entry, learned: true };
 }
 
 // The Fix-it "confirm" card: Yes -> confirmed (future matches are high-confidence),

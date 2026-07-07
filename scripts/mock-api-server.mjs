@@ -14,7 +14,7 @@
 //                scripts/verify-isolation-local.mjs).
 //
 // Leak modes (each makes specific gate assertions fail):
-//   providers   cross-org provider rows leak into lists and GET-by-id (1, 1b, 2c, 3)
+//   providers   cross-org provider rows leak into lists, GET-by-id, and PATCH (1, 1b, 2c, 3, 12)
 //   spoof       x-org-id honored without a membership check          (4)
 //   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
 //   profile     cross-org provider profile served instead of 404     (6)
@@ -230,6 +230,10 @@ export async function createMockApiServer(options = {}) {
   // idempotency, like the real handlers).
   const fillSessions = new Map();
   const touches = new Map();
+  // Per-server provider creates from POST /api/providers, so a create lands in
+  // the caller's org (and is only visible to that org). Kept separate from the
+  // shared PROVIDERS fixture so it never drifts the count assertions across runs.
+  const createdProviders = [];
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -326,19 +330,68 @@ export async function createMockApiServer(options = {}) {
       );
     }
 
-    // --- /api/providers and /api/providers/:id ---
+    // --- /api/providers and /api/providers/:id (GET list/by-id, POST create,
+    // PATCH update) ---
     const providersMatch = url.pathname.match(/^\/api\/providers(?:\/([^/]+))?\/?$/);
     if (providersMatch) {
-      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       const id = providersMatch[1];
+      const allProviders = () => PROVIDERS.concat(createdProviders);
+
+      // POST /api/providers — create in the caller's org. Writers only; the
+      // body's org_id is stripped so a create can never plant a row in another
+      // tenant, and the created row is only visible to the caller's org (GET
+      // list below filters by orgId). No real-gate assertion exercises this
+      // (see verify-org-isolation.mjs) — the contract is pinned here + in the
+      // handler unit tests.
+      if (!id && method === "POST") {
+        if (user.role === "billing") {
+          return envelope(res, 403, null, "Your role cannot modify providers");
+        }
+        const body = await readBody(req);
+        if (!body || typeof body !== "object" || !body.firstName || !body.lastName) {
+          return envelope(res, 422, null, "firstName and lastName are required");
+        }
+        // org_id comes from the authenticated membership only, never the body.
+        const created = provider(
+          `new-${orgId}-${createdProviders.length + 1}`,
+          orgId,
+          body.firstName,
+          body.lastName,
+        );
+        createdProviders.push(created);
+        return envelope(res, 201, created);
+      }
+
+      // PATCH /api/providers/:id — update within the caller's org. Writers
+      // only; a cross-org (or nonexistent) id is a 404 (mirrors GET-by-id), so
+      // it is never a cross-org write. Leak "providers": the org check is
+      // skipped and the write lands on another tenant's row (assertion 12 red).
+      if (id && method === "PATCH") {
+        if (user.role === "billing") {
+          return envelope(res, 403, null, "Your role cannot modify providers");
+        }
+        const body = await readBody(req);
+        if (!body || typeof body !== "object") {
+          return envelope(res, 422, null, "Request body must be a JSON object");
+        }
+        const p = allProviders().find((row) => row.id === id);
+        const visible = p && (p.orgId === orgId || leak === "providers");
+        if (!visible) return envelope(res, 404, null, "Provider not found");
+        // org_id/id in the body are stripped; the row never moves tenants.
+        const { orgId: _b1, org_id: _b2, id: _b3, ...clean } = body;
+        Object.assign(p, clean);
+        return envelope(res, 200, p);
+      }
+
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       if (!id) {
-        let rows = PROVIDERS.filter((p) => p.orgId === orgId);
+        let rows = allProviders().filter((p) => p.orgId === orgId);
         if (leak === "providers" && orgId === FIXTURES.KANSAS_ORG) {
           rows = rows.concat(PROVIDERS.filter((p) => p.orgId === FIXTURES.SOUTHPARK_ORG));
         }
         return envelope(res, 200, rows, null, { total: rows.length, page: 1, pageSize: 100 });
       }
-      const p = PROVIDERS.find((row) => row.id === id);
+      const p = allProviders().find((row) => row.id === id);
       const visible = p && (p.orgId === orgId || leak === "providers");
       if (!visible) return envelope(res, 404, null, "Provider not found");
       return envelope(res, 200, p);

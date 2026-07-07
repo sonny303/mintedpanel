@@ -63,7 +63,10 @@ describe("resolveConfidence", () => {
   it("a rejected label is forced low even with a stored token/score", () => {
     const dict = buildDictionaryMap([dictEntry("remit address", "group.remit", "rejected")]);
     expect(
-      resolveConfidence(row({ fieldLabel: "Remit Address", token: "group.remit", confidence: 95 }), dict),
+      resolveConfidence(
+        row({ fieldLabel: "Remit Address", token: "group.remit", confidence: 95 }),
+        dict,
+      ),
     ).toBe("low");
   });
 

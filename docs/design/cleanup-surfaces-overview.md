@@ -2,11 +2,11 @@
 
 Three connected in-app surfaces for the cleanup side of Minted Panel:
 
-| # | Surface | Route(s) | Spec | PR |
-|---|---------|----------|------|----|
-| 1 | Fix-it queue | `/home` section + `/fix-it` | `fix-it-queue-spec.md` | C |
-| 2 | Mapping review | `/portals/$portalKey/train` | `mapping-review-spec.md` | B |
-| 3 | Portals admin | `/admin/portals` | `portals-admin-spec.md` | A |
+| #   | Surface        | Route(s)                    | Spec                     | PR  |
+| --- | -------------- | --------------------------- | ------------------------ | --- |
+| 1   | Fix-it queue   | `/home` section + `/fix-it` | `fix-it-queue-spec.md`   | C   |
+| 2   | Mapping review | `/portals/$portalKey/train` | `mapping-review-spec.md` | B   |
+| 3   | Portals admin  | `/admin/portals`            | `portals-admin-spec.md`  | A   |
 
 High-fidelity mockups (all states, annotated): `docs/design/mockups/cleanup-surfaces.html`
 — self-contained, open in any browser. Published copy:
@@ -38,9 +38,9 @@ Non-negotiables carried through all three specs:
 
 For a provider × portal: `auto-fill coverage = resolvable fields / mapped fields`.
 
-- *Mapped fields* = `portal_field_maps` rows for the portal (global + org
+- _Mapped fields_ = `portal_field_maps` rows for the portal (global + org
   override, `status = 'approved'`).
-- *Resolvable* = `source = 'hardcoded'`, or `source = 'token'` and the token
+- _Resolvable_ = `source = 'hardcoded'`, or `source = 'token'` and the token
   resolves to a non-empty value for that provider (client-side resolution over
   the same families the SOP resolver reads; v1 scope in the Fix-it spec).
 - `source = 'manual'` rows are **counted out of** the denominator's
@@ -95,7 +95,7 @@ New (defined in the PR-A migration, spec has full SQL):
   `form_url`, `is_verified`, `last_verified_at`, `url_changed_at`.
   Unique `(org_id, portal_key)`.
 - `field_dictionary` — `label_normalized`, `token`, `status
-  (suggested|confirmed|rejected)`, `seen_count`. Unique
+(suggested|confirmed|rejected)`, `seen_count`. Unique
   `(org_id, label_normalized)`.
 - Additive columns on `portal_field_maps`: `field_label text`,
   `form_section text`, `confidence smallint` (0–100, set on proposed rows by

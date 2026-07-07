@@ -48,8 +48,7 @@ export function useFixitQueue(): UseFixitQueueResult {
     portalsQ.isLoading ||
     mapsQ.isLoading ||
     dictQ.isLoading;
-  const isError =
-    providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
+  const isError = providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
 
   const cards = useMemo(() => {
     const providers = providersQ.data ?? [];
