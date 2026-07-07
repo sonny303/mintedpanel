@@ -45,6 +45,7 @@ import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
+import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -226,6 +227,11 @@ const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AdminSopsRoute,
 } as any)
+const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
+  id: '/admin/payers_/$id/scorecard',
+  path: '/admin/payers/$id/scorecard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -264,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -296,6 +303,7 @@ export interface FileRoutesByTo {
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
+  '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -335,6 +343,7 @@ export interface FileRoutesById {
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -375,6 +384,7 @@ export interface FileRouteTypes {
     | '/admin/sops/'
     | '/admin/templates/'
     | '/providers/$id/'
+    | '/admin/payers/$id/scorecard'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -407,6 +417,7 @@ export interface FileRouteTypes {
     | '/admin/sops'
     | '/admin/templates'
     | '/providers/$id'
+    | '/admin/payers/$id/scorecard'
   id:
     | '__root__'
     | '/'
@@ -445,6 +456,7 @@ export interface FileRouteTypes {
     | '/admin/sops/'
     | '/admin/templates/'
     | '/providers/$id/'
+    | '/admin/payers_/$id/scorecard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -471,6 +483,7 @@ export interface RootRouteChildren {
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   TasksIdRoute: typeof TasksIdRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
+  AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -727,6 +740,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSopsIdRouteImport
       parentRoute: typeof AdminSopsRoute
     }
+    '/admin/payers_/$id/scorecard': {
+      id: '/admin/payers_/$id/scorecard'
+      path: '/admin/payers/$id/scorecard'
+      fullPath: '/admin/payers/$id/scorecard'
+      preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -838,6 +858,7 @@ const rootRouteChildren: RootRouteChildren = {
   DevPrimitivesRoute: DevPrimitivesRoute,
   TasksIdRoute: TasksIdRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
+  AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

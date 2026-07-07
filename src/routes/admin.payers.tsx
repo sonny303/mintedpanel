@@ -1,7 +1,7 @@
 // Admin → Payers list and edit. Every payer field exposed in modal because
 // these values drive submission guidance and billing rules for coordinators.
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus, Info } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
@@ -31,6 +31,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { usePayers, useCreatePayer, useUpdatePayer } from "@/hooks/useAdmin";
 import { useOrgPayerAssignments, useSetStarter } from "@/hooks/useOrgPayerAssignments";
 import { useIsAdmin } from "@/lib/permissions";
+import { useRole } from "@/lib/auth-store";
 import type { OrgPayerAssignment, Payer } from "@/types";
 import type { PayerInput } from "@/services/payers";
 
@@ -63,6 +64,8 @@ function YesNoPill({ value }: { value: boolean }) {
 
 function AdminPayersPage() {
   const canEdit = useIsAdmin();
+  const role = useRole();
+  const canViewScorecard = role === "admin" || role === "billing";
   const payersQ = usePayers();
   const assignmentsQ = useOrgPayerAssignments();
   const [editing, setEditing] = useState<{ payer: Payer | null } | null>(null);
@@ -225,16 +228,30 @@ function AdminPayersPage() {
                       className="px-3 h-10 align-middle text-right"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px] px-2"
-                          onClick={() => setEditing({ payer: p })}
-                        >
-                          Edit
-                        </Button>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {canViewScorecard && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            asChild
+                          >
+                            <Link to="/admin/payers/$id/scorecard" params={{ id: p.id }}>
+                              Scorecard
+                            </Link>
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            onClick={() => setEditing({ payer: p })}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
