@@ -210,8 +210,7 @@ them. The current surface:
   provider's OPEN cases, `{ id, payerName, state, status, submittedDate,
 payerReferenceId, latestNote, lastSubmittedAt }`. Open = credentialing status
   not in the `action_bucket 'complete'` bucket — derived from `status_configs`,
-  never from labels; status-less cases count as open. Cross-org providerId →
-  404. The last three fields (PR C) are derived from ONE org-scoped touchlog
+  never from labels; status-less cases count as open. Cross-org providerId → 404. The last three fields (PR C) are derived from ONE org-scoped touchlog
   read over the open case ids: `payerReferenceId` (case column, Story 5
   prefill), `latestNote {text,author,at}` (newest `entry_type='note'`,
   author-resolved via `profiles`, Story 11), `lastSubmittedAt` (newest
