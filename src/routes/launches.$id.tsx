@@ -12,6 +12,7 @@ import { CreateCasesDialog } from "@/components/launches/CreateCasesDialog";
 import { LaunchEditModal } from "@/components/launches/LaunchEditModal";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/triage/StatusPill";
+import { StatusPill as SemanticStatusPill } from "@/components/StatusPill";
 import { ProgressBar } from "@/components/triage/ProgressBar";
 import { useFacilityAssignments, useLaunchLocation, useLaunchLocations } from "@/hooks/useLaunches";
 import { useProviders } from "@/hooks/useProviders";
@@ -175,6 +176,7 @@ function LaunchDetailPage() {
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
         {status ? <StatusPill label={status.label} color={status.color} /> : null}
+        {location.referenceOnly ? <SemanticStatusPill status="neutral" label="Reference" /> : null}
         {newState && location.state ? (
           <span className="flex items-center gap-1.5">
             <StatusPill label="New state" color="var(--mp-warn)" />
@@ -203,7 +205,8 @@ function LaunchDetailPage() {
             Contract gap in {location.state}
           </span>
         ) : null}
-        {needsGoLiveNudge(status?.label, location.effectiveDate, new Date()) ? (
+        {!location.referenceOnly &&
+        needsGoLiveNudge(status?.label, location.effectiveDate, new Date()) ? (
           canWrite ? (
             <button
               type="button"

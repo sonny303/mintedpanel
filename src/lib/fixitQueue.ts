@@ -130,7 +130,12 @@ export function buildFixitQueue(input: BuildFixitInput): FixitCard[] {
     }
   }
 
-  const providerById = new Map(input.providers.map((p) => [p.id, p]));
+  // Reference-only providers (migrated/onboard-existing) are never worked, so
+  // they raise no gap cards — drop them before the provider map so a case whose
+  // provider is reference-only finds no provider and is skipped (Epic 2e).
+  const providerById = new Map(
+    input.providers.filter((p) => !p.referenceOnly).map((p) => [p.id, p]),
+  );
   const casesByProvider = new Map<string, OpenCaseLite[]>();
   for (const c of input.openCases) {
     const list = casesByProvider.get(c.providerId) ?? [];

@@ -9,6 +9,7 @@ import { MoreHorizontal, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/triage/StatusPill";
+import { StatusPill as SemanticStatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -85,7 +86,10 @@ function LaunchesPage() {
   const total = recentlyLaunched.length + pipeline.length;
 
   function launchRow(r: LaunchRow) {
-    const nudge = needsGoLiveNudge(r.status?.label, r.facility.effectiveDate, new Date());
+    // Reference-only (migrated) locations are never worked: no go-live nudge (Epic 2e).
+    const nudge =
+      !r.facility.referenceOnly &&
+      needsGoLiveNudge(r.status?.label, r.facility.effectiveDate, new Date());
     return (
       <div
         key={r.facility.id}
@@ -101,6 +105,9 @@ function LaunchesPage() {
           <div className="flex items-center gap-2 md:w-56 md:flex-shrink-0">
             {r.status ? <StatusPill label={r.status.label} color={r.status.color} /> : null}
             {r.newState ? <StatusPill label="New state" color="var(--mp-warn)" /> : null}
+            {r.facility.referenceOnly ? (
+              <SemanticStatusPill status="neutral" label="Reference" />
+            ) : null}
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[length:var(--mp-text-base)] font-medium text-[color:var(--mp-ink)]">

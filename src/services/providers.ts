@@ -64,7 +64,7 @@ export interface ProviderInput {
 // not an address. specialty and email ride along for MSO routing resolution and
 // SOP tokens in the launch case-kickoff flow, which works off this list projection.
 const PROVIDER_LIST_COLUMNS =
-  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, updated_at";
+  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, reference_only, updated_at";
 
 // Per-request context injected by callers. `db` is the Supabase client to use
 // (browser anon client under RLS, or the server service-role client), `orgId`

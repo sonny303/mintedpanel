@@ -73,6 +73,7 @@ function provider(over: Partial<Provider>): Provider {
     licenseState: null,
     licenseIssueDate: null,
     licenseExpirationDate: null,
+    referenceOnly: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...over,

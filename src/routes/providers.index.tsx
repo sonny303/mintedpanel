@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import { StatusPill } from "@/components/StatusPill";
 import { FilterCards } from "@/components/triage/FilterCards";
 import { GroupedList } from "@/components/triage/GroupedList";
 import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
@@ -74,6 +75,8 @@ interface WorkGroup {
   inNetwork: number;
   denominator: number;
   oldestDays: number | null;
+  /** migrated/onboard-existing provider: listed for reference, never worked (Epic 2e) */
+  isReference: boolean;
 }
 
 function initialsOf(p: Provider): string {
@@ -220,6 +223,7 @@ function ProvidersWorkView() {
           (max, r) => (r.days !== null && (max === null || r.days > max) ? r.days : max),
           null,
         ),
+        isReference: provider.referenceOnly,
       });
     }
     built.sort(
@@ -238,7 +242,12 @@ function ProvidersWorkView() {
     lastTouchQ.data,
   ]);
 
-  const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
+  // Reference-only providers are listed separately and never counted as work
+  // (Epic 2e): the chips, the filtered list, and the totals derive from worked
+  // providers only.
+  const workedGroups = useMemo(() => groups.filter((g) => !g.isReference), [groups]);
+  const referenceGroups = useMemo(() => groups.filter((g) => g.isReference), [groups]);
+  const openRowsAll = useMemo(() => workedGroups.flatMap((g) => g.openRows), [workedGroups]);
   const counts = chipCounts(openRowsAll.map((r) => r.state));
   const cards = [
     { id: "all", label: "All open cases", n: counts.all },
@@ -251,10 +260,10 @@ function ProvidersWorkView() {
   // always leaves exactly N case rows on screen.
   const visibleGroups = useMemo(
     () =>
-      groups
+      workedGroups
         .map((g) => ({ group: g, visibleRows: g.rows.filter((r) => matchesChip(chip, r.state)) }))
         .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip],
+    [workedGroups, chip],
   );
 
   const totalProviders = groups.length;
@@ -353,6 +362,39 @@ function ProvidersWorkView() {
     );
   }
 
+  function referenceRow(g: WorkGroup) {
+    const openProvider = () => navigate({ to: "/providers/$id", params: { id: g.provider.id } });
+    return (
+      <div
+        key={g.provider.id}
+        role="link"
+        tabIndex={0}
+        onClick={openProvider}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") openProvider();
+        }}
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
+      >
+        <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
+          {initialsOf(g.provider)}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
+          {g.provider.firstName} {g.provider.lastName}
+          {g.provider.credentials ? (
+            <span className="font-normal text-[color:var(--mp-ink-secondary)]">
+              {" "}
+              {g.provider.credentials}
+            </span>
+          ) : null}
+        </span>
+        <span className="whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
+          {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
+        </span>
+        <StatusPill status="neutral" label="Reference" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <PageHeader
@@ -382,7 +424,7 @@ function ProvidersWorkView() {
             <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
           ))}
         </div>
-      ) : visibleGroups.length === 0 ? (
+      ) : visibleGroups.length === 0 && referenceGroups.length === 0 ? (
         <EmptyState
           message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
           description={
@@ -392,13 +434,27 @@ function ProvidersWorkView() {
           }
         />
       ) : (
-        <GroupedList
-          groups={visibleGroups.map(({ group, visibleRows }) => ({
-            id: group.provider.id,
-            header: groupHeader(group),
-            children: <CaseTable leadLabel="Payer" rows={visibleRows.map(tableRow)} />,
-          }))}
-        />
+        <div className="space-y-6">
+          {visibleGroups.length > 0 ? (
+            <GroupedList
+              groups={visibleGroups.map(({ group, visibleRows }) => ({
+                id: group.provider.id,
+                header: groupHeader(group),
+                children: <CaseTable leadLabel="Payer" rows={visibleRows.map(tableRow)} />,
+              }))}
+            />
+          ) : null}
+          {referenceGroups.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
+                Reference
+              </h2>
+              <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
+                {referenceGroups.map(referenceRow)}
+              </div>
+            </section>
+          ) : null}
+        </div>
       )}
     </div>
   );

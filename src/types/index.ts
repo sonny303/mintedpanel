@@ -112,6 +112,8 @@ export interface Facility {
   statusId: string | null;
   /** target/start date; label switches by status (Target pre-fulfillment, Starts after) */
   effectiveDate: string | null;
+  /** migrated/onboard-existing location: reference data, skipped by the action engine + Home queues (Epic 2e) */
+  referenceOnly: boolean;
   createdAt: string;
 }
 
@@ -173,6 +175,8 @@ export interface Provider {
   licenseState: string | null;
   licenseIssueDate: string | null;
   licenseExpirationDate: string | null;
+  /** migrated/onboard-existing provider: reference data, skipped by the action engine, Fix-it, and Home queues (Epic 2e) */
+  referenceOnly: boolean;
   createdAt: string;
   updatedAt: string;
 }

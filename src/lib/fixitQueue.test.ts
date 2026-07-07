@@ -57,6 +57,7 @@ function provider(p: Partial<Provider> = {}): Provider {
     licenseState: null,
     licenseIssueDate: null,
     licenseExpirationDate: null,
+    referenceOnly: false,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...p,
@@ -189,6 +190,19 @@ describe("buildFixitQueue — provider gaps", () => {
     expect(cards[0].sortDate).toBe("2026-07-09");
     expect(cards[0].gap?.payerName).toBe("Aetna");
     expect(cards[0].gap?.moreCount).toBe(1);
+  });
+
+  it("raises no gap for a reference-only provider (never worked)", () => {
+    // Same shape as the first gap test — a missing CAQH ID mapped by an open
+    // case's portal — but the provider is reference-only, so no card.
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      providers: [provider({ caqhId: null, referenceOnly: true })],
+      openCases: [openCase({ caseId: "c1", payerId: "pay-1", nextDueDate: "2026-07-09" })],
+      portals: [{ portalKey: "availity", name: "Availity", payerId: "pay-1" }],
+      fieldMaps: [map({ portalKey: "availity", token: "provider.caqhId", id: "m1" })],
+    });
+    expect(cards).toHaveLength(0);
   });
 });
 
