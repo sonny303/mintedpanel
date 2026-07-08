@@ -25,6 +25,36 @@ export interface SplitResult {
   cards: TrainingCard[];
 }
 
+export interface TrainablePartition {
+  // Own-org proposed rows — the only rows the org can actually decide (RLS
+  // blocks writes to global rows), so these seed the training deck.
+  orgProposed: PortalFieldMap[];
+  // Decided rows (token / manual / manual_partial), global or own-org.
+  approved: PortalFieldMap[];
+  // Global (org_id NULL) proposed rows: captured but not yet finalized by the
+  // platform. The org can't train them, so they stay out of the deck — but they
+  // are NOT "fully trained" and must be surfaced honestly rather than ignored.
+  globalProposed: PortalFieldMap[];
+}
+
+// Split a portal's field maps into what this org can train, what is already
+// decided, and what is centrally (globally) managed and pending. The training
+// route branches its empty state on globalProposed so it never claims a form is
+// "fully trained" when the only unapproved rows are ones the org cannot touch.
+export function partitionTrainableMaps(maps: PortalFieldMap[]): TrainablePartition {
+  const orgProposed: PortalFieldMap[] = [];
+  const approved: PortalFieldMap[] = [];
+  const globalProposed: PortalFieldMap[] = [];
+  for (const m of maps) {
+    if (m.status === "approved") approved.push(m);
+    else if (m.status === "proposed") {
+      if (m.orgId === null) globalProposed.push(m);
+      else orgProposed.push(m);
+    }
+  }
+  return { orgProposed, approved, globalProposed };
+}
+
 export function buildDictionaryMap(
   entries: FieldDictionaryEntry[],
 ): Map<string, FieldDictionaryEntry> {

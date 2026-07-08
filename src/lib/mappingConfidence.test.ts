@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildDictionaryMap,
+  partitionTrainableMaps,
   resolveConfidence,
   resolvedSuggestionToken,
   splitBatch,
@@ -123,6 +124,33 @@ describe("toTrainingCard high-without-token downgrade", () => {
     expect(cards.map((c) => c.confidence)).toEqual(["medium", "medium"]);
     expect(cards[0].row.id).toBe("highNoTok");
     expect(cards.find((c) => c.row.id === "highNoTok")?.suggestedToken).toBeNull();
+  });
+});
+
+describe("partitionTrainableMaps", () => {
+  it("routes proposed rows by ownership and collects approved rows", () => {
+    const maps = [
+      row({ id: "org-prop", orgId: "org-1", status: "proposed" }),
+      row({ id: "global-prop", orgId: null, status: "proposed" }),
+      row({ id: "org-appr", orgId: "org-1", status: "approved" }),
+      row({ id: "global-appr", orgId: null, status: "approved" }),
+      row({ id: "retired", orgId: "org-1", status: "retired" }),
+    ];
+    const { orgProposed, approved, globalProposed } = partitionTrainableMaps(maps);
+    expect(orgProposed.map((m) => m.id)).toEqual(["org-prop"]);
+    expect(globalProposed.map((m) => m.id)).toEqual(["global-prop"]);
+    expect(approved.map((m) => m.id).sort()).toEqual(["global-appr", "org-appr"]);
+  });
+
+  it("a form of only global proposed rows has nothing the org can train", () => {
+    // The bcbs_ks_enrollment shape: every row global (org_id NULL) + proposed.
+    const maps = Array.from({ length: 24 }, (_, i) =>
+      row({ id: `g${i}`, orgId: null, status: "proposed" }),
+    );
+    const { orgProposed, approved, globalProposed } = partitionTrainableMaps(maps);
+    expect(orgProposed).toHaveLength(0);
+    expect(approved).toHaveLength(0);
+    expect(globalProposed).toHaveLength(24);
   });
 });
 
