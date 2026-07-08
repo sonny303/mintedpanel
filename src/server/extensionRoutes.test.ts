@@ -59,6 +59,15 @@ describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const FACILITY_ID = "aaaa1111-2222-4333-8444-555566667777";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
+  const facilityEntry = (id: string, name: string) => ({
+    id,
+    name,
+    street: "100 Main St",
+    suite: null,
+    city: "Wichita",
+    state: "KS",
+    zip: "67202",
+  });
   // What the ctx() JWT resolves to (see resolveUserTokens).
   const USER_TOKENS = [
     { token: "user.name", value: "Tess Tester" },
@@ -76,7 +85,7 @@ describe("provider profile handler", () => {
         provider: { id: PROVIDER_ID } as never,
         tokens: [],
         unresolved: [],
-        facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+        facilities: [facilityEntry(FACILITY_ID, "Main Clinic")],
         selected_facility_id: FACILITY_ID,
         ...profile,
       },
@@ -111,7 +120,7 @@ describe("provider profile handler", () => {
       provider: { id: PROVIDER_ID },
       tokens: USER_TOKENS,
       unresolved: [],
-      facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+      facilities: [facilityEntry(FACILITY_ID, "Main Clinic")],
       selected_facility_id: FACILITY_ID,
     });
     // Both user tokens resolved, facility selected -> no meta at all.
@@ -226,8 +235,8 @@ describe("provider profile handler", () => {
 
   it("flags meta.needs_facility when several facilities need a user choice", async () => {
     const facilities = [
-      { id: FACILITY_ID, name: "Main Clinic" },
-      { id: "bbbb1111-2222-4333-8444-555566667777", name: "Second Clinic" },
+      facilityEntry(FACILITY_ID, "Main Clinic"),
+      facilityEntry("bbbb1111-2222-4333-8444-555566667777", "Second Clinic"),
     ];
     getProfileMock.mockResolvedValue(okResult({ facilities, selected_facility_id: null }, true));
     const c = ctx();
