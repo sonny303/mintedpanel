@@ -640,7 +640,14 @@ cross-system idiom (`portal_field_maps`, `fill_sessions`, the touches contract).
   toggle, empty-registry amber note → `/admin/portals`, soft "won't be linked"
   nudge — never required). The Review step chips each online_form step
   linked/unlinked. Wizard threads `portals` (`usePortals()`) + `templatePayerId`
-  as props.
+  as props. **One portal per task** (2026-07-08): a task with two online_form
+  steps carrying different normalized keys shows an amber warning in the task
+  card and `handleSave` blocks with a toast (`portalKeyConflicts` in
+  `editableTemplate.ts`, tested) — the extension closes exactly one task per
+  portal submission, so the task's portal must be unambiguous.
+  `createPortal` (`src/services/portals.ts`) also folds `portal_key` through
+  `normalizePortalKey` at the write boundary, so a hand-typed mixed-case key
+  can't silently miss the join.
 - **Generated task views:** `src/components/portals/PortalStepLink.tsx` resolves a
   step's `portalKey` against `usePortals()` and shows portal name + "Open portal"
   (`formUrl`, `target=_blank`) + verification pill; unresolved key → neutral
