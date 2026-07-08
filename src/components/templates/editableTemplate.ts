@@ -77,6 +77,32 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
   }));
 }
 
+// A task's portal must be unambiguous — the extension closes ONE task per
+// portal submission, so two steps in the same task pointing at different
+// portals would make the close-out target undecidable. Returns the offending
+// tasks (normalized distinct keys > 1) so the wizard can warn and block save.
+export interface PortalKeyConflict {
+  taskIdx: number;
+  title: string;
+  keys: string[];
+}
+
+export function portalKeyConflicts(tasks: EditableTask[]): PortalKeyConflict[] {
+  const out: PortalKeyConflict[] = [];
+  tasks.forEach((t, i) => {
+    const keys = [
+      ...new Set(
+        t.steps
+          .filter((s) => s.stepType === "online_form")
+          .map((s) => normalizePortalKey(s.portalKey))
+          .filter((k): k is string => k !== null),
+      ),
+    ];
+    if (keys.length > 1) out.push({ taskIdx: i, title: t.title, keys });
+  });
+  return out;
+}
+
 export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
   return tasks.map((t, i) => ({
     title: t.title,

@@ -4,6 +4,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal } from "@/types";
 
 const PORTAL_COLUMNS =
@@ -32,7 +33,11 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
   const payload = {
     org_id: orgId,
     name: input.name.trim(),
-    portal_key: input.portalKey.trim(),
+    // Folded (trim + lowercase) at the write boundary so SOP-step portalKey
+    // joins are literal string compares. The key is immutable after create —
+    // no update path edits it; a rename would orphan every SOP-step link and
+    // field mapping, so it stays out of the UI deliberately.
+    portal_key: normalizePortalKey(input.portalKey) ?? "",
     payer_id: input.payerId ?? null,
     form_url: input.formUrl?.trim() || null,
   };

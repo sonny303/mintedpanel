@@ -25,6 +25,7 @@ import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
   fromEditable,
+  portalKeyConflicts,
   randId,
   toEditable,
   type EditableTask,
@@ -390,6 +391,18 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
     if (!name.trim()) {
       toast.error("Template name is required");
       setStep(1);
+      return;
+    }
+    // One portal per task: the extension closes exactly one task per portal
+    // submission, so two steps in a task pointing at different portals would
+    // make the close-out target ambiguous.
+    const conflicts = portalKeyConflicts(tasks);
+    if (conflicts.length > 0) {
+      const c = conflicts[0];
+      toast.error(
+        `"${c.title.trim() || `Task ${c.taskIdx + 1}`}" links more than one portal (${c.keys.join(", ")}). A task can fill only one portal — pick one.`,
+      );
+      setStep(3);
       return;
     }
     setSaving(true);

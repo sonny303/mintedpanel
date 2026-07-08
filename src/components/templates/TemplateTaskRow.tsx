@@ -179,6 +179,12 @@ export function TemplateTaskRow({
       </div>
 
       <div className="p-4 space-y-3">
+        {taskPortalKeys(task).length > 1 ? (
+          <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+            This task links more than one portal ({taskPortalKeys(task).join(", ")}). A task can
+            fill only one portal — pick one; save is blocked until then.
+          </div>
+        ) : null}
         <div className="flex items-center justify-between">
           <span className="text-xs uppercase tracking-wider text-muted-foreground">SOP steps</span>
           {canEdit ? (
@@ -414,6 +420,20 @@ export function TemplateTaskRow({
       </div>
     </div>
   );
+}
+
+// A task's distinct normalized portal keys across its online_form steps. More
+// than one makes the extension's close-out target ambiguous, so the wizard
+// warns here and blocks save.
+function taskPortalKeys(task: EditableTask): string[] {
+  return [
+    ...new Set(
+      task.steps
+        .filter((s) => s.stepType === "online_form")
+        .map((s) => normalizePortalKey(s.portalKey))
+        .filter((k): k is string => k !== null),
+    ),
+  ];
 }
 
 // Portal picker for an online_form step. Options default to portals registered
