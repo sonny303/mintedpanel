@@ -1,10 +1,15 @@
-// M1 app shell: fixed dark sidebar on desktop, hamburger slide-in drawer on
-// mobile (translateX pattern, overlay dismiss, X to close). Route pages render
-// unmodified in the content area.
+// Redesign E0.0 app shell (TE-6). Fixed sidebar on desktop; hamburger slide-in
+// drawer on mobile (translateX pattern, overlay dismiss, X to close). On small
+// screens the sidebar collapses into the drawer while the mobile header keeps
+// the active org visible (F0.0.2) and offers a one-tap return to the Portfolio
+// (F0.0.4); the drawer itself still carries the org switcher and Portfolio
+// return, so nothing is lost in the collapse (F0.0.1). Route pages render in the
+// content area.
 import React, { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LayoutGrid } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
-import logoAsset from "@/assets/minted-mark.png.asset.json";
+import { useActiveMembership } from "@/lib/auth-store";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,6 +18,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = () => setDrawerOpen(false);
+  const active = useActiveMembership();
+  const activeOrgName = active?.orgName ?? "Minted Panel";
 
   return (
     <div className="flex h-dvh w-full bg-background overflow-hidden font-sans text-foreground">
@@ -50,7 +57,8 @@ export function AppShell({ children }: AppShellProps) {
       </div>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Mobile header */}
+        {/* Mobile header: hamburger opens the drawer (org switcher + journey),
+            the active org stays visible, and the icon returns to Portfolio. */}
         <header className="md:hidden h-14 flex items-center gap-3 px-4 border-b border-border bg-card flex-shrink-0">
           <button
             type="button"
@@ -60,16 +68,16 @@ export function AppShell({ children }: AppShellProps) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 font-semibold text-[15px] tracking-tight">
-            <div className="w-6 h-6 rounded bg-mp-primary flex items-center justify-center">
-              <img
-                src={logoAsset.url}
-                alt=""
-                className="w-4 h-4 object-contain brightness-0 invert"
-              />
-            </div>
-            Minted Panel
-          </div>
+          <span className="flex-1 truncate font-semibold text-[15px] tracking-tight text-foreground">
+            {activeOrgName}
+          </span>
+          <Link
+            to="/portfolio"
+            aria-label="Return to Portfolio"
+            className="w-9 h-9 -mr-2 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
+          >
+            <LayoutGrid className="w-5 h-5" />
+          </Link>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4">{children}</main>

@@ -172,6 +172,7 @@ function RootComponent() {
   const session = useAuthStore((s) => s.session);
   const initError = useAuthStore((s) => s.initError);
   const memberships = useAuthStore((s) => s.memberships);
+  const activeOrgId = useAuthStore((s) => s.activeOrgId);
 
   useEffect(() => {
     registerQueryClient(queryClient);
@@ -229,7 +230,12 @@ function RootComponent() {
         <NoOrgScreen />
       ) : (
         <AppShell>
-          <Outlet />
+          {/* TE-4 (F0.0.3): keying the routed subtree on the active org forces a
+              remount on switch, clearing org-scoped component-local view state
+              (selected provider/case/facility, filters, unsaved forms) before
+              the new org loads. Server state is cleared by
+              auth-store.setActiveOrg -> queryClient.removeQueries(). */}
+          <Outlet key={activeOrgId ?? "no-org"} />
         </AppShell>
       )}
       <Toaster />

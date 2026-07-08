@@ -25,7 +25,8 @@ function LoginPage() {
 
   useEffect(() => {
     if (initialized && session && pathname === "/login") {
-      navigate({ to: "/home" });
+      // Redesign E0.0: land on the cross-org Portfolio, not the legacy /home.
+      navigate({ to: "/portfolio" });
     }
   }, [initialized, session, pathname, navigate]);
 
@@ -37,7 +38,7 @@ function LoginPage() {
       setError(result.error);
       return;
     }
-    navigate({ to: "/home" });
+    navigate({ to: "/portfolio" });
   }
 
   return (
