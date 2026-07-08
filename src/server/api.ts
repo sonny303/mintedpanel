@@ -31,6 +31,9 @@ const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
 const CASE_CONTEXT_ROUTE = /^\/api\/cases\/([^/]+)\/context\/?$/;
 // `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
 const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
+// `/api/me/view-prefs` — the caller's extension detail-view field list
+// (user-scoped, no org context — prefs follow the user across orgs).
+const ME_VIEW_PREFS_ROUTE = /^\/api\/me\/view-prefs\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
@@ -86,6 +89,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
   const caseContextMatch = pathname.match(CASE_CONTEXT_ROUTE);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
+  const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   if (
     !profileMatch &&
     !providersMatch &&
@@ -94,7 +98,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isCases &&
     !caseTouchesMatch &&
     !caseContextMatch &&
-    !isMeOrgs
+    !isMeOrgs &&
+    !isMeViewPrefs
   ) {
     return fail(404, "Not found");
   }
@@ -109,6 +114,20 @@ async function routeApiRequest(request: Request): Promise<Response> {
       const user = await authenticateUser(request);
       const routes = await loadExtensionRoutes();
       return await routes.handleListMyOrgs(user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
+  }
+
+  // /api/me/view-prefs is user-scoped for the same reason as /api/me/orgs:
+  // the prefs row is keyed by user id alone, no org context involved.
+  if (isMeViewPrefs) {
+    if (method !== "GET" && method !== "PUT") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      if (method === "GET") return await routes.handleGetViewPrefs(user);
+      return await routes.handlePutViewPrefs(await readJsonBody(request), user);
     } catch (error) {
       return toErrorResponse(error);
     }

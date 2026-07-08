@@ -60,6 +60,13 @@ export interface UnresolvedToken {
 export interface ProviderProfileFacility {
   id: string;
   name: string;
+  // Address fields ride on the facility set so the extension can show the
+  // selected location's full practice address without another profile read.
+  street: string | null;
+  suite: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
 }
 
 export interface ProviderProfile {
@@ -304,8 +311,9 @@ export async function getProviderProfile(
 
   // The provider→facility linkage is provider_facility_assignments (unique
   // (provider_id, facility_id)); the resolvable facility set is every assigned
-  // facility that still exists in the caller's org. Fetched id+name only —
-  // this list is part of the response payload, not a token source.
+  // facility that still exists in the caller's org. Fetched with the address
+  // columns so the client can render the selected location's practice
+  // address — this list is part of the response payload, not a token source.
   const assignmentFacilityIds = [
     ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
   ];
@@ -313,15 +321,30 @@ export async function getProviderProfile(
   if (assignmentFacilityIds.length > 0) {
     const { data: facilityRows, error: facilityListErr } = await db
       .from("facilities")
-      .select("id, name")
+      .select("id, name, street, suite, city, state, zip")
       .in("id", assignmentFacilityIds)
       .eq("org_id", orgId)
       .order("name")
       .order("id");
     if (facilityListErr) throw facilityListErr;
-    facilities = ((facilityRows ?? []) as Array<{ id: string; name: string | null }>).map((f) => ({
+    facilities = (
+      (facilityRows ?? []) as Array<{
+        id: string;
+        name: string | null;
+        street: string | null;
+        suite: string | null;
+        city: string | null;
+        state: string | null;
+        zip: string | null;
+      }>
+    ).map((f) => ({
       id: f.id,
       name: f.name ?? "",
+      street: f.street ?? null,
+      suite: f.suite ?? null,
+      city: f.city ?? null,
+      state: f.state ?? null,
+      zip: f.zip ?? null,
     }));
   }
 

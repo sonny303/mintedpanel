@@ -89,11 +89,21 @@ const FACILITIES = [
     id: FIXTURES.KANSAS_FACILITY_ID,
     orgId: FIXTURES.KANSAS_ORG,
     name: "Fitness Physio - Leavenworth",
+    street: "100 Main St",
+    suite: null,
+    city: "Leavenworth",
+    state: "KS",
+    zip: "66048",
   },
   {
     id: FIXTURES.SOUTHPARK_FACILITY_ID,
     orgId: FIXTURES.SOUTHPARK_ORG,
     name: "Casa Bonita Clinic",
+    street: "200 Oak Ave",
+    suite: "Ste 5",
+    city: "South Park",
+    state: "CO",
+    zip: "80440",
   },
 ];
 
@@ -254,7 +264,15 @@ function profileFor(p, user, { facilities, selectedFacilityId }) {
     unresolved: [
       { token: "payer.name", reason: "case-scoped source (payers); resolve at fill time" },
     ],
-    facilities: facilities.map(({ id, name }) => ({ id, name })),
+    facilities: facilities.map(({ id, name, street, suite, city, state, zip }) => ({
+      id,
+      name,
+      street: street ?? null,
+      suite: suite ?? null,
+      city: city ?? null,
+      state: state ?? null,
+      zip: zip ?? null,
+    })),
     selected_facility_id: selectedFacilityId,
   };
 }

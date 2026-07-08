@@ -109,8 +109,24 @@ const licenseKS = { id: "l1", state: "KS", license_number: "KS-100", issue_date:
 const licenseMO = { id: "l2", state: "MO", license_number: "MO-200", issue_date: "2023-06-01" };
 const assignmentF1 = { id: "a1", facility_id: "f1", is_primary: true };
 const assignmentF2 = { id: "a2", facility_id: "f2", is_primary: false };
-const facilityListF1 = { id: "f1", name: "Main Clinic" };
-const facilityListF2 = { id: "f2", name: "Second Clinic" };
+const facilityListF1 = {
+  id: "f1",
+  name: "Main Clinic",
+  street: "100 Main St",
+  suite: null,
+  city: "Wichita",
+  state: "KS",
+  zip: "67202",
+};
+const facilityListF2 = {
+  id: "f2",
+  name: "Second Clinic",
+  street: "200 Oak Ave",
+  suite: "Ste 5",
+  city: "Topeka",
+  state: "KS",
+  zip: "66603",
+};
 const facilityRowF1 = { id: "f1", name: "Main Clinic" };
 const facilityRowF2 = { id: "f2", name: "Second Clinic" };
 const policyRow = { id: "gp1", policy_number: "POL-9" };
@@ -122,8 +138,8 @@ function happyTables(): Record<string, FakeResult | FakeResult[]> {
     state_licenses: { data: [licenseKS] },
     provider_facility_assignments: { data: [assignmentF1] },
     group_insurance_policies: { data: [policyRow] },
-    // Queried twice: the org-scoped facility set (id, name), then the selected
-    // facility's full-column row.
+    // Queried twice: the org-scoped facility set (id, name, address), then
+    // the selected facility's full-column row.
     facilities: [{ data: [facilityListF1] }, { data: facilityRowF1 }],
   };
 }
@@ -177,7 +193,17 @@ describe("provider profile service — injected server context", () => {
     expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("POL-9");
 
     // A sole facility is auto-selected and reported in the payload.
-    expect(profile.facilities).toEqual([{ id: "f1", name: "Main Clinic" }]);
+    expect(profile.facilities).toEqual([
+      {
+        id: "f1",
+        name: "Main Clinic",
+        street: "100 Main St",
+        suite: null,
+        city: "Wichita",
+        state: "KS",
+        zip: "67202",
+      },
+    ]);
     expect(profile.selected_facility_id).toBe("f1");
 
     // Case-scoped sources are never resolved from a provider profile.
@@ -194,11 +220,11 @@ describe("provider profile service — injected server context", () => {
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
-    // The facility set is fetched by the assignments' facility ids (id + name
-    // only), then the selected facility's full row by id.
+    // The facility set is fetched by the assignments' facility ids (id, name,
+    // and address fields), then the selected facility's full row by id.
     const facilityCaps = captures.filter((c) => c.table === "facilities");
     expect(facilityCaps).toHaveLength(2);
-    expect(facilityCaps[0].selectCols).toBe("id, name");
+    expect(facilityCaps[0].selectCols).toBe("id, name, street, suite, city, state, zip");
     expect(facilityCaps[0].ins).toEqual([["id", ["f1"]]]);
     expect(facilityCaps[0].orders.map(([col]) => col)).toEqual(["name", "id"]);
     expect(facilityCaps[1].filters).toContainEqual(["id", "f1"]);
@@ -245,8 +271,24 @@ describe("provider profile service — injected server context", () => {
     const profile = result.profile;
     expect(profile.selected_facility_id).toBeNull();
     expect(profile.facilities).toEqual([
-      { id: "f1", name: "Main Clinic" },
-      { id: "f2", name: "Second Clinic" },
+      {
+        id: "f1",
+        name: "Main Clinic",
+        street: "100 Main St",
+        suite: null,
+        city: "Wichita",
+        state: "KS",
+        zip: "67202",
+      },
+      {
+        id: "f2",
+        name: "Second Clinic",
+        street: "200 Oak Ave",
+        suite: "Ste 5",
+        city: "Topeka",
+        state: "KS",
+        zip: "66603",
+      },
     ]);
     expect(valueOf(profile, "facility.name")).toBeNull();
     expect(reasonFor(profile, "facility.name")).toContain("?facilityId=");

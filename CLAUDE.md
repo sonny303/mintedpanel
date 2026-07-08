@@ -174,14 +174,26 @@ them. The current surface:
   `x-org-id`, so the guard's multi-org 400 deliberately doesn't apply. Zero
   memberships = empty list, not an error. Gate assertions 10/10b pin "own
   memberships only".
+- `GET/PUT /api/me/view-prefs` — the caller's saved extension detail-view
+  field list (`src/services/extensionViewPrefs.ts`), stored in
+  `user_table_prefs` under `page_key 'extension.providerDetails'`. USER-scoped
+  like `/api/me/orgs` (runs on `authenticateUser`, no org guard — prefs follow
+  the user across orgs). GET returns `{ fields: string[] | null }` (null =
+  nothing saved; the envelope's `data` is never null since the extension
+  treats null data as an error). PUT accepts `{ fields: string[] }` of BARE
+  catalog token keys (`license.licenseNumber`), deduped, max 64; anything else
+  → 422. Not a PHI read/write — no audit row.
 - `GET /api/providers/:id/profile?state=XX&facilityId=<uuid>` — the fill
   engine's payload: the provider row + every catalog token resolved to a value
   server-side (`src/services/providerProfile.ts`). Deterministic source-row
   picking: `?state` selects the state license; sole policy selects group
   insurance; `payers`/`msos`/`contracts` tokens are case-scoped and always
   come back `null` + listed in `unresolved` with a reason. Facility awareness
-  (2026-07-06): the response carries `facilities: [{ id, name }]` (the
-  provider's org-scoped facility set via provider_facility_assignments) and
+  (2026-07-06): the response carries
+  `facilities: [{ id, name, street, suite, city, state, zip }]` (the
+  provider's org-scoped facility set via provider_facility_assignments;
+  address fields added 2026-07-08 so the extension can render the selected
+  location's practice address under its Location picker) and
   `selected_facility_id`; `?facilityId` must be in that set (cross-org or
   unassigned → 404 "Facility not found for this provider", gate assertion 11);
   no param + sole facility auto-selects; no param + several →

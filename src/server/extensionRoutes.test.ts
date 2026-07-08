@@ -10,6 +10,13 @@ vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
+vi.mock("@/services/extensionViewPrefs", async (importOriginal) => ({
+  // parseExtensionViewPrefs is pure validation logic — use the real one so the
+  // handler's 422 contract is tested for real; mock only the DB reads/writes.
+  ...(await importOriginal<typeof import("@/services/extensionViewPrefs")>()),
+  getExtensionViewPrefs: vi.fn(),
+  putExtensionViewPrefs: vi.fn(),
+}));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
@@ -18,6 +25,7 @@ import { listOpenProviderCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
+import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
@@ -26,6 +34,8 @@ import {
   handleCaseContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
+  handleGetViewPrefs,
+  handlePutViewPrefs,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
@@ -35,6 +45,8 @@ const listCasesMock = vi.mocked(listOpenProviderCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
+const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
+const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -59,6 +71,15 @@ describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const FACILITY_ID = "aaaa1111-2222-4333-8444-555566667777";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
+  const facilityEntry = (id: string, name: string) => ({
+    id,
+    name,
+    street: "100 Main St",
+    suite: null,
+    city: "Wichita",
+    state: "KS",
+    zip: "67202",
+  });
   // What the ctx() JWT resolves to (see resolveUserTokens).
   const USER_TOKENS = [
     { token: "user.name", value: "Tess Tester" },
@@ -76,7 +97,7 @@ describe("provider profile handler", () => {
         provider: { id: PROVIDER_ID } as never,
         tokens: [],
         unresolved: [],
-        facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+        facilities: [facilityEntry(FACILITY_ID, "Main Clinic")],
         selected_facility_id: FACILITY_ID,
         ...profile,
       },
@@ -111,7 +132,7 @@ describe("provider profile handler", () => {
       provider: { id: PROVIDER_ID },
       tokens: USER_TOKENS,
       unresolved: [],
-      facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
+      facilities: [facilityEntry(FACILITY_ID, "Main Clinic")],
       selected_facility_id: FACILITY_ID,
     });
     // Both user tokens resolved, facility selected -> no meta at all.
@@ -226,8 +247,8 @@ describe("provider profile handler", () => {
 
   it("flags meta.needs_facility when several facilities need a user choice", async () => {
     const facilities = [
-      { id: FACILITY_ID, name: "Main Clinic" },
-      { id: "bbbb1111-2222-4333-8444-555566667777", name: "Second Clinic" },
+      facilityEntry(FACILITY_ID, "Main Clinic"),
+      facilityEntry("bbbb1111-2222-4333-8444-555566667777", "Second Clinic"),
     ];
     getProfileMock.mockResolvedValue(okResult({ facilities, selected_facility_id: null }, true));
     const c = ctx();
@@ -284,6 +305,58 @@ describe("me orgs handler", () => {
     const b = await body(res);
     expect(b.data).toEqual([]);
     expect(b.meta).toEqual({ total: 0 });
+  });
+});
+
+describe("view prefs handlers", () => {
+  function userCtx(): UserContext {
+    return {
+      userId: "u1",
+      email: "tester@minted.com",
+      userMetadata: null,
+      db: {} as UserContext["db"],
+    };
+  }
+
+  it("GET returns the saved field list, queried by the JWT user id", async () => {
+    getViewPrefsMock.mockResolvedValue({ fields: ["license.licenseNumber", "provider.npi"] });
+    const res = await handleGetViewPrefs(userCtx());
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual({ fields: ["license.licenseNumber", "provider.npi"] });
+    expect(getViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ db: {} }), "u1");
+  });
+
+  it("GET returns { fields: null } (non-null data) when nothing is saved", async () => {
+    getViewPrefsMock.mockResolvedValue(null);
+    const res = await handleGetViewPrefs(userCtx());
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ fields: null });
+  });
+
+  it("PUT saves a valid field list (deduped) under the JWT user id and echoes it", async () => {
+    putViewPrefsMock.mockResolvedValue(undefined);
+    const res = await handlePutViewPrefs(
+      { fields: ["provider.npi", "group.tin", "provider.npi"] },
+      userCtx(),
+    );
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ fields: ["provider.npi", "group.tin"] });
+    expect(putViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ db: {} }), "u1", {
+      fields: ["provider.npi", "group.tin"],
+    });
+  });
+
+  it.each([
+    ["null body", null],
+    ["missing fields", {}],
+    ["non-array fields", { fields: "provider.npi" }],
+    ["non-token entry", { fields: ["{{provider.npi}}"] }],
+    ["non-string entry", { fields: [42] }],
+  ])("PUT rejects %s with 422 and never writes", async (_label, payload) => {
+    const res = await handlePutViewPrefs(payload, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
   });
 });
 
