@@ -238,6 +238,118 @@ describe("buildFixitQueue — dictionary + train", () => {
   });
 });
 
+describe("buildFixitQueue — broken mappings from fill telemetry", () => {
+  const portals = [{ portalKey: "bcbs_ks", name: "BCBS KS", payerId: "pay-1" }];
+
+  it("raises a card for selectors the last fill couldn't find, joined by mapId then label", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [
+        map({ portalKey: "bcbs_ks", id: "m1", token: "provider.npi", selector: "label:NPI" }),
+        map({
+          portalKey: "bcbs_ks",
+          id: "m2",
+          token: "facility.city",
+          selector: "label:City",
+          fieldLabel: "Service location city",
+        }),
+        map({ portalKey: "bcbs_ks", id: "m3", token: "provider.caqhId", selector: "label:CAQH" }),
+      ],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            // exact join via mapId
+            { label: "NPI", reason: "field not found on this page", kind: "skipped", mapId: "m1" },
+            // legacy report without mapId → joins via the selector's label
+            { label: "City", reason: "field not found on this page", kind: "skipped" },
+            // other skip reasons and manual entries never raise the card
+            { label: "CAQH", reason: "no value", kind: "skipped" },
+            { label: "CAQH", reason: "manual entry", kind: "manual" },
+          ],
+        },
+      ],
+    });
+    const broken = cards.find((c) => c.kind === "broken_mapping");
+    expect(broken?.broken).toMatchObject({
+      portalKey: "bcbs_ks",
+      count: 2,
+      globalCount: 0,
+      labels: ["NPI", "Service location city"],
+    });
+    expect(broken?.broken?.orgRows.map((r) => r.id)).toEqual(["m1", "m2"]);
+  });
+
+  it("splits org rows (actionable) from global rows (read-only)", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [
+        map({ portalKey: "bcbs_ks", id: "g1", orgId: null, selector: "label:City" }),
+        map({ portalKey: "bcbs_ks", id: "o1", selector: "label:State" }),
+      ],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            { label: "City", reason: "field not found on this page", kind: "skipped" },
+            { label: "State", reason: "field not found on this page", kind: "skipped" },
+          ],
+        },
+      ],
+    });
+    const broken = cards.find((c) => c.kind === "broken_mapping");
+    expect(broken?.broken?.count).toBe(2);
+    expect(broken?.broken?.globalCount).toBe(1);
+    expect(broken?.broken?.orgRows.map((r) => r.id)).toEqual(["o1"]);
+  });
+
+  it("ignores retired rows, unmatched labels, and malformed telemetry", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [
+        map({ portalKey: "bcbs_ks", id: "r1", status: "retired", selector: "label:City" }),
+      ],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            { label: "City", reason: "field not found on this page", kind: "skipped" },
+            { label: "Ghost", reason: "field not found on this page", kind: "skipped" },
+            "not-an-object",
+            { reason: "field not found on this page" },
+          ],
+        },
+        { portalKey: "bcbs_ks", fieldsSkipped: "corrupt" },
+        { portalKey: "unknown_portal", fieldsSkipped: [] },
+      ],
+    });
+    expect(cards.find((c) => c.kind === "broken_mapping")).toBeUndefined();
+  });
+
+  it("dates the card by the payer's soonest open case", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      providers: [provider()],
+      openCases: [openCase({ caseId: "c1", payerId: "pay-1", nextDueDate: "2026-07-20" })],
+      portals,
+      fieldMaps: [map({ portalKey: "bcbs_ks", id: "m1", selector: "label:City" })],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            { label: "City", reason: "field not found on this page", kind: "skipped" },
+          ],
+        },
+      ],
+    });
+    const broken = cards.find((c) => c.kind === "broken_mapping");
+    expect(broken?.sortDate).toBe("2026-07-20");
+  });
+});
+
 describe("buildFixitQueue — ordering is by impact, never ease", () => {
   it("dated gaps sort before undated cards, soonest first", () => {
     const cards = buildFixitQueue({

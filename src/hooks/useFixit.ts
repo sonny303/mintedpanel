@@ -11,12 +11,18 @@ import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
+import { usePortals, usePortalFieldMaps, useLastFills } from "@/hooks/usePortals";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
 import { updateProvider, type ProviderInput } from "@/services/providers";
+import { reproposeFieldMap } from "@/services/portalFieldMaps";
 import { createFollowUpTask } from "@/services/tasks";
 import { decideDictionaryEntry } from "@/services/fieldDictionary";
-import { buildFixitQueue, type FixitCard, type OpenCaseLite } from "@/lib/fixitQueue";
+import {
+  buildFixitQueue,
+  type BrokenOrgRow,
+  type FixitCard,
+  type OpenCaseLite,
+} from "@/lib/fixitQueue";
 import type { FieldDictionaryStatus } from "@/types";
 
 export interface UseFixitQueueResult {
@@ -35,6 +41,7 @@ export function useFixitQueue(): UseFixitQueueResult {
   const portalsQ = usePortals();
   const mapsQ = usePortalFieldMaps();
   const dictQ = useFieldDictionary();
+  const lastFillsQ = useLastFills();
 
   // Every query feeds buildFixitQueue, so the deck must not seed until all have
   // loaded — a partial seed would freeze an incomplete deck (missing dictionary
@@ -47,7 +54,8 @@ export function useFixitQueue(): UseFixitQueueResult {
     statusConfigsQ.isLoading ||
     portalsQ.isLoading ||
     mapsQ.isLoading ||
-    dictQ.isLoading;
+    dictQ.isLoading ||
+    lastFillsQ.isLoading;
   const isError = providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
 
   const cards = useMemo(() => {
@@ -59,6 +67,10 @@ export function useFixitQueue(): UseFixitQueueResult {
     const portals = portalsQ.data ?? [];
     const maps = mapsQ.data ?? [];
     const dictionary = dictQ.data ?? [];
+    const lastFills = [...(lastFillsQ.data?.values() ?? [])].map((f) => ({
+      portalKey: f.portalKey,
+      fieldsSkipped: f.fieldsSkipped,
+    }));
     if (providers.length === 0 && cases.length === 0) return [];
 
     const statusById = new Map(statusConfigs.map((s) => [s.id, s]));
@@ -93,6 +105,7 @@ export function useFixitQueue(): UseFixitQueueResult {
       portals: portals.map((p) => ({ portalKey: p.portalKey, name: p.name, payerId: p.payerId })),
       fieldMaps: maps,
       dictionary,
+      lastFills,
     });
   }, [
     providersQ.data,
@@ -103,6 +116,7 @@ export function useFixitQueue(): UseFixitQueueResult {
     portalsQ.data,
     mapsQ.data,
     dictQ.data,
+    lastFillsQ.data,
   ]);
 
   return {
@@ -115,6 +129,7 @@ export function useFixitQueue(): UseFixitQueueResult {
       portalsQ.refetch();
       mapsQ.refetch();
       dictQ.refetch();
+      lastFillsQ.refetch();
     },
   };
 }
@@ -158,5 +173,21 @@ export function useDecideDictionary() {
       status: Extract<FieldDictionaryStatus, "confirmed" | "rejected">;
     }) => decideDictionaryEntry(id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.fieldDictionary(orgId) }),
+  });
+}
+
+// Broken-mapping card action: send the org's own rows whose selectors no longer
+// match the live form back to proposed, so they re-enter the training deck for
+// a re-decision (RLS blocks writes to global rows — those stay informational).
+export function useSendBrokenToTraining() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: async (rows: BrokenOrgRow[]) => {
+      for (const row of rows) {
+        await reproposeFieldMap(row.id, { token: row.token, source: row.source });
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portalFieldMaps(orgId) }),
   });
 }
