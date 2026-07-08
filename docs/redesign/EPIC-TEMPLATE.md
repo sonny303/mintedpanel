@@ -1,5 +1,5 @@
 ---
-epic: eX.X
+epic: e0.0 # lowercase in frontmatter; filename is EX.X-<slug>.md, e.g. E0.0-app-shell.md
 title: <Title>
 stage: X
 status: draft # draft → reviewed → in-build → done (reviewer-managed)
@@ -7,7 +7,7 @@ owner: chatprd
 reviewed: false # set to true by the reviewing agent only
 ---
 
-# eX.X — <Title>
+# E0.0 — <Title>
 
 ## 1. Summary & Business Goal
 

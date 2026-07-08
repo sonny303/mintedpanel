@@ -70,8 +70,9 @@ Selection rules:
 
 ## Build requirements for implementation PRs
 
-1. **One epic per PR**, targeting `redesign`, titled `eX.X: <title>` and
-   referencing the epic file. FRs must be traceable in the diff.
+1. **One epic per PR**, targeting `redesign`, titled `EX.X: <title>` and
+   referencing the epic file (`docs/redesign/EX.X-<slug>.md`). FRs must be
+   traceable in the diff.
 2. **Layering:** components → hooks (`src/hooks/`) → services
    (`src/services/`) → `externalClient`. No Supabase in components; no mock
    arrays in components.

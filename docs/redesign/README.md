@@ -9,7 +9,7 @@ by the PM.
 | Role                    | Agent          | Responsibility                                                                                 |
 | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
 | PM                      | Human (Sowmya) | Business scope, UX design system, stage promotion                                              |
-| Requirements author     | ChatPRD        | Drafts epic `eX.X-*.md` files per the template                                                 |
+| Requirements author     | ChatPRD        | Drafts epic `EX.X-*.md` files per the template                                                 |
 | Reviewer / Orchestrator | Devin          | Polishes epics, populates technical enablers, gates and merges Claude Code PRs into `redesign` |
 | Builder                 | Claude Code    | Implements epics as PRs targeting `redesign`                                                   |
 
@@ -18,18 +18,23 @@ by the PM.
 ```
 docs/redesign/
   README.md                  This file.
-  epics/                     One markdown file per epic: eX.X-<slug>.md
-    TEMPLATE.md              Canonical epic template (copy for new epics).
+  EPIC-TEMPLATE.md           Canonical epic template (copy for new epics).
+  E0.0-app-shell.md          One markdown file per epic: EX.X-<slug>.md, in this dir.
+  E0.1-...md                 (further epics land here, alongside this README)
   uiux-component-guide.md    Component selection & build requirements for builders.
 CLARIFICATIONS_NEEDED.md     (repo root) Open roadblocks for the PM.
 ```
+
+Epic files land **directly in `docs/redesign/`** (not a subfolder), named
+`EX.X-<slug>.md` (e.g. `E0.0-app-shell.md`) — this is the path the reviewer
+listens on.
 
 ## Epic lifecycle
 
 Status is tracked in each epic's frontmatter and only the reviewer changes
 `status`/`reviewed`:
 
-1. `draft` — authored by ChatPRD, committed to `docs/redesign/epics/`.
+1. `draft` — authored by ChatPRD, committed to `docs/redesign/` as `EX.X-<slug>.md`.
 2. `reviewed` — Devin has polished grammar/formatting (no scope changes) and fully
    populated `## 5. Technical Considerations & Enablers`. Frontmatter `reviewed: true`.
 3. `in-build` — a Claude Code PR referencing the epic is open against `redesign`.
