@@ -346,6 +346,14 @@ describe("provider cases handler", () => {
         payerReferenceId: "REF-123",
         latestNote: { text: "waiting on payer", author: "Ann", at: "2026-07-06T00:00:00Z" },
         lastSubmittedAt: "2026-07-05T00:00:00Z",
+        portalTasks: [
+          {
+            taskId: "t1",
+            title: "Enroll on Availity",
+            portalKey: "availity",
+            status: "in_progress",
+          },
+        ],
       },
     ];
     listCasesMock.mockResolvedValue(rows);

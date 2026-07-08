@@ -130,6 +130,16 @@ const CASES = [
     state: "CO",
     status: "In Progress",
     submittedDate: null,
+    // Phase 4: a portal-linked open task. Its task_id must never leak into a
+    // Kansas caller's response (assertion 8d) — same isolation as the row.
+    portalTasks: [
+      {
+        taskId: FIXTURES.SOUTHPARK_TASK_ID,
+        title: "SP portal enrollment",
+        portalKey: "sp_test_portal",
+        status: "in_progress",
+      },
+    ],
   },
   {
     id: FIXTURES.KANSAS_CASE_ID,
@@ -139,6 +149,14 @@ const CASES = [
     state: "KS",
     status: "Submitted",
     submittedDate: "2026-06-01",
+    portalTasks: [
+      {
+        taskId: FIXTURES.KANSAS_TASK_ID,
+        title: "Enroll on BCBS portal",
+        portalKey: "bcbs_ks_enrollment",
+        status: "in_progress",
+      },
+    ],
   },
 ];
 
@@ -155,6 +173,7 @@ function caseListRow(c) {
     payerReferenceId: c.payerReferenceId ?? null,
     latestNote: c.latestNote ?? null,
     lastSubmittedAt: c.lastSubmittedAt ?? null,
+    portalTasks: c.portalTasks ?? [],
   };
 }
 
