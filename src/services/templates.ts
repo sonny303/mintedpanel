@@ -1,5 +1,5 @@
 // SOP template CRUD (org-scoped, admin-write enforced by RLS) with audit.
-// The archived column is `is_archived`; TemplateInput accepts either alias.
+// The archived column is `archived`; TemplateInput accepts either alias.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
@@ -30,7 +30,7 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
   const payload = snakeizeRow<Record<string, unknown>>(rest);
   payload.org_id = orgId;
   const archiveValue = archived ?? isArchived;
-  if (archiveValue !== undefined) payload.is_archived = archiveValue;
+  if (archiveValue !== undefined) payload.archived = archiveValue;
   return payload as unknown as SopTemplateInsert;
 }
 
