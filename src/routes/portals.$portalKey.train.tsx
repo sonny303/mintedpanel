@@ -27,7 +27,12 @@ import {
   useBatchApprove,
   useFinishTraining,
 } from "@/hooks/useMappingReview";
-import { splitBatch, type Confidence, type TrainingCard } from "@/lib/mappingConfidence";
+import {
+  partitionTrainableMaps,
+  splitBatch,
+  type Confidence,
+  type TrainingCard,
+} from "@/lib/mappingConfidence";
 import { bumpGoodCatches } from "@/lib/goodCatches";
 import type { Portal, PortalFieldMap } from "@/types";
 import type { TokenCatalogEntry } from "@/services/tokenCatalog";
@@ -54,6 +59,9 @@ interface Session {
   total: number;
   preManual: number;
   decidedBase: number;
+  // Global (org_id NULL) proposed rows exist for this portal but can't be
+  // trained here — surfaced honestly instead of read as "fully trained".
+  globalProposed: number;
   phase: "batch" | "cards" | "done";
   cardIndex: number;
   decidedCards: number;
@@ -171,8 +179,7 @@ function TrainPage() {
     if (seeded) return;
     if (!mapsQ.data || !dictQ.data) return;
     const maps = mapsQ.data;
-    const orgProposed = maps.filter((m) => m.status === "proposed" && m.orgId !== null);
-    const approved = maps.filter((m) => m.status === "approved");
+    const { orgProposed, approved, globalProposed } = partitionTrainableMaps(maps);
     const { batch, cards } = splitBatch(orgProposed, dictQ.data);
     const decidedBase = approved.length;
     const preManual = approved.filter(
@@ -186,6 +193,7 @@ function TrainPage() {
         total: decidedBase + batch.length + cards.length,
         preManual,
         decidedBase,
+        globalProposed: globalProposed.length,
         phase: batch.length > 0 ? "batch" : cards.length > 0 ? "cards" : "done",
         cardIndex: 0,
         decidedCards: 0,
@@ -270,13 +278,36 @@ function TrainPage() {
   const s = session as Session;
   const formName = portal.name;
 
-  // Fully trained: no proposed rows to decide and nothing was done this visit.
+  // Nothing for this org to decide this visit. Two very different reasons:
+  //  - genuinely trained: every captured field is decided, or
+  //  - the form's unapproved fields are all global (centrally managed) rows the
+  //    org can't touch — which is NOT "fully trained" and must say so, or the
+  //    banner contradicts Admin > Portals ("N proposed") for the same portal.
   if (
     s.phase === "done" &&
     s.decisionsCount === 0 &&
     s.batch.length === 0 &&
     s.cards.length === 0
   ) {
+    if (s.globalProposed > 0) {
+      const n = s.globalProposed;
+      return (
+        <div className="mx-auto max-w-[720px] py-6">
+          <TrainHeader formName={formName} onExit={exit} decided={s.decidedBase} total={s.total} />
+          <div className="mt-8">
+            <EmptyState
+              message={`${n} field ${n === 1 ? "mapping is" : "mappings are"} managed centrally`}
+              description="These selectors are shared across all organizations and maintained by Minted Panel, so they can't be trained here. They still autofill — reach out to your Minted Panel admin to change how this form maps."
+              action={
+                <Button variant="outline" size="sm" onClick={exit}>
+                  Back to Portals
+                </Button>
+              }
+            />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-[720px] py-6">
         <TrainHeader formName={formName} onExit={exit} decided={s.total} total={s.total} />

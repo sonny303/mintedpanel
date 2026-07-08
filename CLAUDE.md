@@ -776,7 +776,17 @@ window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
   boundary). Hook `src/hooks/useMappingReview.ts`. **The deck is seeded once
   into local reducer state** so persisting a decision never re-splits it
   mid-flow; caches invalidate on finish/exit. Completing a pass calls
-  `markPortalVerified`.
+  `markPortalVerified`. **Only OWN-ORG proposed rows are trainable** — RLS
+  blocks org writes to global (`org_id NULL`) rows, so the deck excludes them
+  (`partitionTrainableMaps` in `mappingConfidence.ts`). A global row is the
+  platform's shared catalog and belongs in `approved`; a global row left in
+  `proposed` is a seeding state only the platform can finish (promote via MCP,
+  the sanctioned `portal_field_maps` channel — that's how the 24
+  `bcbs_ks_enrollment` global rows were fixed 2026-07-08). When a portal's only
+  unapproved rows are global, the train page says so honestly ("managed
+  centrally") instead of the misleading "fully trained" it showed before. NB:
+  the extension fills `proposed` AND `approved` maps in v0 (only `retired` is
+  skipped) — approval status gates the training UX, not what autofills.
 - **Surface 3 — Portals admin** (`/admin/portals`, under the Admin nav group):
   registry table — inline URL edit (`updatePortalUrl` clears verification +
   stamps `url_changed_at` → "Needs re-verify" pill), mapped/proposed counts
