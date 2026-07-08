@@ -14,11 +14,19 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 
 ### organizations
 
-`id, name, created_at` — tenant root. Created via the SECURITY DEFINER
-`create_organization(p_name text) RETURNS uuid` RPC (self-serve intake): there
-is no INSERT policy on this table — the RPC inserts the org, the caller's admin
-membership, the canonical `status_configs` seed, and a CREATE audit row as the
-definer (migration `20260707140000_create_organization_rpc.sql`).
+`id, name, lifecycle_state, created_at` — tenant root. Created via the SECURITY
+DEFINER `create_organization(p_name text) RETURNS uuid` RPC (self-serve intake):
+there is no INSERT policy on this table — the RPC inserts the org, the caller's
+admin membership, the canonical `status_configs` seed, and a CREATE audit row as
+the definer (migration `20260707140000_create_organization_rpc.sql`).
+
+`lifecycle_state` (`text NOT NULL DEFAULT 'active' CHECK (lifecycle_state IN
+('prospect','active','inactive'))`, migration
+`20260708120000_org_lifecycle_state.sql`, redesign E0.0): internal-only signal
+driving the redesigned Portfolio buckets (active→"In motion", prospect→
+"Prospects", inactive excluded). Read-only in the app and NEVER rendered to the
+Credentialing Manager as a status label. All pre-migration rows are `active`.
+Stage 0 does not write it; transitions are manual until later tooling exists.
 
 ### memberships
 

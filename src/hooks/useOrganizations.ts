@@ -19,7 +19,8 @@ export function useCreateOrganization() {
       // an org the caller is a member of, so this must precede the switch.
       await loadMemberships();
       setActiveOrg(orgId);
-      navigate({ to: "/home" });
+      // Redesign E0.0: land on the Portfolio (the new front door) after intake.
+      navigate({ to: "/portfolio" });
     },
   });
 }

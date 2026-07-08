@@ -925,16 +925,19 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          lifecycle_state: string;
           name: string;
         };
         Insert: {
           created_at?: string;
           id?: string;
+          lifecycle_state?: string;
           name: string;
         };
         Update: {
           created_at?: string;
           id?: string;
+          lifecycle_state?: string;
           name?: string;
         };
         Relationships: [];

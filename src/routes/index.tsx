@@ -9,7 +9,9 @@ export const Route = createFileRoute("/")({
   beforeLoad: () => {
     const { session } = useAuthStore.getState();
     if (session) {
-      throw redirect({ to: "/home", replace: true });
+      // Redesign E0.0: the authenticated workspace opens on the cross-org
+      // Portfolio (the new front door), not the legacy flat /home.
+      throw redirect({ to: "/portfolio", replace: true });
     }
   },
   component: LandingPage,
