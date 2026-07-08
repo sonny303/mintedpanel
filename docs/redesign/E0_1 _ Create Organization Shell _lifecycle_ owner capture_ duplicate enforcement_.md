@@ -1,0 +1,130 @@
+# E0.1 — Create Organization Shell (Lifecycle, Owner Capture, Duplicate Enforcement)
+
+## Purpose and Context
+
+Establishes the requirements, benefit, and acceptance criteria for Stage 0's core org-creation flow. Implements the first step in the onboarding funnel from E0.0: a clean, lifecycle-aware organization shell, with enforced owner capture and duplicate-org blocking. Examples draw from the shared seed universe (`seed-universe.md`).
+
+For context on persona/actor discipline, portfolio flow, shell UX, and lifecycle model, see [E0.0 — App Shell & Navigation IA](../E0.0-app-shell.md).
+
+## Feature List
+
+### F0.1.1 — Credentialing Manager or Bulk-Import Can Create Org (UI+seed)
+
+* **Persona:** P1 Credentialing Manager. Bulk/import allowed for demo/testing.
+* **Benefit hypothesis:** Org portfolio and product validation require more than UI-driven entry; seed fixtures let tests and demos start from real, known states.
+* **Acceptance criteria:**
+  * Organization can be created via the standard UI flow (P1).
+  * It is also valid to seed orgs programmatically for test/demo.
+  * Seeded orgs must appear in UI exactly as user-created orgs do.
+
+### F0.1.2 — Required Owner (Name + Email) at Create
+
+* **Persona:** P1 (creator) and P5 (owner; captured stakeholder)
+* **Benefit hypothesis:** Every organization has a definitive responsible owner for dashboards, invites, and later workflow; blanks lead to accountability ambiguity, broken invite-link flows, and demo gaps.
+* **Acceptance criteria:**
+  * Name and email for the primary owner (P5) are required fields.
+  * Org creation is blocked (UI and seed-script) if either is missing.
+  * Email format must be valid to pass; warnings for common domain errors.
+  * Owner is captured into Full Party model for future assignment, dashboards, and E0.5 link flows (see mapping in `seed-universe.md`).
+
+### F0.1.3 — Org Lifecycle (Prospect→Active Auto-Promotion)
+
+* **Persona:** P1 (creator), P1/P2 (future team)
+* **Benefit hypothesis:** Accurately captures the onboarding funnel: orgs start as prospects, become active *only* when real scope exists; enables prospecting and precise reporting.
+* **Acceptance criteria:**
+  * New orgs are always created with internal state `prospect`.
+  * Lifecycle is promoted *automatically* and only after first group/facility/provider is added (Stage 1+ deliverable); no toggle, button, or manual override.
+  * UI reflects org as created prospect, with no lifecycle label shown (internal only).
+
+### F0.1.4 — Enforced Duplicate Guard (No Soft Option)
+
+* **Persona:** P1
+* **Benefit hypothesis:** Duplicate org records cause fragmented data, coordination errors, and demo confusion; strict blocking prevents the cost early.
+* **Acceptance criteria:**
+  * Org creation fails if another org exists with a matching name (case- and space-insensitive) and (optionally) similar city/state.
+  * Block applies to both UI and seed/import.
+  * Warning is descriptive: e.g., "An organization named 'Outer Banks Rehab Group' already exists in North Carolina. Please use a different name."
+  * No override option; must change data to proceed.
+  * \[TS-6 Duplicate Risk\] scenario must fail for `${duplicateOrg}` unless name is changed.
+
+### F0.1.5 — Post-Creation: Land In Workspace With Guided Next Step
+
+* **Persona:** P1
+* **Benefit hypothesis:** Minimizes friction, ensures new org flows straight into onboarding/scoping, eliminates unmotivated returns to portfolio.
+* **Acceptance criteria:**
+  * After successful creation, manager is automatically landed inside the new org's workspace (see E0.0 F0.0.4 guidance).
+  * Guided next-action prompt links directly to first scope step (e.g., "Add facilities or providers").
+  * No option or prompt to return to cross-portfolio view.
+
+## Gherkin Examples (seed-universe references)
+
+```gherkin
+Feature: Create organization shell with lifecycle, owner, and duplicate prevention
+
+  Scenario: Create a new active org in North Carolina
+    Given I am the Credentialing Manager (P1)
+    And no org exists named "Outer Banks Rehab Group"
+    And I enter name "Outer Banks Rehab Group"
+    And I enter owner name "John B Routledge"
+    And I enter owner email "johnb@outerbanks.example.test"
+    When I submit the new organization
+    Then the organization is created with lifecycle state prospect
+    And it appears in my workspace
+    And the owner record is stored for link/invite flows
+    And I am shown a guided next step to begin onboarding scope
+
+  Scenario: Fail to create a duplicate org (hard block)
+    Given an org already exists named "Outer Banks Rehab Group"
+    When I attempt to create an org named "Outer Banks Rehab Group"
+    And I provide any owner name and email
+    Then the system blocks creation and shows a warning that the org already exists
+    And I cannot proceed until the name is changed
+
+  Scenario: Block creation if owner details are missing
+    Given I am entering a new org named "Dillon Sports Medicine"
+    When I leave owner name blank or owner email blank
+    Then creation is blocked and errors specify fields are required
+
+  Scenario: Created org remains a prospect until scoped
+    Given I created "South Park Physical Therapy"
+    And no group, facility, or provider is assigned yet
+    When I view the organization
+    Then it is internally \`prospect\` but no state label is shown in the UI
+
+  Scenario: Bulk or seed creates match UI-created orgs
+    Given the database is seeded with "Lone Star Rehab Group" and "Gemstone Family Rehab"
+    When I view my organizations UI
+    Then both appear identically with correct owner name and email
+
+```
+
+## Test Scenario Mapping
+
+Reference: [Seed Universe — Redesign Test Data & Fixture Strategy](./seed-universe.md)
+
+| Scenario | Org(s) used | Notes |
+| --- | --- | --- |
+| Single active | Outer Banks Rehab Group | TS-2 |
+| Single prospect | Tree Hill Sports Therapy | TS-1 |
+| Duplicate guard | Outer Banks Rehab Group, Outer Banks Therapy Group | TS-6 |
+| Multi-operator | Shelby Sports Rehab | TS-8, see party/role assignment |
+| Owner link captured | Lone Star Rehab Group | TS-7 |
+| Bulk/seed validation | All orgs per `seed-universe.md` |  |
+
+## Dependencies
+
+* Requires party/role data support (for owner assignment, multi-role, TS-8); must flag as dependency for Claude Code if not in current schema.
+* Be sure to coordinate with the branch-based build and component-constraint rules in [Stage 0 build constraints](./stage-0-build-constraints.md).
+* No org shell creation can bypass lifecycle or duplicate/owner enforcement, either via UI or seed scripts.
+
+## Out of Scope / Non-Goals
+
+* No manual promote-to-active for org state.
+* No partial or override duplicate warning.
+* No allow-creation-without-owner.
+* No returning to portfolio immediately after creation.
+* No support for direct creation of groups/facilities/providers in E0.1 — those follow per Stage 1 deliverables.
+
+## Revision History
+
+* Initial: drafted after explicit multi-choice alignment with Sowmya, referencing E0.0, seed-universe, component constraint, and party/role dependencies.
