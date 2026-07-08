@@ -1,6 +1,6 @@
 // Fix-it queue (Surface 1): a deck of 30-second decisions that improve fill
-// coverage, ordered by soonest blocked fill — never by ease. Three card types
-// (provider gap / dictionary confirm / train form). No timers, no speed
+// coverage, ordered by soonest blocked fill — never by ease. Four card types
+// (provider gap / dictionary confirm / train form / broken mapping). No timers, no speed
 // mechanics; corrections are celebrated as good catches, never penalized.
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
@@ -19,6 +19,7 @@ import {
   useSaveProviderField,
   useSkipToFollowUp,
   useDecideDictionary,
+  useSendBrokenToTraining,
 } from "@/hooks/useFixit";
 import { FIXIT_FIELDS } from "@/lib/fixitFields";
 import { getGoodCatches, bumpGoodCatches } from "@/lib/goodCatches";
@@ -53,7 +54,8 @@ type Action =
   | { type: "SKIP_GAP"; followUp: { title: string; dueDate: string | null } }
   | { type: "DICT_YES" }
   | { type: "DICT_NO" }
-  | { type: "TRAIN_LATER" };
+  | { type: "TRAIN_LATER" }
+  | { type: "BROKEN_SENT" };
 
 function reducer(state: Session | null, action: Action): Session | null {
   if (action.type === "SEED") {
@@ -91,6 +93,8 @@ function reducer(state: Session | null, action: Action): Session | null {
       };
     case "TRAIN_LATER":
       return advance;
+    case "BROKEN_SENT":
+      return { ...advance, cleared: state.cleared + 1 };
     default:
       return state;
   }
@@ -228,6 +232,8 @@ function ActiveCard({
   if (card.kind === "provider_gap") return <GapCard card={card} dispatch={dispatch} />;
   if (card.kind === "dictionary_confirm")
     return <DictionaryCard card={card} dispatch={dispatch} onGoodCatch={onGoodCatch} />;
+  if (card.kind === "broken_mapping")
+    return <BrokenMappingCard card={card} dispatch={dispatch} onTrain={onTrain} />;
   return <TrainCard card={card} dispatch={dispatch} onTrain={onTrain} />;
 }
 
@@ -242,7 +248,7 @@ function CardShell({
   footer,
 }: {
   chip: string;
-  chipTone: "data" | "dict" | "form";
+  chipTone: "data" | "dict" | "form" | "broken";
   impact: string;
   impactDated: boolean;
   title: string;
@@ -254,6 +260,7 @@ function CardShell({
     data: "bg-[#EFF6FF] text-[#2563EB]",
     dict: "bg-[color:var(--mp-primary-tint)] text-[color:var(--mp-primary)]",
     form: "bg-[#FEF3C7] text-[#92400E]",
+    broken: "bg-[#FEE2E2] text-[#B91C1C]",
   }[chipTone];
   return (
     <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-5">
@@ -565,6 +572,105 @@ function TrainCard({
           />
         </div>
       </div>
+    </CardShell>
+  );
+}
+
+function BrokenMappingCard({
+  card,
+  dispatch,
+  onTrain,
+}: {
+  card: FixitCard;
+  dispatch: React.Dispatch<Action>;
+  onTrain: (portalKey: string) => void;
+}) {
+  const b = card.broken!;
+  const sendMut = useSendBrokenToTraining();
+  const shown = b.labels.slice(0, 5);
+  const overflow = b.count - shown.length;
+
+  async function sendToTraining() {
+    try {
+      await sendMut.mutateAsync(b.orgRows);
+      toast.success(
+        `${b.orgRows.length} field${b.orgRows.length === 1 ? "" : "s"} sent back to training`,
+      );
+      dispatch({ type: "BROKEN_SENT" });
+      onTrain(b.portalKey);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't update the mappings — retry.");
+    }
+  }
+
+  return (
+    <CardShell
+      chip="Form drift"
+      chipTone="broken"
+      impact={card.sortDate ? `Fills due ${fmtDate(card.sortDate)}` : "Reported by the last fill"}
+      impactDated={Boolean(card.sortDate)}
+      title={`${b.count} trained field${b.count === 1 ? "" : "s"} didn't match the live ${b.portalName} form.`}
+      why={
+        b.orgRows.length > 0
+          ? `The last fill couldn't find ${b.count === 1 ? "this field" : "these fields"} on the page — the form likely changed. Sending them back to training re-opens the decision so a re-capture can refresh the selectors.`
+          : `The last fill couldn't find ${b.count === 1 ? "this field" : "these fields"} on the page. ${b.globalCount === 1 ? "This mapping is" : "These mappings are"} managed centrally by Minted Panel — re-capture the form with the extension to propose fresh selectors for your org.`
+      }
+      footer={
+        <>
+          {b.orgRows.length > 0 ? (
+            <Button
+              onClick={sendToTraining}
+              disabled={sendMut.isPending}
+              className="bg-[color:var(--mp-primary)] hover:bg-[color:var(--mp-primary-hover)] text-white h-9"
+            >
+              Send to training
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                dispatch({ type: "BROKEN_SENT" });
+                onTrain(b.portalKey);
+              }}
+              className="bg-[color:var(--mp-primary)] hover:bg-[color:var(--mp-primary-hover)] text-white h-9"
+            >
+              Review in training
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={() => dispatch({ type: "TRAIN_LATER" })}
+            disabled={sendMut.isPending}
+          >
+            Later
+          </Button>
+          <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)] text-right max-w-[240px]">
+            {b.orgRows.length > 0 && b.globalCount > 0
+              ? `${b.globalCount} of these are managed centrally and stay read-only`
+              : "opens mapping review"}
+          </span>
+        </>
+      }
+    >
+      <ul className="space-y-1">
+        {shown.map((label, i) => (
+          <li
+            key={`${label}-${i}`}
+            className="flex items-center gap-2 text-[13px] text-[color:var(--mp-ink)]"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626] shrink-0" />
+            <span className="truncate">{label}</span>
+            <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
+              not found on page
+            </span>
+          </li>
+        ))}
+        {overflow > 0 ? (
+          <li className="text-[11.5px] text-[color:var(--mp-ink-faint)]">
+            +{overflow} more field{overflow === 1 ? "" : "s"}
+          </li>
+        ) : null}
+      </ul>
     </CardShell>
   );
 }
