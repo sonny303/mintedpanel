@@ -607,6 +607,47 @@ redirects which were flipped back. Reused: `TemplateTaskRow`,
 `DiscardConfirmDialog`, and the `useSops`/`useSop`/`useCreateSop`/`useUpdateSop`
 hooks (`useAdmin.ts`).
 
+## SOP step ↔ portal linking (2026-07-08, no migration)
+
+An `online_form` SOP step can carry an optional **`portalKey`** (bare/normalized
+text) that links it to a `portals`-registry row, so the same portal identity
+threads authoring → generated task → extension fill → task close-out. **Zero
+migration** — `portalKey` rides the existing `task_definitions` / `sop_content`
+jsonb; every pre-existing step lacks it and degrades gracefully. `portal_key`
+(text), not a portals row id, is the join key by design: `sop_templates` can be
+global (`org_id NULL`) while `portals` are org-scoped, and it's already the
+cross-system idiom (`portal_field_maps`, `fill_sessions`, the touches contract).
+
+- **Data shape:** `SOPStep.portalKey?` + `SOPTaskDefinition.steps[].portalKey?`
+  (both additive in `types/index.ts`). `sopResolver.ts` copies it through
+  **verbatim, never interpolated** (it's an identifier). `editableTemplate.ts`
+  `toEditable`/`fromEditable` carry it, writing it **only for online_form steps**
+  and folding to the stored form via `normalizePortalKey` (`src/lib/tokenFormat.ts`
+  — trim + lowercase, does NOT slugify punctuation, blank→null; tested).
+- **Authoring:** the Template wizard's `TemplateTaskRow` renders a **Portal
+  select** on online_form steps (payer-filtered by default, "Show all portals"
+  toggle, empty-registry amber note → `/admin/portals`, soft "won't be linked"
+  nudge — never required). The Review step chips each online_form step
+  linked/unlinked. Wizard threads `portals` (`usePortals()`) + `templatePayerId`
+  as props.
+- **Generated task views:** `src/components/portals/PortalStepLink.tsx` resolves a
+  step's `portalKey` against `usePortals()` and shows portal name + "Open portal"
+  (`formUrl`, `target=_blank`) + verification pill; unresolved key → neutral
+  "not set up in this org" note. Rendered in `TaskDrawer`, `CaseWizard`
+  (`OnlineFormStep`), and `/tasks/$id`. The verification pill is the shared
+  `src/components/portals/PortalVerificationPill.tsx` (`portalVerification()`
+  helper) — Admin > Portals `StatusCell` now delegates to it (was duplicated).
+- **Admin > Portals** shows **"Referenced by N SOP steps"** per portal
+  (`src/lib/portalReferences.ts` `countStepsByPortalKey`, excludes archived;
+  tested). **Portal-key editing is not exposed in the UI** — a rename would
+  orphan every SOP link the same way a URL change clears verification, so it's
+  deliberately left non-editable (only name/payer/url on create, url on edit).
+- **Close-out loop (extension side):** `GET /api/cases?providerId=` rows carry
+  `portalTasks` (see the server API section) so the extension can match the
+  page's `portal_key` to a case's open tasks and pass the `task_id` on
+  `POST /api/cases/:id/touches` — the already-built Story 7 close-out that was
+  idle for want of a task source.
+
 ## Touchlog — single case-activity spine (Stories 1–3, 8; 2026-07-07)
 
 `touches` is now THE touchlog: `entry_type ∈ {touchpoint, note, system_event,

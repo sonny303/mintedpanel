@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
+import { PortalStepLink } from "@/components/portals/PortalStepLink";
 import { fmtDate } from "@/lib/format";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import {
@@ -108,6 +109,7 @@ function OnlineFormStep({ step }: { step: SOPStep }) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
+      {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
       {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
       {fields.length > 0 ? (
         <dl className="rounded-md border border-[#E8E5E0] divide-y divide-[#E8E5E0]">

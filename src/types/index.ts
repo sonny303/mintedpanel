@@ -331,6 +331,13 @@ export interface SOPStep {
   completedAt?: string | null;
   completedBy?: string | null;
   dataFields?: SOPStepDataField[];
+  /**
+   * Links an `online_form` step to a `portals`-registry row by `portal_key`
+   * (bare/normalized). Absent on every pre-existing step. The Chrome extension
+   * matches the page's `portal_key` against a case's tasks to close the right
+   * SOP task on submit. Not interpolated — carried through verbatim.
+   */
+  portalKey?: string;
 }
 
 export interface Task {
@@ -403,6 +410,8 @@ export interface SOPTaskDefinition {
     stepType?: SOPStepType;
     emailTemplate?: SOPEmailTemplate;
     dataFields?: { label: string; token: string }[];
+    /** Portal-registry `portal_key` for an `online_form` step (bare/normalized). */
+    portalKey?: string;
   }[];
 }
 
