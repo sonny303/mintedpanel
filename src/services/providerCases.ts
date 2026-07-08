@@ -16,8 +16,14 @@
 //   - latestNote (Story 11): the most recent touchlog `note` entry on the case,
 //     author-resolved, shown on the card.
 //
+// Phase 4 (SOP↔portal linking) adds `portalTasks`: the case's open, portal-
+// linked SOP tasks, so the extension can match the current page's portal_key to
+// a task and pass its task_id on the submission touch (closing the right task —
+// the Story 7 close-out that had no task source until now).
+//
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Database } from "@/integrations/supabase/types";
 
 export interface ProviderCasesServiceCtx {
@@ -32,6 +38,16 @@ export interface CaseLatestNote {
   at: string;
 }
 
+// One portal-linked open SOP task on a case (Phase 4). One entry per distinct
+// portal_key a non-completed task references, so the extension can match the
+// page's portal_key and close exactly that task on submit.
+export interface OpenProviderCasePortalTask {
+  taskId: string;
+  title: string;
+  portalKey: string;
+  status: string;
+}
+
 // One dropdown row: everything the popup renders ("<payer> - <state> -
 // <status>") plus submitted_date and the PR C prefill/guard fields. Explicit
 // projection, nothing else.
@@ -44,6 +60,7 @@ export interface OpenProviderCase {
   payerReferenceId: string | null;
   latestNote: CaseLatestNote | null;
   lastSubmittedAt: string | null;
+  portalTasks: OpenProviderCasePortalTask[];
 }
 
 const CASE_COLUMNS =
@@ -65,6 +82,14 @@ interface TouchRow {
   notes: string | null;
   coordinator_id: string | null;
   created_at: string;
+}
+
+interface TaskRow {
+  id: string;
+  case_id: string | null;
+  title: string;
+  status: string;
+  sop_content: unknown;
 }
 
 // Null = the provider is not in the caller's org (the route's 404) — a
@@ -112,6 +137,7 @@ export async function listOpenProviderCases(
   const openIds = open.map((row) => row.id);
   const latestNoteByCase = new Map<string, { notes: string; author: string | null; at: string }>();
   const lastSubmittedByCase = new Map<string, string>();
+  const portalTasksByCase = new Map<string, OpenProviderCasePortalTask[]>();
   if (openIds.length > 0) {
     const { data: touchRows, error: touchErr } = await db
       .from("touches")
@@ -133,6 +159,31 @@ export async function listOpenProviderCases(
       }
       if (r.outcome === "submitted" && !lastSubmittedByCase.has(r.case_id)) {
         lastSubmittedByCase.set(r.case_id, r.created_at);
+      }
+    }
+
+    // Phase 4: portal-linked open tasks per case, from ONE more org-scoped read
+    // over the same open case ids. A task contributes one entry per DISTINCT
+    // portalKey among its steps; completed tasks and steps without a portalKey
+    // are skipped. Keys are normalized so the extension's page-key match is a
+    // literal string compare (same discipline as the field-map join).
+    const { data: taskRows, error: taskErr } = await db
+      .from("tasks")
+      .select("id, case_id, title, status, sop_content")
+      .eq("org_id", orgId)
+      .in("case_id", openIds);
+    if (taskErr) throw taskErr;
+    for (const t of (taskRows ?? []) as unknown as TaskRow[]) {
+      if (t.status === "completed" || t.case_id == null) continue;
+      const steps = Array.isArray(t.sop_content) ? t.sop_content : [];
+      const seen = new Set<string>();
+      for (const step of steps) {
+        const key = normalizePortalKey((step as { portalKey?: string }).portalKey);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        const list = portalTasksByCase.get(t.case_id) ?? [];
+        list.push({ taskId: t.id, title: t.title, portalKey: key, status: t.status });
+        portalTasksByCase.set(t.case_id, list);
       }
     }
 
@@ -171,6 +222,7 @@ export async function listOpenProviderCases(
       payerReferenceId: row.payer_reference_id,
       latestNote: note ? { text: note.notes, author: note.author, at: note.at } : null,
       lastSubmittedAt: lastSubmittedByCase.get(row.id) ?? null,
+      portalTasks: portalTasksByCase.get(row.id) ?? [],
     };
   });
 

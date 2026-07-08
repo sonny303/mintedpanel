@@ -225,14 +225,25 @@ them. The current surface:
   (`src/services/fillSessions.ts`)
 - `GET /api/cases?providerId=<uuid>` — the popup's case dropdown (R2): the
   provider's OPEN cases, `{ id, payerName, state, status, submittedDate,
-payerReferenceId, latestNote, lastSubmittedAt }`. Open = credentialing status
-  not in the `action_bucket 'complete'` bucket — derived from `status_configs`,
-  never from labels; status-less cases count as open. Cross-org providerId → 404. The last three fields (PR C) are derived from ONE org-scoped touchlog
-  read over the open case ids: `payerReferenceId` (case column, Story 5
+payerReferenceId, latestNote, lastSubmittedAt, portalTasks }`. Open =
+  credentialing status not in the `action_bucket 'complete'` bucket — derived
+  from `status_configs`, never from labels; status-less cases count as open.
+  Cross-org providerId → 404. The PR C fields are derived from ONE org-scoped
+  touchlog read over the open case ids: `payerReferenceId` (case column, Story 5
   prefill), `latestNote {text,author,at}` (newest `entry_type='note'`,
   author-resolved via `profiles`, Story 11), `lastSubmittedAt` (newest
   `outcome='submitted'` touch, Story 10 dup guard — keyed off the submission
-  touchpoint, NOT text-matching the system_event). (`src/services/providerCases.ts`)
+  touchpoint, NOT text-matching the system_event). **`portalTasks` (Phase 4,
+  SOP↔portal link)** = `{ taskId, title, portalKey, status }[]` from ONE more
+  org-scoped read over the open case ids (`tasks`): each non-completed task
+  contributes one entry per DISTINCT `portalKey` among its `sop_content` steps
+  (keys normalized bare/lowercase), so the extension matches the page's
+  portal_key to a task and passes its `task_id` on the submission touch — the
+  Story 7 close-out that had no task source until now. Isolation: the tasks read
+  is org-scoped from ctx, and portalTasks rides the same provider-ownership 404;
+  gate assertions **8c** (own portalTasks reference only own-org tasks) + **8d**
+  (cross-org request never leaks a South Park task id via portalTasks, red under
+  the `cases` leak mode). (`src/services/providerCases.ts`)
 - `POST /api/cases/:id/touches` — the "Mark submitted" business log. R2 core:
   ONE append-only anchor touchpoint (`touch_type 'portal'`, `outcome
 'submitted'`, `source 'extension'`, text "Application submitted via <portal

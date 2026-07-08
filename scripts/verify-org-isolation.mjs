@@ -384,6 +384,33 @@ function looksLikeVercelGate(r) {
     `status=${xCases.status} dataPresent=${casesLeaked}`,
     { leak: true },
   );
+  // 8c. portalTasks (Phase 4 SOP↔portal link) rides the dropdown row: the
+  //     extension matches the page portal_key to these to close a task. Every
+  //     own-cases row must carry a portalTasks array and none may reference a
+  //     cross-org task id. Shape/positive check — non-vacuous against the mock
+  //     (Kansas fixture carries one), vacuously true against a not-yet-populated
+  //     prod; the leak half is 8d.
+  const ownCaseRows = ownCases.body?.data ?? [];
+  const ownTaskIds = ownCaseRows.flatMap((c) => (c?.portalTasks ?? []).map((t) => t?.taskId));
+  check(
+    "8c. Kansas own cases expose portalTasks referencing only own-org tasks",
+    ownCases.status === 200 &&
+      ownCaseRows.every((c) => Array.isArray(c?.portalTasks)) &&
+      !ownTaskIds.includes(env.SOUTHPARK_TASK_ID),
+    `rows=${ownCaseRows.length} ownTaskIds=${JSON.stringify(ownTaskIds)}`,
+  );
+  // 8d. The cross-org request must never leak a South Park task id via
+  //     portalTasks. Rides the same 404 as 8b (no rows -> no portalTasks); a
+  //     leaked case list carries the cross-org task ids, which this catches.
+  const xTaskIds = (xCases.body?.data ?? []).flatMap((c) =>
+    (c?.portalTasks ?? []).map((t) => t?.taskId),
+  );
+  check(
+    "8d. Kansas GET cross-org cases never leaks a South Park task id via portalTasks",
+    !xTaskIds.includes(env.SOUTHPARK_TASK_ID),
+    `xTaskIds=${JSON.stringify(xTaskIds)}`,
+    { leak: true },
+  );
 
   // 9. Submission touches (the second must-reject POST): Kansas posting a
   //    touch on a South Park case must 404 before anything is written. Like

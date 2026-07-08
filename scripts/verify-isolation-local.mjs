@@ -71,7 +71,7 @@ const EXPECTED_FAILS = {
   fieldmaps: ["5b", "5c"],
   profile: ["6"],
   fillevents: ["7", "7b"],
-  cases: ["8b"],
+  cases: ["8b", "8d"],
   touches: ["9", "9b"],
   tasks: ["13"],
   casecontext: ["14b"],

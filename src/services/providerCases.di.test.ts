@@ -104,17 +104,19 @@ describe("listOpenProviderCases — org isolation", () => {
       { data: STATUSES },
       { data: [caseRow("c-open", "Aetna", "KS", "st-open")] },
       NO_TOUCHES,
+      { data: [] },
     ]);
 
     await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
-    // providers, status_configs, credential_cases, then the touchlog read
-    // (only when there are open cases).
+    // providers, status_configs, credential_cases, then the touchlog + tasks
+    // reads (only when there are open cases).
     expect(captures.map((c) => c.table)).toEqual([
       "providers",
       "status_configs",
       "credential_cases",
       "touches",
+      "tasks",
     ]);
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
@@ -123,8 +125,10 @@ describe("listOpenProviderCases — org isolation", () => {
     expect(caseCap.filters).toContainEqual(["provider_id", PROVIDER_ID]);
     // Explicit projection, never select('*').
     expect(caseCap.selectCols).not.toContain("*");
-    // The touchlog read is scoped to the open case ids.
+    // The touchlog + tasks reads are both scoped to the open case ids.
     expect(captures[3].filters).toContainEqual(["case_id", ["c-open"]]);
+    expect(captures[4].filters).toContainEqual(["case_id", ["c-open"]]);
+    expect(captures[4].selectCols).not.toContain("*");
   });
 
   it("makes no touchlog read when there are no open cases", async () => {
@@ -159,6 +163,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
         ],
       },
       NO_TOUCHES,
+      { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
@@ -173,6 +178,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
       payerReferenceId: null,
       latestNote: null,
       lastSubmittedAt: null,
+      portalTasks: [],
     });
   });
 
@@ -182,6 +188,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
       { data: STATUSES },
       { data: [caseRow("c-null", "Aetna", "MO", null)] },
       NO_TOUCHES,
+      { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
@@ -196,6 +203,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
         payerReferenceId: null,
         latestNote: null,
         lastSubmittedAt: null,
+        portalTasks: [],
       },
     ]);
   });
@@ -206,6 +214,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
       { data: STATUSES },
       { data: [caseRow("c-ghost", "Aetna", "KS", "st-deleted")] },
       NO_TOUCHES,
+      { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
@@ -262,6 +271,7 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
           },
         ],
       },
+      { data: [] },
       { data: [{ id: "user-9", full_name: "Nadia Rep", email: "nadia@x.test" }] },
     ]);
 
@@ -281,6 +291,7 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
           at: "2026-07-06T10:00:00Z",
         },
         lastSubmittedAt: "2026-07-05T09:00:00Z",
+        portalTasks: [],
       },
     ]);
     // The profiles author lookup is org-agnostic by id but only runs when a
@@ -305,6 +316,7 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
           },
         ],
       },
+      { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
@@ -312,7 +324,92 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
     // A system_event is neither a note nor a submitted touchpoint.
     expect(result?.[0].latestNote).toBeNull();
     expect(result?.[0].lastSubmittedAt).toBeNull();
+    expect(result?.[0].portalTasks).toEqual([]);
     expect(captures.map((c) => c.table)).not.toContain("profiles");
+  });
+});
+
+describe("listOpenProviderCases — portalTasks (Phase 4)", () => {
+  function taskRow(
+    id: string,
+    caseId: string | null,
+    title: string,
+    status: string,
+    steps: unknown[],
+  ) {
+    return { id, case_id: caseId, title, status, sop_content: steps };
+  }
+
+  it("surfaces a non-completed task's distinct portal keys as portalTasks", async () => {
+    const { db } = makeFakeDb([
+      { data: { id: PROVIDER_ID } },
+      { data: STATUSES },
+      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      NO_TOUCHES,
+      {
+        data: [
+          taskRow("t1", "c1", "Enroll on Availity", "in_progress", [
+            { label: "s", stepType: "online_form", portalKey: "availity" },
+            { label: "s2", stepType: "draft_email" },
+          ]),
+        ],
+      },
+    ]);
+
+    const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
+
+    expect(result?.[0].portalTasks).toEqual([
+      { taskId: "t1", title: "Enroll on Availity", portalKey: "availity", status: "in_progress" },
+    ]);
+  });
+
+  it("excludes completed tasks and steps with no portalKey; normalizes + dedupes keys", async () => {
+    const { db } = makeFakeDb([
+      { data: { id: PROVIDER_ID } },
+      { data: STATUSES },
+      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      NO_TOUCHES,
+      {
+        data: [
+          // Completed task is skipped entirely.
+          taskRow("t-done", "c1", "Done", "completed", [{ portalKey: "availity" }]),
+          // Two steps, same key (cased/spaced) → one deduped entry; a keyless
+          // step contributes nothing.
+          taskRow("t1", "c1", "Two steps", "not_started", [
+            { portalKey: " Availity " },
+            { portalKey: "availity" },
+            { label: "no portal" },
+          ]),
+          // Two distinct keys on one task → two entries.
+          taskRow("t2", "c1", "Multi", "in_progress", [
+            { portalKey: "caqh" },
+            { portalKey: "pecos" },
+          ]),
+        ],
+      },
+    ]);
+
+    const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
+
+    expect(result?.[0].portalTasks).toEqual([
+      { taskId: "t1", title: "Two steps", portalKey: "availity", status: "not_started" },
+      { taskId: "t2", title: "Multi", portalKey: "caqh", status: "in_progress" },
+      { taskId: "t2", title: "Multi", portalKey: "pecos", status: "in_progress" },
+    ]);
+  });
+
+  it("returns an empty portalTasks when a case has no portal-linked tasks", async () => {
+    const { db } = makeFakeDb([
+      { data: { id: PROVIDER_ID } },
+      { data: STATUSES },
+      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      NO_TOUCHES,
+      { data: [taskRow("t1", "c1", "Call payer", "in_progress", [{ label: "phone them" }])] },
+    ]);
+
+    const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
+
+    expect(result?.[0].portalTasks).toEqual([]);
   });
 });
 
@@ -330,6 +427,7 @@ describe("listOpenProviderCases — dropdown ordering", () => {
         ],
       },
       NO_TOUCHES,
+      { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
