@@ -6,6 +6,30 @@ this file adds the system map and operational knowledge those rules assume.
 `ARCHITECTURE.md` and `SCHEMA.md` are the deeper references for layering and
 tables.
 
+## Redesign program (you are on the `redesign` branch)
+
+The product redesign is built epic-by-epic on the long-lived `redesign` branch
+and NEVER merges to `main` until the PM promotes a stage. If you are
+implementing a redesign epic:
+
+- Epics live at `docs/redesign/EX.X-<slug>.md` (e.g. `E0.0-app-shell.md`).
+  Only build from epics whose frontmatter says `reviewed: true` — the reviewer
+  agent (Devin) polishes each epic and populates its
+  `## 5. Technical Considerations & Enablers` section first. Never edit epic
+  files, `CLARIFICATIONS_NEEDED.md`, or their frontmatter yourself.
+- Read `docs/redesign/README.md` (workflow + merge gate) and
+  `docs/redesign/uiux-component-guide.md` (component selection + build
+  requirements) before writing code. AGENTS.md rules still bind; epics with
+  shell changes explicitly authorize touching `src/components/layout/*` via
+  their section 5.
+- One epic per PR, branch off `redesign`, PR targets `redesign`, titled
+  `EX.X: <title>` and referencing the epic file. Every numbered FR must be
+  traceable in the diff.
+- Devin reviews each PR against the epic and the gates (`npm run lint`,
+  `npm run test`, `npx tsc --noEmit`, e2e where covered) and merges it into
+  `redesign` when fully aligned; otherwise it leaves review comments naming
+  the unmet FR/enabler — remediate and push to the same branch.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
