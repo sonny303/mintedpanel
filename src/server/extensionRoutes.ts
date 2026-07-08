@@ -8,6 +8,11 @@ import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
+import {
+  getExtensionViewPrefs,
+  parseExtensionViewPrefs,
+  putExtensionViewPrefs,
+} from "@/services/extensionViewPrefs";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
@@ -23,6 +28,29 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function handleListMyOrgs(user: UserContext): Promise<Response> {
   const rows = await listUserOrgMemberships({ db: user.db }, user.userId);
   return ok(rows, { total: rows.length });
+}
+
+// GET /api/me/view-prefs — the caller's saved extension detail-view field
+// list. `fields: null` means nothing saved (the extension falls back to its
+// default field set) — the envelope's `data` itself is never null, since
+// clients treat a null data as an error. USER-scoped like /api/me/orgs:
+// keyed by the JWT-verified user id only, so it runs on authenticateUser,
+// not the org guard — view prefs follow the user across orgs.
+export async function handleGetViewPrefs(user: UserContext): Promise<Response> {
+  const prefs = await getExtensionViewPrefs({ db: user.db }, user.userId);
+  return ok({ fields: prefs?.fields ?? null });
+}
+
+// PUT /api/me/view-prefs — save the caller's detail-view field list:
+// { fields: ["license.licenseNumber", ...] }, bare token keys, deduped,
+// capped. Not a PHI read/write — no audit row.
+export async function handlePutViewPrefs(body: unknown, user: UserContext): Promise<Response> {
+  const prefs = parseExtensionViewPrefs(body);
+  if (!prefs) {
+    return fail(422, "Body must be { fields: string[] } of bare token keys (max 64)");
+  }
+  await putExtensionViewPrefs({ db: user.db }, user.userId, prefs);
+  return ok(prefs);
 }
 
 // GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the

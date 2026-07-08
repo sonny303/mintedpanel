@@ -174,6 +174,15 @@ them. The current surface:
   `x-org-id`, so the guard's multi-org 400 deliberately doesn't apply. Zero
   memberships = empty list, not an error. Gate assertions 10/10b pin "own
   memberships only".
+- `GET/PUT /api/me/view-prefs` — the caller's saved extension detail-view
+  field list (`src/services/extensionViewPrefs.ts`), stored in
+  `user_table_prefs` under `page_key 'extension.providerDetails'`. USER-scoped
+  like `/api/me/orgs` (runs on `authenticateUser`, no org guard — prefs follow
+  the user across orgs). GET returns `{ fields: string[] | null }` (null =
+  nothing saved; the envelope's `data` is never null since the extension
+  treats null data as an error). PUT accepts `{ fields: string[] }` of BARE
+  catalog token keys (`license.licenseNumber`), deduped, max 64; anything else
+  → 422. Not a PHI read/write — no audit row.
 - `GET /api/providers/:id/profile?state=XX&facilityId=<uuid>` — the fill
   engine's payload: the provider row + every catalog token resolved to a value
   server-side (`src/services/providerProfile.ts`). Deterministic source-row
