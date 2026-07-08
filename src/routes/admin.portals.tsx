@@ -10,6 +10,7 @@ import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
+import { PortalVerificationPill } from "@/components/portals/PortalVerificationPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePayers } from "@/hooks/useAdmin";
+import { usePayers, useSops } from "@/hooks/useAdmin";
 import {
   usePortals,
   usePortalFieldMaps,
@@ -44,6 +45,8 @@ import {
 import { useIsAdmin } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import { slugifyPortalKey } from "@/lib/portalKey";
+import { countStepsByPortalKey } from "@/lib/portalReferences";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { FillSession, Payer, Portal, PortalFieldMap } from "@/types";
 import type { PortalInput } from "@/services/portals";
 
@@ -57,13 +60,11 @@ interface PortalRow {
   mapped: number;
   proposed: number;
   lastFill: FillSession | null;
+  sopRefs: number;
 }
 
 function StatusCell({ portal }: { portal: Portal }) {
-  if (portal.isVerified) return <StatusPill status="green" label="Verified" />;
-  if (portal.urlChangedAt && portal.lastVerifiedAt)
-    return <StatusPill status="amber" label="Needs re-verify" />;
-  return <StatusPill status="neutral" label="Unverified" />;
+  return <PortalVerificationPill portal={portal} />;
 }
 
 function LastFillCell({ fill, mapped }: { fill: FillSession | null; mapped: number }) {
@@ -99,6 +100,7 @@ function AdminPortalsPage() {
   const mapsQ = usePortalFieldMaps();
   const lastFillsQ = useLastFills();
   const payersQ = usePayers();
+  const templatesQ = useSops();
 
   const [adding, setAdding] = useState(false);
   const [editingUrlId, setEditingUrlId] = useState<string | null>(null);
@@ -116,14 +118,16 @@ function AdminPortalsPage() {
         proposedByKey.set(m.portalKey, (proposedByKey.get(m.portalKey) ?? 0) + 1);
     }
     const lastFills = lastFillsQ.data;
+    const sopRefsByKey = countStepsByPortalKey(templatesQ.data ?? []);
     return (portalsQ.data ?? []).map((portal) => ({
       portal,
       payerName: portal.payerId ? (payerById.get(portal.payerId) ?? "—") : "Multi-payer",
       mapped: mappedByKey.get(portal.portalKey) ?? 0,
       proposed: proposedByKey.get(portal.portalKey) ?? 0,
       lastFill: lastFills?.get(portal.portalKey) ?? null,
+      sopRefs: sopRefsByKey.get(normalizePortalKey(portal.portalKey) ?? "") ?? 0,
     }));
-  }, [portalsQ.data, mapsQ.data, lastFillsQ.data, payersQ.data]);
+  }, [portalsQ.data, mapsQ.data, lastFillsQ.data, payersQ.data, templatesQ.data]);
 
   const fieldsForViewed = useMemo(
     () => (viewFieldsKey ? (mapsQ.data ?? []).filter((m) => m.portalKey === viewFieldsKey) : []),
@@ -266,13 +270,18 @@ function PortalTableRow({
   onViewFields: () => void;
   onTrain: () => void;
 }) {
-  const { portal, payerName, mapped, proposed, lastFill } = row;
+  const { portal, payerName, mapped, proposed, lastFill, sopRefs } = row;
   return (
     <>
       <tr className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]">
         <td className="px-3 h-11 align-middle">
           <div className="font-medium leading-tight">{portal.name}</div>
           <code className="text-[11px] text-[#99A49B]">{portal.portalKey}</code>
+          {sopRefs > 0 ? (
+            <div className="text-[11px] text-[#99A49B]">
+              Referenced by {sopRefs} SOP step{sopRefs === 1 ? "" : "s"}
+            </div>
+          ) : null}
         </td>
         <td className="px-3 h-11 align-middle text-muted-foreground">{payerName}</td>
         <td className="px-3 h-11 align-middle">

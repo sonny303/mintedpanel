@@ -21,6 +21,20 @@ export function normalizeTokenKey(raw: string | null | undefined): string | null
   return braced ? braced[1] : trimmed;
 }
 
+// Canonical form of a portal_key, the text that joins an SOP `online_form`
+// step to a `portals`-registry row (and to portal_field_maps / fill_sessions /
+// the touches contract). Humans type it into the template editor, so we fold
+// case + whitespace at the write boundary — the same discipline
+// normalizeTokenKey applies to token keys. Unlike slugifyPortalKey this does
+// NOT rewrite punctuation: an existing key is matched verbatim against the
+// registry, only trimmed + lowercased. Empty/blank collapses to null so an
+// unset step never carries a "" portal link.
+export function normalizePortalKey(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim().toLowerCase();
+  return trimmed === "" ? null : trimmed;
+}
+
 // Canonical form of a captured form-field LABEL, used as the dictionary key
 // (field_dictionary.label_normalized) so the same human-facing label always
 // resolves to one entry regardless of casing / trailing punctuation. Lowercase,

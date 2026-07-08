@@ -32,9 +32,11 @@ import {
 import { useCreateSop, usePayers, useUpdateSop } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useTokenCatalog } from "@/hooks/useMappingReview";
+import { usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import { cn } from "@/lib/utils";
-import type { SOPTaskDefinition, SOPTemplate } from "@/types";
+import type { Portal, SOPTaskDefinition, SOPTemplate } from "@/types";
 
 interface SopFieldToken {
   token: string;
@@ -141,8 +143,11 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
   const tokensQ = useTokenCatalog();
+  const portalsQ = usePortals();
   const createMut = useCreateSop();
   const updateMut = useUpdateSop(initial?.id ?? "");
+
+  const portals = useMemo<Portal[]>(() => portalsQ.data ?? [], [portalsQ.data]);
 
   const tokens = useMemo(() => (tokensQ.data ?? []) as SopFieldToken[], [tokensQ.data]);
   const groupedTokens = useMemo(() => {
@@ -257,6 +262,7 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                   stepType: "online_form",
                   emailTemplate: { subject: "", body: "" },
                   dataFields: [],
+                  portalKey: "",
                 },
               ],
             }
@@ -735,6 +741,8 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                 taskIdx={taskIdx}
                 canEdit={canEdit}
                 groupedTokens={groupedTokens}
+                portals={portals}
+                templatePayerId={payerId === "none" ? null : payerId}
                 dragTaskId={dragTaskId}
                 setDragTaskId={setDragTaskId}
                 dragStep={dragStep}
@@ -810,9 +818,25 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                     {(t.steps ?? []).map((s, j) => {
                       const fields =
                         (s as { dataFields?: { label: string; token: string }[] }).dataFields ?? [];
+                      const stepType = s.stepType ?? "online_form";
+                      const portalKey = normalizePortalKey(s.portalKey);
+                      const portal = portalKey
+                        ? portals.find((p) => normalizePortalKey(p.portalKey) === portalKey)
+                        : null;
                       return (
                         <li key={j} className="rounded-md border border-[#E8E5E0] p-2 text-xs">
                           <p className="text-foreground">{s.label || `Step ${j + 1}`}</p>
+                          {stepType === "online_form" ? (
+                            portal ? (
+                              <span className="mt-1 inline-flex items-center rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-0.5 text-[11px] text-[#059669]">
+                                Portal: {portal.name}
+                              </span>
+                            ) : (
+                              <span className="mt-1 inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[11px] text-[#92400E]">
+                                Not linked for fill
+                              </span>
+                            )
+                          ) : null}
                           {s.detail ? (
                             <p className="text-muted-foreground mt-0.5">{s.detail}</p>
                           ) : null}

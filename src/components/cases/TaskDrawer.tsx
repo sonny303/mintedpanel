@@ -27,6 +27,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
+import { PortalStepLink } from "@/components/portals/PortalStepLink";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
@@ -282,13 +283,16 @@ export function TaskDrawer({ taskId, fallbackTask, locked, open, onOpenChange }:
                               onCheckedChange={(v) => handleStep(index, Boolean(v))}
                             />
                           )}
-                          <p
-                            className={`flex-1 text-[13px] leading-snug ${
-                              isChecked ? "text-muted-foreground line-through" : "text-foreground"
-                            }`}
-                          >
-                            {step.label}
-                          </p>
+                          <div className="flex-1 space-y-1.5">
+                            <p
+                              className={`text-[13px] leading-snug ${
+                                isChecked ? "text-muted-foreground line-through" : "text-foreground"
+                              }`}
+                            >
+                              {step.label}
+                            </p>
+                            {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
+                          </div>
                           {isChecked ? (
                             <CheckCircle2 className="h-4 w-4 text-[#059669] flex-shrink-0" />
                           ) : isLocked ? (

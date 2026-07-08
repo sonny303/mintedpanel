@@ -2,8 +2,12 @@
 // from the persisted SOPTaskDefinition[] (the task_definitions jsonb). The DB
 // shape is owned by the resolver (src/lib/sopResolver.ts) — data-field tokens
 // stay BARE (e.g. "provider.firstName") because the resolver uses them as map
-// keys; only free-text label/detail/email carry {{token}} braces. Keep these
-// converters faithful to that contract; case creation depends on it.
+// keys; only free-text label/detail/email carry {{token}} braces. An
+// online_form step may also carry portalKey (bare/normalized) linking it to a
+// portals-registry row; it is written only for online_form steps and folded to
+// the stored form via normalizePortalKey. Keep these converters faithful to
+// that contract; case creation depends on it.
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { SOPStepType, SOPTaskDefinition } from "@/types";
 
 export interface DataField {
@@ -23,6 +27,9 @@ export interface EditableStep {
   stepType: SOPStepType;
   emailTemplate: EmailTemplate;
   dataFields: DataField[];
+  // portal_key for an online_form step, "" = not linked. Editor value is raw;
+  // normalized on write.
+  portalKey: string;
 }
 
 export interface EditableTask {
@@ -50,6 +57,7 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         stepType?: SOPStepType;
         emailTemplate?: { subject?: string; body?: string };
         dataFields?: DataField[];
+        portalKey?: string;
       };
       return {
         id: randId(),
@@ -63,6 +71,7 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         dataFields: (raw.dataFields ?? []).filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),
+        portalKey: raw.portalKey ?? "",
       };
     }),
   }));
@@ -74,14 +83,23 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
     description: t.description,
     sortOrder: i,
     dueOffsetDays: t.dueOffsetDays,
-    steps: t.steps.map((s) => ({
-      label: s.label,
-      detail: s.detail,
-      stepType: s.stepType,
-      ...(s.stepType === "draft_email"
-        ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
-        : {}),
-      dataFields: s.dataFields.filter((f) => typeof f.token === "string" && f.token.includes(".")),
-    })) as SOPTaskDefinition["steps"],
+    steps: t.steps.map((s) => {
+      // A portal link is meaningful only for online_form steps; normalized to
+      // the stored (bare/lowercase) form so the extension's page-key match is a
+      // literal string compare.
+      const portalKey = s.stepType === "online_form" ? normalizePortalKey(s.portalKey) : null;
+      return {
+        label: s.label,
+        detail: s.detail,
+        stepType: s.stepType,
+        ...(s.stepType === "draft_email"
+          ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
+          : {}),
+        ...(portalKey ? { portalKey } : {}),
+        dataFields: s.dataFields.filter(
+          (f) => typeof f.token === "string" && f.token.includes("."),
+        ),
+      };
+    }) as SOPTaskDefinition["steps"],
   }));
 }

@@ -93,6 +93,10 @@ function definitionToInsert(
       detail: step.detail ? interpolate(step.detail, tokens) : undefined,
       stepType,
       emailTemplate,
+      // Carried through verbatim — a portal_key is an identifier, never
+      // interpolated. The resolved task keeps the same portal link the template
+      // authored, so the extension can close this task on submit.
+      portalKey: step.portalKey,
       isCompleted: false,
       completedAt: null,
       completedBy: null,

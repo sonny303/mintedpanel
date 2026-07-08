@@ -1,6 +1,8 @@
 // Editor card for a single template task, including its SOP steps and
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
+import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
-import type { SOPStepType } from "@/types";
+import { normalizePortalKey } from "@/lib/tokenFormat";
+import type { Portal, SOPStepType } from "@/types";
 
 interface DataField {
   label: string;
@@ -33,7 +36,10 @@ interface EditableStep {
   stepType: SOPStepType;
   emailTemplate: EmailTemplate;
   dataFields: DataField[];
+  portalKey: string;
 }
+
+const NO_PORTAL = "__none__";
 
 interface EditableTask {
   id: string;
@@ -71,6 +77,10 @@ export interface TemplateTaskRowProps {
   taskIdx: number;
   canEdit: boolean;
   groupedTokens: TokenGroup[];
+  // The org's portal registry + this template's selected payer, so an
+  // online_form step can be linked to a real portal (payer-filtered by default).
+  portals: Portal[];
+  templatePayerId: string | null;
   dragTaskId: string | null;
   setDragTaskId: (v: string | null) => void;
   dragStep: DragStep | null;
@@ -92,6 +102,8 @@ export function TemplateTaskRow({
   taskIdx,
   canEdit,
   groupedTokens,
+  portals,
+  templatePayerId,
   dragTaskId,
   setDragTaskId,
   dragStep,
@@ -300,75 +312,89 @@ export function TemplateTaskRow({
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <Label className="text-xs">Data fields</Label>
-                      {canEdit ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => addDataField(task.id, step.id)}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add field
-                        </Button>
-                      ) : null}
-                    </div>
-                    {step.dataFields.length === 0 ? (
-                      <EmptyState message="No data fields yet" />
-                    ) : (
-                      <div className="space-y-2">
-                        {step.dataFields.map((field, i) => (
-                          <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                            <Input
-                              placeholder="Label"
-                              value={field.label}
-                              onChange={(e) =>
-                                updateDataField(task.id, step.id, i, {
-                                  label: e.target.value,
-                                })
-                              }
-                              disabled={!canEdit}
-                            />
-                            <Select
-                              value={field.token}
-                              onValueChange={(v) =>
-                                updateDataField(task.id, step.id, i, { token: v })
-                              }
-                              disabled={!canEdit}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {groupedTokens.map((grp) => (
-                                  <div key={grp.prefix}>
-                                    <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                                      {grp.label}
-                                    </div>
-                                    {grp.items.map((t) => (
-                                      <SelectItem key={t.token} value={t.token}>
-                                        {t.token}
-                                      </SelectItem>
-                                    ))}
-                                  </div>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {canEdit ? (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => removeDataField(task.id, step.id, i)}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            ) : null}
-                          </div>
-                        ))}
+                  <div className="space-y-3">
+                    {step.stepType === "online_form" ? (
+                      <PortalStepSelect
+                        step={step}
+                        portals={portals}
+                        templatePayerId={templatePayerId}
+                        canEdit={canEdit}
+                        onChange={(portalKey) => updateStep(task.id, step.id, { portalKey })}
+                      />
+                    ) : null}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs">Data fields</Label>
+                        {canEdit ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => addDataField(task.id, step.id)}
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add field
+                          </Button>
+                        ) : null}
                       </div>
-                    )}
+                      {step.dataFields.length === 0 ? (
+                        <EmptyState message="No data fields yet" />
+                      ) : (
+                        <div className="space-y-2">
+                          {step.dataFields.map((field, i) => (
+                            <div
+                              key={i}
+                              className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                            >
+                              <Input
+                                placeholder="Label"
+                                value={field.label}
+                                onChange={(e) =>
+                                  updateDataField(task.id, step.id, i, {
+                                    label: e.target.value,
+                                  })
+                                }
+                                disabled={!canEdit}
+                              />
+                              <Select
+                                value={field.token}
+                                onValueChange={(v) =>
+                                  updateDataField(task.id, step.id, i, { token: v })
+                                }
+                                disabled={!canEdit}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {groupedTokens.map((grp) => (
+                                    <div key={grp.prefix}>
+                                      <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                                        {grp.label}
+                                      </div>
+                                      {grp.items.map((t) => (
+                                        <SelectItem key={t.token} value={t.token}>
+                                          {t.token}
+                                        </SelectItem>
+                                      ))}
+                                    </div>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {canEdit ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => removeDataField(task.id, step.id, i)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -386,6 +412,107 @@ export function TemplateTaskRow({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Portal picker for an online_form step. Options default to portals registered
+// against this template's payer (a portal_key links the step to a real portal so
+// the extension can close this task on submit); "Show all portals" reveals the
+// rest. Never required — an unlinked step still works, it just won't drive the
+// extension's task close-out.
+function PortalStepSelect({
+  step,
+  portals,
+  templatePayerId,
+  canEdit,
+  onChange,
+}: {
+  step: EditableStep;
+  portals: Portal[];
+  templatePayerId: string | null;
+  canEdit: boolean;
+  onChange: (portalKey: string) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+
+  const matching = templatePayerId ? portals.filter((p) => p.payerId === templatePayerId) : [];
+  // Fall back to the full list when the payer has no portals (or the template
+  // has no payer) — otherwise the user would see an empty picker.
+  const useAll = showAll || !templatePayerId || matching.length === 0;
+  const base = useAll ? portals : matching;
+
+  const selectedKey = normalizePortalKey(step.portalKey);
+  const selected = selectedKey
+    ? portals.find((p) => normalizePortalKey(p.portalKey) === selectedKey)
+    : undefined;
+  // Keep the currently-selected portal visible even when the payer filter would
+  // otherwise hide it, so the Select value always resolves to an option.
+  const options = selected && !base.some((p) => p.id === selected.id) ? [...base, selected] : base;
+  const value = selected ? selected.portalKey : NO_PORTAL;
+
+  const canToggle =
+    Boolean(templatePayerId) && matching.length > 0 && portals.length > matching.length;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Portal</Label>
+        {canToggle ? (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="text-[11px] text-[#1B4D3E] hover:underline"
+          >
+            {useAll ? "Show payer portals" : "Show all portals"}
+          </button>
+        ) : null}
+      </div>
+
+      {portals.length === 0 ? (
+        <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+          No portal registered{templatePayerId ? " for this payer" : ""} — add one in{" "}
+          <Link to="/admin/portals" className="underline underline-offset-2">
+            Admin &gt; Portals
+          </Link>
+          .
+        </div>
+      ) : (
+        <>
+          <Select
+            value={value}
+            onValueChange={(v) => onChange(v === NO_PORTAL ? "" : v)}
+            disabled={!canEdit}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No portal (not linked)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_PORTAL}>No portal (not linked)</SelectItem>
+              {options.map((p) => (
+                <SelectItem key={p.id} value={p.portalKey}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {!selectedKey ? (
+            <p className="text-[11px] text-[#92400E]">
+              This step won&apos;t be linked for extension fill.
+            </p>
+          ) : !selected ? (
+            <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+              Saved portal key <code>{selectedKey}</code> isn&apos;t in your registry — pick one
+              above or add it in{" "}
+              <Link to="/admin/portals" className="underline underline-offset-2">
+                Admin &gt; Portals
+              </Link>
+              .
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

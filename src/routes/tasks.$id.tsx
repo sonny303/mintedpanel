@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/CopyButton";
+import { PortalStepLink } from "@/components/portals/PortalStepLink";
 import { useTask, useCompleteSOPStep, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useCase } from "@/hooks/useCases";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
@@ -423,6 +424,8 @@ function TaskDetailPage() {
                           <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-1" />
                         ) : null}
                       </div>
+
+                      {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
 
                       {fields.length > 0 ? (
                         <div className="bg-[#FAFAF9] border border-[#E8E5E0] rounded-md divide-y divide-[#E8E5E0]">
