@@ -1,6 +1,12 @@
-// M1 shell sidebar: dark surface, org switcher, search trigger, main nav,
-// permission-gated ADMIN section, user footer.
-import { Fragment, useState } from "react";
+// Redesign E0.0 shell sidebar (TE-6). Journey-ordered navigation for the
+// Credentialing Manager workspace: Portfolio sits above the org context; the
+// org switcher anchors the active org; the four org-scoped journey slots (Get
+// started, Scope, Work, Outcomes) are grouped beneath it. No admin/config items
+// (F0.0.1). The active org is always visible (F0.0.2) and Portfolio is a
+// one-step return from every surface (F0.0.4). The org switcher rescopes the
+// workspace (F0.0.3, paired with the <Outlet key={activeOrgId}> remount in
+// __root). This same sidebar renders inside the mobile drawer, so the switcher
+// and the Portfolio return survive the small-screen collapse (F0.0.1).
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   DropdownMenu,
@@ -10,66 +16,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { SearchDialog } from "@/components/layout/SearchDialog";
 import { useAuthStore, useActiveMembership } from "@/lib/auth-store";
-import { useIsAdmin, useCanWrite } from "@/lib/permissions";
-import { useFixitQueue } from "@/hooks/useFixit";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 import {
-  Users,
-  FileStack,
-  BarChart3,
-  FileText,
-  Network,
-  Building2,
-  CheckCircle2,
-  House,
-  Rocket,
+  LayoutGrid,
+  Compass,
+  Target,
+  ListChecks,
   TrendingUp,
   ChevronDown,
-  Search,
-  LogOut,
   Check,
-  Globe,
-  Zap,
-  Upload,
+  LogOut,
 } from "lucide-react";
 
 type NavLink = {
   to: string;
   label: string;
-  icon: typeof Users;
-  exact?: boolean;
+  icon: typeof LayoutGrid;
 };
 
-const mainNav: NavLink[] = [
-  { to: "/home", label: "Home", icon: House },
-  { to: "/providers", label: "Providers", icon: Users },
-  { to: "/cases", label: "Cases", icon: FileStack },
-  { to: "/launches", label: "Launches", icon: Rocket },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
-];
+// Portfolio (cross-org) sits above the org context and is the one-step return.
+const portfolioNav: NavLink = { to: "/portfolio", label: "Portfolio", icon: LayoutGrid };
 
-// Cleanup entry point (Fix-it queue) — writers only, shown directly under Home
-// with a live count of pending cards.
-const fixitNav: NavLink = { to: "/fix-it", label: "Fix-it", icon: Zap };
-
-// Owner-facing readout (Client Progress v1) — shown to admin and billing only.
-const clientProgressNav: NavLink = {
-  to: "/client-progress",
-  label: "Client Progress",
-  icon: TrendingUp,
-};
-
-const adminNav: NavLink[] = [
-  { to: "/admin/statuses", label: "Statuses", icon: CheckCircle2 },
-  { to: "/admin/templates", label: "Templates", icon: FileText },
-  { to: "/admin/mso-routing", label: "MSO Routing", icon: Network },
-  { to: "/admin/payers", label: "Payers", icon: Building2 },
-  { to: "/admin/portals", label: "Portals", icon: Globe },
-  { to: "/admin/audit", label: "Audit Log", icon: FileStack },
-  { to: "/admin/import", label: "Import", icon: Upload },
-  { to: "/admin/settings", label: "Group & Locations", icon: Building2 },
+// The org-scoped journey, in order (F0.0.1). Reserved routes until their stage
+// ships; each resolves to the shared "not yet available" state, so no dead links.
+const journeyNav: NavLink[] = [
+  { to: "/get-started", label: "Get started", icon: Compass },
+  { to: "/scope", label: "Scope", icon: Target },
+  { to: "/work", label: "Work", icon: ListChecks },
+  { to: "/outcomes", label: "Outcomes", icon: TrendingUp },
 ];
 
 function initialsOf(name: string | null, email: string | null): string {
@@ -95,33 +70,9 @@ const navItemClass = (activeItem: boolean) =>
       : "text-white/60 hover:text-white hover:bg-white/5"
   }`;
 
-// Fix-it nav item with a live pending-card count. Its own component so the
-// derived-queue hook only runs for writers (who see the entry).
-function FixitNavItem({ active, onNavigate }: { active: boolean; onNavigate?: () => void }) {
-  const { cards } = useFixitQueue();
-  return (
-    <Link
-      to={fixitNav.to}
-      aria-current={active ? "page" : undefined}
-      className={navItemClass(active)}
-      onClick={onNavigate}
-    >
-      <Zap className="w-4 h-4" />
-      {fixitNav.label}
-      {cards.length > 0 ? (
-        <span className="ml-auto rounded-full bg-white/15 text-white text-[11px] font-medium px-1.5 tabular-nums">
-          {cards.length}
-        </span>
-      ) : null}
-    </Link>
-  );
-}
-
 export function Sidebar({ onNavigate }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const isAdmin = useIsAdmin();
-  const canWrite = useCanWrite();
   const memberships = useAuthStore((s) => s.memberships);
   const activeOrgId = useAuthStore((s) => s.activeOrgId);
   const setActiveOrg = useAuthStore((s) => s.setActiveOrg);
@@ -129,13 +80,10 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
-  const showClientProgress = active?.role === "admin" || active?.role === "billing";
   const activeOrgName = active?.orgName ?? "—";
   const multiOrg = memberships.length > 1;
-  const [searchOpen, setSearchOpen] = useState(false);
 
-  const isActive = (to: string, exact?: boolean) =>
-    exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
+  const isActive = (to: string) => pathname === to || pathname.startsWith(to + "/");
 
   async function handleSignOut() {
     await signOut();
@@ -144,7 +92,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
   function renderNavItem(item: NavLink) {
     const Icon = item.icon;
-    const activeItem = isActive(item.to, item.exact);
+    const activeItem = isActive(item.to);
     return (
       <Link
         key={item.to}
@@ -159,31 +107,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     );
   }
 
-  function renderNav(items: NavLink[], label: string) {
-    return (
-      <nav className="space-y-0.5" aria-label={label}>
-        {items.map(renderNavItem)}
-      </nav>
-    );
-  }
-
-  // Main nav with the writer-only Fix-it entry injected directly under Home.
-  const mainItems = showClientProgress ? [...mainNav, clientProgressNav] : mainNav;
-  function renderMainNav() {
-    return (
-      <nav className="space-y-0.5" aria-label="Main">
-        {mainItems.map((item) => (
-          <Fragment key={item.to}>
-            {renderNavItem(item)}
-            {item.to === "/home" && canWrite ? (
-              <FixitNavItem active={isActive(fixitNav.to)} onNavigate={onNavigate} />
-            ) : null}
-          </Fragment>
-        ))}
-      </nav>
-    );
-  }
-
   const orgTile = (
     <div className="w-7 h-7 rounded-[var(--mp-radius-sm)] bg-white flex items-center justify-center flex-shrink-0">
       <img src={logoAsset.url} alt="" className="w-5 h-5 object-contain" />
@@ -192,13 +115,21 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
   return (
     <aside className="w-full md:w-[232px] flex-shrink-0 bg-mp-sidebar flex flex-col h-full">
-      {/* Org switcher */}
+      {/* Portfolio — above the org context, always a one-step return (F0.0.4). */}
       <div className="px-3 pt-4 pb-2">
+        <nav aria-label="Portfolio">{renderNavItem(portfolioNav)}</nav>
+      </div>
+
+      <div className="mx-3 border-t border-white/10" />
+
+      {/* Active-org context: switcher + the org-scoped journey grouped under it. */}
+      <div className="px-3 pt-3 pb-2">
         {multiOrg ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                aria-label={`Active organization: ${activeOrgName}. Switch organization`}
                 className="w-full flex items-center gap-2.5 rounded-[var(--mp-radius-md)] px-2 py-2 text-left hover:bg-white/5 transition-colors"
               >
                 {orgTile}
@@ -234,31 +165,10 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         )}
       </div>
 
-      {/* Search trigger */}
-      <div className="px-3 pb-3">
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          className="w-full flex items-center gap-2 rounded-[var(--mp-radius-sm)] border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white/50 hover:bg-white/10 hover:text-white/70 transition-colors"
-        >
-          <Search className="w-3.5 h-3.5" />
-          Search
-        </button>
-      </div>
-      {/* Mounted lazily so the search hooks only fire once the user opens it */}
-      {searchOpen ? <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /> : null}
-
-      <div className="flex-1 overflow-y-auto px-3 py-1 flex flex-col gap-6">
-        {renderMainNav()}
-
-        {isAdmin ? (
-          <div>
-            <h3 className="px-3 text-[10.5px] font-semibold uppercase tracking-wider text-white/40 mb-2">
-              Admin
-            </h3>
-            {renderNav(adminNav, "Admin")}
-          </div>
-        ) : null}
+      <div className="flex-1 overflow-y-auto px-3 pb-1">
+        <nav className="space-y-0.5" aria-label={`${activeOrgName} navigation`}>
+          {journeyNav.map(renderNavItem)}
+        </nav>
       </div>
 
       {/* User footer */}

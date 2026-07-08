@@ -45,6 +45,10 @@ export const queryKeys = {
   lastFills: (orgId: string) => ["last-fills", orgId] as const,
   fieldDictionary: (orgId: string) => ["field-dictionary", orgId] as const,
   tokenCatalog: (orgId: string) => ["token-catalog", orgId] as const,
+  // Portfolio (redesign E0.0) is CROSS-org — deliberately not scoped to an
+  // active org (it renders without one). RLS scopes the read to the caller's
+  // member orgs; org switch clears it via queryClient.removeQueries() anyway.
+  portfolio: () => ["portfolio"] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

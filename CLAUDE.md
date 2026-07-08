@@ -30,6 +30,28 @@ implementing a redesign epic:
   `redesign` when fully aligned; otherwise it leaves review comments naming
   the unmet FR/enabler — remediate and push to the same branch.
 
+### Stage 0 built so far
+
+- **E0.0 — App Shell & Navigation IA.** The Credentialing Manager workspace
+  frame. New internal-only column `organizations.lifecycle_state`
+  (`prospect|active|inactive`, default `active`; migration
+  `20260708120000_org_lifecycle_state.sql`, repo + hosted) — read-only, NEVER
+  rendered as a status label. The **Portfolio** is the cross-org home at
+  `/portfolio` (authenticated redirects land there, not `/home`): chrome-decoupled
+  `src/components/portfolio/PortfolioContent.tsx` (zero `src/components/layout/*`
+  imports) fed by `usePortfolio` → `src/services/portfolio.ts` (`listPortfolioOrgs`,
+  cross-org, no `requireActiveOrg` — RLS scopes it) → pure `src/lib/portfolio.ts`
+  (`splitPortfolio`: active→"In motion", prospect→"Prospects", inactive excluded;
+  tested). Journey nav (`src/components/layout/Sidebar.tsx`, rewritten per TE-6):
+  Portfolio above the org context, then org-scoped Get started / Scope / Work /
+  Outcomes — no admin items. Those four are **reserved leaf routes**
+  (`get-started|scope|work|outcomes`) rendering the shared
+  `src/components/empty/NotYetAvailable.tsx`. Org switch clears view state via
+  `<Outlet key={activeOrgId}>` in `__root.tsx` (TE-4) + the existing
+  `setActiveOrg → removeQueries`. First-run (zero orgs) reuses `NoOrgScreen`
+  (restyled) → `create_organization` (E0.1 hand-off). Existing flat routes
+  (home/providers/cases/admin.*) stay URL-reachable but are dropped from the nav.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

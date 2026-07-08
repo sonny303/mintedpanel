@@ -9,14 +9,19 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkRouteImport } from './routes/work'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as ScopeRouteImport } from './routes/scope'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as OutcomesRouteImport } from './routes/outcomes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as FixItRouteImport } from './routes/fix-it'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
@@ -49,9 +54,19 @@ import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
 
+const WorkRoute = WorkRouteImport.update({
+  id: '/work',
+  path: '/work',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScopeRoute = ScopeRouteImport.update({
+  id: '/scope',
+  path: '/scope',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -74,6 +89,16 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OutcomesRoute = OutcomesRouteImport.update({
+  id: '/outcomes',
+  path: '/outcomes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -87,6 +112,11 @@ const LaunchesRoute = LaunchesRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GetStartedRoute = GetStartedRouteImport.update({
+  id: '/get-started',
+  path: '/get-started',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FixItRoute = FixItRouteImport.update({
@@ -250,14 +280,19 @@ export interface FileRoutesByFullPath {
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
   '/fix-it': typeof FixItRoute
+  '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/outcomes': typeof OutcomesRoute
+  '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
+  '/scope': typeof ScopeRoute
   '/welcome': typeof WelcomeRoute
+  '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
@@ -290,12 +325,17 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/client-progress': typeof ClientProgressRoute
   '/fix-it': typeof FixItRoute
+  '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/outcomes': typeof OutcomesRoute
+  '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
+  '/scope': typeof ScopeRoute
   '/welcome': typeof WelcomeRoute
+  '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
@@ -327,14 +367,19 @@ export interface FileRoutesById {
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
   '/fix-it': typeof FixItRoute
+  '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/outcomes': typeof OutcomesRoute
+  '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
+  '/scope': typeof ScopeRoute
   '/welcome': typeof WelcomeRoute
+  '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
@@ -370,14 +415,19 @@ export interface FileRouteTypes {
     | '/cases'
     | '/client-progress'
     | '/fix-it'
+    | '/get-started'
     | '/home'
     | '/launches'
     | '/login'
+    | '/outcomes'
+    | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
+    | '/scope'
     | '/welcome'
+    | '/work'
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
@@ -410,12 +460,17 @@ export interface FileRouteTypes {
     | '/'
     | '/client-progress'
     | '/fix-it'
+    | '/get-started'
     | '/home'
     | '/login'
+    | '/outcomes'
+    | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/reports'
+    | '/scope'
     | '/welcome'
+    | '/work'
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
@@ -446,14 +501,19 @@ export interface FileRouteTypes {
     | '/cases'
     | '/client-progress'
     | '/fix-it'
+    | '/get-started'
     | '/home'
     | '/launches'
     | '/login'
+    | '/outcomes'
+    | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
+    | '/scope'
     | '/welcome'
+    | '/work'
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
@@ -488,14 +548,19 @@ export interface RootRouteChildren {
   CasesRoute: typeof CasesRouteWithChildren
   ClientProgressRoute: typeof ClientProgressRoute
   FixItRoute: typeof FixItRoute
+  GetStartedRoute: typeof GetStartedRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  OutcomesRoute: typeof OutcomesRoute
+  PortfolioRoute: typeof PortfolioRoute
   PrivacyRoute: typeof PrivacyRoute
   ProgressRoute: typeof ProgressRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
+  ScopeRoute: typeof ScopeRoute
   WelcomeRoute: typeof WelcomeRoute
+  WorkRoute: typeof WorkRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminImportRoute: typeof AdminImportRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
@@ -513,11 +578,25 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/work': {
+      id: '/work'
+      path: '/work'
+      fullPath: '/work'
+      preLoaderRoute: typeof WorkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/welcome': {
       id: '/welcome'
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scope': {
+      id: '/scope'
+      path: '/scope'
+      fullPath: '/scope'
+      preLoaderRoute: typeof ScopeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -548,6 +627,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/outcomes': {
+      id: '/outcomes'
+      path: '/outcomes'
+      fullPath: '/outcomes'
+      preLoaderRoute: typeof OutcomesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -567,6 +660,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/get-started': {
+      id: '/get-started'
+      path: '/get-started'
+      fullPath: '/get-started'
+      preLoaderRoute: typeof GetStartedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fix-it': {
@@ -880,14 +980,19 @@ const rootRouteChildren: RootRouteChildren = {
   CasesRoute: CasesRouteWithChildren,
   ClientProgressRoute: ClientProgressRoute,
   FixItRoute: FixItRoute,
+  GetStartedRoute: GetStartedRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  OutcomesRoute: OutcomesRoute,
+  PortfolioRoute: PortfolioRoute,
   PrivacyRoute: PrivacyRoute,
   ProgressRoute: ProgressRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
+  ScopeRoute: ScopeRoute,
   WelcomeRoute: WelcomeRoute,
+  WorkRoute: WorkRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminImportRoute: AdminImportRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,

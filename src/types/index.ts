@@ -53,6 +53,21 @@ export interface Organization {
   createdAt: string;
 }
 
+// Internal-only organization lifecycle (redesign E0.0, migration
+// 20260708120000). Read-only in the app; drives the Portfolio buckets only and
+// is NEVER rendered to the Credentialing Manager as a status label (F0.0.2).
+export type LifecycleState = "prospect" | "active" | "inactive";
+
+// Cross-org Portfolio projection (redesign E0.0, enabler TE-2): the caller's
+// member orgs with their internal lifecycle_state. Bucketed into the two
+// business metrics the Portfolio surfaces ("Prospects" / "In motion") by the
+// pure src/lib/portfolio.ts.
+export interface PortfolioOrg {
+  id: string;
+  name: string;
+  lifecycleState: LifecycleState;
+}
+
 export interface Profile {
   id: string;
   email: string | null;
