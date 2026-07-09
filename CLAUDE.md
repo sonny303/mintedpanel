@@ -25,6 +25,13 @@ implementing a redesign epic:
 - One epic per PR, branch off `redesign`, PR targets `redesign`, titled
   `EX.X: <title>` and referencing the epic file. Every numbered FR must be
   traceable in the diff.
+- **Open the PR yourself as your final step — do not wait for the user.** When
+  the gates pass, push the branch and run `gh pr create --base redesign --head
+<branch> --title "EX.X: <title>"` with a body mapping each FR/TE to the diff.
+  The reviewer automation (Devin) fires automatically on the new PR; you never
+  need a human to create or kick off the review. If review comments come back,
+  push fixes to the SAME branch (do not open a new PR) — the automation
+  re-reviews on each push. Never self-merge.
 - Devin reviews each PR against the epic and the gates (`npm run lint`,
   `npm run test`, `npx tsc --noEmit`, e2e where covered) and merges it into
   `redesign` when fully aligned; otherwise it leaves review comments naming
