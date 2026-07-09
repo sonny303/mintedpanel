@@ -16,20 +16,28 @@ Format per entry:
 
 ## Open
 
-## [e0.5] BD-1 — Unauthenticated recipient access model — OPEN (default recommended)
+_None._
+
+## Resolved
+
+## [e0.5] BD-1 — Unauthenticated recipient access model — RESOLVED (2026-07-09)
 
 - **Issue:** E0.5's premise is an external recipient submitting data with NO
   account. Every data path today requires an authenticated session under
   org-scoped RLS. This is the first Stage 0 surface to cross the trust boundary.
-- **Impact:** Forks the enabler design (TE-3). Blocks E0.5 build until chosen.
+- **Impact:** Forks the enabler design (TE-3).
 - **Options:** (a) RECOMMENDED: public token-validated route `/capture/:token`
   backed by `SECURITY DEFINER` RPCs that hash-validate the token and read/write
   only the single authorized party — no anonymous GoTrue session, no login
   (consistent with the E0.0 "no login" default). (b) mint an anonymous Supabase
   session per link (heavier; not recommended for Stage 0).
-- **Decision:** pending PM.
-
-## Resolved
+- **Decision:** (a) — PM confirmed the lightweight token link (no login). Form
+  data is basic org info, so the token isn't securing secret data; it only binds
+  a link to one org's record (prevents a forwarded/guessed link overwriting the
+  wrong org or revealing which org it targets). PM also directed folding an
+  INBOUND "contact us" lead-capture flow into E0.5 — added as reviewer-proposed
+  F0.5.5 + TE-7; inbound leads are triaged by P1 (recommended default), not
+  auto-created orgs. Outbound remains as authored.
 
 ## [e0.5] BD-2 — Email delivery in Stage 0 — RESOLVED (2026-07-09)
 
