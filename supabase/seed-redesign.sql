@@ -165,3 +165,23 @@ FROM public.organizations o
 CROSS JOIN LATERAL (SELECT id FROM public.parties WHERE email = 'zeb@mintedpanel.example.test' LIMIT 1) z
 WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'pointplacephysicaltherapy'
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E0.5 — Inbound "contact us" leads (F0.5.5 / TE-7). Two demo leads awaiting
+-- triage in the shared internal queue: one convertible to a prospect org, one
+-- an obvious dismiss. Idempotent by (org_name, contact_email). Capture links
+-- themselves are token-ephemeral (only a hash is stored, generated at issue) so
+-- they are exercised via the mock e2e harness, not seeded here — TS-7 (Lone Star
+-- owner) and TS-13 (Rose City alt recipient / office manager) run through the
+-- create_capture_link -> validate_capture_token -> submit_capture flow.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.inbound_leads (org_name, contact_name, contact_email, contact_phone, status)
+SELECT v.org_name, v.contact_name, v.email, v.phone, 'new'
+FROM (VALUES
+  ('Coastal Motion PT',  'Wallace Boden', 'wallace@coastalmotion.example.test', '910-555-0130'),
+  ('Definitely Not Spam','A Bot',         'noreply@spam.example.test',          '000-000-0000')
+) AS v(org_name, contact_name, email, phone)
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.inbound_leads l
+  WHERE l.org_name = v.org_name AND l.contact_email = v.email
+);

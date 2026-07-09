@@ -595,6 +595,57 @@ export type Database = {
           },
         ];
       };
+      inbound_leads: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          city: string | null;
+          contact_email: string;
+          contact_name: string;
+          contact_phone: string | null;
+          converted_org_id: string | null;
+          country: string | null;
+          created_at: string;
+          id: string;
+          org_name: string;
+          postal_code: string | null;
+          state: string | null;
+          status: string;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          contact_email: string;
+          contact_name: string;
+          contact_phone?: string | null;
+          converted_org_id?: string | null;
+          country?: string | null;
+          created_at?: string;
+          id?: string;
+          org_name: string;
+          postal_code?: string | null;
+          state?: string | null;
+          status?: string;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          contact_email?: string;
+          contact_name?: string;
+          contact_phone?: string | null;
+          converted_org_id?: string | null;
+          country?: string | null;
+          created_at?: string;
+          id?: string;
+          org_name?: string;
+          postal_code?: string | null;
+          state?: string | null;
+          status?: string;
+        };
+        Relationships: [];
+      };
       launches: {
         Row: {
           address: string | null;
@@ -990,6 +1041,45 @@ export type Database = {
           phone_office?: string | null;
           postal_code?: string | null;
           state?: string | null;
+        };
+        Relationships: [];
+      };
+      party_capture_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          org_id: string;
+          party_id: string;
+          recipient_email: string;
+          state: string;
+          token_hash: string;
+          used_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          org_id: string;
+          party_id: string;
+          recipient_email: string;
+          state?: string;
+          token_hash: string;
+          used_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          org_id?: string;
+          party_id?: string;
+          recipient_email?: string;
+          state?: string;
+          token_hash?: string;
+          used_at?: string | null;
         };
         Relationships: [];
       };

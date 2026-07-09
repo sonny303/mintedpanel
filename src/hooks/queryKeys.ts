@@ -55,6 +55,10 @@ export const queryKeys = {
   // cross-org role reference list.
   orgParties: (orgId: string) => ["org-parties", orgId] as const,
   partyRoleTypes: () => ["party-role-types"] as const,
+  // Secure data capture link (redesign E0.5): the active org's current link
+  // state. Inbound leads are CROSS-org (no org until converted) — not scoped.
+  captureLink: (orgId: string) => ["capture-link", orgId] as const,
+  inboundLeads: () => ["inbound-leads"] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;
