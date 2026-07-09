@@ -30,6 +30,16 @@ Format per entry:
   Stage 1 edge/middleware tier and ship only the uniform-response + no-token-
   logging audit now. (c) Supabase edge functions — new runtime surface, out of
   Stage 0 scope.
+- **Reviewer note (Devin, 2026-07-09):** Confirmed against the codebase — no
+  throttle/attempts table or per-source counter exists in
+  `supabase/migrations/` today; `submit_inbound_lead` has only the honeypot +
+  required-field validation, and the three token RPCs rely solely on token
+  entropy. Option (a) is implementable additively (a `public_rpc_attempts`
+  counter table + a `CREATE OR REPLACE` fold into the four `anon` RPCs) with no
+  new deps and no middleware. E0.7 is signed off `reviewed: true` with this as
+  an explicit build gate on F0.7.1; the other F0.7.1 half (uniform-response +
+  no-token-logging audit) needs no BD-1 and can proceed. Technical input only —
+  the mechanism + thresholds remain the PM's decision.
 - **Decision:** _pending PM._
 
 ## [e0.7] BD-2: Scoped accessibility pass on public routes — OPEN
@@ -41,6 +51,10 @@ Format per entry:
 - **Options:** (a) RECOMMENDED — include a scoped pass (labels, focus order,
   keyboard submit, error announcement) on just the three public routes.
   (b) Skip entirely for Stage 0.
+- **Reviewer note (Devin, 2026-07-09):** Affects only F0.7.5's scope, not the
+  epic's structure, so E0.7 is signed off `reviewed: true` regardless; if the
+  PM defers, F0.7.5 ships the terminal-state/lockdown-consistency audit without
+  the a11y sweep. Technical input only — the opt-in is the PM's decision.
 - **Decision:** _pending PM._
 
 ## Resolved
