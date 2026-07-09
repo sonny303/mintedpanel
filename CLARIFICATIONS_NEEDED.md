@@ -16,7 +16,32 @@ Format per entry:
 
 ## Open
 
-_None._
+## [e0.7] BD-1: Rate-limit mechanism for anon RPCs — OPEN
+
+- **Issue:** F0.7.1 requires throttling on the four `anon` RPCs, but Stage 0
+  has no server middleware tier and no-new-deps is a hard rule, so the limit
+  must live inside Postgres.
+- **Impact:** Blocks F0.7.1 build (mechanism + thresholds).
+- **Options:** (a) RECOMMENDED — a small `public_rpc_attempts` table keyed by a
+  coarse source fingerprint (RPC name + hashed caller hint), pruned lazily;
+  each anon RPC checks/increments it and returns the generic invalid response
+  once over threshold (e.g. 20 failed validations / 15 min; 5 inbound leads /
+  hour). Zero infra, additive migration. (b) Defer real rate limiting to a
+  Stage 1 edge/middleware tier and ship only the uniform-response + no-token-
+  logging audit now. (c) Supabase edge functions — new runtime surface, out of
+  Stage 0 scope.
+- **Decision:** _pending PM._
+
+## [e0.7] BD-2: Scoped accessibility pass on public routes — OPEN
+
+- **Issue:** The public routes (`/capture`, `/contact`, `/share`) are the only
+  pages outsiders see; they have had no keyboard/label/focus audit. A full
+  a11y overhaul is out of Stage 0 scope, but a scoped pass is cheap here.
+- **Impact:** Only F0.7.5's scope (include the pass or not).
+- **Options:** (a) RECOMMENDED — include a scoped pass (labels, focus order,
+  keyboard submit, error announcement) on just the three public routes.
+  (b) Skip entirely for Stage 0.
+- **Decision:** _pending PM._
 
 ## Resolved
 
