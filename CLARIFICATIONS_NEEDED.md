@@ -29,7 +29,9 @@ Format per entry:
   session per link (heavier; not recommended for Stage 0).
 - **Decision:** pending PM.
 
-## [e0.5] BD-2 — Email delivery in Stage 0 — OPEN (default recommended)
+## Resolved
+
+## [e0.5] BD-2 — Email delivery in Stage 0 — RESOLVED (2026-07-09)
 
 - **Issue:** Nothing in the stack sends application email (GoTrue = auth mail
   only; no transactional provider). AGENTS.md forbids new deps without
@@ -39,11 +41,9 @@ Format per entry:
 - **Options:** (a) RECOMMENDED: generate the link + render the exact email copy
   for P1 to copy/send — no send infra; F0.5.4 content is testable as rendered
   template text. (b) integrate a transactional provider (Resend/Postmark/SES) +
-  domain verification — a new external dependency; should be its own scoped
-  decision, not bundled into Stage 0.
-- **Decision:** pending PM.
-
-## Resolved
+  domain verification — a new external dependency.
+- **Decision:** (a) — PM confirmed. Stage 0 renders copy-able email text only;
+  no send infra. Real transactional sending is a separate future decision.
 
 ## [e0.4] "Flag orgs as inactive" vs the e0.0 locked no-lifecycle-label rule — RESOLVED (2026-07-09)
 
