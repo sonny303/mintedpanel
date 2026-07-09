@@ -15,10 +15,17 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 ### organizations
 
 `id, name, lifecycle_state, created_at` — tenant root. Created via the SECURITY
-DEFINER `create_organization(p_name text) RETURNS uuid` RPC (self-serve intake):
-there is no INSERT policy on this table — the RPC inserts the org, the caller's
-admin membership, the canonical `status_configs` seed, and a CREATE audit row as
-the definer (migration `20260707140000_create_organization_rpc.sql`).
+DEFINER `create_organization(...) RETURNS uuid` RPC (self-serve intake): there is
+no INSERT policy on this table — the RPC inserts the org, the caller's admin
+membership, the canonical `status_configs` seed, and a CREATE audit row as the
+definer (migration `20260707140000_create_organization_rpc.sql`). **Redesign
+E0.1 added an additive v2 overload
+`create_organization(p_name, p_owner_name, p_owner_email)`** (migration
+`20260709120100_create_organization_rpc_v2.sql`): hard-blocks a duplicate
+normalized name (case-/space-insensitive), requires a valid owner name+email,
+sets `lifecycle_state = 'prospect'`, and writes the owner into the party model
+(owner party + `owner` role at org scope). The legacy 1-arg overload is retained
+(additive rule) but the redesign app calls only the enforced 3-arg form.
 
 `lifecycle_state` (`text NOT NULL DEFAULT 'active' CHECK (lifecycle_state IN
 ('prospect','active','inactive'))`, migration
@@ -27,6 +34,32 @@ driving the redesigned Portfolio buckets (active→"In motion", prospect→
 "Prospects", inactive excluded). Read-only in the app and NEVER rendered to the
 Credentialing Manager as a status label. All pre-migration rows are `active`.
 Stage 0 does not write it; transitions are manual until later tooling exists.
+
+### Party model (redesign Stage 0, canonical E0.3 §5)
+
+Landed in the E0.1 PR (migration `20260709120000_party_model_foundation.sql`).
+The single, reusable way stakeholders (owner, CRM contacts, later entities) are
+represented.
+
+- **parties** — `id, party_type ('person'|'organization', default 'person'),
+name, email, phone_office, phone_mobile, address_line1, address_line2, city,
+state, postal_code, country, created_by, created_at`. **No `org_id`** — the one
+  approved exception to org-scoping: a party is reused across orgs (E0.3 F0.3.4).
+  RLS grants access where `created_by = auth.uid()` OR the caller is a member of
+  an org the party is assigned to (via `party_role_assignments`); writes also
+  require a writer role in one of those orgs. `created_by` has no FK (seed uses a
+  fixed placeholder).
+- **party_role_types** — governed role reference list `role_key (PK), label,
+is_active`. Active: `owner`, `customer_escalation_contact`, `sales_rep`.
+  Reserved (`is_active = false`): `billing_contact`, `contracting_signer`,
+  `credentialing_contact`. Read-only to `authenticated`; new roles are data
+  inserts, never schema changes (E0.3 F0.3.5).
+- **party_role_assignments** — `id, org_id, party_id, role_key, scope_type
+('org'|'facility'|'case', default 'org'), scope_id, created_at`, `UNIQUE NULLS
+NOT DISTINCT (org_id, party_id, role_key, scope_type, scope_id)`. Org-RLS-scoped
+  (member SELECT, writer INSERT/UPDATE/DELETE). A BEFORE trigger rejects
+  assigning an inactive (reserved) role. Stage 0 writes only `scope_type='org'`
+  (scope_id NULL).
 
 ### memberships
 

@@ -1,26 +1,27 @@
-// TanStack Query hook for the in-app organization intake (Epic 2a). On success
-// it wires the caller into the freshly-created org: refetch memberships (so the
-// new org appears in the switcher and setActiveOrg will accept it), then reuse
-// the store's org-switch path (setActiveOrg → queryClient.removeQueries resets
-// the prior org's caches), and land on Home.
+// TanStack Query hook for the in-app organization intake (Epic 2a, E0.1). On
+// success it wires the caller into the freshly-created org: refetch memberships
+// (so the new org appears in the switcher and setActiveOrg will accept it), then
+// reuse the store's org-switch path (setActiveOrg → queryClient.removeQueries
+// resets the prior org's caches), and land INSIDE the new org's workspace.
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuthStore } from "@/lib/auth-store";
-import { createOrganization } from "@/services/organizations";
+import { createOrganization, type CreateOrganizationInput } from "@/services/organizations";
 
 export function useCreateOrganization() {
   const navigate = useNavigate();
   const loadMemberships = useAuthStore((s) => s.loadMemberships);
   const setActiveOrg = useAuthStore((s) => s.setActiveOrg);
   return useMutation({
-    mutationFn: (name: string) => createOrganization(name),
+    mutationFn: (input: CreateOrganizationInput) => createOrganization(input),
     onSuccess: async (orgId) => {
       // Pull the new membership into the store first; setActiveOrg only accepts
       // an org the caller is a member of, so this must precede the switch.
       await loadMemberships();
       setActiveOrg(orgId);
-      // Redesign E0.0: land on the Portfolio (the new front door) after intake.
-      navigate({ to: "/portfolio" });
+      // E0.1 F0.1.5 / TE-4: land inside the new org's workspace at the first
+      // journey step (Get started), NOT back at the cross-org Portfolio.
+      navigate({ to: "/get-started" });
     },
   });
 }

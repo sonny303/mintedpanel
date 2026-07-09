@@ -942,6 +942,127 @@ export type Database = {
         };
         Relationships: [];
       };
+      parties: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          city: string | null;
+          country: string | null;
+          created_at: string;
+          created_by: string;
+          email: string | null;
+          id: string;
+          name: string;
+          party_type: string;
+          phone_mobile: string | null;
+          phone_office: string | null;
+          postal_code: string | null;
+          state: string | null;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          created_by: string;
+          email?: string | null;
+          id?: string;
+          name: string;
+          party_type?: string;
+          phone_mobile?: string | null;
+          phone_office?: string | null;
+          postal_code?: string | null;
+          state?: string | null;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          created_by?: string;
+          email?: string | null;
+          id?: string;
+          name?: string;
+          party_type?: string;
+          phone_mobile?: string | null;
+          phone_office?: string | null;
+          postal_code?: string | null;
+          state?: string | null;
+        };
+        Relationships: [];
+      };
+      party_role_assignments: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          party_id: string;
+          role_key: string;
+          scope_id: string | null;
+          scope_type: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          party_id: string;
+          role_key: string;
+          scope_id?: string | null;
+          scope_type?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          party_id?: string;
+          role_key?: string;
+          scope_id?: string | null;
+          scope_type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "party_role_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_role_assignments_party_id_fkey";
+            columns: ["party_id"];
+            isOneToOne: false;
+            referencedRelation: "parties";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_role_assignments_role_key_fkey";
+            columns: ["role_key"];
+            isOneToOne: false;
+            referencedRelation: "party_role_types";
+            referencedColumns: ["role_key"];
+          },
+        ];
+      };
+      party_role_types: {
+        Row: {
+          is_active: boolean;
+          label: string;
+          role_key: string;
+        };
+        Insert: {
+          is_active: boolean;
+          label: string;
+          role_key: string;
+        };
+        Update: {
+          is_active?: boolean;
+          label?: string;
+          role_key?: string;
+        };
+        Relationships: [];
+      };
       payers: {
         Row: {
           avg_decision_days: number | null;
