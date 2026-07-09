@@ -51,6 +51,28 @@ implementing a redesign epic:
   `setActiveOrg → removeQueries`. First-run (zero orgs) reuses `NoOrgScreen`
   (restyled) → `create_organization` (E0.1 hand-off). Existing flat routes
   (home/providers/cases/admin.*) stay URL-reachable but are dropped from the nav.
+- **E0.1 — Create Organization Shell + party-model foundation.** The
+  **canonical E0.3 §5 party schema** landed here (owner must be stored from day
+  one): `parties` (no `org_id` — cross-org; RLS via assignment-membership OR
+  `created_by`), `party_role_types` (governed role list — active owner/
+  customer_escalation_contact/sales_rep, reserved billing_contact/
+  contracting_signer/credentialing_contact), `party_role_assignments`
+  (org-scoped, `UNIQUE NULLS NOT DISTINCT`, inactive-role reject trigger) —
+  migration `20260709120000_party_model_foundation.sql`. **`create_organization`
+  v2** (`20260709120100`, additive 3-arg overload, legacy 1-arg kept): hard-block
+  duplicate normalized name, required owner name+email, `lifecycle_state
+= 'prospect'`, owner party + `owner` assignment. Frontend: `createOrganization`
+  service takes `{name, ownerName, ownerEmail}`; shared `useOrgCreateForm` +
+  `OrgCreateFields` (owner fields + `src/lib/contactValidation.ts` email
+  format/typo nudge) drive BOTH intake surfaces (`NoOrgScreen`,
+  `CreateOrganizationModal` — the latter shared by `CreateOrgPanel` + Portfolio
+  empty state). Post-create lands on the new org's `/get-started`
+  (`useCreateOrganization`), which now renders a guided next-step ("Add
+  facilities or providers" → `/scope`) with NO portfolio-return prompt (F0.1.5).
+  Additive seed `supabase/seed-redesign.sql` (11-org universe + owners, natural-
+  key idempotent, NOT the legacy `seed.sql`; never seed prod). E0.2 extends the
+  RPC/form/seed with Zeb + customer contacts; E0.3 adds the manage-parties
+  surface + TS-9–11.
 
 ## What this is
 
