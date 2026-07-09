@@ -51,6 +51,10 @@ export const queryKeys = {
   portfolio: () => ["portfolio"] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
+  // Full Party model (redesign E0.3): all parties in an org + the global,
+  // cross-org role reference list.
+  orgParties: (orgId: string) => ["org-parties", orgId] as const,
+  partyRoleTypes: () => ["party-role-types"] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;
