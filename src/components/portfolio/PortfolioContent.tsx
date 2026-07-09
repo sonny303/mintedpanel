@@ -134,7 +134,37 @@ export function PortfolioContent() {
         <StatTile icon={Sparkles} label="Prospects" count={buckets.prospectCount} />
       </div>
 
-      {buckets.isEmpty ? (
+      {buckets.allInactive ? (
+        // E0.4 F0.4.2 / TE-3 all-inactive fallback: never a dead end. Show the
+        // orgs under an "Inactive" group heading (the same grouping mechanism as
+        // "In motion"/"Prospects" — NO per-org status label, preserving the E0.0
+        // rule) and offer the create-org next action.
+        <div className="space-y-5">
+          <OrgSection title="Inactive" orgs={buckets.inactive} onOpen={openOrg} />
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-[15px] font-semibold text-foreground">
+                  No organizations in motion
+                </div>
+                <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">
+                  Create a new organization to start tracking credentialing work again.
+                </p>
+              </div>
+              <Button
+                onClick={() => setCreating(true)}
+                className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+              >
+                <Plus className="h-4 w-4" />
+                Create organization
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : buckets.isEmpty ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
             <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">

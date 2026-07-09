@@ -120,6 +120,35 @@ implementing a redesign epic:
   visible-disabled, F0.3.5). Seed adds TS-10 (Zeb also `owner` on Point Place
   alongside the seeded owner). RLS write/read paths verified live under the
   `authenticated` role.
+- **E0.4 — First-Run & Next-Action Landing.** No schema change (E0.0's
+  `organizations.lifecycle_state` + the existing `created_at` are the only
+  inputs). Deterministic landing resolver `src/lib/landing.ts` (`resolveLanding`
+  → `first-run | workspace | portfolio`; the shared pure `selectActiveOrgId`
+  picks the valid non-inactive last-active org, else the most recently created
+  **live** org, else null — tested in `landing.test.ts`), consuming the E0.0
+  `listPortfolioOrgs` source (now also selecting `created_at`; `PortfolioOrg`
+  gained `createdAt`). Applied at the two authenticated entry points via
+  `useLandingRedirect` (`src/hooks/useLandingRedirect.ts`): post-login
+  (`login.tsx`) and the `/` root redirect (`index.tsx` `beforeLoad`, client-nav
+  only — a hard-load of `/` still renders marketing, unchanged). Reloading a
+  specific workspace URL preserves context via the persisted store and never
+  re-resolves (F0.4.1 supersedes E0.0's flat `/portfolio` default). **Store
+  change (TE-2):** `MembershipEntry` carries `lifecycleState`/`createdAt` (the
+  memberships query embeds `organizations(name, lifecycle_state, created_at)`)
+  and the boot-time active-org validation is now lifecycle-aware via the same
+  `selectActiveOrgId` (was "fall back to first membership"). **Portfolio
+  all-inactive fallback (F0.4.2 / TE-3):** `splitPortfolio` also returns the
+  `inactive` bucket + an `allInactive` flag; `PortfolioContent` renders an
+  "Inactive" group heading (the same grouping mechanism as In motion/Prospects —
+  **no per-org status label**, E0.0 F0.0.2 preserved) + a create-org CTA ONLY
+  when the metric buckets are empty and inactive > 0 (else inactive stays
+  excluded and the zero-org "No organizations yet" card shows). **Onboarding
+  banner (F0.4.3 / TE-4):** `src/components/org/OnboardingBanner.tsx` (disabled
+  "Begin onboarding" Stage-1 CTA, composed from card + button) at the top of
+  `/get-started`. Playwright `e2e/portfolio-inactive-fallback.spec.ts` covers
+  TS-12 (the all-inactive dark path, TD-4) via the mock harness. Zero-org
+  first-run still lands on `NoOrgScreen` (E0.0 TE-7); Portfolio itself is
+  otherwise unchanged and stays one click away in the nav.
 
 ## What this is
 

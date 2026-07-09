@@ -21,7 +21,7 @@ function toLifecycleState(value: unknown): LifecycleState {
 export async function listPortfolioOrgs(): Promise<PortfolioOrg[]> {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, name, lifecycle_state")
+    .select("id, name, lifecycle_state, created_at")
     .order("name");
   if (error) throw error;
   return (data ?? []).map((row) => {

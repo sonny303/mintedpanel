@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { PartiesManager } from "@/components/org/PartiesManager";
+import { OnboardingBanner } from "@/components/org/OnboardingBanner";
 
 export const Route = createFileRoute("/get-started")({
   component: GetStartedPage,
@@ -19,6 +20,9 @@ function GetStartedPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Get started" />
+      {/* E0.4 F0.4.3 / TE-4: the onboarding next-action banner — a just-created or
+          still-empty org always lands with a clear next step, never a blank state. */}
+      <OnboardingBanner />
       <Card>
         <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
           <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">

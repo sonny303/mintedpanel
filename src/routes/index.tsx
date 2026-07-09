@@ -3,16 +3,31 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/lib/auth-store";
+import { listPortfolioOrgs } from "@/services/portfolio";
+import { resolveLanding } from "@/lib/landing";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
-    const { session } = useAuthStore.getState();
-    if (session) {
-      // Redesign E0.0: the authenticated workspace opens on the cross-org
-      // Portfolio (the new front door), not the legacy flat /home.
+  beforeLoad: async () => {
+    // On a hard load init() hasn't run yet, so the store session is null here and
+    // we fall through to the public marketing page (unchanged E0.0 behavior). On
+    // client-side navigation the store is populated, so resolve the E0.4 landing.
+    const { session, activeOrgId, setActiveOrg } = useAuthStore.getState();
+    if (!session) return;
+    let decision;
+    try {
+      decision = resolveLanding(await listPortfolioOrgs(), activeOrgId);
+    } catch {
       throw redirect({ to: "/portfolio", replace: true });
     }
+    if (decision.kind === "workspace") {
+      // Redesign E0.4 TE-1: land in the last-active (or most-recent) org workspace,
+      // superseding E0.0's flat /portfolio default. first-run / all-inactive fall
+      // through to the Portfolio (NoOrgScreen renders there when memberships are 0).
+      setActiveOrg(decision.orgId);
+      throw redirect({ to: "/get-started", replace: true });
+    }
+    throw redirect({ to: "/portfolio", replace: true });
   },
   component: LandingPage,
 });
