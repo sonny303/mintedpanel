@@ -10,9 +10,7 @@
 import type { LifecycleState, PortfolioOrg } from "@/types";
 
 export type LandingDecision =
-  | { kind: "first-run" }
-  | { kind: "workspace"; orgId: string }
-  | { kind: "portfolio" };
+  { kind: "first-run" } | { kind: "workspace"; orgId: string } | { kind: "portfolio" };
 
 // Given orgs (with lifecycle + createdAt) and the persisted last-active id, pick
 // the org that should be ACTIVE: the valid non-inactive last-active, else the
@@ -30,10 +28,7 @@ export function selectActiveOrgId(
   return live.reduce((a, b) => (b.createdAt > a.createdAt ? b : a)).id; // TE-1 rule 4
 }
 
-export function resolveLanding(
-  orgs: PortfolioOrg[],
-  activeOrgId: string | null,
-): LandingDecision {
+export function resolveLanding(orgs: PortfolioOrg[], activeOrgId: string | null): LandingDecision {
   // (1) Brand-new user with no orgs — the shell bootstraps the first org.
   if (orgs.length === 0) return { kind: "first-run" };
   // (2)/(4) A usable workspace org (valid last-active, or the most recent live one).
