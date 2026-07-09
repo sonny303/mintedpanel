@@ -165,12 +165,19 @@ function RootComponent() {
   // /privacy is fully public (Chrome Web Store requires a hosted policy URL
   // reachable without sign-in): no session redirect, rendered outside AppShell.
   const isPrivacyRoute = pathname === "/privacy";
-  // E0.5 public trust-boundary surfaces: the token capture link and the inbound
-  // contact form both render WITHOUT a session, outside the app shell (BD-1).
+  // E0.5/E0.6 public trust-boundary surfaces: the E0.5 token capture link, the
+  // E0.5 inbound contact form, and the E0.6 read-only report share all render
+  // WITHOUT a session, outside the app shell (BD-1).
   const isCaptureRoute = pathname.startsWith("/capture/");
   const isContactRoute = pathname === "/contact";
+  const isShareRoute = pathname.startsWith("/share/");
   const isChromelessRoute =
-    isAuthRoute || isRootRoute || isPrivacyRoute || isCaptureRoute || isContactRoute;
+    isAuthRoute ||
+    isRootRoute ||
+    isPrivacyRoute ||
+    isCaptureRoute ||
+    isContactRoute ||
+    isShareRoute;
   const isPublicRoute = isChromelessRoute || isDevRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);

@@ -18,16 +18,17 @@ export const Route = createFileRoute("/")({
     try {
       decision = resolveLanding(await listPortfolioOrgs(), activeOrgId);
     } catch {
-      throw redirect({ to: "/portfolio", replace: true });
+      throw redirect({ to: "/reporting/portfolio", replace: true });
     }
     if (decision.kind === "workspace") {
       // Redesign E0.4 TE-1: land in the last-active (or most-recent) org workspace,
       // superseding E0.0's flat /portfolio default. first-run / all-inactive fall
-      // through to the Portfolio (NoOrgScreen renders there when memberships are 0).
+      // through to the Reporting Center's Portfolio report (E0.6 TE-3; NoOrgScreen
+      // renders there when memberships are 0).
       setActiveOrg(decision.orgId);
       throw redirect({ to: "/get-started", replace: true });
     }
-    throw redirect({ to: "/portfolio", replace: true });
+    throw redirect({ to: "/reporting/portfolio", replace: true });
   },
   component: LandingPage,
 });

@@ -24,9 +24,9 @@ export function useLandingRedirect() {
     try {
       orgs = await listPortfolioOrgs();
     } catch {
-      // Portfolio unreachable — land on the Portfolio surface, which owns its own
-      // load-error state, rather than dead-ending the entry.
-      navigate({ to: "/portfolio" });
+      // Portfolio unreachable — land on the Reporting Center's Portfolio report,
+      // which owns its own load-error state, rather than dead-ending the entry.
+      navigate({ to: "/reporting/portfolio" });
       return;
     }
     const decision = resolveLanding(orgs, useAuthStore.getState().activeOrgId);
@@ -36,7 +36,8 @@ export function useLandingRedirect() {
       return;
     }
     // first-run (memberships === 0 → NoOrgScreen renders from __root) and the
-    // all-inactive fallback both land on the Portfolio.
-    navigate({ to: "/portfolio" });
+    // all-inactive fallback both land on the Reporting Center's Portfolio report
+    // (E0.6 TE-3 retargets the E0.4 fallback from the old top-level /portfolio).
+    navigate({ to: "/reporting/portfolio" });
   };
 }

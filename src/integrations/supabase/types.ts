@@ -1867,6 +1867,48 @@ export type Database = {
           },
         ];
       };
+      report_shares: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          recipient_email: string;
+          report_key: string;
+          revoked_at: string | null;
+          scope: string;
+          scope_org_id: string | null;
+          state: string;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          recipient_email: string;
+          report_key: string;
+          revoked_at?: string | null;
+          scope: string;
+          scope_org_id?: string | null;
+          state?: string;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          recipient_email?: string;
+          report_key?: string;
+          revoked_at?: string | null;
+          scope?: string;
+          scope_org_id?: string | null;
+          state?: string;
+          token_hash?: string;
+        };
+        Relationships: [];
+      };
       sop_templates: {
         Row: {
           archived: boolean;

@@ -113,11 +113,16 @@ test("all-inactive portfolio shows the Inactive group + create CTA (TS-12)", asy
     [AUTH_KEY, SESSION, ORG_A] as const,
   );
 
+  // /portfolio now redirects into the Reporting Center's Portfolio report (E0.6
+  // TE-3), where PortfolioContent still renders the E0.4 all-inactive fallback.
   await page.goto("/portfolio");
 
   // Cold dev-server compile + SSR/hydrate + auth init + fetch resolve on the first
-  // assertion; the rest are immediate.
-  await expect(page.getByRole("heading", { name: "Inactive" })).toBeVisible({ timeout: 30000 });
+  // assertion; the rest are immediate. "Inactive" appears both in the fallback
+  // group heading and the report's all-orgs table, so match the first.
+  await expect(page.getByRole("heading", { name: "Inactive" }).first()).toBeVisible({
+    timeout: 30000,
+  });
   // Scope to the row buttons (the org name also appears in the sidebar's
   // active-org header, so a bare getByText would match multiple elements).
   await expect(page.getByRole("button", { name: "Open Rose City Rehab Collective" })).toBeVisible();

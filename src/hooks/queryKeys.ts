@@ -59,6 +59,10 @@ export const queryKeys = {
   // state. Inbound leads are CROSS-org (no org until converted) — not scoped.
   captureLink: (orgId: string) => ["capture-link", orgId] as const,
   inboundLeads: () => ["inbound-leads"] as const,
+  // Reporting Center (redesign E0.6). CROSS-org (renders without an active org):
+  // per-org geography for the state breakdown, and the caller's shares per report.
+  orgStates: () => ["org-states"] as const,
+  reportShares: (reportKey: string) => ["report-shares", reportKey] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

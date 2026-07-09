@@ -6,7 +6,7 @@
 // return, so nothing is lost in the collapse (F0.0.1). Route pages render in the
 // content area.
 import React, { useState } from "react";
-import { Menu, X, LayoutGrid } from "lucide-react";
+import { Menu, X, BarChart3 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
 import { useActiveMembership } from "@/lib/auth-store";
@@ -72,11 +72,11 @@ export function AppShell({ children }: AppShellProps) {
             {activeOrgName}
           </span>
           <Link
-            to="/portfolio"
-            aria-label="Return to Portfolio"
+            to="/reporting"
+            aria-label="Open Reporting Center"
             className="w-9 h-9 -mr-2 rounded-[var(--mp-radius-sm)] flex items-center justify-center text-foreground hover:bg-muted transition-colors"
           >
-            <LayoutGrid className="w-5 h-5" />
+            <BarChart3 className="w-5 h-5" />
           </Link>
         </header>
 

@@ -1,20 +1,11 @@
-// Portfolio route (redesign E0.0, feature F0.0.5). The cross-org home: renders
-// without requiring an active org. The chrome-decoupled PortfolioContent brings
-// its own data; this route only wraps it in the shell's PageHeader (the
-// AppShell frame itself comes from __root).
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { PortfolioContent } from "@/components/portfolio/PortfolioContent";
+// Redesign E0.6 (TE-3): the Portfolio moved into the Reporting Center. The bare
+// /portfolio path stays alive as a redirect so no bookmark or old redirect
+// dead-ends (E0.4 "no dead-ends" / TD-1). The surface itself now lives at
+// /reporting/portfolio; PortfolioContent + splitPortfolio are unchanged.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/portfolio")({
-  component: PortfolioPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/reporting/portfolio", replace: true });
+  },
 });
-
-function PortfolioPage() {
-  return (
-    <div>
-      <PageHeader title="Portfolio" description="Your organizations across the business." />
-      <PortfolioContent />
-    </div>
-  );
-}
