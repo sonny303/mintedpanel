@@ -61,11 +61,13 @@ export type LifecycleState = "prospect" | "active" | "inactive";
 // Cross-org Portfolio projection (redesign E0.0, enabler TE-2): the caller's
 // member orgs with their internal lifecycle_state. Bucketed into the two
 // business metrics the Portfolio surfaces ("Prospects" / "In motion") by the
-// pure src/lib/portfolio.ts.
+// pure src/lib/portfolio.ts. `createdAt` (E0.4 TE-1) lets the landing resolver
+// pick the most recently created org when there is no valid last-active one.
 export interface PortfolioOrg {
   id: string;
   name: string;
   lifecycleState: LifecycleState;
+  createdAt: string;
 }
 
 // Party model (redesign Stage 0, canonical E0.3 §5). One reusable record per
