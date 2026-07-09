@@ -16,9 +16,46 @@ Format per entry:
 
 ## Open
 
-_None._
+## [e0.1 + e0.2] One party model for owner + CRM contacts — OPEN
+
+- **Issue:** No party/role or org-contact tables exist in the schema. Three
+  epics describe person records: E0.1 owner capture ("Full Party model"), E0.2
+  customer/sales-rep contacts, E0.3 Full Party model (not yet delivered).
+- **Impact:** Blocks the E0.1/E0.2 schema design; build proceeds on the default
+  once confirmed.
+- **Options:** (a) DEFAULT, assumed: E0.1 introduces a minimal additive
+  foundation — `parties` (org-scoped person: name, email; E0.2 adds phone +
+  split address) + `org_party_roles` (role check list: `owner`, then
+  `customer_contact`, `sales_rep`) — which E0.3 extends rather than replaces.
+  (b) Resequence: deliver E0.3 (Full Party model) before E0.1/E0.2. (c) Separate
+  throwaway storage per epic (owner columns on `organizations`, a distinct
+  `org_contacts` table) — rejected: E0.3 would strand both.
+- **Decision:** _pending PM._
+
+## [e0.2] seed-universe.md lacks customer-contact fixtures — OPEN
+
+- **Issue:** E0.2 FR-5 requires demo/test contacts "per seed mapping", and its
+  UX notes name examples (Coach Eric Taylor, Kitty Forman), but
+  `seed-universe.md` has no per-org customer-contact table (names, emails,
+  phones, split addresses) and no Zeb Loewenstine entry.
+- **Impact:** E0.2's seed + Playwright verification has no fixture source.
+- **Options:** ChatPRD extends `seed-universe.md` with a customer-contact
+  fixture table + Zeb's contact row (recommended); or Devin derives fixtures
+  and ChatPRD ratifies.
+- **Decision:** _pending._
 
 ## Resolved
+
+## [e0.1] Duplicate guard: hard block vs seed-universe "soft warning" — RESOLVED (2026-07-08, reviewer)
+
+- **Issue:** `seed-universe.md` TS-6 says "duplicate soft warning"; E0.1 F0.1.4
+  explicitly says hard block, no override.
+- **Decision:** E0.1 wins (later, explicitly PM-aligned): hard block on exact
+  case-/space-insensitive name match; "similar city/state" matching stays
+  optional and is not implemented in Stage 0. The TS-6 fixture pair have
+  different normalized names and coexist as seeds; TS-6 is tested by attempting
+  to create an org with the same normalized name. `seed-universe.md` reviewer
+  notes record the correction.
 
 ## [e0.0] "No login" locked decision vs Supabase RLS — RESOLVED (2026-07-08)
 
