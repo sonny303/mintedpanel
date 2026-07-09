@@ -20,6 +20,30 @@ _None._
 
 ## Resolved
 
+## [e0.6] Navigation IA supersedes the already-merged E0.0 sidebar — RESOLVED (2026-07-09)
+
+- **Issue:** E0.6 replaces E0.0's journey sidebar (Portfolio → Get started →
+  Scope → Work → Outcomes, shipped + merged in #67) with a segmented IA: TOP =
+  cross-org (Home, Reporting Center), BOTTOM = org-scoped (Account Detail, +
+  reserved Facilities/Providers). Portfolio stops being a top-level nav item and
+  becomes report #1 inside the new Reporting Center. This reworks merged code.
+- **Impact:** Forks the E0.6 build and requires retargeting E0.4's all-inactive
+  fallback (which pointed at Portfolio).
+- **Decision:** PM chose the **full rework now** — E0.6 re-lays the sidebar to
+  the segmented model and moves Portfolio into the Reporting Center. E0.4's
+  fallback retargets to the Reporting Center / Home per the new IA. (PM also
+  noted: build a whole stage's epics as a batch in future to avoid this kind of
+  intra-stage rework — Stage 0 is now fully specified, so the remaining epics
+  can build against the final IA.)
+
+## [e0.6] Portfolio share-link lifetime — RESOLVED (2026-07-09)
+
+- **Issue:** E0.5 links are 72h/single-use; a read-only dashboard share an owner
+  checks repeatedly may warrant a longer/renewable life.
+- **Decision:** **Revocable, 30-day default.** P1 can revoke at any time. This
+  diverges from E0.5's 72h single-use because the E0.6 share is read-only and
+  low-risk (no writes, scope-filtered).
+
 ## [e0.5] BD-1 — Unauthenticated recipient access model — RESOLVED (2026-07-09)
 
 - **Issue:** E0.5's premise is an external recipient submitting data with NO
