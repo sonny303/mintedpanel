@@ -2,6 +2,7 @@
 // party/contact surfaces (E0.2/E0.3). The server (create_organization RPC and
 // RLS/services) is the enforcement authority; these give the user immediate,
 // friendly feedback before submit.
+import type { ContactInput } from "@/types";
 
 // Format check mirrors the RPC's server-side regex closely enough for a
 // pre-submit gate: one @, no spaces, a dot in the domain. Deliberately lenient
@@ -43,4 +44,34 @@ export function commonEmailDomainTypo(value: string): string | null {
   const domain = trimmed.slice(at + 1).toLowerCase();
   const fixed = DOMAIN_TYPOS[domain];
   return fixed ? `${local}@${fixed}` : null;
+}
+
+// Required-field validation for a CRM contact (E0.2 FR-2), mirroring the RPC's
+// assert_contact_valid: name, valid email, phone, and the meaningful split
+// address parts (line2/country optional). Returns per-field messages.
+export interface ContactFieldErrors {
+  name?: string;
+  email?: string;
+  phoneOffice?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+}
+
+export function contactErrors(c: ContactInput): ContactFieldErrors {
+  const e: ContactFieldErrors = {};
+  if (!c.name.trim()) e.name = "Name is required";
+  if (!c.email.trim()) e.email = "Email is required";
+  else if (!isValidEmail(c.email)) e.email = "Enter a valid email address";
+  if (!c.phoneOffice.trim()) e.phoneOffice = "Phone is required";
+  if (!c.addressLine1.trim()) e.addressLine1 = "Street address is required";
+  if (!c.city.trim()) e.city = "City is required";
+  if (!c.state.trim()) e.state = "State is required";
+  if (!c.postalCode.trim()) e.postalCode = "Postal code is required";
+  return e;
+}
+
+export function hasContactErrors(e: ContactFieldErrors): boolean {
+  return Object.keys(e).length > 0;
 }

@@ -7,15 +7,27 @@
 // migration 20260707140000_create_organization_rpc.sql), keyed to auth.uid().
 // Any authenticated user may create an org and becomes its admin (self-serve).
 import { supabase } from "@/integrations/supabase/externalClient";
+import { snakeizeRow } from "@/lib/case";
+import type { ContactInput } from "@/types";
 
-// Owner (name + email) is REQUIRED (E0.1 F0.1.2) — the RPC v2 rejects blanks,
-// an invalid email, and a duplicate normalized org name, surfacing a verbatim
-// message the UI shows. There is no defaulting of the owner params here; both
-// call sites (NoOrgScreen, CreateOrganizationModal) pass them.
+// Owner (name + email) is REQUIRED (E0.1 F0.1.2) and a customer-escalation
+// contact + sales rep are REQUIRED (E0.2 FR-2). The RPC v3 rejects blanks, an
+// invalid email, missing contact fields, and a duplicate normalized org name,
+// surfacing a verbatim message the UI shows. There is no defaulting of the owner
+// here; the sales rep defaults to Zeb server-side (the form pre-fills him). Both
+// call sites (NoOrgScreen, CreateOrganizationModal) pass the full input.
 export interface CreateOrganizationInput {
   name: string;
   ownerName: string;
   ownerEmail: string;
+  customer: ContactInput;
+  salesRep: ContactInput;
+}
+
+// ContactInput (camelCase) → the snake_case jsonb the RPC expects (keys match
+// the parties columns: phone_office, address_line1, …).
+function contactToJsonb(contact: ContactInput): Record<string, unknown> {
+  return snakeizeRow<Record<string, unknown>>(contact);
 }
 
 export async function createOrganization(input: CreateOrganizationInput): Promise<string> {
@@ -35,6 +47,8 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
     p_name: name,
     p_owner_name: ownerName,
     p_owner_email: ownerEmail,
+    p_customer: contactToJsonb(input.customer),
+    p_sales_rep: contactToJsonb(input.salesRep),
   });
   if (error) throw new Error(error.message);
   return data as string;

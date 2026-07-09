@@ -68,6 +68,54 @@ export interface PortfolioOrg {
   lifecycleState: LifecycleState;
 }
 
+// Party model (redesign Stage 0, canonical E0.3 §5). One reusable record per
+// stakeholder; roles are scoped assignment rows, never fields on the org.
+export type PartyType = "person" | "organization";
+export type PartyRoleKey =
+  | "owner"
+  | "customer_escalation_contact"
+  | "sales_rep"
+  | "billing_contact"
+  | "contracting_signer"
+  | "credentialing_contact";
+
+export interface Party {
+  id: string;
+  partyType: PartyType;
+  name: string;
+  email: string | null;
+  phoneOffice: string | null;
+  phoneMobile: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+// An org-scoped role assignment resolved to its party (E0.2 contacts display).
+export interface OrgContact {
+  roleKey: PartyRoleKey;
+  party: Party;
+}
+
+// Create/edit input for a CRM contact (E0.2). Split address, never one string.
+export interface ContactInput {
+  name: string;
+  email: string;
+  phoneOffice: string;
+  phoneMobile?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country?: string;
+}
+
 export interface Profile {
   id: string;
   email: string | null;

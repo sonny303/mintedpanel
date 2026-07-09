@@ -73,6 +73,27 @@ implementing a redesign epic:
   key idempotent, NOT the legacy `seed.sql`; never seed prod). E0.2 extends the
   RPC/form/seed with Zeb + customer contacts; E0.3 adds the manage-parties
   surface + TS-9–11.
+- **E0.2 — Org CRM Contact Fields (Customer & Sales Rep).** No schema change —
+  the canonical `parties` table (phone/address columns) + the
+  `customer_escalation_contact`/`sales_rep` roles already shipped in E0.1.
+  **`create_organization` v3** (`20260709130000`, additive 5-arg overload;
+  legacy 1-/3-arg kept, unambiguous since the 5-arg requires the customer arg):
+  customer-escalation contact required, sales rep defaults to **Zeb Loewenstine**
+  when omitted; both stored as parties with their roles via SECURITY-DEFINER
+  helpers `assert_contact_valid`/`insert_contact_party` (client-revoked).
+  Frontend: `ContactInput` type + `src/lib/contacts.ts` (`DEFAULT_SALES_REP` Zeb,
+  `EMPTY_CONTACT`, `PARTY_ROLE_LABELS`, `partyToContactInput`) + `contactErrors`
+  in `contactValidation.ts` (tested). `createOrganization({...customer, salesRep})`
+  → snake_case jsonb. Shared `ContactFields` (name/email/phone/split address)
+  drives the create form (`OrgCreateFields`/`useOrgCreateForm` now carry customer
+  - Zeb-prefilled sales rep) and the edit dialog. Display+edit surface
+    `OrgContactsSection` (owner read-only, customer/sales editable) on
+    `/get-started`, fed by `src/services/parties.ts` (`listOrgContacts`,
+    `updateParty` — browser RLS, audited) → `src/hooks/useParties.ts`
+    (`useOrgContacts`/`useUpdateParty`, invalidate on edit). No contact delete in
+    E0.2 (so "can't remove the only sales rep" holds trivially; delete arrives in
+    E0.3). Seed `seed-redesign.sql` extended: Zeb (one party, `sales_rep` on all 11
+    orgs) + per-org customer contacts.
 
 ## What this is
 

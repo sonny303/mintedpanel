@@ -13,7 +13,7 @@
 --
 -- Extended per PR:
 --   E0.1 — 11 orgs (explicit lifecycle_state) + owner party + 'owner' role each.
---   E0.2 — Zeb sales rep + per-org customer contacts (added in that PR).
+--   E0.2 — Zeb sales rep (every org) + per-org customer escalation contacts.
 --   E0.3 — TS-9–TS-11 party/role states (added in that PR).
 
 -- created_by placeholder for seeded parties (parties.created_by has no FK).
@@ -85,4 +85,69 @@ FROM (VALUES
 JOIN public.organizations o
   ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
 JOIN public.parties p ON p.email = v.owner_email
+ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E0.2 — Sales rep (Zeb Loewenstine): one party, sales_rep on every seed org.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.parties (
+  party_type, name, email, phone_office, address_line1, address_line2, city, state, postal_code, country, created_by
+)
+SELECT 'person', 'Zeb Loewenstine', 'zeb@mintedpanel.example.test', '704-555-0100',
+       '101 S Tryon St', 'Suite 400', 'Charlotte', 'NC', '28280', 'US',
+       '0e5eed00-0000-4000-a000-000000000000'::uuid
+WHERE NOT EXISTS (SELECT 1 FROM public.parties WHERE email = 'zeb@mintedpanel.example.test');
+
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
+SELECT o.id, z.id, 'sales_rep', 'org'
+FROM public.organizations o
+CROSS JOIN LATERAL (SELECT id FROM public.parties WHERE email = 'zeb@mintedpanel.example.test' LIMIT 1) z
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) IN (
+  'outerbanksrehabgroup','treehillsportstherapy','shelbysportsrehab','outerbankstherapygroup',
+  'gemstonefamilyrehab','lowcountrycharmpt','southparkphysicaltherapy','dillonsportsmedicine',
+  'lonestarrehabgroup','pointplacephysicaltherapy','rosecityrehabcollective'
+)
+ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E0.2 — Customer escalation contacts (one per org). Idempotent by email.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.parties (
+  party_type, name, email, phone_office, address_line1, city, state, postal_code, country, created_by
+)
+SELECT 'person', v.name, v.email, v.phone, v.line1, v.city, v.state, v.zip, 'US',
+       '0e5eed00-0000-4000-a000-000000000000'::uuid
+FROM (VALUES
+  ('Sarah Cameron',     'contact.outer-banks@example.test', '252-555-0111', '12 Figure Eight Rd',        'Kill Devil Hills', 'NC', '27948'),
+  ('Haley James',       'contact.tree-hill@example.test',   '910-555-0112', '44 Rivercourt Ln',          'Wilmington',       'NC', '28401'),
+  ('April Buchanon',    'contact.shelby@example.test',      '704-555-0113', '210 Stadium Dr',            'Shelby',           'NC', '28150'),
+  ('Rose Cameron',      'contact.ob-therapy@example.test',  '252-555-0114', '8 Lighthouse Rd',           'Nags Head',        'NC', '27959'),
+  ('Judy Gemstone',     'contact.gemstone@example.test',    '843-555-0115', '1 Salvation Center Blvd',   'Charleston',       'SC', '29401'),
+  ('Cameran Eubanks',   'contact.lowcountry@example.test',  '843-555-0116', '77 East Bay St',            'Charleston',       'SC', '29401'),
+  ('Sharon Marsh',      'contact.south-park@example.test',  '719-555-0117', '260 Avenue de los Mexicanos','South Park',      'CO', '80440'),
+  ('Coach Eric Taylor', 'contact.dillon@example.test',      '432-555-0118', '500 Panther Field Rd',      'Dillon',           'TX', '79714'),
+  ('Owen Strand',       'contact.lone-star@example.test',   '512-555-0119', '126 Firehouse Way',         'Austin',           'TX', '78701'),
+  ('Kitty Forman',      'contact.point-place@example.test', '414-555-0120', '416 Marie Dr',              'Point Place',      'WI', '53511'),
+  ('Candace Devereaux', 'contact.rose-city@example.test',   '503-555-0121', '3550 N Mississippi Ave',    'Portland',         'OR', '97227')
+) AS v(name, email, phone, line1, city, state, zip)
+WHERE NOT EXISTS (SELECT 1 FROM public.parties p WHERE p.email = v.email);
+
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
+SELECT o.id, p.id, 'customer_escalation_contact', 'org'
+FROM (VALUES
+  ('Outer Banks Rehab Group',      'contact.outer-banks@example.test'),
+  ('Tree Hill Sports Therapy',     'contact.tree-hill@example.test'),
+  ('Shelby Sports Rehab',          'contact.shelby@example.test'),
+  ('Outer Banks Therapy Group',    'contact.ob-therapy@example.test'),
+  ('Gemstone Family Rehab',        'contact.gemstone@example.test'),
+  ('Lowcountry Charm PT',          'contact.lowcountry@example.test'),
+  ('South Park Physical Therapy',  'contact.south-park@example.test'),
+  ('Dillon Sports Medicine',       'contact.dillon@example.test'),
+  ('Lone Star Rehab Group',        'contact.lone-star@example.test'),
+  ('Point Place Physical Therapy', 'contact.point-place@example.test'),
+  ('Rose City Rehab Collective',   'contact.rose-city@example.test')
+) AS v(org_name, email)
+JOIN public.organizations o
+  ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
+JOIN public.parties p ON p.email = v.email
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
