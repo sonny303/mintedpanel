@@ -16,7 +16,11 @@ Format per entry:
 
 ## Open
 
-## [e0.4] "Flag orgs as inactive" vs the e0.0 locked no-lifecycle-label rule — OPEN (default assumed)
+_None._
+
+## Resolved
+
+## [e0.4] "Flag orgs as inactive" vs the e0.0 locked no-lifecycle-label rule — RESOLVED (2026-07-09)
 
 - **Issue:** E0.4 F0.4.2 requires the all-inactive Portfolio fallback to show
   "all orgs visible/flagged" as inactive. E0.0's locked decision says the
@@ -30,9 +34,13 @@ Format per entry:
   the E0.0 rule holds everywhere else. (b) Per-org "Inactive" pills — rejected
   as written: directly violates the locked decision. (c) No labeling at all,
   just an empty-state message + create CTA — loses "all orgs visible."
-- **Decision:** _pending PM (visibility item; default preserves both epics)._
+- **Decision:** PM confirmed option (a) on 2026-07-09. In the all-inactive
+  fallback only, inactive orgs render under an "Inactive" group heading — the
+  same grouping mechanism as the existing "Prospects"/"In motion" Portfolio
+  sections. No per-org status pill/label anywhere; the E0.0 no-label rule holds
+  everywhere else.
 
-## [e0.3] Cross-org parties are an exception to the org-RLS convention — OPEN (default assumed)
+## [e0.3] Cross-org parties are an exception to the org-RLS convention — RESOLVED (2026-07-09)
 
 - **Issue:** F0.3.4 requires one Party record reusable across orgs, so `parties`
   cannot carry a single `org_id` — an exception to the repo-wide "every table
@@ -43,9 +51,11 @@ Format per entry:
   (via `party_role_assignments`, which IS org-scoped as usual) or the caller
   created the party. (b) Org-scoped parties with duplication per org — rejected:
   defeats the entire purpose of E0.3.
-- **Decision:** _pending PM (visibility item; default is safe and tested)._
-
-## Resolved
+- **Decision:** PM confirmed option (a) on 2026-07-09. `parties` carries no
+  `org_id`; RLS grants access via assignment membership (org-scoped
+  `party_role_assignments`) or `created_by`. The documented, tested exception
+  to the org-RLS convention stands as implemented in
+  `20260709120000_party_model_foundation.sql`.
 
 ## [e0.1 + e0.2] One party model for owner + CRM contacts — RESOLVED (2026-07-08)
 
