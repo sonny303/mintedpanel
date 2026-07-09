@@ -16,7 +16,32 @@ Format per entry:
 
 ## Open
 
-_None._
+## [e0.5] BD-1 — Unauthenticated recipient access model — OPEN (default recommended)
+
+- **Issue:** E0.5's premise is an external recipient submitting data with NO
+  account. Every data path today requires an authenticated session under
+  org-scoped RLS. This is the first Stage 0 surface to cross the trust boundary.
+- **Impact:** Forks the enabler design (TE-3). Blocks E0.5 build until chosen.
+- **Options:** (a) RECOMMENDED: public token-validated route `/capture/:token`
+  backed by `SECURITY DEFINER` RPCs that hash-validate the token and read/write
+  only the single authorized party — no anonymous GoTrue session, no login
+  (consistent with the E0.0 "no login" default). (b) mint an anonymous Supabase
+  session per link (heavier; not recommended for Stage 0).
+- **Decision:** pending PM.
+
+## [e0.5] BD-2 — Email delivery in Stage 0 — OPEN (default recommended)
+
+- **Issue:** Nothing in the stack sends application email (GoTrue = auth mail
+  only; no transactional provider). AGENTS.md forbids new deps without
+  justification. The epic's Dependencies say "email delivery service … not
+  stub," conflicting with the Stage 0 no-new-infra posture.
+- **Impact:** F0.5.4 delivery mechanism. Does NOT block the rest of E0.5.
+- **Options:** (a) RECOMMENDED: generate the link + render the exact email copy
+  for P1 to copy/send — no send infra; F0.5.4 content is testable as rendered
+  template text. (b) integrate a transactional provider (Resend/Postmark/SES) +
+  domain verification — a new external dependency; should be its own scoped
+  decision, not bundled into Stage 0.
+- **Decision:** pending PM.
 
 ## Resolved
 
