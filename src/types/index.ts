@@ -102,6 +102,19 @@ export interface OrgContact {
   party: Party;
 }
 
+// Governed role reference row (E0.3 F0.3.5), from party_role_types.
+export interface PartyRoleType {
+  roleKey: PartyRoleKey;
+  label: string;
+  isActive: boolean;
+}
+
+// A party with the set of roles it holds in the active org (E0.3 manage-parties).
+export interface OrgParty {
+  party: Party;
+  roleKeys: PartyRoleKey[];
+}
+
 // Create/edit input for a CRM contact (E0.2). Split address, never one string.
 export interface ContactInput {
   name: string;

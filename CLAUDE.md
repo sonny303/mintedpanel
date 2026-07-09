@@ -101,6 +101,25 @@ implementing a redesign epic:
     E0.2 (so "can't remove the only sales rep" holds trivially; delete arrives in
     E0.3). Seed `seed-redesign.sql` extended: Zeb (one party, `sales_rep` on all 11
     orgs) + per-org customer contacts.
+- **E0.3 — Full Party Model (manage-parties surface).** No schema change (the
+  canonical `parties`/`party_role_types`/`party_role_assignments` shipped in
+  E0.1). Adds the browser CRUD + role management on top: `src/services/parties.ts`
+  gained `listOrgParties` (grouped via pure `src/lib/parties.ts` `groupOrgParties`
+  — one party, many roles, tested), `listVisibleParties` (cross-org reuse pool,
+  F0.3.4), `listPartyRoleTypes` (governed list), `createParty`, `assignRole`
+  (trigger rejects reserved), `unassignRole`/`removePartyFromOrg` (both block
+  removing the org's **only** sales rep, F0.2.2; TD-4: the party RECORD is
+  retained — a browser client can't verify "no assignments anywhere" under
+  org-scoped RLS, and the FK cascades). Hooks in `useParties.ts`
+  (`useOrgParties`/`usePartyRoleTypes`/`useVisibleParties`/`useCreateParty`/
+  `useAssignRole`/`useUnassignRole`/`useRemovePartyFromOrg`, shared invalidator).
+  **`src/components/org/PartiesManager.tsx`** replaces the E0.2 `OrgContactsSection`
+  on `/get-started`: party list with role chips (removable), Add person / Add
+  existing (reuse) dialogs, edit dialog (shared `ContactFields`), remove-confirm,
+  and a role picker (`party_role_types` — active selectable, reserved
+  visible-disabled, F0.3.5). Seed adds TS-10 (Zeb also `owner` on Point Place
+  alongside the seeded owner). RLS write/read paths verified live under the
+  `authenticated` role.
 
 ## What this is
 

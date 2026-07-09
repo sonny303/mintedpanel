@@ -14,7 +14,9 @@
 -- Extended per PR:
 --   E0.1 — 11 orgs (explicit lifecycle_state) + owner party + 'owner' role each.
 --   E0.2 — Zeb sales rep (every org) + per-org customer escalation contacts.
---   E0.3 — TS-9–TS-11 party/role states (added in that PR).
+--   E0.3 — TS-10: Zeb also 'owner' on Point Place (one party, many roles).
+--          (TS-9 party fixtures + TS-11 Zeb sales-rep on Outer Banks/Dillon are
+--           already covered by the E0.1/E0.2 sections above.)
 
 -- created_by placeholder for seeded parties (parties.created_by has no FK).
 -- \gset-free: inlined as a literal below.
@@ -150,4 +152,16 @@ FROM (VALUES
 JOIN public.organizations o
   ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
 JOIN public.parties p ON p.email = v.email
+ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E0.3 — TS-10: Zeb ALSO holds 'owner' on Point Place Physical Therapy, in
+-- addition to the seeded "Owner Point Place" and his sales_rep everywhere. One
+-- party, many roles across orgs (F0.3.3/F0.3.4). Idempotent via the unique tuple.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
+SELECT o.id, z.id, 'owner', 'org'
+FROM public.organizations o
+CROSS JOIN LATERAL (SELECT id FROM public.parties WHERE email = 'zeb@mintedpanel.example.test' LIMIT 1) z
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'pointplacephysicaltherapy'
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;

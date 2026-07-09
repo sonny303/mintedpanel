@@ -9,7 +9,7 @@ import { Compass } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { OrgContactsSection } from "@/components/org/OrgContactsSection";
+import { PartiesManager } from "@/components/org/PartiesManager";
 
 export const Route = createFileRoute("/get-started")({
   component: GetStartedPage,
@@ -37,9 +37,10 @@ function GetStartedPage() {
           </Link>
         </CardContent>
       </Card>
-      {/* E0.2: the org's contacts (customer + sales rep) are always visible and
-          editable here — the org overview until Stage 1 defines a richer one. */}
-      <OrgContactsSection />
+      {/* E0.3: the org's people and their roles — customer/sales contacts stay
+          visible and labelled here (E0.2 FR-3), plus full party/role management.
+          The org overview until Stage 1 defines a richer one. */}
+      <PartiesManager />
     </div>
   );
 }
