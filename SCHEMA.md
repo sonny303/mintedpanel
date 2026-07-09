@@ -179,6 +179,53 @@ The single case-activity spine (Story 1, migration `20260707120000_touchlog_entr
 
 `id, org_id, label_normalized, token, status, seen_count, decided_at, decided_by, created_at, updated_at`. Org-scoped label → token memory; unique `(org_id, label_normalized)`. `status`: `suggested | confirmed | rejected` (check-constrained). Mapping review upserts a `suggested` row (bumping `seen_count`) on each token approval; a `suggested` row with `seen_count >= 2` becomes a Fix-it "confirm" card; a confirmed rule makes future matches high-confidence. Same migration as `portals`.
 
+## Redesign E0.5 — Secure data capture link + inbound leads
+
+First surfaces that cross the app's trust boundary (unauthenticated external
+writes). Two additive migrations: `20260709140000_party_capture_links.sql`,
+`20260709140100_inbound_leads.sql` (repo + hosted). No pgcrypto dependency —
+token entropy is two `gen_random_uuid()`s, hashing is core `sha256(bytea)`.
+
+### party_capture_links
+
+`id, org_id, party_id, recipient_email, token_hash, state, expires_at, used_at,
+created_by, created_at`. One row per issued one-time capture link. `state`:
+`active | used | expired | revoked`. Partial unique index
+`(org_id) WHERE state = 'active'` enforces the single-active-link invariant in
+the schema. Only the token HASH is stored (raw token lives only in the emitted
+URL). Browser RLS: member SELECT only (operators read link state); every write
+goes through the SECURITY DEFINER RPCs below.
+
+### inbound_leads
+
+`id, org_name, contact_name, contact_email, contact_phone, address_*, status,
+converted_org_id, created_at`. Public "contact us" leads — NOT org-scoped (no
+org until converted). `status`: `new | converted | dismissed`. RLS: any
+authenticated user SELECT/UPDATE (Stage 0 shared internal triage queue);
+INSERT only via the anon RPC. Converting a lead calls `create_organization`
+(prospect) and sets `status='converted'` + `converted_org_id`.
+
+### RPCs (repo migrations, not hosted-only)
+
+- `create_capture_link(p_org_id, p_party_id, p_recipient_email, p_recipient_name
+DEFAULT NULL) RETURNS jsonb` — SECURITY DEFINER, EXECUTE to `authenticated`.
+  Writer-member check; resolves an existing party or provisions an ad-hoc person
+  party; revokes any prior active link then issues a fresh 256-bit token
+  (returned once), 72h expiry; audits. Returns `{ token, party_id,
+recipient_email, recipient_name, org_name, expires_at }`.
+- `validate_capture_token(p_token) RETURNS jsonb` — SECURITY DEFINER, EXECUTE to
+  `anon`. Hash-validates; lazy-expires a stale-active link; returns
+  `{ state, org_name, recipient_name, recipient_email, expires_at,
+required_fields, current }` for an active link, `{ state }` for
+  invalid/used/expired/revoked. Never leaks any org beyond the authorized one.
+- `submit_capture(p_token, p_payload jsonb) RETURNS jsonb` — SECURITY DEFINER,
+  EXECUTE to `anon`. Re-validates state + expiry, enforces completeness via
+  `assert_contact_valid` (E0.2), overwrites the authorized party, flips the link
+  to `used`, audits. Returns `{ ok, state }`.
+- `submit_inbound_lead(p_payload jsonb) RETURNS jsonb` — SECURITY DEFINER,
+  EXECUTE to `anon`. Honeypot (`company_website`) + required-field validation;
+  inserts a `new` lead (never an org). Returns `{ ok }`.
+
 ## Inbound webhook: email-to-touch
 
 Email replies on a case thread are forwarded to a public webhook that appends a `touches` row with `source = 'email'`. Implementation comes next.

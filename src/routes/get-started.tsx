@@ -11,6 +11,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { PartiesManager } from "@/components/org/PartiesManager";
 import { OnboardingBanner } from "@/components/org/OnboardingBanner";
+import { CaptureLinkPanel } from "@/components/org/CaptureLinkPanel";
+import { InboundLeadsPanel } from "@/components/org/InboundLeadsPanel";
 
 export const Route = createFileRoute("/get-started")({
   component: GetStartedPage,
@@ -41,10 +43,16 @@ function GetStartedPage() {
           </Link>
         </CardContent>
       </Card>
+      {/* E0.5 F0.5.5 / TE-7: shared inbound "contact us" triage queue (renders
+          only when leads await triage). */}
+      <InboundLeadsPanel />
       {/* E0.3: the org's people and their roles — customer/sales contacts stay
           visible and labelled here (E0.2 FR-3), plus full party/role management.
           The org overview until Stage 1 defines a richer one. */}
       <PartiesManager />
+      {/* E0.5 F0.5.1–F0.5.4 / TE-2/TE-4/TE-5: issue a secure one-time link so an
+          external recipient can confirm this org's details. */}
+      <CaptureLinkPanel />
     </div>
   );
 }

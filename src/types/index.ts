@@ -117,6 +117,75 @@ export interface OrgParty {
   roleKeys: PartyRoleKey[];
 }
 
+// Secure one-time data capture link (redesign E0.5). Operators read the state;
+// the raw token is never stored (only its hash) and never surfaced except once,
+// in IssuedCaptureLink at issue time.
+export type CaptureLinkState = "active" | "used" | "expired" | "revoked";
+export interface CaptureLink {
+  id: string;
+  orgId: string;
+  partyId: string;
+  recipientEmail: string;
+  state: CaptureLinkState;
+  expiresAt: string;
+  usedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+// The one-time result of issuing a link: the raw token (for URL assembly) plus
+// the inputs the copy-able email template needs (E0.5 BD-2 / TE-2 / TE-5).
+export interface IssuedCaptureLink {
+  token: string;
+  partyId: string;
+  recipientEmail: string;
+  recipientName: string;
+  orgName: string;
+  expiresAt: string;
+}
+
+// What the public /capture/:token route learns from validate_capture_token —
+// only the single authorized party/org, never any other org's data (E0.5 TD-1).
+export type CaptureTokenState = CaptureLinkState | "invalid";
+export interface CaptureTokenView {
+  state: CaptureTokenState;
+  orgName?: string;
+  recipientName?: string;
+  recipientEmail?: string;
+  expiresAt?: string;
+  current?: ContactInput;
+}
+
+// Inbound "contact us" lead (redesign E0.5 / F0.5.5). NOT an org until a P1
+// converts it — triaged in a shared internal queue.
+export type InboundLeadStatus = "new" | "converted" | "dismissed";
+export interface InboundLead {
+  id: string;
+  orgName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+  status: InboundLeadStatus;
+  convertedOrgId: string | null;
+  createdAt: string;
+}
+
+// Public contact-form input (E0.5 F0.5.5). `companyWebsite` is the honeypot —
+// hidden from humans; a filled value marks the submission as spam server-side.
+export interface InboundLeadInput {
+  orgName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  companyWebsite?: string;
+}
+
 // Create/edit input for a CRM contact (E0.2). Split address, never one string.
 export interface ContactInput {
   name: string;

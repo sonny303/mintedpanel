@@ -149,6 +149,39 @@ implementing a redesign epic:
   TS-12 (the all-inactive dark path, TD-4) via the mock harness. Zero-org
   first-run still lands on `NoOrgScreen` (E0.0 TE-7); Portfolio itself is
   otherwise unchanged and stays one click away in the nav.
+- **E0.5 — Secure One-Time Org Data Capture Link (+ inbound leads).** The FIRST
+  redesign surfaces that cross the trust boundary (unauthenticated external
+  writes). Two additive migrations (repo + hosted, no pgcrypto — token = two
+  `gen_random_uuid()`s, hash = core `sha256`): `20260709140000_party_capture_links.sql`
+  (`party_capture_links` — `state active|used|expired|revoked`, partial unique
+  `(org_id) WHERE state='active'` = single-active-link invariant, only the token
+  HASH stored; member-SELECT RLS, all writes via RPC) + the three capture RPCs;
+  `20260709140100_inbound_leads.sql` (`inbound_leads` — public "contact us" leads,
+  NOT org-scoped, `status new|converted|dismissed`, shared authenticated
+  SELECT/UPDATE triage queue) + `submit_inbound_lead`. **Outbound (BD-1 token
+  link, NO login; BD-2 copy-able email, no send infra):** `create_capture_link`
+  (authenticated, writer-member check, resolves/provisions the recipient party,
+  revokes-then-issues → re-issue semantics, returns the raw token ONCE),
+  `validate_capture_token` + `submit_capture` (both `anon` SECURITY DEFINER,
+  hash-validated, touch only the authorized party/org, lazy expiry; submit reuses
+  E0.2 `assert_contact_valid` for completeness and flips the link to `used`).
+  Frontend: `src/services/captureLinks.ts` (dual — operator issue/read + anon
+  validate/submit) → `src/hooks/useCaptureLinks.ts`; pure `src/lib/captureEmail.ts`
+  (+test, F0.5.4 copy) ; **public `/capture/$token`** route (renders outside the
+  shell — `__root` `isChromelessRoute`) with the active form + used/expired/
+  revoked/invalid lockdowns; operator `CaptureLinkPanel` on `/get-started`
+  (party picker or new email, copy-able link+email). **Inbound (F0.5.5/TE-7):**
+  `src/services/inboundLeads.ts` (`submitInboundLead` anon; `listInboundLeads`/
+  `convertInboundLead`→`create_organization` prospect/`dismissInboundLead`) →
+  `useInboundLeads.ts`; **public `/contact`** route (honeypot + required-field
+  validation) → triaged lead; operator `InboundLeadsPanel` on `/get-started`
+  (Convert/Dismiss, renders only when leads await). Seed adds two demo leads;
+  capture links are token-ephemeral so TS-7/TS-13 run through the mock e2e
+  (`e2e/capture-link.spec.ts`, `e2e/contact-inbound.spec.ts`). `types.ts` gained
+  the two tables (hand-added, MCP regen flaked — normalize on next regen). The
+  /api org-isolation gate does NOT cover these (browser-RLS + anon-RPC surface,
+  not an /api resource); isolation is enforced in the RPC bodies (touch only the
+  token's party/org) + RLS.
 
 ## What this is
 

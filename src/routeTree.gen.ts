@@ -23,6 +23,7 @@ import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as FixItRouteImport } from './routes/fix-it'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
@@ -35,6 +36,7 @@ import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
+import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
 import { Route as AdminSopsRouteImport } from './routes/admin.sops'
@@ -124,6 +126,11 @@ const FixItRoute = FixItRouteImport.update({
   path: '/fix-it',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClientProgressRoute = ClientProgressRouteImport.update({
   id: '/client-progress',
   path: '/client-progress',
@@ -183,6 +190,11 @@ const CasesIdRoute = CasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => CasesRoute,
+} as any)
+const CaptureTokenRoute = CaptureTokenRouteImport.update({
+  id: '/capture/$token',
+  path: '/capture/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
   id: '/admin/templates',
@@ -279,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
@@ -302,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
@@ -324,6 +338,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
@@ -343,6 +358,7 @@ export interface FileRoutesByTo {
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
@@ -366,6 +382,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
@@ -389,6 +406,7 @@ export interface FileRoutesById {
   '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
@@ -414,6 +432,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
     | '/get-started'
     | '/home'
@@ -437,6 +456,7 @@ export interface FileRouteTypes {
     | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
@@ -459,6 +479,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
     | '/get-started'
     | '/home'
@@ -478,6 +499,7 @@ export interface FileRouteTypes {
     | '/admin/portals'
     | '/admin/settings'
     | '/admin/statuses'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
@@ -500,6 +522,7 @@ export interface FileRouteTypes {
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
     | '/get-started'
     | '/home'
@@ -523,6 +546,7 @@ export interface FileRouteTypes {
     | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
@@ -547,6 +571,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
   ClientProgressRoute: typeof ClientProgressRoute
+  ContactRoute: typeof ContactRoute
   FixItRoute: typeof FixItRoute
   GetStartedRoute: typeof GetStartedRoute
   HomeRoute: typeof HomeRoute
@@ -570,6 +595,7 @@ export interface RootRouteChildren {
   AdminSopsRoute: typeof AdminSopsRouteWithChildren
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
+  CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   TasksIdRoute: typeof TasksIdRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
@@ -676,6 +702,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FixItRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/client-progress': {
       id: '/client-progress'
       path: '/client-progress'
@@ -759,6 +792,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/cases/$id'
       preLoaderRoute: typeof CasesIdRouteImport
       parentRoute: typeof CasesRoute
+    }
+    '/capture/$token': {
+      id: '/capture/$token'
+      path: '/capture/$token'
+      fullPath: '/capture/$token'
+      preLoaderRoute: typeof CaptureTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/templates': {
       id: '/admin/templates'
@@ -979,6 +1019,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
   ClientProgressRoute: ClientProgressRoute,
+  ContactRoute: ContactRoute,
   FixItRoute: FixItRoute,
   GetStartedRoute: GetStartedRoute,
   HomeRoute: HomeRoute,
@@ -1002,6 +1043,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSopsRoute: AdminSopsRouteWithChildren,
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
+  CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   TasksIdRoute: TasksIdRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
