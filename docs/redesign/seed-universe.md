@@ -76,6 +76,38 @@ Owners are seeded per organization using the pattern `owner.<org-slug>@example.t
 | Point Place Physical Therapy | Owner Point Place | `owner.point-place@example.test` | WI owner captured        |
 | Rose City Rehab Collective   | Owner Rose City   | `owner.rose-city@example.test`   | OR owner captured        |
 
+## CRM contact fixtures (E0.2)
+
+Added by the reviewer (Devin, 2026-07-08, PM-approved) to close the E0.2 FR-5 gap. Same fixture principles: synthetic only, `.test` emails, 555 phone numbers, TV-inspired but demo-safe.
+
+### Sales rep (every org)
+
+| Field   | Value                                              |
+| ------- | -------------------------------------------------- |
+| Name    | Zeb Loewenstine                                    |
+| Role    | `sales_rep` (default on every seeded org)          |
+| Email   | `zeb@mintedpanel.example.test`                     |
+| Phone   | 704-555-0100                                       |
+| Address | 101 S Tryon St, Suite 400, Charlotte, NC 28280, US |
+
+### Customer contact per org
+
+| Org                          | Customer contact  | Email                              | Phone        | Address                                               |
+| ---------------------------- | ----------------- | ---------------------------------- | ------------ | ----------------------------------------------------- |
+| Outer Banks Rehab Group      | Sarah Cameron     | `contact.outer-banks@example.test` | 252-555-0111 | 12 Figure Eight Rd, Kill Devil Hills, NC 27948, US    |
+| Tree Hill Sports Therapy     | Haley James       | `contact.tree-hill@example.test`   | 910-555-0112 | 44 Rivercourt Ln, Wilmington, NC 28401, US            |
+| Shelby Sports Rehab          | April Buchanon    | `contact.shelby@example.test`      | 704-555-0113 | 210 Stadium Dr, Shelby, NC 28150, US                  |
+| Outer Banks Therapy Group    | Rose Cameron      | `contact.ob-therapy@example.test`  | 252-555-0114 | 8 Lighthouse Rd, Nags Head, NC 27959, US              |
+| Gemstone Family Rehab        | Judy Gemstone     | `contact.gemstone@example.test`    | 843-555-0115 | 1 Salvation Center Blvd, Charleston, SC 29401, US     |
+| Lowcountry Charm PT          | Cameran Eubanks   | `contact.lowcountry@example.test`  | 843-555-0116 | 77 East Bay St, Charleston, SC 29401, US              |
+| South Park Physical Therapy  | Sharon Marsh      | `contact.south-park@example.test`  | 719-555-0117 | 260 Avenue de los Mexicanos, South Park, CO 80440, US |
+| Dillon Sports Medicine       | Coach Eric Taylor | `contact.dillon@example.test`      | 432-555-0118 | 500 Panther Field Rd, Dillon, TX 79714, US            |
+| Lone Star Rehab Group        | Owen Strand       | `contact.lone-star@example.test`   | 512-555-0119 | 126 Firehouse Way, Austin, TX 78701, US               |
+| Point Place Physical Therapy | Kitty Forman      | `contact.point-place@example.test` | 414-555-0120 | 416 Marie Dr, Point Place, WI 53511, US               |
+| Rose City Rehab Collective   | Candace Devereaux | `contact.rose-city@example.test`   | 503-555-0121 | 3550 N Mississippi Ave, Portland, OR 97227, US        |
+
+All address fields split per schema (`line1`, optional `line2`, `city`, `state`, `postal_code`, `country`). Customer contacts are P5-side practice people distinct from the seeded P5 owners.
+
 ## Party / role assignment matrix
 
 | Org                          | P1 Credentialing Manager | P2 Coordinator   | P5 owner          | Notes                         |

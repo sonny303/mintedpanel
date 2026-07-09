@@ -16,7 +16,11 @@ Format per entry:
 
 ## Open
 
-## [e0.1 + e0.2] One party model for owner + CRM contacts — OPEN
+_None._
+
+## Resolved
+
+## [e0.1 + e0.2] One party model for owner + CRM contacts — RESOLVED (2026-07-08)
 
 - **Issue:** No party/role or org-contact tables exist in the schema. Three
   epics describe person records: E0.1 owner capture ("Full Party model"), E0.2
@@ -30,21 +34,22 @@ Format per entry:
   (b) Resequence: deliver E0.3 (Full Party model) before E0.1/E0.2. (c) Separate
   throwaway storage per epic (owner columns on `organizations`, a distinct
   `org_contacts` table) — rejected: E0.3 would strand both.
-- **Decision:** _pending PM._
+- **Decision:** PM confirmed option (a) on 2026-07-08. Additionally, E0.3
+  (Full Party model) is nearly done — builds are queued so E0.1–E0.3 are
+  reviewed together before hand-off, letting the party model be validated
+  across all three epics up front.
 
-## [e0.2] seed-universe.md lacks customer-contact fixtures — OPEN
+## [e0.2] seed-universe.md lacks customer-contact fixtures — RESOLVED (2026-07-08)
 
 - **Issue:** E0.2 FR-5 requires demo/test contacts "per seed mapping", and its
   UX notes name examples (Coach Eric Taylor, Kitty Forman), but
   `seed-universe.md` has no per-org customer-contact table (names, emails,
   phones, split addresses) and no Zeb Loewenstine entry.
 - **Impact:** E0.2's seed + Playwright verification has no fixture source.
-- **Options:** ChatPRD extends `seed-universe.md` with a customer-contact
-  fixture table + Zeb's contact row (recommended); or Devin derives fixtures
-  and ChatPRD ratifies.
-- **Decision:** _pending._
-
-## Resolved
+- **Decision:** PM directed the reviewer to close the gap directly (2026-07-08).
+  Devin added the "CRM contact fixtures (E0.2)" section to `seed-universe.md`
+  (Zeb Loewenstine sales-rep row + per-org customer contacts, `.test` emails,
+  555 numbers, split addresses).
 
 ## [e0.1] Duplicate guard: hard block vs seed-universe "soft warning" — RESOLVED (2026-07-08, reviewer)
 
