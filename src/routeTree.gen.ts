@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as SoonRouteImport } from './routes/soon'
 import { Route as ScopeRouteImport } from './routes/scope'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
@@ -27,10 +28,13 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
@@ -64,6 +68,11 @@ const WorkRoute = WorkRouteImport.update({
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoonRoute = SoonRouteImport.update({
+  id: '/soon',
+  path: '/soon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScopeRoute = ScopeRouteImport.update({
@@ -146,6 +155,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingIndexRoute = ReportingIndexRouteImport.update({
+  id: '/reporting/',
+  path: '/reporting/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -164,6 +178,16 @@ const CasesIndexRoute = CasesIndexRouteImport.update({
 const TasksIdRoute = TasksIdRouteImport.update({
   id: '/tasks/$id',
   path: '/tasks/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
+  id: '/reporting/portfolio',
+  path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
@@ -304,6 +328,7 @@ export interface FileRoutesByFullPath {
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -321,10 +346,13 @@ export interface FileRoutesByFullPath {
   '/launches/$id': typeof LaunchesIdRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -349,6 +377,7 @@ export interface FileRoutesByTo {
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -363,10 +392,13 @@ export interface FileRoutesByTo {
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
   '/providers': typeof ProvidersIndexRoute
+  '/reporting': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -395,6 +427,7 @@ export interface FileRoutesById {
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -412,10 +445,13 @@ export interface FileRoutesById {
   '/launches/$id': typeof LaunchesIdRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -445,6 +481,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
@@ -462,10 +499,13 @@ export interface FileRouteTypes {
     | '/launches/$id'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
     | '/providers/'
+    | '/reporting/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -490,6 +530,7 @@ export interface FileRouteTypes {
     | '/progress'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
@@ -504,10 +545,13 @@ export interface FileRouteTypes {
     | '/dev/primitives'
     | '/launches/$id'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases'
     | '/launches'
     | '/providers'
+    | '/reporting'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -535,6 +579,7 @@ export interface FileRouteTypes {
     | '/providers'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
@@ -552,10 +597,13 @@ export interface FileRouteTypes {
     | '/launches/$id'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
     | '/providers/'
+    | '/reporting/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -584,6 +632,7 @@ export interface RootRouteChildren {
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   ScopeRoute: typeof ScopeRoute
+  SoonRoute: typeof SoonRoute
   WelcomeRoute: typeof WelcomeRoute
   WorkRoute: typeof WorkRoute
   AdminAuditRoute: typeof AdminAuditRoute
@@ -597,7 +646,10 @@ export interface RootRouteChildren {
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
+  ReportingPortfolioRoute: typeof ReportingPortfolioRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   TasksIdRoute: typeof TasksIdRoute
+  ReportingIndexRoute: typeof ReportingIndexRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
 }
@@ -616,6 +668,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/soon': {
+      id: '/soon'
+      path: '/soon'
+      fullPath: '/soon'
+      preLoaderRoute: typeof SoonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scope': {
@@ -730,6 +789,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/': {
+      id: '/reporting/'
+      path: '/reporting'
+      fullPath: '/reporting/'
+      preLoaderRoute: typeof ReportingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/providers/': {
       id: '/providers/'
       path: '/'
@@ -756,6 +822,20 @@ declare module '@tanstack/react-router' {
       path: '/tasks/$id'
       fullPath: '/tasks/$id'
       preLoaderRoute: typeof TasksIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/portfolio': {
+      id: '/reporting/portfolio'
+      path: '/reporting/portfolio'
+      fullPath: '/reporting/portfolio'
+      preLoaderRoute: typeof ReportingPortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/providers/new': {
@@ -1032,6 +1112,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
   ScopeRoute: ScopeRoute,
+  SoonRoute: SoonRoute,
   WelcomeRoute: WelcomeRoute,
   WorkRoute: WorkRoute,
   AdminAuditRoute: AdminAuditRoute,
@@ -1045,7 +1126,10 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
+  ReportingPortfolioRoute: ReportingPortfolioRoute,
+  ShareTokenRoute: ShareTokenRoute,
   TasksIdRoute: TasksIdRoute,
+  ReportingIndexRoute: ReportingIndexRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
 }

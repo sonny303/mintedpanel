@@ -226,6 +226,36 @@ required_fields, current }` for an active link, `{ state }` for
   EXECUTE to `anon`. Honeypot (`company_website`) + required-field validation;
   inserts a `new` lead (never an org). Returns `{ ok }`.
 
+## Redesign E0.6 — Secure read-only report share
+
+The app's SECOND public unauthenticated surface (after E0.5's capture link), but
+READ-ONLY — there is no anon write RPC. Migration
+`20260709150000_report_shares.sql` (repo + hosted; core sha256, no pgcrypto).
+
+### report_shares
+
+`id, report_key, scope, scope_org_id, recipient_email, token_hash, state,
+expires_at, created_by, created_at, revoked_at`. One row per issued share.
+`scope`: `full | single_org` (a CHECK ties `scope_org_id` present ⇔ single_org).
+`state`: `active | revoked | expired`. 30-day expiry (vs E0.5's 72h — read-only
+
+- scope-filtered, PM decision). Only the token HASH is stored. RLS: the creator
+  reads their own shares (`created_by = auth.uid()`); all writes via the RPCs.
+
+### RPCs (repo migration)
+
+- `create_report_share(p_report_key, p_scope, p_scope_org_id, p_recipient_email)
+RETURNS jsonb` — SECURITY DEFINER, `authenticated`. Validates scope +
+  membership (single_org requires the caller to be a member), issues a 256-bit
+  token (hash stored), 30-day expiry; audits; returns the raw token once.
+- `revoke_report_share(p_id) RETURNS void` — SECURITY DEFINER, `authenticated`.
+  Creator-only, active-only → `revoked` + `revoked_at`.
+- `validate_report_share(p_token) RETURNS jsonb` — SECURITY DEFINER, `anon`.
+  Hash-validates, lazy-expires, and returns ONLY the in-scope orgs (full = every
+  org the creator belongs to; single_org = the one scope org). The scope filter
+  is applied server-side, so a filtered share cannot leak other orgs (TE-6).
+  Read-only — no write RPC.
+
 ## Inbound webhook: email-to-touch
 
 Email replies on a case thread are forwarded to a public webhook that appends a `touches` row with `source = 'email'`. Implementation comes next.

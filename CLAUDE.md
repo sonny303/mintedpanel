@@ -182,6 +182,43 @@ implementing a redesign epic:
   /api org-isolation gate does NOT cover these (browser-RLS + anon-RPC surface,
   not an /api resource); isolation is enforced in the RPC bodies (touch only the
   token's party/org) + RLS.
+- **E0.6 — Reporting Center & Portfolio Dashboard (CLOSES Stage 0).** Also did
+  the E0.0 sidebar supersession in-place (PM decision). **Segmented nav (TE-2,
+  `src/components/layout/Sidebar.tsx` rewritten):** TOP cross-org (Home → `/`
+  landing resolver, Reporting Center; reserved Setup/Config → Payer Setup/SOP,
+  reserved Cases/Tasks) / BOTTOM org-scoped (active-org header IS the switcher,
+  Account Detail → `/get-started`; reserved Facilities/Providers). Portfolio is
+  no longer a top-level nav item. Reserved items route to the **single shared
+  `/soon?title=` route** (`src/routes/soon.tsx` → `NotYetAvailable`, retargeted
+  to the Reporting Center). No active org → bottom shows a "select an
+  organization" prompt. **Reporting Center (TE-1):** cross-org `/reporting`
+  (registry index from `src/lib/reports.ts` `REPORTS` — one entry today, add a
+  report = one entry + route, F0.6.6) + `/reporting/portfolio` report. Bare
+  `/portfolio` is now a **redirect** to `/reporting/portfolio` (TD-1, old links
+  live). The **E0.4 landing fallback retargets** to `/reporting/portfolio`
+  (`useLandingRedirect` + `index.tsx` beforeLoad). **Portfolio report (TE-4,
+  `src/components/reporting/PortfolioReport.tsx`):** reuses `PortfolioContent`
+  verbatim (metrics + In motion/Prospects) + pure `stateBreakdown`
+  (`src/lib/portfolio.ts`, +tests; NC/SC/CO/TX/WI/OR order, inactive excluded,
+  Unknown bucket) + all-orgs list (incl. inactive under a group heading, name +
+  state — **no per-org status label**) + `ShareReportPanel`. Per-org **state is
+  derived** from the org's customer-escalation-contact party's address state
+  (fallback owner; sales-rep Zeb excluded — cross-org, always NC), TD-5, via
+  `src/services/reporting.ts` `listPortfolioOrgStates` (cross-org, RLS-scoped) →
+  `usePortfolioOrgStates`. **Read-only share (TE-5/TE-6):** migration
+  `20260709150000_report_shares.sql` (`report_shares` — `scope full|single_org`,
+  `state active|revoked|expired`, 30-day expiry, token HASH only, created_by RLS)
+  - `create_report_share`/`revoke_report_share` (authenticated) +
+    `validate_report_share` (`anon`, **no anon write** — the scope filter is
+    enforced server-side so a single-org share never leaks other orgs).
+    `src/services/reportShares.ts` → `src/hooks/useReporting.ts`; public
+    **`/share/$token`** route (chromeless via `__root` `isShareRoute`) renders
+    `PortfolioContent` with the server-scoped orgs — **`PortfolioContent` gained
+    optional `orgs`/`readOnly` props** (default = the unchanged authenticated
+    path). e2e `e2e/reporting-center.spec.ts` + `e2e/report-share.spec.ts` (full vs
+    single-org scope, revoked/expired lockdowns). `types.ts` `report_shares`
+    hand-added (MCP regen flaked). **Stage 0 is complete after this merges — do NOT
+    merge `redesign` → `main` (PM's explicit call).**
 
 ## What this is
 

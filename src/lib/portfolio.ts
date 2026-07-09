@@ -8,7 +8,7 @@
 // Kept pure and tested so the counts are verifiable without a live DB. The raw
 // lifecycle words are internal and are never rendered as a status label
 // (F0.0.2); the UI shows only the business framing ("Prospects" / "In motion").
-import type { PortfolioOrg } from "@/types";
+import type { LifecycleState, PortfolioOrg } from "@/types";
 
 export interface PortfolioBuckets {
   /** Orgs with active work (lifecycle_state 'active'). */
@@ -45,4 +45,43 @@ export function splitPortfolio(orgs: PortfolioOrg[]): PortfolioBuckets {
     isEmpty,
     allInactive: isEmpty && inactive.length > 0,
   };
+}
+
+// Reporting Center state breakdown (redesign E0.6, feature F0.6.4 / TE-4). Counts
+// the caller's NON-inactive orgs by state — inactive excluded from the in-motion
+// breakdown, consistent with the two metrics (F0.6.2). Orgs with no derivable
+// state land in an "Unknown" bucket rather than being dropped (TD-5). Canonical
+// seed states (NC/SC/CO/TX/WI/OR) sort first in that order, then any other state
+// alphabetically, then Unknown last. Pure + tested.
+export const REPORT_STATES = ["NC", "SC", "CO", "TX", "WI", "OR"] as const;
+export const UNKNOWN_STATE = "Unknown";
+
+export interface StateCount {
+  state: string;
+  count: number;
+}
+
+export function stateBreakdown(
+  orgs: Array<{ lifecycleState: LifecycleState; state: string | null }>,
+): StateCount[] {
+  const counts = new Map<string, number>();
+  for (const o of orgs) {
+    if (o.lifecycleState === "inactive") continue;
+    const s = (o.state ?? "").trim().toUpperCase() || UNKNOWN_STATE;
+    counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  const ordered: StateCount[] = [];
+  for (const s of REPORT_STATES) {
+    if (counts.has(s)) {
+      ordered.push({ state: s, count: counts.get(s) as number });
+      counts.delete(s);
+    }
+  }
+  const rest = [...counts.entries()]
+    .filter(([s]) => s !== UNKNOWN_STATE)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [s, c] of rest) ordered.push({ state: s, count: c });
+  if (counts.has(UNKNOWN_STATE))
+    ordered.push({ state: UNKNOWN_STATE, count: counts.get(UNKNOWN_STATE) as number });
+  return ordered;
 }

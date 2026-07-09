@@ -186,6 +186,43 @@ export interface InboundLeadInput {
   companyWebsite?: string;
 }
 
+// Secure read-only portfolio share (redesign E0.6). Outbound + read-only —
+// distinct from E0.5's inbound single-use capture link. 30-day revocable.
+export type ReportShareScope = "full" | "single_org";
+export type ReportShareState = "active" | "revoked" | "expired";
+export interface ReportShare {
+  id: string;
+  reportKey: string;
+  scope: ReportShareScope;
+  scopeOrgId: string | null;
+  recipientEmail: string;
+  state: ReportShareState;
+  expiresAt: string;
+  createdBy: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+// The one-time result of creating a share: the raw token (URL assembly) + inputs.
+export interface IssuedReportShare {
+  token: string;
+  shareId: string;
+  recipientEmail: string;
+  scope: ReportShareScope;
+  expiresAt: string;
+}
+
+// What the public /share/:token route learns from validate_report_share — ONLY
+// the in-scope orgs (the scope filter is enforced server-side). `orgs` already
+// filtered; the client never trusts its own filter (TE-6).
+export type ReportShareViewState = ReportShareState | "invalid";
+export interface ReportShareView {
+  state: ReportShareViewState;
+  reportKey?: string;
+  scope?: ReportShareScope;
+  orgs?: PortfolioOrg[];
+}
+
 // Create/edit input for a CRM contact (E0.2). Split address, never one string.
 export interface ContactInput {
   name: string;
