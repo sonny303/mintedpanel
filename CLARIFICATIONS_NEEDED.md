@@ -16,7 +16,18 @@ Format per entry:
 
 ## Open
 
-_None._
+## [e0.3] Cross-org parties are an exception to the org-RLS convention — OPEN (default assumed)
+
+- **Issue:** F0.3.4 requires one Party record reusable across orgs, so `parties`
+  cannot carry a single `org_id` — an exception to the repo-wide "every table
+  org-scoped by RLS" convention (AGENTS.md).
+- **Impact:** None if the default holds; build proceeds on it.
+- **Options:** (a) DEFAULT, assumed: `parties` has no `org_id`; RLS grants
+  access where the caller has a membership in an org the party is assigned to
+  (via `party_role_assignments`, which IS org-scoped as usual) or the caller
+  created the party. (b) Org-scoped parties with duplication per org — rejected:
+  defeats the entire purpose of E0.3.
+- **Decision:** _pending PM (visibility item; default is safe and tested)._
 
 ## Resolved
 

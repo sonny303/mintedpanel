@@ -150,6 +150,9 @@ This artifact does not define exact payer configuration yet. It reserves state c
 | TS-6        | Duplicate risk                | Outer Banks Rehab Group + Outer Banks Therapy Group                                                     | E0.1 duplicate soft warning can be tested                        |
 | TS-7        | Owner captured / link pending | Lone Star Rehab Group with owner email captured and link status pending                                 | E0.5 capture-link readiness                                      |
 | TS-8        | Multi-operator org            | Shelby Sports Rehab with Sowmya Seed + Coordinator Seed                                                 | Full Party relationship model supports multiple internal parties |
+| TS-9        | Party fixtures (E0.3)         | Zeb Loewenstine, Sowmya Seed, org owners, customer contacts as Party records                            | Create/manage parties; role reference list; consolidation check  |
+| TS-10       | One party, many roles (E0.3)  | Zeb: Sales Rep on all orgs AND Owner on Point Place Physical Therapy (alongside the seeded owner)       | Multiple roles/orgs on one party record, no duplicates           |
+| TS-11       | Cross-org party query (E0.3)  | Zeb Sales Rep on Outer Banks Rehab Group + Dillon Sports Medicine                                       | Reporting-readiness: list every org where a party holds a role   |
 
 ## Recommended seed layers
 
@@ -235,4 +238,5 @@ Not an epic — fixture strategy doc; no frontmatter/lifecycle. Answers and corr
 - **TS-6 correction:** E0.1 F0.1.4 defines the duplicate guard as a **hard block, no override** — not a "soft warning" as written above. Also, "Outer Banks Rehab Group" vs "Outer Banks Therapy Group" have different normalized names and will coexist as seeds; TS-6 must be exercised by attempting to create an org with the _same_ case-/space-insensitive name as an existing one.
 - **Existing local fixture:** `supabase/seed.sql` is the legacy 2-org demo fixture (BEST PT / KS FIT PT) with fixed UUIDs. The 11-org universe should be a **separate, additive** fixture layer (e.g. `supabase/seed-redesign.sql` or a test-fixture module) rather than an edit of the legacy file, keeping both loadable independently.
 - **E0.2 gap:** this doc has no per-org customer-contact fixtures and no Zeb Loewenstine row, which E0.2 FR-5 requires — flagged in `CLARIFICATIONS_NEEDED.md` for ChatPRD to extend.
+- **TS-9–TS-11 added (2026-07-08):** E0.3 introduced three party-model scenarios not in the original TS-0–TS-8 set; rows added to the Stage 0 scenario mapping above. Note TS-10 gives Point Place Physical Therapy a second `owner` assignment (Zeb) in addition to the seeded "Owner Point Place" — intentional, to prove one-party-many-roles.
 - **Epic-list drift:** the "Initial seed scope by epic" table calls E0.2 "Seat Credentialing Manager to org", but the delivered E0.2 is "Org CRM Contact Fields (Customer & Sales Rep)". Update the table when the Stage 0 epic list is final.
