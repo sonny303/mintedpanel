@@ -49,6 +49,8 @@ export const queryKeys = {
   // active org (it renders without one). RLS scopes the read to the caller's
   // member orgs; org switch clears it via queryClient.removeQueries() anyway.
   portfolio: () => ["portfolio"] as const,
+  // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
+  orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

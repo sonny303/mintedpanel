@@ -25,8 +25,8 @@ export function NoOrgScreen() {
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm rounded-md border border-[#E8E5E0] bg-white p-6">
+    <div className="min-h-dvh flex items-start justify-center overflow-y-auto bg-background px-4 py-10">
+      <div className="w-full max-w-md rounded-md border border-[#E8E5E0] bg-white p-6">
         <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <LayoutGrid className="h-5 w-5" />
         </div>
@@ -40,7 +40,7 @@ export function NoOrgScreen() {
         <OrgCreateFields form={form} />
         <Button
           onClick={form.submit}
-          disabled={form.isPending || !form.canSubmit}
+          disabled={form.isPending}
           className="mt-4 w-full bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
         >
           {form.isPending ? "Creating…" : "Create your first organization"}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isValidEmail, commonEmailDomainTypo } from "./contactValidation";
+import { isValidEmail, commonEmailDomainTypo, contactErrors } from "./contactValidation";
+import { DEFAULT_SALES_REP, EMPTY_CONTACT } from "./contacts";
 
 describe("isValidEmail", () => {
   it("accepts well-formed addresses", () => {
@@ -27,5 +28,23 @@ describe("commonEmailDomainTypo", () => {
     expect(commonEmailDomainTypo("owner@outerbanks.example.test")).toBeNull();
     expect(commonEmailDomainTypo("no-at-sign")).toBeNull();
     expect(commonEmailDomainTypo("trailing@")).toBeNull();
+  });
+});
+
+describe("contactErrors", () => {
+  it("flags every required field on an empty contact (E0.2 FR-2)", () => {
+    const e = contactErrors(EMPTY_CONTACT);
+    expect(Object.keys(e).sort()).toEqual(
+      ["addressLine1", "city", "email", "name", "phoneOffice", "postalCode", "state"].sort(),
+    );
+  });
+
+  it("passes the fully-populated Zeb default (line2/country optional)", () => {
+    expect(contactErrors(DEFAULT_SALES_REP)).toEqual({});
+  });
+
+  it("flags a malformed email but accepts a valid one", () => {
+    expect(contactErrors({ ...DEFAULT_SALES_REP, email: "nope" }).email).toBeTruthy();
+    expect(contactErrors({ ...DEFAULT_SALES_REP, email: "a@b.co" }).email).toBeUndefined();
   });
 });

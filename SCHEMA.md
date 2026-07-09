@@ -24,8 +24,15 @@ E0.1 added an additive v2 overload
 `20260709120100_create_organization_rpc_v2.sql`): hard-blocks a duplicate
 normalized name (case-/space-insensitive), requires a valid owner name+email,
 sets `lifecycle_state = 'prospect'`, and writes the owner into the party model
-(owner party + `owner` role at org scope). The legacy 1-arg overload is retained
-(additive rule) but the redesign app calls only the enforced 3-arg form.
+(owner party + `owner` role at org scope). **Redesign E0.2 added a further
+additive 5-arg overload
+`create_organization(p_name, p_owner_name, p_owner_email, p_customer jsonb, p_sales_rep jsonb DEFAULT NULL)`**
+(migration `20260709130000_create_organization_rpc_v3_contacts.sql`): also
+requires a customer-escalation contact + sales rep (stored as parties with their
+roles; sales rep defaults to Zeb Loewenstine when omitted) via the
+`assert_contact_valid` / `insert_contact_party` helpers. Legacy 1-arg and 3-arg
+overloads are retained (additive rule) but the redesign app calls only the
+enforced 5-arg form.
 
 `lifecycle_state` (`text NOT NULL DEFAULT 'active' CHECK (lifecycle_state IN
 ('prospect','active','inactive'))`, migration

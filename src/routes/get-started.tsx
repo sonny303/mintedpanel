@@ -9,6 +9,7 @@ import { Compass } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { OrgContactsSection } from "@/components/org/OrgContactsSection";
 
 export const Route = createFileRoute("/get-started")({
   component: GetStartedPage,
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/get-started")({
 
 function GetStartedPage() {
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader title="Get started" />
       <Card>
         <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
@@ -36,6 +37,9 @@ function GetStartedPage() {
           </Link>
         </CardContent>
       </Card>
+      {/* E0.2: the org's contacts (customer + sales rep) are always visible and
+          editable here — the org overview until Stage 1 defines a richer one. */}
+      <OrgContactsSection />
     </div>
   );
 }

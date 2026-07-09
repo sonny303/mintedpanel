@@ -20,7 +20,7 @@ export function CreateOrganizationModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md border-[#E8E5E0] shadow-none">
+      <DialogContent className="max-w-md border-[#E8E5E0] shadow-none max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create organization</DialogTitle>
         </DialogHeader>
@@ -36,7 +36,7 @@ export function CreateOrganizationModal({ onClose }: { onClose: () => void }) {
           </Button>
           <Button
             onClick={form.submit}
-            disabled={form.isPending || !form.canSubmit}
+            disabled={form.isPending}
             className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
           >
             {form.isPending ? "Creating…" : "Create organization"}
