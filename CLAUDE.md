@@ -219,6 +219,53 @@ implementing a redesign epic:
     single-org scope, revoked/expired lockdowns). `types.ts` `report_shares`
     hand-added (MCP regen flaked). **Stage 0 is complete after this merges — do NOT
     merge `redesign` → `main` (PM's explicit call).**
+- **E0.7 — Stage 0 Hardening (PR #77).** Public-surface hardening only, no
+  feature change: uniform invalid/expired responses across the anon RPC
+  lockdowns, GRANT lockdown + the re-runnable audit
+  `scripts/verify-stage0-rls-grants.sql` (empty result set = pass; run via MCP
+  `execute_sql`), types regen, regression e2e (`e2e/abuse-probe.spec.ts`,
+  `e2e/onboarding-regression.spec.ts`), and migration
+  `20260710120000_stage0_grant_hardening.sql`. Deferred the BD-1 rate limiter
+  and BD-2 a11y pass to E0.8.
+- **E0.8 — Standalone Onboarding Shell & Stage 0 Hardening Close-out.**
+  **Onboarding shell (TE-1..4):** the org switcher's Add organization item now
+  navigates to the standalone authenticated **`/onboarding`** page (the modal is
+  no longer the entry point; `CreateOrganizationModal` remains for its other
+  callers). Split layout: left = the SHARED `useOrgCreateForm` + `OrgCreateFields`
+  intake form (post-create still navigates to the new org's `/get-started`);
+  right = persistent side panel with the two journeys for the ACTIVE org —
+  **Share onboarding link** (popup, recipient name+email required, NO party
+  dropdown; same `create_capture_link` re-issue semantics; CTA labeled "Share
+  onboarding link") and **Begin onboarding** (→ **`/onboarding/wizard`**, a
+  single page with sections: live org-details summary + `NotYetAvailable`
+  placeholders for CSV/facilities/providers). **Terminology (F0.8.2/F0.8.3):**
+  intake labels are now "Authorized contact" (was owner) / "Organization
+  contact" (was customer escalation contact) / a separate "Organization address"
+  section; the sales rep field is GONE from the form (Zeb default applied
+  server-side, managed in People Enroll). Display-side the same relabels apply
+  (`AccountDetailSummary`, wizard) — the party model / role keys are unchanged.
+  **Account Detail (F0.8.6):** `/get-started` header is "Account Detail" and
+  renders the read-only `src/components/org/AccountDetailSummary.tsx`;
+  `CaptureLinkPanel` + `OnboardingBanner` are no longer rendered there
+  (components kept). `PartiesManager` heading is now **"People Enroll"**.
+  **Branding (F0.8.7):** sidebar TOP carries the Minted Panel logo + name above
+  the "Workspace" label; the BOTTOM org segment is labeled "Org space";
+  `/capture/:token` gained a branded footer. **Rate limiting (F0.8.8 / TE-8,
+  migration `20260710130000_public_rpc_rate_limiting.sql`, repo + hosted):**
+  `public_rpc_attempts` (RLS on, NO policies) + SECURITY DEFINER helpers
+  `check_rpc_throttle` / `mark_rpc_attempt_valid` — **NO anon/authenticated
+  EXECUTE on the helpers** (the four public RPCs are SECURITY DEFINER so inner
+  calls run as owner; an anon-callable mark-valid would whitewash failed probes
+  — caught in review, revoked repo + hosted, asserted by the grants audit). The
+  four anon RPCs are redefined with the check prepended: validations 20
+  failed/15 min per hashed source IP (successful lookups marked valid),
+  `submit_inbound_lead` 5 total/60 min; throttled = the same generic
+  invalid/fake-success response (no oracle). **A11y (F0.8.9):** scoped pass on
+  `/capture/:token`, `/contact`, `/share/:token` — `aria-describedby` +
+  `aria-live` error wiring in `ContactFields`/contact form, `role="alert"` on
+  submit errors, form/main landmarks. e2e: `e2e/onboarding-shell.spec.ts`
+  (TS-17..20) + a TS-16 throttle probe in `abuse-probe.spec.ts`;
+  `onboarding-regression.spec.ts` rewritten for the `/onboarding` entry point.
 
 ## What this is
 

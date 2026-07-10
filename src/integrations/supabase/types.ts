@@ -1890,6 +1890,30 @@ export type Database = {
           },
         ];
       };
+      public_rpc_attempts: {
+        Row: {
+          attempted_at: string;
+          caller_hash: string;
+          id: string;
+          rpc_name: string;
+          was_valid: boolean;
+        };
+        Insert: {
+          attempted_at?: string;
+          caller_hash: string;
+          id?: string;
+          rpc_name: string;
+          was_valid?: boolean;
+        };
+        Update: {
+          attempted_at?: string;
+          caller_hash?: string;
+          id?: string;
+          rpc_name?: string;
+          was_valid?: boolean;
+        };
+        Relationships: [];
+      };
       report_shares: {
         Row: {
           created_at: string;
@@ -2366,6 +2390,15 @@ export type Database = {
         Args: { p: Json; p_label: string };
         Returns: undefined;
       };
+      check_rpc_throttle: {
+        Args: {
+          p_count_all?: boolean;
+          p_max_attempts: number;
+          p_rpc_name: string;
+          p_window_minutes: number;
+        };
+        Returns: boolean;
+      };
       claim_invites: { Args: never; Returns: number };
       create_capture_link: {
         Args: {
@@ -2413,6 +2446,10 @@ export type Database = {
       insert_contact_party: {
         Args: { p: Json; p_uid: string };
         Returns: string;
+      };
+      mark_rpc_attempt_valid: {
+        Args: { p_rpc_name: string };
+        Returns: undefined;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
       submit_capture: {

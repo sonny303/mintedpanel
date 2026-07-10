@@ -256,6 +256,46 @@ RETURNS jsonb` — SECURITY DEFINER, `authenticated`. Validates scope +
   is applied server-side, so a filtered share cannot leak other orgs (TE-6).
   Read-only — no write RPC.
 
+## Redesign E0.7/E0.8 — Stage 0 hardening (grants + rate limiting)
+
+E0.7 (`20260710120000_stage0_grant_hardening.sql`) locked down the Stage 0
+GRANT surface; `scripts/verify-stage0-rls-grants.sql` is the re-runnable audit
+(empty result set = pass; run via MCP `execute_sql`). E0.8 adds the BD-1
+in-Postgres rate limiter (`20260710130000_public_rpc_rate_limiting.sql`, repo +
+hosted) and folds the check into the four anon RPCs.
+
+### public_rpc_attempts
+
+`id, rpc_name, caller_hash, attempted_at, was_valid`. One row per public-RPC
+attempt, keyed by `sha256(inet_client_addr())` (core sha256, no pgcrypto). RLS
+enabled with NO policies — only the SECURITY DEFINER helpers and service_role
+touch it. Lazily pruned (rows older than 2x the window for the caller+rpc are
+deleted on each check).
+
+### Helpers (SECURITY DEFINER, NO anon/authenticated EXECUTE)
+
+- `check_rpc_throttle(p_rpc_name, p_max_attempts, p_window_minutes, p_count_all
+DEFAULT false) RETURNS boolean` — counts the caller's recent FAILED attempts
+  (or ALL when `p_count_all`), logs the current attempt, returns
+  allowed/throttled.
+- `mark_rpc_attempt_valid(p_rpc_name) RETURNS void` — flips the caller's latest
+  attempt to `was_valid = true` after a successful token lookup. Deliberately
+  NOT executable by anon/authenticated: the public RPCs are SECURITY DEFINER so
+  their inner calls run as the function owner, and an anon-callable mark-valid
+  would let an attacker whitewash failed probes and defeat the throttle. The
+  grants audit asserts both helpers stay locked down.
+
+### Throttled RPC behavior (CREATE OR REPLACE of the four E0.5/E0.6 anon RPCs)
+
+- `validate_capture_token` / `submit_capture` / `validate_report_share`: 20
+  FAILED attempts / 15 min per source fingerprint; a successful hash lookup is
+  marked valid and does not count toward the cap. Throttled → the same generic
+  `{ state: 'invalid' }` (`{ ok: false, state: 'invalid' }` for submit) as a
+  wrong token — invalid/revoked/expired/throttled stay indistinguishable.
+- `submit_inbound_lead`: 5 TOTAL attempts / 60 min (a submission cap, not a
+  validation cap); throttled → fake success `{ ok: true }`, the same response
+  as the honeypot path.
+
 ## Inbound webhook: email-to-touch
 
 Email replies on a case thread are forwarded to a public webhook that appends a `touches` row with `source = 'email'`. Implementation comes next.
