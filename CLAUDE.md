@@ -266,6 +266,53 @@ implementing a redesign epic:
   submit errors, form/main landmarks. e2e: `e2e/onboarding-shell.spec.ts`
   (TS-17..20) + a TS-16 throttle probe in `abuse-probe.spec.ts`;
   `onboarding-regression.spec.ts` rewritten for the `/onboarding` entry point.
+- **E0.10 — Data-Model Integrity Hardening (PR #82).** Five additive
+  migrations (repo + hosted, `20260710140000`–`180000`): FK indexes on the
+  TE-4 pinned nine columns; per-column `CHECK (col IS NOT NULL)` under the
+  unique invariants (`contracts.group_id/payer_id`, `pfa.provider_id/
+facility_id`, `state_licenses.provider_id`); `^[A-Z]{2}$` state-format
+  checks on the TE-2 scalar set (wildcard fields `mso_routing_rules.state` /
+  `sop_templates.state` excluded — `'All'` is valid there); structural
+  constraints (`tasks_owner_check`, partial unique
+  `uq_provider_facility_assignments_one_primary`, `status_configs
+UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
+  audits returned zero offending rows; live values were already clean
+  two-letter codes). **Service boundary:** `src/lib/stateCode.ts`
+  (`normalizeStateCode`/`normalizeOptionalStateCode` — trim+uppercase before
+  writing any constrained state column; NEVER applied to the wildcard
+  writers) and `src/lib/dbErrors.ts` (`translateDbError`, 23505/23514/23502 →
+  domain messages by constraint name, unknown errors pass through) wired into
+  contracts/cases/providers/tasks/statusConfigs/launches/orgSettings. No
+  constraint on `mso_routing_rules` (PM-deferred). Table-register rows updated.
+- **E0.9 — Design System Conformance & Stage 0 Tech-Debt Consolidation.**
+  The PM design handoff lives at `docs/redesign/design-system/`
+  (lint/format-ignored — never edit the bundle). `src/styles/tokens.css` is
+  now the BYTE-IDENTICAL drop-in from `design-system/targets/` (it is in
+  `.prettierignore` to keep parity) — warm neutrals, `#1B4D3E`/`#163F33`,
+  fixed `--mp-*-tint`/`--mp-*-ink` status pairs (no `color-mix`),
+  `--mp-radius-control` 4px / `--mp-radius-sm` 6px, `--mp-shadow-sm: none`.
+  UI font is **Geist** (`@fontsource/geist`; Instrument Sans/Inter fully
+  removed, incl. `public/fonts` assets + `__root` preloads). Controls are
+  shadowless; cards 6px; global focus = 2px soft primary ring
+  (`rgba(27,77,62,.18)`). **Both StatusPills** render 4px borderless
+  tint+ink pairs — the shared map is `statusToneClasses` in
+  `src/components/StatusPill.tsx`; the triage pill maps its DB hex through
+  `hexToStatusColor` (color-mix is gone). `triage/FilterCards` →
+  **`triage/SummaryChips`**. **Sidebar IA v2** (supersedes E0.6 nav + E0.8
+  "Org space"): Workspace (Home, Cases + open-case count chip from the
+  cached `useCases`/`useStatusConfigs` — no polling) / Payers (Payer
+  Management → `/admin/payers`) / Reporting Center; org zone = contained
+  switcher tile (ORGANIZATION eyebrow), lifecycle-grouped menu (headings
+  only, never per-org status labels), search above 10 orgs, footer Add
+  organization (→ `/onboarding`) + View all organizations (→
+  `/reporting/portfolio`); nav focus uses a white-alpha ring; user menu has
+  Settings → `/admin/settings`. **Governance:** `DESIGN-DEBT.md` +
+  `TECH-DEBT.md` (31-row Stage 0 TD consolidation) at the repo root —
+  unspecced components must be stock shadcn, token-styled, and logged
+  (AGENTS.md rule). e2e: `sidebar-ia.spec.ts` (TS-22) +
+  `legacy-routes.spec.ts` (TS-23 — every legacy route renders or redirects;
+  `/portfolio`→`/reporting/portfolio`, `/progress`→`/client-progress`,
+  `/admin/sops`→`/admin/templates` pinned).
 
 ## What this is
 
@@ -789,15 +836,16 @@ label → canonical**. `STATUS_LABEL_COMPAT` is EMPTY today (orgs already match)
 so `canonicalLabel` is a no-op identity; the day an imported org ships a
 non-canonical label, one entry there fixes matching everywhere at once.
 
-Status pills: `src/components/triage/StatusPill.tsx` takes the raw hex from
-`status_configs.color` (color-mix tinting) — use this for DB-driven statuses.
-The legacy `src/components/StatusPill.tsx` + `hexToStatusColor` is for
-semantic one-offs, and since the R1 sweep it is the ONLY place pill styling
-lives: it carries `neutral` (warm gray), `brand` (Admin badge), and `violet`
-(audit TOUCH_LOGGED) variants, and admin payers/audit/mso-routing plus the
-settings panels all render through it. Don't hand-roll
-`rounded-[20px]`-style pill spans; neutral _tag_ chips (group name, via-MSO,
-Archived) are the deliberate exception.
+Status pills (E0.9 design-system conformance): both implementations render
+4px borderless pills from the fixed `--mp-*-tint`/`--mp-*-ink` token pairs —
+the shared tone map is `statusToneClasses` in `src/components/StatusPill.tsx`.
+`src/components/triage/StatusPill.tsx` takes the raw hex from
+`status_configs.color` and maps it through `hexToStatusColor` to a tone (the
+old color-mix tinting is gone) — use it for DB-driven statuses. The legacy
+`src/components/StatusPill.tsx` is for semantic one-offs and carries the
+`neutral`/`brand`/`violet` variants; admin payers/audit/mso-routing and the
+settings panels render through it. Don't hand-roll pill spans; neutral _tag_
+chips (group name, via-MSO, Archived) are the deliberate exception.
 
 ## Launches = locations (launch PRD v2.1, built Jul 2026)
 
