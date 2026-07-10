@@ -18,6 +18,54 @@ Format per entry:
 
 ## Resolved
 
+## [e0.10] State-constraint scope and routing-rule overlap semantics — RESOLVED (2026-07-10)
+
+- **Issue:** F0.10.2 says to constrain "the six `state` columns," but the
+  current schema does not have one unambiguous six-column set. It has operational
+  jurisdiction fields (`contracts.state`, `credential_cases.state`,
+  `state_licenses.state`), physical-address fields (`facilities.state`,
+  `providers.home_state`, and three `provider_groups.*_state` columns), a
+  frozen provider license mirror (`providers.license_state`), and wildcard
+  matching fields (`mso_routing_rules.state`, `sop_templates.state`) where
+  `All`/NULL are valid today. The epic's named "group/facility/provider state
+  fields" therefore does not match the spike's six-column claim, and applying
+  `^[A-Z]{2}$` to the wildcard fields would break current routing/template
+  behavior.
+- **Issue:** F0.10.3 says overlapping MSO routing rules must be rejected with
+  `UNIQUE (org_id, payer_id, state, specialty)`. The current resolver
+  intentionally permits multiple matching wildcard layers (`All`) and ranks
+  exact specialty/state above fallbacks, with newest-row tie-breaking. The
+  proposed UNIQUE key prevents only exact duplicate tuples; it neither rejects
+  all overlapping matches nor defines whether the existing wildcard precedence
+  should remain.
+- **Impact:** E0.10 cannot be technically enabled without guessing which state
+  fields are business jurisdiction codes versus addresses/wildcards, or whether
+  routing fallbacks remain a supported product behavior. The file remains
+  `reviewed: false`; F0.10.2 and the routing-rule part of F0.10.3 are blocked.
+  The implementation plan must also stage audits/remediation before adding
+  UNIQUE indexes, because PostgreSQL does not support `UNIQUE ... NOT VALID`.
+- **Options:**
+  1. Constrain only canonical operational jurisdiction fields; explicitly list
+     them, preserve `All`/NULL wildcard fields, and handle address normalization
+     in the later address/contact epics.
+  2. Constrain operational plus physical-address fields; explicitly list every
+     column and define nullable/territory behavior, while still excluding
+     wildcard matching fields.
+  3. For MSO routing, preserve wildcard precedence and narrow the invariant to
+     "no exact duplicate at the same specificity," or prohibit overlapping
+     matches and replace the current resolver contract. A third option is an
+     explicit additive priority field with a deterministic uniqueness rule.
+- **Decision (PM, 2026-07-10):** Option 1 for state scope — constrain only the
+  reviewer-pinned scalar jurisdiction/address columns listed in the epic's TE-2
+  and preserve the `All`/NULL wildcard fields (`mso_routing_rules.state`,
+  `sop_templates.state`) untouched; address normalization stays with the later
+  address/contact epics. The MSO routing-rule uniqueness constraint is DEFERRED
+  out of E0.10 entirely — the resolver's wildcard precedence remains the
+  supported behavior until the PM picks a routing invariant (the three options
+  above stay on the backlog). Unique constraints are audit-first (no
+  `UNIQUE ... NOT VALID`), recorded in the epic's TE-3/TE-7. E0.10 is restored
+  to `reviewed: true` with these amendments.
+
 ## [design-conformance] Sidebar IA v2 supersedes E0.6 nav + E0.8 "Org space" label — RESOLVED (2026-07-10)
 
 - **Issue:** The PM-approved design system handoff (`docs/redesign/design-system/`)
