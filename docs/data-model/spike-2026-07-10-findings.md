@@ -16,7 +16,7 @@ is the weakest.
 1. **provider ↔ group cardinality.** Modeled as `providers.group_id` (1:N) but
    a provider can work under multiple groups/TINs (M:N). Fix: additive
    `provider_group_assignments (org_id, provider_id, group_id, is_primary,
-   start_date, end_date, UNIQUE(provider_id, group_id))`, backfilled from
+start_date, end_date, UNIQUE(provider_id, group_id))`, backfilled from
    `providers.group_id`, which then becomes a frozen "primary group" mirror.
    `credential_cases.group_id` already records which TIN each case is
    credentialed under, so case history survives; case creation changes from
@@ -38,7 +38,7 @@ is the weakest.
   mean those invariants are silently unenforced (NULLs never collide).
 - `CHECK (state ~ '^[A-Z]{2}$')` (NOT VALID first) on the six state columns.
 - ~10 missing FK indexes (`credential_cases.payer_id/group_id/mso_id/
-  assigned_to`, `contracts.group_id/payer_id`, `state_licenses.provider_id`,
+assigned_to`, `contracts.group_id/payer_id`, `state_licenses.provider_id`,
   `touches.coordinator_id`, `tasks.provider_id`, `status_history.changed_by`).
 - `UNIQUE(org_id, payer_id, state, specialty)` on `mso_routing_rules`.
 - `UNIQUE(org_id, track, label)` on `status_configs`.
@@ -65,14 +65,14 @@ existing facility-selection pattern.
 
 ## 3. MVD (minimum viable data) per transactional record
 
-| Table | MVD | Current gaps |
-|---|---|---|
+| Table            | MVD                                                                             | Current gaps                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | credential_cases | org, provider, payer, state, credentialing_status, created_by, case_email_token | `credentialing_status_id` nullable (invisible to the action engine); `group_id` becomes required once multi-group lands |
-| contracts | org, group, payer, state, contracting_status (dates legitimately unknown early) | group/payer/status all nullable — the highest-value MVD fix |
-| touches | org, case, date, entry_type, author-or-source; touchpoint → channel + outcome | essentially fully enforced — the reference standard |
-| status_history | org, exactly-one-of case/contract, track, to_status, changed_by | `to_status_id` and `changed_by` nullable |
-| tasks | org, owner (case or provider), title, status | owner not enforced |
-| audit_log | org, ts, actor-or-system, action_type, entity_type, entity_id | `entity_type` free text; nothing distinguishes system actions from missing actor |
+| contracts        | org, group, payer, state, contracting_status (dates legitimately unknown early) | group/payer/status all nullable — the highest-value MVD fix                                                             |
+| touches          | org, case, date, entry_type, author-or-source; touchpoint → channel + outcome   | essentially fully enforced — the reference standard                                                                     |
+| status_history   | org, exactly-one-of case/contract, track, to_status, changed_by                 | `to_status_id` and `changed_by` nullable                                                                                |
+| tasks            | org, owner (case or provider), title, status                                    | owner not enforced                                                                                                      |
+| audit_log        | org, ts, actor-or-system, action_type, entity_type, entity_id                   | `entity_type` free text; nothing distinguishes system actions from missing actor                                        |
 
 ## 4. Open questions (gate the structural work)
 
