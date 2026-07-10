@@ -10,7 +10,6 @@
 // prompt rather than collapsing. Org switch clears view state via the existing
 // <Outlet key={activeOrgId}> remount + setActiveOrg → removeQueries. Renders in
 // both the desktop rail and the mobile drawer.
-import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   DropdownMenu,
@@ -21,7 +20,6 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore, useActiveMembership } from "@/lib/auth-store";
-import { CreateOrganizationModal } from "@/components/org/CreateOrganizationModal";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 import {
   Home,
@@ -101,7 +99,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
-  const [creating, setCreating] = useState(false);
 
   // "/" is Home = the E0.4 landing resolver; highlight it only on the marketing
   // root, never as a prefix of every route.
@@ -154,8 +151,14 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
   return (
     <aside className="w-full md:w-[232px] flex-shrink-0 bg-mp-sidebar flex flex-col h-full">
+      {/* Branding (E0.8 F0.8.6) */}
+      <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+        <img src={logoAsset.url} alt="Minted Panel" className="w-6 h-6 object-contain" />
+        <span className="text-[14px] font-semibold text-white">Minted Panel</span>
+      </div>
+
       {/* TOP segment — cross-org work. */}
-      <div className="px-3 pt-4 pb-2">
+      <div className="px-3 pt-0 pb-2">
         <div className="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-white/35">
           Workspace
         </div>
@@ -179,6 +182,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       <div className="flex-1 overflow-y-auto px-3 pt-3 pb-1">
         {active ? (
           <>
+            <div className="px-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider text-white/35">
+              Org space
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -208,7 +214,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setCreating(true)}>
+                <DropdownMenuItem onSelect={() => navigate({ to: "/onboarding" })}>
                   <Plus className="w-4 h-4 mr-2" />
                   Add organization
                 </DropdownMenuItem>
@@ -276,8 +282,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      {creating ? <CreateOrganizationModal onClose={() => setCreating(false)} /> : null}
     </aside>
   );
 }

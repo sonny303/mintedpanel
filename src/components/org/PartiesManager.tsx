@@ -478,7 +478,7 @@ export function PartiesManager() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-[15px] font-semibold text-foreground">People &amp; roles</h2>
+        <h2 className="text-[15px] font-semibold text-foreground">People Enroll</h2>
         <div className="flex gap-2">
           {candidates.length > 0 ? (
             <Button variant="outline" size="sm" onClick={() => setAddingExisting(true)}>

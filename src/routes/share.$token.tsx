@@ -77,14 +77,16 @@ function SharePage() {
 
   return (
     <Shell>
-      <div className="mb-4">
-        <h1 className="text-[20px] font-semibold text-foreground">Portfolio</h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          A read-only view shared with you. {data.scope === "single_org" ? "One organization." : ""}
-        </p>
-      </div>
-      {/* Server already scope-filtered `orgs`; render read-only, no workspace nav. */}
-      <PortfolioContent orgs={data.orgs} readOnly />
+      <main aria-label="Shared portfolio report">
+        <div className="mb-4">
+          <h1 className="text-[20px] font-semibold text-foreground">Portfolio</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            A read-only view shared with you.{" "}
+            {data.scope === "single_org" ? "One organization." : ""}
+          </p>
+        </div>
+        <PortfolioContent orgs={data.orgs} readOnly />
+      </main>
     </Shell>
   );
 }

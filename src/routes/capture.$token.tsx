@@ -33,6 +33,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           <span className="text-[15px] font-semibold text-foreground">Minted Panel</span>
         </div>
         {children}
+        <div className="mt-8 text-center text-[11px] text-muted-foreground">
+          Powered by Minted Panel · Credentialing made simple
+        </div>
       </div>
     </div>
   );
@@ -191,7 +194,12 @@ function CapturePage() {
             </p>
           ) : null}
 
-          <form onSubmit={onSubmit} noValidate className="mt-5 space-y-4">
+          <form
+            onSubmit={onSubmit}
+            noValidate
+            className="mt-5 space-y-4"
+            aria-label="Confirm organization details"
+          >
             <ContactFields
               value={form}
               onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
@@ -199,7 +207,10 @@ function CapturePage() {
               idPrefix="capture"
             />
             {submitError ? (
-              <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B91C1C]">
+              <div
+                role="alert"
+                className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B91C1C]"
+              >
                 {submitError}
               </div>
             ) : null}

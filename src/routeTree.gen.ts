@@ -30,6 +30,7 @@ import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
+import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
@@ -37,6 +38,7 @@ import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
@@ -165,6 +167,11 @@ const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersRoute,
 } as any)
+const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
+  id: '/onboarding/',
+  path: '/onboarding/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -199,6 +206,11 @@ const ProvidersIdRoute = ProvidersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => ProvidersRoute,
+} as any)
+const OnboardingWizardRoute = OnboardingWizardRouteImport.update({
+  id: '/onboarding/wizard',
+  path: '/onboarding/wizard',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const LaunchesIdRoute = LaunchesIdRouteImport.update({
   id: '/$id',
@@ -344,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
@@ -351,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
@@ -391,12 +405,14 @@ export interface FileRoutesByTo {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
+  '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/reporting': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
@@ -443,6 +459,7 @@ export interface FileRoutesById {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
@@ -450,6 +467,7 @@ export interface FileRoutesById {
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
@@ -497,6 +515,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/portfolio'
@@ -504,6 +523,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
+    | '/onboarding/'
     | '/providers/'
     | '/reporting/'
     | '/admin/sops/$id'
@@ -544,12 +564,14 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/new'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/tasks/$id'
     | '/cases'
     | '/launches'
+    | '/onboarding'
     | '/providers'
     | '/reporting'
     | '/admin/sops/$id'
@@ -595,6 +617,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
     | '/reporting/portfolio'
@@ -602,6 +625,7 @@ export interface FileRouteTypes {
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
+    | '/onboarding/'
     | '/providers/'
     | '/reporting/'
     | '/admin/sops/$id'
@@ -646,9 +670,11 @@ export interface RootRouteChildren {
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
+  OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
   TasksIdRoute: typeof TasksIdRoute
+  OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
@@ -803,6 +829,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIndexRouteImport
       parentRoute: typeof ProvidersRoute
     }
+    '/onboarding/': {
+      id: '/onboarding/'
+      path: '/onboarding'
+      fullPath: '/onboarding/'
+      preLoaderRoute: typeof OnboardingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/launches/': {
       id: '/launches/'
       path: '/'
@@ -851,6 +884,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/providers/$id'
       preLoaderRoute: typeof ProvidersIdRouteImport
       parentRoute: typeof ProvidersRoute
+    }
+    '/onboarding/wizard': {
+      id: '/onboarding/wizard'
+      path: '/onboarding/wizard'
+      fullPath: '/onboarding/wizard'
+      preLoaderRoute: typeof OnboardingWizardRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/launches/$id': {
       id: '/launches/$id'
@@ -1126,9 +1166,11 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
+  OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,
   TasksIdRoute: TasksIdRoute,
+  OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,

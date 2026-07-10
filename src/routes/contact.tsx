@@ -59,6 +59,7 @@ function Field({
   error?: string;
   type?: string;
 }) {
+  const errId = `${id}-error`;
   return (
     <div>
       <Label className="text-[12px]" htmlFor={id}>
@@ -70,9 +71,14 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errId : undefined}
         className="h-9"
       />
-      {error ? <div className={errClass}>{error}</div> : null}
+      {error ? (
+        <div id={errId} aria-live="polite" className={errClass}>
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -188,7 +194,10 @@ function ContactPage() {
                 </div>
 
                 {submitError ? (
-                  <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B91C1C]">
+                  <div
+                    role="alert"
+                    className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] px-3 py-2 text-[12px] text-[#B91C1C]"
+                  >
                     {submitError}
                   </div>
                 ) : null}

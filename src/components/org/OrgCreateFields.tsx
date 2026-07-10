@@ -1,12 +1,6 @@
-// Presentational create-org fields (E0.1 + E0.2 TE-3): organization name +
-// required owner (name/email) + required customer-escalation contact + sales rep
-// (pre-filled with Zeb). Inline field errors and a non-blocking "did you mean"
-// nudge for common owner-email typos. Composed only from existing primitives;
-// state + submit live in the parent via useOrgCreateForm.
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { ContactFields } from "@/components/org/ContactFields";
 import type { OrgCreateForm } from "@/hooks/useOrgCreateForm";
 
 const fieldError = "mt-1 text-[12px] text-[#B91C1C]";
@@ -28,9 +22,9 @@ export function OrgCreateFields({ form }: { form: OrgCreateForm }) {
       </div>
 
       <div className="space-y-3">
-        <div className={sectionLabel}>Owner</div>
+        <div className={sectionLabel}>Authorized contact</div>
         <div>
-          <Label className="text-[12px]">Owner name</Label>
+          <Label className="text-[12px]">Name</Label>
           <Input
             value={form.ownerName}
             onChange={(e) => form.setOwnerName(e.target.value)}
@@ -40,7 +34,7 @@ export function OrgCreateFields({ form }: { form: OrgCreateForm }) {
           {form.errors.ownerName ? <div className={fieldError}>{form.errors.ownerName}</div> : null}
         </div>
         <div>
-          <Label className="text-[12px]">Owner email</Label>
+          <Label className="text-[12px]">Email</Label>
           <Input
             type="email"
             value={form.ownerEmail}
@@ -70,25 +64,134 @@ export function OrgCreateFields({ form }: { form: OrgCreateForm }) {
       <Separator />
 
       <div className="space-y-3">
-        <div className={sectionLabel}>Customer escalation contact</div>
-        <ContactFields
-          value={form.customer}
-          onChange={form.patchCustomer}
-          errors={form.customerErrors}
-          idPrefix="customer"
-        />
+        <div className={sectionLabel}>Organization contact</div>
+        <div>
+          <Label className="text-[12px]" htmlFor="customer-name">
+            Name
+          </Label>
+          <Input
+            id="customer-name"
+            value={form.customer.name}
+            onChange={(e) => form.patchCustomer({ name: e.target.value })}
+            aria-invalid={form.customerErrors.name ? true : undefined}
+            className="h-9"
+          />
+          {form.customerErrors.name ? (
+            <div className={fieldError}>{form.customerErrors.name}</div>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-email">
+              Email
+            </Label>
+            <Input
+              id="customer-email"
+              type="email"
+              value={form.customer.email}
+              onChange={(e) => form.patchCustomer({ email: e.target.value })}
+              aria-invalid={form.customerErrors.email ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.email ? (
+              <div className={fieldError}>{form.customerErrors.email}</div>
+            ) : null}
+          </div>
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-phone">
+              Phone
+            </Label>
+            <Input
+              id="customer-phone"
+              value={form.customer.phoneOffice}
+              onChange={(e) => form.patchCustomer({ phoneOffice: e.target.value })}
+              aria-invalid={form.customerErrors.phoneOffice ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.phoneOffice ? (
+              <div className={fieldError}>{form.customerErrors.phoneOffice}</div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <Separator />
 
       <div className="space-y-3">
-        <div className={sectionLabel}>Minted Panel sales rep</div>
-        <ContactFields
-          value={form.salesRep}
-          onChange={form.patchSalesRep}
-          errors={form.salesErrors}
-          idPrefix="sales"
-        />
+        <div className={sectionLabel}>Organization address</div>
+        <div>
+          <Label className="text-[12px]" htmlFor="customer-line1">
+            Street address
+          </Label>
+          <Input
+            id="customer-line1"
+            value={form.customer.addressLine1}
+            onChange={(e) => form.patchCustomer({ addressLine1: e.target.value })}
+            aria-invalid={form.customerErrors.addressLine1 ? true : undefined}
+            className="h-9"
+          />
+          {form.customerErrors.addressLine1 ? (
+            <div className={fieldError}>{form.customerErrors.addressLine1}</div>
+          ) : null}
+        </div>
+        <div>
+          <Label className="text-[12px]" htmlFor="customer-line2">
+            Suite / unit <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id="customer-line2"
+            value={form.customer.addressLine2 ?? ""}
+            onChange={(e) => form.patchCustomer({ addressLine2: e.target.value })}
+            className="h-9"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="col-span-2 sm:col-span-2">
+            <Label className="text-[12px]" htmlFor="customer-city">
+              City
+            </Label>
+            <Input
+              id="customer-city"
+              value={form.customer.city}
+              onChange={(e) => form.patchCustomer({ city: e.target.value })}
+              aria-invalid={form.customerErrors.city ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.city ? (
+              <div className={fieldError}>{form.customerErrors.city}</div>
+            ) : null}
+          </div>
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-state">
+              State
+            </Label>
+            <Input
+              id="customer-state"
+              value={form.customer.state}
+              onChange={(e) => form.patchCustomer({ state: e.target.value })}
+              aria-invalid={form.customerErrors.state ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.state ? (
+              <div className={fieldError}>{form.customerErrors.state}</div>
+            ) : null}
+          </div>
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-zip">
+              Postal code
+            </Label>
+            <Input
+              id="customer-zip"
+              value={form.customer.postalCode}
+              onChange={(e) => form.patchCustomer({ postalCode: e.target.value })}
+              aria-invalid={form.customerErrors.postalCode ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.postalCode ? (
+              <div className={fieldError}>{form.customerErrors.postalCode}</div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       {form.errors.form ? (
