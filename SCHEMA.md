@@ -9,6 +9,9 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 - **Append-only**: `touches`, `status_history`, `audit_log`. Never updated, never deleted.
 - **PHI minimization**: `providers.ssn_last4` only. Full SSN is never stored or accepted.
 - **Role checks**: `admin` (full), `specialist` (operational write), `billing` (read-only at policy level). Enforced via `has_role(uid, role)` security-definer function.
+- **Grain rule**: a new field goes on the table whose grain matches how the field varies. A field that varies by state, purpose, or payer is a child row keyed by that dimension — never a new column on a grain-less master row.
+- **M:N rule**: any relationship that could plausibly become many-to-many gets a join table from day one (`memberships`, `org_payer_assignments`, `provider_facility_assignments` are the house pattern).
+- **Table register**: `docs/data-model/table-register.md` is the living inventory (layer, lifecycle status, replacement) for every table; any migration that adds or supersedes a table/column updates it in the same PR. Spike findings and the hardening backlog: `docs/data-model/spike-2026-07-10-findings.md`.
 
 ## Tables
 

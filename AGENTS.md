@@ -56,6 +56,9 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 - One credentialing case per `(provider_id, payer_id, state)`. Credentialing only.
 - Contracting status lives on `contracts` (group + payer + state). Never put contracting status on `credential_cases`.
 - All access is scoped by `org_id` RLS. Every insert sets `org_id` from the active org. Every public table needs explicit `GRANT`s alongside RLS.
+- Any migration that adds or supersedes a table or column updates the row in `docs/data-model/table-register.md` in the same PR.
+- Follow the grain and M:N rules in `SCHEMA.md` — state/purpose/payer-varying data is a child row keyed by that dimension, never a new column; plausible many-to-many relationships get a join table from day one.
+- Epics and feature specs list a table trace (tables read / tables written); reviewers reconcile it against the table register.
 
 ## Style rules
 
