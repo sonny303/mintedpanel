@@ -1,7 +1,3 @@
-// Reusable CRM-contact field group (E0.2): name, email, phone, and a SPLIT
-// address laid out vertically for clarity (UX note) — never one string. Used for
-// the customer contact and the sales rep in the create-org form and the edit
-// dialog. Composed only from existing primitives (label + input).
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ContactInput } from "@/types";
@@ -28,9 +24,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
           value={value.name}
           onChange={(e) => onChange({ name: e.target.value })}
           aria-invalid={errors.name ? true : undefined}
+          aria-describedby={errors.name ? `${idPrefix}-name-error` : undefined}
           className="h-9"
         />
-        {errors.name ? <div className={errClass}>{errors.name}</div> : null}
+        {errors.name ? (
+          <div id={`${idPrefix}-name-error`} aria-live="polite" className={errClass}>
+            {errors.name}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -44,9 +45,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
             value={value.email}
             onChange={(e) => onChange({ email: e.target.value })}
             aria-invalid={errors.email ? true : undefined}
+            aria-describedby={errors.email ? `${idPrefix}-email-error` : undefined}
             className="h-9"
           />
-          {errors.email ? <div className={errClass}>{errors.email}</div> : null}
+          {errors.email ? (
+            <div id={`${idPrefix}-email-error`} aria-live="polite" className={errClass}>
+              {errors.email}
+            </div>
+          ) : null}
         </div>
         <div>
           <Label className="text-[12px]" htmlFor={`${idPrefix}-phone`}>
@@ -57,9 +63,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
             value={value.phoneOffice}
             onChange={(e) => onChange({ phoneOffice: e.target.value })}
             aria-invalid={errors.phoneOffice ? true : undefined}
+            aria-describedby={errors.phoneOffice ? `${idPrefix}-phone-error` : undefined}
             className="h-9"
           />
-          {errors.phoneOffice ? <div className={errClass}>{errors.phoneOffice}</div> : null}
+          {errors.phoneOffice ? (
+            <div id={`${idPrefix}-phone-error`} aria-live="polite" className={errClass}>
+              {errors.phoneOffice}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -72,9 +83,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
           value={value.addressLine1}
           onChange={(e) => onChange({ addressLine1: e.target.value })}
           aria-invalid={errors.addressLine1 ? true : undefined}
+          aria-describedby={errors.addressLine1 ? `${idPrefix}-line1-error` : undefined}
           className="h-9"
         />
-        {errors.addressLine1 ? <div className={errClass}>{errors.addressLine1}</div> : null}
+        {errors.addressLine1 ? (
+          <div id={`${idPrefix}-line1-error`} aria-live="polite" className={errClass}>
+            {errors.addressLine1}
+          </div>
+        ) : null}
       </div>
 
       <div>
@@ -99,9 +115,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
             value={value.city}
             onChange={(e) => onChange({ city: e.target.value })}
             aria-invalid={errors.city ? true : undefined}
+            aria-describedby={errors.city ? `${idPrefix}-city-error` : undefined}
             className="h-9"
           />
-          {errors.city ? <div className={errClass}>{errors.city}</div> : null}
+          {errors.city ? (
+            <div id={`${idPrefix}-city-error`} aria-live="polite" className={errClass}>
+              {errors.city}
+            </div>
+          ) : null}
         </div>
         <div>
           <Label className="text-[12px]" htmlFor={`${idPrefix}-state`}>
@@ -112,9 +133,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
             value={value.state}
             onChange={(e) => onChange({ state: e.target.value })}
             aria-invalid={errors.state ? true : undefined}
+            aria-describedby={errors.state ? `${idPrefix}-state-error` : undefined}
             className="h-9"
           />
-          {errors.state ? <div className={errClass}>{errors.state}</div> : null}
+          {errors.state ? (
+            <div id={`${idPrefix}-state-error`} aria-live="polite" className={errClass}>
+              {errors.state}
+            </div>
+          ) : null}
         </div>
         <div>
           <Label className="text-[12px]" htmlFor={`${idPrefix}-zip`}>
@@ -125,9 +151,14 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
             value={value.postalCode}
             onChange={(e) => onChange({ postalCode: e.target.value })}
             aria-invalid={errors.postalCode ? true : undefined}
+            aria-describedby={errors.postalCode ? `${idPrefix}-zip-error` : undefined}
             className="h-9"
           />
-          {errors.postalCode ? <div className={errClass}>{errors.postalCode}</div> : null}
+          {errors.postalCode ? (
+            <div id={`${idPrefix}-zip-error`} aria-live="polite" className={errClass}>
+              {errors.postalCode}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

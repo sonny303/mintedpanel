@@ -141,11 +141,18 @@ test("seeded org contacts (customer + Zeb sales rep) render on the workspace", a
   await page.goto("/get-started");
 
   // Wait out the cold dev-server compile + SSR/hydrate + auth init + fetch on the
-  // first assertion, then the rest resolve immediately.
-  await expect(page.getByText("Coach Eric Taylor")).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText("Zeb Loewenstine")).toBeVisible();
-  await expect(page.getByText("contact.dillon@example.test", { exact: false })).toBeVisible();
-  await expect(page.getByText("zeb@mintedpanel.example.test", { exact: false })).toBeVisible();
-  await expect(page.getByText("Customer Escalation Contact")).toBeVisible();
-  await expect(page.getByText("Sales Rep")).toBeVisible();
+  // first assertion, then the rest resolve immediately. Since E0.8, /get-started
+  // renders the customer's name/email in BOTH the read-only AccountDetailSummary
+  // and PartiesManager — .first() keeps strict mode satisfied while still
+  // asserting visibility.
+  await expect(page.getByText("Coach Eric Taylor").first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Zeb Loewenstine").first()).toBeVisible();
+  await expect(
+    page.getByText("contact.dillon@example.test", { exact: false }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("zeb@mintedpanel.example.test", { exact: false }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("Customer Escalation Contact").first()).toBeVisible();
+  await expect(page.getByText("Sales Rep").first()).toBeVisible();
 });
