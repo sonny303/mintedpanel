@@ -64,10 +64,13 @@ test("single-org share shows ONLY that org, no other org leaks (filtered share)"
   await expect(page.getByText("Point Place Physical Therapy")).toHaveCount(0);
 });
 
-test("a revoked share shows the revoked lockdown", async ({ context, page }) => {
+test("a revoked share shows the generic lockdown (no oracle — F0.7.5 TE-7)", async ({
+  context,
+  page,
+}) => {
   await context.route(/\/(rest|auth)\/v1\//, mock({ state: "revoked" }));
   await page.goto("/share/revokedtoken");
-  await expect(page.getByText("This link was revoked")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("This link is no longer valid")).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("Rose City", { exact: false })).toHaveCount(0);
 });
 
@@ -75,4 +78,14 @@ test("an expired share shows the expired lockdown", async ({ context, page }) =>
   await context.route(/\/(rest|auth)\/v1\//, mock({ state: "expired" }));
   await page.goto("/share/expiredtoken");
   await expect(page.getByText("This link has expired")).toBeVisible({ timeout: 30000 });
+});
+
+test("an invalid token shows the generic lockdown and leaks no data (F0.7.5 TE-7)", async ({
+  context,
+  page,
+}) => {
+  await context.route(/\/(rest|auth)\/v1\//, mock({ state: "invalid" }));
+  await page.goto("/share/bogustoken");
+  await expect(page.getByText("This link is no longer valid")).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Rose City", { exact: false })).toHaveCount(0);
 });
