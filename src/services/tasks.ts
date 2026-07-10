@@ -3,6 +3,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
@@ -35,7 +36,8 @@ export async function createTasksForCase(inputs: CaseTaskInput[]): Promise<Task[
     .from("tasks")
     .insert(payload as never)
     .select("*");
-  if (error) throw error;
+  // E0.10: tasks_owner_check rejects ownerless tasks — surface it friendly.
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Task[]>(data ?? []);
   await writeAudit({
     actionType: "CREATE",
@@ -74,7 +76,7 @@ export async function createFollowUpTask(input: FollowUpTaskInput): Promise<Task
     } as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const task = camelizeRow<Task>(data);
   await writeAudit({
     actionType: "CREATE",

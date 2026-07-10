@@ -5,6 +5,8 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizeStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { CaseDetail, Contract, CredentialCase, StatusHistoryEntry, Task } from "@/types";
 
@@ -262,7 +264,8 @@ export async function createCase(
     org_id: orgId,
     provider_id: input.providerId,
     payer_id: input.payerId,
-    state: input.state,
+    // E0.10: credential_cases.state is DB-checked to ^[A-Z]{2}$.
+    state: normalizeStateCode(input.state),
     group_id: input.groupId ?? null,
     facility_id: input.facilityId ?? null,
     specialty: input.specialty ?? null,
@@ -287,12 +290,15 @@ export async function createCase(
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
     args: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
   const { data, error } = await rpc("create_case_with_tasks", {
     p_input,
     p_tasks,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    const translated = translateDbError(error);
+    throw translated instanceof Error ? translated : new Error(error.message);
+  }
   if (!data) throw new Error("create_case_with_tasks returned no data");
   return camelizeRow<CredentialCase>(data);
 }
@@ -327,7 +333,7 @@ export async function updateCaseStatus(
     .select("*")
     .single();
 
-  if (updErr) throw updErr;
+  if (updErr) throw translateDbError(updErr);
 
   await appendStatusHistory({
     track: "credentialing",

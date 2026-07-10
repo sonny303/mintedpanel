@@ -3,6 +3,8 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizeOptionalStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
 import type { AppRole, Facility, Organization, ProviderGroup } from "@/types";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -87,13 +89,21 @@ async function getProviderGroup(id: string): Promise<ProviderGroup | null> {
 export async function createProviderGroup(input: ProviderGroupInput): Promise<ProviderGroup> {
   const orgId = requireActiveOrg();
   if (!input.name.trim()) throw new Error("Name is required");
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
+  // E0.10: billing/correspondence state are DB-checked to ^[A-Z]{2}$ when present.
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    org_id: orgId,
+  };
+  if ("billingState" in input)
+    payload.billing_state = normalizeOptionalStateCode(input.billingState);
+  if ("correspondenceState" in input)
+    payload.correspondence_state = normalizeOptionalStateCode(input.correspondenceState);
   const { data, error } = await supabase
     .from("provider_groups")
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<ProviderGroup>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -112,6 +122,10 @@ export async function updateProviderGroup(
   const orgId = requireActiveOrg();
   const before = await getProviderGroup(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
+  if ("billingState" in patch)
+    payload.billing_state = normalizeOptionalStateCode(patch.billingState);
+  if ("correspondenceState" in patch)
+    payload.correspondence_state = normalizeOptionalStateCode(patch.correspondenceState);
   const { data, error } = await supabase
     .from("provider_groups")
     .update(payload as never)
@@ -119,7 +133,7 @@ export async function updateProviderGroup(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<ProviderGroup>(data);
   await writeAudit({
     actionType: "UPDATE",
@@ -174,13 +188,18 @@ async function getFacility(id: string): Promise<Facility | null> {
 export async function createFacility(input: FacilityInput): Promise<Facility> {
   const orgId = requireActiveOrg();
   if (!input.name.trim()) throw new Error("Name is required");
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
+  // E0.10: facilities.state is DB-checked to ^[A-Z]{2}$ when present.
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    org_id: orgId,
+  };
+  if ("state" in input) payload.state = normalizeOptionalStateCode(input.state);
   const { data, error } = await supabase
     .from("facilities")
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Facility>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -196,6 +215,7 @@ export async function updateFacility(id: string, patch: Partial<FacilityInput>):
   const orgId = requireActiveOrg();
   const before = await getFacility(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
+  if ("state" in patch) payload.state = normalizeOptionalStateCode(patch.state);
   const { data, error } = await supabase
     .from("facilities")
     .update(payload as never)
@@ -203,7 +223,7 @@ export async function updateFacility(id: string, patch: Partial<FacilityInput>):
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<Facility>(data);
   await writeAudit({
     actionType: "UPDATE",
