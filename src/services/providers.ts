@@ -9,6 +9,8 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
+import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { Provider, ProviderStatus } from "@/types";
@@ -189,13 +191,20 @@ export async function createProvider(
 ): Promise<Provider> {
   // org_id comes from the context only; never trust a client-supplied org.
   const { orgId: _o1, org_id: _o2, ...clean } = input as unknown as Record<string, unknown>;
-  const payload = { ...snakeizeRow<Record<string, unknown>>(clean), org_id: ctx.orgId };
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(clean),
+    org_id: ctx.orgId,
+  };
+  // E0.10: home_state / license_state are DB-checked to ^[A-Z]{2}$ when present.
+  if ("homeState" in input) payload.home_state = normalizeOptionalStateCode(input.homeState);
+  if ("licenseState" in clean)
+    payload.license_state = normalizeOptionalStateCode(clean.licenseState as string | null);
   const { data, error } = await ctx.db
     .from("providers")
     .insert(payload as unknown as ProviderInsert)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Provider>(data);
   await ctx.writeAudit({
     actionType: "CREATE",
@@ -216,6 +225,9 @@ export async function updateProvider(
   // Strip any client-supplied org so a write can never move a row across tenants.
   const { orgId: _o1, org_id: _o2, ...clean } = patch as unknown as Record<string, unknown>;
   const payload = snakeizeRow<Record<string, unknown>>(clean);
+  if ("homeState" in patch) payload.home_state = normalizeOptionalStateCode(patch.homeState);
+  if ("licenseState" in clean)
+    payload.license_state = normalizeOptionalStateCode(clean.licenseState as string | null);
   const { data, error } = await ctx.db
     .from("providers")
     .update(payload as unknown as ProviderUpdate)
@@ -223,7 +235,7 @@ export async function updateProvider(
     .eq("org_id", ctx.orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<Provider>(data);
   await ctx.writeAudit({
     actionType: "UPDATE",
@@ -265,13 +277,18 @@ export async function createProviderWithDetails(
   input: CreateProviderWithDetailsInput,
 ): Promise<CreateProviderWithDetailsResult> {
   const orgId = requireActiveOrg();
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input.provider), org_id: orgId };
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(input.provider),
+    org_id: orgId,
+  };
+  if ("homeState" in input.provider)
+    payload.home_state = normalizeOptionalStateCode(input.provider.homeState);
   const { data, error } = await supabase
     .from("providers")
     .insert(payload as unknown as ProviderInsert)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Provider>(data);
 
   const warnings: string[] = [];
@@ -281,7 +298,8 @@ export async function createProviderWithDetails(
     .map((l) => ({
       org_id: orgId,
       provider_id: created.id,
-      state: l.state,
+      // E0.10: state_licenses.state is DB-checked to ^[A-Z]{2}$.
+      state: normalizeStateCode(l.state),
       license_number: l.licenseNumber,
       license_type: l.licenseType,
       issue_date: l.issueDate,
@@ -293,7 +311,10 @@ export async function createProviderWithDetails(
   if (licenseRows.length > 0) {
     const { error: licErr } = await supabase.from("state_licenses").insert(licenseRows);
     if (licErr) {
-      warnings.push(`Licenses not saved: ${licErr.message}`);
+      const translated = translateDbError(licErr);
+      warnings.push(
+        `Licenses not saved: ${translated instanceof Error ? translated.message : licErr.message}`,
+      );
     } else {
       insertedLicenses = licenseRows;
     }
@@ -353,6 +374,8 @@ export async function updateProviderWithLicenses(
   }>;
 
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
+  if ("homeState" in input.patch)
+    payload.home_state = normalizeOptionalStateCode(input.patch.homeState);
   const { data, error } = await supabase
     .from("providers")
     .update(payload as unknown as ProviderUpdate)
@@ -360,7 +383,7 @@ export async function updateProviderWithLicenses(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<Provider>(data);
 
   const cleanLicenses = input.licenses.filter(
@@ -383,7 +406,7 @@ export async function updateProviderWithLicenses(
     const row: StateLicenseInsert = {
       org_id: orgId,
       provider_id: id,
-      state: l.state || "",
+      state: normalizeStateCode(l.state || ""),
       license_number: l.licenseNumber,
       license_type: l.licenseType,
       issue_date: l.issueDate,
@@ -440,13 +463,13 @@ export async function updateProviderWithLicenses(
       .eq("id", licId)
       .eq("org_id", orgId)
       .eq("provider_id", id);
-    if (updErr) throw updErr;
+    if (updErr) throw translateDbError(updErr);
   }
 
   // Insert new rows.
   if (toInsert.length > 0) {
     const { error: insErr } = await supabase.from("state_licenses").insert(toInsert);
-    if (insErr) throw insErr;
+    if (insErr) throw translateDbError(insErr);
   }
 
   await writeAudit({

@@ -7,6 +7,8 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
 import { createCase, type CaseInput, type CaseTaskPayload } from "@/services/cases";
 import type { Facility, FacilityAssignment } from "@/types";
 
@@ -41,6 +43,8 @@ export async function createLaunchLocation(input: CreateLaunchInput): Promise<Fa
   const payload = {
     ...snakeizeRow<Record<string, unknown>>(facilityInput),
     name: input.name.trim(),
+    // E0.10: facilities.state is DB-checked to ^[A-Z]{2}$ when present.
+    state: normalizeStateCode(input.state),
     org_id: orgId,
     is_active: true,
   };
@@ -49,7 +53,7 @@ export async function createLaunchLocation(input: CreateLaunchInput): Promise<Fa
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Facility>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -89,14 +93,16 @@ export async function updateLaunchLocation(
   if (!beforeRow) throw new Error("Location not found");
   const before = camelizeRow<Facility>(beforeRow);
 
+  const updatePayload = snakeizeRow<Record<string, unknown>>(patch);
+  if ("state" in patch) updatePayload.state = normalizeOptionalStateCode(patch.state);
   const { data, error } = await supabase
     .from("facilities")
-    .update(snakeizeRow<Record<string, unknown>>(patch) as never)
+    .update(updatePayload as never)
     .eq("id", id)
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<Facility>(data);
 
   const statusChanged = patch.statusId !== undefined && patch.statusId !== before.statusId;
@@ -134,7 +140,7 @@ export async function assignProviderToFacility(
       { org_id: orgId, provider_id: providerId, facility_id: facilityId },
       { onConflict: "provider_id,facility_id", ignoreDuplicates: true },
     );
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   await writeAudit({
     actionType: "UPDATE",
     entityType: "facility",
