@@ -1,19 +1,20 @@
-// Triage FilterCards (M1/M2 fix): the four stat cards above the work views
+// Triage SummaryChips (M1/M2 fix; renamed from FilterCards in E0.9 to match
+// the design-system component vocabulary): the four stat cards above the work views
 // ARE the filter — exactly one active at a time. Small uppercase label over a
 // large count; active card fills primary, inactive cards stay white.
-export interface FilterCard {
+export interface SummaryChip {
   id: string;
   label: string;
   n: number;
 }
 
-interface FilterCardsProps {
-  cards: FilterCard[];
+interface SummaryChipsProps {
+  cards: SummaryChip[];
   selected: string;
   onSelect: (id: string) => void;
 }
 
-export function FilterCards({ cards, selected, onSelect }: FilterCardsProps) {
+export function SummaryChips({ cards, selected, onSelect }: SummaryChipsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4" role="group">
       {cards.map((card) => {

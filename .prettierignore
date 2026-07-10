@@ -13,3 +13,6 @@ routeTree.gen.ts
 public/__l5e/
 src/assets/*.asset.json
 docs/redesign/design-system/
+# Verbatim drop-in from the design bundle — must stay byte-identical to
+# docs/redesign/design-system/targets/mintedpanel-tokens.css (E0.9 F0.9.1 AC).
+src/styles/tokens.css

@@ -2,10 +2,10 @@
 @source "../src";
 @import "tw-animate-css";
 @import "./styles/tokens.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
+@import "@fontsource/geist/400.css";
+@import "@fontsource/geist/500.css";
+@import "@fontsource/geist/600.css";
+@import "@fontsource/geist/700.css";
 @import "@fontsource/geist-mono/400.css";
 @import "@fontsource/geist-mono/500.css";
 
@@ -13,8 +13,8 @@
 
 @theme inline {
   --font-sans:
-    "Instrument Sans", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   --font-mono:
     "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -147,8 +147,9 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* DS focus: 2px soft primary ring (design-system conformance, E0.9). */
   *:focus-visible {
-    outline: 2px solid var(--mp-primary);
-    outline-offset: 2px;
+    outline: 2px solid rgba(27, 77, 62, 0.18);
+    outline-offset: 0;
   }
 }

@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
-import { FilterCards } from "@/components/triage/FilterCards";
+import { SummaryChips } from "@/components/triage/SummaryChips";
 import { GroupedList } from "@/components/triage/GroupedList";
 import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
 import { ActionBadge } from "@/components/triage/ActionBadge";
@@ -459,7 +459,7 @@ function ProvidersWorkView() {
       />
 
       <div className="mb-6">
-        <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
+        <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
       </div>
 
       {failed ? (

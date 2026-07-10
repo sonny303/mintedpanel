@@ -116,21 +116,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      // Instrument Sans is self-hosted from public/fonts (C1-era rule: no Google Fonts CDN).
-      {
-        rel: "preload",
-        href: "/fonts/instrument-sans-latin-400-normal.woff2",
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "preload",
-        href: "/fonts/instrument-sans-latin-600-normal.woff2",
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
-      },
+      // Geist (E0.9 design-system conformance) is self-hosted via @fontsource
+      // imports in styles.css (no Google Fonts CDN) — no manual preload needed.
       { rel: "stylesheet", href: appCss },
     ],
   }),
