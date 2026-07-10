@@ -63,17 +63,11 @@ function SharePage() {
   }
 
   if (isError || !data || data.state !== "active" || !data.orgs) {
-    const expired = data?.state === "expired";
-    const revoked = data?.state === "revoked";
     return (
       <Shell>
         <Lockdown
           title={
-            expired
-              ? "This link has expired"
-              : revoked
-                ? "This link was revoked"
-                : "This link isn't valid"
+            data?.state === "expired" ? "This link has expired" : "This link is no longer valid"
           }
           message="This shared report is no longer available. Contact the person who shared it for a new link."
         />

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "fs";
+
+const SANDBOX_CHROMIUM = "/opt/pw-browsers/chromium";
 
 // Smoke skeleton (Gate 0). See docs/minted-panel-phase-gates.md.
 // Serves the app via the Vite dev server with dummy Supabase env vars: the app
@@ -16,11 +19,21 @@ export default defineConfig({
     baseURL: "http://localhost:8080",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          executablePath: existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined,
+        },
+      },
+    },
+  ],
   webServer: {
     command: "npm run dev",
     url: "http://localhost:8080",
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 });

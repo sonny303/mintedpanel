@@ -644,7 +644,15 @@ export type Database = {
           state?: string | null;
           status?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "inbound_leads_converted_org_id_fkey";
+            columns: ["converted_org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       launches: {
         Row: {
@@ -1081,7 +1089,22 @@ export type Database = {
           token_hash?: string;
           used_at?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "party_capture_links_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_capture_links_party_id_fkey";
+            columns: ["party_id"];
+            isOneToOne: false;
+            referencedRelation: "parties";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       party_role_assignments: {
         Row: {
@@ -1907,7 +1930,15 @@ export type Database = {
           state?: string;
           token_hash?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "report_shares_scope_org_id_fkey";
+            columns: ["scope_org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       sop_templates: {
         Row: {
@@ -2331,15 +2362,68 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      assert_contact_valid: {
+        Args: { p: Json; p_label: string };
+        Returns: undefined;
+      };
       claim_invites: { Args: never; Returns: number };
+      create_capture_link: {
+        Args: {
+          p_org_id: string;
+          p_party_id: string;
+          p_recipient_email: string;
+          p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
       create_case_with_tasks: {
         Args: { p_input: Json; p_tasks?: Json };
         Returns: Json;
       };
-      create_organization: { Args: { p_name: string }; Returns: string };
+      create_organization:
+        | { Args: { p_name: string }; Returns: string }
+        | {
+            Args: {
+              p_name: string;
+              p_owner_email: string;
+              p_owner_name: string;
+            };
+            Returns: string;
+          }
+        | {
+            Args: {
+              p_customer: Json;
+              p_name: string;
+              p_owner_email: string;
+              p_owner_name: string;
+              p_sales_rep?: Json;
+            };
+            Returns: string;
+          };
+      create_report_share: {
+        Args: {
+          p_recipient_email: string;
+          p_report_key: string;
+          p_scope: string;
+          p_scope_org_id: string;
+        };
+        Returns: Json;
+      };
       get_sop_field_tokens: { Args: never; Returns: Json };
+      insert_contact_party: {
+        Args: { p: Json; p_uid: string };
+        Returns: string;
+      };
+      revoke_report_share: { Args: { p_id: string }; Returns: undefined };
+      submit_capture: {
+        Args: { p_payload: Json; p_token: string };
+        Returns: Json;
+      };
+      submit_inbound_lead: { Args: { p_payload: Json }; Returns: Json };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      validate_capture_token: { Args: { p_token: string }; Returns: Json };
+      validate_report_share: { Args: { p_token: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;
