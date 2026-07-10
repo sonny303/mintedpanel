@@ -145,8 +145,22 @@ all 23 hosted migrations. Consequences:
   objects exist); it is for fresh rebuilds — local stacks, new projects, CI.
 - `supabase/seed.sql` is a local fixture with its own two org ids (different
   from the hosted demo orgs) and fixed UUIDs + `ON CONFLICT (id) DO NOTHING`.
-- Hosted demo data: two orgs — "Kansas Fitness Physio" (the rich demo) and
-  "South Park Physician Group".
+- Hosted demo data: two customer orgs — "Kansas Fitness Physio" (the rich demo)
+  and "South Park Physician Group" — plus "Dragon Ball PT" (UI-created prospect
+  test org) and, since 2026-07-10, the 11-org fictional **seed universe** from
+  `docs/redesign/seed-universe.md`, injected via `supabase/seeds/
+seed_universe_v1.sql` (INSERT-only, idempotent; every seed row's UUID starts
+  with `5eed`; exact rollback + login-mapping notes in `supabase/seeds/`).
+  Memberships: sowmya@minted.com admin on all 11 seed orgs, test@minted.com
+  specialist on Shelby Sports Rehab. Gate provider counts are untouched (the
+  universe seeds no providers/cases).
+- Hosted-only redesign tables (in live DB, NOT in repo migrations, like the
+  RPCs below): the org-CRM party model — `parties`, `party_role_assignments`
+  (unique nulls-not-distinct `(org_id, party_id, role_key, scope_type,
+scope_id)`, trigger rejects inactive role types), `party_role_types` (active:
+  owner/sales_rep/customer_escalation_contact), `party_capture_links` — plus
+  `inbound_leads`, `public_rpc_attempts`, `report_shares`. Introspect live
+  before schema work.
 
 ### RPCs (hosted-only, not in repo migrations)
 
