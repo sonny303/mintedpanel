@@ -1,0 +1,28 @@
+<!-- @dsCard group="Components" viewport="700x120" name="Filters" subtitle="SummaryChips — one per action state, click to filter (Needs action selected)" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .wrap { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: var(--radius-tile); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; }
+  .cdot { width: 6px; height: 6px; border-radius: 50%; }
+  .n { font-weight: 600; }
+  .hint { font-size: 12px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+      <button class="chip" style="border:1px solid var(--mp-status-overdue);background:var(--color-surface);color:var(--mp-tint-overdue-fg);outline:2px solid rgba(220,38,38,.28);outline-offset:1px;"><span class="cdot" style="background:var(--mp-status-overdue);"></span>Needs action <span class="n">3</span></button>
+      <button class="chip" style="border:1px solid var(--mp-tint-pending-bg);background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);"><span class="cdot" style="background:var(--mp-status-pending);"></span>Blocked <span class="n">2</span></button>
+      <button class="chip" style="border:1px solid var(--mp-tint-idle-bg);background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);"><span class="cdot" style="background:var(--mp-status-idle);"></span>Stalled <span class="n">5</span></button>
+      <button class="chip" style="border:1px solid var(--mp-tint-submitted-bg);background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);"><span class="cdot" style="background:var(--mp-status-submitted);"></span>On track <span class="n">12</span></button>
+    </div>
+    <div class="hint">Selected: Needs action. One at a time — click again to clear.</div>
+  </div>
+</body>
+</html>

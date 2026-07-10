@@ -1,0 +1,107 @@
+<!-- @dsCard group="App" viewport="1000x560" name="Providers page" subtitle="Provider-grouped work view — sidebar, filters, expandable rows" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Minted Panel — Providers</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .app { display: flex; min-height: 560px; }
+  .side { width: 216px; flex: none; background: var(--color-nav); padding: 18px 14px; display: flex; flex-direction: column; gap: 22px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+  .brand span { font-size: 15px; font-weight: 600; color: #fff; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav a { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 34px; padding: 0 10px; border-radius: var(--radius-control); font-size: 13px; text-decoration: none; color: #A7B5AD; }
+  .nav a.on { background: rgba(255,255,255,.10); color: #fff; font-weight: 500; }
+  .nav a:hover:not(.on) { background: rgba(255,255,255,.06); color: #fff; }
+  .nchip { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: rgba(255,255,255,.14); color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+  .nchip.idle { background: rgba(255,255,255,.08); color: #8FA398; }
+  .user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 1px solid rgba(255,255,255,.08); }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--color-primary); color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head { height: 56px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--color-surface); }
+  .head h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .orgpick { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); font-size: 13px; }
+  .caret { width: 6px; height: 6px; border-right: 1.5px solid var(--text-tertiary); border-bottom: 1.5px solid var(--text-tertiary); transform: rotate(45deg); }
+  .toolbar { padding: 16px 20px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--color-surface); }
+  .search { position: relative; flex: 1; min-width: 200px; max-width: 320px; }
+  .search input { height: 32px; width: 100%; padding: 0 10px 0 30px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); font-size: 13px; font-family: inherit; color: var(--text-primary); }
+  .search svg { position: absolute; left: 10px; top: 9px; }
+  .sel { position: relative; }
+  .sel select { height: 32px; padding: 0 28px 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); font-size: 13px; font-family: inherit; color: var(--text-primary); appearance: none; -webkit-appearance: none; }
+  .sel .caret { position: absolute; right: 11px; top: 11px; pointer-events: none; }
+  .ghead { display: flex; align-items: center; gap: 12px; padding: 12px 20px; cursor: pointer; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-surface); }
+  .ghead:hover { background: var(--color-surface-hover); }
+  .chev { width: 7px; height: 7px; border-right: 1.5px solid var(--text-tertiary); border-bottom: 1.5px solid var(--text-tertiary); flex: none; }
+  .name { font-size: 13px; font-weight: 600; }
+  .meta { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+  .prog { display: flex; align-items: center; gap: 8px; width: 132px; flex: none; }
+  .track { flex: 1; height: 6px; background: var(--color-surface-muted); border-radius: var(--radius-control); overflow: hidden; }
+  .fill { height: 100%; background: var(--color-primary); border-radius: var(--radius-control); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--radius-control); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .case { display: flex; align-items: center; gap: 12px; padding: 10px 20px 10px 39px; border-top: 1px solid var(--color-border-faint); font-size: 13px; }
+  .cases { background: var(--color-bg); border-bottom: 1px solid var(--color-border-subtle); }
+</style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><img src="../../assets/logo-white.png" alt="" style="height:26px;"><span>Minted Panel</span></div>
+      <nav class="nav">
+        <a href="#"><span>Today</span><span class="nchip">3</span></a>
+        <a href="#" class="on"><span>Providers</span></a>
+        <a href="#"><span>Payers</span></a>
+        <a href="#"><span>Cases</span><span class="nchip idle">22</span></a>
+        <a href="#"><span>Reports</span></a>
+      </nav>
+      <div class="user"><span class="avatar">SW</span><div><div style="font-size:12px;color:#fff;font-weight:500;">Sowmya</div><div style="font-size:11px;color:#8FA398;">Coordinator</div></div></div>
+    </aside>
+    <div class="main">
+      <header class="head">
+        <h1>Providers</h1>
+        <div class="orgpick"><span>Kansas Fitness Physio</span><span class="meta">KS · MO</span><span class="caret"></span></div>
+      </header>
+      <div class="toolbar">
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#9CA3AF" stroke-width="1.5"></circle><line x1="9.4" y1="9.4" x2="12.5" y2="12.5" stroke="#9CA3AF" stroke-width="1.5" stroke-linecap="round"></line></svg>
+          <input placeholder="Search providers…">
+        </div>
+        <div class="sel"><select><option>All payers</option></select><span class="caret"></span></div>
+        <div class="sel"><select><option>All states</option></select><span class="caret"></span></div>
+      </div>
+      <div>
+        <div>
+          <div class="ghead">
+            <span class="chev" style="transform:rotate(45deg);"></span>
+            <div style="flex:1;"><div class="name">Brian Hershberger, PT</div><div class="meta">1841293756 · Kansas</div></div>
+            <div class="prog"><div class="track"><div class="fill" style="width:20%;"></div></div><span class="meta" style="font-size:11px;">1 / 5</span></div>
+            <span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="dot" style="background:var(--mp-status-overdue);"></span>Needs action</span>
+          </div>
+          <div class="cases">
+            <div class="case" style="border-top:none;"><div style="flex:1;">Aetna</div><span class="meta" style="margin-right:4px;">Updated 2h ago</span><span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="dot" style="background:var(--mp-status-overdue);"></span>Needs action</span></div>
+            <div class="case"><div style="flex:1;">Humana Military</div><span class="meta" style="margin-right:4px;">3d ago</span><span class="badge" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);"><span class="dot" style="background:var(--mp-status-pending);"></span>Blocked</span></div>
+            <div class="case"><div style="flex:1;">Cigna</div><span class="meta" style="margin-right:4px;">12d ago</span><span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);"><span class="dot" style="background:var(--mp-status-idle);"></span>Stalled</span></div>
+            <div class="case"><div style="flex:1;">UnitedHealthcare / Optum</div><span class="meta" style="margin-right:4px;">1d ago</span><span class="badge" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);"><span class="dot" style="background:var(--mp-status-review);"></span>Awaiting effective date</span></div>
+            <div class="case"><div style="flex:1;">BCBS Kansas</div><span class="meta" style="margin-right:4px;">Today</span><span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);"><span class="dot" style="background:var(--mp-status-submitted);"></span>On track</span></div>
+          </div>
+        </div>
+        <div class="ghead">
+          <span class="chev" style="transform:rotate(-45deg);"></span>
+          <div style="flex:1;"><div class="name">Sarah Nguyen, DPT</div><div class="meta">1730495821 · Kansas</div></div>
+          <div class="prog"><div class="track"><div class="fill" style="width:75%;"></div></div><span class="meta" style="font-size:11px;">3 / 4</span></div>
+          <span class="badge" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);"><span class="dot" style="background:var(--mp-status-pending);"></span>Blocked</span>
+        </div>
+        <div class="ghead" style="border-bottom:none;">
+          <span class="chev" style="transform:rotate(-45deg);"></span>
+          <div style="flex:1;"><div class="name">Marcus Bell, PT, DPT</div><div class="meta">1902847563 · Missouri</div></div>
+          <div class="prog"><div class="track"><div class="fill" style="width:33%;"></div></div><span class="meta" style="font-size:11px;">1 / 3</span></div>
+          <span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);"><span class="dot" style="background:var(--mp-status-idle);"></span>Stalled</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+/* ============================================================
+   Minted Panel — Motion primitives
+   Shipped to consumers so component spinners / skeletons animate
+   without any per-app setup. Motion is minimal and functional.
+   ============================================================ */
+
+/* Button / inline loading spinner. */
+@keyframes mp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton + placeholder pulse (tables, empty/loading states). */
+@keyframes mp-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}

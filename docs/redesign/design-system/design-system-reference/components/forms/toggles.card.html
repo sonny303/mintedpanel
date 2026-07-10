@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" viewport="700x160" name="Toggles" subtitle="Checkbox (selection) · Switch (state)" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .wrap { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 11px; }
+  .row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; font-size: 13px; }
+  .cb { width: 16px; height: 16px; border-radius: var(--radius-control); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .item { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { width: 34px; height: 18px; border-radius: 9px; padding: 2px; display: inline-flex; align-items: center; flex: none; }
+  .knob { width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="lbl">Checkbox</div>
+      <div class="row">
+        <span class="item"><span class="cb" style="background:var(--color-primary);border:1px solid var(--color-primary);"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.2l2.3 2.3 4.7-5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>Checked</span>
+        <span class="item"><span class="cb" style="background:var(--color-surface);border:1px solid var(--color-border);"></span>Unchecked</span>
+        <span class="item" style="opacity:.45;"><span class="cb" style="background:var(--color-surface-muted);border:1px solid var(--color-border);"></span>Disabled</span>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">Switch</div>
+      <div class="row">
+        <span class="item"><span class="sw" style="background:var(--color-primary);justify-content:flex-end;"><span class="knob"></span></span>On</span>
+        <span class="item"><span class="sw" style="background:var(--mp-chip-idle);"><span class="knob"></span></span>Off</span>
+        <span class="item" style="opacity:.45;"><span class="sw" style="background:var(--mp-chip-idle);"><span class="knob"></span></span>Disabled</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

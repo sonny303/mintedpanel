@@ -1,0 +1,82 @@
+/* ============================================================
+   Minted Panel — Color tokens
+   Light mode only. No gradients. Warm-neutral grays, forest-green
+   primary, and a six-tone status system (solid dot + soft tint pair).
+   ============================================================ */
+
+:root {
+  /* --- Forest (primary) --- */
+  --mp-forest-900: #0C2A1D;   /* nav / sidebar */
+  --mp-forest-700: #163F33;   /* primary hover / pressed */
+  --mp-forest-600: #1B4D3E;   /* primary */
+
+  /* --- Warm neutral surfaces --- */
+  --mp-off-white:     #FDFDFC; /* app background */
+  --mp-white:         #FFFFFF; /* cards */
+  --mp-surface-muted: #F5F4F1; /* fills, progress tracks, disabled */
+  --mp-surface-hover: #FAFAF8; /* table / list row hover */
+  --mp-backdrop:      #EFEDE9; /* dimmed dialog backdrop */
+
+  /* --- Borders (warm gray, three depths) --- */
+  --mp-border:        #E8E5E0; /* structural 1px border */
+  --mp-border-subtle: #F0EEEA; /* dividers inside a card */
+  --mp-border-faint:  #F3F1ED; /* nested row dividers */
+
+  /* --- Text (one warm neutral, three weights of value) --- */
+  --mp-gray-900: #1F2937; /* headings, values */
+  --mp-gray-500: #6B7280; /* body, descriptions */
+  --mp-gray-400: #9CA3AF; /* meta, placeholders */
+
+  /* --- Count-badge idle fill --- */
+  --mp-chip-idle: #EDEBE7;
+
+  /* --- Destructive --- */
+  --mp-danger:       #DC2626;
+  --mp-danger-hover: #B91C1C;
+
+  /* --- Status: solid (dots, fills) --- */
+  --mp-status-active:    #059669; /* green  */
+  --mp-status-review:    #2563EB; /* blue   */
+  --mp-status-pending:   #D97706; /* amber  */
+  --mp-status-overdue:   #DC2626; /* red    */
+  --mp-status-submitted: #0891B2; /* teal   */
+  --mp-status-idle:      #9CA3AF; /* gray   */
+
+  /* --- Status: soft tint pairs (badge background / foreground) --- */
+  --mp-tint-active-bg:    #E7F5EF;  --mp-tint-active-fg:    #047857;
+  --mp-tint-review-bg:    #E8EEFD;  --mp-tint-review-fg:    #1D4ED8;
+  --mp-tint-pending-bg:   #FBF0E1;  --mp-tint-pending-fg:   #B45309;
+  --mp-tint-overdue-bg:   #FBEAEA;  --mp-tint-overdue-fg:   #B91C1C;
+  --mp-tint-submitted-bg: #E4F3F7;  --mp-tint-submitted-fg: #0E7490;
+  --mp-tint-idle-bg:      #F1F1EF;  --mp-tint-idle-fg:      #6B7280;
+
+  /* --- Focus ring (1px primary border + soft outline) --- */
+  --mp-focus-ring: rgba(27, 77, 62, 0.18);
+
+  /* ============================================================
+     Semantic aliases — prefer these in components.
+     ============================================================ */
+  --color-bg:             var(--mp-off-white);
+  --color-surface:        var(--mp-white);
+  --color-surface-muted:  var(--mp-surface-muted);
+  --color-surface-hover:  var(--mp-surface-hover);
+  --color-backdrop:       var(--mp-backdrop);
+
+  --color-primary:        var(--mp-forest-600);
+  --color-primary-hover:  var(--mp-forest-700);
+  --color-nav:            var(--mp-forest-900);
+
+  --color-border:         var(--mp-border);
+  --color-border-subtle:  var(--mp-border-subtle);
+  --color-border-faint:   var(--mp-border-faint);
+
+  --text-primary:         var(--mp-gray-900);
+  --text-secondary:       var(--mp-gray-500);
+  --text-tertiary:        var(--mp-gray-400);
+  --text-on-primary:      var(--mp-white);
+
+  --color-danger:         var(--mp-danger);
+  --color-danger-hover:   var(--mp-danger-hover);
+
+  --focus-ring:           var(--mp-focus-ring);
+}

@@ -18,6 +18,19 @@ Format per entry:
 
 ## Resolved
 
+## [design-conformance] Sidebar IA v2 supersedes E0.6 nav + E0.8 "Org space" label — RESOLVED (2026-07-10)
+
+- **Issue:** The PM-approved design system handoff (`docs/redesign/design-system/`)
+  restructures the sidebar (Workspace: Home/Cases; Payers: Payer Management;
+  Reporting Center; org zone as a labeled switcher tile with Account Detail /
+  Facilities / Providers children) — superseding the E0.6 segmented nav
+  (Setup/Config group, reserved Tasks/SOP items) and the E0.8 F0.8.7
+  `Org space` label days after they shipped.
+- **Decision:** PM-approved via the design handoff (2026-07-10). Tasks roll up
+  under Cases; SOP folds into Payer Management; no `Org space` heading. The
+  handoff is also the explicit authorization to modify the protected token,
+  layout, and ui files it names.
+
 ## [e0.7] BD-1: Rate-limit mechanism for anon RPCs — RESOLVED (2026-07-09)
 
 - **Issue:** F0.7.1 requires throttling on the four `anon` RPCs, but Stage 0

@@ -1,0 +1,27 @@
+<!-- @dsCard group="Components" viewport="700x140" name="Layout" subtitle="PageHeader — required on every routed page" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border-radius: var(--radius-control); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div style="padding:20px;">
+    <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--color-border);">
+      <div>
+        <h1 style="margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em;">Payer Management</h1>
+        <p style="margin:4px 0 0;font-size:13px;color:var(--text-secondary);">Payers, metadata, and standard operating agreements.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn" style="border:1px solid var(--color-border);background:var(--color-surface);color:var(--text-primary);">Export</button>
+        <button class="btn" style="border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;">Add payer</button>
+      </div>
+    </header>
+  </div>
+</body>
+</html>

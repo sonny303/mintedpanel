@@ -1,0 +1,29 @@
+<!-- @dsCard group="Type" viewport="700x150" name="Geist Mono — numbers & IDs" subtitle="Tabular figures for NPIs, CAQH, license numbers" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .wrap { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .big { font-size: 22px; letter-spacing: .01em; }
+  .kv { display: flex; gap: 28px; flex-wrap: wrap; }
+  .k { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-tertiary); }
+  .v { font-size: 14px; color: var(--text-primary); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mono big">0123456789</div>
+    <div class="kv">
+      <div><div class="k">NPI</div><div class="mono v">1841293756</div></div>
+      <div><div class="k">CAQH</div><div class="mono v">14237788</div></div>
+      <div><div class="k">License</div><div class="mono v">KS-PT-009214</div></div>
+      <div><div class="k">Taxonomy</div><div class="mono v">2251X0800X</div></div>
+    </div>
+  </div>
+</body>
+</html>

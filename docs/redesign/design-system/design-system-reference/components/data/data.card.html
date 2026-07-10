@@ -1,0 +1,74 @@
+<!-- @dsCard group="Components" viewport="700x400" name="Data" subtitle="Dense Table (two-line cells, pills, mono) · GroupedList queue" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .wrap { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 11px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--color-border); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-tertiary); }
+  td { padding: 7px 14px; border-bottom: 1px solid var(--color-border-subtle); font-size: 13px; vertical-align: middle; }
+  .name { font-size: 13px; font-weight: 600; }
+  .mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--radius-control); font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: var(--radius-control); font-size: 11px; font-weight: 500; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .sdot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+  .glist { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-tile); overflow: hidden; }
+  .ghead { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--color-border-subtle); }
+  .chev { width: 7px; height: 7px; border-right: 1.5px solid var(--text-tertiary); border-bottom: 1.5px solid var(--text-tertiary); flex: none; }
+  .count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--mp-chip-idle); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+  .case { display: flex; align-items: center; gap: 12px; padding: 10px 20px 10px 39px; border-top: 1px solid var(--color-border-faint); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="lbl">Table — dense</div>
+      <table>
+        <thead><tr><th>Provider</th><th>Payer coverage</th><th>Status</th><th style="text-align:right;">Updated</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><div class="name">Brian Hershberger, PT</div><div class="mono">1841293756</div></td>
+            <td><div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="pill" style="background:var(--mp-tint-active-bg);color:var(--mp-tint-active-fg);"><span class="sdot" style="background:var(--mp-status-active);"></span>BCBS</span><span class="pill" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);"><span class="sdot" style="background:var(--mp-status-review);"></span>Aetna</span></div></td>
+            <td><span class="badge" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);">Under review</span></td>
+            <td style="text-align:right;" class="mono">2h ago</td>
+          </tr>
+          <tr style="background:var(--color-surface-hover);">
+            <td><div class="name">Sarah Nguyen, DPT</div><div class="mono">1730495821</div></td>
+            <td><div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="pill" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);"><span class="sdot" style="background:var(--mp-status-submitted);"></span>UHC</span><span class="pill" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);"><span class="sdot" style="background:var(--mp-status-pending);"></span>Humana</span></div></td>
+            <td><span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);">Submitted</span></td>
+            <td style="text-align:right;" class="mono">Yesterday</td>
+          </tr>
+          <tr>
+            <td style="border-bottom:none;"><div class="name">Marcus Bell, PT, DPT</div><div class="mono">1902847563</div></td>
+            <td style="border-bottom:none;"><div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="pill" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="sdot" style="background:var(--mp-status-overdue);"></span>Aetna</span></div></td>
+            <td style="border-bottom:none;"><span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);">Overdue</span></td>
+            <td style="border-bottom:none;text-align:right;" class="mono">5d ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <div class="lbl">GroupedList — one provider expanded</div>
+      <div class="glist">
+        <div class="ghead">
+          <span class="chev" style="transform:rotate(45deg);"></span>
+          <div style="flex:1;"><div class="name">Brian Hershberger, PT</div><div style="font-size:12px;color:var(--text-tertiary);">Kansas · 5 payers</div></div>
+          <span class="count">5</span>
+          <span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="dot" style="background:var(--mp-status-overdue);"></span>Needs action</span>
+        </div>
+        <div style="background:var(--color-bg);">
+          <div class="case" style="border-top:none;"><div style="flex:1;">Aetna</div><span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="dot" style="background:var(--mp-status-overdue);"></span>Needs action</span></div>
+          <div class="case"><div style="flex:1;">Cigna</div><span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);"><span class="dot" style="background:var(--mp-status-idle);"></span>Stalled</span></div>
+          <div class="case"><div style="flex:1;">BCBS Kansas</div><span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);"><span class="dot" style="background:var(--mp-status-submitted);"></span>On track</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
