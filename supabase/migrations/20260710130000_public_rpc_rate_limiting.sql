@@ -89,8 +89,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.check_rpc_throttle(text, int, int, boolean) FROM public;
-GRANT EXECUTE ON FUNCTION public.check_rpc_throttle(text, int, int, boolean) TO anon, authenticated;
+-- TE-8: NO caller-facing EXECUTE. The four public RPCs are SECURITY DEFINER,
+-- so their internal calls to this helper run as the function owner and need no
+-- anon/authenticated grant. Granting it would let a caller inflate or probe
+-- the attempt log directly.
+REVOKE ALL ON FUNCTION public.check_rpc_throttle(text, int, int, boolean) FROM public, anon, authenticated;
 
 ----------------------------------------------------------------------
 -- 3. Mark-valid helper
@@ -114,8 +117,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.mark_rpc_attempt_valid(text) FROM public;
-GRANT EXECUTE ON FUNCTION public.mark_rpc_attempt_valid(text) TO anon, authenticated;
+-- TE-8: NO caller-facing EXECUTE — this one is the security-critical revoke.
+-- An anon-callable mark_rpc_attempt_valid would let an attacker flip each
+-- failed probe to was_valid=true and defeat the fail-count throttle entirely.
+-- Only the SECURITY DEFINER RPC bodies (running as the function owner) call it.
+REVOKE ALL ON FUNCTION public.mark_rpc_attempt_valid(text) FROM public, anon, authenticated;
 
 ----------------------------------------------------------------------
 -- 4a. Redefine validate_capture_token with throttle

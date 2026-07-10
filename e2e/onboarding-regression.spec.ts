@@ -1,9 +1,11 @@
 import { test, expect, type Route } from "@playwright/test";
 
 // E0.7 F0.7.4 TE-5 — Regression coverage for the org-create flow reachable from
-// the sidebar's "Add organization" dropdown item. Covers:
-//   1. Add organization → modal opens → form submits → org switch
-//   2. Duplicate normalized name → server error surfaced to user
+// the sidebar's "Add organization" dropdown item. REWRITTEN for E0.8 TE-2: Add
+// organization now routes to the standalone /onboarding page (the modal is no
+// longer the entry point). Covers:
+//   1. Add organization → /onboarding page with the intake form + side panel
+//   2. Duplicate normalized name → server error surfaced on the onboarding form
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -151,7 +153,10 @@ function seedAuth(context: {
   );
 }
 
-test("Add organization from sidebar opens the create modal", async ({ context, page }) => {
+test("Add organization from sidebar routes to the standalone onboarding page (E0.8 TE-2)", async ({
+  context,
+  page,
+}) => {
   await context.route(/\/(rest|auth)\/v1\//, makeHandler());
   await seedAuth(context);
 
@@ -167,50 +172,46 @@ test("Add organization from sidebar opens the create modal", async ({ context, p
   await expect(page.getByText("Add organization")).toBeVisible({ timeout: 10000 });
   await page.getByText("Add organization").click();
 
-  await expect(page.getByRole("heading", { name: "Create organization" })).toBeVisible({
+  // The standalone onboarding page, not a modal (F0.8.1).
+  await expect(page).toHaveURL(/\/onboarding\/?$/, { timeout: 10000 });
+  await expect(page.getByRole("heading", { name: "New organization" })).toBeVisible({
     timeout: 10000,
   });
+  // Intake form on the left, persistent side panel with both journeys on the right.
+  await expect(page.getByLabel("Organization intake")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Share onboarding link" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Begin onboarding" })).toBeVisible();
 });
 
-test("duplicate org name surfaces a server error in the modal (F0.1.2)", async ({
+test("duplicate org name surfaces a server error on the onboarding form (F0.1.2)", async ({
   context,
   page,
 }) => {
   await context.route(/\/(rest|auth)\/v1\//, makeHandler({ duplicateBlock: true }));
   await seedAuth(context);
 
-  await page.goto("/get-started");
-  await page.waitForTimeout(2000);
-
-  const orgTrigger = page
-    .locator("button")
-    .filter({ hasText: "Rose City Rehab Collective" })
-    .first();
-  await orgTrigger.click();
-  await page.getByText("Add organization").click();
-
-  await expect(page.getByRole("heading", { name: "Create organization" })).toBeVisible({
-    timeout: 10000,
+  await page.goto("/onboarding");
+  await expect(page.getByRole("heading", { name: "New organization" })).toBeVisible({
+    timeout: 30000,
   });
 
-  const dialog = page.getByRole("dialog");
-  await dialog.locator("input").first().fill("Rose City Rehab Collective");
+  const form = page.getByLabel("Organization intake");
+  const inputs = form.locator("input");
+  await inputs.nth(0).fill("Rose City Rehab Collective");
+  await inputs.nth(1).fill("Jane Owner");
+  await inputs.nth(2).fill("jane@example.test");
 
-  const ownerInputs = dialog.locator("input");
-  await ownerInputs.nth(1).fill("Jane Owner");
-  await ownerInputs.nth(2).fill("jane@example.test");
+  await form.locator("#customer-name").fill("Customer Person");
+  await form.locator("#customer-email").fill("customer@example.test");
+  await form.locator("#customer-phone").fill("555-555-0100");
+  await form.locator("#customer-line1").fill("123 Main St");
+  await form.locator("#customer-city").fill("Portland");
+  await form.locator("#customer-state").fill("OR");
+  await form.locator("#customer-zip").fill("97201");
 
-  await dialog.locator("#customer-name").fill("Customer Person");
-  await dialog.locator("#customer-email").fill("customer@example.test");
-  await dialog.locator("#customer-phone").fill("555-555-0100");
-  await dialog.locator("#customer-line1").fill("123 Main St");
-  await dialog.locator("#customer-city").fill("Portland");
-  await dialog.locator("#customer-state").fill("OR");
-  await dialog.locator("#customer-zip").fill("97201");
+  await form.getByRole("button", { name: "Create organization" }).click();
 
-  await dialog.getByRole("button", { name: "Create organization" }).click();
-
-  await expect(dialog.getByText("An organization with this name already exists")).toBeVisible({
+  await expect(form.getByText("An organization with this name already exists")).toBeVisible({
     timeout: 10000,
   });
 });

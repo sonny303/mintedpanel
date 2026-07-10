@@ -1,12 +1,15 @@
-// Onboarding wizard (E0.8): vertical-section single-page wizard. Section 1 shows
-// an org summary from party data; sections 2-4 are placeholders for future stages.
+// Onboarding wizard (E0.8 F0.8.4): vertical-section single-page wizard. Section 1
+// shows the org-intake outputs live from party data; the CSV / facilities /
+// providers sections are placeholders rendered with the SHARED not-yet-available
+// pattern (src/components/empty/NotYetAvailable.tsx) per the F0.8.4 AC.
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FileUp, Building, Users, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { buttonVariants } from "@/components/ui/button";
+import { NotYetAvailable } from "@/components/empty/NotYetAvailable";
 import { useOrgContacts } from "@/hooks/useParties";
 import { useActiveMembership } from "@/lib/auth-store";
 import type { OrgContact, Party, PartyRoleKey } from "@/types";
@@ -119,32 +122,6 @@ function OrgDetailsSection() {
   );
 }
 
-// ---------- placeholder sections ----------
-
-function PlaceholderSection({
-  title,
-  description,
-  icon: Icon,
-}: {
-  title: string;
-  description: string;
-  icon: typeof FileUp;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
-        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <div className="text-[15px] font-semibold text-foreground">{title}</div>
-          <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">{description}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ---------- main page ----------
 
 function OnboardingWizardPage() {
@@ -163,26 +140,11 @@ function OnboardingWizardPage() {
       {/* Section 1: Organization details (read-only from party data) */}
       <OrgDetailsSection />
 
-      {/* Section 2: Import data (placeholder) */}
-      <PlaceholderSection
-        title="Import data"
-        description="CSV import will be available in a later release."
-        icon={FileUp}
-      />
-
-      {/* Section 3: Facilities (placeholder) */}
-      <PlaceholderSection
-        title="Facilities"
-        description="Facility setup will be available in a later release."
-        icon={Building}
-      />
-
-      {/* Section 4: Providers (placeholder) */}
-      <PlaceholderSection
-        title="Providers"
-        description="Provider enrollment will be available in a later release."
-        icon={Users}
-      />
+      {/* Sections 2-4: CSV import / facilities / providers placeholders — the
+          shared not-yet-available pattern (F0.8.4 AC). */}
+      <NotYetAvailable title="Import data" />
+      <NotYetAvailable title="Facilities" />
+      <NotYetAvailable title="Providers" />
     </div>
   );
 }

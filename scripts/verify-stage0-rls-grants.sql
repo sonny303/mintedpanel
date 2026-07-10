@@ -5,7 +5,8 @@
 --
 -- Tables: parties, party_role_types, party_role_assignments,
 --         party_capture_links, inbound_leads, report_shares
--- Functions: the 4 intended anon RPCs + 8 non-public functions
+-- Functions: the 4 intended anon RPCs + 10 non-public functions (incl. the
+--            E0.8 throttle helpers check_rpc_throttle / mark_rpc_attempt_valid)
 
 -- 1. RLS must be enabled on all 6 Stage 0 tables
 SELECT 'FAIL: RLS not enabled on ' || tablename AS assertion
@@ -78,7 +79,9 @@ FROM (
     ('assert_contact_valid(jsonb, text)'),
     ('insert_contact_party(jsonb, uuid)'),
     ('reject_inactive_role_assignment()'),
-    ('set_updated_at()')
+    ('set_updated_at()'),
+    ('check_rpc_throttle(text, integer, integer, boolean)'),
+    ('mark_rpc_attempt_valid(text)')
 ) AS blocked_anon(fn)
 WHERE has_function_privilege('anon', 'public.' || fn, 'EXECUTE')
 
@@ -106,7 +109,9 @@ FROM (
     ('assert_contact_valid(jsonb, text)'),
     ('insert_contact_party(jsonb, uuid)'),
     ('reject_inactive_role_assignment()'),
-    ('set_updated_at()')
+    ('set_updated_at()'),
+    ('check_rpc_throttle(text, integer, integer, boolean)'),
+    ('mark_rpc_attempt_valid(text)')
 ) AS internal_fn(fn)
 WHERE has_function_privilege('authenticated', 'public.' || fn, 'EXECUTE')
 
