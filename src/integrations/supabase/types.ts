@@ -2405,7 +2405,7 @@ export type Database = {
           p_recipient_email: string;
           p_report_key: string;
           p_scope: string;
-          p_scope_org_id: string;
+          p_scope_org_id: string | null;
         };
         Returns: Json;
       };
