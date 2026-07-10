@@ -12,3 +12,4 @@ routeTree.gen.ts
 .wrangler/
 public/__l5e/
 src/assets/*.asset.json
+docs/redesign/design-system/
