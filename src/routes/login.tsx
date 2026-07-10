@@ -10,7 +10,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-const FONT = { fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' };
+const FONT = { fontFamily: '"Geist", ui-sans-serif, system-ui, sans-serif' };
 
 function LoginPage() {
   const goToLanding = useLandingRedirect();

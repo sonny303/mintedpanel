@@ -63,6 +63,7 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 ## Style rules
 
 - Design tokens: primary `#1B4D3E`, border `#E8E5E0` 1px, no shadows on cards, no gradients, no decorative color backgrounds.
+- Component governance (E0.9): a component not defined by the design system (`docs/redesign/design-system/`) must be stock shadcn styled by tokens only, and logged in `DESIGN-DEBT.md` in the same PR. Deferred engineering debt lives in `TECH-DEBT.md`; both registers are at the repo root and are triaged each design-review cycle.
 - Border radius: `rounded-md` on cards/inputs/dropdowns; `rounded-full` for pills and avatars only.
 - Rows `h-10`, card padding `p-4` max, section gaps `gap-4` max.
 - Color outside the sidebar accent and chart bars is reserved for status pills and destructive states.

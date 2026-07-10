@@ -330,7 +330,7 @@ test("TS-19: Account Detail mirrors the org-intake outputs read-only", async ({
   await expect(page.getByRole("button", { name: "Begin onboarding" })).toHaveCount(0);
 });
 
-test("TS-20: workspace shell carries Minted Panel branding with Workspace / Org space segments", async ({
+test("TS-20: workspace shell carries Minted Panel branding with the Workspace segment and org-zone switcher tile", async ({
   context,
   page,
 }) => {
@@ -342,12 +342,14 @@ test("TS-20: workspace shell carries Minted Panel branding with Workspace / Org 
   await expect(page.getByRole("heading", { name: "Account Detail" })).toBeVisible({
     timeout: 30000,
   });
-  // F0.8.7 / TE-7: logo + product name at the top of the menu bar, Workspace
-  // beneath it, and the org-scoped segment labeled Org space. The sidebar is
-  // mounted twice (desktop rail + mobile drawer), hence .first().
+  // F0.8.7 branding holds; the E0.8 "Org space" label was superseded by E0.9
+  // F0.9.3 (Sidebar IA v2) — the org zone is now headed by the switcher tile
+  // with its ORGANIZATION eyebrow. The sidebar is mounted twice (desktop rail
+  // + mobile drawer), hence .first().
   await expect(page.getByText("Minted Panel").first()).toBeVisible();
   await expect(page.getByText("Workspace", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Org space", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Organization", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Org space", { exact: true })).toHaveCount(0);
 });
 
 test("TS-20: the outbound recipient form is branded end-to-end", async ({ context, page }) => {

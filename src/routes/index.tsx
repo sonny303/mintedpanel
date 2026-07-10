@@ -34,7 +34,7 @@ export const Route = createFileRoute("/")({
 });
 
 const FONT: React.CSSProperties = {
-  fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
+  fontFamily: '"Geist", ui-sans-serif, system-ui, sans-serif',
 };
 
 const DOT_TEXTURE: React.CSSProperties = {

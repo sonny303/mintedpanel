@@ -4,7 +4,7 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { FilterCards } from "@/components/triage/FilterCards";
+import { SummaryChips } from "@/components/triage/SummaryChips";
 import { GroupedList } from "@/components/triage/GroupedList";
 import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
 import { StatusPill } from "@/components/triage/StatusPill";
@@ -158,8 +158,8 @@ function PrimitivesPage() {
         description="Component demo — dev only, not linked from nav."
       />
 
-      <Section title="FilterCards">
-        <FilterCards
+      <Section title="SummaryChips">
+        <SummaryChips
           cards={[
             { id: "all", label: "All open cases", n: 42 },
             { id: "needs", label: "Needs your action", n: 3 },
