@@ -61,7 +61,11 @@ const FIXTURES: Record<string, unknown[]> = {
   party_role_assignments: [],
   party_role_types: [
     { role_key: "owner", label: "Owner", is_active: true },
-    { role_key: "customer_escalation_contact", label: "Customer Escalation Contact", is_active: true },
+    {
+      role_key: "customer_escalation_contact",
+      label: "Customer Escalation Contact",
+      is_active: true,
+    },
     { role_key: "sales_rep", label: "Sales Rep", is_active: true },
   ],
   inbound_leads: [],
@@ -132,7 +136,9 @@ function makeHandler(opts: { duplicateBlock?: boolean } = {}) {
   };
 }
 
-function seedAuth(context: { addInitScript: (fn: (args: unknown[]) => void, args: unknown[]) => Promise<void> }) {
+function seedAuth(context: {
+  addInitScript: (fn: (args: unknown[]) => void, args: unknown[]) => Promise<void>;
+}) {
   return context.addInitScript(
     ([authKey, session, orgId]) => {
       localStorage.setItem(authKey as string, JSON.stringify(session));
@@ -152,7 +158,10 @@ test("Add organization from sidebar opens the create modal", async ({ context, p
   await page.goto("/get-started");
   await page.waitForTimeout(2000);
 
-  const orgTrigger = page.locator("button").filter({ hasText: "Rose City Rehab Collective" }).first();
+  const orgTrigger = page
+    .locator("button")
+    .filter({ hasText: "Rose City Rehab Collective" })
+    .first();
   await orgTrigger.click();
 
   await expect(page.getByText("Add organization")).toBeVisible({ timeout: 10000 });
@@ -173,7 +182,10 @@ test("duplicate org name surfaces a server error in the modal (F0.1.2)", async (
   await page.goto("/get-started");
   await page.waitForTimeout(2000);
 
-  const orgTrigger = page.locator("button").filter({ hasText: "Rose City Rehab Collective" }).first();
+  const orgTrigger = page
+    .locator("button")
+    .filter({ hasText: "Rose City Rehab Collective" })
+    .first();
   await orgTrigger.click();
   await page.getByText("Add organization").click();
 

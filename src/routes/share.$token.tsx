@@ -67,9 +67,7 @@ function SharePage() {
       <Shell>
         <Lockdown
           title={
-            data?.state === "expired"
-              ? "This link has expired"
-              : "This link is no longer valid"
+            data?.state === "expired" ? "This link has expired" : "This link is no longer valid"
           }
           message="This shared report is no longer available. Contact the person who shared it for a new link."
         />

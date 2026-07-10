@@ -116,7 +116,11 @@ const FIXTURES: Record<string, unknown[]> = {
   ],
   party_role_types: [
     { role_key: "owner", label: "Owner", is_active: true },
-    { role_key: "customer_escalation_contact", label: "Customer Escalation Contact", is_active: true },
+    {
+      role_key: "customer_escalation_contact",
+      label: "Customer Escalation Contact",
+      is_active: true,
+    },
     { role_key: "sales_rep", label: "Sales Rep", is_active: true },
     { role_key: "billing_contact", label: "Billing Contact", is_active: false },
     { role_key: "contracting_signer", label: "Contracting Signer", is_active: false },
@@ -166,7 +170,9 @@ async function fulfillSupabase(route: Route) {
       const partyMap = Object.fromEntries(
         (FIXTURES.parties as Array<{ id: string }>).map((p) => [p.id, p]),
       );
-      const embedded = (FIXTURES.party_role_assignments as Array<{ party_id: string; role_key: string }>).map((a) => ({
+      const embedded = (
+        FIXTURES.party_role_assignments as Array<{ party_id: string; role_key: string }>
+      ).map((a) => ({
         role_key: a.role_key,
         parties: partyMap[a.party_id] ?? null,
       }));
@@ -183,10 +189,7 @@ async function fulfillSupabase(route: Route) {
   return json(rows);
 }
 
-test("removing the only sales rep role is blocked (F0.2.2 / F0.3.3)", async ({
-  context,
-  page,
-}) => {
+test("removing the only sales rep role is blocked (F0.2.2 / F0.3.3)", async ({ context, page }) => {
   await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
   await context.addInitScript(
     ([authKey, session, orgId]) => {
@@ -208,7 +211,7 @@ test("removing the only sales rep role is blocked (F0.2.2 / F0.3.3)", async ({
   const removeRoleBtn = zebCard.getByLabel("Remove Sales Rep role");
   await removeRoleBtn.click();
 
-  await expect(
-    page.getByText("This is the only sales rep", { exact: false }),
-  ).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("This is the only sales rep", { exact: false })).toBeVisible({
+    timeout: 10000,
+  });
 });

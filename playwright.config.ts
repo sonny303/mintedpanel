@@ -25,9 +25,7 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         launchOptions: {
-          executablePath: existsSync(SANDBOX_CHROMIUM)
-            ? SANDBOX_CHROMIUM
-            : undefined,
+          executablePath: existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined,
         },
       },
     },

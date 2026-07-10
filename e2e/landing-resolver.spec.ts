@@ -135,5 +135,7 @@ test("workspace (valid active org) renders the workspace page (F0.4.1)", async (
 
   await page.goto("/get-started");
 
-  await expect(page.getByText("Rose City Rehab Collective").first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Rose City Rehab Collective").first()).toBeVisible({
+    timeout: 30000,
+  });
 });
