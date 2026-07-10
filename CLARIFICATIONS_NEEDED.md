@@ -16,48 +16,36 @@ Format per entry:
 
 ## Open
 
-## [e0.7] BD-1: Rate-limit mechanism for anon RPCs — OPEN
+## Resolved
+
+## [e0.7] BD-1: Rate-limit mechanism for anon RPCs — RESOLVED (2026-07-09)
 
 - **Issue:** F0.7.1 requires throttling on the four `anon` RPCs, but Stage 0
   has no server middleware tier and no-new-deps is a hard rule, so the limit
   must live inside Postgres.
-- **Impact:** Blocks F0.7.1 build (mechanism + thresholds).
-- **Options:** (a) RECOMMENDED — a small `public_rpc_attempts` table keyed by a
-  coarse source fingerprint (RPC name + hashed caller hint), pruned lazily;
-  each anon RPC checks/increments it and returns the generic invalid response
-  once over threshold (e.g. 20 failed validations / 15 min; 5 inbound leads /
-  hour). Zero infra, additive migration. (b) Defer real rate limiting to a
-  Stage 1 edge/middleware tier and ship only the uniform-response + no-token-
-  logging audit now. (c) Supabase edge functions — new runtime surface, out of
-  Stage 0 scope.
+- **Impact:** Blocked F0.7.1's throttle half until the mechanism was chosen.
 - **Reviewer note (Devin, 2026-07-09):** Confirmed against the codebase — no
   throttle/attempts table or per-source counter exists in
   `supabase/migrations/` today; `submit_inbound_lead` has only the honeypot +
   required-field validation, and the three token RPCs rely solely on token
-  entropy. Option (a) is implementable additively (a `public_rpc_attempts`
-  counter table + a `CREATE OR REPLACE` fold into the four `anon` RPCs) with no
-  new deps and no middleware. E0.7 is signed off `reviewed: true` with this as
-  an explicit build gate on F0.7.1; the other F0.7.1 half (uniform-response +
-  no-token-logging audit) needs no BD-1 and can proceed. Technical input only —
-  the mechanism + thresholds remain the PM's decision.
-- **Decision:** _pending PM._
+  entropy. A `public_rpc_attempts` counter table + a `CREATE OR REPLACE` fold
+  into the four `anon` RPCs is implementable additively with no new deps and
+  no middleware.
+- **Decision (PM, best-judgment delegation):** Use low-cost in-Postgres rate
+  limiting: a small `public_rpc_attempts` table keyed by a coarse source
+  fingerprint (RPC name + hashed caller hint), lazily pruned, with
+  conservative thresholds and a uniform invalid/expired response. No new
+  infra. The E0.7 PR (#77) shipped the uniform-response half; the throttle
+  build carries into E0.8 (F0.8.8).
 
-## [e0.7] BD-2: Scoped accessibility pass on public routes — OPEN
+## [e0.7] BD-2: Scoped accessibility pass on public routes — RESOLVED (2026-07-09)
 
 - **Issue:** The public routes (`/capture`, `/contact`, `/share`) are the only
-  pages outsiders see; they have had no keyboard/label/focus audit. A full
-  a11y overhaul is out of Stage 0 scope, but a scoped pass is cheap here.
-- **Impact:** Only F0.7.5's scope (include the pass or not).
-- **Options:** (a) RECOMMENDED — include a scoped pass (labels, focus order,
-  keyboard submit, error announcement) on just the three public routes.
-  (b) Skip entirely for Stage 0.
-- **Reviewer note (Devin, 2026-07-09):** Affects only F0.7.5's scope, not the
-  epic's structure, so E0.7 is signed off `reviewed: true` regardless; if the
-  PM defers, F0.7.5 ships the terminal-state/lockdown-consistency audit without
-  the a11y sweep. Technical input only — the opt-in is the PM's decision.
-- **Decision:** _pending PM._
-
-## Resolved
+  pages outsiders see; they had no keyboard/label/focus audit.
+- **Impact:** Scoped F0.7.5 needed a yes/no on the a11y pass.
+- **Decision:** Include the scoped pass (labels, focus order, keyboard submit,
+  error announcement) on the three public routes. Not shipped in PR #77;
+  carries into E0.8 (F0.8.9).
 
 ## [e0.6] Navigation IA supersedes the already-merged E0.0 sidebar — RESOLVED (2026-07-09)
 
