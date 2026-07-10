@@ -16,7 +16,9 @@ Format per entry:
 
 ## Open
 
-## [e0.10] State-constraint scope and routing-rule overlap semantics — OPEN (2026-07-10)
+## Resolved
+
+## [e0.10] State-constraint scope and routing-rule overlap semantics — RESOLVED (2026-07-10)
 
 - **Issue:** F0.10.2 says to constrain "the six `state` columns," but the
   current schema does not have one unambiguous six-column set. It has operational
@@ -53,8 +55,16 @@ Format per entry:
      "no exact duplicate at the same specificity," or prohibit overlapping
      matches and replace the current resolver contract. A third option is an
      explicit additive priority field with a deterministic uniqueness rule.
-
-## Resolved
+- **Decision (PM, 2026-07-10):** Option 1 for state scope — constrain only the
+  reviewer-pinned scalar jurisdiction/address columns listed in the epic's TE-2
+  and preserve the `All`/NULL wildcard fields (`mso_routing_rules.state`,
+  `sop_templates.state`) untouched; address normalization stays with the later
+  address/contact epics. The MSO routing-rule uniqueness constraint is DEFERRED
+  out of E0.10 entirely — the resolver's wildcard precedence remains the
+  supported behavior until the PM picks a routing invariant (the three options
+  above stay on the backlog). Unique constraints are audit-first (no
+  `UNIQUE ... NOT VALID`), recorded in the epic's TE-3/TE-7. E0.10 is restored
+  to `reviewed: true` with these amendments.
 
 ## [design-conformance] Sidebar IA v2 supersedes E0.6 nav + E0.8 "Org space" label — RESOLVED (2026-07-10)
 
