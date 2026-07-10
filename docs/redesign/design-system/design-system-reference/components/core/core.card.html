@@ -1,0 +1,85 @@
+<!-- @dsCard group="Components" viewport="700x470" name="Core" subtitle="Badge · CountBadge · ActionBadge · Button · CopyButton · ProgressBar" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .wrap { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 22px 28px; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 11px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: var(--radius-control); font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; font-weight: 600; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: var(--radius-control); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; white-space: nowrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: var(--radius-control); font-size: 12px; font-family: inherit; cursor: pointer; }
+  .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; animation: mp-spin .7s linear infinite; display: inline-block; }
+  .track { height: 6px; background: var(--color-surface-muted); border-radius: var(--radius-control); overflow: hidden; }
+  .fill { height: 100%; background: var(--color-primary); border-radius: var(--radius-control); }
+  .mono { font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="lbl">Badge — six tones</div>
+      <div class="row">
+        <span class="badge" style="background:var(--mp-tint-active-bg);color:var(--mp-tint-active-fg);">Active</span>
+        <span class="badge" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);">Under review</span>
+        <span class="badge" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);">Pending</span>
+        <span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);">Overdue</span>
+        <span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);">Submitted</span>
+        <span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);">Not started</span>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">CountBadge</div>
+      <div class="row">
+        <span class="count" style="background:var(--color-primary);color:#fff;">3</span>
+        <span class="count" style="background:var(--mp-chip-idle);color:var(--text-secondary);">24</span>
+        <span style="font-size:12px;color:var(--text-tertiary);">forest = active · gray = idle</span>
+      </div>
+    </div>
+
+    <div style="grid-column:1 / -1;">
+      <div class="lbl">ActionBadge — derived, dotted</div>
+      <div class="row">
+        <span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);"><span class="dot" style="background:var(--mp-status-overdue);"></span>Needs action</span>
+        <span class="badge" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);"><span class="dot" style="background:var(--mp-status-pending);"></span>Blocked</span>
+        <span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);"><span class="dot" style="background:var(--mp-status-idle);"></span>Stalled</span>
+        <span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);"><span class="dot" style="background:var(--mp-status-submitted);"></span>On track</span>
+        <span class="badge" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);"><span class="dot" style="background:var(--mp-status-review);"></span>Awaiting effective date</span>
+      </div>
+    </div>
+
+    <div style="grid-column:1 / -1;">
+      <div class="lbl">Button — variants &amp; states</div>
+      <div class="row" style="gap:10px;">
+        <button class="btn" style="border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;">Save</button>
+        <button class="btn" style="border:1px solid var(--color-border);background:var(--color-surface);color:var(--text-primary);">Cancel</button>
+        <button class="btn" style="border:1px solid var(--color-danger);background:var(--color-danger);color:#fff;">Remove</button>
+        <button class="btn" style="border:none;background:transparent;color:var(--color-primary);padding:0 2px;">View history</button>
+        <button class="btn" style="border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;cursor:progress;"><span class="spin"></span>Saving</button>
+        <button class="btn" style="border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;opacity:.4;cursor:not-allowed;">Save</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="lbl">CopyButton</div>
+      <div class="row" style="gap:10px;">
+        <button class="chip" style="border:1px solid var(--color-border);background:var(--color-surface);color:var(--text-secondary);">Copy</button>
+        <button class="chip" style="border:1px solid #A7D9C4;background:#ECF7F1;color:var(--mp-tint-active-fg);">&#10003; Copied</button>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">ProgressBar</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-size:13px;">In-network</span><span class="mono" style="font-size:12px;color:var(--text-secondary);">5 of 8</span></div>
+        <div class="track"><div class="fill" style="width:62.5%;"></div></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

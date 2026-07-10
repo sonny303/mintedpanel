@@ -1,0 +1,28 @@
+<!-- @dsCard group="Colors" viewport="700x210" name="Status system" subtitle="Six tones — solid dot + soft tint pair" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .grid { padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; }
+  .item { display: flex; align-items: center; gap: 12px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--radius-control); font-size: 12px; font-weight: 500; }
+  .name { font-size: 13px; font-weight: 600; flex: 1; }
+  .hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="item"><span class="dot" style="background:var(--mp-status-active);"></span><span class="name">Active</span><span class="badge" style="background:var(--mp-tint-active-bg);color:var(--mp-tint-active-fg);">Active</span><span class="hex">#059669</span></div>
+    <div class="item"><span class="dot" style="background:var(--mp-status-review);"></span><span class="name">Under review</span><span class="badge" style="background:var(--mp-tint-review-bg);color:var(--mp-tint-review-fg);">Under review</span><span class="hex">#2563EB</span></div>
+    <div class="item"><span class="dot" style="background:var(--mp-status-pending);"></span><span class="name">Pending</span><span class="badge" style="background:var(--mp-tint-pending-bg);color:var(--mp-tint-pending-fg);">Pending</span><span class="hex">#D97706</span></div>
+    <div class="item"><span class="dot" style="background:var(--mp-status-overdue);"></span><span class="name">Overdue</span><span class="badge" style="background:var(--mp-tint-overdue-bg);color:var(--mp-tint-overdue-fg);">Overdue</span><span class="hex">#DC2626</span></div>
+    <div class="item"><span class="dot" style="background:var(--mp-status-submitted);"></span><span class="name">Submitted</span><span class="badge" style="background:var(--mp-tint-submitted-bg);color:var(--mp-tint-submitted-fg);">Submitted</span><span class="hex">#0891B2</span></div>
+    <div class="item"><span class="dot" style="background:var(--mp-status-idle);"></span><span class="name">Not started</span><span class="badge" style="background:var(--mp-tint-idle-bg);color:var(--mp-tint-idle-fg);">Not started</span><span class="hex">#9CA3AF</span></div>
+  </div>
+</body>
+</html>

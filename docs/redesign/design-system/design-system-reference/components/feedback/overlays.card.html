@@ -1,0 +1,38 @@
+<!-- @dsCard group="Components" viewport="700x230" name="Feedback — overlays" subtitle="Toast (border, no shadow) · Tooltip on an icon-only button" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .wrap { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 11px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="lbl">Toast</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;width:360px;padding:12px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-tile);">
+        <span style="width:7px;height:7px;margin-top:5px;border-radius:50%;background:var(--mp-status-active);flex:none;"></span>
+        <div style="flex:1;"><div style="font-size:13px;font-weight:600;">Case status updated</div><div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">BCBS Kansas &rarr; Submitted</div></div>
+        <span style="color:var(--text-tertiary);font-size:16px;line-height:1;">&times;</span>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">Tooltip — icon-only button (mandatory)</div>
+      <div style="display:flex;align-items:flex-end;gap:14px;padding-top:30px;">
+        <span style="position:relative;display:inline-flex;">
+          <span style="position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 6px);white-space:nowrap;padding:5px 8px;background:var(--text-primary);color:#fff;border-radius:var(--radius-control);font-size:12px;line-height:1.3;">Copy NPI</span>
+          <button style="width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--color-border);background:var(--color-surface);border-radius:var(--radius-control);cursor:pointer;" aria-label="Copy NPI">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+          </button>
+        </span>
+        <span style="font-size:12px;color:var(--text-tertiary);">dark ink bubble · 12px · pairs with aria-label</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

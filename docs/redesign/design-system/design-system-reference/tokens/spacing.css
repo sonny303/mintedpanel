@@ -1,0 +1,32 @@
+/* ============================================================
+   Minted Panel — Spacing, radius & sizing tokens
+   Tight, functional 4-based scale. 4px on controls, 6px on tiles.
+   1px borders carry all structure — never shadows.
+   ============================================================ */
+
+:root {
+  /* Spacing scale: 4 / 8 / 12 / 16 / 24 */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-6:  24px;
+
+  /* Radius */
+  --radius-control: 4px;  /* buttons, inputs, badges, chips */
+  --radius-tile:    6px;  /* cards, panels, tiles */
+  --radius-pill:    9px;  /* count badges (fully round at 18px) */
+
+  /* Control heights */
+  --control-height:    34px; /* default button / input */
+  --control-height-sm: 32px; /* toolbar button / filter */
+  --control-height-xs: 26px; /* copy chip */
+  --badge-height:      22px; /* status badge */
+  --row-height:        40px; /* dense table row */
+
+  /* Borders */
+  --border-width: 1px;
+
+  /* Focus outline width (paired with --focus-ring color) */
+  --focus-outline-width: 2px;
+}

@@ -1,0 +1,103 @@
+/* ============================================================================
+ * Minted Panel — design tokens, CONFORMED to the Minted Panel Design System
+ * (the design system is the source of truth). Drop-in replacement for
+ * mintedpanel/src/styles/tokens.css.
+ *
+ * Same --mp-* token NAMES as before, so nothing downstream needs renaming —
+ * only the VALUES change. What moved:
+ *   • Font:      Instrument Sans → Geist      (also swap the import in styles.css)
+ *   • Primary:   #164A2F → #1B4D3E   (hover #1D5C3C → #163F33)
+ *   • Neutrals:  cool → warm  (app/border/muted/ink families)
+ *   • Tints:     color-mix(hue 12–14%) → the DS's fixed tint + ink hex pairs
+ *   • Shadows:   removed from controls & cards (kept only for floating overlays)
+ *   • Focus:     1px ring → 2px soft primary ring
+ *   • Radius:    cards/panels 4px → 6px; status pills round → 4px (component edit)
+ *
+ * @font-face for Geist is intentionally NOT declared here — import it from
+ * @fontsource/geist in src/styles.css (see changes.md, Phase 1). Geist Mono
+ * is unchanged and already imported there.
+ * ============================================================================ */
+
+:root {
+  /* ---- Type families ---- */
+  --mp-font: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mp-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* ---- Surfaces (warm neutral) ---- */
+  --mp-sidebar: #0C2A1D;
+  --mp-app: #FDFDFC;
+  --mp-card: #FFFFFF;
+  --mp-border: #E8E5E0;
+  --mp-muted: #F5F4F1;
+  --mp-primary: #1B4D3E;
+  --mp-primary-hover: #163F33;
+  --mp-primary-tint: #E7EFEA;   /* derived: light forest tint (DS had no explicit token) */
+
+  /* ---- Ink (one warm neutral, three values) ---- */
+  --mp-ink: #1F2937;
+  --mp-ink-secondary: #6B7280;
+  --mp-ink-faint: #9CA3AF;
+
+  /* ---- Status hues (UNCHANGED — already match the design system) ---- */
+  --mp-ok: #059669;
+  --mp-info: #2563EB;
+  --mp-warn: #D97706;
+  --mp-danger: #DC2626;
+  --mp-pending: #0891B2;
+  --mp-neutral: #9CA3AF;
+
+  /* ---- Status tint + ink pairs (DS fixed values; REPLACES color-mix) ----
+     Pills/badges: background = *-tint, text = *-ink (NOT the raw hue). */
+  --mp-ok-tint: #E7F5EF;       --mp-ok-ink: #047857;
+  --mp-info-tint: #E8EEFD;     --mp-info-ink: #1D4ED8;
+  --mp-warn-tint: #FBF0E1;     --mp-warn-ink: #B45309;
+  --mp-danger-tint: #FBEAEA;   --mp-danger-ink: #B91C1C;
+  --mp-pending-tint: #E4F3F7;  --mp-pending-ink: #0E7490;
+  --mp-neutral-tint: #F1F1EF;  --mp-neutral-ink: #6B7280;
+
+  /* Extra DS status tones — wire up where the code needs them (StatusPill
+     "brand"/"violet"). */
+  --mp-brand-tint: #E7EFEA;    --mp-brand-ink: #1B4D3E;
+  --mp-violet: #6D28D9;        --mp-violet-tint: #F1ECFB;  --mp-violet-ink: #6D28D9;
+
+  /* ---- Border depths + count-chip fill (from the DS) ---- */
+  --mp-border-subtle: #F0EEEA; /* dividers inside a card */
+  --mp-border-faint: #F3F1ED;  /* nested row dividers */
+  --mp-border-dashed: #D6D3CE; /* dashed "blocked" hint */
+  --mp-chip-idle: #EDEBE7;     /* idle count-chip fill */
+
+  /* ---- Type scale ----
+     The small end (2xs–base) already matches the DS 1:1. The large display
+     sizes are capped to the DS ramp (page title 16, section H2 22). If the
+     heading shrink is unwanted, keep the old xl/2xl/3xl — see changes.md. */
+  --mp-text-2xs: 11px;  /* meta / overline / table header */
+  --mp-text-xs: 12px;   /* body, field labels */
+  --mp-text-sm: 13px;   /* controls, rows, nav */
+  --mp-text-base: 14px; /* section heading */
+  --mp-text-lg: 15px;   /* (unchanged) */
+  --mp-text-xl: 16px;   /* page title  (was 18) */
+  --mp-text-2xl: 20px;  /* (unchanged) */
+  --mp-text-3xl: 22px;  /* hero / H2   (was 25) */
+
+  /* ---- Radius ----
+     DS: 4px controls, 6px cards/panels/tiles, 4px status pills, round count
+     chips. --mp-radius-pill stays round for COUNT chips; switch status-pill
+     components to --mp-radius-control (4px). See changes.md, Phase 2. */
+  --mp-radius-sm: 6px;
+  --mp-radius-md: 6px;
+  --mp-radius-lg: 6px;
+  --mp-radius-control: 4px;
+  --mp-radius-pill: 999px;
+
+  /* ---- Elevation ----
+     The DS carries structure with 1px borders, NOT shadows. Controls & cards
+     get NONE. Only floating overlays (dropdown/tooltip/toast) keep a soft
+     shadow. NOTE: shadcn controls apply Tailwind `shadow-sm` via className —
+     removing it is a component edit (changes.md, Phase 2), not just a token. */
+  --mp-shadow-sm: none;
+  --mp-shadow-md: 0 2px 8px rgba(31, 41, 55, 0.08);  /* dropdown / menu */
+  --mp-shadow-lg: 0 8px 24px rgba(31, 41, 55, 0.12); /* toast */
+
+  /* ---- Focus — DS: 2px soft primary ring, paired with a 1px primary border ---- */
+  --mp-focus: 0 0 0 2px rgba(27, 77, 62, 0.18);
+}

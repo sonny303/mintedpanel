@@ -1,0 +1,38 @@
+/* ============================================================
+   Minted Panel — Typography tokens
+   Geist for UI, Geist Mono for numbers & IDs. Tabular figures
+   everywhere. Tight, functional scale tuned for 12–16px product UI.
+   ============================================================ */
+
+:root {
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale (size / weight) — from the reference artifact.
+     Page title 16·600 · Section 14·600 · Body 12·400 · Control 13·500
+     Label 12·600 uppercase · Meta 11·400/500 · Numbers mono·tabular. */
+  --font-size-page-title: 16px;
+  --font-size-heading:    22px; /* section H2 on reference sheets */
+  --font-size-section:    14px;
+  --font-size-control:    13px; /* buttons, inputs, table cells */
+  --font-size-body:       12px;
+  --font-size-label:      12px;
+  --font-size-meta:       11px;
+
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --line-height-tight: 1.2;
+  --line-height-snug:  1.35;
+  --line-height-body:  1.5;
+
+  --letter-spacing-title: -0.01em;  /* page/section titles */
+  --letter-spacing-h2:    -0.012em;
+  --letter-spacing-label:  0.05em;   /* uppercase field labels */
+  --letter-spacing-eyebrow:0.06em;   /* uppercase card eyebrows */
+
+  /* Every number aligns: tabular figures are on by default. */
+  --font-variant-numeric: tabular-nums;
+}

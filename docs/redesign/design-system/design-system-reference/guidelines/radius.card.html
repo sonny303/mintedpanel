@@ -1,0 +1,22 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Radius" subtitle="4px on controls · 6px on tiles" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; }
+  .row { padding: 20px; display: flex; gap: 28px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .tile { width: 96px; height: 56px; background: var(--color-surface-muted); border: 1px solid var(--color-border); }
+  .n { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="col"><div class="tile" style="border-radius:var(--radius-control);"></div><span class="n">4px · controls</span></div>
+    <div class="col"><div class="tile" style="border-radius:var(--radius-tile);"></div><span class="n">6px · tiles</span></div>
+  </div>
+</body>
+</html>
