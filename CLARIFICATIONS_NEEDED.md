@@ -18,6 +18,78 @@ Format per entry:
 
 ## Resolved
 
+## [stage-1c] R1 form-scope decisions (E1.1–E1.3) — RESOLVED (2026-07-10)
+
+- **Issue:** The remaining open questions blocking R1 epic authoring: group
+  save requirements and flow, facility minimums and CAQH location fields,
+  provider baseline field set, license PSV handling, SSN storage, and
+  progress semantics.
+- **Impact:** Blocked final drafts of E1.1, E1.2, E1.3.
+- **Decision (PM, 2026-07-10):**
+  1. **E1.1:** TIN is required to save a group. All three address + contact
+     blocks (billing, correspondence, credentialing) are in the R1 form.
+     Dual-path exit: primary "Next: Facilities" + secondary "Add another
+     group"; section Complete at ≥1 group, no confirmation gate.
+  2. **E1.2:** minimum save = address + state + group + at least one contact
+     channel; facility contact defaults (inherits) from the owning group's
+     phone/contact when absent. CAQH practice-location fields (accepting new
+     patients, languages, interpreter languages, ADA, appointment phone) are
+     in the R1 form as optional — this supersedes the earlier
+     exclude-from-R1 call (CAQH alignment wins).
+  3. **E1.3 baseline = CAQH-required provider core** minus full SSN, work
+     history, and disclosure questions (CAQH holds those; "attestation
+     current" is the proxy until the R5 import). Required to save: name,
+     Type 1 NPI, ≥1 group assignment; everything else optional at entry
+     (readiness gates later, E1.8).
+  4. **Group assignment required at entry** — no unassigned providers; M:N
+     multi-select with one primary. Provider status stays hidden and
+     defaults to `onboarding` (no status picker in R1). Multiple state
+     licenses supported in the R1 form.
+  5. **License PSV is recorded, not lost:** each license carries verified
+     status/date/verifier + the state-board lookup URL. Re-verify at
+     renewal — editing expiration resets verification (feeds R9 clocks).
+  6. **SSN stays last-4 only** (AGENTS.md rule unchanged). Full-SSN need
+     (CAQH/Medicare/UHC form fill) is deferred to a future "Sensitive
+     Identifiers Vault" epic in R6/R7: encrypted separate storage, role-gated
+     reveal/fill, re-auth, append-only access audit, no browser/list/export
+     exposure.
+  7. **Progress is fully derived from data** — no manual "mark section done"
+     anywhere (confirms the E1.0 design).
+
+## [stage-1b] Payer catalog supersede-vs-extend, contract renewals, data migration — RESOLVED (2026-07-10)
+
+- **Issue:** Three follow-on decisions after the E1.0 lock: (a) whether E1.6
+  extends or supersedes the existing global payer catalog mechanism (migration
+  `20260707060000_global_catalog_org_assignment.sql` + `payers` global rows +
+  `org_payer_assignments`); (b) whether contracts are versioned per renewal;
+  (c) whether existing production data needs a migration path into Stage 1.
+- **Impact:** Blocked E1.6/E1.5 authoring (catalog + attachment model) and the
+  roadmap's migration line.
+- **Decision (PM + repo audit, 2026-07-10):**
+  1. **E1.6 extends, does not rebuild.** The global-row pattern
+     (`payers.org_id IS NULL` = global, visible only via
+     `org_payer_assignments`, platform-managed via service role) is proven and
+     stays. `payers` already carries curated credentialing fields
+     (`portal_url`, `avg_decision_days`, `caqh_pull_deadline_days`,
+     provisional/retro billing). E1.6 adds additive columns — `payer_kind`,
+     `stedi_payer_id`, `cms_hios_id`, `aliases[]`, `states[]`, `status`,
+     `merged_into_id`, `last_synced_at` — plus the append-only
+     `payer_catalog_changes` diff table and the Stedi seed pipeline. Existing
+     org-scoped payer rows are left untouched; converting them to global rows
+     stays a separate, human-supervised step (per the original migration's
+     note).
+  2. **E1.5 attachment grain gets a new child table.**
+     `org_payer_assignments` (UNIQUE(org_id, payer_id)) remains the
+     visibility/subscription layer; the group + state attachment grain lands
+     in a new additive table (working name `payer_network_targets`:
+     org × group × payer × state).
+  3. **Contracts: one row per group × payer × state, not versioned.**
+     Renewal/recred history is derived from `status_history`/touches, not
+     contract-row versions — E5.2 (recred pipeline) authoring must account
+     for this.
+  4. **No data-migration workstream.** Current production book is dummy data;
+     real client data starts fresh in the new Stage 1 flows at cutover.
+
 ## [stage-1] Four R1 scope decisions — RESOLVED (2026-07-10)
 
 - **Issue:** Four decisions blocked R1 (E1.0–E1.3) authoring: wizard audience,
