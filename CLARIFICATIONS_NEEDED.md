@@ -32,7 +32,7 @@ Format per entry:
      deferred to the R5 scale pack.
   3. **Facility hours:** per-day jsonb in the existing `facilities.hours`
      column — `{ "mon": { "status": "open", "open": "07:00", "close":
-     "19:00" }, …, "sun": { "status": "closed" } }`. Grain matches payer
+"19:00" }, …, "sun": { "status": "closed" } }`. Grain matches payer
      forms (per-day status/open/close, e.g. Humana provider certification)
      and doubles as the extension fill contract. E1.2 form gets a weekday
      quick-fill; no split shifts in v1.
