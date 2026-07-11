@@ -18,6 +18,36 @@ Format per entry:
 
 ## Resolved
 
+## [stage-1] Four R1 scope decisions — RESOLVED (2026-07-10)
+
+- **Issue:** Four decisions blocked R1 (E1.0–E1.3) authoring: wizard audience,
+  license source of truth, the shape of `facilities.hours` jsonb, and the
+  credentialing-case uniqueness key.
+- **Impact:** E1.0 framework, E1.2 hours form, E1.3 roster model, and the
+  Stage 2 generation key could not be specced without guessing.
+- **Decision (PM, 2026-07-10):**
+  1. **Wizard audience:** internal-only (P1 Credentialing Manager) through
+     Stage 3; no client-facing wizard access in R1–R7.
+  2. **License source of truth:** hand-entered in v1; CAQH/NPPES import
+     deferred to the R5 scale pack.
+  3. **Facility hours:** per-day jsonb in the existing `facilities.hours`
+     column — `{ "mon": { "status": "open", "open": "07:00", "close":
+     "19:00" }, …, "sun": { "status": "closed" } }`. Grain matches payer
+     forms (per-day status/open/close, e.g. Humana provider certification)
+     and doubles as the extension fill contract. E1.2 form gets a weekday
+     quick-fill; no split shifts in v1.
+  4. **Case key is 4-part:** provider × group × payer × state. Real-world
+     basis confirmed by PM: the same provider can be credentialed with the
+     same payer in different states under different groups, or with the same
+     payer/state under multiple groups. Companion rules: (a) contracts remain
+     group × payer × state — each group's own TIN enrollment is a separate
+     contracting effort; (b) "group has a facility in the target state and
+     the provider is licensed there" is an E1.8 readiness check and E2.0
+     soft warning, not a DB constraint. This amends the AGENTS.md rule
+     "one credentialing case per (provider_id, payer_id, state)"; the epic
+     implementing the key change (E1.3/E2.3) must carry the AGENTS.md
+     amendment in its diff.
+
 ## [e0.10] State-constraint scope and routing-rule overlap semantics — RESOLVED (2026-07-10)
 
 - **Issue:** F0.10.2 says to constrain "the six `state` columns," but the
