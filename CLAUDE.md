@@ -13,10 +13,14 @@ and NEVER merges to `main` until the PM promotes a stage. If you are
 implementing a redesign epic:
 
 - Epics live at `docs/redesign/EX.X-<slug>.md` (e.g. `E0.0-app-shell.md`).
-  Only build from epics whose frontmatter says `reviewed: true` — the reviewer
-  agent (Devin) polishes each epic and populates its
-  `## 5. Technical Considerations & Enablers` section first. Never edit epic
-  files, `CLARIFICATIONS_NEEDED.md`, or their frontmatter yourself.
+  Only build from epics whose frontmatter says `reviewed: true`. From R1
+  onward the roles are: Devin authors the epic; a **dedicated Claude Code
+  review session** independently reviews it per
+  `docs/redesign/REVIEW-HANDOFF.md`, populating its
+  `## 5. Technical Considerations & Enablers` section; the PM flips
+  `reviewed: true`. A **build session** never edits epic files,
+  `CLARIFICATIONS_NEEDED.md`, or their frontmatter — only a review session
+  operating under REVIEW-HANDOFF.md may edit the one epic file under review.
 - Read `docs/redesign/README.md` (workflow + merge gate) and
   `docs/redesign/uiux-component-guide.md` (component selection + build
   requirements) before writing code. AGENTS.md rules still bind; epics with
