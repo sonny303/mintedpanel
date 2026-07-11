@@ -167,6 +167,15 @@ This artifact does not define exact payer configuration yet. It reserves state c
 | TS-23       | Legacy-route sweep (E0.9)                 | Any seeded org, P1; visit `/portfolio`, `/home`, `/providers`, `/launches`, remaining `admin.*`, and the `scope`/`work`/`outcomes` leaves directly by URL                                                                             | Every legacy route renders or redirects (`/portfolio` → `/reporting/portfolio`); no 404/blank dead ends                                                                 |
 | TS-24       | Focus-conformance keyboard pass (E0.9)    | Keyboard-only traversal as P1 in the shell + anon visitor on `/capture/:token` and `/share/:token` lockdown pages                                                                                                                     | 2px soft primary ring on light surfaces; white-alpha ring on the dark rail; E0.8 public-route a11y pass not regressed                                                   |
 
+## Stage 1 scenario mapping
+
+| Scenario ID | Requirement scenario                    | Fixture mapping                                                                                                                         | Expected validation                                                                                                                     |
+| ----------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| TS-25       | Fresh-org scope journey (E1.0)          | Fixture variant creates Tree Hill Sports Therapy through the L1 UI layer instead of pre-seeding it; no groups, facilities, or providers | Org details is Complete; the three R1 scope sections are actionable; Assignments, Payer Network, and Scope Review are disabled previews |
+| TS-26       | Outside edit refreshes progress (E1.0)  | Outer Banks Rehab Group; add one facility through the existing admin facilities surface as an L3 scenario mutation                      | Reopening onboarding shows Facilities as Complete with no wizard progress write                                                         |
+| TS-27       | Derived resume across org switch (E1.0) | Lone Star Rehab Group with org details and one provider-group row, but no facilities or providers; switch away and back                 | The first incomplete section is Facilities and the Next action targets it                                                               |
+| TS-28       | All R1 scope sections complete (E1.0)   | Outer Banks Rehab Group with at least one provider group, facility, and provider supplied by the L3 fixture layer                       | The wizard shows the Assignments coming-next preview instead of another R1 Next action                                                  |
+
 ## Recommended seed layers
 
 | Layer                      | Seed method                           | Scope                                                                      |
@@ -192,6 +201,7 @@ Rule: seed baseline data directly; validate user workflows through UI. Do not re
 | E0.7 Hardening                               | Yes               | TS-16                                                                                           |
 | E0.8 Onboarding shell + close-out            | Yes               | TS-16 through TS-20                                                                             |
 | E0.9 Design conformance + debt consolidation | Yes               | TS-21 through TS-24 (no new fixtures — full 11-org universe + L2 states)                        |
+| E1.0 Wizard scope sections                   | Yes               | TS-25 through TS-28 (existing org/contact fixtures + L1/L3 scenario states)                     |
 
 ## What gets seeded now vs later
 
@@ -259,3 +269,4 @@ Not an epic — fixture strategy doc; no frontmatter/lifecycle. Answers and corr
 - **TS-12 added (2026-07-09):** E0.4 referenced an undefined "TS-X" for the all-orgs-inactive fallback; defined here as TS-12, an **L2 scenario-mutation state** (not a baseline fixture) — a Playwright helper flips every seeded org to `inactive`, then restores.
 - **Epic-list drift:** the "Initial seed scope by epic" table calls E0.2 "Seat Credentialing Manager to org", but the delivered E0.2 is "Org CRM Contact Fields (Customer & Sales Rep)". Update the table when the Stage 0 epic list is final.
 - **TS-21–TS-24 added (2026-07-10):** E0.9 (design conformance + tech-debt consolidation) scenarios; no new baseline fixtures — the existing 11-org universe plus L2 states cover all four. Note TS-20's `Org space` expectation is superseded by E0.9's Sidebar IA v2 (the org zone drops that label; the switcher tile is the header) — the branding validation itself still holds; re-read TS-20 as "Workspace label + branded outbound form".
+- **TS-25–TS-28 added (2026-07-11):** E1.0 scope-section, derived-progress, org-switch resume, and all-complete scenarios. They reuse existing org/contact fixtures and add only L1/L3 scenario setup for provider-group, facility, and provider presence; no wizard-state fixture is permitted.
