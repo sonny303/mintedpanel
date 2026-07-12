@@ -1,5 +1,6 @@
 // Shared constants, types, and validation for Add/Edit provider forms.
 // Owned by ProviderForm.tsx and EditProviderForm.tsx.
+import { isPtTaxonomyCode } from "@/lib/ptTaxonomy";
 
 export const US_STATES = [
   "AL",
@@ -161,6 +162,8 @@ export function validateCredentials(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
   if (f.npi && !NPI_RE.test(f.npi)) e.npi = "NPI must be 10 digits and start with 1";
   if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = "CAQH must be 8 digits";
+  if (f.taxonomyCode && !isPtTaxonomyCode(f.taxonomyCode))
+    e.taxonomyCode = "Must be a PT/PTA taxonomy code (225X series)";
   return e;
 }
 
