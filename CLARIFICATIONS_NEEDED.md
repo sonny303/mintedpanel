@@ -18,6 +18,21 @@ Format per entry:
 
 ## Resolved
 
+## [e1.7a] SOP versioning model — RESOLVED (2026-07-12)
+
+- **Issue:** The E1.7a spike required a PM decision on the SOP versioning
+  model before E1.7b (SOP-as-data authoring build, R4 lane) can start. The
+  ADR at `docs/redesign/E1.7a-sop-versioning-decision.md` recommended
+  **Model A**: every SOP edit creates a new immutable version; in-flight
+  cases keep the version their tasks were generated from (task stamp
+  `(sop_template_id, sop_version)` per the E2.2 contract); newly generated
+  cases pick up the latest version.
+- **Decision (PM Sowmya, 2026-07-12):** **Model A approved** — "confirmed
+  with business that we are good with model a." Includes the E2.2 task-stamp
+  contract and the §5 step-shape extension per the ADR's sign-off checklist.
+  E1.7b is unblocked for the R4 lane; the 2 real SOP worked examples remain
+  a pending PM input for E1.7b grounding.
+
 ## [e1.6] Stedi / payer-data long-term source — RESOLVED (2026-07-12)
 
 - **Roadblock:** E1.6 seeds the commercial payer catalog from Stedi, which
