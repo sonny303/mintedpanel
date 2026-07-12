@@ -24,7 +24,15 @@ export function StatesMultiSelect({ id, value, onChange, invalid }: StatesMultiS
     onChange(checked ? [...value, code] : value.filter((s) => s !== code));
   };
   return (
-    <DropdownMenu>
+    // modal={false} because this menu lives inside the ProviderGroupForm Dialog.
+    // A modal DropdownMenu sets `pointer-events: none` on <body>, which cascades
+    // to the whole DialogContent (the menu content is portaled out and re-enabled
+    // alone). Re-clicking the trigger while the menu is open then lands on a
+    // pointer-events:none element, so the click resolves to the document root —
+    // which BOTH the menu's and the Dialog's dismissable layers read as an
+    // "outside" pointerdown, closing the entire modal and discarding form data.
+    // Non-modal keeps the trigger interactive so the re-click only toggles the menu.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           id={id}
