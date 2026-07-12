@@ -11,6 +11,7 @@ import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
 import { planAssignmentSync, type GroupAssignmentInput } from "@/lib/groupAssignments";
+import { insertAssignmentRows } from "@/services/providerAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -354,23 +355,19 @@ export async function createProviderWithDetails(
     }
   }
 
-  const facilityRows = input.facilityIds
-    .filter((id) => id)
-    .map((facilityId) => ({
-      org_id: orgId,
-      provider_id: created.id,
-      facility_id: facilityId,
-    }));
-
+  // E1.4 TE-3: assignment writes route through the shared service.
+  const facilityIds = input.facilityIds.filter((fid) => fid);
   let insertedFacilityIds: string[] = [];
-  if (facilityRows.length > 0) {
-    const { error: facErr } = await supabase
-      .from("provider_facility_assignments")
-      .insert(facilityRows);
-    if (facErr) {
-      warnings.push(`Facility assignments not saved: ${facErr.message}`);
-    } else {
-      insertedFacilityIds = facilityRows.map((f) => f.facility_id);
+  if (facilityIds.length > 0) {
+    try {
+      await insertAssignmentRows(
+        facilityIds.map((facilityId) => ({ providerId: created.id, facilityId })),
+      );
+      insertedFacilityIds = facilityIds;
+    } catch (facErr) {
+      warnings.push(
+        `Facility assignments not saved: ${facErr instanceof Error ? facErr.message : "unknown error"}`,
+      );
     }
   }
 

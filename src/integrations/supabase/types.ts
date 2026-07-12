@@ -2519,6 +2519,10 @@ export type Database = {
         Returns: undefined;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
+      set_primary_assignment: {
+        Args: { p_assignment_id: string; p_provider_id: string };
+        Returns: undefined;
+      };
       submit_capture: {
         Args: { p_payload: Json; p_token: string };
         Returns: Json;

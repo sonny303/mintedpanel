@@ -18,6 +18,12 @@ import {
   type UpdateProviderWithLicensesInput,
 } from "@/services/providers";
 import { FIVE_MINUTES } from "@/hooks/queryKeys";
+import {
+  listOrgAssignments,
+  setAssignments,
+  setPrimaryAssignment,
+} from "@/services/providerAssignments";
+import type { AssignmentDraft } from "@/lib/assignmentScope";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -118,6 +124,43 @@ export function useCreateProviderWithDetails() {
       qc.invalidateQueries({ queryKey: ["providers", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E1.4 — provider↔facility assignments (the wizard Assignments section).
+// Shares the launches "facility-assignments" cache (same table, one cache).
+export function useProviderAssignments() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.facilityAssignments(orgId),
+    queryFn: () => listOrgAssignments(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useSetAssignments(providerId: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (drafts: AssignmentDraft[]) => setAssignments(providerId, drafts),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export function useSetPrimaryAssignment() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: { providerId: string; assignmentId: string }) =>
+      setPrimaryAssignment(vars.providerId, vars.assignmentId),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },

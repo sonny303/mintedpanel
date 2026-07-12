@@ -9,6 +9,7 @@ import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
+import { insertAssignmentRows } from "@/services/providerAssignments";
 import { createCase, type CaseInput, type CaseTaskPayload } from "@/services/cases";
 import type { Facility, FacilityAssignment } from "@/types";
 
@@ -133,14 +134,9 @@ export async function assignProviderToFacility(
   providerId: string,
   facilityId: string,
 ): Promise<void> {
-  const orgId = requireActiveOrg();
-  const { error } = await supabase
-    .from("provider_facility_assignments")
-    .upsert(
-      { org_id: orgId, provider_id: providerId, facility_id: facilityId },
-      { onConflict: "provider_id,facility_id", ignoreDuplicates: true },
-    );
-  if (error) throw translateDbError(error);
+  requireActiveOrg();
+  // E1.4 TE-3: all assignment writes route through the shared service.
+  await insertAssignmentRows([{ providerId, facilityId }]);
   await writeAudit({
     actionType: "UPDATE",
     entityType: "facility",

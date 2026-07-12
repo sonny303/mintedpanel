@@ -6,6 +6,7 @@ import {
   ACTIVE_SECTIONS,
   ONBOARDING_SECTIONS,
   getNextIncompleteSection,
+  resolveAssignmentsStatus,
   resolveOrgDetailsStatus,
   resolveProviderGroupStatus,
   resolveRowCountStatus,
@@ -177,12 +178,13 @@ describe("section registry", () => {
       "Payer Network",
       "Scope Review",
     ]);
+    // E1.4 activated Assignments — the first R3 preview to go live.
     expect(ONBOARDING_SECTIONS.map((s) => s.kind)).toEqual([
       "active",
       "active",
       "active",
       "active",
-      "preview",
+      "active",
       "preview",
       "preview",
     ]);
@@ -193,13 +195,40 @@ describe("section registry", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("derives ACTIVE_SECTIONS as the four R1 sections in order", () => {
+  it("derives ACTIVE_SECTIONS in registry order (R1 four + E1.4 assignments)", () => {
     expect(ACTIVE_SECTIONS.map((s) => s.key)).toEqual([
       "org_details",
       "provider_group",
       "facilities",
       "providers",
+      "assignments",
     ]);
+  });
+});
+
+describe("resolveAssignmentsStatus (E1.4)", () => {
+  const A = (providerId: string) => ({ providerId });
+
+  it("is not_started with zero providers (empty state points to Providers)", () => {
+    expect(resolveAssignmentsStatus([], [])).toBe("not_started");
+    expect(resolveAssignmentsStatus([], [A("p1")])).toBe("not_started");
+  });
+
+  it("is not_started when no provider has an assignment", () => {
+    expect(resolveAssignmentsStatus(["p1", "p2"], [])).toBe("not_started");
+  });
+
+  it("is in_progress when only some providers are assigned", () => {
+    expect(resolveAssignmentsStatus(["p1", "p2"], [A("p1")])).toBe("in_progress");
+  });
+
+  it("is complete only when EVERY provider has ≥1 assignment", () => {
+    expect(resolveAssignmentsStatus(["p1", "p2"], [A("p1"), A("p2")])).toBe("complete");
+    expect(resolveAssignmentsStatus(["p1"], [A("p1"), A("p1")])).toBe("complete");
+  });
+
+  it("ignores assignments for unknown/terminated providers", () => {
+    expect(resolveAssignmentsStatus(["p1"], [A("ghost")])).toBe("not_started");
   });
 });
 
@@ -211,6 +240,7 @@ describe("getNextIncompleteSection", () => {
     provider_group: status,
     facilities: status,
     providers: status,
+    assignments: status,
   });
 
   it("returns the first non-complete active section in registry order", () => {
@@ -223,6 +253,9 @@ describe("getNextIncompleteSection", () => {
     );
     expect(getNextIncompleteSection({ ...all("complete"), providers: "not_started" })?.key).toBe(
       "providers",
+    );
+    expect(getNextIncompleteSection({ ...all("complete"), assignments: "not_started" })?.key).toBe(
+      "assignments",
     );
   });
 
@@ -239,6 +272,7 @@ describe("getNextIncompleteSection", () => {
         provider_group: "not_started",
         facilities: "not_started",
         providers: "not_started",
+        assignments: "not_started",
       })?.key,
     ).toBe("provider_group");
   });

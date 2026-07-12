@@ -17,6 +17,7 @@ import { NextActionCard } from "@/components/onboarding/NextActionCard";
 import { PreviewSectionCard } from "@/components/onboarding/PreviewSectionCard";
 import { WizardSectionCard } from "@/components/onboarding/WizardSectionCard";
 import {
+  AssignmentsSectionBody,
   FacilitiesSectionBody,
   OrgDetailsSectionBody,
   ProviderGroupSectionBody,
@@ -38,6 +39,7 @@ const SECTION_BODIES: Record<ActiveSectionKey, ComponentType<SectionBodyProps>> 
   provider_group: ProviderGroupSectionBody,
   facilities: FacilitiesSectionBody,
   providers: ProvidersSectionBody,
+  assignments: AssignmentsSectionBody,
 };
 
 function OnboardingWizardPage() {

@@ -135,6 +135,7 @@ interface FixtureOverrides {
   facilities?: unknown[];
   providers?: unknown[];
   party_role_assignments?: unknown[];
+  provider_facility_assignments?: unknown[];
 }
 
 function makeFixtures(over: FixtureOverrides) {
@@ -170,6 +171,8 @@ function makeFixtures(over: FixtureOverrides) {
     provider_groups: over.provider_groups ?? [],
     facilities: over.facilities ?? [],
     providers: over.providers ?? [],
+    provider_facility_assignments: over.provider_facility_assignments ?? [],
+    provider_group_assignments: [],
   } as Record<string, unknown[]>;
 }
 
@@ -284,8 +287,15 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
   ).toBeVisible();
   await expect(page.getByText("isn't available yet")).toHaveCount(0);
 
+  // E1.4 activated Assignments: with zero providers it renders the
+  // points-back-to-Providers empty state, not a disabled preview.
+  await expect(sectionCard(page, "wizard-assignments")).toContainText("Not started");
+  await expect(
+    sectionCard(page, "wizard-assignments").getByRole("button", { name: "Go to Providers" }),
+  ).toBeVisible();
+
   // Previews: visible, labeled Coming next, aria-disabled, non-interactive.
-  for (const domId of ["wizard-assignments", "wizard-payer-network", "wizard-scope-review"]) {
+  for (const domId of ["wizard-payer-network", "wizard-scope-review"]) {
     const previewCard = sectionCard(page, domId);
     await expect(previewCard).toBeVisible();
     await expect(previewCard).toContainText("Coming next");
@@ -380,6 +390,18 @@ test("TS-28: all four sections complete hands off to the Assignments preview", a
     provider_groups: [providerGroup(ORG_LONE_STAR, "g-ls", "Lone Star Rehab Group")],
     facilities: [facilityRow(ORG_LONE_STAR, "f-ls", "Lone Star HQ")],
     providers: [provider(ORG_LONE_STAR, "pr-1", "Karen", "Filippelli")],
+    // E1.4: the all-complete state now also requires every provider assigned.
+    provider_facility_assignments: [
+      {
+        id: "pfa-1",
+        org_id: ORG_LONE_STAR,
+        provider_id: "pr-1",
+        facility_id: "f-ls",
+        is_primary: true,
+        start_date: "2026-01-05",
+        created_at: "2026-07-10T00:00:00Z",
+      },
+    ],
   });
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
   await seedAuth(context, ORG_LONE_STAR);

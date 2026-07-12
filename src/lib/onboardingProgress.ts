@@ -10,8 +10,9 @@ import { partyToContactInput } from "@/lib/contacts";
 
 export type OnboardingSectionStatus = "not_started" | "in_progress" | "complete";
 
-export type ActiveSectionKey = "org_details" | "provider_group" | "facilities" | "providers";
-export type PreviewSectionKey = "assignments" | "payer_network" | "scope_review";
+export type ActiveSectionKey =
+  "org_details" | "provider_group" | "facilities" | "providers" | "assignments";
+export type PreviewSectionKey = "payer_network" | "scope_review";
 export type OnboardingSectionKey = ActiveSectionKey | PreviewSectionKey;
 
 interface SectionDefBase {
@@ -47,7 +48,8 @@ export const ONBOARDING_SECTIONS: readonly OnboardingSectionDef[] = [
   },
   { key: "facilities", title: "Facilities", domId: "wizard-facilities", kind: "active" },
   { key: "providers", title: "Providers", domId: "wizard-providers", kind: "active" },
-  { key: "assignments", title: "Assignments", domId: "wizard-assignments", kind: "preview" },
+  // E1.4: Assignments went live — the first R3 preview to activate.
+  { key: "assignments", title: "Assignments", domId: "wizard-assignments", kind: "active" },
   {
     key: "payer_network",
     title: "Payer Network",
@@ -110,6 +112,21 @@ export function resolveProviderGroupStatus(
   groups: ReadonlyArray<{ isActive: boolean }>,
 ): OnboardingSectionStatus {
   return resolveActiveRowsStatus(groups);
+}
+
+// Assignments (E1.4 F1.4.1): complete when EVERY non-terminated provider has
+// ≥1 facility assignment; partially covered = in_progress (the first section
+// where that state is reachable); no providers yet = not_started (the section
+// body points back to Providers). Derived, never stored.
+export function resolveAssignmentsStatus(
+  providerIds: readonly string[],
+  assignments: ReadonlyArray<{ providerId: string | null }>,
+): OnboardingSectionStatus {
+  if (providerIds.length === 0) return "not_started";
+  const assigned = new Set(assignments.map((a) => a.providerId));
+  const covered = providerIds.filter((id) => assigned.has(id)).length;
+  if (covered === 0) return "not_started";
+  return covered === providerIds.length ? "complete" : "in_progress";
 }
 
 // ---------- next action (F1.0.3 / TE-4) ----------

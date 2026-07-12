@@ -361,8 +361,11 @@ test("TS-33: first provider — CAQH baseline + group assignment → Complete + 
   expect(ga.group_id).toBe("g-th");
   expect(ga.is_primary).toBe(true);
 
-  // All four R1 sections complete → the preview handoff replaces the CTA.
-  await expect(page.getByText("All scope sections are complete.")).toBeVisible();
+  // E1.4: the new provider is unassigned, so the journey continues to the
+  // (now active) Assignments section instead of the all-complete handoff.
+  await expect(
+    page.locator("#wizard-next-action").getByRole("button", { name: "Next: Assignments" }),
+  ).toBeVisible();
 });
 
 test("TS-34: two-TIN provider — both groups assigned, first primary; last-assignment removal blocked", async ({

@@ -11,6 +11,7 @@ import { OrgDetailsBody } from "@/components/onboarding/OrgDetailsBody";
 import { ProviderGroupSection } from "@/components/onboarding/ProviderGroupSection";
 import { FacilitySection } from "@/components/onboarding/FacilitySection";
 import { ProviderRosterSection } from "@/components/onboarding/ProviderRosterSection";
+import { AssignmentSection } from "@/components/onboarding/AssignmentSection";
 import type { OnboardingWizardData } from "@/hooks/useOnboardingWizard";
 
 export interface SectionBodyProps {
@@ -34,4 +35,9 @@ export function FacilitiesSectionBody({ wizard }: SectionBodyProps) {
 // E1.3: the real CAQH roster form/list replaced the E1.0 start placeholder.
 export function ProvidersSectionBody({ wizard }: SectionBodyProps) {
   return <ProviderRosterSection wizard={wizard} />;
+}
+
+// E1.4: the first R3 preview to activate — provider↔facility assignments.
+export function AssignmentsSectionBody({ wizard }: SectionBodyProps) {
+  return <AssignmentSection wizard={wizard} />;
 }
