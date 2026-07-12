@@ -206,7 +206,8 @@ test("duplicate org name surfaces a server error on the onboarding form (F0.1.2)
   await form.locator("#customer-phone").fill("555-555-0100");
   await form.locator("#customer-line1").fill("123 Main St");
   await form.locator("#customer-city").fill("Portland");
-  await form.locator("#customer-state").fill("OR");
+  await form.locator("#customer-state").click();
+  await page.getByRole("option", { name: "OR", exact: true }).click();
   await form.locator("#customer-zip").fill("97201");
 
   await form.getByRole("button", { name: "Create organization" }).click();

@@ -66,7 +66,8 @@ test("active link renders the form and completes to the done state (TS-7/TS-13)"
   await page.locator("#capture-phone").fill("503-555-0121");
   await page.locator("#capture-line1").fill("3550 N Mississippi Ave");
   await page.locator("#capture-city").fill("Portland");
-  await page.locator("#capture-state").fill("OR");
+  await page.locator("#capture-state").click();
+  await page.getByRole("option", { name: "OR", exact: true }).click();
   await page.locator("#capture-zip").fill("97227");
 
   await page.getByRole("button", { name: "Submit details" }).click();

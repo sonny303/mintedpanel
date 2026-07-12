@@ -248,7 +248,8 @@ test("TS-17: intake run on the onboarding page lands on the new org's Account De
   await form.locator("#customer-phone").fill("414-555-0120");
   await form.locator("#customer-line1").fill("416 Marie Dr");
   await form.locator("#customer-city").fill("Point Place");
-  await form.locator("#customer-state").fill("WI");
+  await form.locator("#customer-state").click();
+  await page.getByRole("option", { name: "WI", exact: true }).click();
   await form.locator("#customer-zip").fill("53511");
 
   await form.getByRole("button", { name: "Create organization" }).click();
