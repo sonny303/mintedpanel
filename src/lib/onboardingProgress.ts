@@ -96,13 +96,20 @@ export function resolveRowCountStatus(rowCount: number): OnboardingSectionStatus
   return rowCount > 0 ? "complete" : "not_started";
 }
 
-// Provider Group (E1.1 TE-6 refinement — the sanctioned resolver-input
-// broadening): complete on ≥1 ACTIVE group. Soft-deleted groups
-// (is_active = false) never complete the section; still derived, no flags.
+// ≥1 ACTIVE row completes the section — soft-deleted rows (is_active=false)
+// never do. Still derived, no flags. Used by Provider Group (E1.1 TE-6) and
+// Facilities (E1.2 TE-6) — each epic's sanctioned resolver-input broadening.
+export function resolveActiveRowsStatus(
+  rows: ReadonlyArray<{ isActive: boolean }>,
+): OnboardingSectionStatus {
+  return rows.some((r) => r.isActive) ? "complete" : "not_started";
+}
+
+// Provider Group (E1.1 TE-6 refinement): complete on ≥1 ACTIVE group.
 export function resolveProviderGroupStatus(
   groups: ReadonlyArray<{ isActive: boolean }>,
 ): OnboardingSectionStatus {
-  return groups.some((g) => g.isActive) ? "complete" : "not_started";
+  return resolveActiveRowsStatus(groups);
 }
 
 // ---------- next action (F1.0.3 / TE-4) ----------

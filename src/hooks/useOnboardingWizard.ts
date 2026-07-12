@@ -12,6 +12,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { useActiveMembership } from "@/lib/auth-store";
 import {
   getNextIncompleteSection,
+  resolveActiveRowsStatus,
   resolveOrgDetailsStatus,
   resolveProviderGroupStatus,
   resolveRowCountStatus,
@@ -19,7 +20,7 @@ import {
   type OnboardingSectionDef,
   type OnboardingSectionStatus,
 } from "@/lib/onboardingProgress";
-import type { OrgContact, ProviderGroup } from "@/types";
+import type { Facility, OrgContact, ProviderGroup } from "@/types";
 
 export interface OnboardingSectionState {
   /** Resolved status; undefined while the backing read is loading or failed. */
@@ -42,8 +43,9 @@ export interface OnboardingWizardData {
   contacts: OrgContact[];
   /** The org's provider groups (E1.1 section list; active rows complete it). */
   providerGroups: ProviderGroup[];
-  /** Row counts for the presence-based section bodies. */
-  facilityCount: number;
+  /** The org's facilities (E1.2 section list; active rows complete it). */
+  facilities: Facility[];
+  /** Row count for the presence-based Providers section body. */
   providerCount: number;
 }
 
@@ -94,7 +96,13 @@ export function useOnboardingWizard(): OnboardingWizardData {
       isError: groupsQ.isError,
       refetch: groupsQ.refetch,
     },
-    facilities: countSection(facilitiesQ),
+    // E1.2: complete on ≥1 ACTIVE facility (same active-rows rule).
+    facilities: {
+      status: facilitiesQ.data ? resolveActiveRowsStatus(facilitiesQ.data) : undefined,
+      isLoading: facilitiesQ.isLoading,
+      isError: facilitiesQ.isError,
+      refetch: facilitiesQ.refetch,
+    },
     providers: countSection(providersQ),
   };
 
@@ -118,7 +126,7 @@ export function useOnboardingWizard(): OnboardingWizardData {
     orgName,
     contacts,
     providerGroups: groupsQ.data ?? [],
-    facilityCount: facilitiesQ.data?.length ?? 0,
+    facilities: facilitiesQ.data ?? [],
     providerCount: providersQ.data?.length ?? 0,
   };
 }

@@ -11,6 +11,7 @@ import { Link } from "@tanstack/react-router";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgDetailsBody } from "@/components/onboarding/OrgDetailsBody";
 import { ProviderGroupSection } from "@/components/onboarding/ProviderGroupSection";
+import { FacilitySection } from "@/components/onboarding/FacilitySection";
 import type { OnboardingWizardData } from "@/hooks/useOnboardingWizard";
 
 export interface SectionBodyProps {
@@ -56,16 +57,9 @@ export function ProviderGroupSectionBody({ wizard }: SectionBodyProps) {
   return <ProviderGroupSection wizard={wizard} />;
 }
 
+// E1.2: the real CAQH facility form/list replaced the E1.0 start placeholder.
 export function FacilitiesSectionBody({ wizard }: SectionBodyProps) {
-  return (
-    <ScopeCountBody
-      count={wizard.facilityCount}
-      summary={`${plural(wizard.facilityCount, "facility", "facilities")} on file for this organization.`}
-      startPrompt="Add the locations where this organization sees patients."
-      ctaLabel="Add facility"
-      ctaTo="/admin/settings"
-    />
-  );
+  return <FacilitySection wizard={wizard} />;
 }
 
 export function ProvidersSectionBody({ wizard }: SectionBodyProps) {
