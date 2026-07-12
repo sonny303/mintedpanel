@@ -7,45 +7,14 @@
 // real CTA to the surface where the data is entered right now. Progress is
 // derived from row presence, so work done through those surfaces flips the
 // wizard chips automatically (F1.0.2).
-import { Link } from "@tanstack/react-router";
-import { buttonVariants } from "@/components/ui/button";
 import { OrgDetailsBody } from "@/components/onboarding/OrgDetailsBody";
 import { ProviderGroupSection } from "@/components/onboarding/ProviderGroupSection";
 import { FacilitySection } from "@/components/onboarding/FacilitySection";
+import { ProviderRosterSection } from "@/components/onboarding/ProviderRosterSection";
 import type { OnboardingWizardData } from "@/hooks/useOnboardingWizard";
 
 export interface SectionBodyProps {
   wizard: OnboardingWizardData;
-}
-
-function ScopeCountBody({
-  count,
-  summary,
-  startPrompt,
-  ctaLabel,
-  ctaTo,
-}: {
-  count: number;
-  summary: string;
-  startPrompt: string;
-  ctaLabel: string;
-  ctaTo: string;
-}) {
-  if (count > 0) {
-    return <p className="text-[13px] text-foreground">{summary}</p>;
-  }
-  return (
-    <div className="flex flex-col items-start gap-3">
-      <p className="text-[13px] text-muted-foreground">{startPrompt}</p>
-      <Link to={ctaTo} className={buttonVariants({ variant: "outline" })}>
-        {ctaLabel}
-      </Link>
-    </div>
-  );
-}
-
-function plural(count: number, singular: string, pluralForm: string): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
 export function OrgDetailsSectionBody({ wizard }: SectionBodyProps) {
@@ -62,14 +31,7 @@ export function FacilitiesSectionBody({ wizard }: SectionBodyProps) {
   return <FacilitySection wizard={wizard} />;
 }
 
+// E1.3: the real CAQH roster form/list replaced the E1.0 start placeholder.
 export function ProvidersSectionBody({ wizard }: SectionBodyProps) {
-  return (
-    <ScopeCountBody
-      count={wizard.providerCount}
-      summary={`${plural(wizard.providerCount, "provider", "providers")} on the roster.`}
-      startPrompt="Add the providers you'll credential for this organization."
-      ctaLabel="Add provider"
-      ctaTo="/providers/new"
-    />
-  );
+  return <ProviderRosterSection wizard={wizard} />;
 }

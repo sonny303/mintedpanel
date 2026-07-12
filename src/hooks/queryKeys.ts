@@ -36,6 +36,10 @@ export const queryKeys = {
   coordinators: (orgId: string) => ["coordinators", orgId] as const,
   stateLicenses: (orgId: string, providerId: string) =>
     ["state-licenses", orgId, providerId] as const,
+  // E1.3 roster summaries: org-wide license projection + the M:N
+  // provider↔group assignment rows.
+  orgStateLicenses: (orgId: string) => ["org-state-licenses", orgId] as const,
+  providerGroupAssignments: (orgId: string) => ["provider-group-assignments", orgId] as const,
   notes: (orgId: string, entityType: string, entityId: string) =>
     ["notes", orgId, entityType, entityId] as const,
   // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).

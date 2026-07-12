@@ -4,16 +4,20 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
   createProvider,
+  createProviderWithDetails,
   getProvider,
   getProviders,
+  listProviderGroupAssignments,
   terminateProvider,
   updateProvider,
   updateProviderWithLicenses,
+  type CreateProviderWithDetailsInput,
   type ProviderFilters,
   type ProviderInput,
   type TerminateProviderInput,
   type UpdateProviderWithLicensesInput,
 } from "@/services/providers";
+import { FIVE_MINUTES } from "@/hooks/queryKeys";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -69,6 +73,8 @@ export function useUpdateProviderWithLicenses(id: string) {
       qc.invalidateQueries({ queryKey: ["providers", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
       qc.invalidateQueries({ queryKey: ["state-licenses", orgId, id] });
+      qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });
@@ -85,6 +91,34 @@ export function useTerminateProvider(id: string) {
       qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E1.3 — the M:N provider↔group assignment rows (roster list + summaries).
+export function useProviderGroupAssignments() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.providerGroupAssignments(orgId),
+    queryFn: () => listProviderGroupAssignments(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+// E1.3 — the wizard's create path: provider + licenses (PSV) + group
+// assignments in one service call.
+export function useCreateProviderWithDetails() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
+      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

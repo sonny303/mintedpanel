@@ -353,6 +353,20 @@ export interface Facility {
   adaCompliance?: AdaCompliance | null;
 }
 
+// M:N provider↔group assignment (E1.3). A provider always holds ≥1 row with
+// exactly one is_primary; providers.group_id mirrors the primary (frozen
+// legacy column — no new readers).
+export interface ProviderGroupAssignment {
+  id: string;
+  orgId: string;
+  providerId: string;
+  groupId: string;
+  isPrimary: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+}
+
 export interface FacilityAssignment {
   id: string;
   orgId: string;

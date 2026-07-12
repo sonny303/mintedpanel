@@ -8,12 +8,14 @@
 // the authenticated membership. The query logic itself is written once.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
-import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
+import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
+import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
+import { planAssignmentSync, type GroupAssignmentInput } from "@/lib/groupAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
-import type { Provider, ProviderStatus } from "@/types";
+import type { Provider, ProviderGroupAssignment, ProviderStatus } from "@/types";
 
 type ProviderInsert = Database["public"]["Tables"]["providers"]["Insert"];
 type ProviderUpdate = Database["public"]["Tables"]["providers"]["Update"];
@@ -34,6 +36,8 @@ export interface ProviderInput {
   firstName: string;
   lastName: string;
   credentials?: string | null;
+  /** CAQH-required demographic (E1.3); existing baseline column. */
+  gender?: string | null;
   email?: string | null;
   phone?: string | null;
   npi?: string | null;
@@ -255,17 +259,28 @@ export interface LicenseInput {
   licenseType: string | null;
   issueDate: string | null;
   expirationDate: string | null;
+  // PSV trail (E1.3 F1.3.3). Status/URL come from the form; verified_at and
+  // verified_by are stamped by the SERVICE via resolvePsvColumns — never
+  // client-supplied. Omitted → treated as unverified (legacy callers).
+  verifiedStatus?: PsvStatus;
+  verificationSourceUrl?: string | null;
 }
 
 export interface UpdateProviderWithLicensesInput {
   patch: Partial<ProviderInput>;
   licenses: LicenseInput[];
+  /** E1.3 M:N group assignments; when provided the full set is synced
+   * (≥1 required, exactly one primary — invariants enforced in the pure
+   * planner) and providers.group_id mirrors the primary. */
+  groupAssignments?: GroupAssignmentInput[];
 }
 
 export interface CreateProviderWithDetailsInput {
   provider: ProviderInput;
   licenses: LicenseInput[];
   facilityIds: string[];
+  /** E1.3 M:N group assignments (wizard path requires ≥1 + one primary). */
+  groupAssignments?: GroupAssignmentInput[];
 }
 
 export interface CreateProviderWithDetailsResult {
@@ -277,12 +292,18 @@ export async function createProviderWithDetails(
   input: CreateProviderWithDetailsInput,
 ): Promise<CreateProviderWithDetailsResult> {
   const orgId = requireActiveOrg();
+  // E1.3: validate the assignment set up front (≥1, exactly one primary) and
+  // mirror the primary onto providers.group_id (frozen legacy mirror).
+  const assignmentPlan = input.groupAssignments
+    ? planAssignmentSync(input.groupAssignments, [])
+    : null;
   const payload: Record<string, unknown> = {
     ...snakeizeRow<Record<string, unknown>>(input.provider),
     org_id: orgId,
   };
   if ("homeState" in input.provider)
     payload.home_state = normalizeOptionalStateCode(input.provider.homeState);
+  if (assignmentPlan) payload.group_id = assignmentPlan.primaryGroupId;
   const { data, error } = await supabase
     .from("providers")
     .insert(payload as unknown as ProviderInsert)
@@ -292,6 +313,8 @@ export async function createProviderWithDetails(
   const created = camelizeRow<Provider>(data);
 
   const warnings: string[] = [];
+  const nowIso = new Date().toISOString();
+  const userId = currentUserId();
 
   const licenseRows: StateLicenseInsert[] = input.licenses
     .filter((l) => l.state && l.state.trim().length > 0)
@@ -305,6 +328,17 @@ export async function createProviderWithDetails(
       issue_date: l.issueDate,
       expiration_date: l.expirationDate,
       status: "active",
+      // PSV columns resolved by the pure rule module (stamps server-side).
+      ...resolvePsvColumns(
+        {
+          verifiedStatus: l.verifiedStatus ?? "unverified",
+          verificationSourceUrl: l.verificationSourceUrl ?? null,
+          expirationDate: l.expirationDate,
+        },
+        null,
+        nowIso,
+        userId,
+      ),
     }));
 
   let insertedLicenses: StateLicenseInsert[] = [];
@@ -340,6 +374,22 @@ export async function createProviderWithDetails(
     }
   }
 
+  // E1.3: the M:N group assignments. A failed write here is NOT a warning —
+  // "no provider exists unassigned" is a hard rule, so surface the error.
+  let insertedAssignments: GroupAssignmentInput[] = [];
+  if (assignmentPlan && assignmentPlan.inserts.length > 0) {
+    const { error: gaErr } = await supabase.from("provider_group_assignments").insert(
+      assignmentPlan.inserts.map((a) => ({
+        org_id: orgId,
+        provider_id: created.id,
+        group_id: a.groupId,
+        is_primary: a.isPrimary,
+      })),
+    );
+    if (gaErr) throw translateDbError(gaErr);
+    insertedAssignments = assignmentPlan.inserts;
+  }
+
   await writeAudit({
     actionType: "CREATE",
     entityType: "provider",
@@ -348,6 +398,7 @@ export async function createProviderWithDetails(
       provider: created,
       licenses: insertedLicenses,
       facilityIds: insertedFacilityIds,
+      groupAssignments: insertedAssignments,
     },
     description: `Created provider ${created.firstName} ${created.lastName}`,
   });
@@ -371,11 +422,36 @@ export async function updateProviderWithLicenses(
     id: string;
     state: string | null;
     license_number: string | null;
+    expiration_date: string | null;
+    verified_status: string | null;
+    verified_at: string | null;
+    verified_by: string | null;
+    verification_source_url: string | null;
   }>;
+
+  // E1.3: plan the group-assignment sync BEFORE any write so an invalid set
+  // (empty / no primary) rejects the whole save.
+  let assignmentPlan: ReturnType<typeof planAssignmentSync> | null = null;
+  let storedAssignments: Array<{ id: string; group_id: string; is_primary: boolean }> = [];
+  if (input.groupAssignments) {
+    const { data: gaRows, error: gaErr } = await supabase
+      .from("provider_group_assignments")
+      .select("id, group_id, is_primary")
+      .eq("org_id", orgId)
+      .eq("provider_id", id);
+    if (gaErr) throw gaErr;
+    storedAssignments = (gaRows ?? []) as typeof storedAssignments;
+    assignmentPlan = planAssignmentSync(
+      input.groupAssignments,
+      storedAssignments.map((r) => ({ id: r.id, groupId: r.group_id, isPrimary: r.is_primary })),
+    );
+  }
 
   const payload = snakeizeRow<Record<string, unknown>>(input.patch);
   if ("homeState" in input.patch)
     payload.home_state = normalizeOptionalStateCode(input.patch.homeState);
+  // Frozen legacy mirror: providers.group_id follows the primary assignment.
+  if (assignmentPlan) payload.group_id = assignmentPlan.primaryGroupId;
   const { data, error } = await supabase
     .from("providers")
     .update(payload as unknown as ProviderUpdate)
@@ -401,8 +477,38 @@ export async function updateProviderWithLicenses(
   const matchedIds = new Set<string>();
   const toUpdate: Array<{ id: string; row: StateLicenseInsert }> = [];
   const toInsert: StateLicenseInsert[] = [];
+  const nowIso = new Date().toISOString();
+  const userId = currentUserId();
+
+  const psvStoredOf = (r: (typeof existing)[number]): PsvStored => ({
+    verifiedStatus: (r.verified_status ?? "unverified") as PsvStatus,
+    verifiedAt: r.verified_at,
+    verifiedBy: r.verified_by,
+    verificationSourceUrl: r.verification_source_url,
+    expirationDate: r.expiration_date,
+  });
 
   for (const l of cleanLicenses) {
+    let match: (typeof existing)[number] | undefined;
+    if (l.id && existingById.has(l.id) && !matchedIds.has(l.id)) {
+      match = existingById.get(l.id);
+    } else {
+      const key = naturalKey(l.state, l.licenseNumber);
+      const cand = existingByNatural.get(key);
+      if (cand && !matchedIds.has(cand.id)) match = cand;
+    }
+    // PSV columns via the pure rule module: URL required to (re)verify,
+    // stamps server-side, renewal reset on expiration change (TE-5).
+    const psv = resolvePsvColumns(
+      {
+        verifiedStatus: l.verifiedStatus ?? "unverified",
+        verificationSourceUrl: l.verificationSourceUrl ?? null,
+        expirationDate: l.expirationDate,
+      },
+      match ? psvStoredOf(match) : null,
+      nowIso,
+      userId,
+    );
     const row: StateLicenseInsert = {
       org_id: orgId,
       provider_id: id,
@@ -411,15 +517,8 @@ export async function updateProviderWithLicenses(
       license_type: l.licenseType,
       issue_date: l.issueDate,
       expiration_date: l.expirationDate,
+      ...psv,
     };
-    let match: { id: string } | undefined;
-    if (l.id && existingById.has(l.id) && !matchedIds.has(l.id)) {
-      match = existingById.get(l.id);
-    } else {
-      const key = naturalKey(l.state, l.licenseNumber);
-      const cand = existingByNatural.get(key);
-      if (cand && !matchedIds.has(cand.id)) match = cand;
-    }
     if (match) {
       matchedIds.add(match.id);
       toUpdate.push({ id: match.id, row });
@@ -449,7 +548,8 @@ export async function updateProviderWithLicenses(
     }
   }
 
-  // Update matched rows.
+  // Update matched rows (incl. the resolved PSV columns — renewal reset and
+  // verification stamps ride the same write).
   for (const { id: licId, row } of toUpdate) {
     const { error: updErr } = await supabase
       .from("state_licenses")
@@ -459,6 +559,10 @@ export async function updateProviderWithLicenses(
         license_type: row.license_type,
         issue_date: row.issue_date,
         expiration_date: row.expiration_date,
+        verified_status: row.verified_status,
+        verified_at: row.verified_at,
+        verified_by: row.verified_by,
+        verification_source_url: row.verification_source_url,
       })
       .eq("id", licId)
       .eq("org_id", orgId)
@@ -472,14 +576,63 @@ export async function updateProviderWithLicenses(
     if (insErr) throw translateDbError(insErr);
   }
 
+  // E1.3: execute the assignment sync in index-safe order — demote surviving
+  // ex-primaries, delete removed rows, promote the new primary, insert new
+  // rows (the partial unique "one primary per provider" can never trip).
+  if (assignmentPlan) {
+    if (assignmentPlan.demoteIds.length > 0) {
+      const { error: gaErr } = await supabase
+        .from("provider_group_assignments")
+        .update({ is_primary: false })
+        .eq("org_id", orgId)
+        .eq("provider_id", id)
+        .in("id", assignmentPlan.demoteIds);
+      if (gaErr) throw translateDbError(gaErr);
+    }
+    if (assignmentPlan.deleteIds.length > 0) {
+      const { error: gaErr } = await supabase
+        .from("provider_group_assignments")
+        .delete()
+        .eq("org_id", orgId)
+        .eq("provider_id", id)
+        .in("id", assignmentPlan.deleteIds);
+      if (gaErr) throw translateDbError(gaErr);
+    }
+    if (assignmentPlan.promoteId) {
+      const { error: gaErr } = await supabase
+        .from("provider_group_assignments")
+        .update({ is_primary: true })
+        .eq("org_id", orgId)
+        .eq("provider_id", id)
+        .eq("id", assignmentPlan.promoteId);
+      if (gaErr) throw translateDbError(gaErr);
+    }
+    if (assignmentPlan.inserts.length > 0) {
+      const { error: gaErr } = await supabase.from("provider_group_assignments").insert(
+        assignmentPlan.inserts.map((a) => ({
+          org_id: orgId,
+          provider_id: id,
+          group_id: a.groupId,
+          is_primary: a.isPrimary,
+        })),
+      );
+      if (gaErr) throw translateDbError(gaErr);
+    }
+  }
+
   await writeAudit({
     actionType: "UPDATE",
     entityType: "provider",
     entityId: id,
-    before: { provider: before, licenses: existing },
+    before: {
+      provider: before,
+      licenses: existing,
+      groupAssignments: input.groupAssignments ? storedAssignments : undefined,
+    },
     after: {
       provider: after,
       licenses: cleanLicenses,
+      groupAssignments: input.groupAssignments,
       diff: {
         updated: toUpdate.length,
         inserted: toInsert.length,
@@ -490,6 +643,19 @@ export async function updateProviderWithLicenses(
   });
 
   return after;
+}
+
+// E1.3: org-scoped read of every provider↔group assignment — the roster list
+// and summaries join it client-side. All NEW group reads go through this
+// table; providers.group_id stays a frozen legacy mirror.
+export async function listProviderGroupAssignments(): Promise<ProviderGroupAssignment[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("provider_group_assignments")
+    .select("*")
+    .eq("org_id", orgId);
+  if (error) throw error;
+  return camelizeRow<ProviderGroupAssignment[]>(data ?? []);
 }
 
 const TERMINATION_ACTIVE_LABELS = ["active", "approved, pending effective date"];

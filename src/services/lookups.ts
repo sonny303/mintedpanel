@@ -23,6 +23,31 @@ export interface StateLicense {
   expirationDate: string | null;
   status: string | null;
   createdAt: string | null;
+  // PSV trail (E1.3): verified_at/by are service-stamped, never client-set.
+  verifiedStatus: "unverified" | "verified" | "failed";
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  verificationSourceUrl: string | null;
+}
+
+// Org-wide license read for roster summaries (E1.3 TE-6): the wizard list
+// derives license-state / soonest-expiry per provider from this narrow
+// projection instead of widening the PHI-safe provider list.
+export interface OrgLicenseSummaryRow {
+  providerId: string | null;
+  state: string;
+  expirationDate: string | null;
+  verifiedStatus: "unverified" | "verified" | "failed";
+}
+
+export async function listOrgStateLicenses(): Promise<OrgLicenseSummaryRow[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("state_licenses")
+    .select("provider_id, state, expiration_date, verified_status")
+    .eq("org_id", orgId);
+  if (error) throw error;
+  return camelizeRow<OrgLicenseSummaryRow[]>(data ?? []);
 }
 
 export async function getStateLicensesByProvider(providerId: string): Promise<StateLicense[]> {
