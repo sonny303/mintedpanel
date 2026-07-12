@@ -18,6 +18,7 @@ import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
@@ -105,6 +106,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const PortfolioRoute = PortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayerDirectoryRoute = PayerDirectoryRouteImport.update({
+  id: '/payer-directory',
+  path: '/payer-directory',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OutcomesRoute = OutcomesRouteImport.update({
@@ -334,6 +340,7 @@ export interface FileRoutesByFullPath {
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
@@ -386,6 +393,7 @@ export interface FileRoutesByTo {
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
@@ -437,6 +445,7 @@ export interface FileRoutesById {
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
@@ -493,6 +502,7 @@ export interface FileRouteTypes {
     | '/launches'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
@@ -545,6 +555,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
@@ -595,6 +606,7 @@ export interface FileRouteTypes {
     | '/launches'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
@@ -650,6 +662,7 @@ export interface RootRouteChildren {
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
   OutcomesRoute: typeof OutcomesRoute
+  PayerDirectoryRoute: typeof PayerDirectoryRoute
   PortfolioRoute: typeof PortfolioRoute
   PrivacyRoute: typeof PrivacyRoute
   ProgressRoute: typeof ProgressRoute
@@ -743,6 +756,13 @@ declare module '@tanstack/react-router' {
       path: '/portfolio'
       fullPath: '/portfolio'
       preLoaderRoute: typeof PortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payer-directory': {
+      id: '/payer-directory'
+      path: '/payer-directory'
+      fullPath: '/payer-directory'
+      preLoaderRoute: typeof PayerDirectoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/outcomes': {
@@ -1146,6 +1166,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
   OutcomesRoute: OutcomesRoute,
+  PayerDirectoryRoute: PayerDirectoryRoute,
   PortfolioRoute: PortfolioRoute,
   PrivacyRoute: PrivacyRoute,
   ProgressRoute: ProgressRoute,

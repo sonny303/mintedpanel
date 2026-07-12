@@ -239,3 +239,35 @@ WHERE p.npi = '1093817465'
     SELECT 1 FROM public.state_licenses l
     WHERE l.provider_id = p.id AND l.state = 'SC' AND l.license_number = 'PT-11902'
   );
+
+-- ---------------------------------------------------------------------------
+-- E1.6 — Global payer catalog fixtures (TS-36/TS-37/TS-38).
+-- A representative slice of the full reference dataset
+-- (docs/redesign/data/payer-catalog/) covering the six seed-universe states
+-- NC/SC/CO/TX/WI/OR: per-state Blues + two nationals. Global rows
+-- (org_id IS NULL) are platform-managed and invisible to orgs until assigned
+-- via org_payer_assignments — seeding them is inert for org flows.
+-- Idempotent on the uq_payers_global_name partial unique.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.payers (org_id, name, payer_kind, aliases, states, stedi_payer_id, status, last_synced_at)
+VALUES
+  (NULL, 'Blue Cross and Blue Shield of North Carolina', 'commercial', ARRAY['BCBSNC', 'Blue Cross NC'], ARRAY['NC'], 'SB810', 'active', now()),
+  (NULL, 'BlueCross BlueShield of South Carolina', 'commercial', ARRAY['BCBS SC', 'BlueChoice HealthPlan (subsidiary)'], ARRAY['SC'], '00401', 'active', now()),
+  (NULL, 'Anthem Blue Cross and Blue Shield of Colorado (Elevance)', 'commercial', ARRAY['Anthem BCBS of Colorado'], ARRAY['CO'], '00050', 'active', now()),
+  (NULL, 'Blue Cross and Blue Shield of Texas (HCSC)', 'commercial', ARRAY['BCBSTX'], ARRAY['TX'], '84980', 'active', now()),
+  (NULL, 'Anthem Blue Cross and Blue Shield of Wisconsin (Elevance)', 'commercial', ARRAY['Compcare Health Services Insurance Corp (HMO/BadgerCare legal entity)'], ARRAY['WI'], '00950', 'active', now()),
+  (NULL, 'Regence BlueCross BlueShield of Oregon', 'commercial', ARRAY['Cambia', 'Regence Oregon'], ARRAY['OR'], '00851', 'active', now()),
+  (NULL, 'UnitedHealthcare', 'commercial', ARRAY['UHC', 'UMR', 'Oxford'], ARRAY['CO', 'NC', 'OR', 'SC', 'TX', 'WI'], '87726', 'active', now()),
+  (NULL, 'Cigna Healthcare', 'commercial', ARRAY['Cigna', 'Evernorth'], ARRAY['CO', 'NC', 'OR', 'SC', 'TX', 'WI'], '62308', 'active', now())
+ON CONFLICT (lower(name)) WHERE org_id IS NULL DO NOTHING;
+
+-- TS-38 fixture: one unreviewed sync diff (upstream rename) awaiting review.
+INSERT INTO public.payer_catalog_changes (payer_id, field, old_value, new_value, source)
+SELECT p.id, 'name', 'Blue Cross and Blue Shield of North Carolina', 'Blue Cross NC (rebranded)', 'sync'
+FROM public.payers p
+WHERE lower(p.name) = lower('Blue Cross and Blue Shield of North Carolina') AND p.org_id IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM public.payer_catalog_changes c
+    WHERE c.payer_id = p.id AND c.field = 'name'
+      AND c.new_value = 'Blue Cross NC (rebranded)' AND c.review_state = 'unreviewed'
+  );

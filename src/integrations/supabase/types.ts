@@ -1176,64 +1176,204 @@ export type Database = {
         };
         Relationships: [];
       };
+      payer_catalog_changes: {
+        Row: {
+          created_at: string;
+          field: string;
+          id: string;
+          new_value: string | null;
+          old_value: string | null;
+          payer_id: string;
+          review_state: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          source: string;
+        };
+        Insert: {
+          created_at?: string;
+          field: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          payer_id: string;
+          review_state?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source?: string;
+        };
+        Update: {
+          created_at?: string;
+          field?: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          payer_id?: string;
+          review_state?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_catalog_changes_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payer_network_targets: {
+        Row: {
+          created_at: string;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          state: string;
+          status: string;
+        };
+        Insert: {
+          created_at?: string;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          state: string;
+          status?: string;
+        };
+        Update: {
+          created_at?: string;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          state?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_network_targets_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_network_targets_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_network_targets_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payers: {
         Row: {
+          aliases: string[] | null;
           avg_decision_days: number | null;
           caqh_pull_deadline_days: number | null;
+          cms_hios_id: string | null;
           created_at: string | null;
           id: string;
           is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
           name: string;
           org_id: string | null;
           payer_billing_id: string | null;
+          payer_kind: string;
           portal_url: string | null;
+          prerequisite_payer_id: string | null;
           prior_auth_vendor: string | null;
           provider_type_path: string | null;
           provisional_billing_allowed: boolean | null;
           provisional_billing_notes: string | null;
           retro_billing_allowed: boolean | null;
           retro_billing_window_days: number | null;
+          states: string[] | null;
+          status: string;
+          stedi_payer_id: string | null;
         };
         Insert: {
+          aliases?: string[] | null;
           avg_decision_days?: number | null;
           caqh_pull_deadline_days?: number | null;
+          cms_hios_id?: string | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
+          last_synced_at?: string | null;
+          merged_into_id?: string | null;
           name: string;
           org_id?: string | null;
           payer_billing_id?: string | null;
+          payer_kind?: string;
           portal_url?: string | null;
+          prerequisite_payer_id?: string | null;
           prior_auth_vendor?: string | null;
           provider_type_path?: string | null;
           provisional_billing_allowed?: boolean | null;
           provisional_billing_notes?: string | null;
           retro_billing_allowed?: boolean | null;
           retro_billing_window_days?: number | null;
+          states?: string[] | null;
+          status?: string;
+          stedi_payer_id?: string | null;
         };
         Update: {
+          aliases?: string[] | null;
           avg_decision_days?: number | null;
           caqh_pull_deadline_days?: number | null;
+          cms_hios_id?: string | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
+          last_synced_at?: string | null;
+          merged_into_id?: string | null;
           name?: string;
           org_id?: string | null;
           payer_billing_id?: string | null;
+          payer_kind?: string;
           portal_url?: string | null;
+          prerequisite_payer_id?: string | null;
           prior_auth_vendor?: string | null;
           provider_type_path?: string | null;
           provisional_billing_allowed?: boolean | null;
           provisional_billing_notes?: string | null;
           retro_billing_allowed?: boolean | null;
           retro_billing_window_days?: number | null;
+          states?: string[] | null;
+          status?: string;
+          stedi_payer_id?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "payers_merged_into_id_fkey";
+            columns: ["merged_into_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "payers_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payers_prerequisite_payer_id_fkey";
+            columns: ["prerequisite_payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
             referencedColumns: ["id"];
           },
         ];
@@ -2514,8 +2654,47 @@ export type Database = {
         Args: { p: Json; p_uid: string };
         Returns: string;
       };
+      list_global_payers: {
+        Args: never;
+        Returns: {
+          aliases: string[] | null;
+          avg_decision_days: number | null;
+          caqh_pull_deadline_days: number | null;
+          cms_hios_id: string | null;
+          created_at: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_billing_id: string | null;
+          payer_kind: string;
+          portal_url: string | null;
+          prerequisite_payer_id: string | null;
+          prior_auth_vendor: string | null;
+          provider_type_path: string | null;
+          provisional_billing_allowed: boolean | null;
+          provisional_billing_notes: string | null;
+          retro_billing_allowed: boolean | null;
+          retro_billing_window_days: number | null;
+          states: string[] | null;
+          status: string;
+          stedi_payer_id: string | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       mark_rpc_attempt_valid: {
         Args: { p_rpc_name: string };
+        Returns: undefined;
+      };
+      review_payer_catalog_change: {
+        Args: { p_accept: boolean; p_change_id: string };
         Returns: undefined;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };

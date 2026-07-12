@@ -434,6 +434,12 @@ export interface Provider {
   updatedAt: string;
 }
 
+// E1.6 catalog identity vocabulary. Government kinds + prerequisite links are
+// dormant schema until R10; the R2 directory filters to commercial by default.
+export type PayerKind =
+  "commercial" | "medicare" | "medicaid" | "medicaid_mco" | "medicare_advantage" | "tricare";
+export type PayerCatalogStatus = "active" | "merged" | "retired";
+
 export interface Payer {
   id: string;
   orgId: string;
@@ -449,6 +455,33 @@ export interface Payer {
   priorAuthVendor: string | null;
   payerBillingId: string | null;
   portalUrl: string | null;
+  createdAt: string;
+  // E1.6 catalog identity columns (additive; optional so pre-E1.6 fixtures
+  // stay valid). stediPayerId carries the professional 837P clearinghouse
+  // payer ID from the reference dataset — the Stedi API is withdrawn ([e1.6]).
+  payerKind?: PayerKind;
+  prerequisitePayerId?: string | null;
+  stediPayerId?: string | null;
+  cmsHiosId?: string | null;
+  aliases?: string[] | null;
+  states?: string[] | null;
+  status?: PayerCatalogStatus;
+  mergedIntoId?: string | null;
+  lastSyncedAt?: string | null;
+}
+
+// E1.6 F1.6.3 — append-only catalog diff log row. The diff facts are
+// immutable; only the review fields change, and only via the review RPC.
+export interface PayerCatalogChange {
+  id: string;
+  payerId: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  source: "sync" | "manual";
+  reviewState: "unreviewed" | "accepted" | "rejected";
+  reviewedBy: string | null;
+  reviewedAt: string | null;
   createdAt: string;
 }
 

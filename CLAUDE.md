@@ -489,6 +489,49 @@ VALID` (validate later, after legacy-null remediation through this UI),
   from this dataset (quarterly manual refresh per the README), deduping on
   the unique `payers.payer_slug` column — not `stedi_payer_id`, which was
   dropped from the epic.
+- **E1.6 — Global Payer Catalog (Commercial).** Built on the reference
+  dataset per the FINAL [e1.6] shape: Stedi withdrawn AND clearinghouse payer
+  IDs dropped entirely — **`payers.payer_slug` (canonical dataset key, partial
+  UNIQUE where not null) is the identity + sync dedupe key**; the CSV's
+  clearinghouse-ID column is ignored. THREE additive migrations (repo +
+  hosted, `20260712180000`–`180200`): TE-2 identity columns on `payers`
+  (`payer_kind` CHECK w/ six kinds default `commercial`, `status
+active|merged|retired`, `aliases text[]`, `states text[]`, `payer_slug` +
+  unique index `uq_payers_payer_slug`, dormant
+  `prerequisite_payer_id`/`merged_into_id`, `cms_hios_id`, `last_synced_at`);
+  TE-3 `payer_catalog_changes` (append-only diff log — authenticated
+  shared-queue SELECT like `inbound_leads`, NO authenticated writes; grants
+  enforce diff-fact immutability); the two RPCs — **`list_global_payers`**
+  (SECURITY DEFINER read: the P2 RLS disjunction only shows ASSIGNED global
+  rows to an org and TE-1 forbids touching it, so the browse-everything
+  directory reads through this instead of a policy change) and
+  **`review_payer_catalog_change`** (accept applies to an IDENTITY-FIELD
+  whitelist — name/aliases/states/cms_hios_id/status, never the slug or
+  curated fields — + stamps reviewed_by/at; reject records; double-review
+  rejected; probes ran rollback-wrapped on hosted). **Seed pipeline
+  (F1.6.2):** `scripts/payer-catalog-sync.mjs` (plain-JS, node-runnable;
+  typed via `payer-catalog-sync.d.mts`; unit-tested from
+  `src/lib/payerCatalogSync.test.ts`) parses `payers.csv` → plans
+  inserts/diffs (`planCatalogSync`: match by `payer_slug`; name-match
+  fallback ONLY to backfill slugless legacy rows; changed fields become diff
+  rows, NEVER overwrites; disappeared payers reported only) → emits
+  idempotent SQL (`ON CONFLICT (payer_slug)`). **All 270 entities are seeded
+  on hosted with slugs**; live TS-37 re-plan = 0 inserts / 0 diffs. Runbook
+  in the script header; quarterly manual refresh per the dataset README.
+  **App layer:** `Payer` type widened additively (`PayerKind`, catalog
+  fields optional incl. `payerSlug`) + `PayerCatalogChange`; cross-org keys
+  `payerCatalog()`/`payerCatalogChanges()`; `src/services/payerCatalog.ts`
+  (RPC-bound reads, review via RPC — the diff row IS the audit trail; no
+  org-scoped writeAudit by design) → `src/hooks/usePayerCatalog.ts`; pure
+  `src/lib/payerDirectory.ts` (`filterDirectoryRows` name+alias search,
+  state/kind filters, `DEFAULT_DIRECTORY_KIND = commercial`; tested).
+  **`/payer-directory` route** (hand-rolled table showing the catalog key
+  (slug), kind/status pills via the legacy `StatusPill`, review panel
+  `PayerCatalogChangesPanel` renders only when unreviewed diffs await) —
+  **no Sidebar entry** (layout/* not §5-authorized; TD-32 in TECH-DEBT.md).
+  Seed-redesign gained the six-state global fixtures + a TS-38 rename diff.
+  e2e `e2e/payer-directory.spec.ts` (TS-36/TS-38). E1.5 and E1.8 are now
+  unblocked.
 
 ## What this is
 
