@@ -533,6 +533,42 @@ active|merged|retired`, `aliases text[]`, `states text[]`, `payer_slug` +
   e2e `e2e/payer-directory.spec.ts` (TS-36/TS-38). E1.5 and E1.8 are now
   unblocked.
 
+- **E1.5 — Payer Network Attachment.** ONE additive migration (repo + hosted,
+  `20260712190000_payer_network_targets.sql`): **`payer_network_targets`** —
+  the group×payer×state attachment grain under the org-level "we work with
+  this payer" intent, DISTINCT from the `org_payer_assignments` subscription
+  layer (locked [stage-1b] split; org_id denormalized on purpose for RLS).
+  `UNIQUE (group_id, payer_id, state)`, `status active|archived` CHECK,
+  `^[A-Z]{2}$` state CHECK, FK cover indexes; RLS = member SELECT / admin
+  writes with STRICTER WITH CHECKs (group must belong to the org AND an
+  `org_payer_assignments` row must exist — a multi-org admin can't cross
+  tenants or attach outside the curated shortlist). Probes ran
+  rollback-wrapped on hosted; types regenerated; table-register row added.
+  **Pure module `src/lib/payerExpansion.ts`** (tested): `expandTargets`
+  (active groups × states-with-≥1-active-facility ∩ payer `states[]`),
+  `reviewExpansion` (annotates vs existing targets; archived rows
+  PRE-UNCHECKED), `planAttachmentSave` (unchecked excluded; archived+checked
+  → restore, never a duplicate insert; active rows never rewritten),
+  `newExpansionRows` (TE-7 derived "new expansion available" — never a
+  stored flag). **Service `src/services/payerNetworkTargets.ts`** (audited
+  `payer_network_target` entity type; archive/restore are STATUS FLIPS —
+  never DELETE, TE-5) → `src/hooks/usePayerNetworkTargets.ts`
+  (`queryKeys.payerNetworkTargets(orgId)`). **Wizard:** `payer_network`
+  moved preview→ACTIVE (`resolvePayerNetworkStatus` = ≥1 active target;
+  Scope Review is now the only preview); `useOnboardingWizard` gained
+  payers/payerAssignments/payerNetworkTargets. UI in
+  `src/components/payers/`: `PayerNetworkSection` (attached list with
+  target chips, per-target + payer-level archive, archived view w/ one-click
+  Restore + Re-attach, TE-7 review affordance, curated-shortlist empty
+  state) + `AttachPayerDialog` (picker = `listPayers` ∩
+  `org_payer_assignments` — never the full catalog; F1.5.4 prerequisite
+  note informational only; expansion review = `ui/table` + checkboxes,
+  facility-count reasons, empty-expansion explainer). NO seed change
+  (seed-universe pins TS-41/42 as L1 on the TS-36 fixtures). e2e
+  `e2e/payer-network.spec.ts` (TS-41/41b/42); `onboarding-wizard.spec.ts`
+  TS-25/28 updated for the activated section. E2.x case generation reads
+  `status='active'` rows; E1.8 readiness evaluates against them.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

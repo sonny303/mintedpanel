@@ -11,8 +11,8 @@ import { partyToContactInput } from "@/lib/contacts";
 export type OnboardingSectionStatus = "not_started" | "in_progress" | "complete";
 
 export type ActiveSectionKey =
-  "org_details" | "provider_group" | "facilities" | "providers" | "assignments";
-export type PreviewSectionKey = "payer_network" | "scope_review";
+  "org_details" | "provider_group" | "facilities" | "providers" | "assignments" | "payer_network";
+export type PreviewSectionKey = "scope_review";
 export type OnboardingSectionKey = ActiveSectionKey | PreviewSectionKey;
 
 interface SectionDefBase {
@@ -36,8 +36,8 @@ export interface PreviewSectionDef extends SectionDefBase {
 
 export type OnboardingSectionDef = ActiveSectionDef | PreviewSectionDef;
 
-// The exact ordered R1 journey (F1.0.1): four active sections, then the R3
-// preview trio — visible but disabled until their epics land.
+// The exact ordered journey (F1.0.1): the R1 four, the activated R3 sections
+// (Assignments, Payer Network), then the remaining disabled preview.
 export const ONBOARDING_SECTIONS: readonly OnboardingSectionDef[] = [
   { key: "org_details", title: "Org details", domId: "wizard-org-details", kind: "active" },
   {
@@ -50,11 +50,12 @@ export const ONBOARDING_SECTIONS: readonly OnboardingSectionDef[] = [
   { key: "providers", title: "Providers", domId: "wizard-providers", kind: "active" },
   // E1.4: Assignments went live — the first R3 preview to activate.
   { key: "assignments", title: "Assignments", domId: "wizard-assignments", kind: "active" },
+  // E1.5: Payer Network went live — the group×payer×state attachment surface.
   {
     key: "payer_network",
     title: "Payer Network",
     domId: "wizard-payer-network",
-    kind: "preview",
+    kind: "active",
   },
   { key: "scope_review", title: "Scope Review", domId: "wizard-scope-review", kind: "preview" },
 ];
@@ -129,6 +130,16 @@ export function resolveAssignmentsStatus(
   return covered === providerIds.length ? "complete" : "in_progress";
 }
 
+// Payer Network (E1.5 TE-8): complete on ≥1 ACTIVE attachment target —
+// archived targets never count (the deny-then-reapply cycle can empty the
+// section back to not_started). Same derived active-rows rule as groups/
+// facilities, mapped from the target's status flip instead of is_active.
+export function resolvePayerNetworkStatus(
+  targets: ReadonlyArray<{ status: "active" | "archived" }>,
+): OnboardingSectionStatus {
+  return resolveActiveRowsStatus(targets.map((t) => ({ isActive: t.status === "active" })));
+}
+
 // ---------- next action (F1.0.3 / TE-4) ----------
 
 // Stable heading id inside a section card — the focus target the next-action
@@ -138,9 +149,9 @@ export function sectionHeadingId(def: OnboardingSectionDef): string {
 }
 
 // First active section, in registry order, whose status is not complete.
-// `null` = all four R1 sections complete (callers show the Assignments
-// preview instead of a CTA). Callers must not invoke this while any required
-// read is unresolved — pass only fully resolved statuses.
+// `null` = every active section complete (callers hand off to the first
+// remaining preview instead of a CTA). Callers must not invoke this while any
+// required read is unresolved — pass only fully resolved statuses.
 export function getNextIncompleteSection(
   statuses: Record<ActiveSectionKey, OnboardingSectionStatus>,
 ): ActiveSectionDef | null {

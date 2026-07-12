@@ -10,7 +10,8 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 //   TS-27 resume across org switch: "Next: Facilities" is derived, so it
 //         survives the E0.0 org-switch state reset; the CTA moves keyboard
 //         focus to the section heading
-//   TS-28 all-complete state: the CTA hands off to the Assignments preview
+//   TS-28 all-complete state: the CTA hands off to the Scope Review preview
+//         (Assignments went live in E1.4, Payer Network in E1.5)
 // Plus the F1.0.4 shell sweep: approved white logo mark + rail text alphas.
 // Fixture personas per seed-universe.md: Lone Star Rehab Group (partially
 // scoped) and Outer Banks Rehab Group (TS-26 outside-edit org).
@@ -136,6 +137,9 @@ interface FixtureOverrides {
   providers?: unknown[];
   party_role_assignments?: unknown[];
   provider_facility_assignments?: unknown[];
+  payers?: unknown[];
+  org_payer_assignments?: unknown[];
+  payer_network_targets?: unknown[];
 }
 
 function makeFixtures(over: FixtureOverrides) {
@@ -173,6 +177,9 @@ function makeFixtures(over: FixtureOverrides) {
     providers: over.providers ?? [],
     provider_facility_assignments: over.provider_facility_assignments ?? [],
     provider_group_assignments: [],
+    payers: over.payers ?? [],
+    org_payer_assignments: over.org_payer_assignments ?? [],
+    payer_network_targets: over.payer_network_targets ?? [],
   } as Record<string, unknown[]>;
 }
 
@@ -294,8 +301,15 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     sectionCard(page, "wizard-assignments").getByRole("button", { name: "Go to Providers" }),
   ).toBeVisible();
 
+  // E1.5 activated Payer Network: with no enabled payers it renders the
+  // curated-shortlist explainer, not a disabled preview.
+  await expect(sectionCard(page, "wizard-payer-network")).toContainText("Not started");
+  await expect(sectionCard(page, "wizard-payer-network")).toContainText(
+    "No payers are enabled for this organization yet",
+  );
+
   // Previews: visible, labeled Coming next, aria-disabled, non-interactive.
-  for (const domId of ["wizard-payer-network", "wizard-scope-review"]) {
+  for (const domId of ["wizard-scope-review"]) {
     const previewCard = sectionCard(page, domId);
     await expect(previewCard).toBeVisible();
     await expect(previewCard).toContainText("Coming next");
@@ -381,7 +395,7 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await expect(page.locator("#wizard-facilities-heading")).toBeFocused();
 });
 
-test("TS-28: all four sections complete hands off to the Assignments preview", async ({
+test("TS-28: every active section complete hands off to the Scope Review preview", async ({
   context,
   page,
 }) => {
@@ -400,6 +414,34 @@ test("TS-28: all four sections complete hands off to the Assignments preview", a
         is_primary: true,
         start_date: "2026-01-05",
         created_at: "2026-07-10T00:00:00Z",
+      },
+    ],
+    // E1.5: ... and one ACTIVE payer network target.
+    payers: [
+      {
+        id: "pay-1",
+        org_id: null,
+        name: "Blue Cross and Blue Shield of North Carolina",
+        payer_kind: "commercial",
+        states: ["NC"],
+        aliases: [],
+        status: "active",
+        payer_slug: "blue-cross-and-blue-shield-of-north-carolina",
+        prerequisite_payer_id: null,
+      },
+    ],
+    org_payer_assignments: [
+      { id: "opa-1", org_id: ORG_LONE_STAR, payer_id: "pay-1", starter: false },
+    ],
+    payer_network_targets: [
+      {
+        id: "pnt-1",
+        org_id: ORG_LONE_STAR,
+        payer_id: "pay-1",
+        group_id: "g-ls",
+        state: "NC",
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
       },
     ],
   });
