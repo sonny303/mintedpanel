@@ -53,6 +53,10 @@ export const queryKeys = {
   // active org (it renders without one). RLS scopes the read to the caller's
   // member orgs; org switch clears it via queryClient.removeQueries() anyway.
   portfolio: () => ["portfolio"] as const,
+  // E1.6 — cross-org global catalog keys (deliberately un-scoped, like
+  // portfolio()/orgStates(): the catalog is platform-level data).
+  payerCatalog: () => ["payer-catalog"] as const,
+  payerCatalogChanges: () => ["payer-catalog-changes"] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
   // Full Party model (redesign E0.3): all parties in an org + the global,
