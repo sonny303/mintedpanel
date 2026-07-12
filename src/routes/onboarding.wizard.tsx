@@ -20,6 +20,7 @@ import {
   AssignmentsSectionBody,
   FacilitiesSectionBody,
   OrgDetailsSectionBody,
+  PayerNetworkSectionBody,
   ProviderGroupSectionBody,
   ProvidersSectionBody,
   type SectionBodyProps,
@@ -40,6 +41,7 @@ const SECTION_BODIES: Record<ActiveSectionKey, ComponentType<SectionBodyProps>> 
   facilities: FacilitiesSectionBody,
   providers: ProvidersSectionBody,
   assignments: AssignmentsSectionBody,
+  payer_network: PayerNetworkSectionBody,
 };
 
 function OnboardingWizardPage() {

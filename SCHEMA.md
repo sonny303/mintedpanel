@@ -103,15 +103,27 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 ### state_licenses
 
-`id, org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, created_at`.
+`id, org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, created_at`. **E1.3 PSV trail (`20260712120100`):** `verified_status` (unverified|verified|failed CHECK), `verified_at`, `verified_by`, `verification_source_url`.
+
+### provider_group_assignments (E1.3, 2026-07-12)
+
+`id, org_id, provider_id, group_id, is_primary, created_at`. The M:N provider↔group join (migration `20260712120000`, mirrors the `provider_facility_assignments` template): org-scoped RLS, `UNIQUE (provider_id, group_id)`, partial unique ONE `is_primary` per provider. `providers.group_id` is a FROZEN legacy mirror of the primary assignment — no new readers.
 
 ### payers
 
-`id, org_id, name, is_active, avg_decision_days, provisional_billing_allowed, provisional_billing_notes, retro_billing_allowed, retro_billing_window_days, caqh_pull_deadline_days, provider_type_path, prior_auth_vendor, payer_billing_id, portal_url, created_at`. **`org_id` is NULLABLE (P2, migration `20260707060000`): a NULL row is a global-catalog payer, visible to an org only via `org_payer_assignments`.** SELECT policy = `(org_id IN user_org_ids()) OR (org_id IS NULL AND assigned)`; writes stay own-org-only (org users can't create/edit global rows).
+`id, org_id, name, is_active, avg_decision_days, provisional_billing_allowed, provisional_billing_notes, retro_billing_allowed, retro_billing_window_days, caqh_pull_deadline_days, provider_type_path, prior_auth_vendor, payer_billing_id, portal_url, created_at`. **`org_id` is NULLABLE (P2, migration `20260707060000`): a NULL row is a global-catalog payer, visible to an org only via `org_payer_assignments`.** SELECT policy = `(org_id IN user_org_ids()) OR (org_id IS NULL AND assigned)`; writes stay own-org-only (org users can't create/edit global rows). **E1.6 catalog identity columns (`20260712180000`):** `payer_kind` (CHECK commercial|medicare|medicaid|medicaid_mco|medicare_advantage|tricare, default commercial), `status` (active|merged|retired), `aliases text[]`, `states text[]`, **`payer_slug`** (canonical dataset key, partial UNIQUE `uq_payers_payer_slug WHERE payer_slug IS NOT NULL` — the sync dedupe/identity key), dormant `prerequisite_payer_id`/`merged_into_id` self-FKs, `cms_hios_id`, `last_synced_at`.
+
+### payer_catalog_changes (E1.6, 2026-07-12)
+
+`id, payer_id, field, old_value, new_value, source, review_state (unreviewed|accepted|rejected), reviewed_by, reviewed_at, created_at`. Append-only sync diff log (migration `20260712180100`): authenticated shared-queue SELECT (like `inbound_leads`), NO authenticated writes — review happens through the `review_payer_catalog_change` RPC (accept applies an identity-field whitelist: name/aliases/states/cms_hios_id/status — never the slug or curated fields). `list_global_payers` (SECURITY DEFINER read) serves the browse-everything directory without touching the P2 RLS disjunction.
 
 ### org_payer_assignments (P2, 2026-07-07)
 
 `id, org_id, payer_id, starter, created_at`. Per-org subscription to a global-catalog payer, unique `(org_id, payer_id)`; `starter` flags starter-pack payers (Epic 1c / P4). RLS: member SELECT own-org, admin INSERT/UPDATE/DELETE own-org. Migration `20260707060000_global_catalog_org_assignment.sql`. Catalog isolation is a browser-RLS concern (not the /api gate) — verified by `scripts/verify-catalog-rls.sql`.
+
+### payer_network_targets (E1.5, 2026-07-12)
+
+`id, org_id, payer_id, group_id, state, status (active|archived), created_at`. The group×payer×state attachment grain under the org-level "we work with this payer" intent — DISTINCT from the `org_payer_assignments` subscription layer (locked [stage-1b] split; `org_id` deliberately denormalized for RLS). `UNIQUE (group_id, payer_id, state)`; `state ~ '^[A-Z]{2}$'`; FK cover indexes. RLS: member SELECT own-org; admin INSERT/UPDATE WITH CHECK additionally requires the group to belong to the org AND a matching `org_payer_assignments` row. Archive = status flip, never DELETE; E2.x case generation reads `status='active'`. Migration `20260712190000_payer_network_targets.sql`.
 
 ### msos
 

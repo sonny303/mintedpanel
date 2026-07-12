@@ -497,6 +497,21 @@ export interface OrgPayerAssignment {
   createdAt: string;
 }
 
+// E1.5 — the group × payer × state attachment grain under the org-level
+// intent (distinct from OrgPayerAssignment, the curated subscription layer).
+// Attach = intend to pursue; archive is the removal semantic (history kept,
+// deny → reapply cycle); real status lives on contracts/cases. E2.x case
+// generation reads status === "active" rows.
+export interface PayerNetworkTarget {
+  id: string;
+  orgId: string;
+  payerId: string;
+  groupId: string;
+  state: string;
+  status: "active" | "archived";
+  createdAt: string;
+}
+
 export interface Mso {
   id: string;
   orgId: string;
