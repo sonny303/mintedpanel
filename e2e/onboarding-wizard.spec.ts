@@ -10,8 +10,8 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 //   TS-27 resume across org switch: "Next: Facilities" is derived, so it
 //         survives the E0.0 org-switch state reset; the CTA moves keyboard
 //         focus to the section heading
-//   TS-28 all-complete state: the CTA hands off to the Scope Review preview
-//         (Assignments went live in E1.4, Payer Network in E1.5)
+//   TS-28 all-complete state: every section (incl. E1.8 Scope Review) is
+//         complete and the journey card has no CTA and no preview handoff
 // Plus the F1.0.4 shell sweep: approved white logo mark + rail text alphas.
 // Fixture personas per seed-universe.md: Lone Star Rehab Group (partially
 // scoped) and Outer Banks Rehab Group (TS-26 outside-edit org).
@@ -140,6 +140,10 @@ interface FixtureOverrides {
   payers?: unknown[];
   org_payer_assignments?: unknown[];
   payer_network_targets?: unknown[];
+  provider_group_assignments?: unknown[];
+  state_licenses?: unknown[];
+  provider_documents?: unknown[];
+  group_insurance_policies?: unknown[];
 }
 
 function makeFixtures(over: FixtureOverrides) {
@@ -176,10 +180,13 @@ function makeFixtures(over: FixtureOverrides) {
     facilities: over.facilities ?? [],
     providers: over.providers ?? [],
     provider_facility_assignments: over.provider_facility_assignments ?? [],
-    provider_group_assignments: [],
     payers: over.payers ?? [],
     org_payer_assignments: over.org_payer_assignments ?? [],
     payer_network_targets: over.payer_network_targets ?? [],
+    provider_group_assignments: over.provider_group_assignments ?? [],
+    state_licenses: over.state_licenses ?? [],
+    provider_documents: over.provider_documents ?? [],
+    group_insurance_policies: over.group_insurance_policies ?? [],
   } as Record<string, unknown[]>;
 }
 
@@ -308,14 +315,14 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     "No payers are enabled for this organization yet",
   );
 
-  // Previews: visible, labeled Coming next, aria-disabled, non-interactive.
-  for (const domId of ["wizard-scope-review"]) {
-    const previewCard = sectionCard(page, domId);
-    await expect(previewCard).toBeVisible();
-    await expect(previewCard).toContainText("Coming next");
-    await expect(previewCard).toHaveAttribute("aria-disabled", "true");
-    await expect(previewCard.locator("a, button")).toHaveCount(0);
-  }
+  // E1.8 activated Scope Review (the last preview): with zero targets it
+  // renders the derive explainer pointing at Payer Network — no preview
+  // cards remain anywhere on the journey.
+  await expect(sectionCard(page, "wizard-scope-review")).toContainText("Not started");
+  await expect(sectionCard(page, "wizard-scope-review")).toContainText(
+    "attach payers in the Payer Network section",
+  );
+  await expect(page.getByText("Coming next")).toHaveCount(0);
 
   // Next action targets the first incomplete section (F1.0.3).
   await expect(page.getByRole("button", { name: "Next: Provider Group" })).toBeVisible();
@@ -395,15 +402,31 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await expect(page.locator("#wizard-facilities-heading")).toBeFocused();
 });
 
-test("TS-28: every active section complete hands off to the Scope Review preview", async ({
+test("TS-28: every active section complete ends the journey (no preview left)", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures({
     party_role_assignments: contactAssignments(ORG_LONE_STAR, "lone-star"),
     provider_groups: [providerGroup(ORG_LONE_STAR, "g-ls", "Lone Star Rehab Group")],
-    facilities: [facilityRow(ORG_LONE_STAR, "f-ls", "Lone Star HQ")],
-    providers: [provider(ORG_LONE_STAR, "pr-1", "Karen", "Filippelli")],
+    facilities: [
+      { ...facilityRow(ORG_LONE_STAR, "f-ls", "Lone Star HQ"), group_id: "g-ls", state: "NC" },
+    ],
+    providers: [
+      {
+        ...provider(ORG_LONE_STAR, "pr-1", "Karen", "Filippelli"),
+        // E1.8: the readiness facts that make every provider check pass.
+        caqh_id: "16224897",
+        caqh_last_attested_date: "2026-07-01",
+        date_of_birth: "1990-01-01",
+        ssn_last4: "1234",
+        home_street: "1 Main St",
+        home_city: "Austin",
+        home_state: "TX",
+        home_zip: "78701",
+        malpractice_coverage_end: "2027-12-31",
+      },
+    ],
     // E1.4: the all-complete state now also requires every provider assigned.
     provider_facility_assignments: [
       {
@@ -442,6 +465,50 @@ test("TS-28: every active section complete hands off to the Scope Review preview
         state: "NC",
         status: "active",
         created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
+    // E1.8: readiness inputs that complete the Scope Review section.
+    provider_group_assignments: [
+      {
+        id: "ga-1",
+        org_id: ORG_LONE_STAR,
+        provider_id: "pr-1",
+        group_id: "g-ls",
+        is_primary: true,
+      },
+    ],
+    state_licenses: [
+      {
+        id: "lic-1",
+        org_id: ORG_LONE_STAR,
+        provider_id: "pr-1",
+        state: "NC",
+        license_number: "PT-1",
+        expiration_date: "2027-12-31",
+        verified_status: "verified",
+      },
+    ],
+    provider_documents: [
+      {
+        id: "doc-1",
+        org_id: ORG_LONE_STAR,
+        group_id: "g-ls",
+        doc_type: "w9",
+        expiration_date: null,
+      },
+      {
+        id: "doc-2",
+        org_id: ORG_LONE_STAR,
+        group_id: "g-ls",
+        doc_type: "coi",
+        expiration_date: null,
+      },
+      {
+        id: "doc-3",
+        org_id: ORG_LONE_STAR,
+        group_id: "g-ls",
+        doc_type: "voided_check",
+        expiration_date: null,
       },
     ],
   });
