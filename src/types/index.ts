@@ -450,6 +450,13 @@ export interface Payer {
   payerBillingId: string | null;
   portalUrl: string | null;
   createdAt: string;
+  // E1.6 global-catalog metadata (additive columns, applied to hosted
+  // 2026-07-12). Optional so rows/fixtures read before the metadata existed
+  // still type-check; E1.5 surfaces render them when present (picker kind /
+  // states, informational prerequisite note) and degrade when absent.
+  payerKind?: string;
+  states?: string[] | null;
+  prerequisitePayerId?: string | null;
 }
 
 // Global catalog (P2): payers/sop_templates with orgId NULL are platform-managed
@@ -461,6 +468,24 @@ export interface OrgPayerAssignment {
   orgId: string;
   payerId: string;
   starter: boolean;
+  createdAt: string;
+}
+
+// Group×state payer-attachment grain (redesign E1.5), a child of the
+// org_payer_assignments subscription layer: one row = "this provider group
+// pursues this payer in this state" (unique (group_id, payer_id, state)).
+// Attach = intent — no attachment-status workflow; real status lives on
+// contracts/cases. Removal flips status to "archived" (history kept,
+// restorable) — never a row delete. E2.x case generation reads active rows.
+export type PayerNetworkTargetStatus = "active" | "archived";
+
+export interface PayerNetworkTarget {
+  id: string;
+  orgId: string;
+  payerId: string;
+  groupId: string;
+  state: string;
+  status: PayerNetworkTargetStatus;
   createdAt: string;
 }
 

@@ -8,6 +8,7 @@ import {
   getNextIncompleteSection,
   resolveAssignmentsStatus,
   resolveOrgDetailsStatus,
+  resolvePayerNetworkStatus,
   resolveProviderGroupStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
@@ -178,14 +179,15 @@ describe("section registry", () => {
       "Payer Network",
       "Scope Review",
     ]);
-    // E1.4 activated Assignments — the first R3 preview to go live.
+    // E1.4 activated Assignments; E1.5 activated Payer Network — only the
+    // Scope Review preview remains.
     expect(ONBOARDING_SECTIONS.map((s) => s.kind)).toEqual([
       "active",
       "active",
       "active",
       "active",
       "active",
-      "preview",
+      "active",
       "preview",
     ]);
   });
@@ -195,14 +197,34 @@ describe("section registry", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("derives ACTIVE_SECTIONS in registry order (R1 four + E1.4 assignments)", () => {
+  it("derives ACTIVE_SECTIONS in registry order (R1 four + E1.4 + E1.5)", () => {
     expect(ACTIVE_SECTIONS.map((s) => s.key)).toEqual([
       "org_details",
       "provider_group",
       "facilities",
       "providers",
       "assignments",
+      "payer_network",
     ]);
+  });
+});
+
+describe("resolvePayerNetworkStatus (E1.5)", () => {
+  it("is not_started with zero target rows", () => {
+    expect(resolvePayerNetworkStatus([])).toBe("not_started");
+  });
+
+  it("completes on ≥1 active target", () => {
+    expect(resolvePayerNetworkStatus([{ status: "active" }])).toBe("complete");
+    expect(resolvePayerNetworkStatus([{ status: "archived" }, { status: "active" }])).toBe(
+      "complete",
+    );
+  });
+
+  it("treats archived-only as not_started (all intent withdrawn)", () => {
+    expect(resolvePayerNetworkStatus([{ status: "archived" }, { status: "archived" }])).toBe(
+      "not_started",
+    );
   });
 });
 
@@ -241,6 +263,7 @@ describe("getNextIncompleteSection", () => {
     facilities: status,
     providers: status,
     assignments: status,
+    payer_network: status,
   });
 
   it("returns the first non-complete active section in registry order", () => {
@@ -257,6 +280,9 @@ describe("getNextIncompleteSection", () => {
     expect(getNextIncompleteSection({ ...all("complete"), assignments: "not_started" })?.key).toBe(
       "assignments",
     );
+    expect(
+      getNextIncompleteSection({ ...all("complete"), payer_network: "not_started" })?.key,
+    ).toBe("payer_network");
   });
 
   it("treats in_progress as incomplete", () => {
@@ -273,11 +299,12 @@ describe("getNextIncompleteSection", () => {
         facilities: "not_started",
         providers: "not_started",
         assignments: "not_started",
+        payer_network: "not_started",
       })?.key,
     ).toBe("provider_group");
   });
 
-  it("returns null when all four R1 sections are complete (preview handoff)", () => {
+  it("returns null when every active section is complete (preview handoff)", () => {
     expect(getNextIncompleteSection(all("complete"))).toBeNull();
   });
 });

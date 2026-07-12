@@ -113,6 +113,10 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 `id, org_id, payer_id, starter, created_at`. Per-org subscription to a global-catalog payer, unique `(org_id, payer_id)`; `starter` flags starter-pack payers (Epic 1c / P4). RLS: member SELECT own-org, admin INSERT/UPDATE/DELETE own-org. Migration `20260707060000_global_catalog_org_assignment.sql`. Catalog isolation is a browser-RLS concern (not the /api gate) — verified by `scripts/verify-catalog-rls.sql`.
 
+### payer_network_targets (redesign E1.5, 2026-07-12)
+
+`id, org_id, payer_id, group_id, state, status, created_at`. The group×state payer-attachment grain BENEATH the `org_payer_assignments` subscription layer (the two stay distinct by locked [stage-1b] decision): one row = "this provider group pursues this payer in this state". **Unique `(group_id, payer_id, state)`** (group-keyed — two groups of one org target the same payer/state independently); `state` CHECK `^[A-Z]{2}$` (E0.10 floor); `status IN ('active','archived')` default `active` — attach = intent (no attachment-status workflow; real status lives on contracts/cases), removal is a status flip to `archived` (history kept, restore flips back), never a DELETE. RLS: member SELECT own-org; admin-only INSERT/UPDATE/DELETE with WITH CHECKs requiring the `group_id` to belong to the same org AND a matching `(org_id, payer_id)` row in `org_payer_assignments`. E2.x case generation reads `status='active'` rows; E1.8 readiness evaluates against them. Migration `20260712160000_payer_network_targets.sql` (repo + hosted).
+
 ### msos
 
 `id, org_id, name, portal_url, created_at`.

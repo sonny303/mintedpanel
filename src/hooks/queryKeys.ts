@@ -15,6 +15,8 @@ export const queryKeys = {
   payers: (orgId: string) => ["payers", orgId] as const,
   payer: (orgId: string, id: string) => ["payer", orgId, id] as const,
   orgPayerAssignments: (orgId: string) => ["org-payer-assignments", orgId] as const,
+  // Payer network attachment targets (redesign E1.5).
+  payerNetworkTargets: (orgId: string) => ["payer-network-targets", orgId] as const,
   msos: (orgId: string) => ["msos", orgId] as const,
   mso: (orgId: string, id: string) => ["mso", orgId, id] as const,
   msoRoutingRules: (orgId: string) => ["mso-routing-rules", orgId] as const,

@@ -472,6 +472,43 @@ VALID` (validate later, after legacy-null remediation through this UI),
   stays untouched/unwritten. e2e: `e2e/assignments-wizard.spec.ts`
   (TS-39/TS-40); TS-25/28/33 fixtures updated for the activated section.
 
+- **E1.5 — Payer Network Attachment.** ONE additive migration (repo + hosted):
+  `20260712160000_payer_network_targets.sql` — `payer_network_targets`
+  (org/payer/group/state + `status active|archived`, unique
+  `(group_id, payer_id, state)` — group-keyed grain, E0.10 state CHECK + FK
+  cover indexes). RLS: member SELECT; **admin-only writes** whose WITH CHECKs
+  also require a same-org `group_id` AND a matching `org_payer_assignments`
+  row — the subscription layer stays the visibility gate; the two tables stay
+  distinct by locked [stage-1b] decision (never fold group/state into
+  `org_payer_assignments`). The wizard's Payer Network preview went ACTIVE
+  (`ActiveSectionKey` gained `payer_network`; Scope Review is the only
+  remaining preview). **Attach = intent**: the org-level pick expands to
+  group×state rows via pure `src/lib/payerExpansion.ts` (tested) —
+  `expandTargets` intersects ACTIVE facilities' states with the payer's
+  `states[]` metadata (**missing metadata = no constraint**, so pre-catalog
+  payers stay attachable), `planAttach` marks rows new/active/archived with
+  archived rows PRE-UNCHECKED (F1.5.3 re-attach review), `newExpansionRows`
+  is the TE-7 derived "new expansion available" diff — no stored dirty flag.
+  Progress: `resolvePayerNetworkStatus` = ≥1 ACTIVE target (archived-only =
+  not_started). ONE write path `src/services/payerNetworkTargets.ts`
+  (`listTargets` / `attachTargets` insert+restore / `archiveTarget` /
+  `restoreTarget` / `archivePayerTargets` — **archive is a status flip, never
+  DELETE**; all audited under entity `payer_network_target`) →
+  `usePayerNetworkTargets.ts` (`queryKeys.payerNetworkTargets`). UI in
+  `src/components/payers/`: `PayerNetworkSection` (curated shortlist =
+  `listPayers` ∩ `org_payer_assignments`, NEVER the full catalog; admin-gated
+  writes; archived view with one-click restore) + `AttachPayerDialog`
+  (reviewable expansion table with exception checkboxes; prerequisite note is
+  INFORMATIONAL ONLY per the R4/Q8 decision) + `payerDisplay.ts`. `Payer`
+  gained OPTIONAL `payerKind`/`states`/`prerequisitePayerId` — the E1.6
+  catalog columns, which the PARALLEL E1.6 lane applied to hosted 2026-07-12
+  mid-session (the types.ts regen picked them up plus
+  `payer_catalog_changes`); E1.5 renders them when present and degrades when
+  absent. E1.5 formally depends on E1.6 (still unbuilt in-app) — merge order
+  is the reviewer's gate. No seed change (TS-41/42 ride the TS-36 catalog
+  fixtures, which are E1.6 seed work). e2e: `e2e/payer-network.spec.ts`
+  (TS-41/TS-42); TS-25/TS-28 fixtures updated for the activated section.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

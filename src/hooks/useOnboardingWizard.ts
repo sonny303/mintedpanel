@@ -13,12 +13,14 @@ import {
   useProviderGroupAssignments,
   useProviders,
 } from "@/hooks/useProviders";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { useActiveMembership } from "@/lib/auth-store";
 import {
   getNextIncompleteSection,
   resolveActiveRowsStatus,
   resolveAssignmentsStatus,
   resolveOrgDetailsStatus,
+  resolvePayerNetworkStatus,
   resolveProviderGroupStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
@@ -29,6 +31,7 @@ import type {
   Facility,
   FacilityAssignment,
   OrgContact,
+  PayerNetworkTarget,
   Provider,
   ProviderGroup,
   ProviderGroupAssignment,
@@ -63,6 +66,8 @@ export interface OnboardingWizardData {
   assignments: FacilityAssignment[];
   /** Provider↔group rows (E1.3) — scopes the E1.4 facility picker. */
   providerGroupAssignments: ProviderGroupAssignment[];
+  /** Payer attachment targets, active AND archived (E1.5 section). */
+  payerNetworkTargets: PayerNetworkTarget[];
 }
 
 export function useOnboardingWizard(): OnboardingWizardData {
@@ -75,6 +80,7 @@ export function useOnboardingWizard(): OnboardingWizardData {
   const providersQ = useProviders();
   const assignmentsQ = useProviderAssignments();
   const groupAssignmentsQ = useProviderGroupAssignments();
+  const targetsQ = usePayerNetworkTargets();
 
   const contacts = contactsQ.data ?? [];
   const orgName = active?.orgName ?? null;
@@ -138,6 +144,14 @@ export function useOnboardingWizard(): OnboardingWizardData {
         if (assignmentsQ.isError) assignmentsQ.refetch();
       },
     },
+    // E1.5: complete on ≥1 active attachment target (archived-only = not
+    // started); same derived-status rule as every other section.
+    payer_network: {
+      status: targetsQ.data ? resolvePayerNetworkStatus(targetsQ.data) : undefined,
+      isLoading: targetsQ.isLoading,
+      isError: targetsQ.isError,
+      refetch: targetsQ.refetch,
+    },
   };
 
   const orgDetailsStatus = sections.org_details.status;
@@ -145,14 +159,21 @@ export function useOnboardingWizard(): OnboardingWizardData {
   const facilitiesStatus = sections.facilities.status;
   const providersStatus = sections.providers.status;
   const assignmentsStatus = sections.assignments.status;
+  const payerNetworkStatus = sections.payer_network.status;
   const nextSection =
-    orgDetailsStatus && groupStatus && facilitiesStatus && providersStatus && assignmentsStatus
+    orgDetailsStatus &&
+    groupStatus &&
+    facilitiesStatus &&
+    providersStatus &&
+    assignmentsStatus &&
+    payerNetworkStatus
       ? getNextIncompleteSection({
           org_details: orgDetailsStatus,
           provider_group: groupStatus,
           facilities: facilitiesStatus,
           providers: providersStatus,
           assignments: assignmentsStatus,
+          payer_network: payerNetworkStatus,
         })
       : undefined;
 
@@ -166,5 +187,6 @@ export function useOnboardingWizard(): OnboardingWizardData {
     providers: providersQ.data ?? [],
     assignments: assignmentsQ.data ?? [],
     providerGroupAssignments: groupAssignmentsQ.data ?? [],
+    payerNetworkTargets: targetsQ.data ?? [],
   };
 }
