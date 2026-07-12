@@ -185,6 +185,8 @@ This artifact does not define exact payer configuration yet. It reserves state c
 | TS-36       | Payer directory search (E1.6)           | Global commercial payer fixtures seeded across the six seed states (BCBS-NC, BCBS-SC, etc.); P1 searches by alias and filters by state                                         | The matching payer appears with kind, states, portal URL, and curated credentialing facts; org-scoped legacy payer rows are not shown                                                         |
 | TS-37       | Idempotent catalog re-seed (E1.6)       | Seeded global catalog; the sync pipeline re-runs against unchanged upstream data (service-role test path)                                                                      | No payer rows change and no payer_catalog_changes rows are created                                                                                                                            |
 | TS-38       | Reviewable rename diff (E1.6)           | Seeded global catalog; a sync reports a new name for an existing stedi_payer_id (service-role test path)                                                                       | A payer_catalog_changes row is created with the payer unchanged; accepting the diff applies the rename and marks it reviewed                                                                  |
+| TS-39       | Assignment gap surfaced (E1.4)          | Tree Hill Sports Therapy with two providers and one facility, only one provider assigned (L1)                                                                                  | The unassigned provider lists first with an "Assign locations" action; the Assignments section shows In progress, not Complete                                                                |
+| TS-40       | Two-group primary swap (E1.4)           | Shelby Sports Rehab (TS-30/TS-34 state): a two-group provider; P1 assigns facilities from each group with start dates, then swaps primary (L1)                                 | Picker offers only the provider's groups' facilities; each assignment stores a start date; exactly one primary exists before and after the swap                                               |
 
 ## Recommended seed layers
 
@@ -216,6 +218,7 @@ Rule: seed baseline data directly; validate user workflows through UI. Do not re
 | E1.2 Facilities / locations                  | Yes               | TS-31 and TS-32 (existing org fixtures + L1 form entry; no new baseline fixtures)               |
 | E1.3 Provider roster                         | Yes               | TS-33 through TS-35 (L1 form entry; TS-35 adds an L3 seeded provider + licenses on Outer Banks) |
 | E1.6 Global payer catalog                    | Yes               | TS-36 through TS-38 (global commercial payer fixtures across the six seed states)               |
+| E1.4 Provider–facility assignment            | Yes               | TS-39 and TS-40 (existing org fixtures + L1 form entry; no new baseline fixtures)               |
 
 ## What gets seeded now vs later
 
@@ -287,4 +290,5 @@ Not an epic — fixture strategy doc; no frontmatter/lifecycle. Answers and corr
 - **TS-29–TS-30 added (2026-07-11):** E1.1 provider-group capture scenarios (single-group flow-through and multi-TIN add-another). No new baseline fixtures — groups are entered through the L1 UI layer.
 - **TS-31–TS-32 added (2026-07-11):** E1.2 facility capture scenarios (CAQH practice-location form + group-contact inheritance, and the per-day hours jsonb quick-fill/override contract). No new baseline fixtures — facilities are entered through the L1 UI layer.
 - **TS-33–TS-35 added (2026-07-11):** E1.3 roster scenarios (CAQH-baseline provider entry, two-TIN M:N assignment, and the license PSV verify/renewal-reset trail). TS-35 adds one L3 seeded provider with two state licenses on Outer Banks Rehab Group; the others are L1 UI entry.
+- **TS-39–TS-40 added (2026-07-11):** E1.4 assignment scenarios (gap surfacing, group-scoped picker + start dates + single-primary swap). L1 UI entry on existing fixtures; no new baseline fixtures.
 - **TS-36–TS-38 added (2026-07-11):** E1.6 payer catalog scenarios (directory search, idempotent re-seed, reviewable rename diff). New global fixture layer: Minted-owned commercial payer rows (`payers.org_id IS NULL`) covering NC/SC/CO/TX/WI/OR — not org-scoped seed data; sync scenarios run through the service-role test path.
