@@ -31,7 +31,11 @@ import {
 import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/auth-store";
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
-import logoAsset from "@/assets/minted-mark.png.asset.json";
+// The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
+// docs/redesign/design-system/design-system-reference/assets/logo-white.png —
+// replaces the wrong minted-mark asset. Paired with the Geist 600 wordmark on
+// the #0C2A1D rail; never recolored or given effects (brand guideline).
+import logoWhite from "@/assets/logo-white.png";
 import {
   Home,
   FolderKanban,
@@ -202,7 +206,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     <aside className="w-full md:w-[232px] flex-shrink-0 bg-mp-sidebar flex flex-col h-full">
       {/* Logo */}
       <div className="px-5 pt-4 pb-2.5 flex items-center gap-2">
-        <img src={logoAsset.url} alt="Minted Panel" className="w-6 h-6 object-contain" />
+        <img src={logoWhite} alt="Minted Panel" className="w-6 h-6 object-contain" />
         <span className="text-[14px] font-semibold text-white">Minted Panel</span>
       </div>
 

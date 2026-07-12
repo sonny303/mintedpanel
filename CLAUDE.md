@@ -318,6 +318,38 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   `/portfolio`→`/reporting/portfolio`, `/progress`→`/client-progress`,
   `/admin/sops`→`/admin/templates` pinned).
 
+### Stage 1 built so far
+
+- **E1.0 — Wizard Scope-Section Framework.** `/onboarding/wizard` is the Stage 1
+  front door: the E0.8 `NotYetAvailable` placeholders are replaced by the R1
+  section framework. The ordered registry + pure progress contract live in
+  `src/lib/onboardingProgress.ts` (tested): 4 active sections (Org details /
+  Provider Group / Facilities / Providers) + 3 disabled R3 previews
+  (Assignments / Payer Network / Scope Review, "Coming next"). Status is
+  DERIVED at render time — org details from org name + owner/customer parties
+  (reusing `contactErrors`/`isValidEmail` via `partyToContactInput`, never a
+  second email rule), the other three from row presence (binary by design
+  until E1.1–E1.3 define partial-record shapes) — never stored wizard flags.
+  `getNextIncompleteSection` drives the single "Next: …" CTA
+  (`NextActionCard`), which IS the resume mechanism (survives org switch, no
+  per-user last-section storage; scroll + heading focus via
+  `sectionHeadingId`, no route/Zustand state). Composition hook
+  `src/hooks/useOnboardingWizard.ts` feeds the route from the EXISTING hooks
+  (`useOrgContacts`/`useProviderGroups`/`useFacilities`/`useProviders` — same
+  org-scoped caches, so outside edits flip chips; failed reads render inline
+  retriable errors and never count as "Not started"; providers stay on the
+  PHI-narrowed list projection). Section UI in `src/components/onboarding/`
+  (`WizardSectionCard`, `PreviewSectionCard`, `NextActionCard`,
+  `SectionStatusPill`, `OrgDetailsBody`, `sectionBodies`); the route holds the
+  `SECTION_BODIES` mount registry E1.1–E1.3 swap their forms into. Shell debt
+  (F1.0.4): the Sidebar now imports the approved white layered-jack mark from
+  `src/assets/logo-white.png` (copied from the design-system reference assets;
+  the old `minted-mark.png.asset.json` remains only on the light-surface
+  landing/login/privacy pages, out of TE-8 scope); rail white-alpha values
+  were audited against `Sidebar Nav.dc.html` and already conformed — no
+  contrast change shipped. e2e: `e2e/onboarding-wizard.spec.ts` (TS-25–28 +
+  logo/rail sweep). No migration, no schema change, no new deps.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
