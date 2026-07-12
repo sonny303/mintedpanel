@@ -16,9 +16,50 @@ Format per entry:
 
 ## Open
 
-_None._
+## [e1.6] Stedi / payer-data long-term source — OPEN (2026-07-12)
+
+- **Roadblock:** E1.6 seeds the commercial payer catalog from Stedi, which
+  requires a provisioned Stedi developer account + API key (repo secret). The
+  PM is aligning on the long-term payer-data-source strategy in a separate
+  thread and has not committed to Stedi as the permanent solution.
+- **Impact:** E1.6 is placed on **hold** (`status: blocked`, `reviewed: false`).
+  The spec itself is reviewer-enabled (§5) and the R1 lane is unaffected — E1.6
+  runs in the R2 lane and no R1 epic depends on it. Only the catalog seed
+  pipeline is gated.
+- **Decision (pending):** PM to confirm the payer-data source (Stedi vs.
+  alternative) and provision credentials, or scope a different seeding path.
 
 ## Resolved
+
+## [e1.1] Facility-contact default + flat provider_groups columns — RESOLVED (2026-07-12)
+
+- **Issue:** (1) `provider_groups` has three contact blocks (billing /
+  correspondence / credentialing) and no generic phone column; the
+  facility-contact fallback rule (E1.2 F1.2.1) did not name which block or a
+  precedence. (2) Whether R1 builds on the flat `provider_groups` columns vs.
+  the register's planned `group_addresses`/`group_contacts` normalization, and
+  whether E1.6 extends the existing catalog. (3) Confirm E1.1 `reviewed: true`.
+- **Decision (PM Sowmya, 2026-07-12):**
+  1. A facility's contact fields (tel / fax / contact) **inherit the owning
+     group's contact unless the facility provides its own**. Block precedence
+     when multiple group blocks are populated: credentialing → correspondence →
+     billing (first non-empty wins).
+  2. R1 **builds on the flat `provider_groups` columns**; E1.6 **extends** the
+     existing global catalog. The address/contact normalization epic lands
+     post-R1, not pulled into Stage 1.
+  3. E1.1 `reviewed: true` stands.
+
+## [e0.10] Constraint-validation fixture scale — RESOLVED (2026-07-12)
+
+- **Issue:** BD-1 (bad-row audit) and BD-2 (allowed state set) inputs are
+  needed before the `VALIDATE` step of the state-format constraints, and the
+  test surface for the deferred routing invariants was undefined.
+- **Decision (PM Sowmya, 2026-07-12):** Exercise the audits/tests against an
+  expanded fixture — two orgs, each with multiple groups spanning 10–20 states
+  and 400+ providers, each generating multiple MSO routing rules across its
+  states. Extend `seed-universe.md` accordingly and document the best-practice
+  test cases. BD-2's allowed set is the canonical US 2-letter list already used
+  by the form validators. Fixture build is tracked as separate work.
 
 ## [e1.8] Document readiness gaps have no fix-here surface — RESOLVED (2026-07-12)
 
