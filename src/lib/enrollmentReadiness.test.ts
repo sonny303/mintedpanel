@@ -240,6 +240,23 @@ describe("row derivation (TE-2 grain)", () => {
     expect(rows.map((r) => r.providerId).sort()).toEqual(["pr-1", "pr-2"]);
   });
 
+  it("an assignment end-dated before today produces no rows; ending today still counts", () => {
+    const ended = baseInput({
+      groupAssignments: [{ providerId: "pr-1", groupId: "g-1", endDate: "2026-07-11" }],
+    });
+    expect(evaluateEnrollmentReadiness(ended)).toHaveLength(0);
+
+    const endsToday = baseInput({
+      groupAssignments: [{ providerId: "pr-1", groupId: "g-1", endDate: TODAY }],
+    });
+    expect(evaluateEnrollmentReadiness(endsToday)).toHaveLength(1);
+
+    const openEnded = baseInput({
+      groupAssignments: [{ providerId: "pr-1", groupId: "g-1", endDate: null }],
+    });
+    expect(evaluateEnrollmentReadiness(openEnded)).toHaveLength(1);
+  });
+
   it("summary counts rows, ready rows, and total open gaps", () => {
     const input = baseInput({
       providers: [facts({ npiPresent: false, caqhIdPresent: false })],
