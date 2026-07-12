@@ -697,7 +697,8 @@ x-org-id`.
 `payers` (+ sentinel payer **"Pre-Credentialing Setup"**, matched by name) ·
 `msos` + `mso_routing_rules` (payer+state+specialty → direct/mso; `'All'`
 wildcards; scored client-side in `getMsoRoutingRule`) · `credential_cases`
-(**unique `(provider_id, payer_id, state)`**, credentialing status only;
+(**unique `(provider_id, payer_id, state)`** — widens to include `group_id`
+with the E2.x case-generation build, see AGENTS.md; credentialing status only;
 `facility_id` links a case to its location) · `contracts` (group+payer+state,
 contracting status lives here, never on cases) · `tasks` (SOP checklists,
 seeded from `sop_templates` via `src/lib/sopResolver.ts` — closed token list) ·
