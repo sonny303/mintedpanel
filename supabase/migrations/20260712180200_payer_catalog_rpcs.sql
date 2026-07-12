@@ -8,9 +8,10 @@
 -- carry no PHI; org-scoped payer rows are never returned.
 --
 -- review_payer_catalog_change (F1.6.3): accept/reject a sync diff. Accepting
--- applies the new value to the global payer row — identity fields ONLY (the
--- sync never touches Minted-curated credentialing fields, TE-5); rejecting
--- records the decision. Both stamp reviewed_by/reviewed_at. The diff facts
+-- applies the new value to the global payer row — identity fields ONLY
+-- (name/aliases/states/cms_hios_id/status; never payer_slug — it is the
+-- match key — and never Minted-curated credentialing fields, TE-5);
+-- rejecting records the decision. Both stamp reviewed_by/reviewed_at. The diff facts
 -- themselves are never mutated.
 
 CREATE OR REPLACE FUNCTION public.list_global_payers()
@@ -78,9 +79,6 @@ BEGIN
       SET states = CASE WHEN v_change.new_value IS NULL OR v_change.new_value = ''
                         THEN NULL ELSE string_to_array(v_change.new_value, '|') END,
           last_synced_at = now()
-      WHERE id = v_change.payer_id AND org_id IS NULL;
-    ELSIF v_change.field = 'stedi_payer_id' THEN
-      UPDATE public.payers SET stedi_payer_id = NULLIF(v_change.new_value, ''), last_synced_at = now()
       WHERE id = v_change.payer_id AND org_id IS NULL;
     ELSIF v_change.field = 'cms_hios_id' THEN
       UPDATE public.payers SET cms_hios_id = NULLIF(v_change.new_value, ''), last_synced_at = now()

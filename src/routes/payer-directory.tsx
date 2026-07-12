@@ -62,7 +62,7 @@ function PayerRow({ payer }: { payer: Payer }) {
         {formatStates(payer.states)}
       </td>
       <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
-        {payer.stediPayerId || "—"}
+        {payer.payerSlug || "—"}
       </td>
       <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
         {payer.avgDecisionDays != null ? `${payer.avgDecisionDays} days` : "—"}
@@ -173,7 +173,7 @@ function PayerDirectoryPage() {
                   <th className="px-3 py-2">Payer</th>
                   <th className="px-3 py-2">Kind</th>
                   <th className="px-3 py-2">States</th>
-                  <th className="px-3 py-2">Payer ID</th>
+                  <th className="px-3 py-2">Catalog key</th>
                   <th className="px-3 py-2">Avg decision</th>
                   <th className="px-3 py-2">CAQH pull</th>
                   <th className="px-3 py-2">Portal</th>

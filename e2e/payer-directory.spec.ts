@@ -45,7 +45,7 @@ const globalPayer = (over: Record<string, unknown>) => ({
   portal_url: null,
   payer_kind: "commercial",
   prerequisite_payer_id: null,
-  stedi_payer_id: null,
+  payer_slug: null,
   cms_hios_id: null,
   aliases: [],
   states: [],
@@ -96,7 +96,7 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
         name: "Blue Cross and Blue Shield of North Carolina",
         aliases: ["BCBSNC", "Blue Cross NC"],
         states: ["NC"],
-        stedi_payer_id: "SB810",
+        payer_slug: "bcbs-nc",
         portal_url: "https://bluee.example.test",
         avg_decision_days: 45,
       }),
@@ -105,7 +105,7 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
         name: "UnitedHealthcare",
         aliases: ["UHC", "UMR"],
         states: ["NC", "SC", "TX"],
-        stedi_payer_id: "87726",
+        payer_slug: "unitedhealthcare",
       }),
       globalPayer({
         id: "gp-superior",
@@ -113,7 +113,7 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
         payer_kind: "medicaid_mco",
         aliases: ["Ambetter from Superior HealthPlan"],
         states: ["TX"],
-        stedi_payer_id: "68069",
+        payer_slug: "superior-healthplan",
       }),
     ],
     ...over,
@@ -219,7 +219,7 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(row).toHaveCount(1);
   await expect(row.first()).toContainText("Blue Cross and Blue Shield of North Carolina");
   await expect(row.first()).toContainText("NC");
-  await expect(row.first()).toContainText("SB810");
+  await expect(row.first()).toContainText("bcbs-nc");
   await expect(row.first()).toContainText("45 days");
   await expect(row.first().getByRole("link", { name: /Portal/ })).toBeVisible();
 

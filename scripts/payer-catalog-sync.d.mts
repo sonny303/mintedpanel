@@ -6,27 +6,33 @@ export interface CatalogDatasetRow {
   payerKind: string;
   states: string[];
   aliases: string[];
-  stediPayerId: string | null;
 }
 
 export interface CatalogExistingRow {
+  payer_slug?: string | null;
   name: string;
   aliases?: string[] | null;
   states?: string[] | null;
-  stedi_payer_id?: string | null;
   status?: string | null;
 }
 
 export interface CatalogDiff {
+  payerSlug: string;
   payerName: string;
   field: string;
   oldValue: string;
   newValue: string;
 }
 
+export interface CatalogSlugBackfill {
+  slug: string;
+  name: string;
+}
+
 export interface CatalogSyncPlan {
   inserts: CatalogDatasetRow[];
   diffs: CatalogDiff[];
+  slugBackfills: CatalogSlugBackfill[];
   unchanged: number;
   missing: string[];
 }

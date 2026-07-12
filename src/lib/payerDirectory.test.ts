@@ -21,6 +21,7 @@ const payer = (over: Partial<Payer>): Payer => ({
   portalUrl: null,
   createdAt: "2026-07-12T00:00:00Z",
   payerKind: "commercial",
+  payerSlug: "bcbs-nc",
   aliases: ["Blue Cross NC", "BCBSNC"],
   states: ["NC"],
   status: "active",

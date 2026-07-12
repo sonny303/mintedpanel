@@ -1290,6 +1290,7 @@ export type Database = {
           org_id: string | null;
           payer_billing_id: string | null;
           payer_kind: string;
+          payer_slug: string | null;
           portal_url: string | null;
           prerequisite_payer_id: string | null;
           prior_auth_vendor: string | null;
@@ -1300,7 +1301,6 @@ export type Database = {
           retro_billing_window_days: number | null;
           states: string[] | null;
           status: string;
-          stedi_payer_id: string | null;
         };
         Insert: {
           aliases?: string[] | null;
@@ -1316,6 +1316,7 @@ export type Database = {
           org_id?: string | null;
           payer_billing_id?: string | null;
           payer_kind?: string;
+          payer_slug?: string | null;
           portal_url?: string | null;
           prerequisite_payer_id?: string | null;
           prior_auth_vendor?: string | null;
@@ -1326,7 +1327,6 @@ export type Database = {
           retro_billing_window_days?: number | null;
           states?: string[] | null;
           status?: string;
-          stedi_payer_id?: string | null;
         };
         Update: {
           aliases?: string[] | null;
@@ -1342,6 +1342,7 @@ export type Database = {
           org_id?: string | null;
           payer_billing_id?: string | null;
           payer_kind?: string;
+          payer_slug?: string | null;
           portal_url?: string | null;
           prerequisite_payer_id?: string | null;
           prior_auth_vendor?: string | null;
@@ -1352,7 +1353,6 @@ export type Database = {
           retro_billing_window_days?: number | null;
           states?: string[] | null;
           status?: string;
-          stedi_payer_id?: string | null;
         };
         Relationships: [
           {
@@ -2670,6 +2670,7 @@ export type Database = {
           org_id: string | null;
           payer_billing_id: string | null;
           payer_kind: string;
+          payer_slug: string | null;
           portal_url: string | null;
           prerequisite_payer_id: string | null;
           prior_auth_vendor: string | null;
@@ -2680,7 +2681,6 @@ export type Database = {
           retro_billing_window_days: number | null;
           states: string[] | null;
           status: string;
-          stedi_payer_id: string | null;
         }[];
         SetofOptions: {
           from: "*";

@@ -3,28 +3,28 @@
 // docs/redesign/data/payer-catalog/payers.csv (the PM-adopted replacement for
 // the withdrawn Stedi API, [e1.6] 2026-07-12) and plans a sync against the
 // current global catalog rows:
-//   - NEW payers      -> direct idempotent INSERTs (ON CONFLICT global name)
+//   - NEW payers      -> direct idempotent INSERTs (ON CONFLICT payer_slug)
 //   - CHANGED payers  -> payer_catalog_changes diff rows for human review
 //                        (never a silent overwrite, F1.6.3)
 //   - MISSING payers  -> reported only (merged/retired is a manual curation
 //                        decision, never automated row deletion)
 // Identity fields only — curated credentialing fields are never touched.
 //
+// Identity/dedupe key: the canonical payer_slug from payers.csv, persisted to
+// payers.payer_slug (partial UNIQUE). The dataset's clearinghouse-payer-ID
+// column is IGNORED per the 2026-07-12 PM decision (per Sonia via Sowmya):
+// not used by the work, no planned future use.
+//
 // Runbook (quarterly manual refresh per the dataset README):
 //   1. Export current global rows:
 //        select coalesce(json_agg(t), '[]'::json) from (
-//          select name, aliases, states, stedi_payer_id, status
+//          select payer_slug, name, aliases, states, status
 //          from payers where org_id is null) t;
 //      Save as existing.json ([] for the very first seed).
 //   2. Plan:  node scripts/payer-catalog-sync.mjs plan --existing existing.json
 //   3. Emit:  node scripts/payer-catalog-sync.mjs sql  --existing existing.json > seed.sql
 //   4. Apply seed.sql under the service role (Supabase MCP execute_sql or psql).
 //   5. Review any new diffs in the app's Payer Directory review queue.
-//
-// Dedupe (§5): match on stedi_payer_id when the ID is unique on BOTH sides
-// (Centene consolidates many plans on 68069, so shared IDs never match-by-ID);
-// otherwise match on the canonical lowercased name. An ID-match with a
-// differing name is exactly the rename case TS-38 covers.
 import { readFileSync } from "node:fs";
 
 // --- CSV (RFC4180-ish: quoted fields, embedded commas/newlines, "" escape) ---
@@ -63,7 +63,7 @@ export function parseCsv(text) {
 
 // The rankings-artifact row for Wyoming's FFS-only market — a note, not a
 // payer entity; never seeded.
-const SKIP_SLUGS = new Set(["original-medicare-and-wyoming-medicaid-direct-ffs-enrollment"]);
+const SKIP_SLUGS = new Set(["original-medicare-and-wyoming-medicaid"]);
 
 // Catalog kind = one value per entity. The dataset carries the pipe-joined
 // union of per-state dominant lines; collapse deterministically: a diversified
@@ -94,7 +94,8 @@ const splitList = (v) =>
     .filter(Boolean)
     .sort();
 
-/** payers.csv -> normalized catalog rows. */
+/** payers.csv -> normalized catalog rows (the clearinghouse-ID column is
+ * deliberately not read — payer_slug is the identity). */
 export function datasetFromCsv(csvText) {
   const rows = parseCsv(csvText);
   const header = rows[0].map((h) => h.trim());
@@ -104,65 +105,55 @@ export function datasetFromCsv(csvText) {
   const iKind = idx("payer_kind");
   const iStates = idx("states");
   const iAliases = idx("aliases");
-  const iId = idx("clearinghouse_payer_id");
-  if ([iSlug, iName, iKind, iStates, iAliases, iId].includes(-1)) {
+  if ([iSlug, iName, iKind, iStates, iAliases].includes(-1)) {
     throw new Error("payers.csv header is missing an expected column");
   }
   return rows
     .slice(1)
     .filter((r) => !SKIP_SLUGS.has(r[iSlug]))
     .map((r) => ({
-      slug: r[iSlug],
+      slug: r[iSlug].trim(),
       name: r[iName].trim(),
       payerKind: collapseKind(r[iKind]),
       states: splitList(r[iStates]),
       aliases: splitList(r[iAliases]),
-      stediPayerId: (r[iId] ?? "").trim() || null,
     }));
 }
 
 const nameKey = (n) => n.trim().toLowerCase();
 const listKey = (l) => [...l].sort().join("|");
 
-function uniqueIdMap(rows, getId) {
-  const counts = new Map();
-  for (const r of rows) {
-    const id = getId(r);
-    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  const map = new Map();
-  for (const r of rows) {
-    const id = getId(r);
-    if (id && counts.get(id) === 1) map.set(id, r);
-  }
-  return map;
-}
-
 /**
  * Plan the sync. existingRows: current global catalog rows
- * ({name, aliases, states, stedi_payer_id, status}). Returns
- * {inserts, diffs, unchanged, missing} — diffs reference the payer by its
- * CURRENT (old) name so the emitted SQL locates the row under the
- * global-name unique index.
+ * ({payer_slug, name, aliases, states, status}). Match is by payer_slug;
+ * a name-match fallback exists ONLY to backfill slugless legacy rows
+ * (planned as slugBackfills — identity stamping, not a curated overwrite).
+ * Diffs reference the payer by slug so the emitted SQL locates the row
+ * under uq_payers_payer_slug.
  */
 export function planCatalogSync(datasetRows, existingRows) {
-  const existingByName = new Map(existingRows.map((r) => [nameKey(r.name), r]));
-  const existingById = uniqueIdMap(existingRows, (r) => r.stedi_payer_id ?? null);
-  const datasetIdUnique = uniqueIdMap(datasetRows, (r) => r.stediPayerId);
+  const existingBySlug = new Map(
+    existingRows.filter((r) => r.payer_slug).map((r) => [r.payer_slug, r]),
+  );
+  const existingByName = new Map(
+    existingRows.filter((r) => !r.payer_slug).map((r) => [nameKey(r.name), r]),
+  );
 
   const inserts = [];
   const diffs = [];
+  const slugBackfills = [];
   let unchanged = 0;
   const matchedExisting = new Set();
 
   for (const row of datasetRows) {
-    // ID-match only when the ID is unique on both sides (shared clearinghouse
-    // IDs like Centene's 68069 must not cross-match plans).
-    const byId =
-      row.stediPayerId && datasetIdUnique.get(row.stediPayerId) === row
-        ? existingById.get(row.stediPayerId)
-        : undefined;
-    const match = byId ?? existingByName.get(nameKey(row.name));
+    let match = existingBySlug.get(row.slug);
+    if (!match) {
+      const byName = existingByName.get(nameKey(row.name));
+      if (byName) {
+        match = byName;
+        slugBackfills.push({ slug: row.slug, name: byName.name });
+      }
+    }
     if (!match) {
       inserts.push(row);
       continue;
@@ -187,42 +178,41 @@ export function planCatalogSync(datasetRows, existingRows) {
         newValue: listKey(row.states),
       });
     }
-    // A blank dataset ID never clears a verified one.
-    if (row.stediPayerId && (match.stedi_payer_id ?? null) !== row.stediPayerId) {
-      rowDiffs.push({
-        field: "stedi_payer_id",
-        oldValue: match.stedi_payer_id ?? "",
-        newValue: row.stediPayerId,
-      });
-    }
     if (rowDiffs.length === 0) unchanged++;
-    else diffs.push(...rowDiffs.map((d) => ({ payerName: match.name, ...d })));
+    else diffs.push(...rowDiffs.map((d) => ({ payerSlug: row.slug, payerName: match.name, ...d })));
   }
 
   const missing = existingRows
     .filter((r) => !matchedExisting.has(r) && (r.status ?? "active") === "active")
     .map((r) => r.name);
 
-  return { inserts, diffs, unchanged, missing };
+  return { inserts, diffs, slugBackfills, unchanged, missing };
 }
 
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 const sqlArray = (list) => (list.length === 0 ? "NULL" : `ARRAY[${list.map(q).join(", ")}]`);
 
-/** Idempotent SQL for a plan: inserts (ON CONFLICT global name) + review-queue
- * diff rows (guarded so re-applying stale SQL never duplicates a pending diff). */
+/** Idempotent SQL for a plan: slug backfills (identity stamping on slugless
+ * legacy rows) + inserts (ON CONFLICT payer_slug) + review-queue diff rows
+ * (guarded so re-applying stale SQL never duplicates a pending diff). */
 export function emitSeedSql(plan) {
   const lines = [
     "-- Generated by scripts/payer-catalog-sync.mjs (E1.6 F1.6.2).",
     "-- Apply under the service role only. Identity fields only; curated",
     "-- credentialing fields are never written here.",
   ];
+  for (const b of plan.slugBackfills ?? []) {
+    lines.push(
+      `UPDATE public.payers SET payer_slug = ${q(b.slug)}\n` +
+        `WHERE org_id IS NULL AND payer_slug IS NULL AND lower(name) = lower(${q(b.name)});`,
+    );
+  }
   for (const row of plan.inserts) {
     lines.push(
-      `INSERT INTO public.payers (org_id, name, payer_kind, aliases, states, stedi_payer_id, status, last_synced_at)\n` +
-        `VALUES (NULL, ${q(row.name)}, ${q(row.payerKind)}, ${sqlArray(row.aliases)}, ${sqlArray(row.states)}, ` +
-        `${row.stediPayerId ? q(row.stediPayerId) : "NULL"}, 'active', now())\n` +
-        `ON CONFLICT (lower(name)) WHERE org_id IS NULL DO NOTHING;`,
+      `INSERT INTO public.payers (org_id, payer_slug, name, payer_kind, aliases, states, status, last_synced_at)\n` +
+        `VALUES (NULL, ${q(row.slug)}, ${q(row.name)}, ${q(row.payerKind)}, ${sqlArray(row.aliases)}, ${sqlArray(row.states)}, ` +
+        `'active', now())\n` +
+        `ON CONFLICT (payer_slug) WHERE payer_slug IS NOT NULL DO NOTHING;`,
     );
   }
   for (const d of plan.diffs) {
@@ -230,7 +220,7 @@ export function emitSeedSql(plan) {
       `INSERT INTO public.payer_catalog_changes (payer_id, field, old_value, new_value, source)\n` +
         `SELECT p.id, ${q(d.field)}, ${q(d.oldValue)}, ${q(d.newValue)}, 'sync'\n` +
         `FROM public.payers p\n` +
-        `WHERE lower(p.name) = lower(${q(d.payerName)}) AND p.org_id IS NULL\n` +
+        `WHERE p.payer_slug = ${q(d.payerSlug)} AND p.org_id IS NULL\n` +
         `  AND NOT EXISTS (\n` +
         `    SELECT 1 FROM public.payer_catalog_changes c\n` +
         `    WHERE c.payer_id = p.id AND c.field = ${q(d.field)}\n` +
@@ -267,6 +257,7 @@ if (isMain) {
           dataset_rows: dataset.length,
           inserts: plan.inserts.length,
           diffs: plan.diffs.length,
+          slug_backfills: plan.slugBackfills.length,
           unchanged: plan.unchanged,
           missing_candidates: plan.missing,
         },

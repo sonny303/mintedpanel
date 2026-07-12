@@ -457,11 +457,11 @@ export interface Payer {
   portalUrl: string | null;
   createdAt: string;
   // E1.6 catalog identity columns (additive; optional so pre-E1.6 fixtures
-  // stay valid). stediPayerId carries the professional 837P clearinghouse
-  // payer ID from the reference dataset — the Stedi API is withdrawn ([e1.6]).
+  // stay valid). payerSlug is the canonical dataset key — the identity and
+  // sync dedupe key per the final [e1.6] shape (clearinghouse IDs dropped).
   payerKind?: PayerKind;
   prerequisitePayerId?: string | null;
-  stediPayerId?: string | null;
+  payerSlug?: string | null;
   cmsHiosId?: string | null;
   aliases?: string[] | null;
   states?: string[] | null;
