@@ -375,6 +375,34 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
     soft-delete regression). Legacy admin `GroupsPanel` untouched (reconcile
     later — known debt).
 
+- **E1.2 — Facilities / Locations.** No schema change — the CAQH
+  practice-location fields all existed on `facilities`. The wizard's
+  Facilities section is now real CRUD: `FacilitySection` (active list with
+  group name, city/state, hours summary, resolved contact; edit; soft delete
+  `isActive:false`; zero-group orgs are pointed back to the Provider Group
+  section) + `FacilityForm` (name/group required — picker offers ACTIVE
+  groups but still renders an existing link to a soft-deleted one; address +
+  state + ZIP required; CAQH extras optional: county, appointment phone,
+  accepting-new-patients switch, `TagListInput` language lists, ADA
+  select+notes). **Locked hours contract** lives ONLY in
+  `src/lib/facilityHours.ts` (tested): per-day jsonb
+  `{mon:{status,open,close}}`, open/close present only when open, 24h
+  storage/12h display, `applyWeekdayDefault` quick-fill (M–F range, weekend
+  closed), close>open validation, `hoursSummary`; `HoursEditor` renders the
+  draft via native time inputs. **Contact inheritance is display-only**
+  (`src/lib/facilityContact.ts`, tested): facility-own wins, else the
+  group's first non-empty block in the LOCKED precedence credentialing →
+  correspondence → billing — rendered as "Inherited from group", facility
+  columns stay null (never copied); `hasReachableContact` is the
+  minimum-to-save rule. Progress: `resolveActiveRowsStatus` (shared with
+  E1.1's group resolver) = ≥1 active facility. `Facility` type +
+  `FacilityInput` additively widened (incl. `AdaCompliance`;
+  `Facility.hours` typed via the lib). Account Detail gained the read-only
+  `FacilitySummaryCard`. e2e: `e2e/facilities-wizard.spec.ts` (TS-31/TS-32 +
+  close>open block). Legacy `launches` columns
+  (`status_id`/`effective_date`/`reference_only`) untouched by the wizard
+  payload.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

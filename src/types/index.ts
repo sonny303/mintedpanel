@@ -1,5 +1,6 @@
 // Domain types for Minted Panel. App code uses camelCase; database rows are
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
+import type { FacilityHours } from "@/lib/facilityHours";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -311,6 +312,13 @@ export interface Launch {
   createdAt: string;
 }
 
+// ADA accessibility capture (E1.2 — the facilities.ada_compliance jsonb).
+// Deliberately minimal in v1: an accessible flag + free-text notes.
+export interface AdaCompliance {
+  accessible?: boolean;
+  notes?: string;
+}
+
 export interface Facility {
   id: string;
   orgId: string;
@@ -328,6 +336,21 @@ export interface Facility {
   /** migrated/onboard-existing location: reference data, skipped by the action engine + Home queues (Epic 2e) */
   referenceOnly: boolean;
   createdAt: string;
+  // CAQH practice-location fields (E1.2 TE-2, additive — columns existed in
+  // the baseline schema; typed for the wizard form + summaries). `hours` is
+  // the locked per-day jsonb owned by src/lib/facilityHours.ts.
+  suite?: string | null;
+  county?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  email?: string | null;
+  appointmentPhone?: string | null;
+  contactName?: string | null;
+  acceptingNewPatients?: boolean | null;
+  languagesOffered?: string[] | null;
+  interpreterLanguages?: string[] | null;
+  hours?: FacilityHours | null;
+  adaCompliance?: AdaCompliance | null;
 }
 
 export interface FacilityAssignment {

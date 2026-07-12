@@ -5,6 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { GroupSummaryCard } from "@/components/org/GroupSummaryCard";
+import { FacilitySummaryCard } from "@/components/org/FacilitySummaryCard";
 import { InboundLeadsPanel } from "@/components/org/InboundLeadsPanel";
 import { PartiesManager } from "@/components/org/PartiesManager";
 
@@ -21,6 +22,8 @@ function AccountDetailPage() {
       {/* E1.1 F1.1.3: read-only provider-group summary — editing stays in the
           onboarding wizard (single front door). */}
       <GroupSummaryCard />
+      {/* E1.2 F1.2.3: read-only facilities summary — same rule. */}
+      <FacilitySummaryCard />
       {/* E0.5 F0.5.5 / TE-7: shared inbound "contact us" triage queue (renders
           only when leads await triage). */}
       <InboundLeadsPanel />

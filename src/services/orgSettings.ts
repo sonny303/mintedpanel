@@ -5,7 +5,8 @@ import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
-import type { AppRole, Facility, Organization, ProviderGroup } from "@/types";
+import type { AdaCompliance, AppRole, Facility, Organization, ProviderGroup } from "@/types";
+import type { FacilityHours } from "@/lib/facilityHours";
 import type { Database } from "@/integrations/supabase/types";
 
 /* ------------------------------ Organization ------------------------------ */
@@ -185,6 +186,21 @@ export interface FacilityInput {
   // so existing panel callers are unchanged. The CSV import sets it from the
   // per-import toggle. Rides through snakeizeRow → reference_only.
   referenceOnly?: boolean;
+  // E1.2 TE-2 (additive): the CAQH practice-location fields — all existing
+  // baseline columns, riding snakeizeRow. `hours` must be encoded through
+  // src/lib/facilityHours (the locked jsonb contract) before it gets here.
+  suite?: string | null;
+  county?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  email?: string | null;
+  appointmentPhone?: string | null;
+  contactName?: string | null;
+  acceptingNewPatients?: boolean | null;
+  languagesOffered?: string[] | null;
+  interpreterLanguages?: string[] | null;
+  hours?: FacilityHours | null;
+  adaCompliance?: AdaCompliance | null;
 }
 
 export async function listFacilities(): Promise<Facility[]> {

@@ -327,7 +327,8 @@ test("TS-26: a facility added through the admin surface flips the wizard chip â€
   await expect(sectionCard(page, "wizard-facilities")).toContainText("Complete", {
     timeout: 30000,
   });
-  await expect(sectionCard(page, "wizard-facilities")).toContainText("1 facility on file");
+  // E1.2: the section lists the facility rather than a count summary.
+  await expect(sectionCard(page, "wizard-facilities")).toContainText("Kill Devil Hills Clinic");
 });
 
 test("TS-27: resume survives an org switch; the CTA moves focus to the section heading", async ({
