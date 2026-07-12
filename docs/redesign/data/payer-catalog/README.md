@@ -4,7 +4,7 @@ Compiled 2026-07-12 on PM direction: gather the identity data the Stedi payer
 directory would have provided (E1.6 F1.6.2) ourselves, plus the market and
 MSO context a robust payer-selection table needs. This dataset is the
 **seed source** for the E1.6 global payer catalog: the epic's schema
-(`payer_kind`, `aliases[]`, `states[]`, `stedi_payer_id`, `status`) is
+(`payer_kind`, `aliases[]`, `states[]`, `payer_slug`, `status`) is
 unchanged — only the feed behind F1.6.2 changes from an API sync to this
 curated table. Credentialing fields (`portal_url`, `avg_decision_days`, etc.)
 remain Minted-curated and are NOT sourced here, per the epic's locked
@@ -16,13 +16,13 @@ rule.
 
 ## Files
 
-| File                          | Grain                    | Rows | What it is                                                                                                                                                         |
-| ----------------------------- | ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `state_payer_rankings.csv`    | state × rank             | 491  | Top-10 medical payers per state (all 50), ranked by total in-state covered lives across commercial (fully-insured + ASO), Medicare Advantage, and managed Medicaid |
-| `payers.csv`                  | canonical payer entity   | 270  | One row per operating payer (the E1.6 `payers` global-row grain): kind, LOBs, states, aliases, clearinghouse payer ID (the `stedi_payer_id` stand-in)              |
-| `mso_delegations.csv`         | MSO × payer relationship | 14   | Delegated-network/credentialing layers (ASH, Optum Physical Health, Carelon…) + UM-only vendors explicitly flagged — feeds `mso_routing_rules` curation            |
-| `medicare_macs.csv`           | state                    | 50   | Medicare A/B MAC jurisdiction + contractor per state (the universal implicit payer's enrollment route)                                                             |
-| `state_medicaid_programs.csv` | state                    | 50   | Medicaid program name, delivery model (managed_care / ffs / hybrid), MCO contract notes                                                                            |
+| File                          | Grain                    | Rows | What it is                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state_payer_rankings.csv`    | state × rank             | 491  | Top-10 medical payers per state (all 50), ranked by total in-state covered lives across commercial (fully-insured + ASO), Medicare Advantage, and managed Medicaid                                             |
+| `payers.csv`                  | canonical payer entity   | 270  | One row per operating payer (the E1.6 `payers` global-row grain): kind, LOBs, states, aliases, clearinghouse payer ID (retained but ignored per the 2026-07-12 PM decision; `payer_slug` is the canonical key) |
+| `mso_delegations.csv`         | MSO × payer relationship | 14   | Delegated-network/credentialing layers (ASH, Optum Physical Health, Carelon…) + UM-only vendors explicitly flagged — feeds `mso_routing_rules` curation                                                        |
+| `medicare_macs.csv`           | state                    | 50   | Medicare A/B MAC jurisdiction + contractor per state (the universal implicit payer's enrollment route)                                                                                                         |
+| `state_medicaid_programs.csv` | state                    | 50   | Medicaid program name, delivery model (managed_care / ffs / hybrid), MCO contract notes                                                                                                                        |
 
 ## How it was built (methodology)
 
@@ -51,14 +51,14 @@ rule.
 
 ## Mapping to the E1.6 `payers` columns (TE-2)
 
-| CSV column                           | E1.6 column               | Notes                                                                                                                  |
-| ------------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `payers.csv name`                    | `name` (global row)       |                                                                                                                        |
-| `aliases` (pipe-separated)           | `aliases text[]`          | Includes former names, dba brands, Medicaid product names                                                              |
-| `states` (pipe-separated)            | `states text[]`           | States where the payer ranked top-10; a payer can operate in more states than it ranks in                              |
-| `payer_kind`                         | `payer_kind`              | Pipe-joined union of per-state dominant lines; collapse per seeding policy (diversified carriers default `commercial`) |
-| `clearinghouse_payer_id`             | `stedi_payer_id` stand-in | Professional 837P ID as observed at a clearinghouse — see caveats below                                                |
-| `stedi_slug` / `enrollment_required` | (Stedi mirror fields)     | Sparse: Stedi's site was bot-blocked during collection; captured only where a slug surfaced in search results          |
+| CSV column                           | E1.6 column             | Notes                                                                                                                  |
+| ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `payers.csv name`                    | `name` (global row)     |                                                                                                                        |
+| `aliases` (pipe-separated)           | `aliases text[]`        | Includes former names, dba brands, Medicaid product names                                                              |
+| `states` (pipe-separated)            | `states text[]`         | States where the payer ranked top-10; a payer can operate in more states than it ranks in                              |
+| `payer_kind`                         | `payer_kind`            | Pipe-joined union of per-state dominant lines; collapse per seeding policy (diversified carriers default `commercial`) |
+| `clearinghouse_payer_id`             | ignored (PM 2026-07-12) | Professional 837P ID as observed at a clearinghouse — retained but unused; see caveats below                           |
+| `stedi_slug` / `enrollment_required` | (Stedi mirror fields)   | Sparse: Stedi's site was bot-blocked during collection; captured only where a slug surfaced in search results          |
 
 Government payers (`medicare`, `medicaid`, `tricare` kinds) exist in this
 dataset because they are real credentialing targets; the R2 directory UI still
