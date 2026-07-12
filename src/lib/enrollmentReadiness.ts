@@ -92,8 +92,14 @@ export interface EnrollmentReadinessInput {
   today: string;
   /** All targets — archived rows are ignored here (E1.5 removal semantic). */
   targets: readonly ReadinessTargetInput[];
-  /** provider↔group membership (E1.3). */
-  groupAssignments: ReadonlyArray<{ providerId: string | null; groupId: string | null }>;
+  /** provider↔group membership (E1.3). An assignment end-dated before today
+   * no longer places the provider on that group's readiness rows (membership
+   * runs through the end date itself); omitted/null endDate = open-ended. */
+  groupAssignments: ReadonlyArray<{
+    providerId: string | null;
+    groupId: string | null;
+    endDate?: string | null;
+  }>;
   /** Non-terminated roster facts (service pre-filters terminated). */
   providers: readonly ProviderReadinessFacts[];
   licenses: readonly ReadinessLicenseInput[];
@@ -296,6 +302,9 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
   const factsById = new Map(input.providers.map((p) => [p.providerId, p]));
   for (const a of input.groupAssignments) {
     if (!a.providerId || !a.groupId) continue;
+    // E1.3 end_date: an ended membership stops producing rows the day after
+    // it ends — a provider who left the group is not pre-flighted for it.
+    if (a.endDate != null && a.endDate.slice(0, 10) < input.today) continue;
     const facts = factsById.get(a.providerId);
     if (!facts) continue; // terminated / unknown providers never produce rows
     providersByGroup.set(a.groupId, [...(providersByGroup.get(a.groupId) ?? []), facts]);
