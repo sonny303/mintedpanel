@@ -16,20 +16,26 @@ Format per entry:
 
 ## Open
 
-## [e1.6] Stedi / payer-data long-term source — OPEN (2026-07-12)
+## Resolved
+
+## [e1.6] Stedi / payer-data long-term source — RESOLVED (2026-07-12)
 
 - **Roadblock:** E1.6 seeds the commercial payer catalog from Stedi, which
   requires a provisioned Stedi developer account + API key (repo secret). The
   PM is aligning on the long-term payer-data-source strategy in a separate
   thread and has not committed to Stedi as the permanent solution.
-- **Impact:** E1.6 is placed on **hold** (`status: blocked`, `reviewed: false`).
-  The spec itself is reviewer-enabled (§5) and the R1 lane is unaffected — E1.6
-  runs in the R2 lane and no R1 epic depends on it. Only the catalog seed
-  pipeline is gated.
-- **Decision (pending):** PM to confirm the payer-data source (Stedi vs.
-  alternative) and provision credentials, or scope a different seeding path.
-
-## Resolved
+- **Impact:** E1.6 was placed on **hold** (`status: blocked`,
+  `reviewed: false`). The spec itself is reviewer-enabled (§5) and the R1
+  lane was unaffected — E1.6 runs in the R2 lane and no R1 epic depends on
+  it. Only the catalog seed pipeline was gated.
+- **Decision (PM Sowmya, 2026-07-12):** **Stedi is withdrawn.** F1.6.2 seeds
+  from the self-built payer reference dataset at
+  `docs/redesign/data/payer-catalog/` (PR #115 — `payers.csv` in the TE-2
+  column shape, state rankings, MAC/Medicaid context, MSO delegations;
+  quarterly manual refresh per its README). No external credentials needed;
+  `stedi_payer_id` is retained as the column name, carrying the professional
+  837P clearinghouse payer ID from the dataset. The E1.6 hold is lifted
+  (`status: reviewed`, `reviewed: true`).
 
 ## [e1.1] Facility-contact default + flat provider_groups columns — RESOLVED (2026-07-12)
 
