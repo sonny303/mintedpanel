@@ -16,7 +16,11 @@ Format per entry:
 
 ## Open
 
-## [e1.8] Document readiness gaps have no fix-here surface — OPEN (2026-07-12)
+_None._
+
+## Resolved
+
+## [e1.8] Document readiness gaps have no fix-here surface — RESOLVED (2026-07-12)
 
 - **Roadblock:** F1.8.2 derives group W-9 and voided-check readiness from
   `provider_documents`, and F1.8.3 requires every red item to link to the exact
@@ -27,7 +31,7 @@ Format per entry:
 - **Impact:** The authored acceptance criteria cannot be met as written:
   document checks would remain red with no in-product remediation path, or the
   build would silently absorb a document-upload/storage feature that the epic
-  does not explicitly scope. E1.8 therefore remains `reviewed: false`.
+  does not explicitly scope. E1.8 was `reviewed: false` pending this decision.
 - **Options:**
   1. Add a minimal private group-document upload/view/replace surface to E1.8,
      using the existing `provider_documents` rows plus an additive private
@@ -37,8 +41,13 @@ Format per entry:
   3. Relax F1.8.3 for R3 so document gaps may link to the owning group screen
      or an explicit manual workflow; retain exact fix-here links for checks
      with existing editors.
-
-## Resolved
+- **Decision (PM Sowmya, 2026-07-12): Option 3.** F1.8.3 is relaxed for R3:
+  document/COI/voided-check red items link to the owning provider/group screen;
+  only checks with an existing editor (license, provider form, facility
+  section) keep an exact fix-here link. No document-upload/storage surface is
+  pulled into E1.8 — a dedicated documents surface stays a future epic. The
+  read-only readiness matrix still evaluates document presence regardless.
+  E1.8 restored to `reviewed: true`.
 
 ## [stage-3] R3 scope decisions (E1.4, E1.5, E1.8) — RESOLVED (2026-07-11)
 
