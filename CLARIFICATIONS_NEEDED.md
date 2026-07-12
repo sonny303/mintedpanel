@@ -16,6 +16,28 @@ Format per entry:
 
 ## Open
 
+## [e1.8] Document readiness gaps have no fix-here surface — OPEN (2026-07-12)
+
+- **Roadblock:** F1.8.2 derives group W-9 and voided-check readiness from
+  `provider_documents`, and F1.8.3 requires every red item to link to the exact
+  surface where it is fixed. The table and RLS exist, but the current app has
+  no `provider_documents` service, hook, upload UI, or repo-managed Supabase
+  Storage bucket/policies. Group insurance is manageable today through
+  `InsurancePanel`; W-9 and voided-check documents are not.
+- **Impact:** The authored acceptance criteria cannot be met as written:
+  document checks would remain red with no in-product remediation path, or the
+  build would silently absorb a document-upload/storage feature that the epic
+  does not explicitly scope. E1.8 therefore remains `reviewed: false`.
+- **Options:**
+  1. Add a minimal private group-document upload/view/replace surface to E1.8,
+     using the existing `provider_documents` rows plus an additive private
+     Storage bucket, org-scoped object policies, signed downloads, and audit.
+  2. Add a preceding document-management epic/dependency and keep E1.8 blocked
+     until that surface merges.
+  3. Relax F1.8.3 for R3 so document gaps may link to the owning group screen
+     or an explicit manual workflow; retain exact fix-here links for checks
+     with existing editors.
+
 ## Resolved
 
 ## [stage-3] R3 scope decisions (E1.4, E1.5, E1.8) — RESOLVED (2026-07-11)
