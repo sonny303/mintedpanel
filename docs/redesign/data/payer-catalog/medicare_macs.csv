@@ -1,0 +1,51 @@
+state,jurisdiction,contractor
+AK,JF,Noridian Healthcare Solutions
+AL,JJ,Palmetto GBA
+AR,JH,Novitas Solutions
+AZ,JF,Noridian Healthcare Solutions
+CA,JE,Noridian Healthcare Solutions
+CO,"JH (Jurisdiction H: CO, NM, OK, TX, AR, LA, MS)","Novitas Solutions, Inc."
+CT,"JK (Jurisdiction K: CT, NY, ME, MA, NH, RI, VT)","National Government Services, Inc. (NGS)"
+DE,"JL (Jurisdiction L: DE, PA, NJ, MD, DC)","Novitas Solutions, Inc."
+FL,"JN (Jurisdiction N: FL, PR, USVI)","First Coast Service Options, Inc."
+GA,"JJ (Jurisdiction J: GA, AL, TN)","Palmetto GBA, LLC"
+HI,"JE (Part A/B: CA, HI, NV, American Samoa, Guam, Northern Mariana Islands)",Noridian Healthcare Solutions
+IA,"J5 (Part A/B: IA, KS, MO, NE)",WPS Government Health Administrators (Wisconsin Physicians Service)
+ID,"JF (Part A/B: AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY)",Noridian Healthcare Solutions
+IL,"J6 (Part A/B: IL, MN, WI)",National Government Services (NGS)
+IN,"J8 (Part A/B: IN, MI)",WPS Government Health Administrators (Wisconsin Physicians Service)
+KS,"J5 (IA, KS, MO, NE)",Wisconsin Physicians Service Government Health Administrators (WPS GHA)
+KY,"J15 (KY, OH)","CGS Administrators, LLC"
+LA,"JH (AR, CO, LA, MS, NM, OK, TX)","Novitas Solutions, Inc."
+MA,"JK (J14 legacy; A/B MAC for CT, ME, MA, NH, NY, RI, VT)",National Government Services (NGS)
+MD,"JL (DC, DE, MD, NJ, PA)","Novitas Solutions, Inc."
+ME,"JK (CT, MA, ME, NH, NY, RI, VT)","National Government Services, Inc. (NGS)"
+MI,J8 (A/B MAC for Michigan and Indiana),Wisconsin Physicians Service Government Health Administrators (WPS GHA)
+MN,"J6 (A/B MAC for Illinois, Minnesota, Wisconsin)",National Government Services (NGS)
+MO,"J5 (A/B MAC for Iowa, Kansas, Missouri, Nebraska)",Wisconsin Physicians Service Government Health Administrators (WPS GHA)
+MS,"JH (A/B MAC for AR, CO, LA, MS, NM, OK, TX)",Novitas Solutions (re-awarded the JH contract June 2026)
+MT,"JF (Part A/B: AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY)",Noridian Healthcare Solutions
+NC,"JM (NC, SC, VA, WV)","Palmetto GBA, LLC"
+ND,"JF (AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY)","Noridian Healthcare Solutions, LLC (headquartered in Fargo, ND)"
+NE,"J5 (Part A/B: IA, KS, MO, NE)",Wisconsin Physicians Service Government Health Administrators (WPS GHA)
+NH,"JK (Part A/B: CT, ME, MA, NH, NY, RI, VT)","National Government Services (NGS, an Elevance Health company)"
+NJ,"JL (Part A/B: DE, DC, MD, NJ, PA)",Novitas Solutions
+NM,"JH (AR, CO, LA, MS, NM, OK, TX)","Novitas Solutions, Inc."
+NV,"JE (Part A/B: CA, HI, NV, American Samoa, Guam, N. Mariana Islands)",Noridian Healthcare Solutions
+NY,"JK (NY, CT, ME, MA, NH, RI, VT)","National Government Services, Inc. (NGS, an Elevance Health company)"
+OH,"J15 (OH, KY)","CGS Administrators, LLC"
+OK,JH,"Novitas Solutions, Inc. (Part A/B MAC for AR, CO, LA, MS, NM, OK, TX; CMS MAC list)"
+OR,JF,"Noridian Healthcare Solutions, LLC (Part A/B MAC for AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY; CMS MAC list)"
+PA,JL,"Novitas Solutions, Inc. (Part A/B MAC for DE, DC, MD, NJ, PA; CMS MAC list)"
+RI,JK,"National Government Services, Inc. (Part A/B MAC for CT, ME, MA, NH, NY, RI, VT; CMS MAC list)"
+SC,JM,"Palmetto GBA, LLC (Part A/B MAC for NC, SC, VA, WV; headquartered in Columbia, SC; CMS MAC list)"
+SD,JF,Noridian Healthcare Solutions
+TN,JJ,Palmetto GBA
+TX,JH,Novitas Solutions
+UT,JF,Noridian Healthcare Solutions
+VA,"JM (NC, SC, VA, WV)",Palmetto GBA
+VT,JK,National Government Services (NGS)
+WA,"JF (AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY)",Noridian Healthcare Solutions
+WI,"J6 (IL, MN, WI)",National Government Services (NGS)
+WV,"JM (NC, SC, VA, WV)",Palmetto GBA
+WY,"JF (AK, AZ, ID, MT, ND, OR, SD, UT, WA, WY)",Noridian Healthcare Solutions
