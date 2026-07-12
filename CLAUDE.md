@@ -569,6 +569,50 @@ active|merged|retired`, `aliases text[]`, `states text[]`, `payer_slug` +
   TS-25/28 updated for the activated section. E2.x case generation reads
   `status='active'` rows; E1.8 readiness evaluates against them.
 
+- **E1.8 — Enrollment Readiness (CLOSES Stage 1 / R3).** NO schema change —
+  a pure derivation over R1–R3 data (TE-4 confirmed the existing
+  `provider_documents_doc_type_check` already carries w9/coi/voided_check).
+  **Pure evaluator `src/lib/enrollmentReadiness.ts`** (+21-case test suite;
+  deliberately NOT `launchReadiness.ts`, which stays location-launch):
+  rows at the E2.x case-key grain (provider×group×payer×state) from ACTIVE
+  `payer_network_targets` × the group's roster; provider checklist (license
+  present/unexpired/PSV-verified per target state — verified row preferred
+  over stale duplicates; CAQH ID; CAQH attested ≤ `CAQH_CURRENT_DAYS` 120,
+  boundary-tested 119/120/121; NPI; demographics PRESENCE; malpractice end
+  date) + group checklist computed ONCE per (group, state) and fanned out
+  (TE-7 — the check objects are shared by identity): state facility, W-9,
+  COI (insurance policy end date OR current coi doc), voided check. All
+  date math date-only vs a passed-in `today` (never a clock read in the
+  lib). `readinessForCaseKey` is the DOCUMENTED E2.0 soft-warn interface
+  (nothing calls it to gate anything in R3); `filterReadinessRows` backs
+  the F1.8.1 filters. **PHI boundary (TE-9):** `src/services/
+enrollmentReadiness.ts` reads DOB/ssn_last4/home-address columns ONLY to
+  reduce them to presence booleans in the service — values never enter the
+  cache or render. That service is the FIRST app consumer of the dormant
+  `provider_documents` (group rows, doc_type ∩ w9/coi/voided_check) and
+  second of `group_insurance_policies` — read-only, no documents surface
+  (PM [e1.8] Option 3: doc/COI/voided red items soft-link to Account
+  Detail; checks with a wizard editor deep-link their section via
+  `openSection`). Hook `src/hooks/useEnrollmentReadiness.ts` (3 new
+  org-scoped keys + the existing wizard caches; `localTodayIso`).
+  **Wizard:** `scope_review` moved preview→ACTIVE — ALL seven sections are
+  now live; `PreviewSectionKey` is `never` (machinery kept for future
+  stages) and `NextActionCard`'s all-complete state stands alone ("Case
+  generation arrives in the next stage"). `resolveScopeReviewStatus` =
+  not_started (0 rows) / in_progress (gaps) / complete (all ready) —
+  informational chip; readiness itself is ADVISORY and never disables
+  anything, and NO tasks are auto-created from gaps.
+  `src/components/onboarding/ScopeReviewSection.tsx`: `ui/table` matrix
+  (Ready = `--mp-ok-*` badge, gaps = `--mp-danger-*`), per-row
+  `ui/collapsible` drill-in (tbody-as-Root pattern) with provider/group
+  checklists + fix-here links, group/payer/state/gap-type `ui/select`
+  filters, "x of y ready". e2e `e2e/scope-review.spec.ts` (TS-43 PSV flip
+  re-derives with ZERO writes recorded; TS-44 group state gap + stale CAQH
+  advisory, no disabled controls, no task writes); `onboarding-wizard`
+  TS-25/28 updated (no "Coming next" anywhere; all-complete requires a
+  fully-ready matrix). No seed change (TS-43/44 are derived views per
+  seed-universe).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

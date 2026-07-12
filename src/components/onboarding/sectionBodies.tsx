@@ -13,6 +13,7 @@ import { FacilitySection } from "@/components/onboarding/FacilitySection";
 import { ProviderRosterSection } from "@/components/onboarding/ProviderRosterSection";
 import { AssignmentSection } from "@/components/onboarding/AssignmentSection";
 import { PayerNetworkSection } from "@/components/payers/PayerNetworkSection";
+import { ScopeReviewSection } from "@/components/onboarding/ScopeReviewSection";
 import type { OnboardingWizardData } from "@/hooks/useOnboardingWizard";
 
 export interface SectionBodyProps {
@@ -46,4 +47,9 @@ export function AssignmentsSectionBody({ wizard }: SectionBodyProps) {
 // E1.5: the payer attachment surface — group×payer×state network targets.
 export function PayerNetworkSectionBody({ wizard }: SectionBodyProps) {
   return <PayerNetworkSection wizard={wizard} />;
+}
+
+// E1.8: the derived enrollment-readiness matrix (advisory, never blocking).
+export function ScopeReviewSectionBody({ wizard }: SectionBodyProps) {
+  return <ScopeReviewSection wizard={wizard} />;
 }

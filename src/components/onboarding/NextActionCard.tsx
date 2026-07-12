@@ -13,7 +13,9 @@ import { openSection } from "@/components/onboarding/openSection";
 import { ONBOARDING_SECTIONS, type OnboardingSectionDef } from "@/lib/onboardingProgress";
 
 // The preview handoff names whichever disabled section is next in the
-// registry (Assignments pre-E1.4, Payer Network after) — never hardcoded.
+// registry — never hardcoded. As of E1.8 every preview has activated, so
+// this is undefined and the all-complete state stands on its own; it wakes
+// back up if a future stage adds a preview.
 const FIRST_PREVIEW = ONBOARDING_SECTIONS.find((s) => s.kind === "preview");
 
 export function NextActionCard({
@@ -30,9 +32,11 @@ export function NextActionCard({
           <>
             <div className="text-[13px] text-foreground">
               All scope sections are complete.
-              {FIRST_PREVIEW ? ` ${FIRST_PREVIEW.title} is the next step in this journey.` : ""}
+              {FIRST_PREVIEW
+                ? ` ${FIRST_PREVIEW.title} is the next step in this journey.`
+                : " Case generation arrives in the next stage."}
             </div>
-            <ComingNextPill />
+            {FIRST_PREVIEW ? <ComingNextPill /> : null}
           </>
         ) : (
           <>
