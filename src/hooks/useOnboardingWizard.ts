@@ -20,7 +20,7 @@ import {
   type OnboardingSectionDef,
   type OnboardingSectionStatus,
 } from "@/lib/onboardingProgress";
-import type { Facility, OrgContact, ProviderGroup } from "@/types";
+import type { Facility, OrgContact, Provider, ProviderGroup } from "@/types";
 
 export interface OnboardingSectionState {
   /** Resolved status; undefined while the backing read is loading or failed. */
@@ -45,8 +45,8 @@ export interface OnboardingWizardData {
   providerGroups: ProviderGroup[];
   /** The org's facilities (E1.2 section list; active rows complete it). */
   facilities: Facility[];
-  /** Row count for the presence-based Providers section body. */
-  providerCount: number;
+  /** The org's roster rows — the PHI-narrowed list projection (E1.3). */
+  providers: Provider[];
 }
 
 export function useOnboardingWizard(): OnboardingWizardData {
@@ -127,6 +127,6 @@ export function useOnboardingWizard(): OnboardingWizardData {
     contacts,
     providerGroups: groupsQ.data ?? [],
     facilities: facilitiesQ.data ?? [],
-    providerCount: providersQ.data?.length ?? 0,
+    providers: providersQ.data ?? [],
   };
 }

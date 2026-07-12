@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { GroupSummaryCard } from "@/components/org/GroupSummaryCard";
 import { FacilitySummaryCard } from "@/components/org/FacilitySummaryCard";
+import { RosterSummaryCard } from "@/components/org/RosterSummaryCard";
 import { InboundLeadsPanel } from "@/components/org/InboundLeadsPanel";
 import { PartiesManager } from "@/components/org/PartiesManager";
 
@@ -24,6 +25,8 @@ function AccountDetailPage() {
       <GroupSummaryCard />
       {/* E1.2 F1.2.3: read-only facilities summary — same rule. */}
       <FacilitySummaryCard />
+      {/* E1.3 F1.3.4: read-only roster summary — same rule. */}
+      <RosterSummaryCard />
       {/* E0.5 F0.5.5 / TE-7: shared inbound "contact us" triage queue (renders
           only when leads await triage). */}
       <InboundLeadsPanel />

@@ -403,6 +403,39 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   (`status_id`/`effective_date`/`reference_only`) untouched by the wizard
   payload.
 
+- **E1.3 — Provider Roster.** TWO additive migrations (repo + hosted):
+  `20260712120000_provider_group_assignments.sql` (the M:N provider↔group
+  join, mirroring the `provider_facility_assignments` template — org-scoped
+  RLS, grants, `UNIQUE (provider_id, group_id)`, FK indexes, partial unique
+  ONE `is_primary` per provider; constraint probes ran rollback-wrapped on
+  hosted) and `20260712120100_state_license_psv.sql` (PSV trail on
+  `state_licenses`: `verified_status unverified|verified|failed` CHECK +
+  `verified_at`/`verified_by`/`verification_source_url`). `types.ts`
+  regenerated; table register updated. **`providers.group_id` is a FROZEN
+  legacy mirror** of the primary assignment — no new readers; all new group
+  reads go through `provider_group_assignments`
+  (`listProviderGroupAssignments` → `useProviderGroupAssignments`). Pure rule
+  modules (tested): `src/lib/groupAssignments.ts` (≥1 assignment, exactly one
+  primary, `planAssignmentSync` demote→delete→promote→insert order so the
+  partial unique never trips) and `src/lib/licensePsv.ts`
+  (`resolvePsvColumns` — verify/fail REQUIRES the board URL, stamps
+  verified_at/by service-side, **expiration edit resets to unverified**).
+  `createProviderWithDetails`/`updateProviderWithLicenses` gained
+  `groupAssignments` + PSV threading; `LicenseInput` carries
+  `verifiedStatus`/`verificationSourceUrl`. Wizard section:
+  `ProviderRosterSection` (non-terminated list — name/NPI/groups/license
+  states + soonest expiry/CAQH date; terminate via the existing
+  `terminateProvider`, never a row delete) + `ProviderRosterForm` (CAQH
+  baseline: required name/NPI/≥1 group with one primary; SSN LAST-4 only,
+  maxLength-guarded; no status picker; licenses via `LicenseListEditor` +
+  `licenseDraft.ts`). Progress stays ROW-PRESENCE per the epic TE-8 (not
+  active-filtered like groups/facilities). Roster summaries read the narrow
+  `listOrgStateLicenses` projection (`useOrgStateLicenses`) — the provider
+  list projection stays PHI-safe. Account Detail gained `RosterSummaryCard`.
+  Seed: TS-35 L3 fixture (Brooke Ostrander on Outer Banks, primary
+  assignment, verified-NC + unverified-SC licenses) appended to
+  `seed-redesign.sql`. e2e: `e2e/provider-roster.spec.ts` (TS-33/34/35).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

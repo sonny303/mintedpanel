@@ -185,3 +185,57 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public.inbound_leads l
   WHERE l.org_name = v.org_name AND l.contact_email = v.email
 );
+
+-- ---------------------------------------------------------------------------
+-- E1.3 — TS-35 L3 fixture: one seeded provider on Outer Banks Rehab Group
+-- with a primary group assignment and TWO state licenses — the NC license
+-- verified against the state board (PSV trail populated), the SC license
+-- unverified. Idempotent by natural keys (group name per org, provider npi
+-- per org, unique assignment tuple, unique (provider, state, number)).
+-- ---------------------------------------------------------------------------
+INSERT INTO public.provider_groups (org_id, name, tin, npi_type2, states, billing_street, billing_city, billing_state, billing_zip, billing_phone)
+SELECT o.id, 'Outer Banks Rehab Group LLC', '561234567', '1902837465', ARRAY['NC','SC'],
+       '4104 S Croatan Hwy', 'Nags Head', 'NC', '27959', '252-555-0100'
+FROM public.organizations o
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'outerbanksrehabgroup'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.provider_groups g
+    WHERE g.org_id = o.id AND g.name = 'Outer Banks Rehab Group LLC'
+  );
+
+INSERT INTO public.providers (org_id, group_id, first_name, last_name, credentials, npi, specialty, taxonomy_code, caqh_id, caqh_last_attested_date, status)
+SELECT o.id, g.id, 'Brooke', 'Ostrander', 'PT, DPT', '1093817465', 'Physical Therapy', '225100000X', '16224897', '2026-06-15', 'onboarding'
+FROM public.organizations o
+JOIN public.provider_groups g ON g.org_id = o.id AND g.name = 'Outer Banks Rehab Group LLC'
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'outerbanksrehabgroup'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.providers p WHERE p.org_id = o.id AND p.npi = '1093817465'
+  );
+
+INSERT INTO public.provider_group_assignments (org_id, provider_id, group_id, is_primary)
+SELECT p.org_id, p.id, g.id, true
+FROM public.providers p
+JOIN public.provider_groups g ON g.org_id = p.org_id AND g.name = 'Outer Banks Rehab Group LLC'
+WHERE p.npi = '1093817465'
+ON CONFLICT ON CONSTRAINT provider_group_assignments_provider_id_group_id_key DO NOTHING;
+
+-- NC license: PSV-verified against the NC board lookup (TS-35 given state).
+INSERT INTO public.state_licenses (org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, verified_status, verified_at, verified_by, verification_source_url)
+SELECT p.org_id, p.id, 'NC', 'PT-48213', 'full', '2023-02-01', '2027-01-31', 'active',
+       'verified', '2026-07-10T14:30:00Z', NULL, 'https://www.ncbpte.org/license-verification'
+FROM public.providers p
+WHERE p.npi = '1093817465'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.state_licenses l
+    WHERE l.provider_id = p.id AND l.state = 'NC' AND l.license_number = 'PT-48213'
+  );
+
+-- SC license: entered but not yet verified (the TS-35 dark half).
+INSERT INTO public.state_licenses (org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, verified_status)
+SELECT p.org_id, p.id, 'SC', 'PT-11902', 'compact', '2024-05-01', '2026-12-31', 'active', 'unverified'
+FROM public.providers p
+WHERE p.npi = '1093817465'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.state_licenses l
+    WHERE l.provider_id = p.id AND l.state = 'SC' AND l.license_number = 'PT-11902'
+  );

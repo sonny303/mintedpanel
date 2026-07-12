@@ -1560,6 +1560,61 @@ export type Database = {
           },
         ];
       };
+      provider_group_assignments: {
+        Row: {
+          created_at: string;
+          end_date: string | null;
+          group_id: string;
+          id: string;
+          is_primary: boolean;
+          org_id: string;
+          provider_id: string;
+          start_date: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          end_date?: string | null;
+          group_id: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id: string;
+          provider_id: string;
+          start_date?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          end_date?: string | null;
+          group_id?: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id?: string;
+          provider_id?: string;
+          start_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_group_assignments_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_group_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_group_assignments_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       provider_groups: {
         Row: {
           billing_city: string | null;
@@ -2040,6 +2095,10 @@ export type Database = {
           provider_id: string | null;
           state: string;
           status: string | null;
+          verification_source_url: string | null;
+          verified_at: string | null;
+          verified_by: string | null;
+          verified_status: string;
         };
         Insert: {
           created_at?: string | null;
@@ -2052,6 +2111,10 @@ export type Database = {
           provider_id?: string | null;
           state: string;
           status?: string | null;
+          verification_source_url?: string | null;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          verified_status?: string;
         };
         Update: {
           created_at?: string | null;
@@ -2064,6 +2127,10 @@ export type Database = {
           provider_id?: string | null;
           state?: string;
           status?: string | null;
+          verification_source_url?: string | null;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          verified_status?: string;
         };
         Relationships: [
           {
@@ -2438,7 +2505,7 @@ export type Database = {
           p_recipient_email: string;
           p_report_key: string;
           p_scope: string;
-          p_scope_org_id: string | null;
+          p_scope_org_id: string;
         };
         Returns: Json;
       };

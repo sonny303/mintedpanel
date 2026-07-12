@@ -11,6 +11,7 @@ import {
   getNotesFor,
   getProviderGroups,
   getStateLicensesByProvider,
+  listOrgStateLicenses,
   type CreateNoteInput,
 } from "@/services/lookups";
 import type { NoteEntityType } from "@/types";
@@ -90,5 +91,17 @@ export function useCreateNote() {
       }
       qc.invalidateQueries({ queryKey: queryKeys.auditLog(orgId) });
     },
+  });
+}
+
+// E1.3 — org-wide narrow license projection for roster summaries (license
+// states + soonest expiry per provider) without widening the provider list.
+export function useOrgStateLicenses() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.orgStateLicenses(orgId),
+    queryFn: () => listOrgStateLicenses(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
   });
 }
