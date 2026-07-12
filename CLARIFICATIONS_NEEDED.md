@@ -18,6 +18,39 @@ Format per entry:
 
 ## Resolved
 
+## [r4] Case-generation discovery decisions — RESOLVED (2026-07-12)
+
+- **Issue:** R4 epic drafting (E1.7b SOP-as-data + E2.x case generation)
+  required PM decisions on five workflow questions.
+- **Decisions (PM Sowmya, 2026-07-12):**
+  1. **Generation preview:** "Generate" computes every valid provider ×
+     group × payer × state combination from roster × assignments ×
+     payer-network targets and shows a **preview checklist** before any case
+     is created. Unchecking a row records a **persistent exclusion with a
+     reason** (already credentialed / panel closed / not pursuing) so the
+     next run does not re-propose it. Manual one-off cases (outside the
+     attached payer list) are rare and live as a **separate "create case"
+     action**, not in the preview. Preview rows surface **group contract
+     status** as the readiness driver (contract status joins the E1.8
+     readiness inputs for generation).
+  2. **Duplicates:** rows whose case already exists at the same 4-part key
+     appear **grayed-out "already exists — in progress"** (never
+     re-created). Reapplication after a denial is legitimate but always
+     **continues on the existing case** to preserve the payer/provider
+     history — never a parallel case for the same key.
+  3. **Prerequisite payers: no prerequisite logic at all.** Commercial and
+     Medicare Advantage applications run **in parallel**; once Medicare is
+     approved the MA contract follows automatically. Prerequisites are not
+     a readiness blocker and drop out of R4 scope entirely
+     (`payers.prerequisite_payer_id` stays dormant).
+  4. **No-SOP payers:** cases whose payer+state has no written SOP get the
+     **generic fallback SOP** (the general enrollment checklist per
+     `docs/redesign/E1.7b-sop-worked-examples.md` Example 2), swapped for
+     the payer-specific SOP as those get authored.
+  5. **Post-generation landing:** a **"next best action" queue** ordered by
+     known upcoming deadlines (provider start date, location launch date,
+     recredentialing deadlines).
+
 ## [e1.7a] SOP versioning model — RESOLVED (2026-07-12)
 
 - **Issue:** The E1.7a spike required a PM decision on the SOP versioning
