@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { StateSelect } from "@/components/StateSelect";
 import {
   Dialog,
   DialogContent,
@@ -122,12 +122,7 @@ export function AddContractDialog({
             <Label>
               State <span className="text-[#DC2626]">*</span>
             </Label>
-            <Input
-              value={state}
-              onChange={(e) => setState(e.target.value)}
-              placeholder="e.g. CA"
-              maxLength={2}
-            />
+            <StateSelect value={state} onChange={setState} allowNone={false} />
           </div>
           <div className="space-y-1.5">
             <Label>Initial status</Label>

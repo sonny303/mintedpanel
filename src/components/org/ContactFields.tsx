@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StateSelect } from "@/components/StateSelect";
 import type { ContactInput } from "@/types";
 import type { ContactFieldErrors } from "@/lib/contactValidation";
 
@@ -128,13 +129,12 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
           <Label className="text-[12px]" htmlFor={`${idPrefix}-state`}>
             State
           </Label>
-          <Input
+          <StateSelect
             id={`${idPrefix}-state`}
             value={value.state}
-            onChange={(e) => onChange({ state: e.target.value })}
-            aria-invalid={errors.state ? true : undefined}
-            aria-describedby={errors.state ? `${idPrefix}-state-error` : undefined}
-            className="h-9"
+            onChange={(state) => onChange({ state })}
+            invalid={errors.state ? true : undefined}
+            describedBy={errors.state ? `${idPrefix}-state-error` : undefined}
           />
           {errors.state ? (
             <div id={`${idPrefix}-state-error`} aria-live="polite" className={errClass}>

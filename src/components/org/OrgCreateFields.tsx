@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { StateSelect } from "@/components/StateSelect";
 import type { OrgCreateForm } from "@/hooks/useOrgCreateForm";
 
 const fieldError = "mt-1 text-[12px] text-[#B91C1C]";
@@ -165,12 +166,11 @@ export function OrgCreateFields({ form }: { form: OrgCreateForm }) {
             <Label className="text-[12px]" htmlFor="customer-state">
               State
             </Label>
-            <Input
+            <StateSelect
               id="customer-state"
               value={form.customer.state}
-              onChange={(e) => form.patchCustomer({ state: e.target.value })}
-              aria-invalid={form.customerErrors.state ? true : undefined}
-              className="h-9"
+              onChange={(state) => form.patchCustomer({ state })}
+              invalid={form.customerErrors.state ? true : undefined}
             />
             {form.customerErrors.state ? (
               <div className={fieldError}>{form.customerErrors.state}</div>
