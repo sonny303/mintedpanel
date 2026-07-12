@@ -436,6 +436,42 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   assignment, verified-NC + unverified-SC licenses) appended to
   `seed-redesign.sql`. e2e: `e2e/provider-roster.spec.ts` (TS-33/34/35).
 
+- **E1.4 — Provider–Facility Assignment.** The FIRST R3 preview to activate:
+  "assignments" moved from preview to ACTIVE in the wizard registry
+  (`ActiveSectionKey` gained it; `NextActionCard`'s all-complete handoff now
+  names the first remaining preview dynamically). NO column migration —
+  `start_date`/`is_primary` existed on `provider_facility_assignments`
+  (epic-body claim corrected by its TE-1). Three additive migrations
+  (repo + hosted): `20260712150000` `CHECK (start_date IS NOT NULL) NOT
+VALID` (validate later, after legacy-null remediation through this UI),
+  `20260712150100` **`set_primary_assignment` RPC** (SECURITY DEFINER,
+  pinned search_path, writer-membership + ownership checks, atomic
+  demote+promote — two PostgREST calls are NOT atomic under the one-primary
+  partial unique), `20260712150200` audit CHECK widened with `'DELETE'`
+  (assignment removal is a hard delete by R3 decision, audited). ONE write
+  path now: `src/services/providerAssignments.ts`
+  (`listOrgAssignments`/`insertAssignmentRows`/`setAssignments` diff sync —
+  updates→deletes→inserts-as-nonprimary→RPC swap —/`setPrimaryAssignment`);
+  the legacy writers (`createProviderWithDetails`,
+  `launches.assignProviderToFacility`) route through `insertAssignmentRows`.
+  Pure rules in `src/lib/assignmentScope.ts` (tested):
+  `facilitiesForProviderGroups` (group-scoped picker — ungrouped/inactive
+  facilities never offered), `validateAssignmentDrafts` (start date required;
+  exactly one primary when non-empty ⇒ removing the primary forces a
+  re-pick), `planFacilityAssignmentSync`. Progress:
+  `resolveAssignmentsStatus` = every non-terminated provider has ≥1
+  assignment (in_progress is reachable here). UI:
+  `AssignmentSection` (unassigned-first list, chips with start date +
+  primary star, one-click Make primary via RPC) + `AssignmentEditor`
+  (checkbox picker + per-location `DatePicker`). **Date-picker enabler
+  (TE-6):** stock-shadcn `ui/calendar` + `ui/popover` vendored (registry
+  unreachable in-sandbox) + `react-day-picker@9` / `@radix-ui/react-popover`
+  deps + shared `src/components/DatePicker.tsx` (modal popover — non-modal
+  portals are pointer-locked inside dialogs) — all logged in DESIGN-DEBT.md.
+  `FacilityAssignment.startDate` added additively; `practice_frequency`
+  stays untouched/unwritten. e2e: `e2e/assignments-wizard.spec.ts`
+  (TS-39/TS-40); TS-25/28/33 fixtures updated for the activated section.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

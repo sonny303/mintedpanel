@@ -8,11 +8,16 @@
 // next action is computed only once all four reads have resolved (TE-4).
 import { useOrgContacts } from "@/hooks/useParties";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
-import { useProviders } from "@/hooks/useProviders";
+import {
+  useProviderAssignments,
+  useProviderGroupAssignments,
+  useProviders,
+} from "@/hooks/useProviders";
 import { useActiveMembership } from "@/lib/auth-store";
 import {
   getNextIncompleteSection,
   resolveActiveRowsStatus,
+  resolveAssignmentsStatus,
   resolveOrgDetailsStatus,
   resolveProviderGroupStatus,
   resolveRowCountStatus,
@@ -20,7 +25,14 @@ import {
   type OnboardingSectionDef,
   type OnboardingSectionStatus,
 } from "@/lib/onboardingProgress";
-import type { Facility, OrgContact, Provider, ProviderGroup } from "@/types";
+import type {
+  Facility,
+  FacilityAssignment,
+  OrgContact,
+  Provider,
+  ProviderGroup,
+  ProviderGroupAssignment,
+} from "@/types";
 
 export interface OnboardingSectionState {
   /** Resolved status; undefined while the backing read is loading or failed. */
@@ -47,6 +59,10 @@ export interface OnboardingWizardData {
   facilities: Facility[];
   /** The org's roster rows — the PHI-narrowed list projection (E1.3). */
   providers: Provider[];
+  /** Provider↔facility assignment rows (E1.4 section). */
+  assignments: FacilityAssignment[];
+  /** Provider↔group rows (E1.3) — scopes the E1.4 facility picker. */
+  providerGroupAssignments: ProviderGroupAssignment[];
 }
 
 export function useOnboardingWizard(): OnboardingWizardData {
@@ -57,6 +73,8 @@ export function useOnboardingWizard(): OnboardingWizardData {
   // List projection only (TE-6): src/services/providers.ts omits ssn_last4,
   // date of birth, and home-address columns; progress uses the row count.
   const providersQ = useProviders();
+  const assignmentsQ = useProviderAssignments();
+  const groupAssignmentsQ = useProviderGroupAssignments();
 
   const contacts = contactsQ.data ?? [];
   const orgName = active?.orgName ?? null;
@@ -104,19 +122,37 @@ export function useOnboardingWizard(): OnboardingWizardData {
       refetch: facilitiesQ.refetch,
     },
     providers: countSection(providersQ),
+    // E1.4: complete when every non-terminated provider has >=1 assignment.
+    assignments: {
+      status:
+        providersQ.data && assignmentsQ.data
+          ? resolveAssignmentsStatus(
+              providersQ.data.filter((p) => p.status !== "terminated").map((p) => p.id),
+              assignmentsQ.data,
+            )
+          : undefined,
+      isLoading: providersQ.isLoading || assignmentsQ.isLoading,
+      isError: providersQ.isError || assignmentsQ.isError,
+      refetch: () => {
+        if (providersQ.isError) providersQ.refetch();
+        if (assignmentsQ.isError) assignmentsQ.refetch();
+      },
+    },
   };
 
   const orgDetailsStatus = sections.org_details.status;
   const groupStatus = sections.provider_group.status;
   const facilitiesStatus = sections.facilities.status;
   const providersStatus = sections.providers.status;
+  const assignmentsStatus = sections.assignments.status;
   const nextSection =
-    orgDetailsStatus && groupStatus && facilitiesStatus && providersStatus
+    orgDetailsStatus && groupStatus && facilitiesStatus && providersStatus && assignmentsStatus
       ? getNextIncompleteSection({
           org_details: orgDetailsStatus,
           provider_group: groupStatus,
           facilities: facilitiesStatus,
           providers: providersStatus,
+          assignments: assignmentsStatus,
         })
       : undefined;
 
@@ -128,5 +164,7 @@ export function useOnboardingWizard(): OnboardingWizardData {
     providerGroups: groupsQ.data ?? [],
     facilities: facilitiesQ.data ?? [],
     providers: providersQ.data ?? [],
+    assignments: assignmentsQ.data ?? [],
+    providerGroupAssignments: groupAssignmentsQ.data ?? [],
   };
 }

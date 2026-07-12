@@ -374,6 +374,9 @@ export interface FacilityAssignment {
   facilityId: string | null;
   isPrimary: boolean | null;
   createdAt: string;
+  /** Date the provider began practicing at the location (E1.4, additive —
+   * baseline column; required on new assignments via the E1.4 editor). */
+  startDate?: string | null;
 }
 
 export interface Provider {

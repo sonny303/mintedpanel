@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ComingNextPill } from "@/components/onboarding/SectionStatusPill";
 import { openSection } from "@/components/onboarding/openSection";
-import type { OnboardingSectionDef } from "@/lib/onboardingProgress";
+import { ONBOARDING_SECTIONS, type OnboardingSectionDef } from "@/lib/onboardingProgress";
+
+// The preview handoff names whichever disabled section is next in the
+// registry (Assignments pre-E1.4, Payer Network after) — never hardcoded.
+const FIRST_PREVIEW = ONBOARDING_SECTIONS.find((s) => s.kind === "preview");
 
 export function NextActionCard({
   nextSection,
@@ -25,7 +29,8 @@ export function NextActionCard({
         ) : nextSection === null ? (
           <>
             <div className="text-[13px] text-foreground">
-              All scope sections are complete. Assignments is the next step in this journey.
+              All scope sections are complete.
+              {FIRST_PREVIEW ? ` ${FIRST_PREVIEW.title} is the next step in this journey.` : ""}
             </div>
             <ComingNextPill />
           </>
