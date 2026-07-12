@@ -36,6 +36,12 @@ Format per entry:
   `stedi_payer_id` is retained as the column name, carrying the professional
   837P clearinghouse payer ID from the dataset. The E1.6 hold is lifted
   (`status: reviewed`, `reviewed: true`).
+- **Addendum (PM, 2026-07-12, per Sonia):** clearinghouse payer IDs are
+  **removed from consideration** — the field is not used by the work today
+  and has no planned future use. `stedi_payer_id` is dropped from the E1.6
+  schema entirely; the seed pipeline dedupes on the canonical `payer_slug`
+  from `payers.csv` (new unique `payers.payer_slug` column). The dataset's
+  clearinghouse-ID column stays in the CSV but is ignored.
 
 ## [e1.1] Facility-contact default + flat provider_groups columns — RESOLVED (2026-07-12)
 
