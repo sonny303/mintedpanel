@@ -472,6 +472,22 @@ VALID` (validate later, after legacy-null remediation through this UI),
   stays untouched/unwritten. e2e: `e2e/assignments-wizard.spec.ts`
   (TS-39/TS-40); TS-25/28/33 fixtures updated for the activated section.
 
+- **E1.6 prep — payer reference dataset (data only, no epic code).** PM
+  direction 2026-07-12: build the Stedi-equivalent identity data ourselves
+  instead of the F1.6.2 API sync. `docs/redesign/data/payer-catalog/` holds
+  five CSVs + README: `state_payer_rankings.csv` (top-10 medical payers × all
+  50 states, 491 rows — dental/vision/PDP/supplemental excluded; share
+  sources labeled, nulls over invented numbers, thin markets not padded),
+  `payers.csv` (270 canonical entities in the E1.6 TE-2 shape — aliases,
+  states[], kind, professional 837P clearinghouse payer ID as the
+  `stedi_payer_id` stand-in; 121 source-verified, conflicts left blank+noted),
+  `mso_delegations.csv` (delegation vs UM-only — **UM-only rows must never
+  become MSO credentialing routing rules**), `medicare_macs.csv` +
+  `state_medicaid_programs.csv` (the universal implicit payers). E1.6 itself
+  stays blocked/unbuilt; when it unblocks, F1.6.2 seeds from this dataset
+  (quarterly manual refresh per the README) and the rest of the epic is
+  unchanged.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
