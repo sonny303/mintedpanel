@@ -18,6 +18,41 @@ Format per entry:
 
 ## Resolved
 
+## [stage-3] R3 scope decisions (E1.4, E1.5, E1.8) — RESOLVED (2026-07-11)
+
+- **Issue:** Open questions blocking R3 epic authoring: assignment scoping,
+  primary-location semantics, per-location start dates, payer attachment
+  grain and curation, archive/reapply behavior, and the readiness model.
+- **Impact:** Blocked drafts of E1.4, E1.5, E1.8.
+- **Decision (PM, 2026-07-11):**
+  1. **E1.4:** the facility picker is scoped to the provider's group(s)'
+     facilities only — never the whole org. Exactly one primary practice
+     location per provider, even across groups. Locations are hand-picked
+     every time (no auto-assign in R3; bulk rules are R5). Each assignment
+     carries a required **start date** (the team computes this by hand today
+     per provider per location — it becomes a first-class data point:
+     additive `provider_facility_assignments.start_date`). No unassigned
+     resting state: every provider needs a group and ≥1 location.
+  2. **E1.5:** the UX is org-level intent ("this org works with BCBS"); the
+     system expands it into group × state target rows derived from the
+     group's facility states, shown for review with uncheckable exceptions
+     (new `payer_network_targets` child table — `org_payer_assignments`
+     stays the Minted-curated visibility layer, configured at onboarding and
+     editable from group settings so payers can be added as org needs grow).
+     Attach = "we intend to pursue"; no attachment status — real status lives
+     on contracts/cases. Remove = archive (hidden from new case generation,
+     history kept) with easy re-attach, because payers deny then reopen.
+     Prerequisite-payer checks are case-generation-time (R4), not
+     attach-time.
+  3. **E1.8 = enrollment readiness only** (location-launch readiness is a
+     separate future epic). Fully derived matrix at the case-key grain
+     (provider × group × payer × state) over active targets. Checks split
+     into a **provider checklist** (license exists/current/PSV-verified,
+     CAQH ID + attested within **120 days**, NPI, demographics, malpractice)
+     and a **group checklist** (facility in target state, W-9, COI, voided
+     check). Advisory only — never blocks; case generation soft-warns. Gaps
+     render as red items worked from the screen; no automatic task creation.
+
 ## [stage-1c] R1 form-scope decisions (E1.1–E1.3) — RESOLVED (2026-07-10)
 
 - **Issue:** The remaining open questions blocking R1 epic authoring: group
