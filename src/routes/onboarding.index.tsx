@@ -231,16 +231,24 @@ function OnboardingPage() {
         </Card>
 
         {/* Right: persistent side panel — the two onboarding journeys for the
-            ACTIVE org (F0.8.3). */}
+            ACTIVE org (F0.8.3). These act on the currently-selected org, NOT
+            the new org being created on the left, so the scope is spelled out
+            explicitly here to avoid the "wrong org" footgun. */}
         <div className="space-y-4">
           <Card>
             <CardContent className="space-y-3 p-4">
               <h3 className="text-[14px] font-semibold text-foreground">Onboarding actions</h3>
-              <p className="text-[12px] text-muted-foreground">
-                {active
-                  ? `These actions run for ${active.orgName}.`
-                  : "Select or create an organization to use these actions."}
-              </p>
+              {active ? (
+                <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
+                  These actions apply to your current organization,{" "}
+                  <span className="font-semibold">{active.orgName}</span> — not the new organization
+                  you're creating on the left.
+                </div>
+              ) : (
+                <p className="text-[12px] text-muted-foreground">
+                  Select or create an organization to use these actions.
+                </p>
+              )}
               <Button
                 type="button"
                 onClick={() => setShareOpen(true)}
