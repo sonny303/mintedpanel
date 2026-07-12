@@ -226,6 +226,18 @@ test("TS-17: intake run on the onboarding page lands on the new org's Account De
     timeout: 30000,
   });
 
+  // Residual-org bugfix: the persistent side panel's scope is spelled out so it
+  // cannot be mistaken for the new org being created — it names the CURRENT
+  // active org and contrasts it with the left-hand intake form.
+  await expect(
+    page.getByText("These actions apply to your current organization", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Rose City Rehab Collective — not the new organization you're creating", {
+      exact: false,
+    }),
+  ).toBeVisible();
+
   const form = page.getByLabel("Organization intake");
   const inputs = form.locator("input");
   await inputs.nth(0).fill("Point Place Physical Therapy");
