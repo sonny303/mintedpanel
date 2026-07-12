@@ -61,6 +61,27 @@ export interface ProviderGroupInput {
   correspondenceCity?: string | null;
   correspondenceState?: string | null;
   correspondenceZip?: string | null;
+  // E1.1 TE-3 (additive): suites, per-block contacts, and the full
+  // credentialing block — all existing baseline columns, riding snakeizeRow.
+  billingSuite?: string | null;
+  billingContactName?: string | null;
+  billingPhone?: string | null;
+  billingFax?: string | null;
+  billingEmail?: string | null;
+  correspondenceSuite?: string | null;
+  correspondenceContactName?: string | null;
+  correspondencePhone?: string | null;
+  correspondenceFax?: string | null;
+  correspondenceEmail?: string | null;
+  credentialingStreet?: string | null;
+  credentialingSuite?: string | null;
+  credentialingCity?: string | null;
+  credentialingState?: string | null;
+  credentialingZip?: string | null;
+  credentialingContactName?: string | null;
+  credentialingPhone?: string | null;
+  credentialingFax?: string | null;
+  credentialingEmail?: string | null;
 }
 
 export async function listProviderGroups(): Promise<ProviderGroup[]> {
@@ -98,6 +119,8 @@ export async function createProviderGroup(input: ProviderGroupInput): Promise<Pr
     payload.billing_state = normalizeOptionalStateCode(input.billingState);
   if ("correspondenceState" in input)
     payload.correspondence_state = normalizeOptionalStateCode(input.correspondenceState);
+  if ("credentialingState" in input)
+    payload.credentialing_state = normalizeOptionalStateCode(input.credentialingState);
   const { data, error } = await supabase
     .from("provider_groups")
     .insert(payload as never)
@@ -126,6 +149,8 @@ export async function updateProviderGroup(
     payload.billing_state = normalizeOptionalStateCode(patch.billingState);
   if ("correspondenceState" in patch)
     payload.correspondence_state = normalizeOptionalStateCode(patch.correspondenceState);
+  if ("credentialingState" in patch)
+    payload.credentialing_state = normalizeOptionalStateCode(patch.credentialingState);
   const { data, error } = await supabase
     .from("provider_groups")
     .update(payload as never)

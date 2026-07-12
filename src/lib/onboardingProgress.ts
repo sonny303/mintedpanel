@@ -88,12 +88,21 @@ export function resolveOrgDetailsStatus(input: OrgDetailsInput): OnboardingSecti
   return anyInput ? "in_progress" : "not_started";
 }
 
-// Provider Group / Facilities / Providers (TE-3): row presence completes the
-// section. Deliberately binary in E1.0 — current writes persist only valid
-// rows, not drafts; E1.1–E1.3 may broaden their resolver inputs when they
-// define a persisted partial-record shape.
+// Facilities / Providers (TE-3): row presence completes the section.
+// Deliberately binary in E1.0 — current writes persist only valid rows, not
+// drafts; E1.2–E1.3 may broaden their resolver inputs when they define a
+// persisted partial-record shape.
 export function resolveRowCountStatus(rowCount: number): OnboardingSectionStatus {
   return rowCount > 0 ? "complete" : "not_started";
+}
+
+// Provider Group (E1.1 TE-6 refinement — the sanctioned resolver-input
+// broadening): complete on ≥1 ACTIVE group. Soft-deleted groups
+// (is_active = false) never complete the section; still derived, no flags.
+export function resolveProviderGroupStatus(
+  groups: ReadonlyArray<{ isActive: boolean }>,
+): OnboardingSectionStatus {
+  return groups.some((g) => g.isActive) ? "complete" : "not_started";
 }
 
 // ---------- next action (F1.0.3 / TE-4) ----------

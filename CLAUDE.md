@@ -349,6 +349,31 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   were audited against `Sidebar Nav.dc.html` and already conformed — no
   contrast change shipped. e2e: `e2e/onboarding-wizard.spec.ts` (TS-25–28 +
   logo/rail sweep). No migration, no schema change, no new deps.
+- **E1.1 — Provider Group / Business Entity.** No schema change — every field
+  already existed on `provider_groups` (baseline). The wizard's Provider Group
+  section is now the real entity surface: `ProviderGroupSection` (active-group
+  list, edit, soft delete via `isActive:false` — never a row delete, dual-path
+  exit "Next: Facilities" + "Add another group" per the PM's no-gate decision)
+  - `ProviderGroupForm` (legal name; TIN required 9-digit shown `XX-XXXXXXX`
+    stored bare digits; Type 2 NPI 10-digit format-only; operating-states
+    multi-select ≥1; billing/correspondence/credentialing address+contact blocks,
+    billing required, same-as-billing live-mirror quick-fills). The pure
+    block-shaped mapping + validators live in `src/lib/providerGroup.ts`
+    (tested) — ONE fold point to the flat columns (the table-register sprawl
+    target), so the post-R1 `group_addresses`/`group_contacts` normalization
+    repoints one boundary. Writes ride the EXISTING `orgSettings` service path
+    (`createProviderGroup`/`updateProviderGroup` — `credentialingState` now
+    normalized like the other two); `ProviderGroupInput` + the protected
+    `ProviderGroup` type were additively widened to the baseline columns.
+    Progress: `resolveProviderGroupStatus` = ≥1 ACTIVE group (the sanctioned
+    E1.1 resolver broadening; soft-deleted groups don't count). Account Detail
+    gained the read-only `src/components/org/GroupSummaryCard.tsx` (shared
+    `useProviderGroups()` cache, no edit affordances). `US_STATES` was promoted
+    to `src/lib/usStates.ts` (`components/settings/shared.ts` re-exports);
+    `StatesMultiSelect` (DropdownMenuCheckboxItem composition) is logged in
+    `DESIGN-DEBT.md`. e2e: `e2e/provider-group.spec.ts` (TS-29/TS-30 +
+    soft-delete regression). Legacy admin `GroupsPanel` untouched (reconcile
+    later — known debt).
 
 ## What this is
 

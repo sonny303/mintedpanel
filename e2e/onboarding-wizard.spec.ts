@@ -275,9 +275,13 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
   await expect(sectionCard(page, "wizard-providers")).toContainText("Not started");
 
   // Active sections render a start state with a real CTA (never NotYetAvailable).
-  await expect(sectionCard(page, "wizard-provider-group").getByRole("link")).toHaveText(
-    "Add provider group",
-  );
+  // E1.1 replaced the Provider Group start placeholder with the entity form
+  // entry point (a button opening the form dialog).
+  await expect(
+    sectionCard(page, "wizard-provider-group").getByRole("button", {
+      name: "Add provider group",
+    }),
+  ).toBeVisible();
   await expect(page.getByText("isn't available yet")).toHaveCount(0);
 
   // Previews: visible, labeled Coming next, aria-disabled, non-interactive.
@@ -342,7 +346,9 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await seedAuth(context, ORG_LONE_STAR);
 
   await page.goto("/onboarding/wizard");
-  await expect(page.getByRole("button", { name: "Next: Facilities" })).toBeVisible({
+  // .first(): E1.1's dual-path exit adds a second "Next: Facilities" inside
+  // the Provider Group section; the top next-action card stays the resume CTA.
+  await expect(page.getByRole("button", { name: "Next: Facilities" }).first()).toBeVisible({
     timeout: 30000,
   });
 
@@ -356,7 +362,7 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await page.getByRole("menuitem", { name: "Lone Star Rehab Group" }).click();
 
   // Derived resume: still Facilities, no per-user storage involved (F1.0.3).
-  const nextCta = page.getByRole("button", { name: "Next: Facilities" });
+  const nextCta = page.getByRole("button", { name: "Next: Facilities" }).first();
   await expect(nextCta).toBeVisible({ timeout: 30000 });
 
   // One click opens the section and moves keyboard focus to its heading (TE-4).
@@ -381,7 +387,9 @@ test("TS-28: all four sections complete hands off to the Assignments preview", a
   await expect(page.getByText("All scope sections are complete.")).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByRole("button", { name: /^Next:/ })).toHaveCount(0);
+  // The next-action card hands off to the preview — no CTA there. (E1.1's
+  // section-level dual-path button may still render inside its own section.)
+  await expect(page.locator("#wizard-next-action").getByRole("button")).toHaveCount(0);
 });
 
 test("F1.0.4: sidebar shows the approved white mark and conformed rail text alphas", async ({
