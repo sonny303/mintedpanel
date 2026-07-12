@@ -253,6 +253,35 @@ export interface ProviderGroup {
   states: string[] | null;
   isActive: boolean;
   createdAt: string;
+  // Purpose-keyed address + contact blocks (E1.1 TE-4, additive — columns
+  // existed in the baseline schema; typed for the wizard form + summaries).
+  billingStreet?: string | null;
+  billingSuite?: string | null;
+  billingCity?: string | null;
+  billingState?: string | null;
+  billingZip?: string | null;
+  billingContactName?: string | null;
+  billingPhone?: string | null;
+  billingFax?: string | null;
+  billingEmail?: string | null;
+  correspondenceStreet?: string | null;
+  correspondenceSuite?: string | null;
+  correspondenceCity?: string | null;
+  correspondenceState?: string | null;
+  correspondenceZip?: string | null;
+  correspondenceContactName?: string | null;
+  correspondencePhone?: string | null;
+  correspondenceFax?: string | null;
+  correspondenceEmail?: string | null;
+  credentialingStreet?: string | null;
+  credentialingSuite?: string | null;
+  credentialingCity?: string | null;
+  credentialingState?: string | null;
+  credentialingZip?: string | null;
+  credentialingContactName?: string | null;
+  credentialingPhone?: string | null;
+  credentialingFax?: string | null;
+  credentialingEmail?: string | null;
 }
 
 export type LaunchStatus =

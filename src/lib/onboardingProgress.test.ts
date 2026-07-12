@@ -7,6 +7,7 @@ import {
   ONBOARDING_SECTIONS,
   getNextIncompleteSection,
   resolveOrgDetailsStatus,
+  resolveProviderGroupStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
   type OnboardingSectionStatus,
@@ -144,6 +145,24 @@ describe("resolveRowCountStatus", () => {
     expect(resolveRowCountStatus(0)).toBe("not_started");
     expect(resolveRowCountStatus(1)).toBe("complete");
     expect(resolveRowCountStatus(12)).toBe("complete");
+  });
+});
+
+describe("resolveProviderGroupStatus (E1.1 refinement)", () => {
+  it("is not_started with zero groups", () => {
+    expect(resolveProviderGroupStatus([])).toBe("not_started");
+  });
+
+  it("completes on at least one ACTIVE group", () => {
+    expect(resolveProviderGroupStatus([{ isActive: true }])).toBe("complete");
+    expect(resolveProviderGroupStatus([{ isActive: false }, { isActive: true }])).toBe("complete");
+  });
+
+  it("never completes on soft-deleted groups alone", () => {
+    expect(resolveProviderGroupStatus([{ isActive: false }])).toBe("not_started");
+    expect(resolveProviderGroupStatus([{ isActive: false }, { isActive: false }])).toBe(
+      "not_started",
+    );
   });
 });
 

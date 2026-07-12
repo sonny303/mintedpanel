@@ -9,15 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ComingNextPill } from "@/components/onboarding/SectionStatusPill";
-import { sectionHeadingId, type OnboardingSectionDef } from "@/lib/onboardingProgress";
-
-// Opens the target section: scroll it into view and move focus to its heading
-// (stable DOM id + tabIndex={-1}) — no route state, no Zustand state (TE-4).
-function openSection(def: OnboardingSectionDef) {
-  const card = document.getElementById(def.domId);
-  card?.scrollIntoView({ behavior: "smooth", block: "start" });
-  document.getElementById(sectionHeadingId(def))?.focus({ preventScroll: true });
-}
+import { openSection } from "@/components/onboarding/openSection";
+import type { OnboardingSectionDef } from "@/lib/onboardingProgress";
 
 export function NextActionCard({
   nextSection,
@@ -25,7 +18,7 @@ export function NextActionCard({
   nextSection: OnboardingSectionDef | null | undefined;
 }) {
   return (
-    <Card>
+    <Card id="wizard-next-action">
       <CardContent className="flex min-h-[56px] items-center justify-between gap-3 p-4">
         {nextSection === undefined ? (
           <Skeleton className="h-8 w-52" />

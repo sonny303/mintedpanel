@@ -10,6 +10,7 @@
 import { Link } from "@tanstack/react-router";
 import { buttonVariants } from "@/components/ui/button";
 import { OrgDetailsBody } from "@/components/onboarding/OrgDetailsBody";
+import { ProviderGroupSection } from "@/components/onboarding/ProviderGroupSection";
 import type { OnboardingWizardData } from "@/hooks/useOnboardingWizard";
 
 export interface SectionBodyProps {
@@ -50,16 +51,9 @@ export function OrgDetailsSectionBody({ wizard }: SectionBodyProps) {
   return <OrgDetailsBody orgName={wizard.orgName} contacts={wizard.contacts} />;
 }
 
+// E1.1: the real entity form/list replaced the E1.0 start placeholder here.
 export function ProviderGroupSectionBody({ wizard }: SectionBodyProps) {
-  return (
-    <ScopeCountBody
-      count={wizard.providerGroupCount}
-      summary={`${plural(wizard.providerGroupCount, "provider group", "provider groups")} set up for this organization.`}
-      startPrompt="Set up the provider group this organization bills under."
-      ctaLabel="Add provider group"
-      ctaTo="/admin/settings"
-    />
-  );
+  return <ProviderGroupSection wizard={wizard} />;
 }
 
 export function FacilitiesSectionBody({ wizard }: SectionBodyProps) {

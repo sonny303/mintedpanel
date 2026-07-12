@@ -13,12 +13,13 @@ import { useActiveMembership } from "@/lib/auth-store";
 import {
   getNextIncompleteSection,
   resolveOrgDetailsStatus,
+  resolveProviderGroupStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
   type OnboardingSectionDef,
   type OnboardingSectionStatus,
 } from "@/lib/onboardingProgress";
-import type { OrgContact } from "@/types";
+import type { OrgContact, ProviderGroup } from "@/types";
 
 export interface OnboardingSectionState {
   /** Resolved status; undefined while the backing read is loading or failed. */
@@ -39,8 +40,9 @@ export interface OnboardingWizardData {
   /** Live org-details display data for the Org details section body. */
   orgName: string | null;
   contacts: OrgContact[];
+  /** The org's provider groups (E1.1 section list; active rows complete it). */
+  providerGroups: ProviderGroup[];
   /** Row counts for the presence-based section bodies. */
-  providerGroupCount: number;
   facilityCount: number;
   providerCount: number;
 }
@@ -85,7 +87,13 @@ export function useOnboardingWizard(): OnboardingWizardData {
 
   const sections: Record<ActiveSectionKey, OnboardingSectionState> = {
     org_details: orgDetails,
-    provider_group: countSection(groupsQ),
+    // E1.1: complete on ≥1 ACTIVE group (soft-deleted groups don't count).
+    provider_group: {
+      status: groupsQ.data ? resolveProviderGroupStatus(groupsQ.data) : undefined,
+      isLoading: groupsQ.isLoading,
+      isError: groupsQ.isError,
+      refetch: groupsQ.refetch,
+    },
     facilities: countSection(facilitiesQ),
     providers: countSection(providersQ),
   };
@@ -109,7 +117,7 @@ export function useOnboardingWizard(): OnboardingWizardData {
     nextSection,
     orgName,
     contacts,
-    providerGroupCount: groupsQ.data?.length ?? 0,
+    providerGroups: groupsQ.data ?? [],
     facilityCount: facilitiesQ.data?.length ?? 0,
     providerCount: providersQ.data?.length ?? 0,
   };
