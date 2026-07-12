@@ -479,14 +479,16 @@ VALID` (validate later, after legacy-null remediation through this UI),
   50 states, 491 rows — dental/vision/PDP/supplemental excluded; share
   sources labeled, nulls over invented numbers, thin markets not padded),
   `payers.csv` (270 canonical entities in the E1.6 TE-2 shape — aliases,
-  states[], kind, professional 837P clearinghouse payer ID as the
-  `stedi_payer_id` stand-in; 121 source-verified, conflicts left blank+noted),
+  states[], kind, canonical `payer_slug`; the clearinghouse-payer-ID column
+  is retained in the CSV but **ignored** per the 2026-07-12 PM decision —
+  not used by the work, no planned future use),
   `mso_delegations.csv` (delegation vs UM-only — **UM-only rows must never
   become MSO credentialing routing rules**), `medicare_macs.csv` +
   `state_medicaid_programs.csv` (the universal implicit payers). E1.6 itself
-  stays blocked/unbuilt; when it unblocks, F1.6.2 seeds from this dataset
-  (quarterly manual refresh per the README) and the rest of the epic is
-  unchanged.
+  was unblocked 2026-07-12 ([e1.6] resolved — Stedi withdrawn); F1.6.2 seeds
+  from this dataset (quarterly manual refresh per the README), deduping on
+  the unique `payers.payer_slug` column — not `stedi_payer_id`, which was
+  dropped from the epic.
 
 ## What this is
 
