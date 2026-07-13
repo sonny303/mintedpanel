@@ -18,6 +18,51 @@ Format per entry:
 
 ## Resolved
 
+## [r4-review] R4 independent-review PM questions — RESOLVED (2026-07-13)
+
+- **Issue:** The six R4 independent reviews (PRs #134–#139) raised eleven
+  PM questions across E1.7b/E2.0–E2.4.
+- **Decisions (PM Sowmya, 2026-07-13):**
+  1. **Fallback SOP visibility (E1.7b):** yes — widen the `sop_templates`
+     SELECT policy so the payerless global fallback SOP is visible to all
+     orgs' members (template content only, tokens, no tenant data). Even
+     without a payer SOP, the touch log helps understand status for one-off
+     cases.
+  2. **Fallback goes live for manual flows immediately (E1.7b/E2.2):**
+     confirmed — a good side effect; no more empty cases from
+     `NewCaseModal` / launch `CreateCasesDialog` for no-SOP payers.
+  3. **"Using generic SOP" filter (E2.2):** a **case-list chip** (the
+     URL-driven `?chip=` idiom), not a report.
+  4. **Candidacy basis (E2.0):** cases are proposed only where the provider
+     **actually has a clinic (facility) assignment** under the group — NOT
+     for every group membership. (Overrides the reviewer's
+     group-membership recommendation; see the E2.0 §5 addendum for the
+     buildable presence-based rule.)
+  5. **Exclusion lifecycle is status-linked (E2.0):** a key whose case
+     reaches **Credentialed** stays suppressed while that status holds; if
+     the case's status is later changed off Credentialed, the suppression
+     lifts (the key resurfaces as an existing-case row) until manually
+     excluded again. Exclusion/restore writes are **admin-only** (reviewer
+     default; PM did not object).
+  6. **Reapply status (E2.1):** Denied → **In Progress**, recorded in
+     `status_history` as today. A final-FINAL denied case can be excluded
+     and dropped from the list until its status changes again.
+  7. **Recredentialing deadlines (E2.3):** ship the R4 queue on what exists
+     (start dates, task due dates, follow-ups); add recred dates when R9
+     lands. PM note: credentialing and re-credentialing should share the
+     same lifecycle.
+  8. **Location launch dates (E2.3):** rank-if-present
+     (`facilities.effective_date`); the capture surface belongs to the
+     later location-launch epic.
+  9. **Queue nav label (E2.3):** **"My Cases"** (not the reserved "Work"
+     label).
+  10. **Run history placement (E2.4):** per reviewer recommendation — reach
+      run history from the generation surface + per-case deep links; no new
+      top-level nav item.
+  11. **Run-record retention (E2.4):** follow healthcare record-retention
+      practice — retain a minimum of **7 years**; records stay immutable;
+      any archiving beyond that window is a later additive decision.
+
 ## [r4] Case-generation discovery decisions — RESOLVED (2026-07-12)
 
 - **Issue:** R4 epic drafting (E1.7b SOP-as-data + E2.x case generation)
