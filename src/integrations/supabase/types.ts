@@ -152,6 +152,101 @@ export type Database = {
           },
         ];
       };
+      case_generation_run_rows: {
+        Row: {
+          case_id: string | null;
+          created_at: string;
+          disposition: string;
+          exclusion_id: string | null;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string | null;
+          run_id: string;
+          state: string;
+        };
+        Insert: {
+          case_id?: string | null;
+          created_at?: string;
+          disposition: string;
+          exclusion_id?: string | null;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason?: string | null;
+          run_id: string;
+          state: string;
+        };
+        Update: {
+          case_id?: string | null;
+          created_at?: string;
+          disposition?: string;
+          exclusion_id?: string | null;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          reason?: string | null;
+          run_id?: string;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_run_rows_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_exclusion_id_fkey";
+            columns: ["exclusion_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_exclusions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       case_generation_runs: {
         Row: {
           created_at: string;

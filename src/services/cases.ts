@@ -85,12 +85,14 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     ((data as Record<string, unknown>).status_history as Array<Record<string, unknown>> | null) ??
     [];
 
-  // One profiles fetch covers status-history authors and touchlog note authors.
+  // One profiles fetch covers status-history authors, touchlog note authors,
+  // and the case's creation actor (E2.4 F2.4.2 provenance).
   const personIds = Array.from(
     new Set(
       [
         ...rawHistory.map((h) => h.changed_by as string | null),
         ...rawTouches.map((t) => t.coordinator_id as string | null),
+        (data as Record<string, unknown>).created_by as string | null,
       ].filter((v): v is string => Boolean(v)),
     ),
   );
@@ -189,11 +191,13 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
       : null,
   }));
 
+  const createdBy = (data as Record<string, unknown>).created_by as string | null;
   const merged = {
     ...(data as Record<string, unknown>),
     touches: enrichedTouches,
     status_history: enrichedHistory,
     notes,
+    created_by_name: createdBy ? (nameMap.get(createdBy) ?? null) : null,
   };
   return camelizeRow<CaseDetail>(merged);
 }

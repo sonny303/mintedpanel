@@ -733,8 +733,9 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   IMMUTABLE by omission — no UPDATE/DELETE policy or grant) +
   `credential_cases.generation_run_id` FK + partial cover index. The run row
   is inserted BEFORE the loop (created cases FK it), so its stored counts are
-  the confirm-time plan; ACTUAL outcomes go in the run's audit row (E2.4's
-  disposition rows supersede both — its TE-1). **`150200` (TE-3 + E2.2 stamp
+  the confirm-time plan; ACTUAL outcomes go in the run's audit row AND — since
+  E2.4 — the immutable `case_generation_run_rows` disposition child rows,
+  which supersede both at read time (its TE-1). **`150200` (TE-3 + E2.2 stamp
   transport):** `create_case_with_tasks` reissued with `generation_run_id` on
   the case insert and per-task `sop_template_id`/`sop_version` threading
   (`CaseTaskPayload` carries them optionally; every SOP-resolving surface
@@ -746,8 +747,9 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   duplicate degrades to a skip; partial failure reports failed rows and stays
   on the preview) with plan/summary logic pure in
   `src/lib/generationConfirm.ts` (+tests); run insert isolated in
-  `src/services/caseGenerationRuns.ts` (the ONE counts boundary E2.4
-  repoints). Full success landed on `/cases?runId=<id>` until E2.3: confirm
+  `src/services/caseGenerationRuns.ts` (the ONE counts boundary — repointed
+  by E2.4: run-history counts derive from the disposition child rows at read
+  time). Full success landed on `/cases?runId=<id>` until E2.3: confirm
   now lands on **`/work?run=<id>`** (F2.3.2); the `/cases?runId=` filter
   stays URL-reachable (validateSearch + banner + clear — old links live).
   `listGenerationCaseRows` now selects the real `group_id` (TE-6 two-branch
@@ -859,6 +861,55 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   honors `order=` since the latest-touchpoint read depends on it);
   `legacy-routes` moved `/work` to the rendering set; `sidebar-ia` pins the
   new entry; `case-creation` TS-50 asserts the new landing.
+
+- **E2.4 — Generation Traceability & Audit (CLOSES R4).** ONE additive
+  migration (repo + hosted, `20260713170000_case_generation_run_rows.sql`):
+  **`case_generation_run_rows`** — the immutable per-candidate disposition
+  ledger, one row per 4-part key per run (`UNIQUE (run_id, provider, group,
+payer, state)`), disposition CHECK (`created|skipped_existing|excluded|
+failed`; created requires `case_id`, excluded/failed require `reason`),
+  INSERT-only by policy shape AND grant floor (TE-2 — no UPDATE/DELETE
+  anywhere; probes ran rollback-wrapped on hosted); writer INSERT carries
+  same-org run/provider/group WITH CHECKs; `case_id` links created AND
+  blocking cases (SET NULL), `exclusion_id` SET NULL + the `reason` snapshot
+  (never the note, no PHI — TE-8) so run detail degrades, never dangles.
+  Types regenerated; table-register row added (ledger layer). **Confirm loop
+  writes (TE-2/TE-11 additive edits to `generationConfirm.ts`):**
+  skipped_existing (blocking `case_id`) + excluded (exclusion link + reason
+  label) rows recorded right after the run insert; created/failed rows as
+  each RPC resolves via `recordGenerationRunRows`
+  (`caseGenerationRuns.ts`) — a mid-batch crash leaves an honestly short
+  record ("run ended early" in detail; no mutable run status). **Counts
+  derive from the child rows at read time** (`src/lib/generationRuns.ts`
+  `deriveRunCounts` — zero rows falls back to the stored plan, FLAGGED
+  "plan counts"; + `runRecordStatus`, `caseOrigin`, `deriveTaskCycles` —
+  tolerates a missing `createdAt`; all tested). **Run history (F2.4.1,
+  [r4-review] Q10 — NO nav item):** "Run history" action on `/generation` →
+  **`/generation/runs`** list + **`/generation/runs/$runId`** detail
+  (`generation_.runs*` route files — the `admin.payers_` un-nesting idiom;
+  `RunHistoryContent`/`RunDetailContent` in `src/components/generation/`);
+  detail lists every row's disposition + confirm-time reason, created/
+  blocking rows link the case, excluded rows render the exclusion's reason +
+  current state (still excluded / since restored). Reads:
+  `src/services/generationRuns.ts` (runs + actor names via profiles, one
+  run's rows, ONE org-wide dispositions projection for list counts) →
+  `src/hooks/useGenerationRuns.ts` (keys `generationRuns`/
+  `generationRunRows`; the confirm mutation invalidates both prefixes).
+  **Case provenance (F2.4.2):** `CaseProvenancePanel` on case detail
+  EXTENDS (composes) the E2.2 `CaseSopProvenance` — run deep link or the
+  distinct "Created manually by X" origin (NULL run id) + actor/date
+  (`getCase` now resolves `created_by` in its existing profiles fetch →
+  `CaseDetail.createdByName`), plus the DERIVED reapply-cycle line (task
+  creation clusters + version stamps, TE-6 — never stored). **Audit spine
+  (F2.4.3): zero new writes** — verified coverage: run confirm (E2.1
+  `writeAudit`), per-case/task CREATE (inside the RPC), exclusion
+  add/restore (E2.0 service), reapply (STATUS_CHANGE + task CREATEs); no
+  double-writing. e2e `e2e/generation-traceability.spec.ts` (TS-57
+  mixed-disposition run over TS-48/50-style states, no new baseline
+  fixtures: disposition rows asserted at the wire, INSERT-only pinned,
+  derived counts, links both ways, manual-vs-run origin, audit rows for
+  confirm/create/exclude — its RPC emulation synthesizes the RPC's own
+  audit rows).
 
 ## What this is
 
@@ -1251,6 +1302,7 @@ since E2.1 — the 4-part case key; legacy NULL-group rows keep the 3-part rule
 because NULL = NULL, see AGENTS.md; credentialing status only;
 `facility_id` links a case to its location; `generation_run_id` NULL = manual/
 pre-E2.1) · `case_generation_runs` (immutable batch record, E2.1) ·
+`case_generation_run_rows` (immutable per-candidate disposition ledger, E2.4) ·
 `contracts` (group+payer+state,
 contracting status lives here, never on cases) · `tasks` (SOP checklists,
 seeded from `sop_templates` via `src/lib/sopResolver.ts` — closed token list) ·

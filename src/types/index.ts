@@ -590,6 +590,28 @@ export interface CaseGenerationRun {
   failedCount: number;
 }
 
+// E2.4 TE-1 — one immutable disposition row per candidate 4-part key per run,
+// written once when the outcome is known (INSERT-only: no UPDATE/DELETE policy
+// or grant). `reason` is the confirm-time snapshot; `caseId` links created AND
+// skipped_existing rows (the blocking case); `exclusionId` links excluded rows
+// (SET NULL belt-and-braces — the reason snapshot survives a dangling link).
+export type GenerationRowDisposition = "created" | "skipped_existing" | "excluded" | "failed";
+
+export interface CaseGenerationRunRow {
+  id: string;
+  orgId: string;
+  runId: string;
+  providerId: string;
+  groupId: string;
+  payerId: string;
+  state: string;
+  disposition: GenerationRowDisposition;
+  reason: string | null;
+  caseId: string | null;
+  exclusionId: string | null;
+  createdAt: string;
+}
+
 export interface Contract {
   id: string;
   orgId: string;
@@ -810,6 +832,9 @@ export interface CaseDetail extends CredentialCase {
   touches: Touch[];
   notes: Note[];
   statusHistory: StatusHistoryEntry[];
+  /** E2.4 F2.4.2 — the creation actor's display name, resolved by getCase via
+   * the same profiles fetch that names history/touch authors. */
+  createdByName?: string | null;
 }
 
 export type PortalFieldMapSource = "token" | "manual" | "manual_partial" | "hardcoded";
