@@ -2,26 +2,37 @@
 
 _Living status page for business review. Refreshed at least once per release
 milestone (owner: Devin, the reviewer/orchestrator). Last updated:
-**2026-07-13**._
+**2026-07-13** (R4 epics published)._
 
 ```
-R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 discovery done, epics drafting ──► R5…R10 📋
+R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 epics published, review queue ──► R5…R10 📋
 ```
 
 ## Release status
 
-| Release                     | Scope                                                                       | State                                                                                                                                                                                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **R0 — Shell & foundation** | E0.0–E0.10 (app shell, party model, reporting, capture links, hardening)    | ✅ Built & merged                                                                                                                                                                                                                                          |
-| **R1 — People & places**    | E1.0 wizard, E1.1 groups, E1.2 facilities, E1.3 roster                      | ✅ Built & merged (#108–#111)                                                                                                                                                                                                                              |
-| **R2 — Payer directory**    | E1.6 payer catalog, E1.7a SOP-versioning spike                              | ✅ Complete: E1.6 built & merged (#122, seeds from the in-repo reference dataset, `payer_slug` identity); E1.7a Model A **signed off** 2026-07-12 (#120) with worked examples from the two real business SOPs (#121).                                      |
-| **R3 — Scope & readiness**  | E1.4 assignments, E1.5 payer attachment, E1.8 readiness                     | ✅ Complete: E1.4 (#113), E1.5 (#125), E1.8 (#127 + follow-up #131 — end-dated assignments exit readiness, COI check live). Hotfixes #128 (provider-group modal), #129/#130 (onboarding side-panel residual org + mastered US-state dropdown) also merged. |
-| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 Discovery complete 2026-07-12 — all 5 workflow decisions locked (`CLARIFICATIONS_NEEDED.md` [r4], #124); epics drafting next.                                                                                                                           |
-| **R5 — Scale pack**         | Bulk roster import (CAQH/NPPES), bulk assignment rules                      | 📋                                                                                                                                                                                                                                                         |
-| **R6/R7 — Execution**       | Payer workflows, touches, extension fill; Sensitive Identifiers Vault (SSN) | 📋                                                                                                                                                                                                                                                         |
-| **R8 — Outcomes/reporting** | Credentialing outcome reporting                                             | 📋                                                                                                                                                                                                                                                         |
-| **R9 — Recurring ops**      | Expiration radar, recredentialing, PSV re-verify clocks, payer change radar | 📋                                                                                                                                                                                                                                                         |
-| **R10 — Government payers** | Medicare / Medicaid / Tricare workflows (`payer_kind` activation)           | 📋                                                                                                                                                                                                                                                         |
+| Release                     | Scope                                                                       | State                                                                                                                                                                                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R0 — Shell & foundation** | E0.0–E0.10 (app shell, party model, reporting, capture links, hardening)    | ✅ Built & merged                                                                                                                                                                                                                                                               |
+| **R1 — People & places**    | E1.0 wizard, E1.1 groups, E1.2 facilities, E1.3 roster                      | ✅ Built & merged (#108–#111)                                                                                                                                                                                                                                                   |
+| **R2 — Payer directory**    | E1.6 payer catalog, E1.7a SOP-versioning spike                              | ✅ Complete: E1.6 built & merged (#122, seeds from the in-repo reference dataset, `payer_slug` identity); E1.7a Model A **signed off** 2026-07-12 (#120) with worked examples from the two real business SOPs (#121).                                                           |
+| **R3 — Scope & readiness**  | E1.4 assignments, E1.5 payer attachment, E1.8 readiness                     | ✅ Complete: E1.4 (#113), E1.5 (#125), E1.8 (#127 + follow-up #131 — end-dated assignments exit readiness, COI check live). Hotfixes #128 (provider-group modal), #129/#130 (onboarding side-panel residual org + mastered US-state dropdown) also merged.                      |
+| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 All six epics PM-approved & published (#132): E1.7b SOP-as-data + E2.0 preview / E2.1 creation & 4-part key / E2.2 SOP stamping / E2.3 next-best-action queue / E2.4 traceability. Now queued for independent Claude review, then sequential builds E1.7b → E2.0 → … → E2.4. |
+| **R5 — Scale pack**         | Bulk roster import (CAQH/NPPES), bulk assignment rules                      | 📋                                                                                                                                                                                                                                                                              |
+| **R6/R7 — Execution**       | Payer workflows, touches, extension fill; Sensitive Identifiers Vault (SSN) | 📋                                                                                                                                                                                                                                                                              |
+| **R8 — Outcomes/reporting** | Credentialing outcome reporting                                             | 📋                                                                                                                                                                                                                                                                              |
+| **R9 — Recurring ops**      | Expiration radar, recredentialing, PSV re-verify clocks, payer change radar | 📋                                                                                                                                                                                                                                                                              |
+| **R10 — Government payers** | Medicare / Medicaid / Tricare workflows (`payer_kind` activation)           | 📋                                                                                                                                                                                                                                                                              |
+
+## Epic board (R4)
+
+| Epic  | Title                           | Reviewed | Built |
+| ----- | ------------------------------- | -------- | ----- |
+| E1.7b | SOP-as-data (Model A build)     | ⏳ queue | —     |
+| E2.0  | Generation preview & exclusions | ⏳ queue | —     |
+| E2.1  | Case creation & 4-part key      | ⏳ queue | —     |
+| E2.2  | SOP resolution & stamping       | ⏳ queue | —     |
+| E2.3  | Next-best-action queue          | ⏳ queue | —     |
+| E2.4  | Generation traceability & audit | ⏳ queue | —     |
 
 ## Epic board (R1–R3)
 
@@ -48,7 +59,7 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 disc
 
 ## Current jobs to be done
 
-1. **R4 epic drafting** — E1.7b + E2.x, grounded in the locked [r4] decisions and the SOP worked examples; then the R1-style review queue.
+1. **R4 review queue** — six Claude Code review sessions (E1.7b first), one per epic per `REVIEW-HANDOFF.md`; PM approval flips `reviewed: true`, then sequential builds.
 2. **PM manual test pass** — hotfixes #128/#129/#130 and E1.8 on the `redesign` preview.
 3. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 
