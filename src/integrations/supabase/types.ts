@@ -2159,10 +2159,52 @@ export type Database = {
           },
         ];
       };
+      sop_template_versions: {
+        Row: {
+          change_note: string | null;
+          id: string;
+          name: string;
+          published_at: string;
+          published_by: string | null;
+          task_definitions: Json;
+          template_id: string;
+          version: number;
+        };
+        Insert: {
+          change_note?: string | null;
+          id?: string;
+          name: string;
+          published_at?: string;
+          published_by?: string | null;
+          task_definitions: Json;
+          template_id: string;
+          version: number;
+        };
+        Update: {
+          change_note?: string | null;
+          id?: string;
+          name?: string;
+          published_at?: string;
+          published_by?: string | null;
+          task_definitions?: Json;
+          template_id?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sop_template_versions_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "sop_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       sop_templates: {
         Row: {
           archived: boolean;
           created_at: string | null;
+          current_version: number;
           group_id: string | null;
           id: string;
           name: string;
@@ -2176,6 +2218,7 @@ export type Database = {
         Insert: {
           archived?: boolean;
           created_at?: string | null;
+          current_version?: number;
           group_id?: string | null;
           id?: string;
           name: string;
@@ -2189,6 +2232,7 @@ export type Database = {
         Update: {
           archived?: boolean;
           created_at?: string | null;
+          current_version?: number;
           group_id?: string | null;
           id?: string;
           name?: string;
@@ -2416,6 +2460,8 @@ export type Database = {
           org_id: string;
           provider_id: string | null;
           sop_content: Json | null;
+          sop_template_id: string | null;
+          sop_version: number | null;
           sort_order: number | null;
           status: string;
           title: string;
@@ -2432,6 +2478,8 @@ export type Database = {
           org_id: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           sort_order?: number | null;
           status?: string;
           title: string;
@@ -2448,6 +2496,8 @@ export type Database = {
           org_id?: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           sort_order?: number | null;
           status?: string;
           title?: string;
@@ -2474,6 +2524,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "providers";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tasks_sop_version_fkey";
+            columns: ["sop_template_id", "sop_version"];
+            isOneToOne: false;
+            referencedRelation: "sop_template_versions";
+            referencedColumns: ["template_id", "version"];
           },
         ];
       };
@@ -2692,6 +2749,16 @@ export type Database = {
       mark_rpc_attempt_valid: {
         Args: { p_rpc_name: string };
         Returns: undefined;
+      };
+      publish_sop_template_version: {
+        Args: {
+          p_change_note?: string;
+          p_expected_version: number;
+          p_name: string;
+          p_task_definitions: Json;
+          p_template_id: string;
+        };
+        Returns: Json;
       };
       review_payer_catalog_change: {
         Args: { p_accept: boolean; p_change_id: string };

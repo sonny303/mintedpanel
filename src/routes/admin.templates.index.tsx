@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { usePayers, useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useIsAdmin } from "@/lib/permissions";
+import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { cn } from "@/lib/utils";
 import type { SOPTemplate } from "@/types";
 
@@ -154,6 +155,11 @@ function TemplatesIndex() {
                     >
                       {t.name}
                     </Link>
+                    {isFallbackTemplate(t) ? (
+                      <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
+                        Fallback — used when no payer SOP matches
+                      </span>
+                    ) : null}
                     {isTemplateArchived(t) ? (
                       <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
                         Archived

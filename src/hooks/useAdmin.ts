@@ -17,10 +17,14 @@ import {
 import {
   createTemplate,
   getTemplate,
+  getTemplateVersion,
   listTemplates,
+  listTemplateVersions,
+  publishTemplate,
   updateTemplate,
   type TemplateInput,
 } from "@/services/templates";
+import type { SOPTaskDefinition } from "@/types";
 import {
   createStatusConfig,
   getStatusConfig,
@@ -182,6 +186,53 @@ export function useUpdateSop(id: string) {
       qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.template(orgId, id) });
     },
+  });
+}
+
+// E1.7b — publish creates an immutable version row via the RPC (which writes
+// the audit row). Invalidates the head caches AND the version history.
+export function usePublishSop(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      expectedVersion: number;
+      name: string;
+      taskDefinitions: SOPTaskDefinition[];
+      changeNote?: string | null;
+    }) =>
+      publishTemplate(
+        id,
+        input.expectedVersion,
+        input.name,
+        input.taskDefinitions,
+        input.changeNote,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.template(orgId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.templateVersions(orgId, id) });
+    },
+  });
+}
+
+export function useTemplateVersions(templateId: string | undefined) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.templateVersions(orgId, templateId ?? ""),
+    queryFn: () => listTemplateVersions(templateId as string),
+    enabled: orgId !== "no-org" && Boolean(templateId),
+  });
+}
+
+export function useTemplateVersion(templateId: string | undefined, version: number | null) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.templateVersion(orgId, templateId ?? "", version ?? 0),
+    queryFn: () => getTemplateVersion(templateId as string, version as number),
+    // Version rows are immutable — never refetch a loaded one.
+    staleTime: Infinity,
+    enabled: orgId !== "no-org" && Boolean(templateId) && version !== null && version > 0,
   });
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickTemplate } from "./pickTemplate";
+import { isFallbackTemplate, pickTemplate } from "./pickTemplate";
 import type { SOPTemplate } from "@/types";
 
 function tmpl(over: Partial<SOPTemplate>): SOPTemplate {
@@ -69,5 +69,63 @@ describe("pickTemplate", () => {
 
   it("returns null when there are no templates", () => {
     expect(pickTemplate([], "p1", "KS", "g1")).toBeNull();
+  });
+});
+
+// E1.7b F1.7b.4 / TE-8 — the global-fallback tier. The fallback is a global
+// (orgId null) payerless template; it is selected only when both payer tiers
+// (exact, payer+state) miss.
+function fallbackTmpl(over: Partial<SOPTemplate> = {}): SOPTemplate {
+  return {
+    ...tmpl({ id: "fb", payerId: null, state: null, groupId: null }),
+    ...({ orgId: null } as unknown as Partial<SOPTemplate>),
+    ...over,
+  };
+}
+
+describe("pickTemplate fallback tier (E1.7b)", () => {
+  it("selects the fallback when no template matches the payer", () => {
+    const fallback = fallbackTmpl();
+    expect(pickTemplate([fallback], "p1", "KS", "g1")?.id).toBe("fb");
+  });
+
+  it("selects the fallback when the payer matches but the state does not", () => {
+    const otherState = tmpl({ id: "ws", state: "MO" });
+    const fallback = fallbackTmpl();
+    expect(pickTemplate([otherState, fallback], "p1", "KS", "g1")?.id).toBe("fb");
+  });
+
+  it("never selects the fallback over an exact payer+state+group match", () => {
+    const exact = tmpl({ id: "grp", groupId: "g1" });
+    const fallback = fallbackTmpl();
+    expect(pickTemplate([fallback, exact], "p1", "KS", "g1")?.id).toBe("grp");
+  });
+
+  it("never selects the fallback over a payer+state (different group) match", () => {
+    const otherGroup = tmpl({ id: "other", groupId: "g2" });
+    const fallback = fallbackTmpl();
+    expect(pickTemplate([fallback, otherGroup], "p1", "KS", "g1")?.id).toBe("other");
+  });
+
+  it("does not treat an ORG payerless template as the fallback", () => {
+    const orgPayerless = tmpl({ id: "orgnull", payerId: null, state: null });
+    expect(pickTemplate([orgPayerless], "p1", "KS", "g1")).toBeNull();
+  });
+
+  it("excludes an archived fallback", () => {
+    const archivedFallback = fallbackTmpl({ archived: true, isArchived: true });
+    expect(pickTemplate([archivedFallback], "p1", "KS", "g1")).toBeNull();
+  });
+
+  it("returns null when nothing matches and no fallback exists", () => {
+    expect(pickTemplate([tmpl({ id: "wp", payerId: "p2" })], "p1", "KS", "g1")).toBeNull();
+  });
+});
+
+describe("isFallbackTemplate", () => {
+  it("is true only for a global (orgId null) payerless template", () => {
+    expect(isFallbackTemplate(fallbackTmpl())).toBe(true);
+    expect(isFallbackTemplate(tmpl({ payerId: null }))).toBe(false);
+    expect(isFallbackTemplate(fallbackTmpl({ payerId: "p1" }))).toBe(false);
   });
 });

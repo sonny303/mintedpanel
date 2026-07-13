@@ -37,6 +37,9 @@ interface EditableStep {
   emailTemplate: EmailTemplate;
   dataFields: DataField[];
   portalKey: string;
+  expectedTurnaroundDays: number | null;
+  followUpEveryDays: number | null;
+  requiredArtifacts: string[];
 }
 
 const NO_PORTAL = "__none__";
@@ -240,6 +243,9 @@ export function TemplateTaskRow({
                     <SelectContent>
                       <SelectItem value="online_form">Online form</SelectItem>
                       <SelectItem value="draft_email">Draft email</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="fax">Fax</SelectItem>
+                      <SelectItem value="mail">Mail</SelectItem>
                       <SelectItem value="pdf" disabled>
                         PDF (coming soon)
                       </SelectItem>
@@ -397,6 +403,12 @@ export function TemplateTaskRow({
                     </div>
                   </div>
                 )}
+
+                <StepCadenceFields
+                  step={step}
+                  canEdit={canEdit}
+                  onChange={(patch) => updateStep(task.id, step.id, patch)}
+                />
               </div>
               {canEdit ? (
                 <Button
@@ -411,6 +423,108 @@ export function TemplateTaskRow({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// E1.7b step-shape extension editor: expected payer turnaround, follow-up
+// cadence (both optional day counts), and the required-artifacts checklist.
+// Artifacts are NAMED attachments with no backing token ("Submission
+// confirmation PDF") — they belong here, not in data fields: a data-field
+// entry without a resolvable token is silently dropped at resolution.
+function StepCadenceFields({
+  step,
+  canEdit,
+  onChange,
+}: {
+  step: EditableStep;
+  canEdit: boolean;
+  onChange: (patch: Partial<EditableStep>) => void;
+}) {
+  function parseDays(raw: string): number | null {
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label className="text-xs">Expected turnaround (days)</Label>
+          <Input
+            type="number"
+            min={1}
+            value={step.expectedTurnaroundDays ?? ""}
+            onChange={(e) => onChange({ expectedTurnaroundDays: parseDays(e.target.value) })}
+            disabled={!canEdit}
+          />
+        </div>
+        <div>
+          <Label className="text-xs">Follow up every (days)</Label>
+          <Input
+            type="number"
+            min={1}
+            value={step.followUpEveryDays ?? ""}
+            onChange={(e) => onChange({ followUpEveryDays: parseDays(e.target.value) })}
+            disabled={!canEdit}
+          />
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <Label className="text-xs">Required artifacts</Label>
+          {canEdit ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange({ requiredArtifacts: [...step.requiredArtifacts, ""] })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add artifact
+            </Button>
+          ) : null}
+        </div>
+        {step.requiredArtifacts.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            Name the attachments or proofs this step must produce (e.g. &quot;Submission
+            confirmation PDF&quot;). Reference shared logins by name only — never record a password
+            in an SOP step.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {step.requiredArtifacts.map((artifact, i) => (
+              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                <Input
+                  placeholder="Artifact name"
+                  value={artifact}
+                  onChange={(e) =>
+                    onChange({
+                      requiredArtifacts: step.requiredArtifacts.map((a, j) =>
+                        j === i ? e.target.value : a,
+                      ),
+                    })
+                  }
+                  disabled={!canEdit}
+                />
+                {canEdit ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() =>
+                      onChange({
+                        requiredArtifacts: step.requiredArtifacts.filter((_, j) => j !== i),
+                      })
+                    }
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

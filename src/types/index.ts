@@ -612,8 +612,13 @@ export interface SOPStepDataField {
   value: string;
 }
 
-/** How a step is carried out. Absent = "online_form" (backward compat). */
-export type SOPStepType = "draft_email" | "online_form" | "pdf";
+/**
+ * How a step is carried out. Absent = "online_form" (backward compat).
+ * `fax | phone | mail` added by E1.7b (authorized in its §5 TE-6) so the real
+ * business SOPs are representable; they render as plain steps (no portal or
+ * email affordances).
+ */
+export type SOPStepType = "draft_email" | "online_form" | "pdf" | "fax" | "phone" | "mail";
 
 /** A draft-email step body; carries {{token}} placeholders from the closed catalog. */
 export interface SOPEmailTemplate {
@@ -639,6 +644,17 @@ export interface SOPStep {
    * SOP task on submit. Not interpolated — carried through verbatim.
    */
   portalKey?: string;
+  /** E1.7b: how long the payer typically takes after this step ("~45 days"). */
+  expectedTurnaroundDays?: number;
+  /** E1.7b: follow-up cadence after this step ("call every 14 days"). */
+  followUpEveryDays?: number;
+  /**
+   * E1.7b: named artifacts to produce/attach for this step (e.g. "Submission
+   * confirmation PDF"). Token-less by design — a `dataFields` entry requires a
+   * resolvable token and is filtered at resolution, so attachment checklists
+   * live here, never as token-less data fields.
+   */
+  requiredArtifacts?: string[];
 }
 
 export interface Task {
@@ -713,6 +729,10 @@ export interface SOPTaskDefinition {
     dataFields?: { label: string; token: string }[];
     /** Portal-registry `portal_key` for an `online_form` step (bare/normalized). */
     portalKey?: string;
+    /** E1.7b step-shape extension — see SOPStep for semantics. All optional/additive. */
+    expectedTurnaroundDays?: number;
+    followUpEveryDays?: number;
+    requiredArtifacts?: string[];
   }[];
 }
 
@@ -729,6 +749,28 @@ export interface SOPTemplate {
   archived: boolean;
   createdAt: string;
   updatedAt: string;
+  /**
+   * E1.7b Model A head pointer. Optional (additive) — pre-versioning cached
+   * rows may lack it; treat absent as 1.
+   */
+  currentVersion?: number;
+}
+
+/**
+ * E1.7b — one immutable row per SOP publish (`sop_template_versions`).
+ * INSERT-only via the publish RPC / creation trigger; never updated.
+ */
+export interface SOPTemplateVersion {
+  id: string;
+  templateId: string;
+  version: number;
+  name: string;
+  taskDefinitions: SOPTaskDefinition[];
+  changeNote: string | null;
+  publishedAt: string;
+  publishedBy: string | null;
+  /** Publisher display name, resolved via `profiles` at read time (not a column). */
+  publishedByName?: string | null;
 }
 
 export interface CaseDetail extends CredentialCase {
