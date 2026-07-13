@@ -911,6 +911,72 @@ failed`; created requires `case_id`, excluded/failed require `reason`),
   confirm/create/exclude — its RPC emulation synthesizes the RPC's own
   audit rows).
 
+### Stage 3 built so far
+
+- **E3.0 — Bulk Roster Import: Intake, File Gate & Async Processing.** ONE
+  additive migration (repo + hosted, `20260713180000_import_runs_rows_staging.sql`):
+  **`import_runs`** (durable run header — `source internal|onboarding`, `state
+uploading|scanning|ready_for_review|committed|failed|cancelled`, counts,
+  `error_report` jsonb; a WORKING table: member SELECT, ADMIN-only
+  INSERT/UPDATE, no DELETE grant) + **`import_rows`** (one row per parsed
+  source line, `UNIQUE (run_id, line)` = the idempotent resume key,
+  `raw`/`mapped` jsonb PII under org RLS; ADMIN INSERT/DELETE — rows are
+  PURGED on commit/cancel, TE-7) + the batched **`stage_import_rows` RPC**
+  (SECURITY DEFINER, admin-checked, `ON CONFLICT DO NOTHING` + recomputes run
+  counts in one round trip). **NOTHING writes to live provider/group/facility
+  tables** — staged runs end `ready_for_review` for E3.1's preview/commit.
+  **Pure core `src/lib/rosterImport.ts`** (+37-case suite): the canonical
+  20-column template header list (the SINGLE source for the downloadable
+  template AND the exact front gate — includes `provider_middle_initial`,
+  `caqh_id`, `license_issue_date`, `ssn_last4`, `date_of_birth` per PM
+  sign-off), `checkRosterHeaders` (order-insensitive exact match, BOM/case/
+  space-tolerant via the shared `normalizeHeader`, trailing-blank-tolerant;
+  missing/extra/renamed/duplicate named in the reject), `checkRosterFile`
+  (.csv + the PM-confirmed 10 MB ceiling, client-side), `scanRosterRecord`
+  (required five-part-dedupe inputs, TIN/NPI/state/date/middle-initial
+  formats, ONE error per row in deterministic order), **the TE-6 SSN guard**
+  (dashed `NNN-NN-NNNN` anywhere or bare 9-digit outside `group_tin` →
+  blocked-row error, cell REDACTED from `raw` before persistence, reason
+  never echoes the value, never truncates to a last-4; `ssn_last4` itself is
+  4-digit-validated with a non-echoing error), `chunkRows`
+  (`STAGE_CHUNK_SIZE` 500), error-report assembly (`collectRowErrors`/
+  `errorReportCsvRows` — row/column/reason). REUSES the Epic 2c
+  `csvImport.ts` parser core (TE-1: `parseCsv`/`coerceDate`), NOT its
+  forgiving by-name mapper. **Service `src/services/importRuns.ts`**
+  (create/markScanning/stage-RPC/complete/fail/cancel + list/get; lifecycle
+  audited per TE-10; cancel purges import_rows FIRST) → hook
+  **`src/hooks/useImportRuns.ts`**: the TE-3 async mechanism is a
+  MODULE-LEVEL detached scan loop (`driveRosterScan` — scan+stage in 500-row
+  chunks, awaits between batches keep the UI free), so in-app navigation
+  never aborts it; progress lives on the run row (polled at 1.2s while
+  in-flight) — "leave and return" just re-reads the run (F3.0.4). A run stuck
+  in `scanning` with no live driver in this tab (`isScanDrivenHere`) renders
+  an INTERRUPTED state with Cancel — never a silent hang. **UI
+  `src/components/import/`**: `RosterUploader` (the ONE pipeline both
+  surfaces render — template download, file checks, front gate, columns +
+  sample-rows preview, start; variant `internal` shows raw error detail,
+  `streamlined` keeps errors to count + download and keeps a
+  ready-for-review/failed run visible on return), `RosterDropZone` (dnd +
+  picker fallback; DESIGN-DEBT row), `ImportRunPanel` (state pills via the
+  legacy StatusPill, div-composed progress bar — DESIGN-DEBT row, error
+  report download from the run's `error_report` so it survives the purge),
+  `ImportRunList` (internal run history). **Surfaces (F3.0.1, role-gated v1
+  per [r5-review]):** `/admin/import` REBUILT in place as the internal
+  power tool (TE-8 — the Epic 2c three-file direct-commit importer is GONE;
+  `src/services/importCommit.ts` deleted; the URL still renders for TS-23;
+  `useIsAdmin` backstop) and the STREAMLINED org-rep uploader inside the
+  wizard's Provider Roster section (`BulkRosterUploadCard` in
+  `ProviderRosterSection` — admin-gated, also offered in the zero-group
+  branch since the CSV carries group columns). Types: `ImportRun`/
+  `ImportRunSource`/`ImportRunState`/`ImportRunErrorEntry`; keys
+  `importRuns`/`importRun`. e2e `e2e/roster-import.spec.ts` (TS-58/59/60 —
+  its harness write-throughs the stage RPC honoring the (run_id, line)
+  resume key + recomputing counts, and uses configurable delays to hold the
+  Uploading/Scanning states open; TS-60 pins zero live-table writes and the
+  row/column/reason report download). NB the e2e "leave mid-scan" nav must
+  wait for the destination heading to COMMIT before `goBack()` — a popstate
+  during a pending TanStack transition never unmounts the source route.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1363,9 +1429,16 @@ render the chip and suppress the go-live nudge. `reference_only` rides in
 (below) is the first writer that sets the flag true (via its default-on toggle);
 outside that path the flag stays false.
 
-### CSV onboarding packages (Epic 2c, P6 PR3, 2026-07-07)
+### CSV onboarding packages (Epic 2c, P6 PR3, 2026-07-07 — SUPERSEDED by E3.0)
 
-Admin-only wizard at **`/admin/import`** (Admin nav → "Import") that onboards a
+**The direct-commit wizard is GONE (E3.0 TE-8, 2026-07-13):** `/admin/import`
+is now the staged roster importer (see "Stage 3 built so far") and
+`src/services/importCommit.ts` was deleted — there is no live-table CSV write
+path anymore. What SURVIVES from Epic 2c is the pure core below (the parser +
+coercions are E3.0's TE-1 foundation; `parseImportPackage` keeps its tests).
+Historical shape of the retired wizard, for context:
+
+Admin-only wizard at **`/admin/import`** that onboarded a
 three-file CSV package — `facilities.csv`, `providers.csv`,
 `provider_facility_assignments.csv` — into the org. **Deterministic app logic,
 no LLM/AI ingestion; no schema change** (`reference_only` already existed).
@@ -1389,21 +1462,15 @@ license_expiration_date,license_states`; assignments
   ref+name; provider: ref+npi+email) is how an assignment resolves its
   `provider_ref`/`facility_ref` to a real created id — done deterministically
   by lowercased key match; `group_name` resolves to an existing group id.
-- **Commit `src/services/importCommit.ts`** `commitImport(parsed, {
-referenceOnly, groups })` writes through the EXISTING services only —
-  `createFacility` (orgSettings), `createProviderWithDetails`,
-  `assignProviderToFacility` (launches) — so org_id/audit/RLS are inherited, no
-  hand-rolled inserts. Best-effort per row with a `CommitSummary`
-  (created/failed counts + failure list). `ProviderInput` and `FacilityInput`
-  gained an optional `referenceOnly?: boolean` (rides `snakeizeRow →
-reference_only`; omitted → DB default false, so browser callers are
-  unchanged); the import passes the wizard toggle (**default on**).
-- **Route `src/routes/admin.import.tsx`:** three file inputs → Parse (preview
-  tables + distinct line-numbered errors list) → reference_only toggle → Commit
-  (created/failed summary). Admin-gated by a render-time `useIsAdmin()`
-  backstop. Invalidates providers/facilities/facility-assignments caches on
-  success. Ships the feature only — **does not import demo data**, so the gate
-  expected-counts are unchanged.
+- **Commit path (RETIRED):** `src/services/importCommit.ts` wrote through the
+  existing create services (`createFacility`, `createProviderWithDetails`,
+  `assignProviderToFacility`) with a best-effort `CommitSummary` — deleted in
+  E3.0; E3.1's staged commit replaces the job. `ProviderInput`/`FacilityInput`
+  keep the optional `referenceOnly?: boolean` they gained here (rides
+  `snakeizeRow → reference_only`; omitted → DB default false).
+- **Route `src/routes/admin.import.tsx` (REBUILT):** now the E3.0 internal
+  staged importer — see "Stage 3 built so far". The old three-file
+  Parse→toggle→Commit page is gone; the URL still renders (TS-23).
 
 ### Statuses pattern
 
