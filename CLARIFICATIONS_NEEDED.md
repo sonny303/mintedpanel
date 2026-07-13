@@ -18,6 +18,40 @@ Format per entry:
 
 ## Resolved
 
+## [r5-debt] Intake-flow uniformity gap (E3.0 retro) — RESOLVED (2026-07-13)
+
+- **Issue:** the three intake experiences diverge. The foundational ladder is
+  **org → group → facilities → providers**, and all three entry experiences —
+  (1) credential manager filling out the webapp forms, (2) the sharable
+  onboarding link, (3) CSV upload — must walk the same steps. E3.0 instead
+  shipped one monolithic 20-column combined roster CSV attached to a single
+  wizard section, rather than an upload option beside the manual form in
+  **each** section after initial org setup.
+- **Impact:** CSV users get a different mental model and data flow than
+  form/link users; the combined template couples group/facility/provider
+  creation into one file.
+- **Decisions (PM Sowmya, 2026-07-13):**
+  1. **Per-section uploads:** after initial org setup, the wizard's Group,
+     Facilities, and Providers sections each offer BOTH a manual entry form
+     and a CSV upload; each section's template mirrors exactly the fields its
+     manual form captures (plus all prior [r5]/[r5-review] decisions — header
+     gate, SSN safety, 10 MB ceiling, staging, async scan).
+  2. **Combined roster retired:** both surfaces (internal power tool AND
+     wizard) move to per-section uploads — one uniform, scalable model; the
+     20-column combined template is superseded.
+  3. **Sharable link:** stays org-intake-only for now, but on
+     convert-to-customer the recipient flows into the SAME onboarding
+     experience (group → facilities → providers with the same per-section
+     upload options) — seamless continuation, no parallel flow.
+  4. **Ladder enforcement:** the org → group → facilities → providers order
+     holds uniformly across all three experiences.
+- **Applied:** recorded as tech debt; fix ships as a dedicated epic
+  **E3.3 — Sectioned Intake Uniformity** (to be drafted, PM-reviewed, and
+  built after E3.1 — E3.1's preview/dedupe/staged-commit engine is the
+  reusable core the per-section uploads feed, so it builds first against the
+  current staged grain; E3.3 then splits the templates/surfaces and retires
+  the combined file). Roadmap updated.
+
 ## [r5-review] E3.0 independent-review PM questions — RESOLVED (2026-07-13)
 
 - **Issue:** the independent E3.0 review (PR #150) raised three PM questions:
