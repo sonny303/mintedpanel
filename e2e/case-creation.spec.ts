@@ -523,11 +523,12 @@ test("TS-50: confirm creates one case per checked row across two groups, lands o
 
   await page.getByRole("button", { name: "Confirm & create 2 cases" }).click();
 
-  // Interim landing (F2.1.2): the cases work view filtered to the batch.
-  await expect(page).toHaveURL(/\/cases\?runId=run-1/, { timeout: 30000 });
-  await expect(
-    page.getByText("Showing only the 2 cases created by this generation run."),
-  ).toBeVisible({ timeout: 30000 });
+  // Post-generation landing (F2.1.2, superseded by E2.3 F2.3.2): the My Cases
+  // queue filtered to the batch, with the created/skipped banner.
+  await expect(page).toHaveURL(/\/work\?run=run-1/, { timeout: 30000 });
+  await expect(page.getByText("2 created · 0 skipped (existing) · 0 excluded")).toBeVisible({
+    timeout: 30000,
+  });
 
   // The immutable run row was written FIRST, with the confirm-time plan.
   const runPost = writes.find((w) => w.table === "case_generation_runs" && w.method === "POST");
@@ -607,7 +608,7 @@ test("TS-50: a concurrent duplicate confirm degrades to a skip (23505 on the 4-p
   await expect(page.getByText("1 case created · 1 skipped (existing) · 0 excluded")).toBeVisible({
     timeout: 30000,
   });
-  await expect(page).toHaveURL(/\/cases\?runId=run-1/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/work\?run=run-1/, { timeout: 30000 });
   const rpcCalls = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(rpcCalls).toHaveLength(2);
   // Exactly one NEW case (the raced key was rejected by the constraint).

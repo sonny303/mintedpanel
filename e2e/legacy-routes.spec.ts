@@ -112,6 +112,8 @@ const RENDERING_ROUTES = [
   "/admin/portals",
   "/admin/statuses",
   "/admin/templates",
+  // E2.3 activated the reserved /work slot as the My Cases queue.
+  "/work",
 ];
 
 // Routes that must REDIRECT (old links live — E0.4 rule).
@@ -126,7 +128,6 @@ const RESERVED_ROUTES = [
   { path: "/soon?title=Facilities", title: "Facilities" },
   { path: "/soon?title=Providers", title: "Providers" },
   { path: "/scope", title: "Scope" },
-  { path: "/work", title: "Work" },
   { path: "/outcomes", title: "Outcomes" },
 ];
 

@@ -6,8 +6,9 @@
 // reapply continues THERE, never as a second case at the key). Confirm &
 // create (E2.1) runs the batch through the generationConfirm service — run
 // row first, one create_case_with_tasks call per checked row, duplicates
-// skipped — then lands on the cases work view filtered to the batch (interim
-// landing; E2.3 F2.3.2 supersedes it). Unchecking a proposed row records a
+// skipped — then lands on the My Cases queue filtered to the batch (E2.3
+// F2.3.2, superseding the E2.1 interim /cases?runId= landing, which stays
+// URL-reachable). Unchecking a proposed row records a
 // persistent, reasoned exclusion; excluded rows live in the collapsible
 // section below with one-click restore (a VOID, never a delete). Exclusion
 // and restore writes are admin-only ([r4-review] Q2); confirm is a writer
@@ -119,7 +120,7 @@ export function GenerationPreviewContent() {
           );
           return;
         }
-        navigate({ to: "/cases", search: { runId: result.runId } });
+        navigate({ to: "/work", search: { run: result.runId } });
       },
       onError: (e) =>
         toast.error(e instanceof Error ? e.message : "Could not confirm the generation run."),
