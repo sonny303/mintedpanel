@@ -42,6 +42,7 @@ import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
+import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
 import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
@@ -232,6 +233,11 @@ const LaunchesIdRoute = LaunchesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => LaunchesRoute,
 } as any)
+const ImportRunIdRoute = ImportRunIdRouteImport.update({
+  id: '/import/$runId',
+  path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GenerationRunsRoute = GenerationRunsRouteImport.update({
   id: '/generation_/runs',
   path: '/generation/runs',
@@ -388,6 +394,7 @@ export interface FileRoutesByFullPath {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation/runs': typeof GenerationRunsRouteWithChildren
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -441,6 +448,7 @@ export interface FileRoutesByTo {
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
@@ -500,6 +508,7 @@ export interface FileRoutesById {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation_/runs': typeof GenerationRunsRouteWithChildren
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -561,6 +570,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation/runs'
+    | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -614,6 +624,7 @@ export interface FileRouteTypes {
     | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/new'
@@ -672,6 +683,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation_/runs'
+    | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -731,6 +743,7 @@ export interface RootRouteChildren {
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
+  ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
@@ -973,6 +986,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/launches/$id'
       preLoaderRoute: typeof LaunchesIdRouteImport
       parentRoute: typeof LaunchesRoute
+    }
+    '/import/$runId': {
+      id: '/import/$runId'
+      path: '/import/$runId'
+      fullPath: '/import/$runId'
+      preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/generation_/runs': {
       id: '/generation_/runs'
@@ -1279,6 +1299,7 @@ const rootRouteChildren: RootRouteChildren = {
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
+  ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,

@@ -76,7 +76,7 @@ export interface ProviderInput {
 // not an address. specialty and email ride along for MSO routing resolution and
 // SOP tokens in the launch case-kickoff flow, which works off this list projection.
 const PROVIDER_LIST_COLUMNS =
-  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, reference_only, updated_at";
+  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, reference_only, verification_state, updated_at";
 
 // Per-request context injected by callers. `db` is the Supabase client to use
 // (browser anon client under RLS, or the server service-role client), `orgId`
@@ -781,4 +781,38 @@ export async function terminateProvider(
   });
 
   return { provider: after, tasksCreated: taskRows.length };
+}
+
+/* ----------------------- E3.1 — verification fence flip ----------------------- */
+
+/** Explicit verify action (F3.1.4, single or bulk): flips
+ * pending_verification providers to verified so they re-enter E1.8 readiness
+ * and E2.0 generation candidacy on the next derivation — no re-import, no
+ * stored candidacy to refresh. Writer action (specialist/admin — the RLS
+ * provider-update posture); already-verified ids are untouched by the state
+ * filter, so a replay verifies nothing twice. One audit row per flipped
+ * provider. */
+export async function verifyProviders(providerIds: string[]): Promise<number> {
+  if (providerIds.length === 0) return 0;
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("providers")
+    .update({ verification_state: "verified" })
+    .eq("org_id", orgId)
+    .in("id", providerIds)
+    .eq("verification_state", "pending_verification")
+    .select("id, first_name, last_name");
+  if (error) throw translateDbError(error);
+  const rows = camelizeRow<Array<{ id: string; firstName: string; lastName: string }>>(data ?? []);
+  for (const row of rows) {
+    await writeAudit({
+      actionType: "UPDATE",
+      entityType: "provider",
+      entityId: row.id,
+      before: { id: row.id, verificationState: "pending_verification" },
+      after: { id: row.id, verificationState: "verified" },
+      description: `Provider verified: ${row.firstName} ${row.lastName}`,
+    });
+  }
+  return rows.length;
 }

@@ -9,7 +9,10 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
+import { insertAssignmentRows } from "@/services/providerAssignments";
 import type { ScannedRow } from "@/lib/rosterImport";
+import type { BatchAssignmentPlan, CommitPlan, StagedImportRow } from "@/lib/importDedupe";
 import type { ImportRun, ImportRunErrorEntry, ImportRunSource } from "@/types";
 
 const RUN_LIST_LIMIT = 20;
@@ -191,4 +194,129 @@ export async function cancelImportRun(id: string): Promise<void> {
     after: { id, state: "cancelled" },
     description: "Roster import run cancelled (staged rows purged)",
   });
+}
+
+/* ----------------------- E3.1 — preview + staged commit ----------------------- */
+
+/** One run's staged rows — the dedupe/conflict input (src/lib/importDedupe).
+ * Error rows stay out: they are already counted + reported on the run row. */
+export async function listStagedImportRows(runId: string): Promise<StagedImportRow[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("import_rows")
+    .select("line, mapped")
+    .eq("org_id", orgId)
+    .eq("run_id", runId)
+    .eq("row_state", "staged")
+    .order("line", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    line: r.line,
+    mapped: (r.mapped as Record<string, string | null> | null) ?? null,
+  }));
+}
+
+export interface CommitImportRunResult {
+  alreadyCommitted: boolean;
+  created: number;
+  updated: number;
+  createdProviderIds: string[];
+  updatedProviderIds: string[];
+}
+
+/** Commit the run through the ONE transactional SECURITY DEFINER RPC (TE-5):
+ * a failure rolls every live write back and the run stays ready_for_review
+ * (resumable); a replay sees 'committed' and no-ops. The RPC writes the
+ * run-level AND per-entity audit rows inside the transaction, so this service
+ * deliberately does NOT also writeAudit (the E1.7b publish-RPC rule). */
+export async function commitImportRun(
+  runId: string,
+  plan: CommitPlan,
+): Promise<CommitImportRunResult> {
+  requireActiveOrg();
+  // `supabase.rpc` must be called bound (CLAUDE.md gotcha).
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc("commit_import_run", {
+    p_run_id: runId,
+    p_plan: plan as unknown as Record<string, unknown>,
+  });
+  if (error) throw new Error(error.message);
+  const raw = (data ?? {}) as {
+    already_committed?: boolean;
+    created?: number;
+    updated?: number;
+    created_provider_ids?: string[] | null;
+    updated_provider_ids?: string[] | null;
+  };
+  return {
+    alreadyCommitted: Boolean(raw.already_committed),
+    created: raw.created ?? 0,
+    updated: raw.updated ?? 0,
+    createdProviderIds: raw.created_provider_ids ?? [],
+    updatedProviderIds: raw.updated_provider_ids ?? [],
+  };
+}
+
+export interface BatchAssignmentResult {
+  groupsAdded: number;
+  facilitiesAdded: number;
+  skippedProviders: number;
+}
+
+/** F3.1.5 — the one-shot batch assignment for a committed run's providers.
+ * The plan comes from the pure planBatchAssignment (explicit row data wins —
+ * only assignment GAPS are filled); both insert paths are idempotent under
+ * the DB uniques (TE-7), so running it twice adds nothing. New facility
+ * assignments carry the caller's start date (the pfa start_date CHECK
+ * rejects dateless inserts). */
+export async function applyBatchAssignment(input: {
+  runId: string;
+  groupId: string | null;
+  facilityIds: string[];
+  startDate: string;
+  plan: BatchAssignmentPlan;
+}): Promise<BatchAssignmentResult> {
+  const orgId = requireActiveOrg();
+  if (input.plan.groupInserts.length > 0) {
+    const { error } = await supabase.from("provider_group_assignments").upsert(
+      input.plan.groupInserts.map((g) => ({
+        org_id: orgId,
+        provider_id: g.providerId,
+        group_id: g.groupId,
+        is_primary: g.isPrimary,
+      })),
+      { onConflict: "provider_id,group_id", ignoreDuplicates: true },
+    );
+    if (error) throw translateDbError(error);
+  }
+  if (input.plan.facilityInserts.length > 0) {
+    await insertAssignmentRows(
+      input.plan.facilityInserts.map((f) => ({
+        providerId: f.providerId,
+        facilityId: f.facilityId,
+        startDate: input.startDate,
+      })),
+    );
+  }
+  const result: BatchAssignmentResult = {
+    groupsAdded: input.plan.groupInserts.length,
+    facilitiesAdded: input.plan.facilityInserts.length,
+    skippedProviders: input.plan.skippedProviderIds.length,
+  };
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "import_run",
+    entityId: input.runId,
+    after: {
+      id: input.runId,
+      groupId: input.groupId,
+      facilityIds: input.facilityIds,
+      ...result,
+    },
+    description: "Batch assignment applied to imported providers",
+  });
+  return result;
 }

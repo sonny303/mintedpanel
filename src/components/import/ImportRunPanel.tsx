@@ -6,7 +6,8 @@
 // note — never a silent hang). The 'internal' variant additionally lists raw
 // per-row error detail; 'streamlined' keeps errors to a count + download.
 import { toast } from "sonner";
-import { Download, FileWarning } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowRight, Download, FileWarning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { useCancelImportRun, useImportRun, isScanDrivenHere } from "@/hooks/useImportRuns";
@@ -128,10 +129,32 @@ export function ImportRunPanel({
       ) : null}
 
       {run.state === "ready_for_review" ? (
-        <p className="text-[12px] text-muted-foreground">
-          Staged rows are held for review — nothing has been written to live provider, group, or
-          facility records. Review and commit arrive with the import preview.
-        </p>
+        <div className="space-y-2">
+          <p className="text-[12px] text-muted-foreground">
+            Staged rows are held for review — nothing has been written to live provider, group, or
+            facility records until you commit.
+          </p>
+          <Button asChild className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+            <Link to="/import/$runId" params={{ runId: run.id }}>
+              Review &amp; commit
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {run.state === "committed" ? (
+        <div className="space-y-2">
+          <p className="text-[12px] text-muted-foreground">
+            Committed — imported providers are Pending Verification until verified on the roster.
+          </p>
+          <Button asChild variant="outline" className="h-8">
+            <Link to="/import/$runId" params={{ runId: run.id }}>
+              Open committed run
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       ) : null}
 
       {run.state === "ready_for_review" && errors.length > 0 ? (

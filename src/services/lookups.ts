@@ -32,10 +32,15 @@ export interface StateLicense {
 
 // Org-wide license read for roster summaries (E1.3 TE-6): the wizard list
 // derives license-state / soonest-expiry per provider from this narrow
-// projection instead of widening the PHI-safe provider list.
+// projection instead of widening the PHI-safe provider list. E3.1 widened it
+// additively (id, licenseNumber, issueDate) so the import preview's license
+// conflict check (TE-4) rides the SAME cached read.
 export interface OrgLicenseSummaryRow {
+  id: string;
   providerId: string | null;
   state: string;
+  licenseNumber: string | null;
+  issueDate: string | null;
   expirationDate: string | null;
   verifiedStatus: "unverified" | "verified" | "failed";
 }
@@ -44,7 +49,7 @@ export async function listOrgStateLicenses(): Promise<OrgLicenseSummaryRow[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("state_licenses")
-    .select("provider_id, state, expiration_date, verified_status")
+    .select("id, provider_id, state, license_number, issue_date, expiration_date, verified_status")
     .eq("org_id", orgId);
   if (error) throw error;
   return camelizeRow<OrgLicenseSummaryRow[]>(data ?? []);

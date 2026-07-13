@@ -898,8 +898,10 @@ export type Database = {
       };
       import_runs: {
         Row: {
+          committed_at: string | null;
           created_at: string;
           created_by: string;
+          created_provider_ids: string[] | null;
           error_report: Json | null;
           error_rows: number | null;
           file_name: string | null;
@@ -910,10 +912,13 @@ export type Database = {
           state: string;
           total_rows: number | null;
           updated_at: string;
+          updated_provider_ids: string[] | null;
         };
         Insert: {
+          committed_at?: string | null;
           created_at?: string;
           created_by: string;
+          created_provider_ids?: string[] | null;
           error_report?: Json | null;
           error_rows?: number | null;
           file_name?: string | null;
@@ -924,10 +929,13 @@ export type Database = {
           state?: string;
           total_rows?: number | null;
           updated_at?: string;
+          updated_provider_ids?: string[] | null;
         };
         Update: {
+          committed_at?: string | null;
           created_at?: string;
           created_by?: string;
+          created_provider_ids?: string[] | null;
           error_report?: Json | null;
           error_rows?: number | null;
           file_name?: string | null;
@@ -938,6 +946,7 @@ export type Database = {
           state?: string;
           total_rows?: number | null;
           updated_at?: string;
+          updated_provider_ids?: string[] | null;
         };
         Relationships: [
           {
@@ -2315,6 +2324,7 @@ export type Database = {
           taxonomy_code: string | null;
           terminated_date: string | null;
           updated_at: string | null;
+          verification_state: string;
         };
         Insert: {
           additional_certifications?: Json | null;
@@ -2368,6 +2378,7 @@ export type Database = {
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
+          verification_state?: string;
         };
         Update: {
           additional_certifications?: Json | null;
@@ -2421,6 +2432,7 @@ export type Database = {
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
+          verification_state?: string;
         };
         Relationships: [
           {
@@ -3025,6 +3037,10 @@ export type Database = {
         Returns: boolean;
       };
       claim_invites: { Args: never; Returns: number };
+      commit_import_run: {
+        Args: { p_plan: Json; p_run_id: string };
+        Returns: Json;
+      };
       create_capture_link: {
         Args: {
           p_org_id: string;
