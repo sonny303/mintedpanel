@@ -154,6 +154,10 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 `id, template_id → sop_templates, version, name, task_definitions jsonb, change_note, published_at, published_by`. **IMMUTABLE, INSERT-only**: one row per publish (`UNIQUE (template_id, version)`, the `tasks` composite-FK target). No `org_id` — tenancy derives from the parent; SELECT policy is an EXISTS on the parent's visibility disjunct. `authenticated` has SELECT only; writes happen exclusively inside `publish_sop_template_version` (SECURITY DEFINER, ADMIN-only for org rows, service-role-only for global rows, optimistic concurrency on `current_version`, writes the audit row), the `sop_templates_seed_version` AFTER INSERT trigger (every new head gets its version-1 row), and the migration backfill. Rollback = republish old content as N+1.
 
+### case_generation_exclusions (E2.0, 2026-07-13)
+
+`id, org_id, provider_id, group_id, payer_id, state, reason, note, status (active|voided), created_by → profiles, created_at, voided_by, voided_at`. Persistent reasoned exclusions the generation preview honors at the 4-part case grain. `reason ∈ {already_credentialed, panel_closed, not_pursuing, other}` (text + CHECK, not a Postgres enum); `other` requires a non-blank `note` (CHECK); `state ~ '^[A-Z]{2}$'`. Partial `UNIQUE (provider_id, group_id, payer_id, state) WHERE status='active'` — voided history never blocks a later re-exclusion. **Restore = void (status flip + `voided_by`/`voided_at`), never DELETE — there is no DELETE grant.** RLS: member SELECT own-org; INSERT/UPDATE admin-only with WITH CHECKs requiring provider AND group to belong to the org (`payer_id` unchecked — shared catalog). Migration `20260713130000_case_generation_exclusions.sql`.
+
 ### status_configs
 
 `id, org_id, track, label, color, sort_order, required_fields, action_bucket, created_at` — `track ∈ {credentialing, contracting, location}`. The location track drives the Launches pipeline.

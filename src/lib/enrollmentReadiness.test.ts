@@ -318,3 +318,56 @@ describe("readinessForCaseKey (TE-10 soft-warn contract — advisory only)", () 
     ).toEqual({ ready: false, openGaps: [] });
   });
 });
+
+describe("group contract check (E2.0 TE-8 — optional, additive)", () => {
+  it("emits no group_contract check when the contracts input is omitted", () => {
+    const rows = evaluateEnrollmentReadiness(baseInput());
+    expect(rows[0].checks.some((c) => c.key === "group_contract")).toBe(false);
+    expect(rows[0].checks).toHaveLength(12);
+  });
+
+  it("passes when a contract at the exact group × payer × state is Contracted", () => {
+    const c = check(
+      baseInput({
+        contracts: [{ groupId: "g-1", payerId: "pay-1", state: "NC", statusLabel: "Contracted" }],
+      }),
+      "group_contract",
+    );
+    expect(c.pass).toBe(true);
+    expect(c.owner).toBe("group");
+    expect(c.detail).toBe("Contracted");
+  });
+
+  it("is per-target: a contract with a different payer does not satisfy the key", () => {
+    const c = check(
+      baseInput({
+        contracts: [{ groupId: "g-1", payerId: "pay-2", state: "NC", statusLabel: "Contracted" }],
+      }),
+      "group_contract",
+    );
+    expect(c.pass).toBe(false);
+    expect(c.detail).toBe("No contract");
+  });
+
+  it("a non-Contracted label fails and surfaces the actual label", () => {
+    const c = check(
+      baseInput({
+        contracts: [{ groupId: "g-1", payerId: "pay-1", state: "NC", statusLabel: "In Progress" }],
+      }),
+      "group_contract",
+    );
+    expect(c.pass).toBe(false);
+    expect(c.detail).toBe("In Progress");
+  });
+
+  it("a status-less contract row fails with the no-contract detail", () => {
+    const c = check(
+      baseInput({
+        contracts: [{ groupId: "g-1", payerId: "pay-1", state: "NC", statusLabel: null }],
+      }),
+      "group_contract",
+    );
+    expect(c.pass).toBe(false);
+    expect(c.detail).toBe("No contract");
+  });
+});

@@ -861,3 +861,24 @@ export interface FieldDictionaryEntry {
   createdAt: string;
   updatedAt: string;
 }
+
+// E2.0 — persistent, reasoned generation-preview exclusions at the 4-part
+// case grain. Restore is a VOID (status flip), never a row delete (TE-2).
+export type CaseGenerationExclusionReason =
+  "already_credentialed" | "panel_closed" | "not_pursuing" | "other";
+
+export interface CaseGenerationExclusion {
+  id: string;
+  orgId: string;
+  providerId: string;
+  groupId: string;
+  payerId: string;
+  state: string;
+  reason: CaseGenerationExclusionReason;
+  note: string | null;
+  status: "active" | "voided";
+  createdBy: string;
+  createdAt: string;
+  voidedBy: string | null;
+  voidedAt: string | null;
+}
