@@ -42,6 +42,7 @@ import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
+import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
 import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
@@ -55,10 +56,12 @@ import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
+import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
@@ -229,6 +232,11 @@ const LaunchesIdRoute = LaunchesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => LaunchesRoute,
 } as any)
+const GenerationRunsRoute = GenerationRunsRouteImport.update({
+  id: '/generation_/runs',
+  path: '/generation/runs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
   id: '/dev/primitives',
   path: '/dev/primitives',
@@ -294,6 +302,11 @@ const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersIdRoute,
 } as any)
+const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GenerationRunsRoute,
+} as any)
 const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -313,6 +326,11 @@ const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
   id: '/portals/$portalKey/train',
   path: '/portals/$portalKey/train',
   getParentRoute: () => rootRouteImport,
+} as any)
+const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => GenerationRunsRoute,
 } as any)
 const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
   id: '/new',
@@ -369,6 +387,7 @@ export interface FileRoutesByFullPath {
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/generation/runs': typeof GenerationRunsRouteWithChildren
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -384,10 +403,12 @@ export interface FileRoutesByFullPath {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/generation/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
@@ -434,10 +455,12 @@ export interface FileRoutesByTo {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
+  '/generation/runs': typeof GenerationRunsIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
@@ -476,6 +499,7 @@ export interface FileRoutesById {
   '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/generation_/runs': typeof GenerationRunsRouteWithChildren
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
@@ -491,10 +515,12 @@ export interface FileRoutesById {
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/generation_/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
@@ -534,6 +560,7 @@ export interface FileRouteTypes {
     | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/generation/runs'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -549,10 +576,12 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops/'
     | '/admin/templates/'
+    | '/generation/runs/'
     | '/providers/$id/'
     | '/admin/payers/$id/scorecard'
   fileRoutesByTo: FileRoutesByTo
@@ -599,10 +628,12 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops'
     | '/admin/templates'
+    | '/generation/runs'
     | '/providers/$id'
     | '/admin/payers/$id/scorecard'
   id:
@@ -640,6 +671,7 @@ export interface FileRouteTypes {
     | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/generation_/runs'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
@@ -655,10 +687,12 @@ export interface FileRouteTypes {
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation_/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/sops/'
     | '/admin/templates/'
+    | '/generation_/runs/'
     | '/providers/$id/'
     | '/admin/payers_/$id/scorecard'
   fileRoutesById: FileRoutesById
@@ -696,6 +730,7 @@ export interface RootRouteChildren {
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
+  GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
@@ -939,6 +974,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LaunchesIdRouteImport
       parentRoute: typeof LaunchesRoute
     }
+    '/generation_/runs': {
+      id: '/generation_/runs'
+      path: '/generation/runs'
+      fullPath: '/generation/runs'
+      preLoaderRoute: typeof GenerationRunsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/primitives': {
       id: '/dev/primitives'
       path: '/dev/primitives'
@@ -1030,6 +1072,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdIndexRouteImport
       parentRoute: typeof ProvidersIdRoute
     }
+    '/generation_/runs/': {
+      id: '/generation_/runs/'
+      path: '/'
+      fullPath: '/generation/runs/'
+      preLoaderRoute: typeof GenerationRunsIndexRouteImport
+      parentRoute: typeof GenerationRunsRoute
+    }
     '/admin/templates/': {
       id: '/admin/templates/'
       path: '/'
@@ -1057,6 +1106,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/portals/$portalKey/train'
       preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/generation_/runs/$runId': {
+      id: '/generation_/runs/$runId'
+      path: '/$runId'
+      fullPath: '/generation/runs/$runId'
+      preLoaderRoute: typeof GenerationRunsRunIdRouteImport
+      parentRoute: typeof GenerationRunsRoute
     }
     '/admin/templates/new': {
       id: '/admin/templates/new'
@@ -1175,6 +1231,20 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
   AdminTemplatesRouteChildren,
 )
 
+interface GenerationRunsRouteChildren {
+  GenerationRunsRunIdRoute: typeof GenerationRunsRunIdRoute
+  GenerationRunsIndexRoute: typeof GenerationRunsIndexRoute
+}
+
+const GenerationRunsRouteChildren: GenerationRunsRouteChildren = {
+  GenerationRunsRunIdRoute: GenerationRunsRunIdRoute,
+  GenerationRunsIndexRoute: GenerationRunsIndexRoute,
+}
+
+const GenerationRunsRouteWithChildren = GenerationRunsRoute._addFileChildren(
+  GenerationRunsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
@@ -1208,6 +1278,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
+  GenerationRunsRoute: GenerationRunsRouteWithChildren,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,

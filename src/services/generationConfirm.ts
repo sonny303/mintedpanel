@@ -6,7 +6,8 @@
 // 4-part key — including a concurrent duplicate confirm — degrades safely to
 // a skipped_existing disposition. After the loop, ONE audit row records the
 // ACTUAL outcome counts against the run (the immutable run row stores the
-// confirm-time plan; E2.4's disposition rows supersede both at read time).
+// confirm-time plan; the E2.4 disposition child rows written throughout this
+// loop are the authoritative per-row record, superseding both at read time).
 //
 // NO prerequisite-payer logic here (F2.1.5, [r4] Q3) — commercial and
 // Medicare Advantage rows create and run in parallel.
@@ -18,9 +19,17 @@ import {
   type GenerationConfirmSummary,
   type GenerationRowOutcome,
 } from "@/lib/generationConfirm";
-import type { GenerationPreviewRow } from "@/lib/generationPreview";
+import {
+  EXCLUSION_REASON_LABELS,
+  existingCaseIndicator,
+  type GenerationPreviewRow,
+} from "@/lib/generationPreview";
 import { createCase, type CaseTaskPayload } from "@/services/cases";
-import { recordGenerationRun } from "@/services/caseGenerationRuns";
+import {
+  recordGenerationRun,
+  recordGenerationRunRows,
+  type GenerationRunRowInput,
+} from "@/services/caseGenerationRuns";
 
 export interface GenerationConfirmEntry {
   row: GenerationPreviewRow;
@@ -36,11 +45,50 @@ export interface GenerationConfirmResult {
   summary: GenerationConfirmSummary;
 }
 
+/** E2.4 TE-1 — the disposition-row shape for one preview row. */
+function runRowInput(
+  runId: string,
+  row: GenerationPreviewRow,
+  outcome: Pick<GenerationRunRowInput, "disposition" | "reason" | "caseId" | "exclusionId">,
+): GenerationRunRowInput {
+  return {
+    runId,
+    providerId: row.providerId,
+    groupId: row.groupId,
+    payerId: row.payerId,
+    state: row.state,
+    ...outcome,
+  };
+}
+
 export async function confirmGenerationBatch(
   plan: GenerationConfirmPlan,
   entries: GenerationConfirmEntry[],
 ): Promise<GenerationConfirmResult> {
   const run = await recordGenerationRun(plan.plannedCounts);
+
+  // E2.4 TE-2: outcomes known AT CONFIRM are recorded first — grayed
+  // existing rows (linking the BLOCKING case) and excluded rows (linking the
+  // exclusion + snapshotting its reason label; never the note). Rows for the
+  // attempted creations follow one by one as each RPC resolves, so a
+  // mid-batch crash leaves a run whose record is visibly short — honest and
+  // queryable, with no UPDATE anywhere.
+  await recordGenerationRunRows([
+    ...plan.skippedExisting.map((row) =>
+      runRowInput(run.id, row, {
+        disposition: "skipped_existing",
+        reason: row.existingCase ? existingCaseIndicator(row.existingCase).label : "already exists",
+        caseId: row.existingCase?.caseId ?? null,
+      }),
+    ),
+    ...plan.excluded.map((row) =>
+      runRowInput(run.id, row, {
+        disposition: "excluded",
+        reason: row.exclusion ? EXCLUSION_REASON_LABELS[row.exclusion.reason] : "Excluded",
+        exclusionId: row.exclusion?.exclusionId ?? null,
+      }),
+    ),
+  ]);
 
   const outcomes: GenerationRowOutcome[] = [];
   for (const entry of entries) {
@@ -57,15 +105,30 @@ export async function confirmGenerationBatch(
         entry.tasks,
       );
       outcomes.push({ row, disposition: "created", caseId: created.id });
+      await recordGenerationRunRows([
+        runRowInput(run.id, row, {
+          disposition: "created",
+          reason: row.reason,
+          caseId: created.id,
+        }),
+      ]);
     } catch (e) {
       if (e instanceof UniqueViolationError) {
         outcomes.push({ row, disposition: "skipped_existing" });
+        // The constraint rejected the insert, so the blocking case's id is
+        // unknown here — the reason says why the link is absent.
+        await recordGenerationRunRows([
+          runRowInput(run.id, row, {
+            disposition: "skipped_existing",
+            reason: "already exists — created concurrently by another confirm",
+          }),
+        ]);
       } else {
-        outcomes.push({
-          row,
-          disposition: "failed",
-          message: e instanceof Error ? e.message : "Case creation failed",
-        });
+        const message = e instanceof Error ? e.message : "Case creation failed";
+        outcomes.push({ row, disposition: "failed", message });
+        await recordGenerationRunRows([
+          runRowInput(run.id, row, { disposition: "failed", reason: message }),
+        ]);
       }
     }
   }
