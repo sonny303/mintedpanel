@@ -2,10 +2,10 @@
 
 _Living status page for business review. Refreshed at least once per release
 milestone (owner: Devin, the reviewer/orchestrator). Last updated:
-**2026-07-13** (R4 reviews merged; E1.7b built; E2.0 build next)._
+**2026-07-13** (R4 builds 4/6 merged — E1.7b, E2.0, E2.1, E2.2; E2.3 build next)._
 
 ```
-R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 builds 1/6 (E1.7b ✅, E2.0 next) ──► R5…R10 📋
+R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 builds 4/6 (E2.3 next) ──► R5…R10 📋
 ```
 
 ## Release status
@@ -16,7 +16,7 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 | **R1 — People & places**    | E1.0 wizard, E1.1 groups, E1.2 facilities, E1.3 roster                      | ✅ Built & merged (#108–#111)                                                                                                                                                                                                                              |
 | **R2 — Payer directory**    | E1.6 payer catalog, E1.7a SOP-versioning spike                              | ✅ Complete: E1.6 built & merged (#122, seeds from the in-repo reference dataset, `payer_slug` identity); E1.7a Model A **signed off** 2026-07-12 (#120) with worked examples from the two real business SOPs (#121).                                      |
 | **R3 — Scope & readiness**  | E1.4 assignments, E1.5 payer attachment, E1.8 readiness                     | ✅ Complete: E1.4 (#113), E1.5 (#125), E1.8 (#127 + follow-up #131 — end-dated assignments exit readiness, COI check live). Hotfixes #128 (provider-group modal), #129/#130 (onboarding side-panel residual org + mastered US-state dropdown) also merged. |
-| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 All six epics independently reviewed (#134–#139) with PM answers applied ([r4-review], #140) — all `reviewed: true`. **E1.7b built & merged (#141)**. Sequential builds continue: E2.0 → E2.1 → E2.2 → E2.3 → E2.4.                                     |
+| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 All six epics independently reviewed (#134–#139) with PM answers applied ([r4-review], #140) — all `reviewed: true`. Built & merged: **E1.7b (#141), E2.0 (#143), E2.1 (#144), E2.2 (#145)**. Remaining builds: E2.3 → E2.4.                            |
 | **R5 — Scale pack**         | Bulk roster import (CAQH/NPPES), bulk assignment rules                      | 📋                                                                                                                                                                                                                                                         |
 | **R6/R7 — Execution**       | Payer workflows, touches, extension fill; Sensitive Identifiers Vault (SSN) | 📋                                                                                                                                                                                                                                                         |
 | **R8 — Outcomes/reporting** | Credentialing outcome reporting                                             | 📋                                                                                                                                                                                                                                                         |
@@ -25,14 +25,14 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 
 ## Epic board (R4)
 
-| Epic  | Title                               | Reviewed | Built                  |
-| ----- | ----------------------------------- | -------- | ---------------------- |
-| E1.7b | SOP-as-data (Model A build)         | ✅       | ✅ #141                |
-| E2.0  | Generation preview & exclusions     | ✅       | 🚧 build next          |
-| E2.1  | Case creation & 4-part key          | ✅       | ⏳ queued (after E2.0) |
-| E2.2  | SOP resolution & stamping           | ✅       | ⏳ queued              |
-| E2.3  | Next-best-action queue ("My Cases") | ✅       | ⏳ queued              |
-| E2.4  | Generation traceability & audit     | ✅       | ⏳ queued              |
+| Epic  | Title                               | Reviewed | Built         |
+| ----- | ----------------------------------- | -------- | ------------- |
+| E1.7b | SOP-as-data (Model A build)         | ✅       | ✅ #141       |
+| E2.0  | Generation preview & exclusions     | ✅       | ✅ #143       |
+| E2.1  | Case creation & 4-part key          | ✅       | ✅ #144       |
+| E2.2  | SOP resolution & stamping           | ✅       | ✅ #145       |
+| E2.3  | Next-best-action queue ("My Cases") | ✅       | 🚧 build next |
+| E2.4  | Generation traceability & audit     | ✅       | ⏳ queued     |
 
 ## Epic board (R1–R3)
 
@@ -59,8 +59,8 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 
 ## Current jobs to be done
 
-1. **R4 build queue** — sequential Claude Code builds (one session at a time): E1.7b done (#141); E2.0 next, then E2.1 → E2.4. Devin final-reviews and merges each PR before the next build starts.
-2. **PM manual test pass** — hotfixes #128/#129/#130 and E1.8 on the `redesign` preview.
+1. **R4 build queue** — sequential Claude Code builds (one session at a time): E1.7b (#141), E2.0 (#143), E2.1 (#144), E2.2 (#145) done; E2.3 next, then E2.4. Devin final-reviews and merges each PR before the next build starts.
+2. **PM manual test pass** — the merged generation flow (SOP authoring → Generate preview/exclusions → case creation with stamped SOP version) plus hotfixes #128/#129/#130 and E1.8 on the `redesign` preview.
 3. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 
 ## Key locked decisions
