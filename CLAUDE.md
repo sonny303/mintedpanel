@@ -662,7 +662,58 @@ p_expected_version`; the RAISE prefix `sop_version_conflict` is the wire
   affordances). e2e `e2e/sop-versioning.spec.ts` (TS-45/46/47 slices; its
   mock harness applies generic `eq.` filters — this repo's supabase-js
   `maybeSingle` fetches arrays with `Accept: */*` and errors client-side on
+
   > 1 rows, so fixture handlers MUST honor filters).
+
+- **E2.0 — Case Generation Preview & Exclusions.** ONE additive migration
+  (repo + hosted, `20260713130000_case_generation_exclusions.sql`):
+  **`case_generation_exclusions`** — persistent reasoned exclusions at the
+  4-part case grain (provider × group × payer × state); reason CHECK
+  (`already_credentialed|panel_closed|not_pursuing|other`, `other` requires a
+  note), partial `UNIQUE ... WHERE status='active'`, **restore = void
+  (`status`/`voided_by`/`voided_at`), never DELETE — no DELETE grant**; RLS
+  member SELECT / ADMIN-only writes ([r4-review] Q2) with same-org
+  provider+group WITH CHECKs. **Pure module `src/lib/generationPreview.ts`**
+  (+18-case suite): candidate = active `payer_network_targets` × un-ended
+  group membership **further filtered to providers with ≥1
+  `provider_facility_assignments` row at a facility of the group**
+  (presence-based, the [r4-review] Q1 candidacy — a strict subset of the E1.8
+  readiness universe, so every candidate joins a readiness row);
+  existing-case matching is the TE-6 two-branch rule (NULL-group case covers
+  all groups at its 3-part key — every pre-E2.1 row; group-stamped covers its
+  exact 4-part key); dispositions `proposed|existing|excluded` with
+  human-readable derivation reasons; suppression is status-linked and derived
+  live (`existingCaseIndicator`: non-complete bucket → "already exists — in
+  progress", complete bucket → "already exists — {label}" + reapply flag; the
+  reapply LINK is E2.1 scope). **E1.8 evaluator gained an OPTIONAL
+  `contracts` input** (TE-8, the delegated Q3a decision): a per-target
+  `group_contract` check (pass = label canonicalizes to `CONTRACTED_LABEL`)
+  appended only when the input is passed — every existing caller is
+  bit-for-bit unchanged; only the E2.0 preview passes it. Service layer:
+  `src/services/caseGenerationExclusions.ts` (list/create/void, audited —
+  audit payloads carry ids + reason, NEVER the note) +
+  `src/services/generationPreview.ts` (the two narrow projections:
+  `credential_cases` `id/provider_id/payer_id/state/credentialing_status_id`
+  — `groupId` mapped null until E2.1 adds the column — and `contracts`
+  keys + `contracting_status_id`, labels resolved against the status_configs
+  cache in the hook). Composition hook `src/hooks/useGenerationPreview.ts`
+  (+ exclusions CRUD hooks; keys `caseGenerationExclusions` /
+  `generationCaseRows` / `generationContractRows`): ONE
+  `evaluateEnrollmentReadiness` pass joined to preview rows by the 4-part key
+  (TE-9 — never `readinessForCaseKey` per row; missing key renders neutral
+  "No readiness data", never green). UI `src/components/generation/`
+  (`GenerationPreviewContent` — checklist table, checked-by-default,
+  grayed non-selectable existing rows, collapsible Excluded section with
+  one-click Restore; `ExclusionReasonDialog` — uncheck prompts reason,
+  cancel = stays checked) on the **`/generation` route** (no Sidebar entry —
+  layout/* not §5-authorized), entered via a "Generate applications" button
+  on the Scope Review wizard section. Nothing is stored at preview time
+  (TE-11): delta runs are recomputation; NOTHING is created from the preview
+  (confirm & create is E2.1). Non-admins get disabled checkboxes and no
+  Restore. `CaseGenerationExclusion` type added; e2e
+  `e2e/generation-preview.spec.ts` (TS-48/TS-49; its handler WRITES THROUGH
+  exclusion POST/PATCH into the fixtures so the invalidate-and-refetch loop
+  runs for real).
 
 ## What this is
 

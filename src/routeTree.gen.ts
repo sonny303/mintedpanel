@@ -24,6 +24,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GetStartedRouteImport } from './routes/get-started'
+import { Route as GenerationRouteImport } from './routes/generation'
 import { Route as FixItRouteImport } from './routes/fix-it'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
@@ -136,6 +137,11 @@ const HomeRoute = HomeRouteImport.update({
 const GetStartedRoute = GetStartedRouteImport.update({
   id: '/get-started',
   path: '/get-started',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GenerationRoute = GenerationRouteImport.update({
+  id: '/generation',
+  path: '/generation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FixItRoute = FixItRouteImport.update({
@@ -335,6 +341,7 @@ export interface FileRoutesByFullPath {
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
@@ -389,6 +396,7 @@ export interface FileRoutesByTo {
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
@@ -440,6 +448,7 @@ export interface FileRoutesById {
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
@@ -497,6 +506,7 @@ export interface FileRouteTypes {
     | '/client-progress'
     | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/launches'
@@ -551,6 +561,7 @@ export interface FileRouteTypes {
     | '/client-progress'
     | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/login'
@@ -601,6 +612,7 @@ export interface FileRouteTypes {
     | '/client-progress'
     | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/launches'
@@ -657,6 +669,7 @@ export interface RootRouteChildren {
   ClientProgressRoute: typeof ClientProgressRoute
   ContactRoute: typeof ContactRoute
   FixItRoute: typeof FixItRoute
+  GenerationRoute: typeof GenerationRoute
   GetStartedRoute: typeof GetStartedRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
@@ -798,6 +811,13 @@ declare module '@tanstack/react-router' {
       path: '/get-started'
       fullPath: '/get-started'
       preLoaderRoute: typeof GetStartedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/generation': {
+      id: '/generation'
+      path: '/generation'
+      fullPath: '/generation'
+      preLoaderRoute: typeof GenerationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fix-it': {
@@ -1161,6 +1181,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClientProgressRoute: ClientProgressRoute,
   ContactRoute: ContactRoute,
   FixItRoute: FixItRoute,
+  GenerationRoute: GenerationRoute,
   GetStartedRoute: GetStartedRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,

@@ -51,6 +51,11 @@ export const queryKeys = {
   providerGroupAssignments: (orgId: string) => ["provider-group-assignments", orgId] as const,
   notes: (orgId: string, entityType: string, entityId: string) =>
     ["notes", orgId, entityType, entityId] as const,
+  // E2.0 case-generation preview: the persistent exclusions plus the two
+  // narrow preview-input projections (cases, contracts).
+  caseGenerationExclusions: (orgId: string) => ["case-generation-exclusions", orgId] as const,
+  generationCaseRows: (orgId: string) => ["generation-case-rows", orgId] as const,
+  generationContractRows: (orgId: string) => ["generation-contract-rows", orgId] as const,
   // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).
   portals: (orgId: string) => ["portals", orgId] as const,
   portalFieldMaps: (orgId: string, portalKey?: string) =>

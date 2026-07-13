@@ -166,10 +166,18 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
 
   return (
     <div className="space-y-3">
-      <p className="text-[13px] text-muted-foreground">
-        The pre-flight check before enrollment starts: one row per provider, group, payer, and state
-        from your active payer targets. Readiness is advisory — nothing here blocks case work.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-[13px] text-muted-foreground">
+          The pre-flight check before enrollment starts: one row per provider, group, payer, and
+          state from your active payer targets. Readiness is advisory — nothing here blocks case
+          work.
+        </p>
+        {/* E2.0 entry affordance: the generation preview shares this row
+            universe (candidates are its clinic-assigned subset). */}
+        <Button asChild className="shrink-0 bg-[#1B4D3E] hover:bg-[#163F33]">
+          <Link to="/generation">Generate applications</Link>
+        </Button>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Select

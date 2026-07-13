@@ -12,6 +12,9 @@
 // at the service boundary — date of birth, SSN last-4, and home address never
 // enter this module, only whether they exist.
 
+import { canonicalLabel } from "@/lib/canonicalStatuses";
+import { CONTRACTED_LABEL } from "@/lib/statusLabels";
+
 /** The locked CAQH freshness window (PM decision 2026-07-11). */
 export const CAQH_CURRENT_DAYS = 120;
 
@@ -32,7 +35,8 @@ export type ProviderCheckKey =
   | "demographics"
   | "malpractice_current";
 
-export type GroupCheckKey = "state_facility" | "w9" | "group_coi" | "voided_check";
+export type GroupCheckKey =
+  "state_facility" | "w9" | "group_coi" | "voided_check" | "group_contract";
 
 export type ReadinessCheckKey = ProviderCheckKey | GroupCheckKey;
 
@@ -87,6 +91,16 @@ export interface GroupInsuranceInput {
   policyEndDate: string | null;
 }
 
+/** E2.0 TE-8 — one row per `contracts` entry at the group × payer × state
+ * grain, reduced to its resolved contracting-status label (null when the
+ * contract carries no status). */
+export interface GroupContractInput {
+  groupId: string | null;
+  payerId: string | null;
+  state: string;
+  statusLabel: string | null;
+}
+
 export interface EnrollmentReadinessInput {
   /** Date-only ISO string (YYYY-MM-DD); never read a clock inside. */
   today: string;
@@ -106,6 +120,11 @@ export interface EnrollmentReadinessInput {
   facilities: ReadonlyArray<{ groupId: string | null; state: string | null; isActive: boolean }>;
   groupDocuments: readonly GroupDocumentInput[];
   groupInsurancePolicies: readonly GroupInsuranceInput[];
+  /** E2.0 TE-8 (the delegated Q3a decision) — OPTIONAL group contract-status
+   * input. When omitted, no `group_contract` check is emitted and every
+   * pre-E2.0 caller is bit-for-bit unchanged; the generation preview passes
+   * it. Advisory like everything else here — it never disables anything. */
+  contracts?: readonly GroupContractInput[];
 }
 
 export interface ReadinessRow {
@@ -295,6 +314,28 @@ function groupChecks(
   ];
 }
 
+/** E2.0 TE-8 — the group-contract check, computed PER TARGET (group × payer ×
+ * state): contracts vary by payer, so it cannot ride the (group, state) group
+ * cache. Pass = a contract row exists at the key whose label canonicalizes to
+ * the Contracted label. */
+function groupContractCheck(
+  target: ReadinessTargetInput,
+  contracts: readonly GroupContractInput[],
+): ReadinessCheck {
+  const contract = contracts.find(
+    (c) => c.groupId === target.groupId && c.payerId === target.payerId && c.state === target.state,
+  );
+  const label = contract?.statusLabel ?? null;
+  return {
+    key: "group_contract",
+    owner: "group",
+    label: "Group contract in place",
+    pass: label !== null && canonicalLabel(label) === CONTRACTED_LABEL,
+    detail: label ?? "No contract",
+    fixTarget: "group_screen",
+  };
+}
+
 /** Derive the full readiness matrix. Group checks are computed ONCE per
  * (group, state) and fanned out across that group's provider rows (TE-7). */
 export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): ReadinessRow[] {
@@ -326,6 +367,10 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
       groupCheckCache.set(groupKey, shared);
     }
 
+    // TE-8: computed once per target and shared by identity across the
+    // target's provider rows; absent entirely when the input is omitted.
+    const contractCheck = input.contracts ? groupContractCheck(target, input.contracts) : null;
+
     for (const facts of roster) {
       // Provider checks depend only on (provider, state) — reuse across the
       // same provider's rows for different payers in one state.
@@ -335,7 +380,7 @@ export function evaluateEnrollmentReadiness(input: EnrollmentReadinessInput): Re
         own = providerChecks(facts, target.state, input.licenses, input.today);
         providerCheckCache.set(provKey, own);
       }
-      const checks = [...own, ...shared];
+      const checks = contractCheck ? [...own, ...shared, contractCheck] : [...own, ...shared];
       const openGaps = checks.filter((c) => !c.pass).length;
       rows.push({
         providerId: facts.providerId,

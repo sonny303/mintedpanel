@@ -61,6 +61,97 @@ export type Database = {
           },
         ];
       };
+      case_generation_exclusions: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          group_id: string;
+          id: string;
+          note: string | null;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string;
+          state: string;
+          status: string;
+          voided_at: string | null;
+          voided_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          group_id: string;
+          id?: string;
+          note?: string | null;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string;
+          state: string;
+          status?: string;
+          voided_at?: string | null;
+          voided_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          group_id?: string;
+          id?: string;
+          note?: string | null;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          reason?: string;
+          state?: string;
+          status?: string;
+          voided_at?: string | null;
+          voided_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_exclusions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_voided_by_fkey";
+            columns: ["voided_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       communication_event: {
         Row: {
           channel: string;
