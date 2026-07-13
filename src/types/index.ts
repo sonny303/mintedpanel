@@ -42,6 +42,10 @@ export type TouchOutcome =
 // Touchlog discriminator (Story 1): one append-only table, four entry kinds.
 export type TouchEntryType = "touchpoint" | "note" | "system_event" | "task_update";
 export type ProviderStatus = "onboarding" | "active" | "terminated";
+// E3.1 — the bulk-import staging fence (distinct from ProviderStatus, which
+// drives the action engine, and from referenceOnly, which keeps its existing
+// action-engine meaning).
+export type ProviderVerificationState = "verified" | "pending_verification";
 export type TaskStatus = "not_started" | "in_progress" | "completed" | "blocked";
 export type NoteEntityType = "case" | "task" | "provider";
 export type AuditActionType =
@@ -430,6 +434,9 @@ export interface Provider {
   licenseExpirationDate: string | null;
   /** migrated/onboard-existing provider: reference data, skipped by the action engine, Fix-it, and Home queues (Epic 2e) */
   referenceOnly: boolean;
+  /** E3.1 staging fence: 'pending_verification' rows are excluded from E1.8
+   * readiness and E2.0 generation candidacy until explicitly verified */
+  verificationState: ProviderVerificationState;
   createdAt: string;
   updatedAt: string;
 }
@@ -959,6 +966,12 @@ export interface ImportRun {
   stagedRows: number | null;
   errorRows: number | null;
   errorReport: ImportRunErrorEntry[] | null;
+  // E3.1 commit outcome (written by the commit_import_run RPC): who the run
+  // created/updated, so the committed view can verify + batch-assign after
+  // the staged rows purge.
+  committedAt: string | null;
+  createdProviderIds: string[] | null;
+  updatedProviderIds: string[] | null;
   createdAt: string;
   updatedAt: string;
 }

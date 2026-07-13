@@ -5,19 +5,30 @@
 // keeps updating. The run panel POLLS the run while it is in flight; a run
 // stuck in 'scanning' with no live driver in this tab renders as interrupted
 // (the epic's client-driven-async honesty note), never a silent hang.
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  applyBatchAssignment,
   cancelImportRun,
+  commitImportRun,
   completeImportRun,
   createImportRun,
   failImportRun,
   getImportRun,
   listImportRuns,
+  listStagedImportRows,
   markImportRunScanning,
   stageImportRows,
 } from "@/services/importRuns";
+import {
+  useProviders,
+  useProviderAssignments,
+  useProviderGroupAssignments,
+} from "@/hooks/useProviders";
+import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
+import { dedupeImportRows, type BatchAssignmentPlan, type CommitPlan } from "@/lib/importDedupe";
 import {
   STAGE_CHUNK_SIZE,
   chunkRows,
@@ -129,6 +140,164 @@ export function useCancelImportRun() {
     onSuccess: (_data, runId) => {
       qc.invalidateQueries({ queryKey: queryKeys.importRuns(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.importRun(orgId, runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRunRows(orgId, runId) });
+    },
+  });
+}
+
+/* ----------------------- E3.1 — preview + staged commit ----------------------- */
+
+export function useStagedImportRows(runId: string | null) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.importRunRows(orgId, runId ?? ""),
+    queryFn: () => listStagedImportRows(runId as string),
+    enabled: orgId !== "no-org" && Boolean(runId),
+  });
+}
+
+/** The preview composition (the useGenerationPreview pattern): one staged-row
+ * read + the EXISTING org caches (providers list projection, groups,
+ * facilities, both assignment tables, the org license projection) joined in
+ * memory by the pure five-part dedupe. Nothing is stored at preview time —
+ * a re-open recomputes over live reads. */
+export function useImportPreview(runId: string | null) {
+  const runQ = useImportRun(runId);
+  const rowsQ = useStagedImportRows(runId);
+  const providersQ = useProviders();
+  const groupsQ = useProviderGroups();
+  const facilitiesQ = useFacilities();
+  const groupAssignmentsQ = useProviderGroupAssignments();
+  const facilityAssignmentsQ = useProviderAssignments();
+  const licensesQ = useOrgStateLicenses();
+
+  const queries = [
+    runQ,
+    rowsQ,
+    providersQ,
+    groupsQ,
+    facilitiesQ,
+    groupAssignmentsQ,
+    facilityAssignmentsQ,
+    licensesQ,
+  ];
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  const dispositions = useMemo(() => {
+    if (!rowsQ.data) return null;
+    return dedupeImportRows({
+      rows: rowsQ.data,
+      providers: (providersQ.data ?? []).map((p) => ({
+        id: p.id,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        npi: p.npi,
+        specialty: p.specialty,
+      })),
+      groups: (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name, tin: g.tin })),
+      facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
+      groupAssignments: (groupAssignmentsQ.data ?? []).map((a) => ({
+        providerId: a.providerId,
+        groupId: a.groupId,
+      })),
+      facilityAssignments: (facilityAssignmentsQ.data ?? [])
+        .filter(
+          (a): a is typeof a & { providerId: string; facilityId: string } =>
+            Boolean(a.providerId) && Boolean(a.facilityId),
+        )
+        .map((a) => ({ providerId: a.providerId, facilityId: a.facilityId })),
+      licenses: (licensesQ.data ?? [])
+        .filter((l): l is typeof l & { providerId: string } => Boolean(l.providerId))
+        .map((l) => ({
+          id: l.id,
+          providerId: l.providerId,
+          state: l.state,
+          licenseNumber: l.licenseNumber,
+          issueDate: l.issueDate,
+          expirationDate: l.expirationDate,
+        })),
+    });
+  }, [
+    rowsQ.data,
+    providersQ.data,
+    groupsQ.data,
+    facilitiesQ.data,
+    groupAssignmentsQ.data,
+    facilityAssignmentsQ.data,
+    licensesQ.data,
+  ]);
+
+  return { run: runQ.data ?? null, dispositions, isLoading, isError };
+}
+
+/** Commit invalidates every cache the RPC's writes feed — providers, both
+ * assignment tables, licenses, the readiness facts (the TE-2 fence read), and
+ * the run itself. */
+export function useCommitImportRun() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: { runId: string; plan: CommitPlan }) =>
+      commitImportRun(input.runId, input.plan),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.importRuns(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRun(orgId, input.runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRunRows(orgId, input.runId) });
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.facilityAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.providerReadinessFacts(orgId) });
+    },
+  });
+}
+
+/** The run's providers' EXISTING assignments (from the shared caches), so
+ * planBatchAssignment can tell which providers already carried row-explicit
+ * group/facility columns — explicit data wins over the batch default. */
+export function useProviderAssignmentsForRun(run: {
+  createdProviderIds: string[] | null;
+  updatedProviderIds: string[] | null;
+}) {
+  const groupAssignmentsQ = useProviderGroupAssignments();
+  const facilityAssignmentsQ = useProviderAssignments();
+  return useMemo(() => {
+    const ids = new Set([...(run.createdProviderIds ?? []), ...(run.updatedProviderIds ?? [])]);
+    return {
+      groupAssignments: (groupAssignmentsQ.data ?? [])
+        .filter((a) => ids.has(a.providerId))
+        .map((a) => ({ providerId: a.providerId, groupId: a.groupId })),
+      facilityAssignments: (facilityAssignmentsQ.data ?? [])
+        .filter(
+          (a): a is typeof a & { providerId: string; facilityId: string } =>
+            Boolean(a.providerId) && Boolean(a.facilityId) && ids.has(a.providerId as string),
+        )
+        .map((a) => ({ providerId: a.providerId, facilityId: a.facilityId })),
+    };
+  }, [
+    run.createdProviderIds,
+    run.updatedProviderIds,
+    groupAssignmentsQ.data,
+    facilityAssignmentsQ.data,
+  ]);
+}
+
+export function useApplyBatchAssignment() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      runId: string;
+      groupId: string | null;
+      facilityIds: string[];
+      startDate: string;
+      plan: BatchAssignmentPlan;
+    }) => applyBatchAssignment(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.facilityAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
     },
   });
 }

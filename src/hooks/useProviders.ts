@@ -10,6 +10,7 @@ import {
   listProviderGroupAssignments,
   terminateProvider,
   updateProvider,
+  verifyProviders,
   updateProviderWithLicenses,
   type CreateProviderWithDetailsInput,
   type ProviderFilters,
@@ -163,6 +164,22 @@ export function useSetPrimaryAssignment() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+/** E3.1 F3.1.4 — the explicit verify action (single or bulk). Invalidates the
+ * provider caches AND the readiness-facts read (the TE-2 staging fence), so
+ * the verified provider is a readiness/generation candidate on the very next
+ * derivation — no re-import. */
+export function useVerifyProviders() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (providerIds: string[]) => verifyProviders(providerIds),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.providerReadinessFacts(orgId) });
     },
   });
 }

@@ -35,13 +35,21 @@ interface ProviderFactsRow {
 
 export async function listProviderReadinessFacts(): Promise<ProviderReadinessFacts[]> {
   const orgId = requireActiveOrg();
+  // E3.1 TE-2 — THE staging fence: pending-verification providers are absent
+  // from this ONE read, and both E1.8 readiness AND E2.0 generation candidacy
+  // derive their provider universe from it (useGenerationPreview feeds
+  // factsQ.data into buildGenerationPreview and evaluateEnrollmentReadiness
+  // alike; both drop providers absent from the input, exactly like
+  // terminated). Do NOT add a second candidacy/readiness provider source —
+  // a path that bypasses this read silently breaks the fence.
   const { data, error } = await supabase
     .from("providers")
     .select(
-      "id, first_name, last_name, status, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, home_street, home_city, home_state, home_zip, malpractice_coverage_end",
+      "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, home_street, home_city, home_state, home_zip, malpractice_coverage_end",
     )
     .eq("org_id", orgId)
-    .neq("status", "terminated");
+    .neq("status", "terminated")
+    .neq("verification_state", "pending_verification");
   if (error) throw error;
   const rows = camelizeRow<ProviderFactsRow[]>(data ?? []);
   return rows.map((r) => ({

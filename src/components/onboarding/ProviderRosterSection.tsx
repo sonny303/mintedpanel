@@ -24,9 +24,14 @@ import {
 import { ProviderRosterForm } from "@/components/onboarding/ProviderRosterForm";
 import { openSection } from "@/components/onboarding/openSection";
 import { RosterUploader } from "@/components/import/RosterUploader";
-import { useProviderGroupAssignments, useTerminateProvider } from "@/hooks/useProviders";
+import { StatusPill } from "@/components/StatusPill";
+import {
+  useProviderGroupAssignments,
+  useTerminateProvider,
+  useVerifyProviders,
+} from "@/hooks/useProviders";
 import { useOrgStateLicenses } from "@/hooks/useLookups";
-import { useIsAdmin } from "@/lib/permissions";
+import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
 import type { Provider } from "@/types";
@@ -104,10 +109,29 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
   const [terminating, setTerminating] = useState<Provider | null>(null);
   const assignmentsQ = useProviderGroupAssignments();
   const licensesQ = useOrgStateLicenses();
+  const canWrite = useCanWrite();
+  const verifyMut = useVerifyProviders();
 
   const roster = wizard.providers.filter((p) => p.status !== "terminated");
   const activeGroups = wizard.providerGroups.filter((g) => g.isActive);
   const groupNameById = new Map(wizard.providerGroups.map((g) => [g.id, g.name]));
+  // E3.1 F3.1.4 — imported providers land Pending Verification; they carry the
+  // pill here and are fenced out of readiness/generation until verified.
+  const pendingIds = roster
+    .filter((p) => p.verificationState === "pending_verification")
+    .map((p) => p.id);
+
+  const verify = (ids: string[]) => {
+    if (ids.length === 0) return;
+    verifyMut.mutate(ids, {
+      onSuccess: (n) =>
+        toast.success(
+          `${n} provider${n === 1 ? "" : "s"} verified — now in readiness & generation`,
+        ),
+      onError: (e) =>
+        toast.error(e instanceof Error ? e.message : "Couldn't verify the provider(s)"),
+    });
+  };
 
   const groupsOf = (providerId: string): string =>
     (assignmentsQ.data ?? [])
@@ -153,6 +177,25 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
 
   return (
     <div className="space-y-4">
+      {pendingIds.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
+          <span>
+            {pendingIds.length} imported provider{pendingIds.length === 1 ? "" : "s"} pending
+            verification — excluded from readiness and case generation until verified.
+          </span>
+          {canWrite ? (
+            <Button
+              size="sm"
+              className="ml-auto h-7 bg-[#1B4D3E] px-2 text-[11px] text-white hover:bg-[#163F33]"
+              disabled={verifyMut.isPending}
+              onClick={() => verify(pendingIds)}
+            >
+              Verify all ({pendingIds.length})
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       {roster.length === 0 ? (
         <p className="text-[13px] text-muted-foreground">
           Add the clinicians you&apos;ll credential — the CAQH-grain profile is captured once and
@@ -160,51 +203,67 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
         </p>
       ) : (
         <ul className="space-y-2">
-          {roster.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-[#E8E5E0] px-3 py-2"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-medium text-foreground">
-                  {p.firstName} {p.lastName}
-                  {p.credentials ? (
-                    <span className="text-muted-foreground">, {p.credentials}</span>
+          {roster.map((p) => {
+            const pending = p.verificationState === "pending_verification";
+            return (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-[#E8E5E0] px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 truncate text-[13px] font-medium text-foreground">
+                    <span className="truncate">
+                      {p.firstName} {p.lastName}
+                      {p.credentials ? (
+                        <span className="text-muted-foreground">, {p.credentials}</span>
+                      ) : null}
+                    </span>
+                    {pending ? <StatusPill status="amber" label="Pending verification" /> : null}
+                  </div>
+                  <div className="text-[12px] text-muted-foreground">
+                    {[
+                      p.npi ? `NPI ${p.npi}` : null,
+                      groupsOf(p.id) || null,
+                      licenseSummaryOf(p.id),
+                      p.caqhLastAttestedDate
+                        ? `CAQH attested ${fmtDate(p.caqhLastAttestedDate)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
+                  </div>
+                </div>
+                <div className="flex flex-none items-center gap-2">
+                  {pending && canWrite ? (
+                    <Button
+                      size="sm"
+                      className="h-7 bg-[#1B4D3E] px-2 text-[11px] text-white hover:bg-[#163F33]"
+                      disabled={verifyMut.isPending}
+                      onClick={() => verify([p.id])}
+                    >
+                      Verify
+                    </Button>
                   ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setModal({ provider: p })}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] text-muted-foreground"
+                    onClick={() => setTerminating(p)}
+                  >
+                    Terminate
+                  </Button>
                 </div>
-                <div className="text-[12px] text-muted-foreground">
-                  {[
-                    p.npi ? `NPI ${p.npi}` : null,
-                    groupsOf(p.id) || null,
-                    licenseSummaryOf(p.id),
-                    p.caqhLastAttestedDate
-                      ? `CAQH attested ${fmtDate(p.caqhLastAttestedDate)}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "—"}
-                </div>
-              </div>
-              <div className="flex flex-none items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-[11px]"
-                  onClick={() => setModal({ provider: p })}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-[11px] text-muted-foreground"
-                  onClick={() => setTerminating(p)}
-                >
-                  Terminate
-                </Button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 

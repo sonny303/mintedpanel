@@ -72,6 +72,8 @@ export const queryKeys = {
   // progress row (polled while a scan is in flight).
   importRuns: (orgId: string) => ["import-runs", orgId] as const,
   importRun: (orgId: string, runId: string) => ["import-run", orgId, runId] as const,
+  // E3.1 import preview: one run's staged rows (the dedupe/conflict input).
+  importRunRows: (orgId: string, runId: string) => ["import-run-rows", orgId, runId] as const,
   // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).
   portals: (orgId: string) => ["portals", orgId] as const,
   portalFieldMaps: (orgId: string, portalKey?: string) =>

@@ -977,6 +977,64 @@ uploading|scanning|ready_for_review|committed|failed|cancelled`, counts,
   wait for the destination heading to COMMIT before `goBack()` — a popstate
   during a pending TanStack transition never unmounts the source route.
 
+- **E3.1 — Import Preview, Dedupe, Conflict Review & Staged Commit.** Turns
+  E3.0's `ready_for_review` runs into live data behind one confirmation gate.
+  TWO additive migrations (repo + hosted): `20260713190000_provider_verification_state.sql`
+  (**`providers.verification_state`** `text NOT NULL DEFAULT 'verified'` CHECK
+  `verified|pending_verification` — TE-1; the R5 staging fence, NOT a widening
+  of `status` and NOT `reference_only`; `verified` default preserves every
+  existing row; partial index on the pending set) and
+  `20260713191000_commit_import_run.sql` (**`commit_import_run(p_run_id, p_plan
+jsonb)`** — the ONE transactional staged-commit RPC + additive
+  `import_runs.committed_at`/`created_provider_ids`/`updated_provider_ids`).
+  **TE-2 — the single fence (highest-leverage):** both E1.8 readiness AND E2.0
+  generation candidacy consume ONE provider read — `listProviderReadinessFacts`
+  (`enrollmentReadiness.ts`) — so a lone
+  `.neq("verification_state","pending_verification")` there (beside the existing
+  `.neq("status","terminated")`) fences BOTH surfaces; both drop absent
+  providers by presence, so neither locked model changed. `useProviders` (the
+  roster projection) is deliberately NOT fenced — staged rows show with a
+  Pending Verification pill. Verify recomputes from live reads, so it lifts with
+  no re-import. **Pure `src/lib/importDedupe.ts`** (+34-case suite): five-part
+  dedupe (name+NPI+TIN+group+facility; TIN/group are the same entity — group
+  resolved by TIN then name) folding per provider — full match → skip "already
+  exists"; name+NPI under a new group/facility → UPDATE proposing assignments
+  (never a 2nd record); missing NPI → blocked manual-review (E3.0 already makes
+  npi a required scan field, so these arrive as scan errors in the error report
+  — the branch is defensive); per-field conflict diff (name/NPI/license/specialty,
+  existing = default, explicit pick required, unresolved blocks ONLY its row);
+  `summarizeImportPreview` (exact reconciliation with staged rows);
+  `buildCommitPlan` (the RPC wire shape, unresolved → blocked_entries);
+  `planBatchAssignment` (gap-fill, explicit-row-wins, idempotent). **Service**
+  `importRuns.ts` gained `listStagedImportRows`, `commitImportRun` (RPC — the
+  service does NOT `writeAudit`; the RPC owns audit rows), `applyBatchAssignment`
+  (both assignment uniques backstop idempotency — TE-7 corrected: the pfa
+  `(provider_id, facility_id)` unique ALREADY EXISTS, no new index); `providers.ts`
+  gained `verifyProviders` (writer, audited, state-filtered so replays are
+  no-ops). **Hooks** (`useImportRuns.ts`): `useStagedImportRows`,
+  `useImportPreview` (the useGenerationPreview composition — one staged read +
+  existing org caches → pure dedupe, nothing stored), `useCommitImportRun`
+  (invalidates providers/assignments/licenses + the readiness-facts fence),
+  `useApplyBatchAssignment`, `useProviderAssignmentsForRun`; `useProviders.ts`
+  gained `useVerifyProviders`. `OrgLicenseSummaryRow` widened additively
+  (id/licenseNumber/issueDate) so the license-conflict check rides the same
+  cached read. **UI** `src/components/import/`: `ImportPreviewContent` (E2.0
+  idiom — 3 metric cards + drill-down collapsibles + inline per-field
+  `ConflictPicker` + finality-confirmed `Commit Changes` / `Cancel Import`;
+  committed view shows the outcome + `BatchAssignPanel`) on the new
+  **`/import/$runId`** route (admin-gated, reached from the E3.0 run panel's
+  "Review & commit"); `BatchAssignPanel` (F3.1.5, DatePicker + group select +
+  facility checkboxes). The wizard `ProviderRosterSection` gained the Pending
+  Verification pill + single/bulk Verify. `Provider.verificationState` +
+  `ProviderVerificationState` added; `PROVIDER_LIST_COLUMNS` carries
+  `verification_state`. e2e `e2e/import-preview.spec.ts` (TS-61 dedupe +
+  reconcile + nothing-live-before-commit; TS-62 conflict review + commit →
+  pending pills + audit; TS-63 the fence — a pending provider is absent from
+  `/generation` until verified on the roster, then appears with a readiness
+  badge — + batch-assign idempotency; the harness write-throughs the
+  `commit_import_run` RPC and honors `neq.` filters). Table-register `providers`
+  row + `import_runs` row updated; SCHEMA.md updated; types regenerated.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
