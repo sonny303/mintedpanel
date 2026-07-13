@@ -5,6 +5,11 @@
 // opens the CAQH form for create/edit, and soft-deletes via terminated
 // status (the existing terminateProvider flow) — never a row delete.
 // Progress stays row-presence per the epic's TE-8.
+//
+// E3.0 F3.0.1: this section also hosts the STREAMLINED org-rep bulk uploader
+// (admin-gated like the RLS staging writes — the org rep is provisioned as an
+// admin of their own org per [r5-review]). Same parse/stage pipeline as the
+// internal tool at /admin/import; simplified error handling, no power tooling.
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Plus } from "lucide-react";
@@ -18,8 +23,10 @@ import {
 } from "@/components/ui/dialog";
 import { ProviderRosterForm } from "@/components/onboarding/ProviderRosterForm";
 import { openSection } from "@/components/onboarding/openSection";
+import { RosterUploader } from "@/components/import/RosterUploader";
 import { useProviderGroupAssignments, useTerminateProvider } from "@/hooks/useProviders";
 import { useOrgStateLicenses } from "@/hooks/useLookups";
+import { useIsAdmin } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
 import type { Provider } from "@/types";
@@ -71,6 +78,27 @@ function TerminateConfirm({ provider, onClose }: { provider: Provider; onClose: 
   );
 }
 
+// The streamlined bulk-upload card (E3.0 F3.0.1). Rendered for admins only —
+// staging writes are admin-only under RLS, and the org rep is an admin of
+// their own org. The CSV carries group/facility columns, so it is offered
+// even before any group exists (unlike the manual add-provider flow).
+function BulkRosterUploadCard() {
+  const isAdmin = useIsAdmin();
+  if (!isAdmin) return null;
+  return (
+    <div className="space-y-3 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
+      <div>
+        <div className="text-[13px] font-medium text-foreground">Bulk roster import</div>
+        <p className="text-[12px] text-muted-foreground">
+          Upload your whole roster as one CSV — rows are validated and staged for review, and
+          nothing changes in your workspace until the import is committed.
+        </p>
+      </div>
+      <RosterUploader source="onboarding" variant="streamlined" />
+    </div>
+  );
+}
+
 export function ProviderRosterSection({ wizard }: SectionBodyProps) {
   const [modal, setModal] = useState<{ provider: Provider | null } | null>(null);
   const [terminating, setTerminating] = useState<Provider | null>(null);
@@ -100,20 +128,25 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
     return expiries.length > 0 ? `${states} · soonest expiry ${fmtDate(expiries[0])}` : states;
   };
 
-  // Providers need a group to be assigned to (≥1 assignment is required).
+  // Providers need a group to be assigned to (≥1 assignment is required) —
+  // but the bulk CSV carries its own group columns, so the uploader stays
+  // available here (E3.0).
   if (activeGroups.length === 0 && roster.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-3">
-        <p className="text-[13px] text-muted-foreground">
-          Providers are always assigned to a group — add the provider group first, then build the
-          roster here.
-        </p>
-        {GROUP_DEF ? (
-          <Button variant="outline" onClick={() => openSection(GROUP_DEF)}>
-            <ArrowRight className="h-4 w-4" />
-            Go to Provider Group
-          </Button>
-        ) : null}
+      <div className="space-y-4">
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-[13px] text-muted-foreground">
+            Providers are always assigned to a group — add the provider group first, then build the
+            roster here.
+          </p>
+          {GROUP_DEF ? (
+            <Button variant="outline" onClick={() => openSection(GROUP_DEF)}>
+              <ArrowRight className="h-4 w-4" />
+              Go to Provider Group
+            </Button>
+          ) : null}
+        </div>
+        <BulkRosterUploadCard />
       </div>
     );
   }
@@ -182,6 +215,8 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
         <Plus className="h-4 w-4" />
         Add provider
       </Button>
+
+      <BulkRosterUploadCard />
 
       {modal ? (
         <ProviderRosterForm

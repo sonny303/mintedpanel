@@ -68,6 +68,10 @@ export const queryKeys = {
   generationRuns: (orgId: string) => ["generation-runs", orgId] as const,
   generationRunRows: (orgId: string, runId: string) =>
     ["generation-run-rows", orgId, runId] as const,
+  // E3.0 bulk roster import: the org's staged import runs + one run's durable
+  // progress row (polled while a scan is in flight).
+  importRuns: (orgId: string) => ["import-runs", orgId] as const,
+  importRun: (orgId: string, runId: string) => ["import-run", orgId, runId] as const,
   // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).
   portals: (orgId: string) => ["portals", orgId] as const,
   portalFieldMaps: (orgId: string, portalKey?: string) =>

@@ -933,3 +933,32 @@ export interface CaseGenerationExclusion {
   voidedBy: string | null;
   voidedAt: string | null;
 }
+
+// E3.0 — bulk roster import staging (import_runs). The run row is the durable
+// async-scan progress record; error_report is the compact (row, column,
+// reason) list that survives the import_rows purge on commit/cancel. Offending
+// values are never echoed into it (TE-6).
+export type ImportRunSource = "internal" | "onboarding";
+export type ImportRunState =
+  "uploading" | "scanning" | "ready_for_review" | "committed" | "failed" | "cancelled";
+
+export interface ImportRunErrorEntry {
+  line: number;
+  column: string | null;
+  reason: string;
+}
+
+export interface ImportRun {
+  id: string;
+  orgId: string;
+  createdBy: string;
+  source: ImportRunSource;
+  fileName: string | null;
+  state: ImportRunState;
+  totalRows: number | null;
+  stagedRows: number | null;
+  errorRows: number | null;
+  errorReport: ImportRunErrorEntry[] | null;
+  createdAt: string;
+  updatedAt: string;
+}

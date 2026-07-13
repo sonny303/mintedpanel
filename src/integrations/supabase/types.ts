@@ -842,6 +842,120 @@ export type Database = {
           },
         ];
       };
+      import_rows: {
+        Row: {
+          created_at: string;
+          error_column: string | null;
+          error_reason: string | null;
+          id: string;
+          line: number;
+          mapped: Json | null;
+          org_id: string;
+          raw: Json;
+          row_state: string | null;
+          run_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          error_column?: string | null;
+          error_reason?: string | null;
+          id?: string;
+          line: number;
+          mapped?: Json | null;
+          org_id: string;
+          raw: Json;
+          row_state?: string | null;
+          run_id: string;
+        };
+        Update: {
+          created_at?: string;
+          error_column?: string | null;
+          error_reason?: string | null;
+          id?: string;
+          line?: number;
+          mapped?: Json | null;
+          org_id?: string;
+          raw?: Json;
+          row_state?: string | null;
+          run_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "import_rows_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "import_rows_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "import_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      import_runs: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          error_report: Json | null;
+          error_rows: number | null;
+          file_name: string | null;
+          id: string;
+          org_id: string;
+          source: string;
+          staged_rows: number | null;
+          state: string;
+          total_rows: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          error_report?: Json | null;
+          error_rows?: number | null;
+          file_name?: string | null;
+          id?: string;
+          org_id: string;
+          source: string;
+          staged_rows?: number | null;
+          state?: string;
+          total_rows?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          error_report?: Json | null;
+          error_rows?: number | null;
+          file_name?: string | null;
+          id?: string;
+          org_id?: string;
+          source?: string;
+          staged_rows?: number | null;
+          state?: string;
+          total_rows?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "import_runs_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "import_runs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       inbound_leads: {
         Row: {
           address_line1: string | null;
@@ -3014,6 +3128,10 @@ export type Database = {
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
       set_primary_assignment: {
         Args: { p_assignment_id: string; p_provider_id: string };
+        Returns: undefined;
+      };
+      stage_import_rows: {
+        Args: { p_rows: Json; p_run_id: string };
         Returns: undefined;
       };
       submit_capture: {
