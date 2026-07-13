@@ -29,6 +29,7 @@ import { useCanWrite } from "@/lib/permissions";
 import { Pencil } from "lucide-react";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
+import { CaseSopProvenance } from "@/components/cases/CaseSopProvenance";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseWizard } from "@/components/cases/CaseWizard";
@@ -189,6 +190,7 @@ function CaseDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
+            <CaseSopProvenance tasks={tasks} />
             <Tabs value={taskView} onValueChange={setTaskView}>
               <TabsList className="mb-3">
                 <TabsTrigger value="list">List</TabsTrigger>

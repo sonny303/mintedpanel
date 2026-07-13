@@ -20,13 +20,17 @@ export function TemplateVersionHistoryDialog({
   currentVersion,
   portals,
   onClose,
+  initialViewing,
 }: {
   templateId: string;
   currentVersion: number;
   portals: Portal[];
   onClose: () => void;
+  /** Open directly on one version's read-only view (E2.2 case provenance);
+   * "All versions" still steps back to the history table. */
+  initialViewing?: number;
 }) {
-  const [viewing, setViewing] = useState<number | null>(null);
+  const [viewing, setViewing] = useState<number | null>(initialViewing ?? null);
   const versionsQ = useTemplateVersions(templateId);
   const versionQ = useTemplateVersion(templateId, viewing);
 
