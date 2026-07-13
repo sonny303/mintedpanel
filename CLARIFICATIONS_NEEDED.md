@@ -18,6 +18,33 @@ Format per entry:
 
 ## Resolved
 
+## [r5-review] E3.0 independent-review PM questions — RESOLVED (2026-07-13)
+
+- **Issue:** the independent E3.0 review (PR #150) raised three PM questions:
+  (1) how to express the "internal staff only" gate when roles are per-org
+  `admin|specialist|billing` with no platform-staff concept; (2) how an org
+  rep gets a login for the wizard uploader (TS-59); (3) whether the CSV
+  template includes `ssn_last4` / `date_of_birth`.
+- **Decisions (PM Sowmya, 2026-07-13):**
+  1. **Internal-staff gate:** role-gated v1 now — the power tool is
+     admin-gated (`useIsAdmin`); a dedicated platform-staff flag (e.g.
+     additive `profiles.is_platform_staff`) is the durable follow-up, out of
+     R5.
+  2. **Org-rep provisioning:** the org rep is provisioned as an **admin of
+     their own org** (fits the admin-only staging RLS with no policy change).
+     E3.0 does not build the invite flow.
+  3. **Template PII columns:** **include both `ssn_last4` and
+     `date_of_birth`** in the template spec. `ssn_last4` is 4-digit-validated
+     with a non-echoing error; a full-SSN value guard runs on every column
+     (reject, never truncate/derive a last-4). Both fields are PHI in
+     staging, covered by the RLS + purge controls.
+- **Applied:** reviewer folded the decisions into E3.0 §5 (review branch,
+  PR #150 — closed as superseded after #149 merged the reviewed epic);
+  author (Devin) applied the five mechanical AC edits directly to the merged
+  epic (F3.0.1 gating wording, wizard Provider Roster re-target, definitive
+  F3.0.2 header list + PII columns + row grain, `/admin/import` supersession,
+  reject-not-truncate SSN wording).
+
 ## [r5] R5 Scale-pack discovery decisions — RESOLVED (2026-07-13)
 
 - **Issue:** R5 (bulk roster import via CAQH/NPPES + bulk assignment rules)
