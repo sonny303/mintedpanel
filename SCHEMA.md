@@ -4,7 +4,7 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 
 ## Core rules
 
-- **Unique case**: one row in `credential_cases` per `(provider_id, payer_id, state)`. Credentialing only — contracting status lives on `contracts`.
+- **Unique case**: one row in `credential_cases` per `(provider_id, group_id, payer_id, state)` — `UNIQUE NULLS NOT DISTINCT` since E2.1 (`20260713150000`), so legacy NULL-group rows stay unique at the old 3-part key. Credentialing only — contracting status lives on `contracts`.
 - **Contracts**: one row per `(group_id, payer_id, state)`. Contracting status, effective/expiration dates.
 - **Append-only**: `touches`, `status_history`, `audit_log`. Never updated, never deleted.
 - **PHI minimization**: `providers.ssn_last4` only. Full SSN is never stored or accepted.
@@ -135,8 +135,12 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 ### credential_cases
 
-`id, org_id, provider_id, group_id, facility_id, payer_id, state, specialty, credentialing_status_id, mso_id, submitted_date, approved_date, expected_effective_date, confirmed_effective_date, termination_date, assigned_to, created_by, case_email_token, payer_reference_id, created_at, updated_at`.
-**Unique** `(provider_id, payer_id, state)`. Credentialing status only. `case_email_token` is `text NOT NULL` (default `substr(md5(gen_random_uuid()::text), 1, 12)`) — the opaque per-case token the inbound email-to-touch webhook resolves back to `case_id` + `org_id` (see below). `payer_reference_id` (`text`, nullable) is the latest payer reference / submission ID, latest-wins (Story 2, migration `20260707120200_case_payer_reference_id.sql`) — per-submission history lives in the touchlog, not here.
+`id, org_id, provider_id, group_id, facility_id, payer_id, state, specialty, credentialing_status_id, mso_id, submitted_date, approved_date, expected_effective_date, confirmed_effective_date, termination_date, assigned_to, created_by, case_email_token, payer_reference_id, generation_run_id, created_at, updated_at`.
+**Unique** `(provider_id, group_id, payer_id, state)` — `UNIQUE NULLS NOT DISTINCT` (E2.1 migration `20260713150000`: safety-net backfill + swap from the old 3-part constraint; NULL = NULL, so legacy NULL-group rows keep the 3-part rule). Credentialing status only. `case_email_token` is `text NOT NULL` (default `substr(md5(gen_random_uuid()::text), 1, 12)`) — the opaque per-case token the inbound email-to-touch webhook resolves back to `case_id` + `org_id` (see below). `payer_reference_id` (`text`, nullable) is the latest payer reference / submission ID, latest-wins (Story 2, migration `20260707120200_case_payer_reference_id.sql`) — per-submission history lives in the touchlog, not here. `generation_run_id` (`uuid`, nullable FK → `case_generation_runs`, E2.1 `20260713150100`): the batch that created the case; NULL = manual one-off or pre-E2.1 row.
+
+### case_generation_runs
+
+`id, org_id, created_by → profiles, created_at, proposed_count, created_count, skipped_existing_count, excluded_count, failed_count`. One row per confirmed generation batch (E2.1 F2.1.2), inserted BEFORE the per-row create loop so created cases can FK it. **Immutable by omission** — no UPDATE/DELETE policy or grant (`GRANT SELECT, INSERT` only); the stored counts are the confirm-time plan, and actual outcomes live in the run's audit row until E2.4's disposition child rows supersede both. RLS: member SELECT own-org; writer (admin|specialist) INSERT own-org. Migration `20260713150100_case_generation_runs.sql`.
 
 ### contracts
 

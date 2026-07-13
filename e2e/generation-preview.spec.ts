@@ -277,6 +277,9 @@ function makeFixtures() {
         provider_id: "pr-jane",
         payer_id: "pay-bcbsnc",
         state: "NC",
+        // E2.1: the projection now selects group_id; Jane's is a legacy
+        // NULL-group row, covering all groups at its 3-part key (TE-6).
+        group_id: null,
         credentialing_status_id: "st-inprog",
       },
     ],

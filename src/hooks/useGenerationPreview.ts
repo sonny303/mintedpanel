@@ -39,6 +39,16 @@ import {
   type CreateExclusionInput,
 } from "@/services/caseGenerationExclusions";
 import { listGenerationCaseRows, listGenerationContractRows } from "@/services/generationPreview";
+import { planGenerationConfirm } from "@/lib/generationConfirm";
+import { pickTemplate } from "@/lib/pickTemplate";
+import { resolveTemplate } from "@/lib/sopResolver";
+import {
+  confirmGenerationBatch,
+  type GenerationConfirmEntry,
+  type GenerationConfirmResult,
+} from "@/services/generationConfirm";
+import { useProviders } from "@/hooks/useProviders";
+import { useSops } from "@/hooks/useAdmin";
 import type { CaseGenerationExclusion } from "@/types";
 
 export function useCaseGenerationExclusions() {
@@ -226,4 +236,51 @@ export function useGenerationPreview(): GenerationPreviewData {
       for (const q of sources) if (q.isError) q.refetch();
     },
   };
+}
+
+// E2.1 F2.1.2 — the confirm & create mutation. Resolution rides the SAME
+// pickTemplate/resolveTemplate tier every other creation surface uses (E2.2
+// owns version stamping — no stamps are populated here); facility stays null
+// (generation cases aren't location-linked) and no MSO routing is resolved
+// (not in the epic's table trace). The loop itself — run row first, per-row
+// RPC calls, 23505 → skipped_existing — is the generationConfirm service.
+export function useConfirmGeneration() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  const providersQ = useProviders();
+  const groupsQ = useProviderGroups();
+  const templatesQ = useSops();
+
+  const ready =
+    providersQ.data !== undefined && groupsQ.data !== undefined && templatesQ.data !== undefined;
+
+  const mutation = useMutation({
+    mutationFn: async (rows: GenerationPreviewRow[]): Promise<GenerationConfirmResult> => {
+      const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
+      const groupById = new Map((groupsQ.data ?? []).map((g) => [g.id, g]));
+      const templates = templatesQ.data ?? [];
+
+      const plan = planGenerationConfirm(rows);
+      const entries: GenerationConfirmEntry[] = plan.toCreate.map((row) => {
+        const provider = providerById.get(row.providerId);
+        const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
+        const tasks =
+          provider && template
+            ? resolveTemplate(template, provider, groupById.get(row.groupId) ?? null, null, null)
+            : [];
+        return { row, tasks };
+      });
+      return confirmGenerationBatch(plan, entries);
+    },
+    onSettled: () => {
+      // Created cases (even on partial failure) must flip preview rows to
+      // "existing" and show up in the work views immediately.
+      qc.invalidateQueries({ queryKey: queryKeys.generationCaseRows(orgId) });
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+
+  return { ...mutation, ready };
 }

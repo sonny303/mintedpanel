@@ -21,6 +21,8 @@
 // the case's credentialing status on every run (Purpose ¶3) — nothing here
 // stores anything, and nothing mutates append-only history.
 
+import { canonicalLabel } from "@/lib/canonicalStatuses";
+import { DENIED_LABEL } from "@/lib/statusLabels";
 import type { CaseGenerationExclusionReason as ExclusionReason } from "@/types";
 
 export type { CaseGenerationExclusionReason as ExclusionReason } from "@/types";
@@ -250,14 +252,20 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
   );
 }
 
-/** TE-7 — the status-aware existing-case wording: in-flight cases read
- * "already exists — in progress"; complete-bucket cases read "already exists"
- * plus the status label (the reapply LINK itself is E2.1 scope). */
+/** TE-7 + E2.1 F2.1.3 — the status-aware existing-case wording: in-flight
+ * cases read "already exists — in progress"; complete-bucket AND denied cases
+ * read "already exists" plus the status label and flag the reapply link
+ * (Denied sits in action_bucket 'ours', not 'complete' — it is occupied, not
+ * in flight, and reapplication continues on that case). */
 export function existingCaseIndicator(existing: PreviewExistingCase): {
   label: string;
   reapply: boolean;
 } {
-  if (!existing.complete) return { label: "already exists — in progress", reapply: false };
+  const denied =
+    existing.statusLabel !== null && canonicalLabel(existing.statusLabel) === DENIED_LABEL;
+  if (!existing.complete && !denied) {
+    return { label: "already exists — in progress", reapply: false };
+  }
   return {
     label: existing.statusLabel
       ? `already exists — ${existing.statusLabel}`

@@ -9,10 +9,10 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
 
-/** The pre-E2.1 3-part reality (TE-6): credential_cases has no group_id
- * column yet, so every row comes back with groupId null — a NULL-group case
- * covers ALL candidate rows at its (provider, payer, state). E2.1 widens this
- * projection when it adds the column. */
+/** The 4-part key set (TE-5/TE-6): group_id rides the projection since E2.1
+ * widened the case key. A NULL-group row (legacy) still covers ALL candidate
+ * rows at its (provider, payer, state); a group-stamped row covers only its
+ * exact 4-part key — the two-branch match in buildGenerationPreview. */
 export interface GenerationCaseRow {
   id: string;
   providerId: string;
@@ -26,11 +26,13 @@ export async function listGenerationCaseRows(): Promise<GenerationCaseRow[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("credential_cases")
-    .select("id, provider_id, payer_id, state, credentialing_status_id")
+    .select("id, provider_id, payer_id, state, group_id, credentialing_status_id")
     .eq("org_id", orgId);
   if (error) throw error;
-  const rows = camelizeRow<Array<Omit<GenerationCaseRow, "groupId">>>(data ?? []);
-  return rows.map((r) => ({ ...r, groupId: null }));
+  const rows = camelizeRow<GenerationCaseRow[]>(data ?? []);
+  // Normalize a missing key to an explicit null — the two-branch match keys
+  // on `groupId === null` and must never see undefined.
+  return rows.map((r) => ({ ...r, groupId: r.groupId ?? null }));
 }
 
 /** Group-contract readiness input (TE-8): the contract keys plus the status

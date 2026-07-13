@@ -715,6 +715,65 @@ p_expected_version`; the RAISE prefix `sop_version_conflict` is the wire
   exclusion POST/PATCH into the fixtures so the invalidate-and-refetch loop
   runs for real).
 
+- **E2.1 — Case Creation & the 4-Part Case Key.** THREE additive migrations
+  (repo + hosted, `20260713150000`–`150200`). **THE key migration
+  (`150000`, F2.1.1):** safety-net backfill of NULL-group cases in the TE-1
+  deterministic order — facility→group, sole `provider_group_assignments`
+  row, `is_primary` row, else NULL (a no-op on hosted: 61/61 rows already
+  grouped; rule mirrored + tested in `src/lib/caseKeyBackfill.ts`) — then the
+  constraint swap: `credential_cases_provider_id_payer_id_state_key` dropped,
+  **`credential_cases_provider_group_payer_state_key UNIQUE NULLS NOT
+DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
+  provider_id kept leading for FK index coverage; coexistence + both
+  duplicate rejections probed rollback-wrapped on hosted). `dbErrors.ts`
+  learned the new fragment (TE-4) and 23505 now returns a typed
+  `UniqueViolationError` the confirm loop classifies on. **`150100` (TE-2):**
+  `case_generation_runs` (who/when/counts; member SELECT / WRITER insert /
+  IMMUTABLE by omission — no UPDATE/DELETE policy or grant) +
+  `credential_cases.generation_run_id` FK + partial cover index. The run row
+  is inserted BEFORE the loop (created cases FK it), so its stored counts are
+  the confirm-time plan; ACTUAL outcomes go in the run's audit row (E2.4's
+  disposition rows supersede both — its TE-1). **`150200` (TE-3 + E2.2 stamp
+  transport):** `create_case_with_tasks` reissued with `generation_run_id` on
+  the case insert and per-task `sop_template_id`/`sop_version` threading
+  (`CaseTaskPayload` carries them optionally; nothing populates them until
+  E2.2). **Confirm & create (F2.1.2):** writer-gated button on `/generation` →
+  `useConfirmGeneration` resolves tasks per proposed row via the SAME
+  `pickTemplate`/`resolveTemplate` tier (facility null, NO MSO routing — not
+  in the TE-7 trace) → `src/services/generationConfirm.ts` loop (per-row RPC
+  transactions; `UniqueViolationError` → skipped_existing — a concurrent
+  duplicate degrades to a skip; partial failure reports failed rows and stays
+  on the preview) with plan/summary logic pure in
+  `src/lib/generationConfirm.ts` (+tests); run insert isolated in
+  `src/services/caseGenerationRuns.ts` (the ONE counts boundary E2.4
+  repoints). Full success lands on **`/cases?runId=<id>`** (validateSearch +
+  banner + clear — the interim landing; E2.3 F2.3.2 supersedes).
+  `listGenerationCaseRows` now selects the real `group_id` (TE-6 two-branch
+  match live for post-E2.1 rows). **Reapply (F2.1.3):** `existingCaseIndicator`
+  now flags DENIED (bucket 'ours', canonicalLabel-matched) as reapply →
+  grayed preview row links "reapply from the case" → case detail renders
+  `ReapplyCaseAction` (Denied only, writers): Denied → **In Progress**
+  ([r4-review] Q6) via the existing `updateCaseStatus` (status_history +
+  audit) then `appendCaseTasks` (new in `cases.ts` — RPC-shaped task inserts
+  appended AFTER existing sortOrders, audited "on reapplication"); never a
+  second case. NB `updateCaseStatus` metadata keys become UPDATE columns —
+  reapply passes `{}`. **Manual one-off (F2.1.4):**
+  `src/components/cases/ManualCaseModal.tsx` from "New case" on `/cases`
+  (writers): provider → groups from un-ended `provider_group_assignments`,
+  payer = FULL org-visible catalog (deliberately not targets-filtered), state
+  from `US_STATES`; pre-check blocks on the TE-5 two-branch key match with a
+  link to the case; `generationRunId` unset (run-less); DB constraint stays
+  the backstop. **F2.1.5 (negative):** NO prerequisite-payer logic anywhere —
+  pinned by a code-level unit assertion over the generation pipeline modules
+  (`generationConfirm.test.ts` greps comment-stripped sources). Docs retired
+  to the live 4-part rule: AGENTS.md data rule, table-register (¶, row, grain
+  rule + `case_generation_runs` row), SCHEMA.md. e2e
+  `e2e/case-creation.spec.ts` (TS-50 ×2 incl. the 23505 race, TS-51, TS-52;
+  its harness write-throughs the RPC — enforcing NULLS-NOT-DISTINCT
+  uniqueness — runs/tasks/status_history/case-PATCH, and synthesizes
+  PostgREST embeds for case-detail reads **on the array path too**: this
+  repo's supabase-js `maybeSingle`/`single` fetch arrays with `Accept: */*`).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -816,7 +875,13 @@ all 23 hosted migrations. Consequences:
 - `create_case_with_tasks(p_input jsonb, p_tasks jsonb)` — transactional case
   insert + initial `status_history` row + tasks + two `audit_log` rows;
   `created_by` from `auth.uid()`; default credentialing status = lowest
-  `sort_order`. Returns the case as jsonb.
+  `sort_order`. Returns the case as jsonb. **Since E2.1 it IS a repo migration
+  too** (`20260713150200`, CREATE OR REPLACE): the case insert threads
+  `p_input->>'generation_run_id'` and each `p_tasks` element may carry
+  `sop_template_id`/`sop_version` (the E2.2 stamp transport — E2.2 populates
+  them, nothing does yet). NULL-safe for every pre-existing caller; signature
+  and SECURITY INVOKER posture unchanged. NOT replay-idempotent — batch
+  semantics are per-row transactionality + skip-on-23505 in the confirm loop.
 - `create_organization(p_name text) RETURNS uuid` — **the exception to this
   section's "hosted-only" heading: it IS a repo migration**
   (`20260707140000_create_organization_rpc.sql`, repo + hosted). SECURITY
@@ -1094,9 +1159,12 @@ x-org-id`.
 `payers` (+ sentinel payer **"Pre-Credentialing Setup"**, matched by name) ·
 `msos` + `mso_routing_rules` (payer+state+specialty → direct/mso; `'All'`
 wildcards; scored client-side in `getMsoRoutingRule`) · `credential_cases`
-(**unique `(provider_id, payer_id, state)`** — widens to include `group_id`
-with the E2.x case-generation build, see AGENTS.md; credentialing status only;
-`facility_id` links a case to its location) · `contracts` (group+payer+state,
+(**`UNIQUE NULLS NOT DISTINCT (provider_id, group_id, payer_id, state)`**
+since E2.1 — the 4-part case key; legacy NULL-group rows keep the 3-part rule
+because NULL = NULL, see AGENTS.md; credentialing status only;
+`facility_id` links a case to its location; `generation_run_id` NULL = manual/
+pre-E2.1) · `case_generation_runs` (immutable batch record, E2.1) ·
+`contracts` (group+payer+state,
 contracting status lives here, never on cases) · `tasks` (SOP checklists,
 seeded from `sop_templates` via `src/lib/sopResolver.ts` — closed token list) ·
 `status_configs` (tracks below) · append-only: `touches`, `status_history`,

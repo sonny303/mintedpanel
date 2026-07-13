@@ -152,6 +152,57 @@ export type Database = {
           },
         ];
       };
+      case_generation_runs: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          created_count: number;
+          excluded_count: number;
+          failed_count: number;
+          id: string;
+          org_id: string;
+          proposed_count: number;
+          skipped_existing_count: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          created_count: number;
+          excluded_count: number;
+          failed_count: number;
+          id?: string;
+          org_id: string;
+          proposed_count: number;
+          skipped_existing_count: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          created_count?: number;
+          excluded_count?: number;
+          failed_count?: number;
+          id?: string;
+          org_id?: string;
+          proposed_count?: number;
+          skipped_existing_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_runs_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_runs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       communication_event: {
         Row: {
           channel: string;
@@ -275,6 +326,7 @@ export type Database = {
           credentialing_status_id: string | null;
           expected_effective_date: string | null;
           facility_id: string | null;
+          generation_run_id: string | null;
           group_id: string | null;
           id: string;
           mso_id: string | null;
@@ -298,6 +350,7 @@ export type Database = {
           credentialing_status_id?: string | null;
           expected_effective_date?: string | null;
           facility_id?: string | null;
+          generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
           mso_id?: string | null;
@@ -321,6 +374,7 @@ export type Database = {
           credentialing_status_id?: string | null;
           expected_effective_date?: string | null;
           facility_id?: string | null;
+          generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
           mso_id?: string | null;
@@ -361,6 +415,13 @@ export type Database = {
             columns: ["facility_id"];
             isOneToOne: false;
             referencedRelation: "facilities";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "credential_cases_generation_run_id_fkey";
+            columns: ["generation_run_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_runs";
             referencedColumns: ["id"];
           },
           {

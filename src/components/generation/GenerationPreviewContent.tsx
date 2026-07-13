@@ -1,15 +1,19 @@
-// E2.0 F2.0.1/F2.0.2/F2.0.3 — the computed generation-preview checklist:
-// every candidate provider × group × payer × state exactly once, checked by
-// default, with derivation reason, readiness signal (E1.8 + the TE-8 group
-// contract check), and status-aware existing-case gray-outs (TE-7). Nothing
-// is created from here (confirm & create is E2.1); nothing is stored at
-// preview time (TE-11) — re-opening recomputes from live data, so delta runs
-// propose only genuinely new keys. Unchecking a proposed row records a
+// E2.0 F2.0.1/F2.0.2/F2.0.3 + E2.1 F2.1.2/F2.1.3 — the computed
+// generation-preview checklist: every candidate provider × group × payer ×
+// state exactly once, checked by default, with derivation reason, readiness
+// signal (E1.8 + the TE-8 group contract check), and status-aware
+// existing-case gray-outs (TE-7; complete-bucket rows link to the case —
+// reapply continues THERE, never as a second case at the key). Confirm &
+// create (E2.1) runs the batch through the generationConfirm service — run
+// row first, one create_case_with_tasks call per checked row, duplicates
+// skipped — then lands on the cases work view filtered to the batch (interim
+// landing; E2.3 F2.3.2 supersedes it). Unchecking a proposed row records a
 // persistent, reasoned exclusion; excluded rows live in the collapsible
 // section below with one-click restore (a VOID, never a delete). Exclusion
-// and restore writes are admin-only ([r4-review] Q2) — the RLS policies
-// enforce it and the controls mirror it.
+// and restore writes are admin-only ([r4-review] Q2); confirm is a writer
+// flow, mirroring the case-creation RLS.
 import { useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExclusionReasonDialog } from "@/components/generation/ExclusionReasonDialog";
-import { useGenerationPreview, useVoidCaseGenerationExclusion } from "@/hooks/useGenerationPreview";
-import { useIsAdmin } from "@/lib/permissions";
+import {
+  useConfirmGeneration,
+  useGenerationPreview,
+  useVoidCaseGenerationExclusion,
+} from "@/hooks/useGenerationPreview";
+import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { ReadinessRow } from "@/lib/enrollmentReadiness";
 import {
   EXCLUSION_REASON_LABELS,
@@ -68,7 +76,10 @@ function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) 
 export function GenerationPreviewContent() {
   const preview = useGenerationPreview();
   const isAdmin = useIsAdmin();
+  const canWrite = useCanWrite();
+  const navigate = useNavigate();
   const voidExclusion = useVoidCaseGenerationExclusion();
+  const confirm = useConfirmGeneration();
   const [excluding, setExcluding] = useState<GenerationPreviewRow | null>(null);
   const [excludedOpen, setExcludedOpen] = useState(false);
 
@@ -88,6 +99,32 @@ export function GenerationPreviewContent() {
 
   const { checklist, excluded } = splitGenerationPreview(preview.rows);
   const summary = preview.summary;
+
+  const runConfirm = () => {
+    if (!preview.rows) return;
+    confirm.mutate(preview.rows, {
+      onSuccess: (result) => {
+        const skipped = (summary?.existing ?? 0) + result.summary.skippedExisting;
+        toast.success(
+          `${result.summary.created} case${result.summary.created === 1 ? "" : "s"} created · ${skipped} skipped (existing) · ${summary?.excluded ?? 0} excluded`,
+        );
+        if (result.summary.failed > 0) {
+          // F2.1.2: a partial failure reports which rows failed; the created
+          // ones stand (per-row transactionality) and the refetched preview
+          // shows them as existing, so the user can retry just the failures.
+          toast.error(
+            `${result.summary.failed} row${result.summary.failed === 1 ? "" : "s"} failed: ${result.summary.failures
+              .map((f) => `${f.row.providerName} — ${f.row.payerName} ${f.row.state}`)
+              .join("; ")}`,
+          );
+          return;
+        }
+        navigate({ to: "/cases", search: { runId: result.runId } });
+      },
+      onError: (e) =>
+        toast.error(e instanceof Error ? e.message : "Could not confirm the generation run."),
+    });
+  };
 
   const restore = (row: GenerationPreviewRow) => {
     if (!row.exclusion) return;
@@ -121,9 +158,18 @@ export function GenerationPreviewContent() {
             {summary.proposed} proposed · {summary.existing} already{" "}
             {summary.existing === 1 ? "exists" : "exist"} · {summary.excluded} excluded
           </span>
-          <span className="ml-auto">
-            Checked rows are created on confirm — confirm &amp; create arrives with the next epic.
-          </span>
+          {canWrite ? (
+            <Button
+              size="sm"
+              className="ml-auto bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+              disabled={summary.proposed === 0 || confirm.isPending || !confirm.ready}
+              onClick={runConfirm}
+            >
+              {confirm.isPending
+                ? "Creating cases…"
+                : `Confirm & create ${summary.proposed} ${summary.proposed === 1 ? "case" : "cases"}`}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -169,9 +215,23 @@ export function GenerationPreviewContent() {
                 </TableCell>
                 <TableCell className="max-w-[320px] text-[12px] text-muted-foreground">
                   {existing ? (
-                    <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
-                      {existingCaseIndicator(existing).label}
-                    </Badge>
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+                        {existingCaseIndicator(existing).label}
+                      </Badge>
+                      {/* F2.1.3: generation never proposes a new case at a
+                          denied/closed key — the row links to the case, where
+                          reapplication continues the same history. */}
+                      {existingCaseIndicator(existing).reapply ? (
+                        <Link
+                          to="/cases/$id"
+                          params={{ id: existing.caseId }}
+                          className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                        >
+                          reapply from the case
+                        </Link>
+                      ) : null}
+                    </span>
                   ) : (
                     row.reason
                   )}

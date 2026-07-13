@@ -37,13 +37,24 @@ import {
 } from "@/lib/workView";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
-import { Phone } from "lucide-react";
+import { Phone, Plus } from "lucide-react";
 import { useCanWrite } from "@/lib/permissions";
 import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
+import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
+
+// E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the view to the cases a
+// confirmed generation batch created (URL-state, sharable). E2.3 F2.3.2
+// supersedes this landing with the next-best-action queue.
+interface CasesSearch {
+  runId?: string;
+}
 
 export const Route = createFileRoute("/cases/")({
   component: CasesWorkView,
+  validateSearch: (search: Record<string, unknown>): CasesSearch => ({
+    runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
+  }),
 });
 
 interface CaseRow {
@@ -74,6 +85,7 @@ const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 
 function CasesWorkView() {
   const navigate = useNavigate();
+  const { runId } = Route.useSearch();
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
@@ -85,6 +97,7 @@ function CasesWorkView() {
 
   const [chip, setChip] = useState<ChipId>("all");
   const [batchOpen, setBatchOpen] = useState(false);
+  const [newCaseOpen, setNewCaseOpen] = useState(false);
 
   const loading =
     providersQ.isLoading ||
@@ -97,7 +110,9 @@ function CasesWorkView() {
   const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
 
   const groups: PayerGroup[] = useMemo(() => {
-    const cases = casesQ.data ?? [];
+    const cases = (casesQ.data ?? []).filter(
+      (c) => !runId || (c.generationRunId ?? null) === runId,
+    );
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
     const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
@@ -218,6 +233,7 @@ function CasesWorkView() {
     payersQ.data,
     statusConfigsQ.data,
     lastTouchQ.data,
+    runId,
   ]);
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
@@ -312,14 +328,47 @@ function CasesWorkView() {
         description={`${totalPayers} payers · ${counts.all} open cases`}
         actions={
           canWrite ? (
-            <Button variant="outline" size="sm" className="h-8" onClick={() => setBatchOpen(true)}>
-              <Phone className="w-4 h-4 mr-1" /> Log payer call
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => setBatchOpen(true)}
+              >
+                <Phone className="w-4 h-4 mr-1" /> Log payer call
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                onClick={() => setNewCaseOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-1" /> New case
+              </Button>
+            </div>
           ) : null
         }
       />
       {batchOpen ? (
         <BatchTouchpointDialog open={batchOpen} onClose={() => setBatchOpen(false)} />
+      ) : null}
+      {newCaseOpen ? <ManualCaseModal onClose={() => setNewCaseOpen(false)} /> : null}
+
+      {runId ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            Showing only the {groups.reduce((n, g) => n + g.rows.length, 0)}{" "}
+            {groups.reduce((n, g) => n + g.rows.length, 0) === 1 ? "case" : "cases"} created by this
+            generation run.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() => navigate({ to: "/cases", search: {} })}
+          >
+            Show all cases
+          </Button>
+        </div>
       ) : null}
 
       <div className="mb-6">
