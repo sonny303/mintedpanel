@@ -613,6 +613,57 @@ enrollmentReadiness.ts` reads DOB/ssn_last4/home-address columns ONLY to
   fully-ready matrix). No seed change (TS-43/44 are derived views per
   seed-universe).
 
+### Stage 2 built so far
+
+- **E1.7b — SOP-as-Data: Versioned SOP Authoring (Model A).** Migration
+  `20260713120000_sop_template_versions.sql` (repo + hosted): immutable
+  `sop_template_versions` (no `org_id` — SELECT scopes through the parent's
+  visibility disjunct; authenticated has SELECT ONLY),
+  `sop_templates.current_version`, `tasks.sop_template_id`/`sop_version`
+  (nullable + both-or-neither CHECK + composite FK — DDL only, E2.2 writes
+  them), version-1 backfill, and an AFTER INSERT trigger
+  (`sop_template_seed_version`) so EVERY insert path (wizard create,
+  Duplicate, service-role seeds) yields its version-1 row — the invariant
+  "every head has a version row for `current_version`" is true by
+  construction. **Publish is the `publish_sop_template_version` RPC**
+  (SECURITY DEFINER, ADMIN-only for org rows — NOT writer; global rows
+  service-role-only; optimistic concurrency `WHERE current_version =
+p_expected_version`; the RAISE prefix `sop_version_conflict` is the wire
+  contract `src/services/templates.ts` maps to `SopVersionConflictError`;
+  the RPC writes the audit row — the service must NOT also `writeAudit`).
+  **TE-5 save split:** wizard content (name + task definitions) goes through
+  Publish (change-note dialog, friendly conflict toast); match-key edits
+  (payer/state/specialty/group) stay on the plain audited head update, no
+  version bump. Version history + read-only per-version view:
+  `TemplateVersionHistory.tsx` + shared `TemplatePreviewTasks.tsx` (also the
+  wizard Review step). **Step-shape extension** (authorized protected edits):
+  `SOPStepType` += `fax|phone|mail`; optional `expectedTurnaroundDays`/
+  `followUpEveryDays`/`requiredArtifacts` on `SOPStep` + definition steps;
+  `sopResolver.ts` carries all three verbatim (portalKey precedent) and
+  `buildTokenMap` gained catalog aliases (`license.licenseNumber`,
+  `facility.street/city/state/zip`); token-less attachment names belong in
+  `requiredArtifacts` (a `dataFields` entry without a resolvable token is
+  filtered at resolution). `resolvableTokenKeys()` (sopResolver) +
+  `filterAuthoringTokens` (`src/lib/sopAuthoringTokens.ts`) constrain the
+  wizard's token picker to resolver-resolvable tokens (picker ⊆ map, tested);
+  the full catalog stays for mapping review / extension profile fill.
+  **Global fallback SOP** (`[r4]` Q4): `sop_templates_select` gained a third
+  disjunct `(org_id IS NULL AND payer_id IS NULL)` — payerless global SOPs
+  visible to ALL orgs (PM-confirmed); exactly one seeded (fixed UUID
+  `00000000-0000-4000-a000-00000000e17b`, mirrored as
+  `FALLBACK_SOP_TEMPLATE_ID`); `pickTemplate` gained the third tier (exact →
+  payer+state → fallback via the `isFallbackTemplate` shape check), so
+  NewCaseModal / launch CreateCasesDialog / starterCases now resolve the
+  generic checklist for no-SOP payers (PM-confirmed live-before-E2.x).
+  `getTemplate` reads own-org OR global (fallback opens read-only — the
+  wizard renders any global row read-only even for admins). Templates list
+  labels the fallback. CaseWizard renders fax/phone/mail as plain steps
+  (label/detail/fields + turnaround/cadence/artifact metadata, no portal
+  affordances). e2e `e2e/sop-versioning.spec.ts` (TS-45/46/47 slices; its
+  mock harness applies generic `eq.` filters — this repo's supabase-js
+  `maybeSingle` fetches arrays with `Accept: */*` and errors client-side on
+  > 1 rows, so fixture handlers MUST honor filters).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

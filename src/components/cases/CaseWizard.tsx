@@ -21,6 +21,9 @@ import {
   FileText,
   Loader2,
   Mail,
+  Mailbox,
+  Phone,
+  Printer,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,6 +114,7 @@ function OnlineFormStep({ step }: { step: SOPStep }) {
     <div className="space-y-3">
       {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
       {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
+      <StepCadenceMeta step={step} />
       {fields.length > 0 ? (
         <dl className="rounded-md border border-[#E8E5E0] divide-y divide-[#E8E5E0]">
           {fields.map((f, i) => (
@@ -338,6 +342,47 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
   );
 }
 
+// E1.7b: fax/phone/mail steps render as plain instructions — label/detail,
+// data fields, and the turnaround/cadence/artifact metadata; deliberately no
+// portal affordances (those belong to online_form steps only).
+function PlainChannelStep({ step }: { step: SOPStep }) {
+  const fields = step.dataFields ?? [];
+  return (
+    <div className="space-y-3">
+      {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
+      <StepCadenceMeta step={step} />
+      {fields.length > 0 ? (
+        <dl className="rounded-md border border-[#E8E5E0] divide-y divide-[#E8E5E0]">
+          {fields.map((f, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 p-2.5">
+              <dt className="text-[12px] text-muted-foreground">{f.label}</dt>
+              <dd className="text-[13px] font-medium tabular-nums">{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
+function StepCadenceMeta({ step }: { step: SOPStep }) {
+  const parts: string[] = [];
+  if (typeof step.expectedTurnaroundDays === "number") {
+    parts.push(`Expected turnaround ~${step.expectedTurnaroundDays} days`);
+  }
+  if (typeof step.followUpEveryDays === "number") {
+    parts.push(`follow up every ${step.followUpEveryDays} days`);
+  }
+  const artifacts = step.requiredArtifacts ?? [];
+  if (parts.length === 0 && artifacts.length === 0) return null;
+  return (
+    <div className="space-y-1 text-[12px] text-muted-foreground">
+      {parts.length > 0 ? <p>{parts.join(" · ")}</p> : null}
+      {artifacts.length > 0 ? <p>Artifacts to save: {artifacts.join(", ")}</p> : null}
+    </div>
+  );
+}
+
 function StepBlock({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
   const stepType = step.stepType ?? "online_form";
   const icon =
@@ -345,6 +390,12 @@ function StepBlock({ step, tokenValues }: { step: SOPStep; tokenValues: Record<s
       <Mail className="h-4 w-4 text-[#1B4D3E]" />
     ) : stepType === "pdf" ? (
       <FileText className="h-4 w-4 text-[#1B4D3E]" />
+    ) : stepType === "phone" ? (
+      <Phone className="h-4 w-4 text-[#1B4D3E]" />
+    ) : stepType === "fax" ? (
+      <Printer className="h-4 w-4 text-[#1B4D3E]" />
+    ) : stepType === "mail" ? (
+      <Mailbox className="h-4 w-4 text-[#1B4D3E]" />
     ) : null;
   return (
     <div className="space-y-2">
@@ -363,6 +414,8 @@ function StepBlock({ step, tokenValues }: { step: SOPStep; tokenValues: Record<s
         <DraftEmailStep step={step} />
       ) : stepType === "pdf" ? (
         <PdfStep step={step} tokenValues={tokenValues} />
+      ) : stepType === "fax" || stepType === "phone" || stepType === "mail" ? (
+        <PlainChannelStep step={step} />
       ) : (
         <OnlineFormStep step={step} />
       )}

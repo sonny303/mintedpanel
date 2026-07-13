@@ -1,17 +1,40 @@
 // Four-step wizard for authoring an SOP template (Admin > Templates). Replaces
-// the old single-page editor. Writes sop_templates.task_definitions jsonb via
-// the templates service in ONE write on the final step. The jsonb shape is
-// unchanged (owned by src/lib/sopResolver.ts): tasks -> steps -> data fields
-// with bare tokens; case creation reads it untouched.
+// the old single-page editor. The jsonb shape is unchanged (owned by
+// src/lib/sopResolver.ts): tasks -> steps -> data fields with bare tokens;
+// case creation reads it untouched.
+//
+// E1.7b Model A save split (TE-5): CONTENT (name + task definitions) saves
+// through Publish — the publish_sop_template_version RPC inserts an immutable
+// version row, updates the head, and bumps current_version (optimistic
+// concurrency; a losing publish gets a friendly conflict toast). MATCH-KEY
+// edits (payer/state/specialty/group) are head-level identity edits and go
+// through the plain audited update — no version bump. Global templates
+// (org_id NULL, incl. the seeded fallback) render read-only for org users.
 import { useEffect, useMemo, useState } from "react";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
-import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, Copy, Plus, Save } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  History,
+  Plus,
+  Save,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,6 +45,8 @@ import {
 import { EmptyState } from "@/components/EmptyState";
 import { GripVertical, Trash2 } from "lucide-react";
 import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
+import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTasks";
+import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVersionHistory";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
   fromEditable,
@@ -29,12 +54,14 @@ import {
   toEditable,
   type EditableTask,
 } from "@/components/templates/editableTemplate";
-import { useCreateSop, usePayers, useUpdateSop } from "@/hooks/useAdmin";
+import { useCreateSop, usePayers, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
-import { normalizePortalKey } from "@/lib/tokenFormat";
+import { isFallbackTemplate } from "@/lib/pickTemplate";
+import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
+import { SopVersionConflictError } from "@/services/templates";
 import { cn } from "@/lib/utils";
 import type { Portal, SOPTaskDefinition, SOPTemplate } from "@/types";
 
@@ -138,7 +165,14 @@ interface TemplateWizardProps {
 export function TemplateWizard({ initial }: TemplateWizardProps) {
   const navigate = useNavigate();
   const isEdit = initial !== null;
-  const canEdit = useIsAdmin();
+  const isAdmin = useIsAdmin();
+  // Global templates (org_id NULL — assigned catalog SOPs and the seeded
+  // fallback) are platform-managed: read-only for every org user, admin or not.
+  const isGlobal = initial
+    ? (initial as SOPTemplate & { orgId: string | null }).orgId === null
+    : false;
+  const isFallback = initial ? isFallbackTemplate(initial) : false;
+  const canEdit = isAdmin && !isGlobal;
 
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
@@ -146,10 +180,19 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   const portalsQ = usePortals();
   const createMut = useCreateSop();
   const updateMut = useUpdateSop(initial?.id ?? "");
+  const publishMut = usePublishSop(initial?.id ?? "");
 
   const portals = useMemo<Portal[]>(() => portalsQ.data ?? [], [portalsQ.data]);
 
-  const tokens = useMemo(() => (tokensQ.data ?? []) as SopFieldToken[], [tokensQ.data]);
+  // TE-7: the authoring picker advertises only resolver-resolvable tokens — a
+  // dataFields entry whose token the client resolver cannot substitute is
+  // silently filtered at resolution. Case-scoped catalog families
+  // (payer.*/contract.*, the user.* pair) stay available to their own
+  // consumers (extension profile fill, mapping review), just not here.
+  const tokens = useMemo(
+    () => filterAuthoringTokens((tokensQ.data ?? []) as SopFieldToken[]),
+    [tokensQ.data],
+  );
   const groupedTokens = useMemo(() => {
     const map = new Map<string, SopFieldToken[]>();
     for (const t of tokens) {
@@ -182,6 +225,10 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  // E1.7b publish flow: the change-note dialog and the version-history dialog.
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [changeNote, setChangeNote] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragStep, setDragStep] = useState<{ taskId: string; stepId: string } | null>(null);
@@ -263,6 +310,9 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                   emailTemplate: { subject: "", body: "" },
                   dataFields: [],
                   portalKey: "",
+                  expectedTurnaroundDays: null,
+                  followUpEveryDays: null,
+                  requiredArtifacts: [],
                 },
               ],
             }
@@ -386,7 +436,35 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
 
   const previewTasks: SOPTaskDefinition[] = useMemo(() => fromEditable(tasks), [tasks]);
 
-  async function handleSave() {
+  // TE-5 split. Content = name + task definitions (versioned via Publish);
+  // match keys = payer/state/specialty/group (unversioned head update).
+  // Compare the task definitions against the same normalized round-trip so
+  // toEditable's defaults never read as a phantom edit.
+  const initialNormalizedDefs = useMemo(
+    () => (initial ? JSON.stringify(fromEditable(toEditable(initial.taskDefinitions))) : ""),
+    [initial],
+  );
+  const contentChanged =
+    !isEdit ||
+    !initial ||
+    name.trim() !== initial.name ||
+    JSON.stringify(previewTasks) !== initialNormalizedDefs;
+  const matchKeyChanged =
+    isEdit && initial
+      ? payload.payerId !== initial.payerId ||
+        payload.state !== initial.state ||
+        payload.specialty !== (initial.specialty ?? null) ||
+        payload.groupId !== initial.groupId
+      : false;
+
+  // Match-key-only head update (no version bump). Content changes go through
+  // handlePublish below.
+  async function saveMatchKey() {
+    const { name: _name, taskDefinitions: _defs, archived: _archived, ...matchKey } = payload;
+    await updateMut.mutateAsync(matchKey);
+  }
+
+  async function handleCreate() {
     if (!name.trim()) {
       toast.error("Template name is required");
       setStep(1);
@@ -394,22 +472,68 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
     }
     setSaving(true);
     try {
-      if (isEdit && initial) {
-        await updateMut.mutateAsync(payload);
-        setDirty(false);
-        toast.success("Template saved");
-        navigate({ to: "/admin/templates" });
-      } else {
-        const created = await createMut.mutateAsync(payload);
-        setDirty(false);
-        toast.success("Template created");
-        navigate({ to: "/admin/templates/$id", params: { id: created.id } });
-      }
+      const created = await createMut.mutateAsync(payload);
+      setDirty(false);
+      toast.success("Template created");
+      navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
       toast.error(msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Edit-mode save. Content changes publish an immutable version via the RPC;
+  // a pure match-key edit is a head update with no version bump.
+  async function handlePublish(note: string) {
+    if (!initial) return;
+    if (!name.trim()) {
+      toast.error("Template name is required");
+      setPublishOpen(false);
+      setStep(1);
+      return;
+    }
+    setSaving(true);
+    try {
+      if (matchKeyChanged) await saveMatchKey();
+      if (contentChanged) {
+        const result = await publishMut.mutateAsync({
+          expectedVersion: initial.currentVersion ?? 1,
+          name: name.trim(),
+          taskDefinitions: previewTasks,
+          changeNote: note.trim() || null,
+        });
+        toast.success(`Published version ${result.version}`);
+      } else {
+        toast.success("Match key updated — no new version");
+      }
+      setDirty(false);
+      setPublishOpen(false);
+      navigate({ to: "/admin/templates" });
+    } catch (err) {
+      if (err instanceof SopVersionConflictError) {
+        toast.error("Someone else published a newer version — reload to see it.");
+      } else {
+        const msg = err instanceof Error ? err.message : "Publish failed";
+        toast.error(msg);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleSaveClick() {
+    if (!isEdit) {
+      void handleCreate();
+      return;
+    }
+    if (contentChanged) {
+      // Content publishes a new version — collect the optional change note.
+      setChangeNote("");
+      setPublishOpen(true);
+    } else {
+      void handlePublish("");
     }
   }
 
@@ -459,6 +583,12 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
             <Button variant="outline" onClick={() => navigate({ to: "/admin/templates" })}>
               Cancel
             </Button>
+            {isEdit ? (
+              <Button variant="outline" onClick={() => setHistoryOpen(true)}>
+                <History className="h-4 w-4 mr-2" />
+                History
+              </Button>
+            ) : null}
             {isEdit && canEdit ? (
               <>
                 <Button variant="outline" onClick={handleDuplicate}>
@@ -486,7 +616,19 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
 
       {!canEdit ? (
         <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          Read-only view. Only admins can create or edit templates.
+          {isGlobal
+            ? isFallback
+              ? "Generic fallback SOP — used when a case's payer and state have no authored SOP. Managed by the platform; read-only."
+              : "Global catalog SOP — managed by the platform; read-only."
+            : "Read-only view. Only admins can create or edit templates."}
+        </div>
+      ) : null}
+
+      {isEdit && canEdit ? (
+        <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          Version {initial?.currentVersion ?? 1}. Content changes publish a new version — earlier
+          versions are never overwritten. Match-key changes (payer/state/specialty/group) update the
+          template identity without a new version.
         </div>
       ) : null}
 
@@ -794,74 +936,7 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
             </dd>
           </dl>
 
-          {previewTasks.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
-              <EmptyState
-                message="No tasks defined"
-                description="This template will generate no tasks."
-              />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {previewTasks.map((t, i) => (
-                <div key={i} className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm font-medium">{t.title || "Untitled task"}</p>
-                    <span className="text-xs text-muted-foreground">
-                      Day +{t.dueOffsetDays ?? 0}
-                    </span>
-                  </div>
-                  {t.description ? (
-                    <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
-                  ) : null}
-                  <ol className="space-y-2 mt-3">
-                    {(t.steps ?? []).map((s, j) => {
-                      const fields =
-                        (s as { dataFields?: { label: string; token: string }[] }).dataFields ?? [];
-                      const stepType = s.stepType ?? "online_form";
-                      const portalKey = normalizePortalKey(s.portalKey);
-                      const portal = portalKey
-                        ? portals.find((p) => normalizePortalKey(p.portalKey) === portalKey)
-                        : null;
-                      return (
-                        <li key={j} className="rounded-md border border-[#E8E5E0] p-2 text-xs">
-                          <p className="text-foreground">{s.label || `Step ${j + 1}`}</p>
-                          {stepType === "online_form" ? (
-                            portal ? (
-                              <span className="mt-1 inline-flex items-center rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-0.5 text-[11px] text-[#059669]">
-                                Portal: {portal.name}
-                              </span>
-                            ) : (
-                              <span className="mt-1 inline-flex items-center rounded-full border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[11px] text-[#92400E]">
-                                Not linked for fill
-                              </span>
-                            )
-                          ) : null}
-                          {s.detail ? (
-                            <p className="text-muted-foreground mt-0.5">{s.detail}</p>
-                          ) : null}
-                          {fields.length > 0 ? (
-                            <div className="mt-2 space-y-1">
-                              {fields.map((f, k) => (
-                                <div key={k} className="flex items-center justify-between gap-2">
-                                  <span className="text-muted-foreground">
-                                    {f.label || f.token}
-                                  </span>
-                                  <span className="inline-flex items-center rounded-full border border-[#E8E5E0] bg-muted/40 px-2 py-0.5 font-mono text-[11px]">
-                                    {`{{${f.token}}}`}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-              ))}
-            </div>
-          )}
+          <TemplatePreviewTasks tasks={previewTasks} portals={portals} />
         </section>
       ) : null}
 
@@ -886,18 +961,71 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
           </Button>
         ) : canEdit ? (
           <Button
-            onClick={handleSave}
+            onClick={handleSaveClick}
             disabled={saving}
             style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
             <Save className="h-4 w-4 mr-2" />
-            {saving ? "Saving…" : isEdit ? "Save template" : "Create template"}
+            {saving
+              ? "Saving…"
+              : !isEdit
+                ? "Create template"
+                : contentChanged
+                  ? "Publish"
+                  : "Save match key"}
           </Button>
         ) : (
           <span />
         )}
       </div>
+
+      {publishOpen ? (
+        <Dialog open onOpenChange={(o) => !o && setPublishOpen(false)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Publish version {(initial?.currentVersion ?? 1) + 1}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Publishing saves this content as an immutable version. Tasks generated from earlier
+                versions keep the content they were created with.
+              </p>
+              <div>
+                <Label className="text-xs">Change note (optional)</Label>
+                <Textarea
+                  value={changeNote}
+                  onChange={(e) => setChangeNote(e.target.value)}
+                  placeholder="What changed and why"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPublishOpen(false)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handlePublish(changeNote)}
+                disabled={saving}
+                style={{ backgroundColor: "#1B4D3E" }}
+                className="text-white hover:opacity-90"
+              >
+                {saving ? "Publishing…" : "Publish"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {historyOpen && initial ? (
+        <TemplateVersionHistoryDialog
+          templateId={initial.id}
+          currentVersion={initial.currentVersion ?? 1}
+          portals={portals}
+          onClose={() => setHistoryOpen(false)}
+        />
+      ) : null}
 
       {discardDialog}
     </div>

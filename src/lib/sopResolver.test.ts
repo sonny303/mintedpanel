@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveTemplate } from "./sopResolver";
+import { resolvableTokenKeys, resolveTemplate } from "./sopResolver";
 import type { Facility, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 function provider(over: Partial<Provider> = {}): Provider {
@@ -144,5 +144,142 @@ describe("resolveTemplate step typing", () => {
     const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
     expect(task.sopContent[0].stepType).toBe("online_form");
     expect(task.sopContent[0].emailTemplate).toBeUndefined();
+  });
+});
+
+// E1.7b F1.7b.3 — the step-shape extension survives resolution verbatim (the
+// portalKey precedent), and token-less artifact names never ride dataFields.
+describe("resolveTemplate E1.7b step-shape carry-through", () => {
+  it("carries expectedTurnaroundDays / followUpEveryDays / requiredArtifacts verbatim", () => {
+    const tpl = template([
+      {
+        label: "Status call to the payer",
+        stepType: "phone",
+        expectedTurnaroundDays: 45,
+        followUpEveryDays: 14,
+        requiredArtifacts: ["Call reference number", "Submission confirmation PDF"],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.stepType).toBe("phone");
+    expect(step.expectedTurnaroundDays).toBe(45);
+    expect(step.followUpEveryDays).toBe(14);
+    expect(step.requiredArtifacts).toEqual([
+      "Call reference number",
+      "Submission confirmation PDF",
+    ]);
+  });
+
+  it("carries fax and mail step types through", () => {
+    const tpl = template([
+      { label: "Fax the W-9", stepType: "fax" },
+      { label: "Mail the wet-signature form", stepType: "mail" },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    expect(task.sopContent[0].stepType).toBe("fax");
+    expect(task.sopContent[1].stepType).toBe("mail");
+  });
+
+  it("leaves the new fields absent when the definition does not carry them", () => {
+    const tpl = template([{ label: "Plain step" }]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.expectedTurnaroundDays).toBeUndefined();
+    expect(step.followUpEveryDays).toBeUndefined();
+    expect(step.requiredArtifacts).toBeUndefined();
+  });
+
+  it("filters a token-less dataFields entry at resolution (artifacts belong in requiredArtifacts)", () => {
+    const tpl = template([
+      {
+        label: "Submit application",
+        dataFields: [
+          { label: "Type 1 NPI", token: "provider.npi" },
+          // A named attachment mistakenly authored as a data field: its
+          // "token" resolves to nothing and the entry is dropped.
+          { label: "COA form", token: "attachment.coaForm" },
+        ],
+        requiredArtifacts: ["COA form"],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.dataFields).toEqual([{ label: "Type 1 NPI", value: "1003456701" }]);
+    expect(step.requiredArtifacts).toEqual(["COA form"]);
+  });
+});
+
+// E1.7b TE-7 — catalog-name aliases resolve to the same values the resolver
+// already holds; existing token names keep working.
+describe("buildTokenMap catalog aliases (via resolveTemplate)", () => {
+  const richFacility: Facility = {
+    ...FACILITY,
+    street: "12 River Rd",
+    city: "Austin",
+    zip: "78701",
+  };
+
+  it("resolves license.licenseNumber to the same value as provider.licenseNumber", () => {
+    const tpl = template([
+      {
+        label: "PSV",
+        dataFields: [
+          { label: "License (resolver name)", token: "provider.licenseNumber" },
+          { label: "License (catalog name)", token: "license.licenseNumber" },
+        ],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, richFacility, null, "KS-12345");
+    expect(task.sopContent[0].dataFields).toEqual([
+      { label: "License (resolver name)", value: "KS-12345" },
+      { label: "License (catalog name)", value: "KS-12345" },
+    ]);
+  });
+
+  it("resolves the facility address-part catalog tokens alongside facility.address", () => {
+    const tpl = template([
+      {
+        label: "Address",
+        dataFields: [
+          { label: "Joined", token: "facility.address" },
+          { label: "Street", token: "facility.street" },
+          { label: "City", token: "facility.city" },
+          { label: "State", token: "facility.state" },
+          { label: "Zip", token: "facility.zip" },
+        ],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, richFacility);
+    expect(task.sopContent[0].dataFields).toEqual([
+      { label: "Joined", value: "12 River Rd, Austin, TX, 78701" },
+      { label: "Street", value: "12 River Rd" },
+      { label: "City", value: "Austin" },
+      { label: "State", value: "TX" },
+      { label: "Zip", value: "78701" },
+    ]);
+  });
+});
+
+describe("resolvableTokenKeys", () => {
+  it("exposes the closed resolver map including the catalog aliases", () => {
+    const keys = resolvableTokenKeys();
+    for (const expected of [
+      "provider.firstName",
+      "provider.licenseNumber",
+      "license.licenseNumber",
+      "facility.address",
+      "facility.street",
+      "facility.city",
+      "facility.state",
+      "facility.zip",
+      "group.tin",
+      "mso.portalUrl",
+    ]) {
+      expect(keys).toContain(expected);
+    }
+    // Case-scoped families never resolve client-side.
+    expect(keys.some((k) => k.startsWith("payer."))).toBe(false);
+    expect(keys.some((k) => k.startsWith("contract."))).toBe(false);
   });
 });

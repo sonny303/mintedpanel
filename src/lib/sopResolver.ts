@@ -41,6 +41,13 @@ function buildTokenMap(ctx: ResolveContext): Record<string, string> {
     "provider.lastName": provider.lastName,
     "provider.email": provider.email ?? "",
     "provider.licenseNumber": stateLicenseNumber ?? "",
+    // E1.7b TE-7 catalog-name aliases: get_sop_field_tokens() advertises
+    // schema-derived names; these map them onto values this context already
+    // holds so authored catalog tokens resolve. Existing names above stay —
+    // SOP bodies in the wild use them. Never rename the catalog side: catalog
+    // token names are a live wire contract (portal_field_maps, view-prefs,
+    // the extension's field-map ↔ profile join).
+    "license.licenseNumber": stateLicenseNumber ?? "",
     "group.tin": group?.tin ?? "",
     "group.npiType2": group?.npiType2 ?? "",
     "group.name": group?.name ?? "",
@@ -48,8 +55,29 @@ function buildTokenMap(ctx: ResolveContext): Record<string, string> {
     "facility.address": facility
       ? [facility.street, facility.city, facility.state, facility.zip].filter(Boolean).join(", ")
       : "",
+    "facility.street": facility?.street ?? "",
+    "facility.city": facility?.city ?? "",
+    "facility.state": facility?.state ?? "",
+    "facility.zip": facility?.zip ?? "",
     "mso.portalUrl": mso?.portalUrl ?? "",
   };
+}
+
+// The closed set of token keys this resolver can substitute, for the SOP
+// authoring picker (E1.7b TE-7): the picker must advertise only tokens that
+// resolve here — case-scoped catalog families (payer.*, mso.*, contract.*
+// beyond the map below) are filtered out of `dataFields` at resolution and
+// would be silently lost.
+export function resolvableTokenKeys(): string[] {
+  return Object.keys(
+    buildTokenMap({
+      provider: {} as Provider,
+      group: null,
+      facility: null,
+      mso: null,
+      stateLicenseNumber: null,
+    }),
+  );
 }
 
 const TOKEN_PATTERN = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
@@ -97,6 +125,11 @@ function definitionToInsert(
       // interpolated. The resolved task keeps the same portal link the template
       // authored, so the extension can close this task on submit.
       portalKey: step.portalKey,
+      // E1.7b step-shape extension: carried through verbatim like portalKey
+      // (numbers/names, never interpolated). Absent on pre-existing steps.
+      expectedTurnaroundDays: step.expectedTurnaroundDays,
+      followUpEveryDays: step.followUpEveryDays,
+      requiredArtifacts: step.requiredArtifacts,
       isCompleted: false,
       completedAt: null,
       completedBy: null,

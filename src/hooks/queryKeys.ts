@@ -26,6 +26,11 @@ export const queryKeys = {
     ["mso-routing-rule", orgId, payerId, state, specialty] as const,
   templates: (orgId: string) => ["templates", orgId] as const,
   template: (orgId: string, id: string) => ["template", orgId, id] as const,
+  // E1.7b SOP versioning: history list + one immutable version's content.
+  templateVersions: (orgId: string, templateId: string) =>
+    ["template-versions", orgId, templateId] as const,
+  templateVersion: (orgId: string, templateId: string, version: number) =>
+    ["template-version", orgId, templateId, version] as const,
   statusConfigs: (orgId: string, track?: unknown) =>
     ["status-configs", orgId, track ?? "all"] as const,
   statusConfig: (orgId: string, id: string) => ["status-config", orgId, id] as const,

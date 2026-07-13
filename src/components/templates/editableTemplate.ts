@@ -30,6 +30,13 @@ export interface EditableStep {
   // portal_key for an online_form step, "" = not linked. Editor value is raw;
   // normalized on write.
   portalKey: string;
+  // E1.7b step-shape extension. null = not set (omitted on write).
+  expectedTurnaroundDays: number | null;
+  followUpEveryDays: number | null;
+  // Token-less named artifacts ("Submission confirmation PDF"). Attachment
+  // checklists live HERE, never as token-less dataFields — a dataFields entry
+  // without a resolvable token is silently filtered at resolution.
+  requiredArtifacts: string[];
 }
 
 export interface EditableTask {
@@ -58,6 +65,9 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         emailTemplate?: { subject?: string; body?: string };
         dataFields?: DataField[];
         portalKey?: string;
+        expectedTurnaroundDays?: number;
+        followUpEveryDays?: number;
+        requiredArtifacts?: string[];
       };
       return {
         id: randId(),
@@ -72,6 +82,12 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),
         portalKey: raw.portalKey ?? "",
+        expectedTurnaroundDays:
+          typeof raw.expectedTurnaroundDays === "number" ? raw.expectedTurnaroundDays : null,
+        followUpEveryDays: typeof raw.followUpEveryDays === "number" ? raw.followUpEveryDays : null,
+        requiredArtifacts: (raw.requiredArtifacts ?? []).filter(
+          (a): a is string => typeof a === "string",
+        ),
       };
     }),
   }));
@@ -88,6 +104,7 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
       // the stored (bare/lowercase) form so the extension's page-key match is a
       // literal string compare.
       const portalKey = s.stepType === "online_form" ? normalizePortalKey(s.portalKey) : null;
+      const requiredArtifacts = s.requiredArtifacts.map((a) => a.trim()).filter(Boolean);
       return {
         label: s.label,
         detail: s.detail,
@@ -96,6 +113,11 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
           ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
           : {}),
         ...(portalKey ? { portalKey } : {}),
+        ...(s.expectedTurnaroundDays !== null
+          ? { expectedTurnaroundDays: s.expectedTurnaroundDays }
+          : {}),
+        ...(s.followUpEveryDays !== null ? { followUpEveryDays: s.followUpEveryDays } : {}),
+        ...(requiredArtifacts.length > 0 ? { requiredArtifacts } : {}),
         dataFields: s.dataFields.filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),

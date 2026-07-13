@@ -144,11 +144,15 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 ### tasks
 
-`id, org_id, case_id, provider_id, title, description, sop_content, status, sort_order, due_date, completed_date, is_auto_generated, created_at, updated_at`. Auto-generated on case creation from `sop_templates`.
+`id, org_id, case_id, provider_id, title, description, sop_content, status, sort_order, due_date, completed_date, is_auto_generated, created_at, updated_at, sop_template_id, sop_version`. Auto-generated on case creation from `sop_templates`. **`sop_template_id`/`sop_version` (E1.7b) stamp which SOP version generated the task — nullable, both-null-or-both-present CHECK, composite FK to `sop_template_versions (template_id, version)`; written by E2.2 generation, legacy tasks stay NULL/NULL.**
 
 ### sop_templates
 
-`id, org_id, name, group_id, state, specialty, payer_id, task_definitions jsonb, is_archived, created_at, updated_at`. Matching ignores archived rows. Token list in `src/lib/sopResolver.ts` is closed — never accept arbitrary tokens. **`org_id` is NULLABLE (P2): a NULL row is a global-catalog SOP, visible to an org only when the org is assigned the SOP's `payer_id` (`org_payer_assignments`); a global SOP with `payer_id` NULL is visible to no org.**
+`id, org_id, name, group_id, state, specialty, payer_id, task_definitions jsonb, is_archived, created_at, updated_at, current_version`. Matching ignores archived rows. Token list in `src/lib/sopResolver.ts` is closed — never accept arbitrary tokens. **`org_id` is NULLABLE (P2): a NULL row is a global-catalog SOP, visible to an org only when the org is assigned the SOP's `payer_id` (`org_payer_assignments`). A global SOP with `payer_id` NULL is the E1.7b generic FALLBACK — visible to all orgs' members (third SELECT disjunct, PM-confirmed [r4-review] Q1); exactly one is seeded (`00000000-0000-4000-a000-00000000e17b`).** `current_version` (E1.7b) is the Model A head pointer; content edits go through the `publish_sop_template_version` RPC, match-key edits stay plain head updates (unversioned).
+
+### sop_template_versions (E1.7b, 2026-07-13)
+
+`id, template_id → sop_templates, version, name, task_definitions jsonb, change_note, published_at, published_by`. **IMMUTABLE, INSERT-only**: one row per publish (`UNIQUE (template_id, version)`, the `tasks` composite-FK target). No `org_id` — tenancy derives from the parent; SELECT policy is an EXISTS on the parent's visibility disjunct. `authenticated` has SELECT only; writes happen exclusively inside `publish_sop_template_version` (SECURITY DEFINER, ADMIN-only for org rows, service-role-only for global rows, optimistic concurrency on `current_version`, writes the audit row), the `sop_templates_seed_version` AFTER INSERT trigger (every new head gets its version-1 row), and the migration backfill. Rollback = republish old content as N+1.
 
 ### status_configs
 
