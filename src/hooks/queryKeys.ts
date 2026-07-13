@@ -56,6 +56,13 @@ export const queryKeys = {
   caseGenerationExclusions: (orgId: string) => ["case-generation-exclusions", orgId] as const,
   generationCaseRows: (orgId: string) => ["generation-case-rows", orgId] as const,
   generationContractRows: (orgId: string) => ["generation-contract-rows", orgId] as const,
+  // E2.3 next-best-action queue: the two narrow queue projections ride their
+  // domain prefixes (the useLastTouchDates idiom) so every existing
+  // ["tasks", orgId] / ["providers", orgId] invalidation re-derives the
+  // queue; plus the one run row the batch-landing banner reads.
+  queueTaskRows: (orgId: string) => ["tasks", orgId, "queue-projection"] as const,
+  queueProviderRows: (orgId: string) => ["providers", orgId, "queue-projection"] as const,
+  generationRun: (orgId: string, runId: string) => ["generation-run", orgId, runId] as const,
   // Cleanup surfaces (Portals admin / Mapping review / Fix-it queue).
   portals: (orgId: string) => ["portals", orgId] as const,
   portalFieldMaps: (orgId: string, portalKey?: string) =>

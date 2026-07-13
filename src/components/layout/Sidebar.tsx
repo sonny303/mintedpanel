@@ -3,7 +3,8 @@
 // the NAVIGATION section of the reference readme). Supersedes the E0.6
 // segmented nav and the E0.8 "Org space" label.
 //
-// IA top-to-bottom: Workspace (Home, Cases + open-case CountBadge) · Payers
+// IA top-to-bottom: Workspace (Home, My Cases — the E2.3 queue, its one
+// authorized shell edit —, Cases + open-case CountBadge) · Payers
 // (Payer Management) · Reporting Center (standalone — section labels only
 // over 2+ item groups) · generous break + divider · org zone (the switcher IS
 // the header: a contained tile with an ORGANIZATION eyebrow; children Account
@@ -39,6 +40,7 @@ import logoWhite from "@/assets/logo-white.png";
 import {
   Home,
   FolderKanban,
+  ListChecks,
   CreditCard,
   BarChart3,
   Contact,
@@ -215,6 +217,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <div className={sectionLabelClass}>Workspace</div>
         <nav className="space-y-0.5" aria-label="Workspace">
           {renderNavItem({ to: "/", label: "Home", icon: Home })}
+          {/* E2.3 TE-8 (the epic's one authorized shell edit): the
+              next-best-action queue's Workspace entry — label "My Cases"
+              per the PM decision ([r4-review] Q9); the route keeps the
+              reserved /work path. */}
+          {renderNavItem({ to: "/work", label: "My Cases", icon: ListChecks })}
           {renderNavItem(
             { to: "/cases", label: "Cases", icon: FolderKanban },
             openCases !== null ? (

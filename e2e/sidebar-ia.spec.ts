@@ -2,9 +2,9 @@ import { test, expect, type Route } from "@playwright/test";
 
 // E0.9 F0.9.3 / TS-22 — Sidebar IA v2 + lifecycle-grouped org switcher over
 // the mock harness, using the 11-org seed universe (seed-universe.md). Covers:
-//   - nav shows exactly Workspace (Home, Cases + count) / Payers (Payer
-//     Management) / Reporting Center; no Tasks, SOP, Setup/Config, or
-//     "Org space" label
+//   - nav shows exactly Workspace (Home, My Cases — the E2.3 queue —, Cases +
+//     count) / Payers (Payer Management) / Reporting Center; no Tasks, SOP,
+//     Setup/Config, or "Org space" label
 //   - the org switcher tile (ORGANIZATION eyebrow) opens a lifecycle-grouped
 //     menu (Active / Prospects / Inactive) with a check on the active org and
 //     NO per-org lifecycle status label (E0.0 locked decision)
@@ -149,7 +149,10 @@ test("IA v2 nav shows exactly the approved destinations", async ({ page }) => {
 
   await expect(rail.getByText("Workspace", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(rail.getByRole("link", { name: /^Home$/ })).toBeVisible();
-  await expect(rail.getByRole("link", { name: /Cases/ })).toBeVisible();
+  // E2.3 TE-8: the queue's Workspace entry ("My Cases", [r4-review] Q9)
+  // alongside the existing Cases work view.
+  await expect(rail.getByRole("link", { name: "My Cases" })).toBeVisible();
+  await expect(rail.getByRole("link", { name: /^Cases/ })).toBeVisible();
   await expect(rail.getByText("Payers", { exact: true })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Payer Management" })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Reporting Center" })).toBeVisible();

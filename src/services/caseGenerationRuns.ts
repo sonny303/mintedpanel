@@ -11,6 +11,20 @@ import { currentUserId, requireActiveOrg } from "@/lib/audit";
 import type { GenerationRunCounts } from "@/lib/generationConfirm";
 import type { CaseGenerationRun } from "@/types";
 
+/** E2.3 TE-6 — the batch-landing banner's read: ONE org-owned run row (the
+ * confirm-time plan counts). A cross-org or unknown id resolves to null. */
+export async function getGenerationRun(id: string): Promise<CaseGenerationRun | null> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("case_generation_runs")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? camelizeRow<CaseGenerationRun>(data) : null;
+}
+
 export async function recordGenerationRun(counts: GenerationRunCounts): Promise<CaseGenerationRun> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase

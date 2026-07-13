@@ -303,7 +303,8 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   `src/components/StatusPill.tsx`; the triage pill maps its DB hex through
   `hexToStatusColor` (color-mix is gone). `triage/FilterCards` →
   **`triage/SummaryChips`**. **Sidebar IA v2** (supersedes E0.6 nav + E0.8
-  "Org space"): Workspace (Home, Cases + open-case count chip from the
+  "Org space"): Workspace (Home, My Cases — the E2.3 queue's authorized
+  entry —, Cases + open-case count chip from the
   cached `useCases`/`useStatusConfigs` — no polling) / Payers (Payer
   Management → `/admin/payers`) / Reporting Center; org zone = contained
   switcher tile (ORGANIZATION eyebrow), lifecycle-grouped menu (headings
@@ -746,8 +747,9 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   on the preview) with plan/summary logic pure in
   `src/lib/generationConfirm.ts` (+tests); run insert isolated in
   `src/services/caseGenerationRuns.ts` (the ONE counts boundary E2.4
-  repoints). Full success lands on **`/cases?runId=<id>`** (validateSearch +
-  banner + clear — the interim landing; E2.3 F2.3.2 supersedes).
+  repoints). Full success landed on `/cases?runId=<id>` until E2.3: confirm
+  now lands on **`/work?run=<id>`** (F2.3.2); the `/cases?runId=` filter
+  stays URL-reachable (validateSearch + banner + clear — old links live).
   `listGenerationCaseRows` now selects the real `group_id` (TE-6 two-branch
   match live for post-E2.1 rows). **Reapply (F2.1.3):** `existingCaseIndicator`
   now flags DENIED (bucket 'ours', canonicalLabel-matched) as reapply →
@@ -810,6 +812,53 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   `src/services/cases.stamp.test.ts`; e2e `e2e/sop-stamping.spec.ts` (TS-53
   publish straddle incl. immutable-name provenance, TS-54 fallback → chip →
   later payer SOP → reapply restamp).
+
+- **E2.3 — Next-Best-Action Queue (Post-Generation Landing).** NO migration,
+  no table-register change — a fully DERIVED, read-only surface (TE-10:
+  nothing stored, nothing written, no audit rows). **Pure module
+  `src/lib/nextBestActions.ts`** (+23-case suite; the module docstring IS the
+  documented tie order): ONE entry per open case (open = `action_bucket` not
+  'complete', status-less counts as open — TE-3), ranked by the earliest
+  applicable TE-1 deadline signal: provider start (`providers.start_date`;
+  the earliest FUTURE `pfa.start_date` stands in ONLY where that is null;
+  past start dates are history and never rank), location launch
+  (`facilities.effective_date` >= today, rank-if-present, reachable via
+  `case.facility_id` ∪ the provider's assignments), earliest OPEN-task due
+  date (overdue still ranks), the latest touchpoint's explicit
+  `next_follow_up_date`, and SOP cadence (min `followUpEveryDays` across ALL
+  the case's tasks' steps — completed included, that's when cadence starts
+  mattering; clock = last touchpoint else case `created_at`; notes/system
+  events never reset it). Ties: date → source order → case `created_at` →
+  case id; no-signal entries rank after all dated work (the queue is total).
+  Recredentialing = the named TE-1 gap, joins when R9 models it. Action
+  precedence: readiness gap (ONE `evaluateEnrollmentReadiness` pass incl. the
+  E2.0 contracts input, joined by 4-part key; legacy NULL-group cases never
+  match) → "touch due" when a follow-up/cadence date has ARRIVED (<= today,
+  so logging a touch re-derives it away — F2.3.3) → lowest-sort_order open
+  task → honest "review" fallback. **Service
+  `src/services/nextBestActions.ts`:** two narrow reads — providers
+  (id/name/start_date, the clientProgress PHI pattern) and tasks
+  (`sop_content` reduced to `cadenceDays` at the boundary; the jsonb never
+  enters the cache); their keys ride the domain prefixes
+  (`["tasks"|"providers", orgId, "queue-projection"]`, the useLastTouchDates
+  idiom) so every existing invalidation re-derives the queue.
+  `caseGenerationRuns.ts` gained the `getGenerationRun` read (banner). Hook
+  `src/hooks/useNextBestActions.ts` composes ~16 org caches (the
+  useGenerationPreview pattern). **UI:** the reserved `/work` leaf is ACTIVE
+  — PageHeader "My Cases", `?run=<uuid>` search (URL-state, shareable;
+  clearing = param removal) rendering
+  `src/components/work/NextBestActionQueue.tsx` (row-card list, destructive
+  tint ONLY on overdue pills, batch banner composed from card tokens + the
+  tabs batch/all toggle — DESIGN-DEBT row; empty state links `/generation`).
+  **Sidebar gained "My Cases"** → `/work` (the epic's ONE authorized shell
+  edit, TE-8; label per [r4-review] Q9). Generation confirm now lands on
+  `/work?run=<id>` — F2.3.2 supersedes the E2.1 interim `/cases?runId=`
+  landing, which stays URL-reachable. e2e
+  `e2e/next-best-action-queue.spec.ts` (TS-55, TS-56 — logs a real touch
+  through the case-detail flow and pins the spine read-only; its harness
+  honors `order=` since the latest-touchpoint read depends on it);
+  `legacy-routes` moved `/work` to the rendering set; `sidebar-ia` pins the
+  new entry; `case-creation` TS-50 asserts the new landing.
 
 ## What this is
 

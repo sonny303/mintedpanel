@@ -47,7 +47,8 @@ import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
 // E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the view to the cases a
 // confirmed generation batch created (URL-state, sharable). E2.3 F2.3.2
-// supersedes this landing with the next-best-action queue.
+// superseded it as the post-generation landing (/work?run=); this filter
+// stays URL-reachable — old links live.
 //
 // E2.2 F2.2.2: the selected filter card lives in the URL (?chip=..., no param
 // = all) — the /providers?chip= idiom — so other surfaces can deep-link a
