@@ -569,6 +569,25 @@ export interface CredentialCase {
   // Story 2: latest payer reference / submission ID, latest-wins. History lives
   // in the touchlog as system_event entries, not here.
   payerReferenceId: string | null;
+  // E2.1: the generation run that created this case; null = manual one-off or
+  // pre-E2.1 row (the "run-less" trail). Optional — narrow projections predate it.
+  generationRunId?: string | null;
+}
+
+// E2.1 TE-2 — one row per confirmed generation batch (who/when/counts).
+// Immutable by omission (no UPDATE/DELETE policy or grant); the stored counts
+// are the confirm-time plan, superseded at read time by E2.4's disposition
+// child rows once those land.
+export interface CaseGenerationRun {
+  id: string;
+  orgId: string;
+  createdBy: string | null;
+  createdAt: string;
+  proposedCount: number;
+  createdCount: number;
+  skippedExistingCount: number;
+  excludedCount: number;
+  failedCount: number;
 }
 
 export interface Contract {

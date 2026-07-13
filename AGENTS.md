@@ -53,7 +53,7 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 - NEVER rename, restructure, or delete tables or columns. Migrations are additive.
 - `touches`, `status_history`, and `audit_log` are append-only — no UPDATE, no DELETE, in code or policy.
 - Providers store `ssn_last4` only. Never store or accept a full SSN.
-- One credentialing case per `(provider_id, payer_id, state)` today — that is the live DB constraint. The PM-approved target grain is `(provider_id, group_id, payer_id, state)` (a provider can have parallel cases with the same payer/state under different groups — each group's TIN contracts separately); the additive `group_id` column and widened constraint land with the E2.x case-generation build. Until then, do not create parallel cases for the same provider/payer/state under different groups. Credentialing only.
+- One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
 - Contracting status lives on `contracts` (group + payer + state). Never put contracting status on `credential_cases`.
 - All access is scoped by `org_id` RLS. Every insert sets `org_id` from the active org. Every public table needs explicit `GRANT`s alongside RLS.
 - Any migration that adds or supersedes a table or column updates the row in `docs/data-model/table-register.md` in the same PR.

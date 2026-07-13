@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { translateDbError } from "./dbErrors";
+import { translateDbError, UniqueViolationError } from "./dbErrors";
 
 const pgError = (code: string, message: string) => ({ code, message });
 
@@ -44,6 +44,34 @@ describe("translateDbError — 23505 unique violations", () => {
       pgError("23505", 'duplicate key value violates unique constraint "something_else_key"'),
     );
     expect(messageOf(result)).toBe("This record already exists.");
+  });
+
+  // E2.1 TE-4: the 4-part-key swap must not silently revert duplicate-case
+  // errors to raw Postgres text — the new constraint name translates, and
+  // every 23505 is typed so the generation confirm loop can classify it as
+  // skipped_existing.
+  it("names the 4-part case grain (E2.1 constraint swap)", () => {
+    const result = translateDbError(
+      pgError(
+        "23505",
+        'duplicate key value violates unique constraint "credential_cases_provider_group_payer_state_key"',
+      ),
+    );
+    expect(messageOf(result)).toBe(
+      "A case already exists for this provider, group, payer, and state.",
+    );
+    expect(result).toBeInstanceOf(UniqueViolationError);
+  });
+
+  it("still translates the retired 3-part fragment (stale errors in flight)", () => {
+    const result = translateDbError(
+      pgError(
+        "23505",
+        'duplicate key value violates unique constraint "credential_cases_provider_id_payer_id_state_key"',
+      ),
+    );
+    expect(messageOf(result)).toBe("A case already exists for this provider, payer, and state.");
+    expect(result).toBeInstanceOf(UniqueViolationError);
   });
 });
 

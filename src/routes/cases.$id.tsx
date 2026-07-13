@@ -29,6 +29,7 @@ import { useCanWrite } from "@/lib/permissions";
 import { Pencil } from "lucide-react";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
+import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseWizard } from "@/components/cases/CaseWizard";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
@@ -155,6 +156,8 @@ function CaseDetailPage() {
             Provider terminated {fmtDate(c.provider.terminatedDate)} — termination tasks generated.
           </div>
         ) : null}
+
+        <ReapplyCaseAction c={c} credStatusLabel={credStatus?.label ?? null} canEdit={canEdit} />
 
         {c.mso ? (
           <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-md p-3">

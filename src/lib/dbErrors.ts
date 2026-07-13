@@ -28,6 +28,13 @@ const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string
     "contracts_group_id_payer_id_state_key",
     "A contract already exists for this group, payer, and state.",
   ],
+  // E2.1 4-part key (20260713150000). The old 3-part fragment row below is
+  // kept harmlessly — the constraint no longer exists, but stale error text
+  // in flight should still translate.
+  [
+    "credential_cases_provider_group_payer_state_key",
+    "A case already exists for this provider, group, payer, and state.",
+  ],
   [
     "credential_cases_provider_id_payer_id_state_key",
     "A case already exists for this provider, payer, and state.",
@@ -73,6 +80,11 @@ function matchFragment(
   return null;
 }
 
+/** 23505 unique_violation, post-translation. The E2.1 generation confirm
+ *  loop classifies on this type to turn a duplicate-key insert into a
+ *  "skipped — already exists" disposition instead of a failure. */
+export class UniqueViolationError extends Error {}
+
 /** Translate a Postgres constraint violation into an Error with a domain
  *  message; anything unrecognized comes back unchanged. Usage:
  *  `if (error) throw translateDbError(error);` */
@@ -82,7 +94,7 @@ export function translateDbError(error: unknown): unknown {
 
   if (pg.code === "23505") {
     const friendly = matchFragment(pg.message, UNIQUE_MESSAGES);
-    return new Error(friendly ?? "This record already exists.");
+    return new UniqueViolationError(friendly ?? "This record already exists.");
   }
   if (pg.code === "23514") {
     const friendly = matchFragment(pg.message, CHECK_MESSAGES);

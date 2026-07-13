@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  appendCaseTasks,
   createCase,
   getCase,
   getCases,
@@ -83,6 +84,39 @@ export function useSetPayerReference() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E2.1 F2.1.3 — reapplication after a denial: a status transition (Denied →
+// In Progress, recorded in status_history by the existing updateCaseStatus
+// path) plus the restamped task set appended to the SAME case. Never a second
+// case at the key; the case keeps its full touches/status history.
+export interface ReapplyCaseVars {
+  caseId: string;
+  /** The org's In Progress credentialing status id ([r4-review] Q6). */
+  statusId: string;
+  /** Tasks resolved from the CURRENT SOP version (Model A: new work gets
+   * latest), sort-ordered after the case's existing tasks. */
+  tasks: CaseTaskPayload[];
+}
+
+export function useReapplyCase() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: async (vars: ReapplyCaseVars) => {
+      // Metadata keys become UPDATE columns in updateCaseStatus — pass none.
+      // The reapplication trace is the appendCaseTasks audit row plus the
+      // Denied → In Progress status_history entry this call writes.
+      await updateCaseStatus(vars.caseId, vars.statusId, {});
+      await appendCaseTasks(vars.caseId, vars.tasks);
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

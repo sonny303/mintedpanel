@@ -32,10 +32,13 @@ export interface CaseInput {
   assignedTo?: string | null;
   submittedDate?: string | null;
   expectedEffectiveDate?: string | null;
+  /** E2.1: set only by the generation confirm loop (F2.1.2); manual and
+   * legacy creation paths leave it unset — the "run-less" trail. */
+  generationRunId?: string | null;
 }
 
 const CASE_LIST_COLUMNS =
-  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, created_at, updated_at";
+  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -253,6 +256,11 @@ export interface CaseTaskPayload {
   sopContent: unknown;
   sortOrder: number;
   dueDate: string | null;
+  /** E2.2 stamp transport (threaded here per E2.1 TE-3; E2.2 populates them):
+   * the SOP version the task's content was resolved from. Both or neither —
+   * the tasks_sop_stamp_both_or_neither CHECK enforces the pairing. */
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
 }
 
 export async function createCase(
@@ -273,6 +281,7 @@ export async function createCase(
     assigned_to: input.assignedTo ?? null,
     submitted_date: input.submittedDate ?? null,
     expected_effective_date: input.expectedEffectiveDate ?? null,
+    generation_run_id: input.generationRunId ?? null,
   };
   if (input.credentialingStatusId) {
     p_input.credentialing_status_id = input.credentialingStatusId;
@@ -283,6 +292,8 @@ export async function createCase(
     sop_content: t.sopContent,
     sort_order: t.sortOrder,
     due_date: t.dueDate,
+    sop_template_id: t.sopTemplateId ?? null,
+    sop_version: t.sopVersion ?? null,
   }));
 
   // Bound reference: extracting the method bare loses `this` and throws
@@ -301,6 +312,58 @@ export async function createCase(
   }
   if (!data) throw new Error("create_case_with_tasks returned no data");
   return camelizeRow<CredentialCase>(data);
+}
+
+// E2.1 F2.1.3 (TE-5) — reapplication appends the restamped task set to the
+// EXISTING case (never a second case at the key; the reopen itself is the
+// updateCaseStatus path, which already writes status_history + audit). Task
+// inserts follow the create_case_with_tasks RPC's shape; E2.2 owns
+// resolution/stamping, so the optional stamp fields just thread through.
+export async function appendCaseTasks(caseId: string, tasks: CaseTaskPayload[]): Promise<void> {
+  if (tasks.length === 0) return;
+  const orgId = requireActiveOrg();
+
+  const { data: caseRow, error: readErr } = await supabase
+    .from("credential_cases")
+    .select("id, provider_id")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!caseRow) throw new Error("Case not found");
+
+  const { data: inserted, error } = await supabase
+    .from("tasks")
+    .insert(
+      tasks.map((t) => ({
+        org_id: orgId,
+        case_id: caseId,
+        provider_id: caseRow.provider_id,
+        title: t.title,
+        description: t.description,
+        sop_content: t.sopContent as Json,
+        status: "not_started",
+        sort_order: t.sortOrder,
+        due_date: t.dueDate,
+        is_auto_generated: true,
+        sop_template_id: t.sopTemplateId ?? null,
+        sop_version: t.sopVersion ?? null,
+      })),
+    )
+    .select("id");
+  if (error) throw translateDbError(error);
+
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "task",
+    entityId: caseId,
+    after: {
+      caseId,
+      count: tasks.length,
+      taskIds: (inserted ?? []).map((r) => r.id),
+    },
+    description: `Regenerated ${tasks.length} SOP task${tasks.length === 1 ? "" : "s"} on reapplication`,
+  });
 }
 
 export async function updateCaseStatus(
