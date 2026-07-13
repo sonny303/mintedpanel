@@ -2,10 +2,11 @@
 
 _Living status page for business review. Refreshed at least once per release
 milestone (owner: Devin, the reviewer/orchestrator). Last updated:
-**2026-07-13** (R4 builds 4/6 merged — E1.7b, E2.0, E2.1, E2.2; E2.3 build next)._
+**2026-07-13** (R4 builds 5/6 — E2.3 merged #147, E2.4 last; R5 discovery
+complete, E3.0–E3.2 drafted awaiting PM review)._
 
 ```
-R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 builds 4/6 (E2.3 next) ──► R5…R10 📋
+R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 builds 5/6 (E2.4 last) ──► R5 🚧 epics drafted ──► R6…R10 📋
 ```
 
 ## Release status
@@ -16,8 +17,8 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 | **R1 — People & places**    | E1.0 wizard, E1.1 groups, E1.2 facilities, E1.3 roster                      | ✅ Built & merged (#108–#111)                                                                                                                                                                                                                              |
 | **R2 — Payer directory**    | E1.6 payer catalog, E1.7a SOP-versioning spike                              | ✅ Complete: E1.6 built & merged (#122, seeds from the in-repo reference dataset, `payer_slug` identity); E1.7a Model A **signed off** 2026-07-12 (#120) with worked examples from the two real business SOPs (#121).                                      |
 | **R3 — Scope & readiness**  | E1.4 assignments, E1.5 payer attachment, E1.8 readiness                     | ✅ Complete: E1.4 (#113), E1.5 (#125), E1.8 (#127 + follow-up #131 — end-dated assignments exit readiness, COI check live). Hotfixes #128 (provider-group modal), #129/#130 (onboarding side-panel residual org + mastered US-state dropdown) also merged. |
-| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 All six epics independently reviewed (#134–#139) with PM answers applied ([r4-review], #140) — all `reviewed: true`. Built & merged: **E1.7b (#141), E2.0 (#143), E2.1 (#144), E2.2 (#145)**. Remaining builds: E2.3 → E2.4.                            |
-| **R5 — Scale pack**         | Bulk roster import (CAQH/NPPES), bulk assignment rules                      | 📋                                                                                                                                                                                                                                                         |
+| **R4 — Case generation**    | E1.7b SOP-as-data, E2.x preview/generate/dedupe/traceability/audit          | 🚧 All six epics independently reviewed (#134–#139) with PM answers applied ([r4-review], #140) — all `reviewed: true`. Built & merged: **E1.7b (#141), E2.0 (#143), E2.1 (#144), E2.2 (#145), E2.3 (#147)**. Remaining: E2.4.                             |
+| **R5 — Scale pack**         | E3.0 import intake, E3.1 preview/staged commit, E3.2 NPPES aid              | 🚧 Discovery complete 2026-07-13 — all 12 decisions locked (`CLARIFICATIONS_NEEDED.md` [r5]); E3.0–E3.2 drafted, awaiting PM review then independent review. CAQH deferred to a later release.                                                             |
 | **R6/R7 — Execution**       | Payer workflows, touches, extension fill; Sensitive Identifiers Vault (SSN) | 📋                                                                                                                                                                                                                                                         |
 | **R8 — Outcomes/reporting** | Credentialing outcome reporting                                             | 📋                                                                                                                                                                                                                                                         |
 | **R9 — Recurring ops**      | Expiration radar, recredentialing, PSV re-verify clocks, payer change radar | 📋                                                                                                                                                                                                                                                         |
@@ -31,8 +32,16 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 | E2.0  | Generation preview & exclusions     | ✅       | ✅ #143       |
 | E2.1  | Case creation & 4-part key          | ✅       | ✅ #144       |
 | E2.2  | SOP resolution & stamping           | ✅       | ✅ #145       |
-| E2.3  | Next-best-action queue ("My Cases") | ✅       | 🚧 build next |
-| E2.4  | Generation traceability & audit     | ✅       | ⏳ queued     |
+| E2.3  | Next-best-action queue ("My Cases") | ✅       | ✅ #147       |
+| E2.4  | Generation traceability & audit     | ✅       | 🚧 build next |
+
+## Epic board (R5)
+
+| Epic | Title                                       | Reviewed | Built |
+| ---- | ------------------------------------------- | -------- | ----- |
+| E3.0 | Roster import: intake, file gate, async     | 📝 draft | ⏳    |
+| E3.1 | Import preview, dedupe & staged commit      | 📝 draft | ⏳    |
+| E3.2 | NPPES lookup aid (post-import verification) | 📝 draft | ⏳    |
 
 ## Epic board (R1–R3)
 
@@ -59,9 +68,10 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 🚧 buil
 
 ## Current jobs to be done
 
-1. **R4 build queue** — sequential Claude Code builds (one session at a time): E1.7b (#141), E2.0 (#143), E2.1 (#144), E2.2 (#145) done; E2.3 next, then E2.4. Devin final-reviews and merges each PR before the next build starts.
-2. **PM manual test pass** — the merged generation flow (SOP authoring → Generate preview/exclusions → case creation with stamped SOP version) plus hotfixes #128/#129/#130 and E1.8 on the `redesign` preview.
-3. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
+1. **R4 close-out** — E2.4 is the last build (Claude Code); Devin reviews and merges its PR.
+2. **R5 epic review** — PM reviews E3.0–E3.2 drafts; then the independent Claude review sessions populate each §5 before `reviewed: true`.
+3. **PM manual test pass** — the merged generation flow (SOP authoring → Generate preview/exclusions → case creation with stamped SOP version) plus hotfixes #128/#129/#130 and E1.8 on the `redesign` preview.
+4. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 
 ## Key locked decisions
 
