@@ -568,7 +568,7 @@ test("TS-53: batches straddling a publish stamp v1 then v2; the earlier batch ke
   await page.goto("/generation");
   await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/cases\?runId=/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
 
   const aprilRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(aprilRpc).toHaveLength(1);
@@ -599,7 +599,7 @@ test("TS-53: batches straddling a publish stamp v1 then v2; the earlier batch ke
   await page.goto("/generation");
   await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/cases\?runId=/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
 
   const allRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(allRpc).toHaveLength(2);
@@ -649,7 +649,7 @@ test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is
   await page.goto("/generation");
   await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/cases\?runId=/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
 
   const genRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(genRpc).toHaveLength(1);
