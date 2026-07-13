@@ -18,6 +18,37 @@ Format per entry:
 
 ## Resolved
 
+## [r5] R5 Scale-pack discovery decisions (part 1: data sources + roster import) — RESOLVED (2026-07-13)
+
+- **Issue:** R5 (bulk roster import via CAQH/NPPES + bulk assignment rules)
+  needed PM direction before epic drafting. Twelve discovery questions were
+  put to the PM; answers 1–7 below. Answers 8–12 (bulk assignment rules +
+  scope guardrails) pending — will be appended as part 2.
+- **Decisions (PM Sowmya, 2026-07-13):**
+  1. **Sources:** NPPES lookup (if straightforward to set up) + CSV upload.
+     CAQH ProView is a **later integration** — out of R5.
+  2. **Conflict handling:** always allow user override — a **per-field
+     review screen** for name, NPI, license, specialty. Location/address is
+     NOT per-field reviewed.
+  3. **Who uploads:** BOTH internal Minted Panel staff AND the org rep via
+     the onboarding wizard's CSV placeholder (E0.8 F0.8.4). Upload UX
+     requirements: preview of columns + sample rows before processing;
+     drag-and-drop with a clearly defined drop zone and visual hover/active
+     states; enforce `.csv` file type and a size limit; progress bar for
+     large files with explicit Uploading → Scanning → Success/Failed states.
+     Consider multi-file batch upload (e.g. CV, medical license, DEA cert
+     together) with per-file failure handling — goal is maximizing good data
+     at implementation-onboarding time. Devin to propose the remaining
+     processing/extraction, storage, security, and compliance decisions in
+     the epic drafts.
+  4. **File spec:** Devin recommends the expected CSV column spec based on
+     the data needed for groups, providers, and locations.
+  5. **Dedupe key:** Name + NPI.
+  6. **Bad rows:** import the good rows; provide a **downloadable error
+     report** for the rejected rows.
+  7. **Preview-before-commit:** yes — each import run lands as a reviewable
+     preview (E2.0-style include/exclude) before committing.
+
 ## [r4-review] R4 independent-review PM questions — RESOLVED (2026-07-13)
 
 - **Issue:** The six R4 independent reviews (PRs #134–#139) raised eleven
