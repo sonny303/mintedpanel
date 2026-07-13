@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { stampTasks } from "@/lib/sopStamp";
 import { US_STATES } from "@/lib/usStates";
 import { useCases, useCreateCase } from "@/hooks/useCases";
 import { useProviders, useProviderGroupAssignments } from "@/hooks/useProviders";
@@ -120,7 +121,10 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
       selection.state,
       selection.groupId,
     );
-    const tasks = template ? resolveTemplate(template, provider, group, null, null) : [];
+    // E2.2 F2.2.1: stamp the version resolved here (same head row, TE-2).
+    const tasks = template
+      ? stampTasks(resolveTemplate(template, provider, group, null, null), template)
+      : [];
 
     createCase.mutate(
       {

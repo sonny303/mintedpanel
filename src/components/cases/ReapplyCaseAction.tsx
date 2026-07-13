@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { stampTasks } from "@/lib/sopStamp";
 import { canonicalLabel } from "@/lib/canonicalStatuses";
 import { DENIED_LABEL, IN_PROGRESS_LABEL } from "@/lib/statusLabels";
 import { useReapplyCase } from "@/hooks/useCases";
@@ -50,9 +51,15 @@ export function ReapplyCaseAction({ c, credStatusLabel, canEdit }: ReapplyCaseAc
     const resolved =
       template && c.provider ? resolveTemplate(template, c.provider, c.group, null, null) : [];
     // Append after the case's existing tasks so the combined checklist keeps
-    // a stable order across cycles.
+    // a stable order across cycles. E2.2 F2.2.3: the new cycle stamps the
+    // CURRENT selection/version (a payer SOP authored since the original
+    // generation now wins over the fallback); the prior cycle's tasks and
+    // stamps are untouched.
     const offset = (c.tasks ?? []).reduce((max, t) => Math.max(max, t.sortOrder + 1), 0);
-    const tasks = resolved.map((t) => ({ ...t, sortOrder: t.sortOrder + offset }));
+    const tasks = stampTasks(
+      resolved.map((t) => ({ ...t, sortOrder: t.sortOrder + offset })),
+      template,
+    );
 
     reapply.mutate(
       { caseId: c.id, statusId: inProgress.id, tasks },

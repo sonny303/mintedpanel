@@ -19,7 +19,7 @@ import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { usePayers, useSops, useStatusConfigs } from "@/hooks/useAdmin";
 import {
   getActionState,
   worstActionState,
@@ -32,9 +32,11 @@ import {
   badgeLabel,
   chipCounts,
   isAlertState,
+  isOpenState,
   matchesChip,
   type ChipId,
 } from "@/lib/workView";
+import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
 import { Phone, Plus } from "lucide-react";
@@ -46,14 +48,29 @@ import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 // E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the view to the cases a
 // confirmed generation batch created (URL-state, sharable). E2.3 F2.3.2
 // supersedes this landing with the next-best-action queue.
+//
+// E2.2 F2.2.2: the selected filter card lives in the URL (?chip=..., no param
+// = all) — the /providers?chip= idiom — so other surfaces can deep-link a
+// filtered view. "generic" is the coverage-gap list: open cases with a task
+// stamped by the fallback SOP (derived from stamps, never stored).
+type CasesChipId = ChipId | "generic";
+
 interface CasesSearch {
   runId?: string;
+  chip?: Exclude<CasesChipId, "all">;
 }
 
 export const Route = createFileRoute("/cases/")({
   component: CasesWorkView,
   validateSearch: (search: Record<string, unknown>): CasesSearch => ({
     runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
+    chip:
+      search.chip === "needs" ||
+      search.chip === "inprog" ||
+      search.chip === "awaiting" ||
+      search.chip === "generic"
+        ? search.chip
+        : undefined,
   }),
 });
 
@@ -85,19 +102,36 @@ const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 
 function CasesWorkView() {
   const navigate = useNavigate();
-  const { runId } = Route.useSearch();
+  const { runId, chip: chipParam } = Route.useSearch();
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
   const contractsQ = useContracts();
   const payersQ = usePayers();
+  const templatesQ = useSops();
   const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
   const canWrite = useCanWrite();
 
-  const [chip, setChip] = useState<ChipId>("all");
+  const chip: CasesChipId = chipParam ?? "all";
+  const setChip = (id: CasesChipId) =>
+    navigate({
+      to: "/cases",
+      search: {
+        ...(runId ? { runId } : {}),
+        ...(id === "all" ? {} : { chip: id }),
+      },
+    });
   const [batchOpen, setBatchOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+
+  // F2.2.2 — a case "uses the generic SOP" iff a task of it is stamped with a
+  // fallback (global payerless) template id; both inputs are already-loaded
+  // org caches (the tasks list projection carries the two stamp columns).
+  const genericCaseIds = useMemo(
+    () => caseIdsUsingGenericSop(tasksQ.data ?? [], fallbackTemplateIds(templatesQ.data ?? [])),
+    [tasksQ.data, templatesQ.data],
+  );
 
   const loading =
     providersQ.isLoading ||
@@ -238,21 +272,30 @@ function CasesWorkView() {
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
   const counts = chipCounts(openRowsAll.map((r) => r.state));
+  const genericCount = openRowsAll.filter((r) => genericCaseIds.has(r.case.id)).length;
   const cards = [
     { id: "all", label: "All open cases", n: counts.all },
     { id: "needs", label: "Needs your action", n: counts.needs },
     { id: "inprog", label: "In progress", n: counts.inprog },
     { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
+    { id: "generic", label: "Using generic SOP", n: genericCount },
   ];
 
-  // Same predicate as the card counts (matchesChip), so a card that says N
-  // always leaves exactly N case rows on screen.
+  // Same predicate as the card counts (matchesChip / the generic derivation),
+  // so a card that says N always leaves exactly N case rows on screen.
   const visibleGroups = useMemo(
     () =>
       groups
-        .map((g) => ({ group: g, visibleRows: g.rows.filter((r) => matchesChip(chip, r.state)) }))
+        .map((g) => ({
+          group: g,
+          visibleRows: g.rows.filter((r) =>
+            chip === "generic"
+              ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
+              : matchesChip(chip, r.state),
+          ),
+        }))
         .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip],
+    [groups, chip, genericCaseIds],
   );
 
   function tableRow(row: CaseRow): CaseTableRow {
@@ -372,7 +415,7 @@ function CasesWorkView() {
       ) : null}
 
       <div className="mb-6">
-        <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
+        <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as CasesChipId)} />
       </div>
 
       {failed ? (

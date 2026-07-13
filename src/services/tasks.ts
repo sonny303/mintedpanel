@@ -95,8 +95,11 @@ export interface TaskFilters {
   assignedTo?: string;
 }
 
+// sop_template_id/sop_version (E2.2) ride the list so the cases work view can
+// derive "distinct stamped template ids per case" from the already-loaded
+// cache — two id columns, never task bodies (TE-7).
 const TASK_LIST_COLUMNS =
-  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, created_at, updated_at";
+  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, sop_template_id, sop_version, created_at, updated_at";
 
 export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   const orgId = requireActiveOrg();

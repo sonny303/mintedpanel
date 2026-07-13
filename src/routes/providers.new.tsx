@@ -17,6 +17,7 @@ import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
 import { queryKeys } from "@/hooks/queryKeys";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { stampTasks } from "@/lib/sopStamp";
 import { deriveStarterCases, type StarterLicense } from "@/lib/starterCases";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import {
@@ -210,13 +211,8 @@ function Page() {
             specialty: created.specialty ?? null,
             msoId: entry.msoId,
           },
-          tasks: tasks.map((t) => ({
-            title: t.title,
-            description: t.description,
-            sopContent: t.sopContent,
-            sortOrder: t.sortOrder,
-            dueDate: t.dueDate,
-          })),
+          // E2.2 F2.2.1: stamp the version resolved above (same head row).
+          tasks: stampTasks(tasks, entry.template),
         });
         createdCount += 1;
       } catch {

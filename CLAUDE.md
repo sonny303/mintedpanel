@@ -736,8 +736,8 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   disposition rows supersede both — its TE-1). **`150200` (TE-3 + E2.2 stamp
   transport):** `create_case_with_tasks` reissued with `generation_run_id` on
   the case insert and per-task `sop_template_id`/`sop_version` threading
-  (`CaseTaskPayload` carries them optionally; nothing populates them until
-  E2.2). **Confirm & create (F2.1.2):** writer-gated button on `/generation` →
+  (`CaseTaskPayload` carries them optionally; every SOP-resolving surface
+  populates them since E2.2). **Confirm & create (F2.1.2):** writer-gated button on `/generation` →
   `useConfirmGeneration` resolves tasks per proposed row via the SAME
   `pickTemplate`/`resolveTemplate` tier (facility null, NO MSO routing — not
   in the TE-7 trace) → `src/services/generationConfirm.ts` loop (per-row RPC
@@ -773,6 +773,43 @@ DISTINCT (provider_id, group_id, payer_id, state)`** added (PG 17.6;
   uniqueness — runs/tasks/status_history/case-PATCH, and synthesizes
   PostgREST embeds for case-detail reads **on the array path too**: this
   repo's supabase-js `maybeSingle`/`single` fetch arrays with `Accept: */*`).
+
+- **E2.2 — SOP Resolution & Version Stamping at Generation.** NO migration and
+  no table-register change (TE-8: the stamp columns landed in E1.7b, the RPC
+  transport in E2.1). **Every SOP-resolving creation surface now stamps its
+  tasks** with `(sop_template_id, sop_version)` via the pure
+  `src/lib/sopStamp.ts` (+tests): `templateStamp`/`stampTasks` implement the
+  TE-2 contract — the stamp is the head-row snapshot the resolver consumed
+  (`listTemplates` returns `current_version` with the content in one
+  statement), NEVER a re-read that could race a publish; a missing/invalid
+  `currentVersion` yields NULL/NULL (both-or-neither), never a guessed
+  version. Six call sites: `useConfirmGeneration` (generation confirm),
+  `NewCaseModal`, launch `CreateCasesDialog`, `providers.new.tsx` starter
+  cases, `ManualCaseModal` (the pre-R4 surfaces stamp too, PM Q2), and
+  `ReapplyCaseAction` (F2.2.3 — the appended cycle restamps at the CURRENT
+  `pickTemplate` selection, so a payer SOP authored since the original
+  generation beats the fallback; the prior cycle's tasks/stamps untouched).
+  Non-SOP task writers (follow-up, termination) legitimately stay NULL/NULL.
+  `Task` gained `sopTemplateId`/`sopVersion` (sanctioned additive protected
+  edit, TE-5); `TASK_LIST_COLUMNS` carries both columns (id columns only —
+  the TE-7 chip data path over the already-loaded tasks cache). **Case
+  surface (TE-7):** `src/components/cases/CaseSopProvenance.tsx` on case
+  detail — one "Generated from <name> v<N>" line per distinct stamped pair
+  (`distinctStampPairs`), name read from the IMMUTABLE
+  `sop_template_versions` row (a head rename never rewrites history), opening
+  `TemplateVersionHistoryDialog` (new additive `initialViewing` prop) on that
+  version; fallback-stamped pairs carry the neutral "Generic SOP" pill
+  (structural `isFallbackTemplate` identity); an unresolvable stamp renders
+  neutral "version unavailable"; legacy NULL tasks render unchanged.
+  **"Using generic SOP" chip (F2.2.2):** the /cases work view's filter cards
+  moved to the URL-driven `?chip=` idiom
+  (`?chip=needs|inprog|awaiting|generic`, no param = all — deep-linkable like
+  /providers) and gained the fifth chip: open cases with a fallback-stamped
+  task (`fallbackTemplateIds`/`caseIdsUsingGenericSop` — derived from stamps,
+  never stored). Service round-trip pinned in
+  `src/services/cases.stamp.test.ts`; e2e `e2e/sop-stamping.spec.ts` (TS-53
+  publish straddle incl. immutable-name provenance, TS-54 fallback → chip →
+  later payer SOP → reapply restamp).
 
 ## What this is
 
@@ -878,8 +915,9 @@ all 23 hosted migrations. Consequences:
   `sort_order`. Returns the case as jsonb. **Since E2.1 it IS a repo migration
   too** (`20260713150200`, CREATE OR REPLACE): the case insert threads
   `p_input->>'generation_run_id'` and each `p_tasks` element may carry
-  `sop_template_id`/`sop_version` (the E2.2 stamp transport — E2.2 populates
-  them, nothing does yet). NULL-safe for every pre-existing caller; signature
+  `sop_template_id`/`sop_version` (the E2.2 stamp transport — populated by
+  every SOP-resolving creation surface since E2.2, NULL/NULL from non-SOP
+  writers). NULL-safe for every pre-existing caller; signature
   and SECURITY INVOKER posture unchanged. NOT replay-idempotent — batch
   semantics are per-row transactionality + skip-on-23505 in the confirm loop.
 - `create_organization(p_name text) RETURNS uuid` — **the exception to this
@@ -1365,11 +1403,12 @@ location-track status.** The Launches page is a filtered view of locations.
 
 `NewCaseModal` (provider detail) and `CreateCasesDialog` (launch) both:
 resolve the MSO routing rule per payer/state/specialty, pick a SOP template
-(`pickTemplate`: exact payer+state+group, then payer+state — duplicated
-module-locally in both, keep in sync), resolve tokens via
+(the shared `src/lib/pickTemplate.ts`: exact payer+state+group, then
+payer+state, then the E1.7b global fallback), resolve tokens via
 `resolveTemplate(template, provider, group, facility, {mso}, licenseNumber)`,
-then `createCase(input, tasks)`. Duplicate `(provider, payer, state)` combos
-are pre-filtered client-side; the DB unique constraint is the backstop.
+stamp the resolved tasks with the template's `(id, currentVersion)` via
+`stampTasks` (E2.2), then `createCase(input, tasks)`. Duplicate combos are
+pre-filtered client-side; the DB unique constraint is the backstop.
 
 ## SOP template authoring — Admin > Templates wizard (2026-07-07)
 

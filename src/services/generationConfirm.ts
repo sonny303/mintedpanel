@@ -25,7 +25,8 @@ import { recordGenerationRun } from "@/services/caseGenerationRuns";
 export interface GenerationConfirmEntry {
   row: GenerationPreviewRow;
   /** Resolved from the SAME pickTemplate/resolveTemplate tier the manual and
-   * launch flows use (E2.2 owns version stamping — stamps stay unset here). */
+   * launch flows use, version-stamped by the caller (E2.2 TE-2: the stamp is
+   * the head snapshot the resolver consumed, threaded here as-is). */
   tasks: CaseTaskPayload[];
 }
 

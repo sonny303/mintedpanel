@@ -42,6 +42,7 @@ import { listGenerationCaseRows, listGenerationContractRows } from "@/services/g
 import { planGenerationConfirm } from "@/lib/generationConfirm";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
+import { stampTasks } from "@/lib/sopStamp";
 import {
   confirmGenerationBatch,
   type GenerationConfirmEntry,
@@ -239,11 +240,14 @@ export function useGenerationPreview(): GenerationPreviewData {
 }
 
 // E2.1 F2.1.2 — the confirm & create mutation. Resolution rides the SAME
-// pickTemplate/resolveTemplate tier every other creation surface uses (E2.2
-// owns version stamping — no stamps are populated here); facility stays null
-// (generation cases aren't location-linked) and no MSO routing is resolved
-// (not in the epic's table trace). The loop itself — run row first, per-row
-// RPC calls, 23505 → skipped_existing — is the generationConfirm service.
+// pickTemplate/resolveTemplate tier every other creation surface uses;
+// facility stays null (generation cases aren't location-linked) and no MSO
+// routing is resolved (not in the epic's table trace). Every resolved task is
+// version-stamped (E2.2 F2.2.1) from the SAME head-row snapshot the resolver
+// consumed — the TE-2 contract: stamp the version read with the content,
+// never a re-read that could race a publish. The loop itself — run row first,
+// per-row RPC calls, 23505 → skipped_existing — is the generationConfirm
+// service.
 export function useConfirmGeneration() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
@@ -266,7 +270,10 @@ export function useConfirmGeneration() {
         const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
         const tasks =
           provider && template
-            ? resolveTemplate(template, provider, groupById.get(row.groupId) ?? null, null, null)
+            ? stampTasks(
+                resolveTemplate(template, provider, groupById.get(row.groupId) ?? null, null, null),
+                template,
+              )
             : [];
         return { row, tasks };
       });
