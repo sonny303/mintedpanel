@@ -71,6 +71,22 @@ Format per entry:
   remains `reviewed: false`; its reviewer-owned §5 was not edited or extended
   for the new payer-config requirement because the review workflow requires
   stopping rather than guessing while this major lifecycle decision is open.
+- **2026-07-14 (re-review of `ca47da6`):** the PM-updated state vocabulary
+  (Not Started → Assigned prepended; terminal phase renamed
+  **Closed (Approved / Denied)**; enum + TE-1 default moved to `not_started`)
+  does **not** resolve this roadblock — it sharpens it. The PM-locked A3
+  vocabulary now names the terminal phase "Closed (Approved / Denied)",
+  listing only Approved and Denied, while F4.0.3 and the body/enum still
+  require **OON** as a third close outcome with no defined normal inbound edge
+  (the F4.0.1 edge list is Not Started → Assigned → Drafting → Submitted →
+  In Review ↔ Action Required → Closed Approved/Denied; OON is still appended
+  as "an explicit non-Approved close" in TE-1 with no source state). Denied
+  reapplication still cites only the internal-track `Denied → In Progress`
+  rule (`[r4-review]` Q6) and does not state whether the payer-pipeline state
+  resets to Not Started/Assigned or begins a new immutable submission cycle.
+  Both remain PM-lock overrides (authoring rule 4), so E4.0 stays
+  `reviewed: false` and its reviewer-owned §5 was left unedited (no scope
+  guess) pending the PM's choice of option 1/2/3 above.
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
 
@@ -113,6 +129,14 @@ Format per entry:
   E4.4 §5 still identifies encryption key management as required before build.
   This remains a major security contradiction, so E4.4 stays
   `reviewed: false` and was not edited.
+- **2026-07-14 (re-review, `ca47da6` cycle):** E4.4 was not part of this push
+  (the commit touched E4.0, `ROADMAP-STATUS.md`, and `seed-universe.md` only),
+  but it was re-assessed because its frontmatter is still `reviewed: false`.
+  `AGENTS.md` and `SCHEMA.md` on the current `redesign` HEAD still bind
+  providers to `ssn_last4` only and prohibit accepting or storing a full SSN;
+  no key-custody/rotation, retention/deletion, or extension release-boundary
+  decision (options 1–3 above) has landed. The security contradiction is
+  unchanged, so E4.4 stays `reviewed: false` and was not edited.
 
 ## Resolved
 
