@@ -16,6 +16,73 @@ Format per entry:
 
 ## Open
 
+## [e4.0] OON terminal state and reapplication-cycle semantics conflict — OPEN
+
+- **Issue:** The resolved `[r6]` A3 decision defines the complete payer
+  pipeline as Drafting, Submitted, In Review, Action Required (RFI), then
+  Approved or Denied, with Approved/Denied terminal. The same discovery record
+  (A1) and E4.0 F4.0.3 also require a case to close Out-of-Network. OON is
+  therefore required as a resolution but absent from the canonical transition
+  graph. E4.0's later access-control, correction, and illustrative-model
+  sections call OON terminal and include it in a database check, but still
+  define no normal transition into OON. In addition, the shipped E2.1 behavior
+  reopens a denied case on the same case (`Denied → In Progress` in the
+  internal status track), while E4.0 calls payer-pipeline Denied terminal and
+  does not say whether reapplication starts a new immutable submission cycle.
+  The existing `status_configs` / `status_history` model already contains OON,
+  Submitted, Approved, and Denied as internal credentialing labels, but `[r6]`
+  explicitly forbids reusing that model as the external payer pipeline.
+- **Impact:** E4.0 cannot define a valid transition graph, current-state
+  projection, immutable history grain, approval/OON enrollment projection, or
+  denial-reapplication behavior without guessing. It also blocks the exact
+  pipeline/tracking contract consumed by E4.3 case context.
+- **Options:**
+  1. Add **OON as a third terminal payer-pipeline state** and define
+     reapplication as a new numbered pipeline cycle on the existing case
+     (recommended minimal change to the stated lifecycle).
+  2. End the pipeline at a neutral `Resolved` state and store
+     `Approved | Denied | OON` as a required structured resolution outcome;
+     this is cleaner analytically but changes the A3 state vocabulary.
+  3. Keep OON outside the payer pipeline as an internal/business close status
+     and specify where it renders/reports; define whether a reapplication
+     resets the current payer state or creates a new cycle.
+- **Decision:** _pending PM_
+
+## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
+
+- **Issue:** E4.4 requires Minted Panel to accept, encrypt, store, reveal, and
+  release a full SSN to the extension. The binding repository rule in
+  `AGENTS.md` says providers store `ssn_last4` only and the system must never
+  store or accept a full SSN. The existing extension build specification also
+  marks the full SSN as manual-only and recommends it stay manual forever.
+  A later PM discovery decision intends to supersede that behavior, but the
+  binding rule and approved trust boundary/key-custody design have not been
+  updated. “Encrypted at rest” alone does not decide who holds decrypt
+  authority, whether the vault is reachable through PostgREST, how a
+  one-time fill release reaches the portal without exposing the value to
+  ordinary extension/UI code, or how retention/deletion is governed.
+- **Impact:** Reviewing E4.4 would authorize implementation directly contrary
+  to `AGENTS.md` and could place a full SSN in an unapproved browser,
+  extension, logging, backup, or database access path. The vault schema,
+  ingress endpoint, admin reveal, extension release, RLS/grants, audit
+  contract, and security tests are all blocked pending an explicit security
+  architecture and rule change.
+- **Options:**
+  1. Explicitly supersede the no-full-SSN rule and approve a **server-only
+     vault** not exposed to PostgREST, with managed key custody/rotation,
+     narrowly scoped decrypt functions, one-time no-store fill release,
+     extension/content-script threat controls, immutable audit, and defined
+     retention/deletion. Update `AGENTS.md` and the extension specification
+     before build.
+  2. Keep the current rule: store only last four, remove vault/reveal/release
+     from R6, and require the specialist to enter the full SSN manually from an
+     approved external source.
+  3. Use an approved external tokenization/vault provider: Minted Panel stores
+     only a token + last four, while a narrowly authorized one-time fill
+     exchange supplies the portal field. Security must still approve the
+     extension/browser release boundary.
+- **Decision:** _pending PM/security owner_
+
 ## Resolved
 
 ## [r6] Next-best-action queue configurability — RESOLVED (2026-07-14)
@@ -129,7 +196,6 @@ Format per entry:
     it goes on the roadmap prioritized **after the redesign**, and the
     document-store architecture chosen today MUST support that future
     auto-attach feature.
-
 
 ## [r5-debt] Intake-flow uniformity gap (E3.0 retro) — RESOLVED (2026-07-13)
 
