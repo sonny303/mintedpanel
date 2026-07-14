@@ -114,8 +114,9 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 - R6 execution ([r6], 2026-07-14): payer SOPs are a mandatory readiness
   prerequisite — case generation stays entirely deterministic from upstream
   config (dedicated Payer & SOP admin module, config-user owned); the payer
-  pipeline is a distinct immutable state machine (Drafting → Submitted → In
-  Review → Action Required (RFI) → Approved/Denied) decoupled from internal
+  pipeline is a distinct immutable state machine (Not Started → Assigned →
+  Drafting → Submitted → In Review → Action Required (RFI) → Closed
+  Approved/Denied) decoupled from internal
   task states; touches are typed (Call/Portal Check/Email/Fax/CAQH Update)
   with overdue follow-ups surfacing in My Cases; denials carry structured
   reason codes; the extension is scoped to read-only token resolution with
