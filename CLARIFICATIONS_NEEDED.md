@@ -47,6 +47,22 @@ Format per entry:
      and specify where it renders/reports; define whether a reapplication
      resets the current payer state or creates a new cycle.
 - **Decision:** _pending PM_
+- **2026-07-14 (re-review):** the ChatPRD round-2 push (attribution, visible
+  history timeline, concurrency/conflict handling, per-feature user journeys,
+  post-closure correction, stale-state nudge, WGLL checklist) was reviewed
+  against this roadblock. Those changes are all additive polish and do NOT
+  resolve it: OON is still added as a 7th pipeline state and terminal close
+  outcome with no defined normal transition into it (the F4.0.1 edge list
+  remains Drafting → Submitted → In Review ↔ Action Required → Approved/Denied,
+  OON omitted), and the reapply path still cites the E2.1 internal
+  `Denied → In Progress` rule without stating whether the payer-pipeline state
+  resets or a new immutable cycle begins. Adding OON to the PM-locked A3
+  vocabulary overrides a locked decision (authoring rule 4), so the epic stays
+  `reviewed: false`; §5 is left as-is (no scope guess) pending the PM's choice
+  of option 1/2/3. The PM's follow-up commit (`f809296`) confirmed the three
+  round-2 defaults (terminal-transition authority, all-role read-only history
+  visibility, 14-day org-configurable stale nudge) — those are now resolved,
+  leaving this OON/reapply conflict as the sole remaining blocker for E4.0.
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
 
