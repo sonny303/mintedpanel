@@ -1,11 +1,14 @@
-// E3.0 — the ONE upload pipeline both role-gated surfaces render (F3.0.1: no
-// divergent data paths). Template download (F3.0.2, generated from the same
-// canonical header list the gate checks), client file checks (.csv + 10 MB),
-// the exact-match header front gate BEFORE any row work, the
-// columns-and-sample-rows preview (F3.0.3), then the chunked async scan
-// (F3.0.4) via useStartRosterScan. Variants differ only in presentation:
-// 'internal' shows raw error detail, 'streamlined' (the org-rep wizard
-// surface) keeps errors simple — same validation, same staging.
+// E3.0 + E3.3 — the ONE upload pipeline every section renders (F3.3.1: one
+// shared upload composition, no divergent data paths). Template download
+// (generated from the same per-section header list the gate checks), client
+// file checks (.csv + 10 MB), the exact-match header front gate BEFORE any row
+// work, the columns-and-sample-rows preview, then the chunked async scan via
+// useStartRosterScan. The `entityKind` prop (E3.3 TE-4) selects the per-section
+// descriptor (template, gate, scan) and is written onto the run; the three
+// wizard sections and /admin/import mount three instances of this component, so
+// "upload UX identical across sections" is structural. Variants differ only in
+// presentation: 'internal' shows raw error detail, 'streamlined' keeps errors
+// simple — same validation, same staging.
 import { useState } from "react";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,14 +18,19 @@ import { useImportRuns, useStartRosterScan } from "@/hooks/useImportRuns";
 import { parseCsv, type ParsedCsv } from "@/lib/csvImport";
 import { downloadCsvText } from "@/lib/csv";
 import {
-  ROSTER_TEMPLATE_FILENAME,
+  checkHeaders,
   checkRosterFile,
-  checkRosterHeaders,
   headerGateMessage,
   presentHeaders,
   previewRows,
-  rosterTemplateCsv,
 } from "@/lib/rosterImport";
+import {
+  COMBINED_TEMPLATE_RETIRED_MESSAGE,
+  looksLikeCombinedTemplate,
+  sectionDescriptor,
+  sectionTemplateCsv,
+  type SectionEntityKind,
+} from "@/lib/importSections";
 import type { ImportRunSource } from "@/types";
 
 type Phase =
@@ -31,42 +39,34 @@ type Phase =
   | { kind: "preview"; fileName: string; parsed: ParsedCsv }
   | { kind: "run"; runId: string };
 
-function TemplateDownloadButton() {
-  return (
-    <Button
-      variant="outline"
-      className="h-8"
-      onClick={() => downloadCsvText(ROSTER_TEMPLATE_FILENAME, rosterTemplateCsv())}
-    >
-      <Download className="mr-1 h-4 w-4" />
-      Download CSV template
-    </Button>
-  );
-}
-
 export function RosterUploader({
   source,
   variant,
+  entityKind,
 }: {
   source: ImportRunSource;
   variant: "internal" | "streamlined";
+  /** E3.3 TE-4: which per-section template/gate/scan this uploader runs. */
+  entityKind: SectionEntityKind;
 }) {
+  const descriptor = sectionDescriptor(entityKind);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const startScan = useStartRosterScan();
   const runsQ = useImportRuns();
 
-  // Resume affordance (F3.0.4): a run started earlier from this surface
-  // surfaces on return — progress lives on the run row, not in this
-  // component's state. The internal tool resumes in-flight scans only (its
-  // run history covers outcomes); the streamlined wizard surface has no
-  // history list, so a run awaiting review or failed stays visible here too.
+  // Resume affordance: a run started earlier from this SECTION surfaces on
+  // return — filtered by entity_kind (TE-4) so a section only resumes its own
+  // runs. Progress lives on the run row, not this component's state.
   const resumeStates =
     variant === "internal"
       ? ["uploading", "scanning"]
       : ["uploading", "scanning", "ready_for_review", "failed"];
   const inFlight =
     phase.kind === "idle"
-      ? (runsQ.data ?? []).find((r) => r.source === source && resumeStates.includes(r.state))
+      ? (runsQ.data ?? []).find(
+          (r) =>
+            r.source === source && r.entityKind === entityKind && resumeStates.includes(r.state),
+        )
       : undefined;
 
   const handleFile = async (file: File) => {
@@ -77,10 +77,15 @@ export function RosterUploader({
     }
     const text = await file.text();
     const parsed = parseCsv(text);
-    const gate = checkRosterHeaders(parsed.headers);
-    const gateMessage = headerGateMessage(gate);
-    if (gateMessage) {
-      setPhase({ kind: "rejected", fileName: file.name, message: gateMessage });
+    const gate = checkHeaders(parsed.headers, descriptor.headers);
+    if (!gate.ok) {
+      // TE-7: a retired combined-template upload gets an actionable message
+      // naming the per-section templates, not a generic missing/extra list.
+      const message = looksLikeCombinedTemplate(parsed.headers)
+        ? COMBINED_TEMPLATE_RETIRED_MESSAGE
+        : (headerGateMessage(gate) ??
+          "The column headers don't match the template. Download the template and re-upload.");
+      setPhase({ kind: "rejected", fileName: file.name, message });
       return;
     }
     if (parsed.records.length === 0) {
@@ -96,7 +101,7 @@ export function RosterUploader({
 
   const startImport = (fileName: string, parsed: ParsedCsv) => {
     startScan.mutate(
-      { source, fileName, parsed },
+      { source, entityKind, fileName, parsed },
       { onSuccess: (runId) => setPhase({ kind: "run", runId }) },
     );
   };
@@ -104,11 +109,17 @@ export function RosterUploader({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] text-muted-foreground">
-          One row per provider × group × facility; repeat rows per license. Headers must match the
-          template exactly.
-        </p>
-        <TemplateDownloadButton />
+        <p className="text-[12px] text-muted-foreground">{descriptor.helperText}</p>
+        <Button
+          variant="outline"
+          className="h-8"
+          onClick={() =>
+            downloadCsvText(descriptor.templateFilename, sectionTemplateCsv(descriptor))
+          }
+        >
+          <Download className="mr-1 h-4 w-4" />
+          Download {descriptor.label} template
+        </Button>
       </div>
 
       {phase.kind === "idle" || phase.kind === "rejected" ? (

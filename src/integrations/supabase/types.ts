@@ -902,6 +902,7 @@ export type Database = {
           created_at: string;
           created_by: string;
           created_provider_ids: string[] | null;
+          entity_kind: string;
           error_report: Json | null;
           error_rows: number | null;
           file_name: string | null;
@@ -919,6 +920,7 @@ export type Database = {
           created_at?: string;
           created_by: string;
           created_provider_ids?: string[] | null;
+          entity_kind?: string;
           error_report?: Json | null;
           error_rows?: number | null;
           file_name?: string | null;
@@ -936,6 +938,7 @@ export type Database = {
           created_at?: string;
           created_by?: string;
           created_provider_ids?: string[] | null;
+          entity_kind?: string;
           error_report?: Json | null;
           error_rows?: number | null;
           file_name?: string | null;

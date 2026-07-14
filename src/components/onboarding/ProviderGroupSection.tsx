@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProviderGroupForm } from "@/components/onboarding/ProviderGroupForm";
 import { openSection } from "@/components/onboarding/openSection";
+import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
 import { useUpdateProviderGroup } from "@/hooks/useOrgSettings";
 import { formatTin } from "@/lib/providerGroup";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
@@ -76,7 +77,7 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
 
   if (activeGroups.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-3">
+      <div className="flex flex-col items-start gap-4">
         <p className="text-[13px] text-muted-foreground">
           Set up the legal billing entity this organization operates under — its TIN, Type 2 NPI,
           operating states, and address blocks appear on every payer application.
@@ -88,6 +89,9 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
           <Plus className="h-4 w-4" />
           Add provider group
         </Button>
+        <div className="w-full">
+          <SectionUploadCard entityKind="provider_group" activeGroupCount={0} />
+        </div>
         {modal ? <ProviderGroupForm group={modal.group} onClose={() => setModal(null)} /> : null}
       </div>
     );
@@ -151,6 +155,8 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
           Add another group
         </Button>
       </div>
+
+      <SectionUploadCard entityKind="provider_group" activeGroupCount={activeGroups.length} />
 
       {modal ? <ProviderGroupForm group={modal.group} onClose={() => setModal(null)} /> : null}
       {deactivating ? (

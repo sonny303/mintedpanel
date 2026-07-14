@@ -13,6 +13,7 @@ import {
   applyBatchAssignment,
   cancelImportRun,
   commitImportRun,
+  commitSectionImportRun,
   completeImportRun,
   createImportRun,
   failImportRun,
@@ -28,13 +29,18 @@ import {
   useProviderGroupAssignments,
 } from "@/hooks/useProviders";
 import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
-import { dedupeImportRows, type BatchAssignmentPlan, type CommitPlan } from "@/lib/importDedupe";
 import {
-  STAGE_CHUNK_SIZE,
-  chunkRows,
-  collectRowErrors,
-  scanRosterRecord,
-} from "@/lib/rosterImport";
+  dedupeFacilityRows,
+  dedupeGroupRows,
+  dedupeImportRows,
+  type BatchAssignmentPlan,
+  type CommitPlan,
+  type SectionBlockedEntry,
+  type SectionCreateEntry,
+  type SectionDedupeResult,
+} from "@/lib/importDedupe";
+import { STAGE_CHUNK_SIZE, chunkRows, collectRowErrors } from "@/lib/rosterImport";
+import { scanSectionRecord, sectionDescriptor, type SectionEntityKind } from "@/lib/importSections";
 import type { ParsedCsv } from "@/lib/csvImport";
 import type { ImportRunErrorEntry, ImportRunSource } from "@/types";
 
@@ -54,13 +60,20 @@ export function isScanDrivenHere(runId: string): boolean {
 // batches keep the main thread free on a 10k-row file), then land the run in
 // ready_for_review with the compact error report. Failures mark the run
 // 'failed' — the polling UI renders the outcome either way.
-async function driveRosterScan(qc: QueryClient, orgId: string, runId: string, parsed: ParsedCsv) {
+async function driveRosterScan(
+  qc: QueryClient,
+  orgId: string,
+  runId: string,
+  parsed: ParsedCsv,
+  entityKind: SectionEntityKind,
+) {
   liveScanRunIds.add(runId);
   try {
     await markImportRunScanning(runId);
+    const descriptor = sectionDescriptor(entityKind);
     const errors: ImportRunErrorEntry[] = [];
     for (const records of chunkRows(parsed.records, STAGE_CHUNK_SIZE)) {
-      const scanned = records.map((r) => scanRosterRecord(r, parsed.headers));
+      const scanned = records.map((r) => scanSectionRecord(descriptor, r, parsed.headers));
       errors.push(...collectRowErrors(scanned));
       await stageImportRows(runId, scanned);
     }
@@ -106,6 +119,7 @@ export function useImportRun(runId: string | null) {
 
 export interface StartRosterScanInput {
   source: ImportRunSource;
+  entityKind: SectionEntityKind;
   fileName: string;
   parsed: ParsedCsv;
 }
@@ -120,10 +134,11 @@ export function useStartRosterScan() {
     mutationFn: async (input: StartRosterScanInput) => {
       const run = await createImportRun({
         source: input.source,
+        entityKind: input.entityKind,
         fileName: input.fileName,
         totalRows: input.parsed.records.length,
       });
-      void driveRosterScan(qc, orgId, run.id, input.parsed);
+      void driveRosterScan(qc, orgId, run.id, input.parsed, input.entityKind);
       return run.id;
     },
     onSuccess: () => {
@@ -249,6 +264,67 @@ export function useCommitImportRun() {
       qc.invalidateQueries({ queryKey: queryKeys.facilityAssignments(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.providerReadinessFacts(orgId) });
+    },
+  });
+}
+
+/* ---------- E3.3 TE-8 — provider_group / facility section preview ---------- */
+
+/** The group/facility preview (the useImportPreview pattern for the simpler
+ * grains): one staged-row read + the existing group (and facility) caches →
+ * pure dedupeGroupRows / dedupeFacilityRows. Nothing is stored at preview time. */
+export function useSectionImportPreview(
+  runId: string | null,
+  entityKind: "provider_group" | "facility",
+) {
+  const runQ = useImportRun(runId);
+  const rowsQ = useStagedImportRows(runId);
+  const groupsQ = useProviderGroups();
+  const facilitiesQ = useFacilities();
+
+  const queries =
+    entityKind === "facility" ? [runQ, rowsQ, groupsQ, facilitiesQ] : [runQ, rowsQ, groupsQ];
+  const isLoading = queries.some((q) => q.isLoading);
+  const isError = queries.some((q) => q.isError);
+
+  const result = useMemo<SectionDedupeResult | null>(() => {
+    if (!rowsQ.data) return null;
+    const groups = (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name, tin: g.tin }));
+    if (entityKind === "provider_group") return dedupeGroupRows(rowsQ.data, groups);
+    const facilities = (facilitiesQ.data ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      groupId: f.groupId,
+      street: f.street,
+      city: f.city,
+      state: f.state,
+      zip: f.zip,
+    }));
+    return dedupeFacilityRows(rowsQ.data, groups, facilities);
+  }, [rowsQ.data, groupsQ.data, facilitiesQ.data, entityKind]);
+
+  return { run: runQ.data ?? null, result, isLoading, isError };
+}
+
+/** Commit a group/facility run through the create-service fan-out; invalidates
+ * the group (and facility) caches so the wizard chips flip, plus the run. */
+export function useCommitSectionImportRun() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      runId: string;
+      entityKind: "provider_group" | "facility";
+      creates: SectionCreateEntry[];
+      skippedCount: number;
+      blocked: SectionBlockedEntry[];
+    }) => commitSectionImportRun(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.importRuns(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRun(orgId, input.runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRunRows(orgId, input.runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroups(orgId) });
+      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
     },
   });
 }

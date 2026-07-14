@@ -81,17 +81,18 @@ export interface HeaderGateResult {
   extra: string[];
 }
 
-// F3.0.2/TE-4 — the exact-match front gate, run on parseCsv(text).headers
+// F3.0.2/TE-4 — the generic exact-match front gate, run on parseCsv(text).headers
 // (already BOM-stripped, trimmed, case-folded, space→underscore by the shared
-// normalizeHeader). Defensive posture per the epic's risk note: trailing blank
-// headers (Excel's trailing-comma artifact) are ignored; a blank header among
-// real ones is reported as an unnamed extra column; a duplicated template
+// normalizeHeader). Section-independent (E3.3 TE-2): the per-section descriptors
+// pass their own template. Defensive posture per the epic's risk note: trailing
+// blank headers (Excel's trailing-comma artifact) are ignored; a blank header
+// among real ones is reported as an unnamed extra column; a duplicated template
 // header is an extra occurrence, not a match.
-export function checkRosterHeaders(headers: string[]): HeaderGateResult {
+export function checkHeaders(headers: string[], template: readonly string[]): HeaderGateResult {
   const trimmed = [...headers];
   while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") trimmed.pop();
 
-  const wanted = new Set<string>(ROSTER_TEMPLATE_HEADERS);
+  const wanted = new Set<string>(template);
   const seen = new Set<string>();
   const extra: string[] = [];
   for (const h of trimmed) {
@@ -105,8 +106,14 @@ export function checkRosterHeaders(headers: string[]): HeaderGateResult {
       seen.add(h);
     }
   }
-  const missing = ROSTER_TEMPLATE_HEADERS.filter((h) => !seen.has(h));
+  const missing = template.filter((h) => !seen.has(h));
   return { ok: missing.length === 0 && extra.length === 0, missing, extra };
+}
+
+/** The legacy E3.0 combined-template gate (retained for its test suite; the
+ * per-section descriptors call checkHeaders directly, E3.3 TE-2). */
+export function checkRosterHeaders(headers: string[]): HeaderGateResult {
+  return checkHeaders(headers, ROSTER_TEMPLATE_HEADERS);
 }
 
 /** The gate's user-facing reject message, naming the offending headers. */
@@ -128,11 +135,57 @@ const STATE_RE = /^[A-Za-z]{2}$/;
 const TIN_RE = /^\d{2}-?\d{7}$/;
 const MIDDLE_INITIAL_RE = /^[A-Za-z]\.?$/;
 
+// Shared format validators (E3.3 TE-2) — the per-section descriptors reuse the
+// exact E3.0 format rules instead of re-declaring regexes.
+export const isTin = (v: string): boolean => TIN_RE.test(v);
+export const isNpi = (v: string): boolean => NPI_RE.test(v);
+export const isSsn4 = (v: string): boolean => SSN4_RE.test(v);
+export const isStateCode = (v: string): boolean => STATE_RE.test(v);
+export const isMiddleInitial = (v: string): boolean => MIDDLE_INITIAL_RE.test(v);
+
 // Non-echoing by design (TE-6 / [r5-review] decision 3): these two messages
 // must never carry the offending value.
 export const SSN_REJECT_REASON =
   "A full SSN was detected and removed — provide only the last 4 digits in ssn_last4";
 export const SSN_LAST4_FORMAT_REASON = "ssn_last4 must be exactly 4 digits";
+
+/** The TIN columns exempt from the bare-9-digit SSN reject in the E3.0 combined
+ * scan (a group TIN is a legitimate bare-9-digit value). */
+export const DEFAULT_TIN_COLUMNS = ["group_tin"] as const;
+
+export interface SsnSweepResult {
+  /** header → cell, every SSN-like cell REDACTED to "" (TE-6). */
+  raw: Record<string, string>;
+  /** the FIRST SSN-like cell found, or null — never echoes the value. */
+  error: { column: string; reason: string } | null;
+}
+
+// TE-6 sweep — the SINGLE shared SSN reject-never-truncate core (E3.3 TE-6:
+// section-scoped, verbatim). Every column is checked: a dashed NNN-NN-NNNN is
+// rejected everywhere, and a bare 9-digit value is rejected outside the TIN
+// columns (a group TIN legitimately holds a bare 9 digits). The offending cell
+// is redacted from `raw` before it can be persisted; the reason never carries
+// the value. ALL offending cells are redacted even after the first failure.
+export function sweepSsn(
+  record: CsvRecord,
+  headers: string[],
+  tinColumns: readonly string[] = DEFAULT_TIN_COLUMNS,
+): SsnSweepResult {
+  const raw: Record<string, string> = {};
+  let error: { column: string; reason: string } | null = null;
+  headers.forEach((h, i) => {
+    if (h === "") return;
+    const v = cellOf(record, i);
+    const ssnLike = SSN_DASHED_RE.test(v) || (BARE_NINE_RE.test(v) && !tinColumns.includes(h));
+    if (ssnLike) {
+      raw[h] = "";
+      if (error === null) error = { column: h, reason: SSN_REJECT_REASON };
+    } else {
+      raw[h] = v;
+    }
+  });
+  return { raw, error };
+}
 
 export const REQUIRED_ROSTER_HEADERS: readonly RosterHeader[] = [
   "group_name",
@@ -165,9 +218,11 @@ function cellOf(record: CsvRecord, index: number): string {
 // SSN sweep ALWAYS redacts every offending cell from `raw`, even when an
 // earlier column already decided the row's error.
 export function scanRosterRecord(record: CsvRecord, headers: string[]): ScannedRow {
-  const raw: Record<string, string> = {};
-  let errorColumn: string | null = null;
-  let errorReason: string | null = null;
+  // TE-6 sweep via the shared core (DEFAULT_TIN_COLUMNS = group_tin exempt).
+  const swept = sweepSsn(record, headers);
+  const raw = swept.raw;
+  let errorColumn: string | null = swept.error?.column ?? null;
+  let errorReason: string | null = swept.error?.reason ?? null;
 
   const fail = (column: string | null, reason: string) => {
     if (errorReason === null) {
@@ -175,20 +230,6 @@ export function scanRosterRecord(record: CsvRecord, headers: string[]): ScannedR
       errorReason = reason;
     }
   };
-
-  // TE-6 sweep — every column; the TIN column legitimately holds a bare
-  // 9-digit value, but a dashed NNN-NN-NNNN rejects even there.
-  headers.forEach((h, i) => {
-    if (h === "") return;
-    const v = cellOf(record, i);
-    const ssnLike = SSN_DASHED_RE.test(v) || (BARE_NINE_RE.test(v) && h !== "group_tin");
-    if (ssnLike) {
-      raw[h] = "";
-      fail(h, SSN_REJECT_REASON);
-    } else {
-      raw[h] = v;
-    }
-  });
 
   if (record.fields.length > headers.length) {
     fail(

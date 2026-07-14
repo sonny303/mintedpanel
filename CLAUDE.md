@@ -1035,6 +1035,66 @@ jsonb)`** — the ONE transactional staged-commit RPC + additive
   `commit_import_run` RPC and honors `neq.` filters). Table-register `providers`
   row + `import_runs` row updated; SCHEMA.md updated; types regenerated.
 
+- **E3.3 — Sectioned Intake Uniformity (per-section CSV upload beside every
+  manual form).** A template/surface split, NOT a new pipeline: the ONE E3.0
+  staging machine + E3.1 commit engine now serve three per-section uploads
+  (Provider Group / Facilities / Providers) keyed by an additive discriminator.
+  ONE additive migration (repo + hosted, `20260714120000_import_runs_entity_kind.sql`):
+  **`import_runs.entity_kind`** (`provider_group|facility|provider|combined`,
+  default `combined` so in-flight E3.0 runs stay valid with NO backfill, TE-1);
+  `import_rows` unchanged. `ImportRun`/`CreateImportRunInput` gained `entityKind`;
+  types regenerated. **Pure per-section descriptors `src/lib/importSections.ts`**
+  (+tests): three `{ headers, required, scan }` descriptors derived from the
+  manual forms (`ProviderGroupForm`/`FacilityForm`/`ProviderRosterForm`) — the
+  SINGLE source shared by each template download AND its exact-header gate
+  (F3.3.1). The E3.0 core is reused verbatim: `checkHeaders` (generalized from
+  `checkRosterHeaders`), the file/10 MB checks, `STAGE_CHUNK_SIZE`,
+  `collectRowErrors`/`errorReportCsvRows`, `previewRows`, and the **shared TE-6
+  SSN sweep `sweepSsn`** (extracted from `scanRosterRecord`, `group_tin`
+  bare-9-digit-exempt, dashed always rejected). **TE-3 non-scalar flat
+  encoding:** multi-value scalars (`operating_states`, language lists) ride one
+  `;`-delimited column (`encode/decodeDelimited`, `\;` escape); the group's
+  three blocks flatten to prefixed columns (`billing_*`/`corr_*`/`cred_*`) with
+  **blank corr/cred ⇒ inherit billing** at scan time; facility **hours are
+  omitted** from the CSV (TECH-DEBT TD-33, PM Open Q1 default — set in the form
+  after import); provider **licenses** ride one row per license (folded on
+  commit, E3.1 grain). **`RosterUploader` is section-parameterized** (`entityKind`
+  prop selects the descriptor, written onto the run; the resume/in-flight filter
+  is entity-kind-scoped so a section only resumes its own runs, TE-4).
+  `ImportRunList` gained an entity-kind label; `ImportRunPanel`/`RosterDropZone`
+  unchanged. **TE-5 ladder** (`uploadLadderGate`): Facilities/Providers uploads
+  require ≥1 provider group — the wizard sections render a DISABLED drop zone +
+  pointer via shared `src/components/onboarding/SectionUploadCard.tsx` (admin-
+  gated). The three wizard section bodies (`ProviderGroupSection`/
+  `FacilitySection`/`ProviderRosterSection`) render the manual form BESIDE the
+  upload card; the old provider-only `BulkRosterUploadCard` is retired. **TE-7
+  combined retirement:** `/admin/import` now shows the same three per-section
+  uploads (no combined); a legacy combined file (detected by
+  `looksLikeCombinedTemplate` = provider identity + facility columns together)
+  is rejected with `COMBINED_TEMPLATE_RETIRED_MESSAGE` naming the three
+  replacements. The E3.0 `ROSTER_TEMPLATE_HEADERS`/`scanRosterRecord`/
+  `checkRosterHeaders` are kept (they back the combined-signature detection + the
+  E3.0 test suite); in-flight `combined` runs stay reviewable through
+  `ImportPreviewContent`. **TE-8 commit fan-out by `entity_kind`:** provider →
+  E3.1's `commit_import_run` RPC verbatim; **provider_group → `createProviderGroup`
+  (dedupe grain = TIN), facility → `createFacility` (grain = group + name +
+  address)** via `commitSectionImportRun` (`importRuns.ts`) — a thin per-kind
+  branch, NOT a second engine. The two grains are added to the pure
+  `importDedupe.ts` (`dedupeGroupRows`/`dedupeFacilityRows`, +tests). The
+  group/facility commit is a browser create-service loop (no new RPC), then flip
+  run→committed (`WHERE state='ready_for_review'`) + purge `import_rows`; not
+  single-transaction, but a mid-loop failure leaves the run resumable (skip-on-
+  match dedupe). `/import/$runId` branches on `entityKind`: provider/combined →
+  `ImportPreviewContent`; group/facility → the simpler `SectionImportPreview`
+  (create/skip/blocked, no conflict review). **TE-9 fence:** the capture surface
+  (`capture.$token.tsx`/`captureLinks.ts`) is UNCHANGED — zero upload/group/
+  facility/provider capability (guard/test only). e2e: `roster-import.spec.ts`
+  retargeted to the provider per-section upload (TS-58/59/60);
+  `sectioned-intake.spec.ts` (TS-65 three sections manual+upload + templates
+  match; TS-66 facilities blocked→proceeds→real facility commit→chip; TS-67
+  combined rejected + three uploads + in-flight combined run reviewable; TS-68
+  capture fence + converted org lands in the wizard). No new table, no new deps.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

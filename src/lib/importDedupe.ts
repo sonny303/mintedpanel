@@ -782,6 +782,215 @@ export interface BatchAssignmentPlan {
   skippedProviderIds: string[];
 }
 
+/* ------------------- E3.3 TE-8 — group / facility dedupe ------------------- */
+//
+// The provider grain above (five-part, per-field conflict review) is the rich
+// case. The Provider Group and Facilities sections are simpler: skip-on-match,
+// no conflict review, no update (imported group/facility data proposes a NEW
+// row or is skipped). These two grains are a THIN addition to this same pure
+// module — NOT a parallel engine (TE-8). Both produce create / skip / blocked
+// dispositions the section commit fans out to createProviderGroup /
+// createFacility.
+
+export interface FacilityDedupeRecord {
+  id: string;
+  name: string;
+  groupId: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}
+
+export interface SectionCreateEntry {
+  line: number;
+  displayName: string;
+  /** the staged mapped row — the service builds the create input from it */
+  mapped: Record<string, string | null>;
+  /** facility only: the resolved parent group id (null for group creates) */
+  groupId: string | null;
+  notes: string[];
+}
+
+export interface SectionSkipEntry {
+  line: number;
+  displayName: string;
+  reason: string;
+}
+
+export interface SectionBlockedEntry {
+  line: number;
+  column: string | null;
+  displayName: string;
+  reason: string;
+}
+
+export interface SectionDedupeResult {
+  creates: SectionCreateEntry[];
+  skips: SectionSkipEntry[];
+  blocked: SectionBlockedEntry[];
+}
+
+const addressKey = (r: {
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}): string => [r.street, r.city, r.state, r.zip].map((v) => norm(v)).join("|");
+
+/** Provider-group dedupe (TE-8): grain = TIN. A staged group whose TIN matches
+ * an existing group is skipped ("already exists"); a TIN repeated within the
+ * file folds to one create (later rows skip). A row missing a TIN is blocked
+ * (the scan already requires it — defensive). */
+export function dedupeGroupRows(
+  rows: StagedImportRow[],
+  groups: DedupeGroupRecord[],
+): SectionDedupeResult {
+  const existingByTin = new Map<string, DedupeGroupRecord>();
+  for (const g of groups) {
+    const t = digits(g.tin);
+    if (t) existingByTin.set(t, g);
+  }
+  const result: SectionDedupeResult = { creates: [], skips: [], blocked: [] };
+  const seenTins = new Set<string>();
+  for (const row of rows) {
+    if (!row.mapped) {
+      result.blocked.push({
+        line: row.line,
+        column: null,
+        displayName: "—",
+        reason: "Row has no scanned values",
+      });
+      continue;
+    }
+    const name = row.mapped.name?.trim() || "";
+    const tin = digits(row.mapped.tin);
+    const displayName = name || (tin ? `TIN ${tin}` : "—");
+    if (!tin) {
+      result.blocked.push({
+        line: row.line,
+        column: "group_tin",
+        displayName,
+        reason: "Missing TIN — a group is identified by its TIN",
+      });
+      continue;
+    }
+    const existing = existingByTin.get(tin);
+    if (existing) {
+      result.skips.push({
+        line: row.line,
+        displayName,
+        reason: `${ALREADY_EXISTS_REASON} (TIN ${tin} → ${existing.name})`,
+      });
+      continue;
+    }
+    if (seenTins.has(tin)) {
+      result.skips.push({
+        line: row.line,
+        displayName,
+        reason: `Duplicate TIN ${tin} in this file`,
+      });
+      continue;
+    }
+    seenTins.add(tin);
+    result.creates.push({
+      line: row.line,
+      displayName,
+      mapped: row.mapped,
+      groupId: null,
+      notes: [],
+    });
+  }
+  return result;
+}
+
+/** Facility dedupe (TE-8): grain = (parent group, facility name + address). The
+ * parent group is resolved by TIN then name (a facility needs its group — the
+ * ladder, TE-5); an unresolved group blocks the row. A facility matching an
+ * existing one at the same group + name + address is skipped; a name+address
+ * repeated within the file folds to one create. */
+export function dedupeFacilityRows(
+  rows: StagedImportRow[],
+  groups: DedupeGroupRecord[],
+  facilities: FacilityDedupeRecord[],
+): SectionDedupeResult {
+  const result: SectionDedupeResult = { creates: [], skips: [], blocked: [] };
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row.mapped) {
+      result.blocked.push({
+        line: row.line,
+        column: null,
+        displayName: "—",
+        reason: "Row has no scanned values",
+      });
+      continue;
+    }
+    const name = row.mapped.facility_name?.trim() || "";
+    const displayName = name || "—";
+    // Resolve parent group by TIN first, then normalized name.
+    const tin = digits(row.mapped.group_tin);
+    const gName = norm(row.mapped.group_name);
+    const group =
+      (tin ? groups.find((g) => digits(g.tin) === tin) : undefined) ??
+      (gName ? groups.find((g) => norm(g.name) === gName) : undefined) ??
+      null;
+    if (!group) {
+      const label = row.mapped.group_name ?? row.mapped.group_tin ?? "unknown";
+      result.blocked.push({
+        line: row.line,
+        column: "group_name",
+        displayName,
+        reason: `Parent group "${label}" not found — add the provider group first`,
+      });
+      continue;
+    }
+    const key = `${group.id}::${norm(name)}::${addressKey({
+      street: row.mapped.street,
+      city: row.mapped.city,
+      state: row.mapped.state,
+      zip: row.mapped.zip,
+    })}`;
+    const existing = facilities.find(
+      (f) =>
+        f.groupId === group.id &&
+        norm(f.name) === norm(name) &&
+        addressKey(f) ===
+          addressKey({
+            street: row.mapped?.street ?? null,
+            city: row.mapped?.city ?? null,
+            state: row.mapped?.state ?? null,
+            zip: row.mapped?.zip ?? null,
+          }),
+    );
+    if (existing) {
+      result.skips.push({
+        line: row.line,
+        displayName,
+        reason: `${ALREADY_EXISTS_REASON} at ${group.name}`,
+      });
+      continue;
+    }
+    if (seen.has(key)) {
+      result.skips.push({
+        line: row.line,
+        displayName,
+        reason: "Duplicate facility (same group, name and address) in this file",
+      });
+      continue;
+    }
+    seen.add(key);
+    result.creates.push({
+      line: row.line,
+      displayName,
+      mapped: row.mapped,
+      groupId: group.id,
+      notes: [],
+    });
+  }
+  return result;
+}
+
 /** One-shot batch assignment for a committed run's providers. Explicit row
  * data wins over the batch default: a provider whose import rows already
  * created assignments in a dimension keeps them and gets NO batch default in

@@ -948,6 +948,11 @@ export interface CaseGenerationExclusion {
 export type ImportRunSource = "internal" | "onboarding";
 export type ImportRunState =
   "uploading" | "scanning" | "ready_for_review" | "committed" | "failed" | "cancelled";
+// E3.3 TE-1: the additive discriminator that lets one staging machine serve the
+// three per-section uploads. 'combined' is the legacy E3.0 default (in-flight
+// combined runs stay reviewable, F3.3.3) — new per-section uploads write one of
+// the three real kinds.
+export type ImportEntityKind = "provider_group" | "facility" | "provider" | "combined";
 
 export interface ImportRunErrorEntry {
   line: number;
@@ -960,6 +965,8 @@ export interface ImportRun {
   orgId: string;
   createdBy: string;
   source: ImportRunSource;
+  /** E3.3 TE-1: which per-section upload produced this run (legacy runs = 'combined'). */
+  entityKind: ImportEntityKind;
   fileName: string | null;
   state: ImportRunState;
   totalRows: number | null;

@@ -1,0 +1,68 @@
+// E3.3 F3.3.1/F3.3.2 — the streamlined per-section bulk uploader that sits
+// BESIDE each wizard section's manual form (Provider Group, Facilities,
+// Providers). One shared composition (TE-10): the E3.0 RosterUploader
+// parameterized by entity_kind (TE-4). Admin-gated like the RLS staging writes
+// (the org rep is an admin of their own org). TE-5 ladder: the Facilities and
+// Providers uploads require ≥1 provider group — when the prerequisite is
+// missing, a DISABLED drop zone with a pointer to the Provider Group section is
+// rendered instead of accepting a file (never a silent failure). The Provider
+// Group upload has no prerequisite.
+import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RosterUploader } from "@/components/import/RosterUploader";
+import { openSection } from "@/components/onboarding/openSection";
+import { useIsAdmin } from "@/lib/permissions";
+import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
+import { sectionDescriptor, uploadLadderGate, type SectionEntityKind } from "@/lib/importSections";
+
+const GROUP_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "provider_group");
+
+export function SectionUploadCard({
+  entityKind,
+  activeGroupCount,
+  showPrerequisiteButton = true,
+}: {
+  entityKind: SectionEntityKind;
+  /** number of ACTIVE provider groups — the TE-5 ladder input */
+  activeGroupCount: number;
+  /** hide the card's own "Go to Provider Group" button when the parent already shows one */
+  showPrerequisiteButton?: boolean;
+}) {
+  const isAdmin = useIsAdmin();
+  if (!isAdmin) return null;
+
+  const descriptor = sectionDescriptor(entityKind);
+  const gate = uploadLadderGate(entityKind, { activeGroupCount });
+
+  return (
+    <div className="space-y-3 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
+      <div>
+        <div className="text-[13px] font-medium text-foreground">
+          Bulk {descriptor.label.toLowerCase()} import
+        </div>
+        <p className="text-[12px] text-muted-foreground">
+          Upload a CSV — rows are validated and staged for review, and nothing changes in your
+          workspace until the import is committed.
+        </p>
+      </div>
+      {gate.allowed ? (
+        <RosterUploader source="onboarding" variant="streamlined" entityKind={entityKind} />
+      ) : (
+        <div className="space-y-2">
+          <div
+            className="rounded-md border border-dashed border-[#E8E5E0] bg-white px-4 py-6 text-center text-[12px] text-muted-foreground"
+            aria-disabled="true"
+          >
+            Add a provider group first — imported rows attach to a group.
+          </div>
+          {GROUP_DEF && showPrerequisiteButton ? (
+            <Button variant="outline" onClick={() => openSection(GROUP_DEF)}>
+              <ArrowRight className="h-4 w-4" />
+              Go to Provider Group
+            </Button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
