@@ -16,7 +16,119 @@ Format per entry:
 
 ## Open
 
+## [r6] Next-best-action queue configurability — OPEN
+
+- **Issue:** The PM asked whether next-best-action workqueue settings are
+  configurable and whether specific criteria need to be provided ("let me
+  know if we need to provide specific criteria for next best action
+  workqueue settings - are the settings configurable, etc?").
+- **Current state:** The E2.3 queue ranking is fully derived and FIXED
+  (deadline-ordered: provider start dates, location launch dates, task due
+  dates) — nothing is configurable today. R6 adds overdue follow-ups as a
+  ranking input ([r6] decision A2).
+- **Options:**
+  1. Keep the ranking fixed for R6 (overdue follow-ups rank above
+     deadline-only rows; ties by earliest deadline) — zero config UI,
+     deterministic, no new admin surface. **Reviewer default.**
+  2. Admin-configurable weights/ordering of ranking inputs in the E4.2
+     admin module — heavier, adds a config surface and support burden.
+- **Impact:** E4.1 F4.1.3 acceptance criteria; E4.2 scope.
+- **Decision:** _pending PM_
+
 ## Resolved
+
+## [r6] R6 Execution-pack discovery decisions — RESOLVED (2026-07-14)
+
+- **Issue:** R6/R7 (payer workflows + touches, extension fill, Sensitive
+  Identifiers Vault, Document Storage) needed PM direction before epic
+  drafting. Discovery questions A1–A4, B5–B6, C7–C8, D were put to the PM;
+  all are answered, plus an unprompted baseline clarification (A0).
+- **Decisions (PM Sowmya, 2026-07-14):**
+  - **A0. Payer SOPs are a mandatory prerequisite for system readiness.**
+    Case generation must be entirely deterministic — driven by upstream
+    configuration, never downstream guesswork. Build a dedicated
+    administrative module (architected as a micro-frontend) exclusively
+    for Payer and SOP management, owned by a designated configuration user
+    (Ops Lead or Admin) who defines payer-specific requirements, logic,
+    and task sequences. Centralizing SOP setup upstream means generated
+    cases arrive with complete, accurate task checklists; specialists log
+    in to a clean, high-density queue and execute immediately — no
+    investigating missing case details.
+  - **A1. Case anatomy (real-world lifecycle):** Generated (system detects
+    a missing payer enrollment and drafts a case; ALSO need **bulk case
+    generation** — e.g. a group signs a new contract and every provider
+    needs enrolling — in addition to ad hoc one-off creation for misses
+    found during onboarding) → Assigned (specialist verifies required
+    documents are active: license, CAQH, COI, etc.) → Submitted
+    (specialist uses the extension to auto-fill the payer portal, or
+    generates a CAQH export, or sends an email — the payer-specific steps
+    captured in Tasks; attaches documents; submits; **capture the payer's
+    Reference/Tracking ID** for future follow-up on delays) → In
+    Review/Touches (periodic check-ins; payer portals are black boxes —
+    responses land via shared-inbox email, fax, or manual portal scraping;
+    lots of back-and-forth/RFIs; need a way to track email ↔ case
+    touches) → Resolution (payer approves; specialist records effective
+    dates + provider IDs; provider is In-Network/Credentialed with
+    effective date, or the case closes OON or Denied).
+  - **A2. Touches:** structured touch types are required — **Call, Portal
+    Check, Email, Fax, CAQH Update** — free-text-only notes are a dead end
+    for SaaS analytics (no operational-efficiency reports, no automations
+    off paragraphs). UI stays high-density: a dropdown for touch type + a
+    single-line text input for context. **Overdue follow-ups must
+    explicitly surface in the next-best-action queue** so applications
+    don't rot in payer purgatory.
+  - **A3. Case status vocabulary:** decouple internal operations from the
+    payer's pipeline. Internal task states ("Missing DEA", "Ready for QA")
+    belong to the task tracker. The **Payer Pipeline is a distinct,
+    immutable state machine: Drafting → Submitted → In Review → Action
+    Required (RFI) → Approved / Denied.** Mixing internal gathering tasks
+    with external payer statuses breaks reporting.
+  - **A4. Denials/returns:** require a **structured reason code** (e.g.
+    Missing Documentation, Network Closed, Demographic Mismatch). Status +
+    note only would forfeit predictive analytics (R8) — structured denial
+    reasons surface systemic issues like a payer consistently rejecting a
+    specific facility's tax ID.
+  - **B. Extension fill:** the workbench extension and the webapp must be
+    a **cohesive duo with seamless handoff** — working a case from the
+    platform vs. moving to a payer portal with the extension guiding case
+    completion, logging it, and bringing the next best action, all from
+    the same view; when SOP/fill data is missing it ties into the fix-it
+    game to grow extension data value. The platform tells you what to do;
+    the extension is what you complete it with. The extension eventually
+    must be more than a form filler (some tasks are emails, etc.). **For
+    this release, tightly scope the extension to read-only token
+    resolution** (reading case/provider data to fill portal forms) —
+    establish a reliable, low-latency form-fill experience first.
+    Logging/submission stays manual from the extension into the Touch log
+    (existing workflow remains).
+  - **C1. SSN vault — zero-trust:** full SSN is **fill-only** for the
+    extension and virtually never displayed in the application UI. Default
+    UI uses tight minimalist masking (`***--1234`).
+  - **C2. Admin reveal:** edge-case viewing goes behind a highly
+    deliberate **"Click to Reveal"** restricted to Admin roles, which
+    immediately logs an immutable audit event (Who, When, Which Provider,
+    Justification).
+  - **C3. Data ingress:** ideally the provider or an authorized org rep
+    enters the full SSN via a **secure, time-expiring intake link**
+    (modern identity-verification flow). If internal staff must enter it
+    from a legacy intake form, provide a **secure input modal** that
+    encrypts immediately on save.
+  - **D1. Document storage grain:** per-provider (state license, …) AND
+    per-group (W-9, COI, CMS-460, voided check, …).
+  - **D2. Expiration tracking is mandatory this release.** Upload-only is
+    just a file system; active credentialing software tracks expiration
+    dates of the State License, DEA, and COI to feed the readiness radar
+    (R9). Display in a clean, tight data table so specialists instantly
+    spot expiring credentials before they block a submission.
+  - **D3. Auto-attach via extension is deferred but NOT dropped:** legacy
+    portal file inputs have variable security constraints; cross-origin
+    file injection triggers portal security blocks. For now the extension
+    handles text entry and the specialist manually downloads /
+    drags-and-drops the PDF from secure storage. It is NOT a fast follow —
+    it goes on the roadmap prioritized **after the redesign**, and the
+    document-store architecture chosen today MUST support that future
+    auto-attach feature.
+
 
 ## [r5-debt] Intake-flow uniformity gap (E3.0 retro) — RESOLVED (2026-07-13)
 
