@@ -7,12 +7,28 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ImportPreviewContent } from "@/components/import/ImportPreviewContent";
+import { SectionImportPreview } from "@/components/import/SectionImportPreview";
+import { useImportRun } from "@/hooks/useImportRuns";
 import { useIsAdmin } from "@/lib/permissions";
 
 export const Route = createFileRoute("/import/$runId")({
   component: ImportPreviewPage,
 });
+
+// The preview surface is chosen by the run's entity_kind (E3.3 TE-8): the
+// provider (and legacy 'combined') grain runs the rich dedupe/conflict engine;
+// the simpler provider_group / facility grains run the section preview.
+function PreviewForRun({ runId }: { runId: string }) {
+  const runQ = useImportRun(runId);
+  if (runQ.isLoading) return <Skeleton className="h-40 w-full" />;
+  const kind = runQ.data?.entityKind;
+  if (kind === "provider_group" || kind === "facility") {
+    return <SectionImportPreview runId={runId} entityKind={kind} />;
+  }
+  return <ImportPreviewContent runId={runId} />;
+}
 
 function ImportPreviewPage() {
   const { runId } = Route.useParams();
@@ -43,7 +59,7 @@ function ImportPreviewPage() {
           </Button>
         }
       />
-      <ImportPreviewContent runId={runId} />
+      <PreviewForRun runId={runId} />
     </div>
   );
 }

@@ -7,11 +7,19 @@ import { Button } from "@/components/ui/button";
 import { ImportRunPanel, ImportRunStatePill } from "@/components/import/ImportRunPanel";
 import { useImportRuns } from "@/hooks/useImportRuns";
 import { fmtDateTime } from "@/lib/format";
-import type { ImportRunSource } from "@/types";
+import type { ImportEntityKind, ImportRunSource } from "@/types";
 
 const SOURCE_LABELS: Record<ImportRunSource, string> = {
   internal: "Internal",
   onboarding: "Onboarding",
+};
+
+// E3.3 TE-4: mixed-kind history reads clearly with a per-run entity label.
+const ENTITY_KIND_LABELS: Record<ImportEntityKind, string> = {
+  provider_group: "Provider groups",
+  facility: "Facilities",
+  provider: "Providers",
+  combined: "Combined (legacy)",
 };
 
 export function ImportRunList() {
@@ -43,9 +51,9 @@ export function ImportRunList() {
                 {run.fileName ?? "Roster file"}
               </div>
               <div className="text-[12px] text-muted-foreground tabular-nums">
-                {fmtDateTime(run.createdAt)} · {SOURCE_LABELS[run.source]} · {run.stagedRows ?? 0}{" "}
-                staged · {run.errorRows ?? 0} error
-                {(run.errorRows ?? 0) === 1 ? "" : "s"} of {run.totalRows ?? 0}
+                {fmtDateTime(run.createdAt)} · {ENTITY_KIND_LABELS[run.entityKind]} ·{" "}
+                {SOURCE_LABELS[run.source]} · {run.stagedRows ?? 0} staged · {run.errorRows ?? 0}{" "}
+                error{(run.errorRows ?? 0) === 1 ? "" : "s"} of {run.totalRows ?? 0}
               </div>
             </div>
             <div className="flex flex-none items-center gap-2">

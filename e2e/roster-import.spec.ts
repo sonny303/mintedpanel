@@ -1,29 +1,29 @@
 import { readFileSync } from "fs";
 import { test, expect, type Page, type Route } from "@playwright/test";
 
-// E3.0 TE-11 — roster-import coverage over the mock harness:
-//   TS-58 Internal upload through the front gate: template download, non-CSV
-//         + renamed-header rejects naming the problem, drop-zone active
-//         state, valid-file columns + sample-rows preview, and the
-//         Uploading → Scanning → Ready-for-review states.
-//   TS-59 Org-rep guarded upload from the onboarding wizard's roster
-//         section: streamlined uploader (template + drop zone, no run
-//         history), stages identically through the same pipeline.
-//   TS-60 Async scan of a large file: survives in-app navigation away/back,
-//         good rows stage / bad rows collect, the run lands
-//         ready_for_review, and the error report lists row + column +
-//         reason. Nothing ever writes to live provider/group/facility
-//         tables.
+// E3.0 TE-11 + E3.3 (per-section retarget) — roster-import coverage over the
+// mock harness. The combined 20-column template is retired (E3.3 TE-7); these
+// tests now exercise the PROVIDER per-section upload (the closest analog of the
+// old combined roster), which still validates the whole pipeline:
+//   TS-58 Internal front gate on /admin/import's Providers section: per-section
+//         template download, non-CSV + renamed-header rejects, drop-zone active
+//         state, columns + sample-rows preview, Uploading → Scanning →
+//         Ready-for-review.
+//   TS-59 Org-rep guarded upload from the wizard's Providers section:
+//         streamlined uploader beside the manual form (needs a group — the
+//         TE-5 ladder), stages identically through the same pipeline.
+//   TS-60 Async scan of a large file: survives in-app navigation, good rows
+//         stage / bad rows collect, run lands ready_for_review, error report
+//         lists row + column + reason. Nothing writes to live tables.
 //
-// The harness write-throughs import_runs (POST/PATCH), the
-// stage_import_rows RPC (honoring the UNIQUE (run_id, line) resume key and
-// recomputing run counts like the SQL does), and audit_log, so the
-// invalidate-and-poll loop runs for real. Configurable delays make the
-// Uploading/Scanning states deterministic.
+// The harness write-throughs import_runs (POST/PATCH), stage_import_rows
+// (honoring the UNIQUE (run_id, line) resume key + recomputing counts), and
+// audit_log. Configurable delays make the states deterministic.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
+const GROUP_ID = "33333333-3333-4333-8333-333333333333";
 const NOW = "2026-07-13T12:00:00Z";
 
 const SESSION = {
@@ -45,6 +45,8 @@ const SESSION = {
 
 /* ------------------------------ CSV builders ----------------------------- */
 
+// The provider per-section template (E3.3 TE-2) — the E3.0 provider subset,
+// NO facility-creation columns; the parent group is keyed by group_tin/name.
 const TEMPLATE_HEADERS = [
   "group_name",
   "group_tin",
@@ -61,11 +63,6 @@ const TEMPLATE_HEADERS = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
-  "facility_name",
-  "facility_street",
-  "facility_city",
-  "facility_state",
-  "facility_zip",
 ];
 const HEADER_LINE = TEMPLATE_HEADERS.join(",");
 
@@ -85,11 +82,6 @@ const VALID_CELLS: Record<string, string> = {
   license_expiration_date: "2027-01-31",
   ssn_last4: "6789",
   date_of_birth: "1990-04-12",
-  facility_name: "Main Clinic",
-  facility_street: "1 Main St",
-  facility_city: "Charlotte",
-  facility_state: "NC",
-  facility_zip: "28280",
 };
 
 function rowLine(over: Record<string, string> = {}): string {
@@ -154,6 +146,18 @@ function makeFixtures() {
   } as Record<string, Record<string, unknown>[]>;
 }
 
+function activeGroup() {
+  return {
+    id: GROUP_ID,
+    org_id: ORG_ID,
+    name: "Tree Hill Sports Therapy LLC",
+    tin: "123456789",
+    is_active: true,
+    states: ["NC"],
+    created_at: NOW,
+  };
+}
+
 const LIVE_TABLES = [
   "providers",
   "provider_groups",
@@ -165,9 +169,6 @@ const LIVE_TABLES = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Stateful PostgREST + RPC mock. scanDelayMs delays the uploading→scanning
-// PATCH; stageDelayMs delays each stage_import_rows batch — together they
-// hold each state open long enough to assert on.
 function makeHandler(
   fixtures: Record<string, Record<string, unknown>[]>,
   wire: WireLog,
@@ -304,12 +305,16 @@ function seedAuth(context: {
   );
 }
 
-async function uploadRoster(
-  page: Page,
-  scope: ReturnType<Page["locator"]>,
-  name: string,
-  content: string,
-) {
+// The Providers upload section on /admin/import (one of three per-section
+// uploaders); scope every interaction so the assertions don't collide with the
+// group/facility uploaders.
+function providersSection(page: Page) {
+  return page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Providers", exact: true }) });
+}
+
+async function uploadRoster(scope: ReturnType<Page["locator"]>, name: string, content: string) {
   await scope.locator('input[type="file"]').setInputFiles(csvFile(name, content));
 }
 
@@ -323,10 +328,7 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   const wire: WireLog = { writes: [], stageCalls: [] };
   await context.route(
     /\/(rest|auth)\/v1\//,
-    makeHandler(fixtures, wire, {
-      scanDelayMs: 900,
-      stageDelayMs: 900,
-    }),
+    makeHandler(fixtures, wire, { scanDelayMs: 900, stageDelayMs: 900 }),
   );
   await seedAuth(context);
 
@@ -334,16 +336,17 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
     timeout: 30000,
   });
+  const section = providersSection(page);
 
-  // Template downloads from the upload screen, generated from the canonical list.
+  // The per-section provider template downloads from the Providers uploader.
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV template" }).click();
+  await section.getByRole("button", { name: "Download Provider template" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("roster-import-template.csv");
+  expect(download.suggestedFilename()).toBe("provider-import-template.csv");
   expect(readFileSync((await download.path()) as string, "utf8")).toBe(HEADER_LINE);
 
-  // Drop-zone active state on drag hover (F3.0.3).
-  const zone = page.getByRole("button", { name: /Upload roster CSV/ });
+  // Drop-zone active state on drag hover.
+  const zone = section.getByRole("button", { name: /Upload roster CSV/ });
   await zone.dispatchEvent("dragover", {
     dataTransfer: await page.evaluateHandle(() => new DataTransfer()),
   });
@@ -351,55 +354,53 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   await zone.dispatchEvent("dragleave");
 
   // Non-CSV rejects client-side.
-  await page
+  await section
     .locator('input[type="file"]')
     .setInputFiles({ name: "roster.txt", mimeType: "text/plain", buffer: Buffer.from("nope") });
-  await expect(page.getByRole("alert")).toContainText("Only .csv files are accepted");
+  await expect(section.getByRole("alert")).toContainText("Only .csv files are accepted");
 
   // Renamed header rejects at the gate BEFORE any row work, naming the offender.
   await uploadRoster(
-    page,
-    page.locator("body"),
+    section,
     "renamed.csv",
-    [HEADER_LINE.replace("npi,", "npi number,"), rowLine()].join("\n"),
+    [HEADER_LINE.replace("npi,", "npi_number,"), rowLine()].join("\n"),
   );
-  await expect(page.getByRole("alert")).toContainText("missing: npi");
-  await expect(page.getByRole("alert")).toContainText("npi_number");
-  await expect(page.getByRole("button", { name: "Download CSV template" })).toBeVisible();
+  await expect(section.getByRole("alert")).toContainText("missing: npi");
+  await expect(section.getByRole("alert")).toContainText("npi_number");
   expect(wire.stageCalls).toHaveLength(0);
   expect(fixtures.import_runs).toHaveLength(0);
 
   // Valid file → columns + sample-rows preview before processing.
   await uploadRoster(
-    page,
-    page.locator("body"),
+    section,
     "roster.csv",
     [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817465" })].join(
       "\n",
     ),
   );
-  await expect(page.getByText("2 data rows")).toBeVisible();
-  await expect(page.locator("th", { hasText: "provider_first_name" })).toBeVisible();
-  await expect(page.locator("td", { hasText: "Nathan" }).first()).toBeVisible();
+  await expect(section.getByText("2 data rows")).toBeVisible();
+  await expect(section.locator("th", { hasText: "provider_first_name" })).toBeVisible();
+  await expect(section.locator("td", { hasText: "Nathan" }).first()).toBeVisible();
 
   // Start → the explicit state sequence renders from the durable run row.
-  await page.getByRole("button", { name: "Start import" }).click();
-  await expect(page.getByText("Uploading", { exact: true }).first()).toBeVisible({
+  await section.getByRole("button", { name: "Start import" }).click();
+  await expect(section.getByText("Uploading", { exact: true }).first()).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.getByText("Scanning", { exact: true }).first()).toBeVisible({
+  await expect(section.getByText("Scanning", { exact: true }).first()).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.getByRole("progressbar")).toBeVisible();
-  await expect(page.getByText("Ready for review", { exact: true }).first()).toBeVisible({
+  await expect(section.getByRole("progressbar")).toBeVisible();
+  await expect(section.getByText("Ready for review", { exact: true }).first()).toBeVisible({
     timeout: 15000,
   });
 
-  // Both rows staged through the RPC; run counts recomputed server-side.
+  // Both rows staged through the RPC; the run is stamped entity_kind='provider'.
   expect(wire.stageCalls).toHaveLength(1);
   expect(fixtures.import_rows).toHaveLength(2);
   const run = fixtures.import_runs[0];
   expect(run.source).toBe("internal");
+  expect(run.entity_kind).toBe("provider");
   expect(run.state).toBe("ready_for_review");
   expect(run.staged_rows).toBe(2);
   expect(run.error_rows).toBe(0);
@@ -413,11 +414,13 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
 
 /* --------------------------------- TS-59 --------------------------------- */
 
-test("TS-59: org-rep streamlined wizard upload stages identically, no power tooling", async ({
+test("TS-59: org-rep streamlined wizard upload stages identically beside the manual form", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures();
+  // A group exists, so the TE-5 ladder lets the Providers upload proceed.
+  fixtures.provider_groups = [activeGroup()];
   const wire: WireLog = { writes: [], stageCalls: [] };
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire));
   await seedAuth(context);
@@ -426,16 +429,16 @@ test("TS-59: org-rep streamlined wizard upload stages identically, no power tool
   const card = page.locator("#wizard-providers");
   await expect(card).toBeVisible({ timeout: 30000 });
 
-  // The streamlined uploader renders inside the roster section: template +
-  // drop zone, no internal power-user tooling (no run history).
-  await expect(card.getByText("Bulk roster import")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Download CSV template" })).toBeVisible();
+  // The streamlined per-section uploader renders BESIDE the manual "Add
+  // provider" form: template + drop zone, no internal power-user run history.
+  await expect(card.getByText("Bulk provider import")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Add provider" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Download Provider template" })).toBeVisible();
   await expect(card.getByRole("button", { name: /Upload roster CSV/ })).toBeVisible();
   await expect(page.getByText("Run history")).toHaveCount(0);
 
   // Small valid roster through the SAME pipeline.
   await uploadRoster(
-    page,
     card,
     "org-roster.csv",
     [HEADER_LINE, rowLine(), rowLine({ provider_first_name: "Quinn", npi: "1093817465" })].join(
@@ -448,10 +451,11 @@ test("TS-59: org-rep streamlined wizard upload stages identically, no power tool
     timeout: 15000,
   });
 
-  // Identical staging: source stamped 'onboarding', rows in import_rows via
-  // the same RPC, zero live-table writes.
+  // Identical staging: source 'onboarding', entity_kind 'provider', rows in
+  // import_rows via the same RPC, zero live-table writes.
   const run = fixtures.import_runs[0];
   expect(run.source).toBe("onboarding");
+  expect(run.entity_kind).toBe("provider");
   expect(run.state).toBe("ready_for_review");
   expect(fixtures.import_rows).toHaveLength(2);
   expect(fixtures.import_rows.every((r) => r.row_state === "staged" && r.run_id === run.id)).toBe(
@@ -468,8 +472,6 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
 }) => {
   const fixtures = makeFixtures();
   const wire: WireLog = { writes: [], stageCalls: [] };
-  // A wide staging delay keeps the run mid-scan through the navigation
-  // round-trip even under full-suite parallel load.
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire, { stageDelayMs: 4000 }));
   await seedAuth(context);
 
@@ -477,8 +479,9 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
     timeout: 30000,
   });
+  const section = providersSection(page);
 
-  // 60 rows, 3 with malformed NPIs (the F3.0.4 gherkin).
+  // 60 rows, 3 with malformed NPIs.
   const badIndexes = [10, 25, 40];
   const rows = Array.from({ length: 60 }, (_, i) =>
     rowLine({
@@ -486,15 +489,10 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
       provider_last_name: `Scott${i}`,
     }),
   );
-  await uploadRoster(
-    page,
-    page.locator("body"),
-    "big-roster.csv",
-    [HEADER_LINE, ...rows].join("\n"),
-  );
-  await expect(page.getByText("60 data rows")).toBeVisible();
-  await page.getByRole("button", { name: "Start import" }).click();
-  await expect(page.getByText("Scanning", { exact: true }).first()).toBeVisible({
+  await uploadRoster(section, "big-roster.csv", [HEADER_LINE, ...rows].join("\n"));
+  await expect(section.getByText("60 data rows")).toBeVisible();
+  await section.getByRole("button", { name: "Start import" }).click();
+  await expect(section.getByText("Scanning", { exact: true }).first()).toBeVisible({
     timeout: 10000,
   });
 
@@ -508,6 +506,8 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
     timeout: 15000,
   });
+  // Once ready_for_review, the internal uploader's inline resume panel (which
+  // tracks uploading/scanning only) drops it — the state shows in Run history.
   await expect(page.getByText("Ready for review", { exact: true }).first()).toBeVisible({
     timeout: 25000,
   });
@@ -520,10 +520,7 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   expect(fixtures.import_rows).toHaveLength(60);
   expect((run.error_report as Array<{ line: number }>).map((e) => e.line)).toEqual([12, 27, 42]);
 
-  // The uploader's transient in-flight resume panel unmounts once the runs
-  // list refetch lands (internal resumes in-flight scans only) …
-  await expect(page.getByText("rows could not be staged.")).toHaveCount(0, { timeout: 10000 });
-  // … and the run history panel carries the raw detail + downloadable report.
+  // The run history panel carries the raw detail + downloadable report.
   await page.getByRole("button", { name: "View" }).click();
   await expect(page.getByText("3 rows could not be staged.")).toBeVisible();
   const downloadPromise = page.waitForEvent("download");

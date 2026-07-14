@@ -4,6 +4,8 @@ import {
   MISSING_NPI_MATCH_REASON,
   MISSING_NPI_REASON,
   buildCommitPlan,
+  dedupeGroupRows,
+  dedupeFacilityRows,
   dedupeImportRows,
   planBatchAssignment,
   summarizeImportPreview,
@@ -443,5 +445,111 @@ describe("planBatchAssignment (F3.1.5)", () => {
     });
     expect(plan.groupInserts).toEqual([]);
     expect(plan.facilityInserts).toEqual([{ providerId: P1, facilityId: FAC2.id }]);
+  });
+});
+
+/* --------------- E3.3 TE-8 — group / facility dedupe grains --------------- */
+
+describe("dedupeGroupRows (TE-8 — grain = TIN)", () => {
+  const groups = [GROUP1, GROUP2];
+  const row = (line: number, mapped: Record<string, string | null>): StagedImportRow => ({
+    line,
+    mapped,
+  });
+
+  it("skips a staged group whose TIN matches an existing group", () => {
+    const result = dedupeGroupRows([row(2, { name: "Shelby Group 1", tin: "123456789" })], groups);
+    expect(result.creates).toHaveLength(0);
+    expect(result.skips).toHaveLength(1);
+    expect(result.skips[0].reason).toContain(ALREADY_EXISTS_REASON);
+  });
+
+  it("creates a new group with a fresh TIN", () => {
+    const result = dedupeGroupRows([row(2, { name: "Fresh Group", tin: "555001234" })], groups);
+    expect(result.creates).toHaveLength(1);
+    expect(result.creates[0].mapped.tin).toBe("555001234");
+  });
+
+  it("folds a TIN repeated within the file to one create", () => {
+    const result = dedupeGroupRows(
+      [
+        row(2, { name: "Fresh Group", tin: "555001234" }),
+        row(3, { name: "Fresh Group Again", tin: "555001234" }),
+      ],
+      groups,
+    );
+    expect(result.creates).toHaveLength(1);
+    expect(result.skips).toHaveLength(1);
+    expect(result.skips[0].reason).toMatch(/Duplicate TIN/);
+  });
+
+  it("blocks a row missing a TIN (defensive)", () => {
+    const result = dedupeGroupRows([row(2, { name: "No TIN Group", tin: null })], groups);
+    expect(result.blocked).toHaveLength(1);
+    expect(result.blocked[0].column).toBe("group_tin");
+  });
+});
+
+describe("dedupeFacilityRows (TE-8 — grain = group + name + address)", () => {
+  const groups = [GROUP1, GROUP2];
+  const facilities = [
+    {
+      id: "fac-1",
+      name: "River Clinic",
+      groupId: GROUP1.id,
+      street: "10 River Rd",
+      city: "Wilmington",
+      state: "NC",
+      zip: "28401",
+    },
+  ];
+  const row = (line: number, mapped: Record<string, string | null>): StagedImportRow => ({
+    line,
+    mapped,
+  });
+  const base = {
+    facility_name: "River Clinic",
+    group_tin: "123456789",
+    street: "10 River Rd",
+    city: "Wilmington",
+    state: "NC",
+    zip: "28401",
+  };
+
+  it("resolves the parent group by TIN and skips an exact name+address match", () => {
+    const result = dedupeFacilityRows([row(2, { ...base })], groups, facilities);
+    expect(result.creates).toHaveLength(0);
+    expect(result.skips).toHaveLength(1);
+    expect(result.skips[0].reason).toContain(ALREADY_EXISTS_REASON);
+  });
+
+  it("creates when the address differs (same name, new address = distinct facility)", () => {
+    const result = dedupeFacilityRows(
+      [row(2, { ...base, street: "20 Ocean Ave" })],
+      groups,
+      facilities,
+    );
+    expect(result.creates).toHaveLength(1);
+    expect(result.creates[0].groupId).toBe(GROUP1.id);
+  });
+
+  it("resolves the parent group by name when TIN is absent", () => {
+    const result = dedupeFacilityRows(
+      [row(2, { ...base, group_tin: null, group_name: "Shelby Group 1", street: "20 Ocean Ave" })],
+      groups,
+      facilities,
+    );
+    expect(result.creates).toHaveLength(1);
+    expect(result.creates[0].groupId).toBe(GROUP1.id);
+  });
+
+  it("blocks a row whose parent group cannot be resolved (ladder, TE-5)", () => {
+    const result = dedupeFacilityRows(
+      [row(2, { ...base, group_tin: "000000000", group_name: "Ghost Group" })],
+      groups,
+      facilities,
+    );
+    expect(result.blocked).toHaveLength(1);
+    expect(result.blocked[0].reason).toMatch(/not found/);
   });
 });

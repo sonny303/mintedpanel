@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProviderRosterForm } from "@/components/onboarding/ProviderRosterForm";
 import { openSection } from "@/components/onboarding/openSection";
-import { RosterUploader } from "@/components/import/RosterUploader";
+import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
 import { StatusPill } from "@/components/StatusPill";
 import {
   useProviderGroupAssignments,
@@ -31,7 +31,7 @@ import {
   useVerifyProviders,
 } from "@/hooks/useProviders";
 import { useOrgStateLicenses } from "@/hooks/useLookups";
-import { useCanWrite, useIsAdmin } from "@/lib/permissions";
+import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
 import type { Provider } from "@/types";
@@ -80,27 +80,6 @@ function TerminateConfirm({ provider, onClose }: { provider: Provider; onClose: 
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// The streamlined bulk-upload card (E3.0 F3.0.1). Rendered for admins only —
-// staging writes are admin-only under RLS, and the org rep is an admin of
-// their own org. The CSV carries group/facility columns, so it is offered
-// even before any group exists (unlike the manual add-provider flow).
-function BulkRosterUploadCard() {
-  const isAdmin = useIsAdmin();
-  if (!isAdmin) return null;
-  return (
-    <div className="space-y-3 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
-      <div>
-        <div className="text-[13px] font-medium text-foreground">Bulk roster import</div>
-        <p className="text-[12px] text-muted-foreground">
-          Upload your whole roster as one CSV — rows are validated and staged for review, and
-          nothing changes in your workspace until the import is committed.
-        </p>
-      </div>
-      <RosterUploader source="onboarding" variant="streamlined" />
-    </div>
   );
 }
 
@@ -170,7 +149,7 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
             </Button>
           ) : null}
         </div>
-        <BulkRosterUploadCard />
+        <SectionUploadCard entityKind="provider" activeGroupCount={activeGroups.length} />
       </div>
     );
   }
@@ -275,7 +254,7 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
         Add provider
       </Button>
 
-      <BulkRosterUploadCard />
+      <SectionUploadCard entityKind="provider" activeGroupCount={activeGroups.length} />
 
       {modal ? (
         <ProviderRosterForm

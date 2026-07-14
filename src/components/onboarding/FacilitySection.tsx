@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { FacilityForm } from "@/components/onboarding/FacilityForm";
 import { openSection } from "@/components/onboarding/openSection";
+import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
 import { useUpdateFacility } from "@/hooks/useOrgSettings";
 import { hoursSummary } from "@/lib/facilityHours";
 import { resolveFacilityContact } from "@/lib/facilityContact";
@@ -82,7 +83,7 @@ export function FacilitySection({ wizard }: SectionBodyProps) {
   // level) — point the operator back one section instead of a dead form.
   if (activeGroups.length === 0 && activeFacilities.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-3">
+      <div className="flex flex-col items-start gap-4">
         <p className="text-[13px] text-muted-foreground">
           Locations belong to a provider group — add the group first, then capture each place of
           service here.
@@ -93,6 +94,13 @@ export function FacilitySection({ wizard }: SectionBodyProps) {
             Go to Provider Group
           </Button>
         ) : null}
+        <div className="w-full">
+          <SectionUploadCard
+            entityKind="facility"
+            activeGroupCount={0}
+            showPrerequisiteButton={false}
+          />
+        </div>
       </div>
     );
   }
@@ -176,6 +184,8 @@ export function FacilitySection({ wizard }: SectionBodyProps) {
         <Plus className="h-4 w-4" />
         Add facility
       </Button>
+
+      <SectionUploadCard entityKind="facility" activeGroupCount={activeGroups.length} />
 
       {modal ? (
         <FacilityForm
