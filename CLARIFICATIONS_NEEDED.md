@@ -16,7 +16,9 @@ Format per entry:
 
 ## Open
 
-## [r6] Next-best-action queue configurability — OPEN
+## Resolved
+
+## [r6] Next-best-action queue configurability — RESOLVED (2026-07-14)
 
 - **Issue:** The PM asked whether next-best-action workqueue settings are
   configurable and whether specific criteria need to be provided ("let me
@@ -26,16 +28,13 @@ Format per entry:
   (deadline-ordered: provider start dates, location launch dates, task due
   dates) — nothing is configurable today. R6 adds overdue follow-ups as a
   ranking input ([r6] decision A2).
-- **Options:**
-  1. Keep the ranking fixed for R6 (overdue follow-ups rank above
-     deadline-only rows; ties by earliest deadline) — zero config UI,
-     deterministic, no new admin surface. **Reviewer default.**
-  2. Admin-configurable weights/ordering of ranking inputs in the E4.2
-     admin module — heavier, adds a config surface and support burden.
-- **Impact:** E4.1 F4.1.3 acceptance criteria; E4.2 scope.
-- **Decision:** _pending PM_
-
-## Resolved
+- **Decision (PM Sowmya, 2026-07-14):** **admin-configurable with a default
+  option, configurable at the organization level.** The system ships a
+  default ranking (overdue follow-ups above deadline-only rows; ties by
+  earliest deadline); an org admin can adjust the ordering/enabling of the
+  ranking inputs for their org in the E4.2 Payer & SOP admin module
+  (F4.2.5). Ranking stays deterministic and fully derived — the org config
+  is an input to the derivation, not stored per-case priority.
 
 ## [r6] R6 Execution-pack discovery decisions — RESOLVED (2026-07-14)
 

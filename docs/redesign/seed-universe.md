@@ -237,6 +237,7 @@ This artifact does not define exact payer configuration yet. It reserves state c
 | TS-88       | Two-grain document store (E4.5)          | A state license uploaded on a provider and a W-9 + COI on the group, then a license re-upload (L1)                                                                             | Provider and group document tables show kind/dates/current version; expiring kinds require an expiration date; re-upload versions (prior retained, current marked); access is org-scoped, signed, audited                                      |
 | TS-89       | Expiration table + advisory readiness (E4.5) | Seeded documents with staggered expirations: expired, 21 days out, and current (L3)                                                                                        | The expiring-credentials table sorts by expiration with derived expired/expiring-soon/current states; readiness carries advisory warnings where the credential already participates                                                            |
 | TS-90       | Case-side document verification (E4.5)   | A case whose SOP requires documents that are present, missing, and expired; P2 downloads a current one (L1)                                                                    | The case shows required-document status derived live from the store; download delivers the current version via a signed short-lived URL; the extension panel links the same downloads only                                                     |
+| TS-91       | Org-level NBA queue settings (E4.2)      | P4 reorders/disables queue ranking inputs for the org, then resets to default; P2 opens My Cases before and after (L1)                                                         | With no saved config the shipped default applies; the saved config reorders P2's queue immediately for that org only; reset restores the default; changes are admin-only and audited; the queue stays fully derived                            |
 
 ## Recommended seed layers
 
@@ -283,7 +284,7 @@ Rule: seed baseline data directly; validate user workflows through UI. Do not re
 | E3.3 Sectioned intake uniformity             | Yes               | TS-65 through TS-68 (L1 uploads of per-section CSVs over existing fixtures; no new baselines)   |
 | E4.0 Payer pipeline                          | Yes               | TS-69 through TS-72 (L1 transitions over TS-50 generated-case states; no new baseline fixtures) |
 | E4.1 Structured touches                      | Yes               | TS-73 through TS-75 (L1 touch entry + one L2 past-due date state; no new baseline fixtures)     |
-| E4.2 Payer & SOP admin module                | Yes               | TS-76 through TS-79 (adds the P4 config-user seed row; otherwise L1 over E1.5–E2.x fixtures)    |
+| E4.2 Payer & SOP admin module                | Yes               | TS-76 through TS-79 + TS-91 (adds the P4 config-user seed row; otherwise L1 over E1.5–E2.x fixtures) |
 | E4.3 Extension workbench handoff             | Yes               | TS-80 through TS-83 (mock/e2e harness + one portal field-map fixture; no live portals in CI)    |
 | E4.4 Sensitive identifiers vault             | Yes               | TS-84 through TS-87 (one L3 vaulted-SSN row using a fake test value; never a real SSN)          |
 | E4.5 Document storage                        | Yes               | TS-88 through TS-90 (L1 uploads of generated PDFs + L3 staggered-expiration metadata)           |
@@ -347,6 +348,7 @@ Rule: seed baseline data directly; validate user workflows through UI. Do not re
 - **TS-58–TS-64 added (2026-07-13):** R5 scenarios (E3.0 import intake/front gate/async scan; E3.1 preview + 5-part dedupe + conflict review + staged commit + batch assignment; E3.2 NPPES lookup aid). No new baseline fixtures — runs are L1 uploads of generated CSVs over existing org/provider fixtures; TS-64 mocks the NPI Registry through the harness.
 - **TS-65–TS-68 added (2026-07-13):** E3.3 sectioned-intake-uniformity scenarios ([r5-debt]: per-section upload beside every manual form, ladder enforcement, combined-template retirement, converted-link continuation). No new baseline fixtures.
 - **TS-69–TS-90 added (2026-07-14):** R6 scenarios (E4.0 payer pipeline; E4.1 structured touches; E4.2 payer/SOP admin module — adds the P4 Company Owner / Ops Lead seed row, resolving that open item; E4.3 extension handoff via the mock harness; E4.4 SSN vault — the vaulted fixture uses a fake test SSN, never a real identifier; E4.5 document storage with generated PDF fixtures). Extension scenarios never hit live payer portals in CI.
+- **TS-91 added (2026-07-14):** E4.2 org-level NBA queue settings scenario (resolved [r6] NBA-configurability decision: admin-configurable per org with a shipped default). L1 entry; no new baseline fixtures.
 
 Not an epic — fixture strategy doc; no frontmatter/lifecycle. Answers and corrections against the live repo:
 
