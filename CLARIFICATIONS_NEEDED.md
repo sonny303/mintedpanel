@@ -46,7 +46,9 @@ Format per entry:
   - **A0. Payer SOPs are a mandatory prerequisite for system readiness.**
     Case generation must be entirely deterministic — driven by upstream
     configuration, never downstream guesswork. Build a dedicated
-    administrative module (architected as a micro-frontend) exclusively
+    administrative module (architected as a micro-frontend — PM confirmed
+    2026-07-14 this means a user-role-controlled admin module inside the
+    existing app, NOT a separately deployed application) exclusively
     for Payer and SOP management, owned by a designated configuration user
     (Ops Lead or Admin) who defines payer-specific requirements, logic,
     and task sequences. Centralizing SOP setup upstream means generated
