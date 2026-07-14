@@ -65,6 +65,18 @@ Format per entry:
   no key-custody/rotation, retention/deletion, or extension release-boundary
   decision (options 1–3 above) has landed. The security contradiction is
   unchanged, so E4.4 stays `reviewed: false` and was not edited.
+- **2026-07-14 (re-review, `84a55b8` e4.0 cycle):** the [e4.0] push
+  (`84a55b8`, resolving the OON/reapply blocker) re-triggered review; E4.4 was
+  not in that push but was re-assessed as the only remaining `reviewed: false`
+  epic. `AGENTS.md` (line 55: "Providers store `ssn_last4` only. Never store
+  or accept a full SSN.") and `SCHEMA.md` (line 10 PHI-minimization + the
+  `providers` column list, which carries `ssn_last4` and no full-SSN field)
+  on the current `redesign` HEAD still bind to last-4-only. None of options
+  1–3 has been chosen, and no key-custody/rotation, retention/deletion, or
+  approved extension release-boundary design has landed. E4.4 §5 itself still
+  names encryption key management as a REQUIRED-before-build PM decision. The
+  major security contradiction is unchanged, so E4.4 stays `reviewed: false`
+  and was not edited this cycle.
 
 ## Resolved
 
