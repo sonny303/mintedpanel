@@ -16,78 +16,6 @@ Format per entry:
 
 ## Open
 
-## [e4.0] OON terminal state and reapplication-cycle semantics conflict — OPEN
-
-- **Issue:** The resolved `[r6]` A3 decision defines the complete payer
-  pipeline as Drafting, Submitted, In Review, Action Required (RFI), then
-  Approved or Denied, with Approved/Denied terminal. The same discovery record
-  (A1) and E4.0 F4.0.3 also require a case to close Out-of-Network. OON is
-  therefore required as a resolution but absent from the canonical transition
-  graph. E4.0's later access-control, correction, and illustrative-model
-  sections call OON terminal and include it in a database check, but still
-  define no normal transition into OON. In addition, the shipped E2.1 behavior
-  reopens a denied case on the same case (`Denied → In Progress` in the
-  internal status track), while E4.0 calls payer-pipeline Denied terminal and
-  does not say whether reapplication starts a new immutable submission cycle.
-  The existing `status_configs` / `status_history` model already contains OON,
-  Submitted, Approved, and Denied as internal credentialing labels, but `[r6]`
-  explicitly forbids reusing that model as the external payer pipeline.
-- **Impact:** E4.0 cannot define a valid transition graph, current-state
-  projection, immutable history grain, approval/OON enrollment projection, or
-  denial-reapplication behavior without guessing. It also blocks the exact
-  pipeline/tracking contract consumed by E4.3 case context.
-- **Options:**
-  1. Add **OON as a third terminal payer-pipeline state** and define
-     reapplication as a new numbered pipeline cycle on the existing case
-     (recommended minimal change to the stated lifecycle).
-  2. End the pipeline at a neutral `Resolved` state and store
-     `Approved | Denied | OON` as a required structured resolution outcome;
-     this is cleaner analytically but changes the A3 state vocabulary.
-  3. Keep OON outside the payer pipeline as an internal/business close status
-     and specify where it renders/reports; define whether a reapplication
-     resets the current payer state or creates a new cycle.
-- **Decision:** _pending PM_
-- **2026-07-14 (re-review):** the ChatPRD round-2 push (attribution, visible
-  history timeline, concurrency/conflict handling, per-feature user journeys,
-  post-closure correction, stale-state nudge, WGLL checklist) was reviewed
-  against this roadblock. Those changes are all additive polish and do NOT
-  resolve it: OON is still added as a 7th pipeline state and terminal close
-  outcome with no defined normal transition into it (the F4.0.1 edge list
-  remains Drafting → Submitted → In Review ↔ Action Required → Approved/Denied,
-  OON omitted), and the reapply path still cites the E2.1 internal
-  `Denied → In Progress` rule without stating whether the payer-pipeline state
-  resets or a new immutable cycle begins. Adding OON to the PM-locked A3
-  vocabulary overrides a locked decision (authoring rule 4), so the epic stays
-  `reviewed: false`; §5 is left as-is (no scope guess) pending the PM's choice
-  of option 1/2/3. The PM's follow-up commit (`f809296`) confirmed the three
-  round-2 defaults (terminal-transition authority, all-role read-only history
-  visibility, 14-day org-configurable stale nudge) — those are now resolved,
-  leaving this OON/reapply conflict as the sole remaining blocker for E4.0.
-- **2026-07-14 (re-review of `81aeeb9`):** the new per-payer
-  resolution-identifier label/expectedness requirements and TS-71 update do
-  not resolve the transition-model conflict. OON still has no defined normal
-  inbound edge, and Denied reapplication still does not define whether the
-  payer pipeline resets or begins a new immutable cycle. E4.0 therefore
-  remains `reviewed: false`; its reviewer-owned §5 was not edited or extended
-  for the new payer-config requirement because the review workflow requires
-  stopping rather than guessing while this major lifecycle decision is open.
-- **2026-07-14 (re-review of `ca47da6`):** the PM-updated state vocabulary
-  (Not Started → Assigned prepended; terminal phase renamed
-  **Closed (Approved / Denied)**; enum + TE-1 default moved to `not_started`)
-  does **not** resolve this roadblock — it sharpens it. The PM-locked A3
-  vocabulary now names the terminal phase "Closed (Approved / Denied)",
-  listing only Approved and Denied, while F4.0.3 and the body/enum still
-  require **OON** as a third close outcome with no defined normal inbound edge
-  (the F4.0.1 edge list is Not Started → Assigned → Drafting → Submitted →
-  In Review ↔ Action Required → Closed Approved/Denied; OON is still appended
-  as "an explicit non-Approved close" in TE-1 with no source state). Denied
-  reapplication still cites only the internal-track `Denied → In Progress`
-  rule (`[r4-review]` Q6) and does not state whether the payer-pipeline state
-  resets to Not Started/Assigned or begins a new immutable submission cycle.
-  Both remain PM-lock overrides (authoring rule 4), so E4.0 stays
-  `reviewed: false` and its reviewer-owned §5 was left unedited (no scope
-  guess) pending the PM's choice of option 1/2/3 above.
-
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
 
 - **Issue:** E4.4 requires Minted Panel to accept, encrypt, store, reveal, and
@@ -139,6 +67,35 @@ Format per entry:
   unchanged, so E4.4 stays `reviewed: false` and was not edited.
 
 ## Resolved
+
+## [e4.0] OON terminal state and reapplication-cycle semantics conflict — RESOLVED (2026-07-14)
+
+- **Issue:** The payer pipeline's PM-locked A3 terminal phase named only
+  Approved and Denied, while E4.0 F4.0.3 (and the enum) also required a case to
+  close **Out-of-Network (OON)** — a third terminal close with no defined normal
+  inbound edge. Separately, Denied **reapplication** cited only the internal
+  E2.1 rule (`Denied → In Progress` in `status_history`, `[r4-review]` Q6) and
+  did not state whether the **payer-pipeline** state resets or begins a new
+  cycle. Across several re-reviews the reviewer declined to guess (adding OON to
+  the PM-locked vocabulary is a locked-decision override), so E4.0 stayed
+  `reviewed: false` pending the PM's choice of option 1/2/3.
+- **Options:** (as recorded) 1 — OON as a third terminal payer-pipeline state,
+  reapplication a new cycle on the existing case; 2 — neutral `Resolved` state +
+  structured outcome; 3 — OON outside the pipeline as an internal close status.
+- **Decision (PM Sowmya, 2026-07-14, commit `d3f6f82` "PM review passed — E4.0
+  approved for build"):** **Option 1.** The PM reviewed the full epic — which
+  already models OON as a third terminal close alongside Approved/Denied and
+  keeps reapply on the existing case — and approved it for build. Email-RFI
+  automation was explicitly deferred to R7. This resolves the business-scope
+  blocker; the remaining edge mechanics are reviewer-owned §5 enablement.
+- **Applied (reviewer, 2026-07-14):** E4.0 §5 TE-1 now defines the edge map
+  explicitly — Approved reachable from In Review / Action Required; **Denied and
+  OON reachable as non-Approved closes from any open pre-terminal state**
+  (Drafting, Submitted, In Review, Action Required), edge-symmetric; **reapply
+  after Denied is a normal forward transition Denied → Drafting on the same
+  case** (new attributed `payer_pipeline_history` row, prior Denied row
+  preserved append-only, not a correction), reconciled with TE-6. Frontmatter
+  set `reviewed: true`; no business-scope change.
 
 ## [r6] Next-best-action queue configurability — RESOLVED (2026-07-14)
 
