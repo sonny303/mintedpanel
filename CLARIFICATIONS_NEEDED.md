@@ -63,6 +63,14 @@ Format per entry:
   round-2 defaults (terminal-transition authority, all-role read-only history
   visibility, 14-day org-configurable stale nudge) — those are now resolved,
   leaving this OON/reapply conflict as the sole remaining blocker for E4.0.
+- **2026-07-14 (re-review of `81aeeb9`):** the new per-payer
+  resolution-identifier label/expectedness requirements and TS-71 update do
+  not resolve the transition-model conflict. OON still has no defined normal
+  inbound edge, and Denied reapplication still does not define whether the
+  payer pipeline resets or begins a new immutable cycle. E4.0 therefore
+  remains `reviewed: false`; its reviewer-owned §5 was not edited or extended
+  for the new payer-config requirement because the review workflow requires
+  stopping rather than guessing while this major lifecycle decision is open.
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
 
@@ -98,6 +106,13 @@ Format per entry:
      exchange supplies the portal field. Security must still approve the
      extension/browser release boundary.
 - **Decision:** _pending PM/security owner_
+- **2026-07-14 (re-review):** the current `redesign` branch still binds both
+  `AGENTS.md` and `SCHEMA.md` to `ssn_last4` only and explicitly prohibits
+  accepting or storing a full SSN. No approved key-custody/rotation,
+  retention/deletion, or extension release-boundary decision has landed, and
+  E4.4 §5 still identifies encryption key management as required before build.
+  This remains a major security contradiction, so E4.4 stays
+  `reviewed: false` and was not edited.
 
 ## Resolved
 
