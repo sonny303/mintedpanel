@@ -64,9 +64,7 @@ type NavLink = { to: string; label: string; icon: Icon };
 // A reserved slot — routes to the shared /soon state carrying its title.
 type ReservedLink = { title: string; label: string; icon: Icon };
 
-const orgReserved: ReservedLink[] = [
-  { title: "Facilities", label: "Facilities", icon: Building },
-];
+const orgReserved: ReservedLink[] = [{ title: "Facilities", label: "Facilities", icon: Building }];
 
 // Switcher scale rules (reference readme NAVIGATION): ≤10 orgs plain grouped
 // list; above 10 a search field + scroll; at 100+ recents only (the active org
