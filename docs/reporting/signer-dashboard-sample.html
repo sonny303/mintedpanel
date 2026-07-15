@@ -1,0 +1,330 @@
+<title>Network Position — Owner Report (Sample)</title>
+<style>
+  :root{
+    --paper:#F4F2EC; --surface:#FFFFFF; --surface-2:#FBFAF6;
+    --ink:#17211C; --ink-2:#55605A; --ink-3:#8A938D; --line:#E5E2D9;
+    --brand:#1B4D3E; --brand-ink:#123A2E;
+    --good:#177D4E; --info:#3D53B5; --warn:#A9740C; --crit:#A5342A; --neutral:#D6D3CA;
+    --shadow:0 1px 2px rgba(23,33,28,.05),0 8px 24px rgba(23,33,28,.06);
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#0E130F; --surface:#161D18; --surface-2:#1B231D;
+      --ink:#EAEDE8; --ink-2:#A7AEA7; --ink-3:#79817B; --line:#2A332C;
+      --brand:#8FD3B4; --brand-ink:#0B1712;
+      --good:#34A56F; --info:#6E80DB; --warn:#C79021; --crit:#D06848; --neutral:#38423A;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#F4F2EC; --surface:#FFFFFF; --surface-2:#FBFAF6;
+    --ink:#17211C; --ink-2:#55605A; --ink-3:#8A938D; --line:#E5E2D9;
+    --brand:#1B4D3E; --brand-ink:#123A2E;
+    --good:#177D4E; --info:#3D53B5; --warn:#A9740C; --crit:#A5342A; --neutral:#D6D3CA;
+    --shadow:0 1px 2px rgba(23,33,28,.05),0 8px 24px rgba(23,33,28,.06);
+  }
+  :root[data-theme="dark"]{
+    --paper:#0E130F; --surface:#161D18; --surface-2:#1B231D;
+    --ink:#EAEDE8; --ink-2:#A7AEA7; --ink-3:#79817B; --line:#2A332C;
+    --brand:#8FD3B4; --brand-ink:#0B1712;
+    --good:#34A56F; --info:#6E80DB; --warn:#C79021; --crit:#D06848; --neutral:#38423A;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1140px;margin:0 auto;padding:32px 24px 56px}
+  .num{font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+
+  /* masthead */
+  .masthead{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;
+    padding-bottom:16px;border-bottom:2px solid var(--brand)}
+  .mast-l h1{font-family:var(--serif);font-weight:600;font-size:29px;line-height:1.1;margin:6px 0 2px;
+    letter-spacing:-.01em;text-wrap:balance}
+  .mast-l .org{display:flex;align-items:center;gap:9px;color:var(--brand);font-weight:700;font-size:13px;letter-spacing:.02em}
+  .seal{width:22px;height:22px;border-radius:6px;background:var(--brand);color:var(--surface);
+    display:grid;place-items:center;font-family:var(--serif);font-size:13px;font-weight:700}
+  :root[data-theme="dark"] .seal,@media (prefers-color-scheme:dark){.seal{color:var(--brand-ink)}}
+  .mast-r{text-align:right;font-size:12.5px;color:var(--ink-2);line-height:1.7}
+  .mast-r b{color:var(--ink);font-weight:600}
+
+  .thesis{font-family:var(--serif);font-size:19px;line-height:1.45;color:var(--ink);margin:22px 0 8px;
+    max-width:74ch;text-wrap:pretty}
+  .thesis b{color:var(--brand);font-weight:600}
+  @media (prefers-color-scheme:dark){.thesis b{color:var(--brand)}}
+
+  /* KPI tiles */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:20px 0 26px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 16px 15px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--brand))}
+  .kpi .lab{font-size:11.5px;color:var(--ink-2);font-weight:600;letter-spacing:.01em}
+  .kpi .big{font-family:var(--serif);font-size:34px;font-weight:600;line-height:1;margin:12px 0 4px;letter-spacing:-.02em}
+  .kpi .sub{font-size:11.5px;color:var(--ink-3)}
+  .kpi.good{--accent:var(--good)} .kpi.info{--accent:var(--info)} .kpi.warn{--accent:var(--warn)} .kpi.brand{--accent:var(--brand)}
+
+  /* card */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+    box-shadow:var(--shadow)}
+  .card h2{font-size:13px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-2);
+    font-weight:700;margin:0 0 14px;display:flex;align-items:center;gap:8px}
+  .card h2 .hint{font-size:11px;letter-spacing:0;text-transform:none;color:var(--ink-3);font-weight:500}
+
+  /* pipeline bar */
+  .pipe{display:flex;height:34px;border-radius:8px;overflow:hidden;background:var(--surface-2);gap:2px}
+  .pipe .seg{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:13px;
+    min-width:34px;position:relative}
+  .pipe .seg.good{background:var(--good)} .pipe .seg.info{background:var(--info)} .pipe .seg.warn{background:var(--warn)}
+  @media (prefers-color-scheme:dark){.pipe .seg{color:#0E130F}}
+  :root[data-theme="dark"] .pipe .seg{color:#0E130F}
+  :root[data-theme="light"] .pipe .seg{color:#fff}
+  .pipe-note{margin-top:12px;font-size:13.5px;color:var(--ink-2);line-height:1.55}
+  .pipe-note b{color:var(--ink);font-weight:600}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:13px;font-size:12px;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .sw.good{background:var(--good)}.sw.info{background:var(--info)}.sw.warn{background:var(--warn)}
+  .sw.crit{background:var(--crit)}.sw.neutral{background:var(--neutral)}
+
+  .grid2{display:grid;grid-template-columns:0.92fr 1.08fr;gap:18px;margin-top:18px}
+
+  /* payer rows */
+  .prow{display:grid;grid-template-columns:96px 1fr 60px;align-items:center;gap:10px;margin:9px 0}
+  .prow .pn{font-size:12.5px;color:var(--ink);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pbar{display:flex;height:16px;border-radius:5px;overflow:hidden;background:var(--surface-2);gap:1.5px}
+  .pbar i{display:block}
+  .pbar i.good{background:var(--good)}.pbar i.info{background:var(--info)}.pbar i.warn{background:var(--warn)}
+  .prow .pct{font-size:11.5px;color:var(--ink-3);text-align:right}
+  .prow .pct b{color:var(--good);font-weight:600}
+
+  /* matrix */
+  .mx-scroll{overflow-x:auto}
+  .mx{display:grid;grid-template-columns:74px repeat(8,minmax(38px,1fr));gap:3px;min-width:430px}
+  .mx .h{font-size:10.5px;color:var(--ink-2);font-weight:600;text-align:center;padding:0 0 3px;
+    align-self:end;line-height:1.15}
+  .mx .rh{font-size:11.5px;color:var(--ink);font-weight:500;display:flex;align-items:center;white-space:nowrap}
+  .cell{height:30px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;
+    color:#fff;letter-spacing:.02em;cursor:default;transition:transform .08s}
+  .cell:hover{transform:scale(1.09);z-index:2}
+  :root[data-theme="light"] .cell{color:#fff} :root[data-theme="dark"] .cell{color:#0E130F}
+  @media (prefers-color-scheme:dark){.cell{color:#0E130F}}
+  .cell.good{background:var(--good)}.cell.info{background:var(--info)}.cell.warn{background:var(--warn)}
+  .cell.crit{background:var(--crit)}
+  .cell.none{background:var(--surface-2);color:var(--ink-3);font-weight:500}
+  @media (prefers-color-scheme:dark){.cell.none{color:var(--ink-3)}}
+
+  /* forecast timeline */
+  .tl{position:relative;height:118px;margin:26px 8px 6px}
+  .tl .axis{position:absolute;left:0;right:0;bottom:34px;height:2px;background:var(--line)}
+  .tl .tick{position:absolute;bottom:20px;transform:translateX(-50%);font-size:10.5px;color:var(--ink-3)}
+  .tl .tick::after{content:"";position:absolute;left:50%;bottom:-8px;width:1px;height:7px;background:var(--line)}
+  .tl .ev{position:absolute;bottom:34px;transform:translateX(-50%);display:flex;flex-direction:column;
+    align-items:center;gap:0}
+  .tl .dot{border-radius:50%;border:2.5px solid var(--surface);box-shadow:var(--shadow)}
+  .tl .ev .cap{position:absolute;bottom:100%;margin-bottom:7px;white-space:nowrap;text-align:center;font-size:11px;
+    color:var(--ink);font-weight:600;line-height:1.25}
+  .tl .ev .cap small{display:block;font-weight:500;color:var(--ink-3);font-size:10px}
+  .fc-foot{font-size:12px;color:var(--ink-3);margin-top:2px}
+
+  .footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:11.5px;color:var(--ink-3);line-height:1.7}
+  .footer b{color:var(--ink-2);font-weight:600}
+  .tag{display:inline-block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+    color:var(--brand);background:color-mix(in srgb,var(--brand) 12%,var(--surface));
+    border:1px solid color-mix(in srgb,var(--brand) 25%,transparent);padding:2px 8px;border-radius:999px}
+
+  #tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--paper);
+    font-size:12px;padding:6px 9px;border-radius:7px;box-shadow:0 6px 20px rgba(0,0,0,.25);
+    opacity:0;transition:opacity .1s;max-width:240px;line-height:1.4}
+  @media (max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}
+    .masthead{align-items:flex-start}.mast-r{text-align:left}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="mast-l">
+      <div class="org"><span class="seal">K</span> KANSAS FITNESS PHYSIO</div>
+      <h1>Network Position Report</h1>
+    </div>
+    <div class="mast-r">
+      Prepared for <b>the Practice Owner</b><br>
+      Review period <b>as of Jul 15, 2026</b><br>
+      <span class="tag">Sample · live data</span>
+    </div>
+  </header>
+
+  <p class="thesis">Six providers are being credentialed across eight payers.
+    <b>10 of 47 payer credentials are in-network</b>; 29 are submitted and sitting with payers;
+    8 still need work on our side. Nothing is currently blocked on you.</p>
+
+  <section class="kpis">
+    <div class="kpi good">
+      <div class="lab">In-network credentials</div>
+      <div class="big num">10<span style="font-size:17px;color:var(--ink-3)"> / 47</span></div>
+      <div class="sub">21% of provider–payer pairs live</div>
+    </div>
+    <div class="kpi info">
+      <div class="lab">Awaiting payer decision</div>
+      <div class="big num">29</div>
+      <div class="sub">submitted, clock is theirs</div>
+    </div>
+    <div class="kpi warn">
+      <div class="lab">Needs our action</div>
+      <div class="big num">8</div>
+      <div class="sub">incl. 1 denial to rework</div>
+    </div>
+    <div class="kpi brand">
+      <div class="lab">Providers in motion</div>
+      <div class="big num">6</div>
+      <div class="sub">across 2 groups</div>
+    </div>
+    <div class="kpi brand">
+      <div class="lab">Locations live</div>
+      <div class="big num">2<span style="font-size:17px;color:var(--ink-3)"> / 10</span></div>
+      <div class="sub">8 in launch pipeline</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Credentialing pipeline <span class="hint">— all 47 provider–payer credentials, by whose move it is</span></h2>
+    <div class="pipe" role="img" aria-label="Pipeline: 10 in-network, 29 awaiting payer, 8 need our action">
+      <div class="seg good" style="flex:10" data-tip="In-network / complete — 10 credentials (21%)">10 In-network</div>
+      <div class="seg info" style="flex:29" data-tip="Submitted, awaiting payer decision — 29 credentials (62%)">29 Awaiting payer</div>
+      <div class="seg warn" style="flex:8" data-tip="Needs our action — 8 credentials (17%)">8 Ours</div>
+    </div>
+    <div class="legend">
+      <span><i class="sw good"></i> In-network / approved</span>
+      <span><i class="sw info"></i> Submitted — awaiting payer</span>
+      <span><i class="sw warn"></i> Needs our action</span>
+      <span><i class="sw crit"></i> Denied — rework</span>
+    </div>
+    <p class="pipe-note">The book is <b>mostly with the payers</b>: nearly two-thirds of credentials are submitted and
+      waiting on a decision. Only <b>8</b> sit with us — seven not-yet-started and one denial (Pollard × BCBS of Kansas) to resubmit.</p>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Payer onboarding <span class="hint">— how far each payer relationship has advanced</span></h2>
+      <div id="payers"></div>
+      <div class="legend" style="margin-top:16px">
+        <span><i class="sw good"></i> In-network</span>
+        <span><i class="sw info"></i> Awaiting</span>
+        <span><i class="sw warn"></i> Not started</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Provider coverage <span class="hint">— where each provider stands with each payer</span></h2>
+      <div class="mx-scroll">
+        <div class="mx" id="matrix"></div>
+      </div>
+      <div class="legend" style="margin-top:14px">
+        <span><i class="sw good"></i> Live / Approved / N/R</span>
+        <span><i class="sw info"></i> Submitted</span>
+        <span><i class="sw warn"></i> In progress / New</span>
+        <span><i class="sw crit"></i> Denied</span>
+        <span><i class="sw neutral"></i> No case</span>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:18px">
+    <h2>What's coming next <span class="hint">— credentialing renewals & expirations on the horizon</span></h2>
+    <div class="tl" id="timeline"></div>
+    <p class="fc-foot">Driven by license expiration dates (100% on file) and CAQH re-attestation cadence.
+      One further license renewal falls in 2028 (Hershberger). No recredentialing or contract-renewal dates are on file yet.</p>
+  </section>
+
+  <footer class="footer">
+    <b>Source.</b> Live Kansas Fitness Physio data (Minted Panel), rendered Jul 15, 2026 — credential_cases · status_configs · state_licenses · providers · facilities.
+    Names are live provider records. 1 non-clinical UAT record ("Test Provider") excluded from this view.<br>
+    <b>Snapshot, by design.</b> This account holds ~2 weeks of operational history, so trend/throughput and cycle-time views are deliberately omitted until the data accrues (see reporting ideation doc, §Data-reality &amp; MVP cut). Delivery to the owner would ride a scoped, expiring share link.
+  </footer>
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  // ---- data (live KFP, Test Provider excluded) ----
+  var payers=[
+    {n:"Pre-Cred Setup",c:4,w:1,o:1},
+    {n:"Medicare",c:4,w:1,o:1},
+    {n:"Blue KC",c:2,w:3,o:1},
+    {n:"Aetna",c:0,w:5,o:1},
+    {n:"BCBS of Kansas",c:0,w:4,o:1},
+    {n:"Cigna",c:0,w:5,o:1},
+    {n:"Humana",c:0,w:5,o:1},
+    {n:"UnitedHealthcare",c:0,w:5,o:1}
+  ];
+  var cols=["Pre-Cred","Medicare","Blue KC","Aetna","BCBS-KS","Cigna","Humana","UHC"];
+  var full=["Pre-Credentialing Setup","Medicare","Blue KC","Aetna","BCBS of Kansas","Cigna","Humana","UnitedHealthcare"];
+  // cell: [class, code, longstatus]
+  var G=["good"],I=["info"],A=["warn"],C=["crit"],N=["none"];
+  function k(cls,code,st){return {cls:cls,code:code,st:st};}
+  var rows=[
+    {p:"Knapp, J.", cells:[k("good","Appr","Approved"),k("good","Live","In-Network"),k("good","N/R","Not Required"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted")]},
+    {p:"Douek, M.", cells:[k("good","Appr","Approved"),k("good","Appr","Approved"),k("good","N/R","Not Required"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted")]},
+    {p:"Hershberger, B.", cells:[k("good","Appr","Approved"),k("good","Live","In-Network"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted")]},
+    {p:"Mowery, M.", cells:[k("good","Appr","Approved"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted")]},
+    {p:"Pollard, S.", cells:[k("info","Sub","Submitted"),k("good","Appr","Approved"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("crit","Den","Denied — rework"),k("info","Sub","Submitted"),k("info","Sub","Submitted"),k("info","Sub","Submitted")]},
+    {p:"Beeson, W.", cells:[k("warn","WIP","In Progress"),k("warn","New","Not Started"),k("warn","New","Not Started"),k("warn","WIP","In Progress"),k("none","—","No case"),k("warn","New","Not Started"),k("warn","New","Not Started"),k("warn","New","Not Started")]}
+  ];
+
+  // ---- render payer bars ----
+  var ph=document.getElementById("payers"), out="";
+  payers.forEach(function(p){
+    var t=p.c+p.w+p.o, pc=Math.round(p.c/t*100);
+    function seg(cls,v,label){return v? '<i class="'+cls+'" style="flex:'+v+'" data-tip="'+p.n+': '+v+' '+label+'"></i>':'';}
+    out+='<div class="prow"><div class="pn" data-tip="'+p.n+' — '+t+' credentials">'+p.n+'</div>'+
+      '<div class="pbar">'+seg("good",p.c,"in-network")+seg("info",p.w,"awaiting")+seg("warn",p.o,"not started")+'</div>'+
+      '<div class="pct">'+(p.c? '<b>'+pc+'%</b> live':'<span style="color:var(--ink-3)">'+p.w+' out</span>')+'</div></div>';
+  });
+  ph.innerHTML=out;
+
+  // ---- render matrix ----
+  var mx=document.getElementById("matrix"), m="<div></div>";
+  cols.forEach(function(c,i){m+='<div class="h" data-tip="'+full[i]+'">'+c+'</div>';});
+  rows.forEach(function(r){
+    m+='<div class="rh">'+r.p+'</div>';
+    r.cells.forEach(function(cell,i){
+      m+='<div class="cell '+cell.cls+'" data-tip="'+r.p+' × '+full[i]+' — '+cell.st+'">'+cell.code+'</div>';
+    });
+  });
+  mx.innerHTML=m;
+
+  // ---- render forecast timeline ----
+  var events=[
+    {pos:52,count:5,r:16,label:"5 CAQH re-attest",when:"Oct 28",cls:"info",who:"Pollard, Hershberger, Mowery, Knapp, Douek"},
+    {pos:83,count:4,r:15,label:"4 license renewals",when:"Dec 31",cls:"warn",who:"Pollard, Mowery, Knapp, Beeson"},
+    {pos:96,count:1,r:10,label:"1 license renewal",when:"Jan 31 ’27",cls:"good",who:"Douek"}
+  ];
+  var ticks=["Jul","Aug","Sep","Oct","Nov","Dec","Jan"];
+  var tl=document.getElementById("timeline"), t='<div class="axis"></div>';
+  ticks.forEach(function(m,i){ t+='<div class="tick" style="left:'+(i/(ticks.length-1)*100)+'%">'+m+'</div>'; });
+  events.forEach(function(e){
+    var col = e.cls==="info"?"var(--info)":e.cls==="warn"?"var(--warn)":"var(--good)";
+    t+='<div class="ev" style="left:'+e.pos+'%">'+
+       '<div class="cap">'+e.label+'<small>'+e.when+'</small></div>'+
+       '<div class="dot" style="width:'+(e.r*2)+'px;height:'+(e.r*2)+'px;background:'+col+'" '+
+       'data-tip="'+e.when+' — '+e.label+': '+e.who+'"></div></div>';
+  });
+  tl.innerHTML=t;
+
+  // ---- tooltip ----
+  var tip=document.getElementById("tip"),cur=null;
+  function show(el,x,y){var m=el.getAttribute("data-tip");if(!m)return;tip.textContent=m;tip.style.opacity="1";
+    var tw=tip.offsetWidth,th=tip.offsetHeight;var px=x+12,py=y+14;
+    if(px+tw>innerWidth-8)px=x-tw-12; if(py+th>innerHeight-8)py=y-th-14;
+    tip.style.left=px+"px";tip.style.top=py+"px";}
+  document.addEventListener("mouseover",function(e){var el=e.target.closest("[data-tip]");if(el){cur=el;show(el,e.clientX,e.clientY);}});
+  document.addEventListener("mousemove",function(e){if(cur)show(cur,e.clientX,e.clientY);});
+  document.addEventListener("mouseout",function(e){if(e.target.closest("[data-tip]")){cur=null;tip.style.opacity="0";}});
+})();
+</script>
