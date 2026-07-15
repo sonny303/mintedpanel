@@ -16,6 +16,48 @@ Format per entry:
 
 ## Open
 
+## [e4.4] Vault key custody and server-only execution boundary — OPEN
+
+- **Issue:** The PM approved the server-only vault and the controlled
+  full-SSN exception, but E4.4 TE-2 still leaves the encryption/key-custody
+  model undecided. Its Option A also mixes two materially different designs:
+  a Nitro-managed server secret and a database-resident GUC. The direct
+  `anon`/`authenticated` RPC paths proposed in TE-3/TE-4 cannot safely receive
+  a Nitro-only key, while a database GUC changes custody, rotation, and
+  compromise boundaries. Separately, checking that a case belongs to the
+  provider does not prove the request is part of an active fill; the required
+  short-lived, actor/org/provider/case/field-bound fill authorization is not
+  yet defined.
+- **Impact:** The builder cannot safely freeze the ciphertext metadata, RPC
+  grants/signatures, Nitro routes, deployment secrets, rotation procedure, or
+  fill-release tests. Approving the current text could either expose decrypt
+  RPCs to clients or produce an implementation whose server-held key is
+  unavailable to its ingress/release paths. E4.4 therefore remains
+  `reviewed: false`, and the epic was not edited in this review.
+- **Options:**
+  1. **Nitro-mediated pgcrypto:** keep encryption/decryption in private
+     SECURITY DEFINER functions, revoke client `EXECUTE`, inject a
+     server-managed versioned key only from Nitro, and route intake, reveal,
+     and fill release through rate-limited Nitro endpoints.
+  2. **Nitro envelope encryption + external KMS:** keep keys and plaintext
+     outside PostgreSQL; store ciphertext, wrapped-key metadata, algorithm,
+     and key version only.
+  3. **Approved database-resident secret:** explicitly approve and provision a
+     database secret facility, define rotation/dual-decrypt behavior, and
+     still keep decrypt functions private behind Nitro.
+- **Decision:** _pending PM/security owner_. Whichever option is selected must
+  define key provisioning, rotation, rollback/dual-decrypt, backup/restore,
+  and emergency revocation, plus a one-use or short-TTL fill grant bound to the
+  authenticated actor, org, provider, case, and SSN field.
+- **2026-07-15 (review of `854c602`):** The prior last-four-only contradiction
+  is resolved by the PM's server-only-vault decision. The internal-modal role
+  is not a separate architecture blocker: F4.4.4 explicitly assigns the modal
+  to P1/P2, and the current write boundary is consistently
+  `specialist|admin` (`useCanWrite` / `isWriter`), so the existing requirement
+  resolves `store_ssn` to writer roles unless the PM changes that business
+  scope. Key custody and the enforceable server-only fill boundary remain
+  major security gaps, so review cannot advance.
+
 ## Resolved
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — RESOLVED (2026-07-14)
