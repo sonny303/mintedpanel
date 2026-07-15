@@ -145,8 +145,9 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
       { rows, releaseScope, providerFacilities: preview.providerFacilities },
       {
         onSuccess: (result) => {
+          const skipped = (preview.summary?.existing ?? 0) + result.summary.skippedExisting;
           toast.success(
-            `${result.summary.created} case${result.summary.created === 1 ? "" : "s"} created · ${result.summary.skippedExisting} skipped (existing)`,
+            `${result.summary.created} case${result.summary.created === 1 ? "" : "s"} created · ${skipped} skipped (existing) · ${excluded.length} excluded`,
           );
           if (result.summary.failed > 0) {
             toast.error(
@@ -205,10 +206,13 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
         <span>
-          {confirmableProposed.length} {confirmableProposed.length === 1 ? "proposal" : "proposals"}{" "}
-          · {gated.length} blocked · {excluded.length} excluded
+          {preview.summary?.candidates ?? 0}{" "}
+          {(preview.summary?.candidates ?? 0) === 1 ? "combination" : "combinations"}:{" "}
+          {confirmableProposed.length} proposed · {preview.summary?.existing ?? 0} already{" "}
+          {(preview.summary?.existing ?? 0) === 1 ? "exists" : "exist"} · {excluded.length} excluded
+          · {gated.length} blocked
         </span>
-        {canWrite && confirmableProposed.length > 0 ? (
+        {canWrite ? (
           <div className="ml-auto flex items-center gap-2">
             <Label htmlFor="release-cap" className="text-[12px] text-muted-foreground">
               Release

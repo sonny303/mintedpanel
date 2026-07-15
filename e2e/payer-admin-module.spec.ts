@@ -148,7 +148,7 @@ test("TS-91 — queue settings show the four inputs, reorder, and reset", async 
   await page.goto("/admin/payer-admin");
   await page.getByRole("tab", { name: "Queue settings" }).click({ timeout: 30000 });
 
-  await expect(page.getByText("Overdue follow-ups")).toBeVisible();
+  await expect(page.getByText("Overdue follow-ups", { exact: true })).toBeVisible();
   await expect(page.getByText("Task due dates")).toBeVisible();
   await expect(page.getByText("Provider start dates")).toBeVisible();
   await expect(page.getByText("Location launch dates")).toBeVisible();

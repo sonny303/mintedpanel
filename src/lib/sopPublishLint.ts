@@ -4,7 +4,7 @@
 //   - at least one task,
 //   - every task has at least one step,
 //   - no blank or default "New step"/"New task" labels.
-// Pure; enforced client-side in the wizard AND in the publish service path.
+// Pure; enforced in the wizard — the only publish surface.
 
 import type { SOPTaskDefinition } from "@/types";
 
