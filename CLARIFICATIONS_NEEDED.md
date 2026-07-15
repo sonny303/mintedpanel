@@ -148,6 +148,18 @@ Format per entry:
   selected a vault option or defined key rotation, retention/deletion, or the
   browser/extension release boundary. E4.4 therefore remains
   `reviewed: false` and was not edited.
+- **2026-07-15 (re-review, `3a0d417` E4.2 round-2 cycle):** the triggering push
+  changed the already-reviewed E4.2 epic (PM/Gemini round-2: enforced module
+  boundary, phased SOP task-execution types, F4.2.6 upstream profile gating,
+  staggered bulk release, template tier visibility) and `seed-universe.md`, so
+  E4.2 was skipped per the review-loop guard. E4.4 remains the only
+  `reviewed: false` epic. Its requirements to accept, store, reveal, and release
+  a full SSN still directly contradict the binding `AGENTS.md` (line 55) and
+  `SCHEMA.md` (line 10) last-four-only rule, and E4.4 §5 still names encryption
+  key management as a REQUIRED-before-build PM/security decision. No PM/security
+  decision has selected a vault option or approved key custody and rotation,
+  retention and deletion, or the browser/extension release boundary. E4.4
+  therefore remains `reviewed: false` and was not edited.
 
 ## Resolved
 
