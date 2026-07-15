@@ -1331,6 +1331,17 @@ p_individual_provider_id, p_group_provider_id) RETURNS jsonb` — **repo migrati
   `src/components/org/CreateOrganizationModal.tsx`).
 - `claim_invites()` — converts `pending_invites` for the caller's email into
   memberships.
+- `archive_org_payer_assignment(p_org_id uuid, p_payer_id uuid) RETURNS jsonb` —
+  **repo migration too** (E4.2 `20260715160000`). SECURITY INVOKER (caller RLS —
+  admin-only writes are enforced by the existing `org_payer_assignments` /
+  `payer_network_targets` policies, plus an explicit `user_role` admin guard that
+  RAISEs `org_payer_assignment_admin_only`). The ONE atomic archive: flips the
+  org's payer subscription to `archived` (+ `archived_at`) AND archives that
+  payer's active `payer_network_targets` in the same transaction (two PostgREST
+  UPDATEs are not atomic), never a DELETE. Returns
+  `{ assignment, archived_target_count }`; `orgPayerAssignments.ts` maps the
+  named RAISEs to friendly errors. Verified by a live rolled-back simulation
+  (assignment archived, targets archived, rows preserved).
 - `get_sop_field_tokens()` — the token **catalog**: `[{ table, token, column }]`
   for 132 tokens across 9 tables — which fields exist and where they live, not
   per-provider values. Client SOP templates use it as the closed token list;
@@ -1622,7 +1633,34 @@ confirmed on prod 2026-07-07). Converting existing org payers to global rows is
 a separate, human-supervised step. Assignment reads + the starter flag ship in
 **P4**: `src/services/orgPayerAssignments.ts` (`listAssignments`/`setStarter`,
 admin-only UPDATE, audited) + `src/hooks/useOrgPayerAssignments.ts`; Admin >
-Payers renders a "Starter" toggle only for assigned global payers. On provider
+Payers renders a "Starter" toggle only for assigned global payers.
+**E4.2 hardening (canonical payer selection, 2026-07-15):** the subscription is
+now a first-class, reversible, history-safe lifecycle — `org_payer_assignments`
+gained `status (active|archived)` + `archived_at` (migration `20260715160000`,
+repo + hosted; additive, all rows `active`, verified inert on live 0-row data).
+`orgPayerAssignments.ts` gained `addAssignment` (idempotent add/reactivate),
+`reactivateAssignment` (status flip ONLY — **never recreates targets**; archived
+scope stays for the existing restore/review flow), and `archiveAssignment` (via
+the transactional **`archive_org_payer_assignment(p_org_id, p_payer_id)` RPC**,
+SECURITY INVOKER + admin-guarded, which ALSO archives the payer's active
+`payer_network_targets` in one transaction — never DELETE, the assignment row is
+preserved so the targets' RLS WITH CHECK still passes) + hooks
+(`useAddAssignment`/`useArchiveAssignment`/`useReactivateAssignment`, invalidating
+the assignment/payer/catalog/target families the readiness + generation-preview
+surfaces compose). The **`/payer-directory` route is the org-admin self-service
+entry**: per active catalog payer it shows Add to organization / Added to
+organization (+ "Configure credentialing scope" → the wizard Payer Network
+section via the new `/onboarding/wizard?section=` deep-link) / Reactivate /
+Remove; retired/merged payers can't be newly added (canonical successor named);
+non-admins browse read-only. Pure branch logic in `src/lib/payerCatalogActions.ts`
+(`catalogAction`/`payerSetupEmptyState`/`isActiveAssignment`, tested). Downstream
+empty states are now actionable: `PayerNetworkSection` → "Browse payer catalog";
+Payer Setup (`payer-admin/PayerDirectory`) distinguishes no-payers-added vs
+payers-but-no-scope; `ScopeReviewSection`'s "Go to Payer Network" scrolls +
+moves focus + temporarily highlights via the enhanced `openSection`
+(reduced-motion aware). `AttachPayerDialog` stays target-creation-only over
+active subscriptions. Missing-catalog-payer intake is a reported follow-up
+(TECH-DEBT TD-34) — no free-text payer creation. On provider
 create, `src/routes/providers.new.tsx` auto-attaches cases for the org's
 assigned+starter payers via the pure `src/lib/starterCases.ts` derivation →
 `createCase`/`create_case_with_tasks` (opens at the provider's `home_state`,

@@ -13,7 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { usePayerReadiness, type EnrichedReadinessRow } from "@/hooks/usePayerReadiness";
 import { usePayers } from "@/hooks/useAdmin";
+import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
 import { useRole } from "@/lib/auth-store";
+import { payerSetupEmptyState } from "@/lib/payerCatalogActions";
 import { PayerResolutionIdDialog } from "@/components/payer-admin/PayerResolutionIdDialog";
 import type { Payer } from "@/types";
 
@@ -62,6 +64,7 @@ function FormCell({ row }: { row: EnrichedReadinessRow }) {
 export function PayerDirectory() {
   const readiness = usePayerReadiness();
   const payersQ = usePayers();
+  const assignmentsQ = useOrgPayerAssignments();
   const role = useRole();
   const canViewScorecard = role === "admin" || role === "billing";
   const [configuring, setConfiguring] = useState<Payer | null>(null);
@@ -69,12 +72,38 @@ export function PayerDirectory() {
   if (readiness.isError) {
     return <EmptyState message="Couldn't load payer readiness." />;
   }
-  if (!readiness.rows) {
+  if (!readiness.rows || assignmentsQ.data === undefined) {
     return <Skeleton className="h-40 w-full" />;
   }
+  // Empty readiness ⟺ no ACTIVE payer_network_targets. Distinguish the two
+  // causes so the empty state points at the right next step (F item 4b):
+  // no payers added yet vs. payers added but no credentialing scope configured.
   if (readiness.rows.length === 0) {
+    if (payerSetupEmptyState(assignmentsQ.data) === "no_payers") {
+      return (
+        <EmptyState
+          message="No payers have been added to this organization yet."
+          description="Browse the payer catalog and add the payers this organization works with — they'll appear here once their credentialing scope is configured."
+          action={
+            <Button asChild size="sm">
+              <Link to="/payer-directory">Browse payer catalog</Link>
+            </Button>
+          }
+        />
+      );
+    }
     return (
-      <EmptyState message="No payers are attached yet. Attach payers in the onboarding wizard's Payer Network section to configure their SOPs here." />
+      <EmptyState
+        message="Payers are added, but no credentialing scope is configured yet."
+        description="Configure credentialing scope (group × state targets) in the Payer Network section to see per-payer SOP readiness here."
+        action={
+          <Button asChild size="sm">
+            <Link to="/onboarding/wizard" search={{ section: "payer_network" }}>
+              Configure credentialing scope
+            </Link>
+          </Button>
+        }
+      />
     );
   }
 

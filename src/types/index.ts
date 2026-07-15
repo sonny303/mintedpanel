@@ -528,11 +528,20 @@ export interface PayerCatalogChange {
 // global rows; an org sees a global payer only via a row in this join table.
 // `starter` flags the org's starter-pack payers (Epic 1c / P4). RLS: member
 // SELECT own-org, admin write own-org.
+// E4.2 hardening — the subscription is reversible & history-safe. `status`
+// defaults to `active`; archived rows keep their history (removal never DELETEs)
+// and reactivation is a status flip that never recreates payer_network_targets
+// scope. `status`/`archivedAt` are optional so pre-hardening fixtures/rows stay
+// valid — treat a missing status as `active` (see isActiveAssignment).
+export type OrgPayerAssignmentStatus = "active" | "archived";
+
 export interface OrgPayerAssignment {
   id: string;
   orgId: string;
   payerId: string;
   starter: boolean;
+  status?: OrgPayerAssignmentStatus;
+  archivedAt?: string | null;
   createdAt: string;
 }
 

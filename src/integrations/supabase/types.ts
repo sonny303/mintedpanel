@@ -1398,25 +1398,31 @@ export type Database = {
       };
       org_payer_assignments: {
         Row: {
+          archived_at: string | null;
           created_at: string;
           id: string;
           org_id: string;
           payer_id: string;
           starter: boolean;
+          status: string;
         };
         Insert: {
+          archived_at?: string | null;
           created_at?: string;
           id?: string;
           org_id: string;
           payer_id: string;
           starter?: boolean;
+          status?: string;
         };
         Update: {
+          archived_at?: string | null;
           created_at?: string;
           id?: string;
           org_id?: string;
           payer_id?: string;
           starter?: boolean;
+          status?: string;
         };
         Relationships: [
           {
@@ -3263,6 +3269,10 @@ export type Database = {
           p_reason_code_id?: string;
           p_to_state: string;
         };
+        Returns: Json;
+      };
+      archive_org_payer_assignment: {
+        Args: { p_org_id: string; p_payer_id: string };
         Returns: Json;
       };
       assert_contact_valid: {

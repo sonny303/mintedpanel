@@ -8,7 +8,7 @@
 // useOnboardingWizard composition hook, section UI lives in
 // src/components/onboarding/, and E1.1–E1.3 mount their forms via the
 // SECTION_BODIES registry.
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,6 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { NextActionCard } from "@/components/onboarding/NextActionCard";
 import { PreviewSectionCard } from "@/components/onboarding/PreviewSectionCard";
 import { WizardSectionCard } from "@/components/onboarding/WizardSectionCard";
+import { openSection } from "@/components/onboarding/openSection";
 import {
   AssignmentsSectionBody,
   FacilitiesSectionBody,
@@ -27,9 +28,24 @@ import {
   type SectionBodyProps,
 } from "@/components/onboarding/sectionBodies";
 import { useOnboardingWizard } from "@/hooks/useOnboardingWizard";
-import { ONBOARDING_SECTIONS, type ActiveSectionKey } from "@/lib/onboardingProgress";
+import {
+  ACTIVE_SECTIONS,
+  ONBOARDING_SECTIONS,
+  type ActiveSectionKey,
+} from "@/lib/onboardingProgress";
+
+interface WizardSearch {
+  /** Deep-link a section to focus (e.g. the E4.2 "Configure credentialing
+   * scope" hand-off from the payer catalog lands on Payer Network). */
+  section?: ActiveSectionKey;
+}
 
 export const Route = createFileRoute("/onboarding/wizard")({
+  validateSearch: (search: Record<string, unknown>): WizardSearch => {
+    const raw = typeof search.section === "string" ? search.section : undefined;
+    const match = ACTIVE_SECTIONS.find((d) => d.key === raw);
+    return match ? { section: match.key } : {};
+  },
   component: OnboardingWizardPage,
 });
 
@@ -48,6 +64,16 @@ const SECTION_BODIES: Record<ActiveSectionKey, ComponentType<SectionBodyProps>> 
 
 function OnboardingWizardPage() {
   const wizard = useOnboardingWizard();
+  const { section } = Route.useSearch();
+
+  useEffect(() => {
+    if (!section) return;
+    const def = ACTIVE_SECTIONS.find((d) => d.key === section);
+    if (!def) return;
+    // Defer to after the section cards paint, then scroll + focus + highlight.
+    const raf = requestAnimationFrame(() => openSection(def));
+    return () => cancelAnimationFrame(raf);
+  }, [section]);
 
   return (
     <div className="space-y-6">

@@ -8,8 +8,9 @@
 // pre-unchecked). "New expansion available" is DERIVED by re-running the
 // pure expansion against current facilities (TE-7) — never a stored flag.
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArchiveRestore, Plus, X } from "lucide-react";
+import { ArchiveRestore, ArrowRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/StatusPill";
 import { AttachPayerDialog } from "@/components/payers/AttachPayerDialog";
@@ -19,6 +20,7 @@ import {
   useRestoreTarget,
 } from "@/hooks/usePayerNetworkTargets";
 import { expandTargets, newExpansionRows } from "@/lib/payerExpansion";
+import { isActiveAssignment } from "@/lib/payerCatalogActions";
 import { PAYER_KIND_LABELS, formatStates } from "@/lib/payerDirectory";
 import type { Payer, PayerNetworkTarget } from "@/types";
 import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
@@ -37,11 +39,16 @@ export function PayerNetworkSection({ wizard }: SectionBodyProps) {
   const groupById = new Map(wizard.providerGroups.map((g) => [g.id, g]));
 
   // The curated shortlist (F1.5.1): org-visible payers intersected with the
-  // org's org_payer_assignments subscriptions — never the full catalog.
+  // org's ACTIVE org_payer_assignments subscriptions — never the full catalog,
+  // and never a catalog-archived subscription (E4.2 hardening: archiving the
+  // subscription removes the payer from the org's attach surface).
   const shortlist = useMemo(() => {
-    const assigned = new Set(wizard.payerAssignments.map((a) => a.payerId));
+    const assigned = new Set(
+      wizard.payerAssignments.filter(isActiveAssignment).map((a) => a.payerId),
+    );
     return wizard.payers.filter((p) => assigned.has(p.id));
   }, [wizard.payers, wizard.payerAssignments]);
+  const shortlistIds = useMemo(() => new Set(shortlist.map((p) => p.id)), [shortlist]);
 
   const targetsByPayer = useMemo(() => {
     const map = new Map<string, PayerNetworkTarget[]>();
@@ -57,15 +64,28 @@ export function PayerNetworkSection({ wizard }: SectionBodyProps) {
   const pickerPayers = shortlist.filter(
     (p) => !(targetsByPayer.get(p.id) ?? []).some((t) => t.status === "active"),
   );
-  const archivedTargets = wizard.payerNetworkTargets.filter((t) => t.status === "archived");
+  // Only archived targets whose SUBSCRIPTION is still active — a catalog-archived
+  // subscription (and its cascade-archived targets) leaves the wizard until it is
+  // reactivated from the payer catalog.
+  const archivedTargets = wizard.payerNetworkTargets.filter(
+    (t) => t.status === "archived" && shortlistIds.has(t.payerId),
+  );
 
   if (shortlist.length === 0) {
     return (
-      <p className="text-[13px] text-muted-foreground">
-        No payers are enabled for this organization yet. The shortlist is curated with Minted during
-        onboarding — once payers are enabled, attach them here to record which networks each group
-        is pursuing.
-      </p>
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-[13px] text-muted-foreground">
+          No payers have been added to this organization yet. Browse the payer catalog to add the
+          payers this organization works with, then attach them here to record which networks each
+          group is pursuing.
+        </p>
+        <Button asChild variant="outline">
+          <Link to="/payer-directory">
+            <ArrowRight className="h-4 w-4" />
+            Browse payer catalog
+          </Link>
+        </Button>
+      </div>
     );
   }
 
