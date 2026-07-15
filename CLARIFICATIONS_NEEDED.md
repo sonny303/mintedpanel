@@ -86,6 +86,14 @@ Format per entry:
   and rotation design, retention/deletion policy, ingress path, and approved
   browser/extension release boundary. No option above has been selected by the
   PM/security owner, so E4.4 stays `reviewed: false` and was not edited.
+- **2026-07-15 (re-review, `e04d3b2` E4.1 roadmap cycle):** the latest push
+  changed only the already-reviewed E4.1 epic and `ROADMAP-STATUS.md`, so E4.1
+  was skipped per the review-loop guard. E4.4 remains the only unreviewed epic,
+  and its storage, reveal, and extension release of a full SSN still conflict
+  with the binding `AGENTS.md` and `SCHEMA.md` last-four-only rule. No approved
+  key-custody/rotation, retention/deletion, or browser/extension release-boundary
+  decision has landed, and no option above has been selected. E4.4 therefore
+  remains `reviewed: false` and was not edited.
 
 ## Resolved
 
