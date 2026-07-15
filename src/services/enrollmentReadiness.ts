@@ -42,6 +42,9 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
   // alike; both drop providers absent from the input, exactly like
   // terminated). Do NOT add a second candidacy/readiness provider source —
   // a path that bypasses this read silently breaks the fence.
+  // E4.2 TE-17 — the designated test provider is excluded from this ONE fence
+  // read too, so it never appears in E1.8 readiness OR E2.0 generation
+  // candidacy (the shared exclusion, at the shared source).
   const { data, error } = await supabase
     .from("providers")
     .select(
@@ -49,7 +52,8 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
     )
     .eq("org_id", orgId)
     .neq("status", "terminated")
-    .neq("verification_state", "pending_verification");
+    .neq("verification_state", "pending_verification")
+    .neq("is_test_provider", true);
   if (error) throw error;
   const rows = camelizeRow<ProviderFactsRow[]>(data ?? []);
   return rows.map((r) => ({

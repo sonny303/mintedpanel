@@ -1144,6 +1144,54 @@ action_required|approved|denied|oon`); the append-only **`payer_pipeline_history
   zero-history-on-failure + admin gate were verified via a live rolled-back
   simulation (a JS fake can't prove PG transactionality). No new deps.
 
+- **E4.2 — Payer & SOP Admin Module.** A role-gated `/admin/payer-admin` route
+  subtree (parent + `.index` tabs + `.forms.$payerId`) consolidating payer +
+  SOP configuration; module-local components in `src/components/payer-admin/`.
+  **The import boundary is machine-enforced both ways** (TE-15) by
+  `src/components/payer-admin/moduleBoundary.test.ts` (Rule A: no non-admin code
+  imports the module; Rule B: the module imports specialist code only via
+  lib/services/hooks/design-system). The **one authorized shell edit**: an
+  admin-only "Payer & SOP Setup" nav entry in `Sidebar.tsx` (`useIsAdmin`).
+  **Seven migrations** (`20260715140000`–`140600`, repo + hosted): `payers`
+  `resolution_id_label`/`resolution_id_expected` (F4.2.1 seam, read via
+  `payerResolutionIdentifier.ts` now); `next_best_action_configs` (TE-7 org
+  queue ranking, `org_id` PK); `sop_template_drafts` (F4.2.1 save-as-draft);
+  `tasks.execution_type` + `sop_templates`/`sop_template_versions`
+  `required_profile_attributes` + the **publish RPC gained a 6th param**
+  `p_required_profile_attributes` (drop-old-signature + recreate to avoid a
+  PostgREST overload); `case_generation_runs.release_scope`;
+  `fill_sessions.is_test` + `case_id` relaxed NULLABLE + `providers.is_test_provider`;
+  and `create_case_with_tasks` now threads per-task `execution_type`.
+  **Pure logic (all tested):** `executionTypes.ts` (the shared execution-type
+  union — the single source), `profileGating.ts` (governed attribute keys +
+  gate eval, TE-13), `payerReadiness.ts` (TE-4 projection), `queueSettings.ts`
+  (labels + reorder over the `nextBestActions.ts` union/default/validator —
+  NOT re-declared), `sopPublishLint.ts`, `releaseScope.ts` (TE-14 selection
+  layer), `testProvider.ts` (the one exclusion predicate), `generationGating.ts`
+  (annotates proposed rows on top of the locked preview), `testRunResults.ts`
+  (F4.2.7 dry-run compute + parse). **Reused verbatim:** `mappingCoverage` from
+  `payerScorecard.ts` (now exported) for form readiness (TE-16); execution-type
+  stamping via `sopStamp.stampExecutionTypes` (sopResolver untouched — resolved
+  tasks align to definitions by index). **Services/hooks:** `denialReasonCodes.ts`
+  (F4.2.3 CRUD, reusing the E4.0 table), `queueRankingConfig.ts` now reads/writes
+  `next_best_action_configs` (the E4.1 seam is live), `sopTemplateDrafts.ts`,
+  `usePayerReadiness` (composes readiness + form coverage + blocked count),
+  `useGenerationPreview(scope?)` gained gating + release-scope + provider→facility
+  map + execution-type stamping, `useConfirmGeneration` takes `{rows, releaseScope,
+providerFacilities}`, `tasks.createProviderOutreachTask` (F4.2.6), form-runner
+  hooks in `useFormOnboarding.ts`. **Wizard extensions** (`TemplateWizard`/
+  `TemplateTaskRow`/`editableTemplate`): per-task execution-type select,
+  required-attributes checkboxes, save-as-draft + resume (`?draftId`), match-key
+  prefill (`?payerId/state/groupId` from the "Needs SOP" link), minimum-content
+  publish lint, global-tier blast-radius confirm, and accessible move up/down on
+  tasks AND steps (drag kept). Generation preview (shared, not the module) gained
+  the release cap + gated-rows-with-outreach UI + `?payerId` scope. `types.ts`
+  additively widened (Payer/Provider/Task/SOP\*/CaseGenerationRun/FillSession +
+  `SopTemplateDraft`/`FillSkippedField`). Reason codes reuse the E4.0 global-default
+  model (no new table — a conflict where E4.0's shipped reality supersedes TE-5's
+  is_system/per-org-seed, and it meets every F4.2.3 acceptance criterion). No new
+  deps.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

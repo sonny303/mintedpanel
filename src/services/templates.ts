@@ -21,11 +21,17 @@ export interface TemplateInput {
   taskDefinitions: SOPTaskDefinition[];
   archived?: boolean;
   isArchived?: boolean;
+  /** E4.2 TE-13 — governed required-profile-attribute keys (head working copy;
+   * publish snapshots them into the version). */
+  requiredProfileAttributes?: string[];
 }
 
 function normalizeTemplate(row: SOPTemplate): SOPTemplate {
   const archived = Boolean(row.isArchived ?? row.archived ?? false);
-  return { ...row, archived, isArchived: archived };
+  const requiredProfileAttributes = Array.isArray(row.requiredProfileAttributes)
+    ? row.requiredProfileAttributes
+    : [];
+  return { ...row, archived, isArchived: archived, requiredProfileAttributes };
 }
 
 function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTemplateInsert {
@@ -92,6 +98,7 @@ export async function publishTemplate(
   name: string,
   taskDefinitions: SOPTaskDefinition[],
   changeNote?: string | null,
+  requiredProfileAttributes?: string[],
 ): Promise<PublishResult> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
@@ -101,6 +108,7 @@ export async function publishTemplate(
     p_name: name,
     p_task_definitions: taskDefinitions as unknown as Json,
     p_change_note: changeNote ?? undefined,
+    p_required_profile_attributes: (requiredProfileAttributes ?? []) as unknown as Json,
   });
   if (error) {
     if (error.message.includes("sop_version_conflict")) throw new SopVersionConflictError();

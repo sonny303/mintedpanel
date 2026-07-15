@@ -17,6 +17,9 @@ export interface PayerInput {
   priorAuthVendor?: string | null;
   payerBillingId?: string | null;
   portalUrl?: string | null;
+  // E4.2 F4.2.1 — per-payer resolution-identifier config.
+  resolutionIdLabel?: string | null;
+  resolutionIdExpected?: boolean | null;
 }
 
 export async function listPayers(): Promise<Payer[]> {

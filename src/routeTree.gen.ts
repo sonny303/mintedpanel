@@ -53,6 +53,7 @@ import { Route as AdminSopsRouteImport } from './routes/admin.sops'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
+import { Route as AdminPayerAdminRouteImport } from './routes/admin.payer-admin'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
@@ -60,6 +61,7 @@ import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.ind
 import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
+import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
 import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
@@ -67,6 +69,7 @@ import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
+import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
 
 const WorkRoute = WorkRouteImport.update({
   id: '/work',
@@ -288,6 +291,11 @@ const AdminPayersRoute = AdminPayersRouteImport.update({
   path: '/admin/payers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPayerAdminRoute = AdminPayerAdminRouteImport.update({
+  id: '/admin/payer-admin',
+  path: '/admin/payer-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
   id: '/admin/mso-routing',
   path: '/admin/mso-routing',
@@ -322,6 +330,11 @@ const AdminSopsIndexRoute = AdminSopsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminSopsRoute,
+} as any)
+const AdminPayerAdminIndexRoute = AdminPayerAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminPayerAdminRoute,
 } as any)
 const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
   id: '/edit',
@@ -358,6 +371,12 @@ const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   path: '/admin/payers/$id/scorecard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPayerAdminFormsPayerIdRoute =
+  AdminPayerAdminFormsPayerIdRouteImport.update({
+    id: '/forms/$payerId',
+    path: '/forms/$payerId',
+    getParentRoute: () => AdminPayerAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -384,6 +403,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payer-admin': typeof AdminPayerAdminRouteWithChildren
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -413,10 +433,12 @@ export interface FileRoutesByFullPath {
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesByTo {
@@ -466,10 +488,12 @@ export interface FileRoutesByTo {
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin': typeof AdminPayerAdminIndexRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/generation/runs': typeof GenerationRunsIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesById {
@@ -498,6 +522,7 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payer-admin': typeof AdminPayerAdminRouteWithChildren
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -527,10 +552,12 @@ export interface FileRoutesById {
   '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation_/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRouteTypes {
@@ -560,6 +587,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
+    | '/admin/payer-admin'
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
@@ -589,10 +617,12 @@ export interface FileRouteTypes {
     | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation/runs/'
     | '/providers/$id/'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -642,10 +672,12 @@ export interface FileRouteTypes {
     | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin'
     | '/admin/sops'
     | '/admin/templates'
     | '/generation/runs'
     | '/providers/$id'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
   id:
     | '__root__'
@@ -673,6 +705,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
+    | '/admin/payer-admin'
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
@@ -702,10 +735,12 @@ export interface FileRouteTypes {
     | '/generation_/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation_/runs/'
     | '/providers/$id/'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers_/$id/scorecard'
   fileRoutesById: FileRoutesById
 }
@@ -734,6 +769,7 @@ export interface RootRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
   AdminImportRoute: typeof AdminImportRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
+  AdminPayerAdminRoute: typeof AdminPayerAdminRouteWithChildren
   AdminPayersRoute: typeof AdminPayersRoute
   AdminPortalsRoute: typeof AdminPortalsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -1064,6 +1100,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/payer-admin': {
+      id: '/admin/payer-admin'
+      path: '/admin/payer-admin'
+      fullPath: '/admin/payer-admin'
+      preLoaderRoute: typeof AdminPayerAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/mso-routing': {
       id: '/admin/mso-routing'
       path: '/admin/mso-routing'
@@ -1113,6 +1156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSopsIndexRouteImport
       parentRoute: typeof AdminSopsRoute
     }
+    '/admin/payer-admin/': {
+      id: '/admin/payer-admin/'
+      path: '/'
+      fullPath: '/admin/payer-admin/'
+      preLoaderRoute: typeof AdminPayerAdminIndexRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
     '/providers/$id/edit': {
       id: '/providers/$id/edit'
       path: '/edit'
@@ -1161,6 +1211,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/payers/$id/scorecard'
       preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/payer-admin/forms/$payerId': {
+      id: '/admin/payer-admin/forms/$payerId'
+      path: '/forms/$payerId'
+      fullPath: '/admin/payer-admin/forms/$payerId'
+      preLoaderRoute: typeof AdminPayerAdminFormsPayerIdRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
     }
   }
 }
@@ -1219,6 +1276,20 @@ const ProvidersRouteChildren: ProvidersRouteChildren = {
 
 const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
   ProvidersRouteChildren,
+)
+
+interface AdminPayerAdminRouteChildren {
+  AdminPayerAdminIndexRoute: typeof AdminPayerAdminIndexRoute
+  AdminPayerAdminFormsPayerIdRoute: typeof AdminPayerAdminFormsPayerIdRoute
+}
+
+const AdminPayerAdminRouteChildren: AdminPayerAdminRouteChildren = {
+  AdminPayerAdminIndexRoute: AdminPayerAdminIndexRoute,
+  AdminPayerAdminFormsPayerIdRoute: AdminPayerAdminFormsPayerIdRoute,
+}
+
+const AdminPayerAdminRouteWithChildren = AdminPayerAdminRoute._addFileChildren(
+  AdminPayerAdminRouteChildren,
 )
 
 interface AdminSopsRouteChildren {
@@ -1290,6 +1361,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
   AdminImportRoute: AdminImportRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
+  AdminPayerAdminRoute: AdminPayerAdminRouteWithChildren,
   AdminPayersRoute: AdminPayersRoute,
   AdminPortalsRoute: AdminPortalsRoute,
   AdminSettingsRoute: AdminSettingsRoute,

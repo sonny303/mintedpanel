@@ -2,6 +2,8 @@
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 import type { FacilityHours } from "@/lib/facilityHours";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type { ExecutionType } from "@/lib/executionTypes";
+import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -458,6 +460,9 @@ export interface Provider {
   /** E3.1 staging fence: 'pending_verification' rows are excluded from E1.8
    * readiness and E2.0 generation candidacy until explicitly verified */
   verificationState: ProviderVerificationState;
+  /** E4.2 F4.2.7 — the org's designated dry-run test provider. Excluded from
+   * queue/generation/scorecard by the shared testProvider predicate. */
+  isTestProvider?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -496,6 +501,12 @@ export interface Payer {
   status?: PayerCatalogStatus;
   mergedIntoId?: string | null;
   lastSyncedAt?: string | null;
+  // E4.2 F4.2.1 — per-payer resolution-identifier config (label of the
+  // payer-issued INDIVIDUAL enrollment ID + whether one is expected at
+  // approval). Read through the E4.0 payerResolutionIdentifier seam. NULL label
+  // = unconfigured → generic "Payer-issued ID" fallback.
+  resolutionIdLabel?: string | null;
+  resolutionIdExpected?: boolean | null;
 }
 
 // E1.6 F1.6.3 — append-only catalog diff log row. The diff facts are
@@ -625,6 +636,9 @@ export interface CaseGenerationRun {
   skippedExistingCount: number;
   excludedCount: number;
   failedCount: number;
+  /** E4.2 F4.2.4 / TE-14 — the release scope this run used (all/none/subset).
+   * NULL for pre-E4.2 runs and full releases. */
+  releaseScope?: ReleaseScopeRecord | null;
 }
 
 // E2.4 TE-1 — one immutable disposition row per candidate 4-part key per run,
@@ -767,6 +781,10 @@ export interface Task {
    */
   sopTemplateId: string | null;
   sopVersion: number | null;
+  /** E4.2 TE-12 — execution type stamped from the SOP task definition at
+   * generation. NULL ⇒ manual (the DB CHECK allows null). R6 renders + stamps
+   * only; automated behaviors ride E4.3/E4.5/R7. */
+  executionType?: ExecutionType | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -848,6 +866,9 @@ export interface SOPTaskDefinition {
   description?: string;
   sortOrder?: number;
   dueOffsetDays?: number;
+  /** E4.2 TE-12 — per-task execution type carried in the version's
+   * task_definitions jsonb. Absent ⇒ manual. */
+  executionType?: ExecutionType;
   steps: {
     label: string;
     detail?: string;
@@ -881,6 +902,11 @@ export interface SOPTemplate {
    * rows may lack it; treat absent as 1.
    */
   currentVersion?: number;
+  /** E4.2 TE-13 — governed provider-profile attribute keys this SOP requires
+   * before a case generates against it. Versioned with the SOP (snapshotted
+   * into each version by the publish RPC). Values are the closed
+   * ProfileAttributeKey set; normalize via profileGating.normalizeRequiredAttributes. */
+  requiredProfileAttributes?: string[];
 }
 
 /**
@@ -898,6 +924,22 @@ export interface SOPTemplateVersion {
   publishedBy: string | null;
   /** Publisher display name, resolved via `profiles` at read time (not a column). */
   publishedByName?: string | null;
+  /** E4.2 TE-13 — the immutable snapshot of required profile attributes for
+   * this version. */
+  requiredProfileAttributes?: string[];
+}
+
+/** E4.2 F4.2.1 (PM round-4) — a save-as-draft SOP wizard work-in-progress. Never
+ * resolves for generation or counts toward readiness; deleted on publish. */
+export interface SopTemplateDraft {
+  id: string;
+  orgId: string;
+  templateId: string | null;
+  payload: unknown;
+  updatedBy: string | null;
+  updatedByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CaseDetail extends CredentialCase {
@@ -948,6 +990,15 @@ export interface PortalFieldMap {
   updatedAt: string;
 }
 
+/** E4.2 TE-17 — a structured per-field skip result on a fill session. Tightened
+ * additively from the former `unknown`. Legacy jsonb that doesn't conform is
+ * parsed leniently by fillSessions helpers. */
+export interface FillSkippedField {
+  selector: string;
+  label: string;
+  reason: "unmapped" | "empty_token";
+}
+
 export interface FillSession {
   id: string;
   orgId: string;
@@ -958,9 +1009,11 @@ export interface FillSession {
   startedAt: string;
   completedAt: string | null;
   fieldsFilled: number;
-  fieldsSkipped: unknown;
+  fieldsSkipped: FillSkippedField[] | null;
   docsAttached: unknown;
   performedBy: string | null;
+  /** E4.2 TE-17 — dry-run test fill marker; excluded from every metric reader. */
+  isTest?: boolean;
 }
 
 // Cleanup surfaces (2026-07-06): the portals registry (Surface 3) and the

@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePayers, useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
+import { useSopTemplateDrafts } from "@/hooks/useSopTemplateDrafts";
+import { fmtDateTime } from "@/lib/format";
 import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,7 @@ function TemplatesIndex() {
   const templatesQ = useSops();
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
+  const draftsQ = useSopTemplateDrafts();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounced(search, 300);
   const [showArchived, setShowArchived] = useState(false);
@@ -81,6 +84,35 @@ function TemplatesIndex() {
       {!canEdit ? (
         <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           Read-only view. Only admins can edit templates.
+        </div>
+      ) : null}
+
+      {/* E4.2 F4.2.1 — save-as-draft WIP (visible to any admin for handoff). */}
+      {canEdit && (draftsQ.data?.length ?? 0) > 0 ? (
+        <div className="mb-4 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
+          <p className="text-[13px] font-medium text-[#92400E]">Drafts in progress</p>
+          <ul className="mt-2 space-y-1">
+            {(draftsQ.data ?? []).map((d) => {
+              const draftName =
+                (d.payload as { name?: string } | null)?.name?.trim() || "Untitled draft";
+              return (
+                <li key={d.id} className="flex items-center gap-2 text-[13px] text-[#92400E]">
+                  <span className="font-medium">{draftName}</span>
+                  <span className="text-[12px]">
+                    updated {fmtDateTime(d.updatedAt)}
+                    {d.updatedByName ? ` by ${d.updatedByName}` : ""}
+                  </span>
+                  <Link
+                    to="/admin/templates/new"
+                    search={{ draftId: d.id }}
+                    className="ml-auto text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                  >
+                    Resume
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
@@ -158,6 +190,11 @@ function TemplatesIndex() {
                     {isFallbackTemplate(t) ? (
                       <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
                         Fallback — used when no payer SOP matches
+                      </span>
+                    ) : (t as TemplateRow & { orgId: string | null }).orgId === null ? (
+                      // E4.2 F4.2.1 — template tier: global/shared vs org-specific.
+                      <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
+                        Global — shared across orgs
                       </span>
                     ) : null}
                     {isTemplateArchived(t) ? (

@@ -68,6 +68,9 @@ export interface ProviderInput {
   // unchanged. The CSV import sets it from the per-import toggle. Rides through
   // snakeizeRow → reference_only on insert.
   referenceOnly?: boolean;
+  // E4.2 F4.2.7 — designate this provider as the org's dry-run test provider.
+  // Optional; omitted → DB default false, so browser callers are unchanged.
+  isTestProvider?: boolean;
 }
 
 // The list projection is PHI-safe by construction: no ssn_last4, date_of_birth,
@@ -76,7 +79,7 @@ export interface ProviderInput {
 // not an address. specialty and email ride along for MSO routing resolution and
 // SOP tokens in the launch case-kickoff flow, which works off this list projection.
 const PROVIDER_LIST_COLUMNS =
-  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, reference_only, verification_state, updated_at";
+  "id, first_name, last_name, credentials, npi, home_state, caqh_id, caqh_last_attested_date, taxonomy_code, status, group_id, specialty, email, reference_only, verification_state, is_test_provider, updated_at";
 
 // Per-request context injected by callers. `db` is the Supabase client to use
 // (browser anon client under RLS, or the server service-role client), `orgId`

@@ -43,6 +43,7 @@ describe("publishTemplate", () => {
       p_name: "Humana KS",
       p_task_definitions: defs,
       p_change_note: "in-network procedure",
+      p_required_profile_attributes: [],
     });
   });
 

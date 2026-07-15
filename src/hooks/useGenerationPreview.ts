@@ -23,6 +23,7 @@ import {
 import {
   evaluateEnrollmentReadiness,
   type GroupContractInput,
+  type ProviderReadinessFacts,
   type ReadinessRow,
 } from "@/lib/enrollmentReadiness";
 import {
@@ -42,7 +43,9 @@ import { listGenerationCaseRows, listGenerationContractRows } from "@/services/g
 import { planGenerationConfirm } from "@/lib/generationConfirm";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
-import { stampTasks } from "@/lib/sopStamp";
+import { stampTasks, stampExecutionTypes } from "@/lib/sopStamp";
+import { evaluateGeneration, type GatedRow } from "@/lib/generationGating";
+import { applyReleaseScope, releaseScopeRecord, type ReleaseScope } from "@/lib/releaseScope";
 import {
   confirmGenerationBatch,
   type GenerationConfirmEntry,
@@ -106,6 +109,12 @@ export function useVoidCaseGenerationExclusion() {
   });
 }
 
+/** E4.2 TE-6 — an optional payer/group scope for the bulk-generation entry. */
+export interface GenerationScope {
+  payerId?: string;
+  groupId?: string;
+}
+
 export interface GenerationPreviewData {
   /** undefined while any source read is unresolved (loading or error). */
   rows: GenerationPreviewRow[] | undefined;
@@ -114,12 +123,16 @@ export interface GenerationPreviewData {
    * as "no readiness data" — never a green Ready. */
   readinessByKey: Map<string, ReadinessRow> | undefined;
   exclusions: CaseGenerationExclusion[] | undefined;
+  /** E4.2 TE-13 — proposed rows blocked by a missing required attribute. */
+  gated: GatedRow[] | undefined;
+  /** provider id → facility ids, for a location-based release scope (TE-14). */
+  providerFacilities: Map<string, Set<string>> | undefined;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
 }
 
-export function useGenerationPreview(): GenerationPreviewData {
+export function useGenerationPreview(scope?: GenerationScope): GenerationPreviewData {
   const targetsQ = usePayerNetworkTargets();
   const groupAssignmentsQ = useProviderGroupAssignments();
   const facilityAssignmentsQ = useProviderAssignments();
@@ -134,6 +147,7 @@ export function useGenerationPreview(): GenerationPreviewData {
   const casesQ = useGenerationCaseRows();
   const contractsQ = useGenerationContractRows();
   const exclusionsQ = useCaseGenerationExclusions();
+  const templatesQ = useSops();
 
   const sources = [
     targetsQ,
@@ -150,9 +164,12 @@ export function useGenerationPreview(): GenerationPreviewData {
     casesQ,
     contractsQ,
     exclusionsQ,
+    templatesQ,
   ];
   const resolved = sources.every((q) => q.data !== undefined);
   const today = localTodayIso();
+  const scopePayer = scope?.payerId;
+  const scopeGroup = scope?.groupId;
 
   const derived = useMemo(() => {
     if (!resolved) return undefined;
@@ -180,7 +197,7 @@ export function useGenerationPreview(): GenerationPreviewData {
       };
     });
 
-    const rows = buildGenerationPreview({
+    const allRows = buildGenerationPreview({
       today,
       targets: targetsQ.data ?? [],
       groupAssignments: groupAssignmentsQ.data ?? [],
@@ -193,7 +210,27 @@ export function useGenerationPreview(): GenerationPreviewData {
       exclusions: exclusionsQ.data ?? [],
     });
 
-    // ONE evaluation pass over the same inputs, joined to rows by key (TE-9).
+    // TE-6 — payer/group scope is a POST-filter over the locked preview rows;
+    // buildGenerationPreview's candidate/dedupe/exclusion logic is untouched.
+    const rows = allRows.filter(
+      (r) => (!scopePayer || r.payerId === scopePayer) && (!scopeGroup || r.groupId === scopeGroup),
+    );
+
+    // TE-13 — gate proposed rows against their SOP's required attributes.
+    const factsById = new Map<string, ProviderReadinessFacts>(
+      (factsQ.data ?? []).map((f) => [f.providerId, f]),
+    );
+    const gating = evaluateGeneration({ rows, templates: templatesQ.data ?? [], factsById });
+
+    // TE-14 — provider → facility ids for a location-based release scope.
+    const providerFacilities = new Map<string, Set<string>>();
+    for (const a of facilityAssignmentsQ.data ?? []) {
+      if (!a.providerId || !a.facilityId) continue;
+      const set = providerFacilities.get(a.providerId) ?? new Set<string>();
+      set.add(a.facilityId);
+      providerFacilities.set(a.providerId, set);
+    }
+
     const readinessRows = evaluateEnrollmentReadiness({
       today,
       targets: targetsQ.data ?? [],
@@ -206,10 +243,12 @@ export function useGenerationPreview(): GenerationPreviewData {
       contracts,
     });
     const readinessByKey = new Map(readinessRows.map((r) => [previewRowKey(r), r]));
-    return { rows, readinessByKey };
+    return { rows, readinessByKey, gated: gating.gated, providerFacilities };
   }, [
     resolved,
     today,
+    scopePayer,
+    scopeGroup,
     targetsQ.data,
     groupAssignmentsQ.data,
     facilityAssignmentsQ.data,
@@ -224,6 +263,7 @@ export function useGenerationPreview(): GenerationPreviewData {
     casesQ.data,
     contractsQ.data,
     exclusionsQ.data,
+    templatesQ.data,
   ]);
 
   return {
@@ -231,6 +271,8 @@ export function useGenerationPreview(): GenerationPreviewData {
     summary: derived ? generationPreviewSummary(derived.rows) : undefined,
     readinessByKey: derived?.readinessByKey,
     exclusions: exclusionsQ.data,
+    gated: derived?.gated,
+    providerFacilities: derived?.providerFacilities,
     isLoading: sources.some((q) => q.isLoading),
     isError: sources.some((q) => q.isError),
     refetch: () => {
@@ -248,6 +290,15 @@ export function useGenerationPreview(): GenerationPreviewData {
 // never a re-read that could race a publish. The loop itself — run row first,
 // per-row RPC calls, 23505 → skipped_existing — is the generationConfirm
 // service.
+export interface ConfirmGenerationVars {
+  /** The scoped preview rows (existing/excluded still ride for E2.4 recording). */
+  rows: GenerationPreviewRow[];
+  /** E4.2 TE-14 — the release scope; omitted ⇒ release all. */
+  releaseScope?: ReleaseScope;
+  /** provider → facility ids, required for a location-based release scope. */
+  providerFacilities?: Map<string, Set<string>>;
+}
+
 export function useConfirmGeneration() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
@@ -259,25 +310,53 @@ export function useConfirmGeneration() {
     providersQ.data !== undefined && groupsQ.data !== undefined && templatesQ.data !== undefined;
 
   const mutation = useMutation({
-    mutationFn: async (rows: GenerationPreviewRow[]): Promise<GenerationConfirmResult> => {
+    mutationFn: async (vars: ConfirmGenerationVars): Promise<GenerationConfirmResult> => {
+      const rows = vars.rows;
       const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
       const groupById = new Map((groupsQ.data ?? []).map((g) => [g.id, g]));
       const templates = templatesQ.data ?? [];
 
-      const plan = planGenerationConfirm(rows);
+      const basePlan = planGenerationConfirm(rows);
+      // E4.2 TE-14 — narrow the CREATE set to the released subset (gated rows
+      // are already excluded by the caller). Skipped-existing/excluded rows
+      // still ride the plan so E2.4 records them; only toCreate is scoped.
+      const scope: ReleaseScope = vars.releaseScope ?? { kind: "all" };
+      const released = applyReleaseScope(basePlan.toCreate, scope, {
+        providerFacilities: vars.providerFacilities,
+      });
+      const plan = {
+        ...basePlan,
+        toCreate: released,
+        plannedCounts: {
+          ...basePlan.plannedCounts,
+          proposedCount: released.length,
+          createdCount: released.length,
+        },
+      };
+
       const entries: GenerationConfirmEntry[] = plan.toCreate.map((row) => {
         const provider = providerById.get(row.providerId);
         const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
         const tasks =
           provider && template
-            ? stampTasks(
-                resolveTemplate(template, provider, groupById.get(row.groupId) ?? null, null, null),
-                template,
+            ? stampExecutionTypes(
+                stampTasks(
+                  resolveTemplate(
+                    template,
+                    provider,
+                    groupById.get(row.groupId) ?? null,
+                    null,
+                    null,
+                  ),
+                  template,
+                ),
+                template.taskDefinitions,
               )
             : [];
         return { row, tasks };
       });
-      return confirmGenerationBatch(plan, entries);
+      const scopeRecord = releaseScopeRecord(scope, released.length, basePlan.toCreate.length);
+      return confirmGenerationBatch(plan, entries, scopeRecord);
     },
     onSettled: () => {
       // Created cases (even on partial failure) must flip preview rows to

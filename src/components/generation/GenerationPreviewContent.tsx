@@ -1,19 +1,15 @@
-// E2.0 F2.0.1/F2.0.2/F2.0.3 + E2.1 F2.1.2/F2.1.3 — the computed
-// generation-preview checklist: every candidate provider × group × payer ×
-// state exactly once, checked by default, with derivation reason, readiness
-// signal (E1.8 + the TE-8 group contract check), and status-aware
-// existing-case gray-outs (TE-7; complete-bucket rows link to the case —
-// reapply continues THERE, never as a second case at the key). Confirm &
-// create (E2.1) runs the batch through the generationConfirm service — run
-// row first, one create_case_with_tasks call per checked row, duplicates
-// skipped — then lands on the My Cases queue filtered to the batch (E2.3
-// F2.3.2, superseding the E2.1 interim /cases?runId= landing, which stays
-// URL-reachable). Unchecking a proposed row records a
-// persistent, reasoned exclusion; excluded rows live in the collapsible
-// section below with one-click restore (a VOID, never a delete). Exclusion
-// and restore writes are admin-only ([r4-review] Q2); confirm is a writer
-// flow, mirroring the case-creation RLS.
-import { useState } from "react";
+// E2.0/E2.1 preview checklist + E4.2 F4.2.4 release configuration (TE-14) and
+// F4.2.6 upstream profile gating (TE-13). The candidate/dedupe/exclusion logic
+// is the locked E2.0 derivation; this component adds a SELECTION layer on top:
+//   - gated proposed rows (a required profile attribute is missing) are pulled
+//     out of the confirmable set and shown as blocked, with a per-provider
+//     "Create outreach task" spawn (never auto-created);
+//   - a release scope (all / first N) narrows how many confirmable rows this run
+//     actually creates; the remainder stays eligible for a later run, and the
+//     E2.4 run record carries the scope.
+// Confirm still runs the UNCHANGED E2.1 batch. An optional payer/group scope
+// (TE-6) filters the preview when entered from a payer's row.
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
@@ -21,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -35,9 +33,13 @@ import {
   useConfirmGeneration,
   useGenerationPreview,
   useVoidCaseGenerationExclusion,
+  type GenerationScope,
 } from "@/hooks/useGenerationPreview";
+import { useCreateProviderOutreachTask } from "@/hooks/useTasks";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { ReadinessRow } from "@/lib/enrollmentReadiness";
+import { applyReleaseScope, type ReleaseScope } from "@/lib/releaseScope";
+import { outreachTaskTitle } from "@/lib/profileGating";
 import {
   EXCLUSION_REASON_LABELS,
   existingCaseIndicator,
@@ -47,8 +49,6 @@ import {
 } from "@/lib/generationPreview";
 
 function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) {
-  // TE-9: a missing readiness row renders as neutral "no readiness data" —
-  // never a green Ready.
   if (!readiness) {
     return (
       <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
@@ -74,15 +74,49 @@ function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) 
   );
 }
 
-export function GenerationPreviewContent() {
-  const preview = useGenerationPreview();
+export interface GenerationPreviewContentProps {
+  scope?: GenerationScope;
+}
+
+export function GenerationPreviewContent({ scope }: GenerationPreviewContentProps = {}) {
+  const preview = useGenerationPreview(scope);
   const isAdmin = useIsAdmin();
   const canWrite = useCanWrite();
   const navigate = useNavigate();
   const voidExclusion = useVoidCaseGenerationExclusion();
   const confirm = useConfirmGeneration();
+  const outreach = useCreateProviderOutreachTask();
   const [excluding, setExcluding] = useState<GenerationPreviewRow | null>(null);
   const [excludedOpen, setExcludedOpen] = useState(false);
+  const [spawned, setSpawned] = useState<Set<string>>(new Set());
+  // Release scope: "" = release all; a positive number = first-N cap (TE-14).
+  const [releaseCap, setReleaseCap] = useState<string>("");
+
+  const gatedKeys = useMemo(
+    () => new Set((preview.gated ?? []).map((g) => previewRowKey(g.row))),
+    [preview.gated],
+  );
+
+  // The confirmable proposed rows = proposed, not gated. Gated rows are shown
+  // separately and never enter the run.
+  const confirmableProposed = useMemo(
+    () =>
+      (preview.rows ?? []).filter(
+        (r) => r.disposition === "proposed" && !gatedKeys.has(previewRowKey(r)),
+      ),
+    [preview.rows, gatedKeys],
+  );
+
+  const releaseScope: ReleaseScope = useMemo(() => {
+    const n = releaseCap.trim() === "" ? null : Number(releaseCap);
+    if (n === null || Number.isNaN(n) || n < 0) return { kind: "all" };
+    return { kind: "count", limit: n };
+  }, [releaseCap]);
+
+  const releasedCount = useMemo(
+    () => applyReleaseScope(confirmableProposed, releaseScope).length,
+    [confirmableProposed, releaseScope],
+  );
 
   if (preview.isError) {
     return (
@@ -99,32 +133,49 @@ export function GenerationPreviewContent() {
   }
 
   const { checklist, excluded } = splitGenerationPreview(preview.rows);
-  const summary = preview.summary;
+  const visibleChecklist = checklist.filter((r) => !gatedKeys.has(previewRowKey(r)));
+  const gated = preview.gated ?? [];
 
   const runConfirm = () => {
     if (!preview.rows) return;
-    confirm.mutate(preview.rows, {
-      onSuccess: (result) => {
-        const skipped = (summary?.existing ?? 0) + result.summary.skippedExisting;
-        toast.success(
-          `${result.summary.created} case${result.summary.created === 1 ? "" : "s"} created · ${skipped} skipped (existing) · ${summary?.excluded ?? 0} excluded`,
-        );
-        if (result.summary.failed > 0) {
-          // F2.1.2: a partial failure reports which rows failed; the created
-          // ones stand (per-row transactionality) and the refetched preview
-          // shows them as existing, so the user can retry just the failures.
-          toast.error(
-            `${result.summary.failed} row${result.summary.failed === 1 ? "" : "s"} failed: ${result.summary.failures
-              .map((f) => `${f.row.providerName} — ${f.row.payerName} ${f.row.state}`)
-              .join("; ")}`,
+    // Remove gated proposed rows so they never reach create_case_with_tasks;
+    // existing/excluded rows stay for E2.4 disposition recording.
+    const rows = preview.rows.filter((r) => !gatedKeys.has(previewRowKey(r)));
+    confirm.mutate(
+      { rows, releaseScope, providerFacilities: preview.providerFacilities },
+      {
+        onSuccess: (result) => {
+          toast.success(
+            `${result.summary.created} case${result.summary.created === 1 ? "" : "s"} created · ${result.summary.skippedExisting} skipped (existing)`,
           );
-          return;
-        }
-        navigate({ to: "/work", search: { run: result.runId } });
+          if (result.summary.failed > 0) {
+            toast.error(
+              `${result.summary.failed} row${result.summary.failed === 1 ? "" : "s"} failed: ${result.summary.failures
+                .map((f) => `${f.row.providerName} — ${f.row.payerName} ${f.row.state}`)
+                .join("; ")}`,
+            );
+            return;
+          }
+          navigate({ to: "/work", search: { run: result.runId } });
+        },
+        onError: (e) =>
+          toast.error(e instanceof Error ? e.message : "Could not confirm the generation run."),
       },
-      onError: (e) =>
-        toast.error(e instanceof Error ? e.message : "Could not confirm the generation run."),
-    });
+    );
+  };
+
+  const spawnOutreach = (row: GenerationPreviewRow, title: string) => {
+    outreach.mutate(
+      { providerId: row.providerId, title },
+      {
+        onSuccess: () => {
+          setSpawned((prev) => new Set(prev).add(row.providerId));
+          toast.success(`Outreach task created for ${row.providerName}.`);
+        },
+        onError: (e) =>
+          toast.error(e instanceof Error ? e.message : "Could not create the outreach task."),
+      },
+    );
   };
 
   const restore = (row: GenerationPreviewRow) => {
@@ -152,25 +203,74 @@ export function GenerationPreviewContent() {
 
   return (
     <div className="space-y-4">
-      {summary ? (
-        <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-          <span>
-            {summary.candidates} {summary.candidates === 1 ? "combination" : "combinations"}:{" "}
-            {summary.proposed} proposed · {summary.existing} already{" "}
-            {summary.existing === 1 ? "exists" : "exist"} · {summary.excluded} excluded
-          </span>
-          {canWrite ? (
+      <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
+        <span>
+          {confirmableProposed.length} {confirmableProposed.length === 1 ? "proposal" : "proposals"}{" "}
+          · {gated.length} blocked · {excluded.length} excluded
+        </span>
+        {canWrite && confirmableProposed.length > 0 ? (
+          <div className="ml-auto flex items-center gap-2">
+            <Label htmlFor="release-cap" className="text-[12px] text-muted-foreground">
+              Release
+            </Label>
+            <Input
+              id="release-cap"
+              inputMode="numeric"
+              placeholder="all"
+              value={releaseCap}
+              onChange={(e) => setReleaseCap(e.target.value.replace(/[^0-9]/g, ""))}
+              className="h-8 w-20 text-[13px]"
+              aria-label="Release count cap (blank = all)"
+            />
             <Button
               size="sm"
-              className="ml-auto bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-              disabled={summary.proposed === 0 || confirm.isPending || !confirm.ready}
+              className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+              disabled={releasedCount === 0 || confirm.isPending || !confirm.ready}
               onClick={runConfirm}
             >
               {confirm.isPending
                 ? "Creating cases…"
-                : `Confirm & create ${summary.proposed} ${summary.proposed === 1 ? "case" : "cases"}`}
+                : `Confirm & create ${releasedCount} ${releasedCount === 1 ? "case" : "cases"}`}
             </Button>
-          ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {gated.length > 0 ? (
+        <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
+          <p className="text-[13px] font-medium text-[#92400E]">
+            {gated.length} provider{gated.length === 1 ? "" : "s"} blocked by a missing required
+            attribute — no case generates for them this run.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {gated.map(({ row, unmet }) => {
+              const title = outreachTaskTitle(row.providerName, unmet);
+              return (
+                <li
+                  key={previewRowKey(row)}
+                  className="flex flex-wrap items-center gap-2 text-[13px] text-[#92400E]"
+                >
+                  <span className="font-medium">{row.providerName}</span>
+                  <span>
+                    {row.payerName} {row.state} — missing {unmet.map((u) => u.label).join(", ")}
+                  </span>
+                  {canWrite ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto h-7 text-[12px]"
+                      disabled={outreach.isPending || spawned.has(row.providerId)}
+                      onClick={() => spawnOutreach(row, title)}
+                    >
+                      {spawned.has(row.providerId)
+                        ? "Outreach task created"
+                        : "Create outreach task"}
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
@@ -189,7 +289,7 @@ export function GenerationPreviewContent() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {checklist.map((row) => {
+          {visibleChecklist.map((row) => {
             const key = previewRowKey(row);
             const existing = row.existingCase;
             const grayed = row.disposition === "existing";
@@ -220,9 +320,6 @@ export function GenerationPreviewContent() {
                       <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
                         {existingCaseIndicator(existing).label}
                       </Badge>
-                      {/* F2.1.3: generation never proposes a new case at a
-                          denied/closed key — the row links to the case, where
-                          reapplication continues the same history. */}
                       {existingCaseIndicator(existing).reapply ? (
                         <Link
                           to="/cases/$id"

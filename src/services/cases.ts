@@ -439,6 +439,9 @@ export interface CaseTaskPayload {
    * the tasks_sop_stamp_both_or_neither CHECK enforces the pairing. */
   sopTemplateId?: string | null;
   sopVersion?: number | null;
+  /** E4.2 TE-12 — per-task execution type, stamped onto the generated task.
+   * NULL/absent ⇒ manual. */
+  executionType?: string | null;
 }
 
 export async function createCase(
@@ -472,6 +475,7 @@ export async function createCase(
     due_date: t.dueDate,
     sop_template_id: t.sopTemplateId ?? null,
     sop_version: t.sopVersion ?? null,
+    execution_type: t.executionType ?? null,
   }));
 
   // Bound reference: extracting the method bare loses `this` and throws
@@ -526,6 +530,7 @@ export async function appendCaseTasks(caseId: string, tasks: CaseTaskPayload[]):
         is_auto_generated: true,
         sop_template_id: t.sopTemplateId ?? null,
         sop_version: t.sopVersion ?? null,
+        execution_type: t.executionType ?? null,
       })),
     )
     .select("id");

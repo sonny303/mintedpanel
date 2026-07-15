@@ -64,7 +64,10 @@ export async function getGenerationRun(id: string): Promise<CaseGenerationRun | 
   return data ? camelizeRow<CaseGenerationRun>(data) : null;
 }
 
-export async function recordGenerationRun(counts: GenerationRunCounts): Promise<CaseGenerationRun> {
+export async function recordGenerationRun(
+  counts: GenerationRunCounts,
+  releaseScope?: unknown,
+): Promise<CaseGenerationRun> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("case_generation_runs")
@@ -76,6 +79,8 @@ export async function recordGenerationRun(counts: GenerationRunCounts): Promise<
       skipped_existing_count: counts.skippedExistingCount,
       excluded_count: counts.excludedCount,
       failed_count: counts.failedCount,
+      // E4.2 TE-14 — additive: the release scope this run used (NULL for a full run).
+      release_scope: (releaseScope ?? null) as never,
     })
     .select("*")
     .single();

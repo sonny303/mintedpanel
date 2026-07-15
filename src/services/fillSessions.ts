@@ -10,9 +10,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
-import { requireActiveOrg, type AuditInput } from "@/lib/audit";
+import { requireActiveOrg, writeAudit, currentUserId, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
-import type { FillMode, FillSession } from "@/types";
+import type { FillMode, FillSession, FillSkippedField } from "@/types";
 
 export interface FillSessionServiceCtx {
   db: SupabaseClient<Database>;
@@ -35,6 +35,8 @@ export interface FillEventInput {
   docsAttached?: unknown;
   // Optional: mark this task complete (org-checked) after logging the fill.
   taskId?: string | null;
+  // E4.2 TE-17 — dry-run test fill marker (excluded from every metric reader).
+  isTest?: boolean;
 }
 
 export type RecordFillEventResult =
@@ -43,7 +45,7 @@ export type RecordFillEventResult =
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
 
 const FILL_SESSION_COLUMNS =
-  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by";
+  "id, org_id, case_id, provider_id, portal_key, fill_mode, started_at, completed_at, fields_filled, fields_skipped, docs_attached, performed_by, is_test";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FILL_MODES = new Set<string>(["web", "pdf"]);
@@ -66,8 +68,12 @@ function isValidTimestamp(value: unknown): boolean {
 // verbatim so the echoed session matches what the client stored.
 function toFillSession(row: Record<string, unknown>): FillSession {
   const session = camelizeRow<FillSession>(row);
-  session.fieldsSkipped = row.fields_skipped ?? null;
+  // fields_skipped is client jsonb echoed VERBATIM (the extension's R2 wire
+  // contract — camelize must not rewrite keys inside it). The E4.2 type is
+  // structured; readers that need the structure parse via parseFillSkipped.
+  session.fieldsSkipped = (row.fields_skipped ?? null) as FillSession["fieldsSkipped"];
   session.docsAttached = row.docs_attached ?? null;
+  session.isTest = Boolean(row.is_test);
   return session;
 }
 
@@ -195,6 +201,7 @@ export async function recordFillEvent(
     fields_skipped: input.fieldsSkipped ?? null,
     docs_attached: input.docsAttached ?? null,
     performed_by: ctx.userId,
+    is_test: input.isTest ?? false,
   };
   // Omit started_at when absent so the column default (now()) applies.
   if (input.startedAt != null) row.started_at = input.startedAt;
@@ -258,6 +265,70 @@ export async function listRecentFillsFromApp(limit = 200): Promise<FillSession[]
     .eq("org_id", orgId)
     .order("started_at", { ascending: false })
     .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => toFillSession(row as Record<string, unknown>));
+}
+
+// ---------------------------------------------------------------------------
+// E4.2 F4.2.7 — the in-app form test runner. A dry-run fill against the
+// designated test provider needs NO case (case_id is nullable since E4.2) and
+// NEVER submits to a payer — it only records what a fill WOULD do (per-field
+// filled / skipped-unmapped / empty-token), marked is_test so every metric
+// reader (scorecard firstPassRate, reporting) excludes it. Browser RLS path
+// (writer INSERT on own-org rows); org/performer from the auth context.
+// ---------------------------------------------------------------------------
+export interface TestFillInput {
+  providerId: string;
+  portalKey: string;
+  fieldsFilled: number;
+  fieldsSkipped: FillSkippedField[];
+}
+
+export async function recordTestFillFromApp(input: TestFillInput): Promise<FillSession> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("fill_sessions")
+    .insert({
+      org_id: orgId,
+      case_id: null,
+      provider_id: input.providerId,
+      portal_key: input.portalKey,
+      fill_mode: "web",
+      completed_at: new Date().toISOString(),
+      fields_filled: input.fieldsFilled,
+      fields_skipped: input.fieldsSkipped as never,
+      performed_by: currentUserId(),
+      is_test: true,
+    } as never)
+    .select(FILL_SESSION_COLUMNS)
+    .single();
+  if (error) throw error;
+  const session = toFillSession(data as Record<string, unknown>);
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "fill_session",
+    entityId: session.id,
+    after: {
+      providerId: session.providerId,
+      portalKey: session.portalKey,
+      fieldsFilled: session.fieldsFilled,
+      isTest: true,
+    },
+    description: `Test fill run (${session.portalKey})`,
+  });
+  return session;
+}
+
+/** Test fills for a portal, most recent first (the runner's result history). */
+export async function listTestFillsFromApp(portalKey: string): Promise<FillSession[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("fill_sessions")
+    .select(FILL_SESSION_COLUMNS)
+    .eq("org_id", orgId)
+    .eq("portal_key", portalKey)
+    .eq("is_test", true)
+    .order("started_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => toFillSession(row as Record<string, unknown>));
 }
