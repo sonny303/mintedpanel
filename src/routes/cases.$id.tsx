@@ -36,6 +36,7 @@ import {
   type TrackingIdSibling,
 } from "@/components/cases/pipeline/TrackingIdField";
 import { PayerPipelineHistoryPanel } from "@/components/cases/pipeline/PayerPipelineHistoryPanel";
+import { isTerminalPipelineState } from "@/lib/payerPipeline";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
@@ -189,7 +190,8 @@ function CaseDetailPage() {
           trackingId={
             <TrackingIdField
               value={c.payerReferenceId}
-              canEdit={canEdit}
+              // F4.0.2/TE-3 — post-terminal tracking-ID edits are admin-only.
+              canEdit={canEdit && (!isTerminalPipelineState(c.payerPipelineState) || isAdmin)}
               saving={setReferenceM.isPending}
               siblings={trackingSiblings}
               onSave={async (value) => {

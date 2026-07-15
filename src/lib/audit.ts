@@ -2,7 +2,7 @@
 // audit_log. Pulls active org and user identity from the auth store.
 
 import { supabase } from "@/integrations/supabase/externalClient";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, type AppRole } from "@/lib/auth-store";
 import type { AuditActionType } from "@/types";
 
 export interface AuditInput {
@@ -42,4 +42,12 @@ export function requireActiveOrg(): string {
 
 export function currentUserId(): string | null {
   return useAuthStore.getState().user?.id ?? null;
+}
+
+// The caller's role in the active org (service-layer, non-hook). Used for the
+// few business rules RLS can't express (e.g. E4.0 post-terminal edits are
+// admin-only). Client-derived — the wall for writes is still RLS.
+export function currentUserRole(): AppRole | null {
+  const state = useAuthStore.getState();
+  return state.memberships.find((m) => m.orgId === state.activeOrgId)?.role ?? null;
 }

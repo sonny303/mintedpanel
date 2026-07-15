@@ -4,11 +4,11 @@
 
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
-import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { currentUserId, currentUserRole, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
-import type { PayerPipelineState } from "@/lib/payerPipeline";
+import { isTerminalPipelineState, type PayerPipelineState } from "@/lib/payerPipeline";
 import type {
   CaseDetail,
   Contract,
@@ -236,6 +236,11 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
   const createdBy = (data as Record<string, unknown>).created_by as string | null;
   const merged = {
     ...(data as Record<string, unknown>),
+    // E4.0: keep CredentialCase.payerPipelineState honest at the boundary — the
+    // column is NOT NULL DEFAULT 'not_started' in prod, but a narrow/mock row
+    // may omit it; default it so no consumer sees undefined (mirrors caseContext).
+    payer_pipeline_state:
+      ((data as Record<string, unknown>).payer_pipeline_state as string | null) ?? "not_started",
     touches: enrichedTouches,
     status_history: enrichedHistory,
     payer_pipeline_history: enrichedPipeline,
@@ -259,16 +264,26 @@ export async function setPayerReference(caseId: string, value: string | null): P
   const orgId = requireActiveOrg();
   const trimmed = value && value.trim() ? value.trim() : null;
 
-  // Read the prior value first so the audit row can carry before -> after.
+  // Read the prior value + pipeline state first: the audit row carries
+  // before -> after, and the terminal admin-gate (F4.0.2/TE-3: "Post-terminal
+  // edits are P1-only") reads the same row — no extra round trip.
   const { data: prior, error: readErr } = await supabase
     .from("credential_cases")
-    .select("id, payer_reference_id")
+    .select("id, payer_reference_id, payer_pipeline_state")
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (readErr) throw readErr;
   if (!prior) throw new Error("Case not found");
   const priorValue = (prior.payer_reference_id as string | null) ?? null;
+
+  // Once the pipeline is closed (Approved/Denied/OON), only an admin may edit
+  // the tracking ID — the same admin-only rule the correction/post-terminal RPC
+  // enforces (TE-6). Non-terminal cases stay open to any writer.
+  const pipelineState = (prior.payer_pipeline_state as PayerPipelineState | null) ?? "not_started";
+  if (isTerminalPipelineState(pipelineState) && currentUserRole() !== "admin") {
+    throw new Error("Only an admin can edit the tracking ID on a closed case.");
+  }
 
   const { data, error } = await supabase
     .from("credential_cases")
