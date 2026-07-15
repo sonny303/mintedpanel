@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGenerationRun, useNextBestActions } from "@/hooks/useNextBestActions";
 import { DEADLINE_SOURCE_LABELS, filterQueueToRun, type QueueEntry } from "@/lib/nextBestActions";
+import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
 import { fmtDate } from "@/lib/format";
 
 function DeadlinePill({ entry }: { entry: QueueEntry }) {
@@ -48,6 +49,10 @@ function QueueRow({ entry }: { entry: QueueEntry }) {
         <span className="min-w-0 flex-1 space-y-0.5">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
+            {/* E4.0 TE-7 — payer-pipeline state, kept distinct from the action/task. */}
+            {entry.payerPipelineState ? (
+              <PayerPipelineBadge state={entry.payerPipelineState} />
+            ) : null}
             {entry.actionKind === "readiness_gap" ? (
               <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
                 Readiness gap

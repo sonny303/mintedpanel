@@ -39,8 +39,10 @@ import {
 import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
-import { Phone, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Phone, Plus, Search } from "lucide-react";
 import { useCanWrite } from "@/lib/permissions";
+import { useTablePrefs } from "@/hooks/useTablePrefs";
 import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
@@ -125,6 +127,15 @@ function CasesWorkView() {
     });
   const [batchOpen, setBatchOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+  // F4.0.2 — case search matches on the tracking ID (+ provider/payer/state).
+  const [search, setSearch] = useState("");
+  // F4.0.2 — the Tracking ID column is default-hidden, toggled via user prefs.
+  const { prefs, savePrefs } = useTablePrefs("cases.list");
+  const showTrackingId = prefs?.visibleCols?.trackingId ?? false;
+  const toggleTrackingId = () =>
+    savePrefs({
+      visibleCols: { ...(prefs?.visibleCols ?? {}), trackingId: !showTrackingId },
+    }).catch(() => undefined);
 
   // F2.2.2 — a case "uses the generic SOP" iff a task of it is stamped with a
   // fallback (global payerless) template id; both inputs are already-loaded
@@ -283,20 +294,35 @@ function CasesWorkView() {
   ];
 
   // Same predicate as the card counts (matchesChip / the generic derivation),
-  // so a card that says N always leaves exactly N case rows on screen.
+  // so a card that says N always leaves exactly N case rows on screen. The
+  // free-text search (F4.0.2) additionally narrows by provider/payer/state and
+  // — the point of the feature — the tracking ID.
+  const q = search.trim().toLowerCase();
   const visibleGroups = useMemo(
     () =>
       groups
         .map((g) => ({
           group: g,
-          visibleRows: g.rows.filter((r) =>
-            chip === "generic"
-              ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
-              : matchesChip(chip, r.state),
-          ),
+          visibleRows: g.rows.filter((r) => {
+            const chipOk =
+              chip === "generic"
+                ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
+                : matchesChip(chip, r.state);
+            if (!chipOk) return false;
+            if (!q) return true;
+            const providerName = r.provider
+              ? `${r.provider.firstName} ${r.provider.lastName}`.toLowerCase()
+              : "";
+            return [
+              providerName,
+              g.payerName.toLowerCase(),
+              r.case.state.toLowerCase(),
+              (r.case.payerReferenceId ?? "").toLowerCase(),
+            ].some((h) => h.includes(q));
+          }),
         }))
         .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip, genericCaseIds],
+    [groups, chip, genericCaseIds, q],
   );
 
   function tableRow(row: CaseRow): CaseTableRow {
@@ -323,6 +349,8 @@ function CasesWorkView() {
       id: row.case.id,
       lead,
       status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
+      pipeline: row.case.payerPipelineState,
+      trackingId: row.case.payerReferenceId ?? null,
       contract: row.contractStatus
         ? { label: row.contractStatus.label, color: row.contractStatus.color }
         : null,
@@ -415,6 +443,22 @@ function CasesWorkView() {
         </div>
       ) : null}
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search provider, payer, or tracking ID…"
+            className="h-9 pl-8"
+            aria-label="Search cases"
+          />
+        </div>
+        <Button variant="outline" size="sm" className="h-9" onClick={toggleTrackingId}>
+          {showTrackingId ? "Hide tracking ID" : "Show tracking ID"}
+        </Button>
+      </div>
+
       <div className="mb-6">
         <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as CasesChipId)} />
       </div>
@@ -443,7 +487,14 @@ function CasesWorkView() {
           groups={visibleGroups.map(({ group, visibleRows }) => ({
             id: group.payerId,
             header: groupHeader(group),
-            children: <CaseTable leadLabel="Provider" rows={visibleRows.map(tableRow)} />,
+            children: (
+              <CaseTable
+                leadLabel="Provider"
+                rows={visibleRows.map(tableRow)}
+                showPipeline
+                showTrackingId={showTrackingId}
+              />
+            ),
           }))}
         />
       )}

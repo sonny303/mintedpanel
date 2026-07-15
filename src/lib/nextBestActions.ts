@@ -54,6 +54,7 @@
 // sort_order non-completed); otherwise an honest "review" fallback.
 
 import { fmtDate } from "@/lib/format";
+import type { PayerPipelineState } from "@/lib/payerPipeline";
 
 export type DeadlineSource =
   "provider_start" | "launch_date" | "task_due" | "follow_up" | "cadence";
@@ -86,6 +87,9 @@ export interface QueueCaseInput {
   credentialingStatusId: string | null;
   facilityId: string | null;
   generationRunId: string | null;
+  /** E4.0 TE-7 — the payer-pipeline state, rendered as a badge on the queue
+   * distinct from internal task progress. Optional (older callers omit it). */
+  payerPipelineState?: PayerPipelineState;
   createdAt: string;
 }
 
@@ -183,6 +187,8 @@ export interface QueueEntry {
   payerName: string;
   state: string;
   generationRunId: string | null;
+  /** E4.0 TE-7 — the payer-pipeline state for the queue badge (may be absent). */
+  payerPipelineState?: PayerPipelineState;
   actionKind: QueueActionKind;
   action: string;
   /** null = no deadline signal at all; the entry ranks after dated work. */
@@ -417,6 +423,7 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       payerName,
       state: c.state,
       generationRunId: c.generationRunId ?? null,
+      payerPipelineState: c.payerPipelineState,
       actionKind,
       action,
       deadline: driving

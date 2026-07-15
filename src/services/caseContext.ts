@@ -46,6 +46,10 @@ export interface CaseContextTouch {
 
 export interface CaseContext {
   referenceNumbers: string[];
+  // E4.0 TE-7 — the external payer-pipeline state (read-only; the extension
+  // shows where the payer is without leaving the portal tab). The tracking ID
+  // is already carried by referenceNumbers.
+  payerPipelineState: string;
   latestNote: CaseContextNote | null;
   latestTouch: CaseContextTouch | null;
 }
@@ -72,15 +76,20 @@ export async function getCaseContext(
   // is the route's 404 (cross-org or nonexistent); nothing else is read.
   const { data: caseRow, error: caseErr } = await db
     .from("credential_cases")
-    .select("id, payer_reference_id")
+    .select("id, payer_reference_id, payer_pipeline_state")
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (caseErr) throw caseErr;
   if (!caseRow) return null;
 
-  const payerRef = (caseRow as { payer_reference_id: string | null }).payer_reference_id;
+  const typedCase = caseRow as {
+    payer_reference_id: string | null;
+    payer_pipeline_state: string | null;
+  };
+  const payerRef = typedCase.payer_reference_id;
   const referenceNumbers = payerRef ? [payerRef] : [];
+  const payerPipelineState = typedCase.payer_pipeline_state ?? "not_started";
 
   // One org-scoped touchlog read, newest-first: the latest note entry AND the
   // latest touchpoint are both picked off it (first hit per kind wins).
@@ -116,6 +125,7 @@ export async function getCaseContext(
 
   return {
     referenceNumbers,
+    payerPipelineState,
     latestNote: noteRow
       ? { content: noteRow.notes as string, createdAt: noteRow.created_at, authorName }
       : null,

@@ -7,7 +7,6 @@ import { AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,17 +17,25 @@ import { fmtDate } from "@/lib/format";
 import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
   useCase,
+  useCases,
   useContractFor,
+  useDenialReasonCodes,
   useSetPayerReference,
   useUpdateCaseStatus,
 } from "@/hooks/useCases";
+import { useProviders } from "@/hooks/useProviders";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
 import { useLogNote, useLogTouch } from "@/hooks/useTouches";
-import { useCanWrite } from "@/lib/permissions";
-import { Pencil } from "lucide-react";
+import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
+import { PayerPipelineControl } from "@/components/cases/pipeline/PayerPipelineControl";
+import {
+  TrackingIdField,
+  type TrackingIdSibling,
+} from "@/components/cases/pipeline/TrackingIdField";
+import { PayerPipelineHistoryPanel } from "@/components/cases/pipeline/PayerPipelineHistoryPanel";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
@@ -49,18 +56,39 @@ function CaseDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const canEdit = useCanWrite();
+  const isAdmin = useIsAdmin();
 
   const caseQ = useCase(id);
   const statusesQ = useStatusConfigs();
   const coordinatorsQ = useCoordinators();
+  const reasonCodesQ = useDenialReasonCodes();
   const c = caseQ.data;
   const contractQ = useContractFor(c?.groupId ?? undefined, c?.payerId, c?.state);
   const routingRuleQ = useMsoRoutingRule(c?.payerId, c?.state, c?.specialty ?? null);
+  // Same org + payer cases feed the F4.0.2 duplicate tracking-ID warning.
+  const payerCasesQ = useCases(c?.payerId ? { payerId: c.payerId } : {});
+  const providersQ = useProviders();
 
   const updateStatusM = useUpdateCaseStatus();
   const logTouchM = useLogTouch();
   const logNoteM = useLogNote();
   const setReferenceM = useSetPayerReference();
+
+  const trackingSiblings = useMemo<TrackingIdSibling[]>(() => {
+    if (!c) return [];
+    const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
+    return (payerCasesQ.data ?? [])
+      .filter((sc) => sc.id !== c.id && sc.payerReferenceId)
+      .map((sc) => {
+        const p = providerById.get(sc.providerId);
+        const name = p ? `${p.firstName} ${p.lastName}` : "another case";
+        return {
+          caseId: sc.id,
+          label: `${name} · ${sc.state}`,
+          reference: sc.payerReferenceId as string,
+        };
+      });
+  }, [c, payerCasesQ.data, providersQ.data]);
 
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [taskView, setTaskView] = useState("list");
@@ -150,6 +178,30 @@ function CaseDetailPage() {
           contractStatus={contractStatus}
           canEdit={canEdit}
           onOpenStatus={() => setStatusModalOpen(true)}
+          pipelineControl={
+            <PayerPipelineControl
+              c={c}
+              reasonCodes={reasonCodesQ.data ?? []}
+              canEdit={canEdit}
+              isAdmin={isAdmin}
+            />
+          }
+          trackingId={
+            <TrackingIdField
+              value={c.payerReferenceId}
+              canEdit={canEdit}
+              saving={setReferenceM.isPending}
+              siblings={trackingSiblings}
+              onSave={async (value) => {
+                try {
+                  await setReferenceM.mutateAsync({ caseId: c.id, value });
+                  toast.success("Tracking ID saved");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            />
+          }
         />
 
         {c.provider?.status === "terminated" ? (
@@ -292,23 +344,18 @@ function CaseDetailPage() {
                   <IdRow label="Taxonomy" value={c.provider?.taxonomyCode ?? null} />
                   <IdRow label="Group NPI" value={c.group?.npiType2 ?? null} />
                   <IdRow label="Group TIN" value={c.group?.tin ?? null} />
-                  <Separator className="my-2" />
-                  <PayerReferenceRow
-                    value={c.payerReferenceId}
-                    canEdit={canEdit}
-                    saving={setReferenceM.isPending}
-                    onSave={async (value) => {
-                      try {
-                        await setReferenceM.mutateAsync({ caseId: c.id, value });
-                        toast.success("Payer reference saved");
-                      } catch (e) {
-                        toast.error((e as Error).message);
-                      }
-                    }}
-                  />
+                  {c.payerIndividualProviderId || c.payerGroupProviderId ? (
+                    <>
+                      <Separator className="my-2" />
+                      <IdRow label="Payer Provider ID" value={c.payerIndividualProviderId} />
+                      <IdRow label="Group/Billing ID" value={c.payerGroupProviderId} />
+                    </>
+                  ) : null}
                 </dl>
               </CardContent>
             </Card>
+
+            <PayerPipelineHistoryPanel history={c.payerPipelineHistory} />
 
             <CaseHistoryPanel history={statusHistory} statusById={statusById} />
           </div>
@@ -362,86 +409,6 @@ function IdRow({ label, value }: { label: string; value: string | null }) {
       <dd className="flex items-center gap-2">
         <span className="font-medium tabular-nums">{value ?? "—"}</span>
         {value ? <CopyButton value={value} label={label} /> : null}
-      </dd>
-    </div>
-  );
-}
-
-// Story 2: latest payer reference / submission ID with inline edit (latest wins).
-function PayerReferenceRow({
-  value,
-  canEdit,
-  saving,
-  onSave,
-}: {
-  value: string | null;
-  canEdit: boolean;
-  saving: boolean;
-  onSave: (value: string | null) => Promise<void> | void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? "");
-
-  if (editing) {
-    return (
-      <div className="flex items-center justify-between gap-2">
-        <dt className="text-muted-foreground shrink-0">Payer reference</dt>
-        <dd className="flex items-center gap-1.5">
-          <Input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Reference / submission ID"
-            className="h-7 w-40 text-[13px]"
-          />
-          <Button
-            size="sm"
-            className="h-7 px-2"
-            disabled={saving}
-            onClick={async () => {
-              await onSave(draft.trim() ? draft.trim() : null);
-              setEditing(false);
-            }}
-          >
-            Save
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2"
-            disabled={saving}
-            onClick={() => {
-              setDraft(value ?? "");
-              setEditing(false);
-            }}
-          >
-            Cancel
-          </Button>
-        </dd>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="text-muted-foreground">Payer reference</dt>
-      <dd className="flex items-center gap-2">
-        <span className="font-medium tabular-nums">{value ?? "—"}</span>
-        {value ? <CopyButton value={value} label="Payer reference" /> : null}
-        {canEdit ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground"
-            onClick={() => {
-              setDraft(value ?? "");
-              setEditing(true);
-            }}
-            aria-label="Edit payer reference"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </Button>
-        ) : null}
       </dd>
     </div>
   );

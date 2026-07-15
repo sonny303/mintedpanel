@@ -4,19 +4,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  advancePayerPipeline,
   appendCaseTasks,
   createCase,
   getCase,
   getCases,
   getContractFor,
+  listDenialReasonCodes,
   setPayerReference,
   updateCaseStatus,
+  type AdvancePipelineInput,
   type CaseFilters,
   type CaseInput,
   type CaseTaskPayload,
 } from "@/services/cases";
 
 const THIRTY_SECONDS = 30_000;
+const FIVE_MINUTES = 300_000;
 
 export function useCases(filters: CaseFilters = {}) {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -119,6 +123,32 @@ export function useReapplyCase() {
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
+  });
+}
+
+// E4.0 F4.0.1 — advance the payer pipeline through the atomic RPC. Invalidates
+// the case detail (state + timeline), the cases list (badge), and the audit log.
+export function useAdvancePayerPipeline() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: AdvancePipelineInput) => advancePayerPipeline(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E4.0 TE-4 — global + own-org active reason codes; long-lived (governance data).
+export function useDenialReasonCodes() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.denialReasonCodes(orgId),
+    queryFn: () => listDenialReasonCodes(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
   });
 }
 

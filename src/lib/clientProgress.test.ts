@@ -60,6 +60,9 @@ function credCase(over: Partial<CredentialCase>): CredentialCase {
     updatedAt: "2026-01-01T00:00:00Z",
     caseEmailToken: "tok-c1",
     payerReferenceId: null,
+    payerPipelineState: "not_started",
+    payerIndividualProviderId: null,
+    payerGroupProviderId: null,
     ...over,
   };
 }

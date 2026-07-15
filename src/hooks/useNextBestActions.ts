@@ -169,6 +169,7 @@ export function useNextBestActions(): NextBestActionsData {
         credentialingStatusId: c.credentialingStatusId,
         facilityId: c.facilityId ?? null,
         generationRunId: c.generationRunId ?? null,
+        payerPipelineState: c.payerPipelineState,
         createdAt: c.createdAt,
       })),
       statusConfigs: (statusConfigsQ.data ?? []).map((s) => ({

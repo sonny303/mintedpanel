@@ -8,7 +8,15 @@ import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
-import type { CaseDetail, Contract, CredentialCase, StatusHistoryEntry, Task } from "@/types";
+import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type {
+  CaseDetail,
+  Contract,
+  CredentialCase,
+  DenialReasonCode,
+  StatusHistoryEntry,
+  Task,
+} from "@/types";
 
 type CredentialCaseUpdate = Database["public"]["Tables"]["credential_cases"]["Update"];
 
@@ -37,8 +45,12 @@ export interface CaseInput {
   generationRunId?: string | null;
 }
 
+// E4.0: payer_reference_id (tracking ID — list column + search + duplicate
+// warning) and payer_pipeline_state (the badge rendered on the list/queue,
+// distinct from credentialing_status_id) join the list projection. The
+// resolution provider-IDs are detail-only (getCase select *), not listed here.
 const CASE_LIST_COLUMNS =
-  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, created_at, updated_at";
+  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_pipeline_state, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -71,7 +83,8 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
        credentialing_status:status_configs(*),
        tasks(*),
        touches(*),
-       status_history(*)`,
+       status_history(*),
+       payer_pipeline_history(*)`,
     )
     .eq("id", id)
     .eq("org_id", orgId)
@@ -84,6 +97,10 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
   const rawHistory =
     ((data as Record<string, unknown>).status_history as Array<Record<string, unknown>> | null) ??
     [];
+  const rawPipeline =
+    ((data as Record<string, unknown>).payer_pipeline_history as Array<
+      Record<string, unknown>
+    > | null) ?? [];
 
   // One profiles fetch covers status-history authors, touchlog note authors,
   // and the case's creation actor (E2.4 F2.4.2 provenance).
@@ -92,6 +109,7 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
       [
         ...rawHistory.map((h) => h.changed_by as string | null),
         ...rawTouches.map((t) => t.coordinator_id as string | null),
+        ...rawPipeline.map((p) => p.changed_by as string | null),
         (data as Record<string, unknown>).created_by as string | null,
       ].filter((v): v is string => Boolean(v)),
     ),
@@ -191,11 +209,36 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
       : null,
   }));
 
+  // E4.0 F4.0.1 — resolve each pipeline-history row's reason-code label (global
+  // + own-org catalog) so the visible timeline reads without a second lookup.
+  const reasonIds = Array.from(
+    new Set(
+      rawPipeline
+        .map((p) => p.reason_code_id as string | null)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const reasonMap = new Map<string, string | null>();
+  if (reasonIds.length > 0) {
+    const { data: reasons, error: rErr } = await supabase
+      .from("denial_reason_codes")
+      .select("id, label")
+      .in("id", reasonIds);
+    if (rErr) throw rErr;
+    for (const r of reasons ?? []) reasonMap.set(r.id as string, (r.label as string) ?? null);
+  }
+  const enrichedPipeline = rawPipeline.map((p) => ({
+    ...p,
+    changed_by_name: p.changed_by ? (nameMap.get(p.changed_by as string) ?? null) : null,
+    reason_label: p.reason_code_id ? (reasonMap.get(p.reason_code_id as string) ?? null) : null,
+  }));
+
   const createdBy = (data as Record<string, unknown>).created_by as string | null;
   const merged = {
     ...(data as Record<string, unknown>),
     touches: enrichedTouches,
     status_history: enrichedHistory,
+    payer_pipeline_history: enrichedPipeline,
     notes,
     created_by_name: createdBy ? (nameMap.get(createdBy) ?? null) : null,
   };
@@ -207,11 +250,26 @@ function channelWord(touchType: string): string {
   return touchType === "call" ? "phone" : touchType;
 }
 
-// Story 2: latest-wins payer reference / submission ID on the case. History is
-// kept in the touchlog (system_event), not here — this column just overwrites.
+// Story 2 / E4.0 TE-3: latest-wins payer reference / submission ID (the case's
+// tracking ID) on the case. History is kept in the touchlog (system_event) +
+// audit_log, not here — this column just overwrites. The audit row carries BOTH
+// the prior and new value (F4.0.2 "every change writes an audit_log row carrying
+// the prior and new value").
 export async function setPayerReference(caseId: string, value: string | null): Promise<void> {
   const orgId = requireActiveOrg();
   const trimmed = value && value.trim() ? value.trim() : null;
+
+  // Read the prior value first so the audit row can carry before -> after.
+  const { data: prior, error: readErr } = await supabase
+    .from("credential_cases")
+    .select("id, payer_reference_id")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!prior) throw new Error("Case not found");
+  const priorValue = (prior.payer_reference_id as string | null) ?? null;
+
   const { data, error } = await supabase
     .from("credential_cases")
     .update({ payer_reference_id: trimmed } as CredentialCaseUpdate)
@@ -225,9 +283,110 @@ export async function setPayerReference(caseId: string, value: string | null): P
     actionType: "UPDATE",
     entityType: "case",
     entityId: caseId,
+    before: { payerReferenceId: priorValue },
     after: { payerReferenceId: trimmed },
     description: "Updated payer reference ID",
   });
+}
+
+// E4.0 TE-5 — a typed error the UI maps to an actionable message. `code` is the
+// RPC's named error (e.g. "pipeline_invalid_transition"); `conflictState` is the
+// case's true current state on a concurrency conflict (refresh prompt).
+export class PipelineTransitionError extends Error {
+  readonly code: string;
+  readonly conflictState: PayerPipelineState | null;
+  constructor(code: string, message: string, conflictState: PayerPipelineState | null = null) {
+    super(message);
+    this.name = "PipelineTransitionError";
+    this.code = code;
+    this.conflictState = conflictState;
+  }
+}
+
+const PIPELINE_ERROR_MESSAGES: Record<string, string> = {
+  pipeline_case_not_found: "Case not found.",
+  pipeline_not_authorized: "You don't have permission to change the payer pipeline.",
+  pipeline_admin_only: "Only an admin can make this change.",
+  pipeline_invalid_state: "That is not a valid pipeline state.",
+  pipeline_invalid_transition: "That transition isn't allowed from the current state.",
+  pipeline_correction_needs_justification: "A justification is required for a correction.",
+  pipeline_reason_code_invalid: "That reason code isn't available.",
+  pipeline_denied_needs_reason: "A denial reason code is required.",
+  pipeline_other_needs_context: "Selecting “Other” requires a short context.",
+  pipeline_approved_needs_effective_date: "An effective date is required to approve.",
+};
+
+function mapPipelineError(error: { message?: string }): Error {
+  const raw = (error.message ?? "").trim();
+  if (raw.startsWith("pipeline_state_conflict")) {
+    const actual = raw.split(":")[1]?.trim() || null;
+    return new PipelineTransitionError(
+      "pipeline_state_conflict",
+      "This case was updated by someone else — refresh to continue.",
+      (actual as PayerPipelineState | null) ?? null,
+    );
+  }
+  // The RPC's RAISE message is the leading token; PostgREST may append detail.
+  const key = Object.keys(PIPELINE_ERROR_MESSAGES).find((k) => raw.startsWith(k));
+  if (key) return new PipelineTransitionError(key, PIPELINE_ERROR_MESSAGES[key]);
+  return raw ? new Error(raw) : new Error("Could not update the payer pipeline.");
+}
+
+export interface AdvancePipelineInput {
+  caseId: string;
+  toState: PayerPipelineState;
+  /** The state the client believed the case was in — optimistic concurrency. */
+  expectedState: PayerPipelineState;
+  reasonCodeId?: string | null;
+  /** Correction justification, or the Denied-"Other" single-line context. */
+  justification?: string | null;
+  isCorrection?: boolean;
+  /** Required by the RPC when toState is 'approved'. */
+  effectiveDate?: string | null;
+  /** Approval identifiers (F4.0.3) — Type 1 individual, Type 2/Tax-ID group. */
+  individualProviderId?: string | null;
+  groupProviderId?: string | null;
+}
+
+// The single atomic transition entry point: state change + append-only history
+// + optional enrollment writes/clears + audit, all-or-nothing (a rejected edge
+// writes nothing). Never a bare UPDATE — that would bypass the edge rules,
+// concurrency guard, admin gate, and history.
+export async function advancePayerPipeline(input: AdvancePipelineInput): Promise<CredentialCase> {
+  requireActiveOrg();
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+  const { data, error } = await rpc("advance_payer_pipeline", {
+    p_case_id: input.caseId,
+    p_to_state: input.toState,
+    p_expected_state: input.expectedState,
+    p_reason_code_id: input.reasonCodeId ?? null,
+    p_justification: input.justification ?? null,
+    p_is_correction: input.isCorrection ?? false,
+    p_effective_date: input.effectiveDate ?? null,
+    p_individual_provider_id: input.individualProviderId ?? null,
+    p_group_provider_id: input.groupProviderId ?? null,
+  });
+  if (error) throw mapPipelineError(error);
+  if (!data) throw new Error("advance_payer_pipeline returned no data");
+  return camelizeRow<CredentialCase>(data);
+}
+
+// E4.0 TE-4 — the active denial/return reason vocabulary: global defaults +
+// this org's added codes (the shared-catalog read pattern). Read-only here;
+// E4.2 owns the management CRUD.
+export async function listDenialReasonCodes(): Promise<DenialReasonCode[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("denial_reason_codes")
+    .select("id, org_id, code, label, active, created_at")
+    .or(`org_id.is.null,org_id.eq.${orgId}`)
+    .eq("active", true)
+    .order("label", { ascending: true });
+  if (error) throw error;
+  return camelizeRow<DenialReasonCode[]>(data ?? []);
 }
 
 export interface AppendStatusHistoryInput {

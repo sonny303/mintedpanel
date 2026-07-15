@@ -271,3 +271,81 @@ WHERE lower(p.name) = lower('Blue Cross and Blue Shield of North Carolina') AND 
     WHERE c.payer_id = p.id AND c.field = 'name'
       AND c.new_value = 'Blue Cross NC (rebranded)' AND c.review_state = 'unreviewed'
   );
+
+-- ---------------------------------------------------------------------------
+-- E4.0 — Payer-pipeline fixtures (TS-69..72) on Dillon Sports Medicine.
+-- Fixed UUIDs so the group/providers/payers, four cases, and their append-only
+-- pipeline history are idempotent (ON CONFLICT (id) DO NOTHING); org_id is
+-- resolved from the seeded Dillon org. Demonstrates: a case walked through the
+-- spine to In Review with an RFI round trip + a readable append-only timeline
+-- (TS-69); a tracking ID reused on a sibling case for the SAME payer (TS-70
+-- duplicate warning); an Approved case with an effective date + BOTH structured
+-- provider IDs (TS-71); and a second case at Submitted, ready to be denied —
+-- blocked until a reason code is chosen at runtime (TS-72). Local fixture only.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.provider_groups (id, org_id, name, tin, npi_type2, states, billing_street, billing_city, billing_state, billing_zip, billing_phone)
+SELECT 'd4110000-0000-4000-a000-0000000000a1', o.id, 'Dillon Sports Medicine LLC', '742938174', '1748291037', ARRAY['TX'],
+       '500 Panther Field Rd', 'Dillon', 'TX', '79714', '432-555-0100'
+FROM public.organizations o
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'dillonsportsmedicine'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.providers (id, org_id, group_id, first_name, last_name, credentials, npi, specialty, taxonomy_code, home_state, status)
+SELECT v.id, o.id, 'd4110000-0000-4000-a000-0000000000a1', v.first_name, v.last_name, 'PT, DPT', v.npi, 'Physical Therapy', '225100000X', 'TX', 'active'
+FROM public.organizations o
+CROSS JOIN (VALUES
+  ('d4110000-0000-4000-a000-0000000000b1'::uuid, 'Tim', 'Riggins', '1546372819'),
+  ('d4110000-0000-4000-a000-0000000000b2'::uuid, 'Jason', 'Street', '1546372820')
+) AS v(id, first_name, last_name, npi)
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'dillonsportsmedicine'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.payers (id, org_id, name)
+SELECT v.id, o.id, v.name
+FROM public.organizations o
+CROSS JOIN (VALUES
+  ('d4110000-0000-4000-a000-0000000000c1'::uuid, 'Blue Cross and Blue Shield of Texas'),
+  ('d4110000-0000-4000-a000-0000000000c2'::uuid, 'UnitedHealthcare TX')
+) AS v(id, name)
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'dillonsportsmedicine'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.credential_cases (id, org_id, provider_id, group_id, payer_id, state, specialty, payer_pipeline_state, payer_reference_id, confirmed_effective_date, payer_individual_provider_id, payer_group_provider_id)
+SELECT v.id, g.org_id, v.provider_id, g.id, v.payer_id, 'TX', 'Physical Therapy',
+       v.pstate, v.ref, v.eff, v.ind_id, v.grp_id
+FROM public.provider_groups g
+CROSS JOIN (VALUES
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'd4110000-0000-4000-a000-0000000000b1'::uuid, 'd4110000-0000-4000-a000-0000000000c1'::uuid, 'in_review', 'TX-APP-77031', NULL::date, NULL::text, NULL::text),
+  ('d4110000-0000-4000-a000-000000000070'::uuid, 'd4110000-0000-4000-a000-0000000000b2'::uuid, 'd4110000-0000-4000-a000-0000000000c1'::uuid, 'submitted', 'TX-APP-77031', NULL, NULL, NULL),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'd4110000-0000-4000-a000-0000000000b1'::uuid, 'd4110000-0000-4000-a000-0000000000c2'::uuid, 'approved', 'TX-UHC-55012', '2026-08-01'::date, 'UHC-IND-88420', 'UHC-GRP-2210'),
+  ('d4110000-0000-4000-a000-000000000072'::uuid, 'd4110000-0000-4000-a000-0000000000b2'::uuid, 'd4110000-0000-4000-a000-0000000000c2'::uuid, 'submitted', NULL, NULL, NULL, NULL)
+) AS v(id, provider_id, payer_id, pstate, ref, eff, ind_id, grp_id)
+WHERE g.id = 'd4110000-0000-4000-a000-0000000000a1'
+ON CONFLICT (id) DO NOTHING;
+
+-- Append-only pipeline history for the four cases (idempotent: skipped once any
+-- row exists for a case). TS-69 shows the In Review ↔ Action Required RFI round
+-- trip; TS-71 ends Approved.
+INSERT INTO public.payer_pipeline_history (org_id, case_id, from_state, to_state, is_correction, changed_at)
+SELECT c.org_id, c.id, v.from_state, v.to_state, false, v.changed_at::timestamptz
+FROM public.credential_cases c
+JOIN (VALUES
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'not_started', 'assigned', '2026-07-01T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'assigned', 'drafting', '2026-07-02T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'drafting', 'submitted', '2026-07-05T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'submitted', 'in_review', '2026-07-08T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'in_review', 'action_required', '2026-07-10T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000069'::uuid, 'action_required', 'in_review', '2026-07-12T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000070'::uuid, 'not_started', 'assigned', '2026-07-03T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000070'::uuid, 'assigned', 'drafting', '2026-07-04T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000070'::uuid, 'drafting', 'submitted', '2026-07-06T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'not_started', 'assigned', '2026-07-02T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'assigned', 'drafting', '2026-07-03T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'drafting', 'submitted', '2026-07-05T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'submitted', 'in_review', '2026-07-09T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000071'::uuid, 'in_review', 'approved', '2026-07-14T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000072'::uuid, 'not_started', 'assigned', '2026-07-06T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000072'::uuid, 'assigned', 'drafting', '2026-07-07T09:00:00Z'),
+  ('d4110000-0000-4000-a000-000000000072'::uuid, 'drafting', 'submitted', '2026-07-09T09:00:00Z')
+) AS v(case_id, from_state, to_state, changed_at) ON v.case_id = c.id
+WHERE NOT EXISTS (SELECT 1 FROM public.payer_pipeline_history h WHERE h.case_id = c.id);

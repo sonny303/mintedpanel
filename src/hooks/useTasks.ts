@@ -4,14 +4,31 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
   completeSOPStep,
+  createFollowUpTask,
   getTask,
   getTasks,
   updateTaskStatus,
+  type FollowUpTaskInput,
   type TaskFilters,
 } from "@/services/tasks";
 import type { TaskStatus } from "@/types";
 
 const THIRTY_SECONDS = 30_000;
+
+// E4.0 F4.0.4 — the RFI→task bridge spawns an internal case task through the
+// existing follow-up-task machinery. Invalidates tasks + the case detail.
+export function useCreateFollowUpTask() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: FollowUpTaskInput) => createFollowUpTask(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
 
 export function useTasks(filters: TaskFilters = {}) {
   const orgId = useActiveOrgId() ?? "no-org";
