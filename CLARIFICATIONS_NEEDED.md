@@ -138,6 +138,16 @@ Format per entry:
   decision. No PM/security decision has selected a vault option or approved key
   custody and rotation, retention and deletion, or the browser/extension
   release boundary. E4.4 therefore remains `reviewed: false` and was not edited.
+- **2026-07-15 (re-review, `6dc7035` E4.1 Action Bridge cycle):** the
+  triggering push changed the already-reviewed E4.1 epic, its Claude handoff,
+  and `seed-universe.md`, so E4.1 was skipped per the review-loop guard. E4.4
+  remains the only `reviewed: false` epic. Its requirements to accept, store,
+  reveal, and release a full SSN still directly contradict the binding
+  `AGENTS.md` and `SCHEMA.md` last-four-only rule, while E4.4 §5 still requires
+  a PM/security decision on key custody before build. No approved decision has
+  selected a vault option or defined key rotation, retention/deletion, or the
+  browser/extension release boundary. E4.4 therefore remains
+  `reviewed: false` and was not edited.
 
 ## Resolved
 
