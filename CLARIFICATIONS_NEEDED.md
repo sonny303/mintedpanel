@@ -94,6 +94,15 @@ Format per entry:
   key-custody/rotation, retention/deletion, or browser/extension release-boundary
   decision has landed, and no option above has been selected. E4.4 therefore
   remains `reviewed: false` and was not edited.
+- **2026-07-15 (re-review, `13bbc0d` E4.1 round-3 cycle):** the triggering push
+  changed the already-reviewed E4.1 epic and `seed-universe.md`, so E4.1 was
+  skipped per the review-loop guard. E4.4 remains the only unreviewed epic.
+  Its requirements to accept, store, reveal, and release a full SSN still
+  directly contradict the binding `AGENTS.md` and `SCHEMA.md` last-four-only
+  rule. No PM/security decision has selected a vault option or approved key
+  custody and rotation, retention and deletion, or the browser/extension
+  release boundary. E4.4 therefore remains `reviewed: false` and was not
+  edited.
 
 ## Resolved
 
