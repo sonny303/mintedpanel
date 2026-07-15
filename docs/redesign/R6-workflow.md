@@ -115,3 +115,73 @@ Key structural rules the diagram encodes:
 8. **Maintain:** new contract or state → step 2; payer changes its process →
    new SOP version; new reason codes as encountered; readiness and scorecard
    watch for drift.
+
+## SOP buildout — what a template actually contains, and where each task executes
+
+An SOP template is not just a checklist; it is the configuration that makes a
+generated case fully specified. Each published version carries:
+
+- **Match key** — payer × state × specialty (resolver precedence: exact →
+  payer+state → global fallback; global rows shared across orgs unless an
+  org-specific override exists).
+- **Ordered task list**, each task carrying:
+  - **execution type** — the entry point where the task is performed
+    (`manual` / `extension_fill` / `auto_verify` / `document_attach`);
+  - due-date offsets / assignment defaults (existing E1.7b behavior).
+- **Required provider-profile attributes** (F4.2.6 gate) — checked at
+  generation, before a case ever exists.
+- **Version lineage** — published versions are immutable; in-flight cases
+  keep theirs.
+
+The same task list therefore fans out to four different entry points at
+execution time — and the `extension_fill` path is the secret-sauce loop:
+the form's fields are collected, mapped to provider-profile tokens, filled
+by the Chrome extension, and every field that CANNOT be resolved comes back
+to the user through the **Fix-It queue** (shipped feature: `/fix-it`,
+`fixitQueue.ts`) instead of silently failing.
+
+```mermaid
+flowchart TB
+  SOP["Published SOP version<br/>(match key + ordered tasks<br/>+ execution types + profile gates)"]
+  GEN["Case generated<br/>(tasks stamped with execution types)"]
+  SOP --> GEN
+
+  GEN --> M["manual<br/>Specialist works the task<br/>(NBA queue → touch logged)"]
+  GEN --> AV["auto_verify<br/>System checks internal data<br/>(active dates, license status)<br/>— engine R7"]
+  GEN --> DA["document_attach<br/>System pulls the named doc<br/>from storage (E4.5)"]
+  GEN --> EF["extension_fill<br/>Form-fill handoff (E4.3)"]
+
+  subgraph LOOP["The form-data loop (extension_fill + Fix-It)"]
+    direction TB
+    FM["Portal field maps + field dictionary<br/>(portal form fields ⇄ provider tokens;<br/>learned via form training)"]
+    FILL["Chrome extension fill session<br/>(read-only payload; fills the payer<br/>portal form from mapped tokens)"]
+    GAP{"Every field<br/>resolved?"}
+    DONE["Task complete —<br/>extension-logged touch,<br/>fill session recorded"]
+    FIX["Fix-It queue (/fix-it)<br/>impact-ordered cards:<br/>• provider data gap → inline fix or task<br/>• unconfirmed dictionary mapping → confirm<br/>• untrained/broken form → train"]
+    UPD["Provider profile / dictionary /<br/>field maps updated"]
+    EF2["Refill: coverage now higher"]
+
+    FM --> FILL --> GAP
+    GAP -- yes --> DONE
+    GAP -- "no (unmapped or empty fields)" --> FIX --> UPD --> EF2 --> FILL
+  end
+
+  EF --> FM
+  PG["F4.2.6 profile gate at generation:<br/>required attributes missing →<br/>no case; outreach task instead"] -.->|"prevents most gaps upstream"| GAP
+```
+
+How the pieces relate across releases:
+
+| Piece                                               | Where it lives                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Portal field maps, field dictionary, form training  | Shipped (main + redesign): `portalFieldMaps`, `fieldDictionary`, portal training route                        |
+| Fill sessions + extension read-only API             | Shipped; E4.3 formalizes the workbench handoff surface                                                        |
+| Fix-It queue (gap cards, dictionary confirm, train) | Shipped: `/fix-it`, `src/lib/fixitQueue.ts` — the feedback path for unresolved fields                         |
+| Execution type on SOP tasks                         | E4.2 (captured + stamped); engines ride E4.3 (`extension_fill`), E4.5 (`document_attach`), R7 (`auto_verify`) |
+| Profile gate at generation                          | E4.2 F4.2.6 — moves the Fix-It class of gaps upstream, before a case exists                                   |
+
+The two gap mechanisms are deliberately complementary: the **F4.2.6 gate**
+catches attributes an SOP _declares_ required before generation; the
+**Fix-It queue** catches everything discovered _at fill time_ (unmapped
+portal fields, empty tokens, untrained forms) and routes each back to the
+user as a 30-second decision.
