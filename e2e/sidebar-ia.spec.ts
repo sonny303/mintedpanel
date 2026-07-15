@@ -160,7 +160,7 @@ test("IA v2 nav shows exactly the approved destinations", async ({ page }) => {
   await expect(rail.getByRole("link", { name: "Facilities" })).toBeVisible();
   const providersLink = rail.getByRole("link", { name: "Providers" });
   await expect(providersLink).toBeVisible();
-  await expect(providersLink).toHaveAttribute("href", "/providers");
+  await expect(providersLink).toHaveAttribute("href", "/onboarding/wizard?section=providers");
 
   // Retired items and labels are gone.
   await expect(rail.getByText("Org space")).toHaveCount(0);
@@ -173,8 +173,8 @@ test("IA v2 nav shows exactly the approved destinations", async ({ page }) => {
   await expect(rail.getByText(ACTIVE_ORG.name)).toBeVisible();
 
   await providersLink.click();
-  await expect(page).toHaveURL(/\/providers\/?$/);
-  await expect(page.getByRole("heading", { name: "Providers", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/onboarding\/wizard\?section=providers$/);
+  await expect(page.locator("#wizard-providers-heading")).toBeFocused();
 });
 
 test("org switcher groups by lifecycle with no per-org status label; footer actions work", async ({
