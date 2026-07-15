@@ -12,7 +12,9 @@ import { pipelineLabel, type PayerPipelineState } from "@/lib/payerPipeline";
 import type { PayerPipelineHistoryEntry } from "@/types";
 
 export function PayerPipelineHistoryPanel({ history }: { history: PayerPipelineHistoryEntry[] }) {
-  const sorted = [...history].sort((a, b) => b.changedAt.localeCompare(a.changedAt));
+  // Tolerate an absent embed (narrow/mock case objects) — the real getCase
+  // always provides the array; never crash the case detail on its absence.
+  const sorted = [...(history ?? [])].sort((a, b) => b.changedAt.localeCompare(a.changedAt));
 
   return (
     <Card className="shadow-none border-border">

@@ -64,7 +64,10 @@ export function PayerPipelineControl({
   canEdit: boolean;
   isAdmin: boolean;
 }) {
-  const state = c.payerPipelineState;
+  // Default an absent state (narrow/mock case objects) to the DB default so the
+  // control never calls allowedTransitions(undefined); the real getCase always
+  // provides it.
+  const state = c.payerPipelineState ?? "not_started";
   const [dialog, setDialog] = useState<DialogState>(null);
 
   const advanceM = useAdvancePayerPipeline();
