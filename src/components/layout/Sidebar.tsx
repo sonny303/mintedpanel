@@ -1,7 +1,12 @@
 // Sidebar IA v2 (redesign E0.9 F0.9.3, per the approved spec
 // docs/redesign/design-system/design-system-reference/Sidebar Nav.dc.html +
 // the NAVIGATION section of the reference readme). Supersedes the E0.6
-// segmented nav and the E0.8 "Org space" label.
+// segmented nav and the E0.8 "Org space" label. The org-zone "Providers" item
+// is the one exception to F0.9.3's reserved mapping: E1.3 TE-11 (§5 amendment,
+// 2026-07-15) authorizes this src/components/layout/* edit and supersedes only
+// the Providers half of F0.9.3 (reserved → /soon), pointing it at the E1.3
+// roster wizard section (/onboarding/wizard?section=providers). Facilities
+// stays reserved and the flat /providers route stays direct-URL-only (F0.9.6).
 //
 // IA top-to-bottom: Workspace (Home, My Cases — the E2.3 queue, its one
 // authorized shell edit —, Cases + open-case CountBadge) · Payers
@@ -358,6 +363,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             <nav className="space-y-0.5" aria-label={`${active.orgName} navigation`}>
               {renderNavItem({ to: "/get-started", label: "Account Detail", icon: Contact })}
               {orgReserved.map(renderReserved)}
+              {/* Providers → the E1.3 Provider Roster wizard section. E1.3 TE-11
+                  (§5 amendment) authorizes this shell edit and supersedes the
+                  Providers half of E0.9 F0.9.3's reserved /soon mapping. */}
               <Link
                 to="/onboarding/wizard"
                 search={{ section: "providers" }}

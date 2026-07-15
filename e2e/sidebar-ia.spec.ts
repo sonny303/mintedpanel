@@ -1,7 +1,8 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E0.9 F0.9.3 / TS-22 — Sidebar IA v2 + lifecycle-grouped org switcher over
-// the mock harness, using the 11-org seed universe (seed-universe.md). Covers:
+// E0.9 F0.9.3 / TS-22 (Providers destination amended by E1.3 TE-11) — Sidebar
+// IA v2 + lifecycle-grouped org switcher over the mock harness, using the
+// 11-org seed universe (seed-universe.md). Covers:
 //   - nav shows exactly Workspace (Home, My Cases — the E2.3 queue —, Cases +
 //     count) / Payers (Payer Management) / Reporting Center; no Tasks, SOP,
 //     Setup/Config, or "Org space" label
@@ -158,6 +159,9 @@ test("IA v2 nav shows exactly the approved destinations", async ({ page }) => {
   await expect(rail.getByRole("link", { name: "Reporting Center" })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Account Detail" })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Facilities" })).toBeVisible();
+  // Providers → the E1.3 roster wizard section. E1.3 TE-11 (§5 amendment)
+  // authorizes this and supersedes only the Providers half of E0.9 F0.9.3's
+  // reserved /soon mapping; Facilities stays reserved, /providers direct-URL-only.
   const providersLink = rail.getByRole("link", { name: "Providers" });
   await expect(providersLink).toBeVisible();
   await expect(providersLink).toHaveAttribute("href", "/onboarding/wizard?section=providers");
