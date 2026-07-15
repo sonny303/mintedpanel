@@ -55,9 +55,59 @@
 
 import { fmtDate } from "@/lib/format";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import { resolveActiveFollowUp, type FollowUpTouch } from "@/lib/followUps";
 
 export type DeadlineSource =
   "provider_start" | "launch_date" | "task_due" | "follow_up" | "cadence";
+
+// E4.1 F4.1.3 / E4.2 F4.2.5 — the org-level ranking config. The queue ranks by
+// "source groups"; the follow_up group covers both the explicit next-follow-up
+// and the SOP cadence deadline (TE-5). The admin surface that persists this
+// lives in E4.2 F4.2.5; this reducer only CONSUMES a validated value.
+export type QueueRankingGroup = "follow_up" | "task_due" | "provider_start" | "launch_date";
+
+export const QUEUE_RANKING_GROUPS: readonly QueueRankingGroup[] = [
+  "follow_up",
+  "task_due",
+  "provider_start",
+  "launch_date",
+];
+
+const SOURCE_GROUP: Record<DeadlineSource, QueueRankingGroup> = {
+  follow_up: "follow_up",
+  cadence: "follow_up",
+  task_due: "task_due",
+  provider_start: "provider_start",
+  launch_date: "launch_date",
+};
+
+export interface QueueRankingConfig {
+  // Enabled groups in priority order. A group omitted here is DISABLED — its
+  // signals contribute nothing to the queue. A null resolved config means the
+  // shipped default (arrived/overdue follow-ups first, then all by date).
+  order: QueueRankingGroup[];
+}
+
+// Validate a raw org config (E4.2 F4.2.5) into a QueueRankingConfig, or null for
+// the shipped default. Invalid or incomplete input falls back ATOMICALLY to the
+// default (null) — never a partial order, so a malformed config can't produce a
+// half-ranked queue.
+export function resolveQueueRankingConfig(raw: unknown): QueueRankingConfig | null {
+  if (!raw || typeof raw !== "object") return null;
+  const order = (raw as { order?: unknown }).order;
+  if (!Array.isArray(order) || order.length === 0) return null;
+  const seen = new Set<string>();
+  const valid: QueueRankingGroup[] = [];
+  for (const g of order) {
+    if (typeof g !== "string" || !QUEUE_RANKING_GROUPS.includes(g as QueueRankingGroup)) {
+      return null;
+    }
+    if (seen.has(g)) return null;
+    seen.add(g);
+    valid.push(g as QueueRankingGroup);
+  }
+  return { order: valid };
+}
 
 /** Same-date tie order for the reported driving source (documented above). */
 export const DEADLINE_SOURCE_ORDER: readonly DeadlineSource[] = [
@@ -118,6 +168,14 @@ export interface QueueTouchInput {
   entryType: string;
   touchDate: string;
   nextFollowUpDate: string | null;
+  /** E4.1 TE-2 — the tie-break + carry-forward inputs. Optional so older
+   * callers/tests keep working (createdAt falls back to touchDate, id to a
+   * synthesized key, clearsFollowUp to false). The active follow-up is resolved
+   * latest-first by (touch_date DESC, created_at DESC, id DESC): a date-less
+   * touch carries the prior follow-up forward; only clears_follow_up ends it. */
+  createdAt?: string;
+  id?: string;
+  clearsFollowUp?: boolean;
 }
 
 export interface QueueProviderInput {
@@ -166,6 +224,10 @@ export interface NextBestActionsInput {
   groups: readonly QueueLookupInput[];
   payers: readonly QueueLookupInput[];
   readiness: readonly QueueReadinessInput[];
+  /** E4.1 F4.1.3 — the org's resolved ranking config (E4.2 F4.2.5). null/absent
+   * = shipped default (overdue follow-ups first). Never read config inside the
+   * reducer beyond this validated input; nothing here is persisted. */
+  rankingConfig?: QueueRankingConfig | null;
 }
 
 // ---------- output ----------
@@ -251,16 +313,37 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     );
   }
 
-  // Latest touchpoint per case (touch date + the explicit follow-up date it
-  // carries). Notes and system events are filtered out here by rule.
-  const latestTouchByCase = new Map<string, QueueTouchInput>();
+  // Touchpoints per case (notes/system events filtered out by rule). E4.1 TE-2:
+  // the active follow-up is the carry-forward reducer over ALL touchpoints —
+  // resolved latest-first by (touch_date, created_at, id) DESC; a date-less
+  // touch carries the prior follow-up forward, only clears_follow_up ends it.
+  // The cadence base is the latest touchpoint DATE under the same tie-break.
+  const touchpointsByCase = new Map<string, FollowUpTouch[]>();
+  const latestTouchDateByCase = new Map<string, string>();
   for (const t of input.touches) {
     if (t.entryType !== "touchpoint") continue;
-    const prior = latestTouchByCase.get(t.caseId);
-    if (!prior || t.touchDate.slice(0, 10) > prior.touchDate.slice(0, 10)) {
-      latestTouchByCase.set(t.caseId, t);
-    }
+    const fu: FollowUpTouch = {
+      id: t.id ?? `${t.caseId}:${t.touchDate}:${t.nextFollowUpDate ?? ""}`,
+      touchDate: t.touchDate.slice(0, 10),
+      createdAt: t.createdAt ?? t.touchDate,
+      nextFollowUpDate: t.nextFollowUpDate ? t.nextFollowUpDate.slice(0, 10) : null,
+      clearsFollowUp: t.clearsFollowUp ?? false,
+    };
+    const list = touchpointsByCase.get(t.caseId) ?? [];
+    list.push(fu);
+    touchpointsByCase.set(t.caseId, list);
+    const priorDate = latestTouchDateByCase.get(t.caseId);
+    if (!priorDate || fu.touchDate > priorDate) latestTouchDateByCase.set(t.caseId, fu.touchDate);
   }
+  const activeFollowUpByCase = new Map<string, string>();
+  for (const [caseId, tps] of touchpointsByCase) {
+    const active = resolveActiveFollowUp(tps);
+    if (active) activeFollowUpByCase.set(caseId, active.date);
+  }
+
+  // The resolved ranking config (E4.2 F4.2.5); null = shipped default.
+  const rankingConfig = input.rankingConfig ?? null;
+  const enabledGroups = rankingConfig ? new Set(rankingConfig.order) : null;
 
   // Provider-start signal (TE-1): start_date when set; the earliest future
   // assignment start date stands in ONLY where the provider-level date is
@@ -302,7 +385,8 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     const payerName = payerNameById.get(c.payerId) ?? "Unknown payer";
     const groupName = c.groupId ? (groupNameById.get(c.groupId) ?? "Unknown group") : "No group";
     const openTasks = openTasksByCase.get(c.id) ?? [];
-    const latestTouch = latestTouchByCase.get(c.id) ?? null;
+    const activeFollowUp = activeFollowUpByCase.get(c.id) ?? null;
+    const latestTouchDate = latestTouchDateByCase.get(c.id) ?? null;
 
     const signals: DeadlineSignal[] = [];
 
@@ -357,37 +441,48 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       });
     }
 
-    // follow_up — the explicit date the team recorded on the last touch.
-    if (latestTouch?.nextFollowUpDate) {
-      const date = latestTouch.nextFollowUpDate.slice(0, 10);
+    // follow_up — the active (carry-forward) follow-up (E4.1 F4.1.2). Overdue
+    // gets the explicit "follow-up overdue" reason (F4.1.3 AC).
+    if (activeFollowUp) {
+      const date = activeFollowUp.slice(0, 10);
       signals.push({
         date,
         source: "follow_up",
-        reason: `Follow-up recorded for ${fmtDate(date)} on the last touch — ranked by the follow-up date.`,
+        reason:
+          date < input.today
+            ? `Follow-up overdue since ${fmtDate(date)} — surfaced ahead of deadline-only cases.`
+            : `Follow-up recorded for ${fmtDate(date)} — ranked by the follow-up date.`,
       });
     }
 
     // cadence — SOP follow-up rhythm from the stamped steps (F2.3.3).
     const cadence = minCadenceByCase.get(c.id);
     if (cadence !== undefined) {
-      const base = latestTouch ? latestTouch.touchDate.slice(0, 10) : c.createdAt.slice(0, 10);
+      const base = latestTouchDate ?? c.createdAt.slice(0, 10);
       const date = addDaysIso(base, cadence);
       signals.push({
         date,
         source: "cadence",
         reason: `SOP cadence says touch every ${cadence} days; ${
-          latestTouch
+          latestTouchDate
             ? `last touch ${fmtDate(base)}`
             : `no touch yet — counting from case creation ${fmtDate(base)}`
         } — touch due ${fmtDate(date)}.`,
       });
     }
 
+    // E4.1 F4.1.3 — a saved org config disables the groups it omits: their
+    // signals contribute nothing (the case ranks on its remaining signals, or
+    // after dated work if none). The shipped default (no config) keeps them all.
+    const activeSignals = enabledGroups
+      ? signals.filter((s) => enabledGroups.has(SOURCE_GROUP[s.source]))
+      : signals;
+
     // Driving signal: earliest date; same-date ties by DEADLINE_SOURCE_ORDER.
-    signals.sort(
+    activeSignals.sort(
       (a, b) => a.date.localeCompare(b.date) || sourceRank(a.source) - sourceRank(b.source),
     );
-    const driving = signals[0] ?? null;
+    const driving = activeSignals[0] ?? null;
 
     // Action precedence (documented above): readiness gap → touch due → next
     // actionable task → honest review fallback.
@@ -434,9 +529,24 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     });
   }
 
-  // Total order: dated entries by deadline ascending, undated after all dated;
-  // ties by case created_at (oldest first), then case id.
+  // E4.1 F4.1.3 total order. Shipped default (no config): arrived/overdue
+  // follow-ups first, then all remaining dated signals by earliest date, then
+  // undated. A saved config ranks by enabled-group priority (config.order),
+  // then date. Every tier breaks ties by case created_at (oldest first), then
+  // case id — the existing stable order.
+  const tierOf = (entry: QueueEntry): number => {
+    if (!entry.deadline) return QUEUE_RANKING_GROUPS.length + 1; // undated → last
+    const group = SOURCE_GROUP[entry.deadline.source];
+    if (rankingConfig) {
+      const idx = rankingConfig.order.indexOf(group);
+      return idx >= 0 ? idx : QUEUE_RANKING_GROUPS.length; // enabled-only by filter
+    }
+    // Default: arrived/overdue follow-ups jump the queue; everything else next.
+    return group === "follow_up" && entry.deadline.date <= input.today ? 0 : 1;
+  };
   entries.sort((a, b) => {
+    const byTier = tierOf(a) - tierOf(b);
+    if (byTier !== 0) return byTier;
     if (a.deadline && b.deadline) {
       const byDate = a.deadline.date.localeCompare(b.deadline.date);
       if (byDate !== 0) return byDate;

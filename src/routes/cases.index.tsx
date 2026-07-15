@@ -40,10 +40,11 @@ import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Phone, Plus, Search } from "lucide-react";
+import { MessageSquarePlus, Phone, Plus, Search, X } from "lucide-react";
 import { useCanWrite } from "@/lib/permissions";
 import { useTablePrefs } from "@/hooks/useTablePrefs";
 import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
+import { BulkLogTouchDialog, type BulkCaseCandidate } from "@/components/cases/BulkLogTouchDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
 
@@ -61,6 +62,10 @@ type CasesChipId = ChipId | "generic";
 interface CasesSearch {
   runId?: string;
   chip?: Exclude<CasesChipId, "all">;
+  // ?ids=<comma-separated case ids> pins the view to exactly a set of cases —
+  // the bulk-touch confirmation links here so an exception is fixed in place
+  // (F4.1.7).
+  ids?: string;
 }
 
 export const Route = createFileRoute("/cases/")({
@@ -74,6 +79,7 @@ export const Route = createFileRoute("/cases/")({
       search.chip === "generic"
         ? search.chip
         : undefined,
+    ids: typeof search.ids === "string" && search.ids.trim() ? search.ids : undefined,
   }),
 });
 
@@ -105,7 +111,7 @@ const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 
 function CasesWorkView() {
   const navigate = useNavigate();
-  const { runId, chip: chipParam } = Route.useSearch();
+  const { runId, chip: chipParam, ids: idsParam } = Route.useSearch();
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
@@ -126,7 +132,14 @@ function CasesWorkView() {
       },
     });
   const [batchOpen, setBatchOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
+
+  // ?ids pins the view to exactly these cases (bulk-touch follow-up link).
+  const idSet = useMemo(
+    () => (idsParam ? new Set(idsParam.split(",").filter(Boolean)) : null),
+    [idsParam],
+  );
   // F4.0.2 — case search matches on the tracking ID (+ provider/payer/state).
   const [search, setSearch] = useState("");
   // F4.0.2 — the Tracking ID column is default-hidden, toggled via user prefs.
@@ -297,6 +310,20 @@ function CasesWorkView() {
   // so a card that says N always leaves exactly N case rows on screen. The
   // free-text search (F4.0.2) additionally narrows by provider/payer/state and
   // — the point of the feature — the tracking ID.
+  // Bulk-touch candidates: every open case, labelled provider · state · payer.
+  const bulkCandidates: BulkCaseCandidate[] = useMemo(
+    () =>
+      groups.flatMap((g) =>
+        g.openRows.map((r) => ({
+          caseId: r.case.id,
+          label: `${
+            r.provider ? `${r.provider.firstName} ${r.provider.lastName}` : "Unknown provider"
+          } · ${r.case.state} · ${g.payerName}`,
+        })),
+      ),
+    [groups],
+  );
+
   const q = search.trim().toLowerCase();
   const visibleGroups = useMemo(
     () =>
@@ -304,6 +331,9 @@ function CasesWorkView() {
         .map((g) => ({
           group: g,
           visibleRows: g.rows.filter((r) => {
+            // ids pinning takes precedence over chip/generic/search so the
+            // bulk-touch link shows exactly the affected set.
+            if (idSet) return idSet.has(r.case.id);
             const chipOk =
               chip === "generic"
                 ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
@@ -322,8 +352,9 @@ function CasesWorkView() {
           }),
         }))
         .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip, genericCaseIds, q],
+    [groups, chip, genericCaseIds, q, idSet],
   );
+  const pinnedCount = visibleGroups.reduce((n, { visibleRows }) => n + visibleRows.length, 0);
 
   function tableRow(row: CaseRow): CaseTableRow {
     const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
@@ -401,6 +432,9 @@ function CasesWorkView() {
         actions={
           canWrite ? (
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setBulkOpen(true)}>
+                <MessageSquarePlus className="w-4 h-4 mr-1" /> Log touch
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -423,7 +457,31 @@ function CasesWorkView() {
       {batchOpen ? (
         <BatchTouchpointDialog open={batchOpen} onClose={() => setBatchOpen(false)} />
       ) : null}
+      {bulkOpen ? (
+        <BulkLogTouchDialog
+          open={bulkOpen}
+          candidates={bulkCandidates}
+          onClose={() => setBulkOpen(false)}
+          onLogged={(caseIds) => navigate({ to: "/cases", search: { ids: caseIds.join(",") } })}
+        />
+      ) : null}
       {newCaseOpen ? <ManualCaseModal onClose={() => setNewCaseOpen(false)} /> : null}
+
+      {idSet ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            Showing {pinnedCount} {pinnedCount === 1 ? "case" : "cases"} you just logged a touch on.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() => navigate({ to: "/cases", search: {} })}
+          >
+            <X className="mr-1 h-4 w-4" /> Show all cases
+          </Button>
+        </div>
+      ) : null}
 
       {runId ? (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">

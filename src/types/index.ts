@@ -5,7 +5,19 @@ import type { PayerPipelineState } from "@/lib/payerPipeline";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
-export type TouchType = "call" | "email" | "portal" | "fax" | "mail";
+// The seven fixed E4.1 touch types (F4.1.1) plus legacy `mail` (kept so
+// pre-E4.1 rows render unchanged — no backfill). Labels, icons, and the
+// payer-facing vs internal reporting direction live in src/lib/touchTypes.ts;
+// this union is the closed set the DB touches_touch_type_check allows.
+export type TouchType =
+  | "call"
+  | "email"
+  | "portal"
+  | "fax"
+  | "mail"
+  | "caqh_update"
+  | "provider_outreach"
+  | "internal_sync";
 // Channel-aware outcome codes (Story 3). Labels + per-channel grouping live in
 // src/lib/touchOutcomes.ts; this union is the closed set the DB check allows.
 export type TouchOutcome =
@@ -39,7 +51,15 @@ export type TouchOutcome =
   | "no_confirmation"
   // mail
   | "delivered"
-  | "returned";
+  | "returned"
+  // E4.1 disposition (F4.1.4): an optional, high-level outcome shared across
+  // every touch type, mapped onto this same `outcome` field. Never synthesized
+  // — the DB check allows NULL so a typed touch may omit it. `no_response` is
+  // reused from the legacy set. Labels live in src/lib/touchDispositions.ts.
+  | "successful"
+  | "attempted"
+  | "error"
+  | "other";
 // Touchlog discriminator (Story 1): one append-only table, four entry kinds.
 export type TouchEntryType = "touchpoint" | "note" | "system_event" | "task_update";
 export type ProviderStatus = "onboarding" | "active" | "terminated";
@@ -660,6 +680,18 @@ export interface Touch {
   communicationEventId: string | null;
   source: "manual" | "email" | "extension";
   createdAt: string;
+  // E4.1 follow-up cadence (F4.1.2): a touch with no next_follow_up_date
+  // carries the prior active follow-up forward; clearing is only ever this
+  // explicit flag, never a null date. Default false.
+  clearsFollowUp: boolean;
+  // E4.1 recipient capture (F4.1.5): optional but prominent — who was contacted
+  // and how (name + free-form contact). Rendered on the log row, filterable.
+  recipientName: string | null;
+  recipientContact: string | null;
+  // E4.1 corrections (Edge Cases): corrections are appends — this points at the
+  // touch being corrected. The original is never mutated; the log renders the
+  // pair ("corrected by …"). Null on a normal touch.
+  correctsTouchId: string | null;
   // Story 8: present only on batch-call children (communicationEventId set),
   // resolved by getCase for the "Part of {payer} {channel} call, N cases" line.
   batchSummary?: { payerName: string; channelLabel: string; caseCount: number } | null;

@@ -26,7 +26,7 @@ import {
 import { useProviders } from "@/hooks/useProviders";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
-import { useLogNote, useLogTouch } from "@/hooks/useTouches";
+import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
@@ -72,6 +72,7 @@ function CaseDetailPage() {
 
   const updateStatusM = useUpdateCaseStatus();
   const logTouchM = useLogTouch();
+  const correctTouchM = useCorrectTouch();
   const logNoteM = useLogNote();
   const setReferenceM = useSetPayerReference();
 
@@ -263,7 +264,7 @@ function CaseDetailPage() {
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}
               canEdit={canEdit}
-              savingTouch={logTouchM.isPending}
+              savingTouch={logTouchM.isPending || correctTouchM.isPending}
               savingNote={logNoteM.isPending}
               onSaveTouch={async (input) => {
                 try {
@@ -281,10 +282,10 @@ function CaseDetailPage() {
                   toast.error((e as Error).message);
                 }
               }}
-              onSetReference={async (value) => {
+              onCorrectTouch={async (originalTouchId, input) => {
                 try {
-                  await setReferenceM.mutateAsync({ caseId: c.id, value });
-                  toast.success("Payer reference saved");
+                  await correctTouchM.mutateAsync({ caseId: c.id, originalTouchId, input });
+                  toast.success("Correction logged");
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
