@@ -112,6 +112,17 @@ Format per entry:
   option or approved key custody and rotation, retention and deletion, or the
   browser/extension release boundary. E4.4 therefore remains `reviewed: false`
   and was not edited.
+- **2026-07-15 (re-review, `1681568` prettier-format cycle):** the triggering
+  push only prettier-formatted the already-reviewed E4.0, E4.1, and E4.2 epics
+  (plus `ROADMAP-STATUS.md`, `handoffs/E4.0-claude-handoff.md`, and
+  `seed-universe.md`), so all three epics were skipped per the review-loop
+  guard. E4.4 remains the only unreviewed epic. Its requirements to accept,
+  store, reveal, and release a full SSN still directly contradict the binding
+  `AGENTS.md` and `SCHEMA.md` last-four-only rule, and E4.4 §5 still names
+  encryption key management as a REQUIRED-before-build PM/security decision.
+  No PM/security decision has selected a vault option or approved key custody
+  and rotation, retention and deletion, or the browser/extension release
+  boundary. E4.4 therefore remains `reviewed: false` and was not edited.
 
 ## Resolved
 
