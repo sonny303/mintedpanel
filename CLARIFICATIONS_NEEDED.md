@@ -77,6 +77,15 @@ Format per entry:
   names encryption key management as a REQUIRED-before-build PM decision. The
   major security contradiction is unchanged, so E4.4 stays `reviewed: false`
   and was not edited this cycle.
+- **2026-07-15 (re-review, `43e7637` E4.1 cycle):** the latest push changed
+  E4.1 and `seed-universe.md`; E4.1 remains `reviewed: true` and was skipped
+  per the review-loop guard. E4.4 remains the only unreviewed epic. The
+  roadblock is unchanged: its full-SSN storage, reveal, and extension-release
+  requirements still contradict the binding `AGENTS.md` and `SCHEMA.md`
+  last-four-only rule. The impact remains a blocked vault schema, key custody
+  and rotation design, retention/deletion policy, ingress path, and approved
+  browser/extension release boundary. No option above has been selected by the
+  PM/security owner, so E4.4 stays `reviewed: false` and was not edited.
 
 ## Resolved
 
