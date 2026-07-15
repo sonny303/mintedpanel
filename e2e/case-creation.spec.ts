@@ -109,9 +109,9 @@ const facilityAssignment = (providerId: string, facilityId: string) => ({
   created_at: "2026-07-10T00:00:00Z",
 });
 
-const payerRow = (id: string, name: string) => ({
+const payerRow = (id: string, name: string, orgId: string | null = null) => ({
   id,
-  org_id: null,
+  org_id: orgId,
   name,
   payer_kind: "commercial",
   states: ["NC"],
@@ -119,6 +119,16 @@ const payerRow = (id: string, name: string) => ({
   status: "active",
   payer_slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
   is_active: true,
+  created_at: "2026-07-10T00:00:00Z",
+});
+
+const payerAssignment = (payerId: string) => ({
+  id: `opa-${payerId}`,
+  org_id: ORG_SHELBY,
+  payer_id: payerId,
+  starter: false,
+  status: "active",
+  archived_at: null,
   created_at: "2026-07-10T00:00:00Z",
 });
 
@@ -226,7 +236,7 @@ function makeFixtures() {
       },
     ],
     payers: [payerRow("pay-bcbsnc", "BCBS-NC"), payerRow("pay-cigna", "Cigna-NC")],
-    org_payer_assignments: [],
+    org_payer_assignments: [payerAssignment("pay-bcbsnc"), payerAssignment("pay-cigna")],
     payer_network_targets: [
       {
         id: "t-1",
@@ -749,8 +759,8 @@ test("TS-52: a manual one-off case against a non-attached payer gets the same ke
   await page.getByRole("option", { name: "Jane Whitaker" }).click();
   await dialog.getByRole("combobox", { name: "Group" }).click();
   await page.getByRole("option", { name: "Group 1" }).click();
-  // Cigna-NC is org-visible but OUTSIDE the attached payer list — the exact
-  // Q2a escape hatch. The picker is the full catalog, not the targets.
+  // Cigna-NC is assigned to the org but OUTSIDE its attached network targets —
+  // the exact Q2a escape hatch. The picker is not filtered to targets.
   await dialog.getByRole("combobox", { name: "Payer" }).click();
   await page.getByRole("option", { name: "Cigna-NC" }).click();
   await dialog.getByRole("combobox", { name: "State" }).click();
@@ -791,4 +801,105 @@ test("TS-52: a manual one-off case against a non-attached payer gets the same ke
   await expect(page).toHaveURL(/\/cases\/case-new-/, { timeout: 30000 });
   // Still exactly one case at the key — the block pre-empted the constraint.
   expect(writes.filter((w) => w.table === "rpc/create_case_with_tasks")).toHaveLength(1);
+});
+
+test("manual case replaces empty selectors with provider and payer setup actions", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.providers = [];
+  fixtures.org_payer_assignments = [];
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await expect(dialog.getByText("Add a provider first")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Add provider" })).toHaveAttribute(
+    "href",
+    "/onboarding/wizard?section=providers",
+  );
+  await expect(dialog.getByText("Add a payer to this organization")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Open payer catalog" })).toHaveAttribute(
+    "href",
+    "/payer-directory",
+  );
+  await expect(dialog.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Payer" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
+});
+
+test("manual case directs providers without group assignments back to the roster", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.provider_group_assignments = [];
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await expect(dialog.getByText("Assign a provider to a group")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Assign provider group" })).toHaveAttribute(
+    "href",
+    "/onboarding/wizard?section=providers",
+  );
+  await expect(dialog.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
+});
+
+test("manual case keeps an active org-owned payer selectable without an assignment", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.payers = [payerRow("pay-legacy", "Legacy Org Payer", ORG_SHELBY)];
+  fixtures.org_payer_assignments = [];
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await dialog.getByRole("combobox", { name: "Payer" }).click();
+  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toBeVisible();
+  await expect(dialog.getByText("Add a payer to this organization")).toHaveCount(0);
+});
+
+test("manual case distinguishes prerequisite query failures from empty data", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await context.route(/\/rest\/v1\/providers(?:\?|$)/, async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "provider read failed" }),
+    });
+  });
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await expect(dialog.getByRole("alert")).toContainText("Couldn't load case prerequisites.", {
+    timeout: 30000,
+  });
+  await expect(dialog.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(dialog.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
 });
