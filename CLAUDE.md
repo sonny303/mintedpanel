@@ -1095,6 +1095,55 @@ jsonb)`** — the ONE transactional staged-commit RPC + additive
   combined rejected + three uploads + in-flight combined run reviewable; TS-68
   capture fence + converted org lands in the wizard). No new table, no new deps.
 
+### Stage 4 built so far
+
+- **E4.0 — Payer Pipeline: External State Machine, Tracking IDs & Structured
+  Resolution.** Every credentialing case now carries a SECOND, parallel state —
+  where the PAYER is — wholly decoupled from the internal
+  `credentialing_status_id`/`status_configs` machine (A3; that machine is
+  untouched). **Schema (repo + hosted, five migrations `20260715120000`–`120500`):**
+  `credential_cases.payer_pipeline_state text NOT NULL DEFAULT 'not_started'`
+  CHECK 9-value (`not_started|assigned|drafting|submitted|in_review|
+action_required|approved|denied|oon`); the append-only **`payer_pipeline_history`**
+  (dedicated sibling of `status_history`, which can't hold the payer enum — no
+  UPDATE/DELETE policy/grant, member SELECT for ALL roles incl. billing, writer
+  INSERT); **`denial_reason_codes`** (governed vocabulary, `org_id NULL` = global,
+  six seeded defaults, admin-only writes — the E4.2 CRUD is NOT built here); and
+  the two Approved-resolution IDs `payer_individual_provider_id` (Type 1) +
+  `payer_group_provider_id` (Type 2/Tax-ID) via `20260715120500` (ChatPRD round-3
+  split — the earlier single `payer_provider_id` from `120100` is now DORMANT,
+  kept per the additive rule). Tracking ID reuses `payer_reference_id`; effective
+  date reuses `confirmed_effective_date` (no new columns — TE-3/TE-6). **Transitions
+  ONLY via `advance_payer_pipeline`** (SECURITY-INVOKER RPC, atomic: a rejected
+  edge writes ZERO history + no partial state; edge map mirrored in SQL from the
+  pure `src/lib/payerPipeline.ts`; enforces reason-code rules, admin-only
+  corrections/post-terminal/approval-reversal-clear, and optimistic concurrency
+  `p_expected_state`). Reapply after Denied is a NORMAL Denied→Drafting forward
+  edge (`[r4-review]` Q6), not a correction. **Services/hooks:** `cases.ts`
+  (`advancePayerPipeline` + typed `PipelineTransitionError`, `listDenialReasonCodes`,
+  `setPayerReference` audit now carries the prior value, `getCase` embeds the
+  attributed pipeline timeline), `useCases.ts` (`useAdvancePayerPipeline`/
+  `useDenialReasonCodes`), `useTasks.ts` (`useCreateFollowUpTask` — the RFI→task
+  bridge), `useTablePrefs.ts` (revives `tablePrefs.ts` for the toggleable list
+  column). **UI (`src/components/cases/pipeline/*`):** `PayerPipelineBadge`
+  (status-semantic `StatusPill`, kept distinct from the internal pill on case
+  detail/list/queue — TE-7), `PayerPipelineControl` (badge + last-updated
+  attribution + legal-edges-only transition menu + all dialogs: transition,
+  approval [effective date required + two IDs via the `payerResolutionIdentifier.ts`
+  resolver seam E4.2 plugs into], denial [reason required, "Other" context],
+  OON, admin correction, RFI→task bridge), `PayerPipelineHistoryPanel` (read-only
+  timeline), `TrackingIdField` (header, copyable, inline audited edit + duplicate
+  warning). Case list (`/cases`) gained the pipeline badge column, a
+  default-hidden toggleable Tracking ID column (via `user_table_prefs`), and a
+  free-text search matching the tracking ID; the E2.3 `/work` queue renders the
+  badge. **TE-7:** `handleCaseContext` (`/api/cases/:id/context`) now returns
+  `payerPipelineState` (read-only, no new endpoint). Seeds: TS-69–72 on Dillon
+  Sports Medicine (`seed-redesign.sql`, fixed UUIDs `d4110000-…`). Tests:
+  `payerPipeline.test.ts` (edges/terminal/reapply), `cases.pipeline.di.test.ts`
+  (RPC param threading + error mapping). The RPC's transactional
+  zero-history-on-failure + admin gate were verified via a live rolled-back
+  simulation (a JS fake can't prove PG transactionality). No new deps.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1204,6 +1253,17 @@ all 23 hosted migrations. Consequences:
   writers). NULL-safe for every pre-existing caller; signature
   and SECURITY INVOKER posture unchanged. NOT replay-idempotent — batch
   semantics are per-row transactionality + skip-on-23505 in the confirm loop.
+- `advance_payer_pipeline(p_case_id, p_to_state, p_expected_state,
+p_reason_code_id, p_justification, p_is_correction, p_effective_date,
+p_individual_provider_id, p_group_provider_id) RETURNS jsonb` — **repo migration
+  too** (E4.0 `20260715120400` + `20260715120500`). SECURITY INVOKER (caller RLS —
+  billing is read-only automatically), the ONE atomic payer-pipeline transition:
+  validate edge / reason-code / admin-gate / concurrency, then state change +
+  append-only `payer_pipeline_history` + Approved enrollment writes-or-clears +
+  in-RPC `audit_log`, all-or-nothing. Named RAISEs (`pipeline_invalid_transition`,
+  `pipeline_state_conflict:<state>`, `pipeline_admin_only`,
+  `pipeline_denied_needs_reason`, …) map to UI messages in `cases.ts`
+  `PipelineTransitionError`. Edge map mirrored from `src/lib/payerPipeline.ts`.
 - `create_organization(p_name text) RETURNS uuid` — **the exception to this
   section's "hosted-only" heading: it IS a repo migration**
   (`20260707140000_create_organization_rpc.sql`, repo + hosted). SECURITY

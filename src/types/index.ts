@@ -1,6 +1,7 @@
 // Domain types for Minted Panel. App code uses camelCase; database rows are
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 import type { FacilityHours } from "@/lib/facilityHours";
+import type { PayerPipelineState } from "@/lib/payerPipeline";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -573,9 +574,18 @@ export interface CredentialCase {
   createdAt: string;
   updatedAt: string;
   caseEmailToken: string;
-  // Story 2: latest payer reference / submission ID, latest-wins. History lives
-  // in the touchlog as system_event entries, not here.
+  // Story 2 / E4.0 TE-3: latest payer reference / submission ID (the case's
+  // tracking ID), latest-wins. History lives in the touchlog + audit_log, not here.
   payerReferenceId: string | null;
+  // E4.0 TE-1: the EXTERNAL payer-pipeline state, parallel to and independent of
+  // credentialingStatusId (the internal machine). Defaults to 'not_started'.
+  payerPipelineState: PayerPipelineState;
+  // E4.0 TE-6 (ChatPRD round-3): two structured payer-issued enrollment
+  // identifiers captured at Approved, never concatenated — Type 1 NPI-linked
+  // Individual (rendered under the payer's configured label — E4.2 — else
+  // "Payer-issued ID") and Type 2/Tax-ID-linked Group/Billing. Either/both/neither.
+  payerIndividualProviderId: string | null;
+  payerGroupProviderId: string | null;
   // E2.1: the generation run that created this case; null = manual one-off or
   // pre-E2.1 row (the "run-less" trail). Optional — narrow projections predate it.
   generationRunId?: string | null;
@@ -756,6 +766,36 @@ export interface StatusHistoryEntry {
   createdAt: string;
 }
 
+// E4.0 TE-2 — one append-only row per payer-pipeline transition. Never updated
+// or deleted; a wrong row is annotated by a later is_correction row.
+export interface PayerPipelineHistoryEntry {
+  id: string;
+  orgId: string;
+  caseId: string;
+  fromState: PayerPipelineState | null;
+  toState: PayerPipelineState;
+  reasonCodeId: string | null;
+  isCorrection: boolean;
+  justification: string | null;
+  changedBy: string | null;
+  /** Actor display name, resolved via profiles at read time (not a column). */
+  changedByName?: string | null;
+  /** Reason-code label, resolved from denial_reason_codes at read time. */
+  reasonLabel?: string | null;
+  changedAt: string;
+}
+
+// E4.0 TE-4 — a structured denial/return reason. orgId null = global default
+// (seeded); non-null = org-added (managed in E4.2). Deactivated, never deleted.
+export interface DenialReasonCode {
+  id: string;
+  orgId: string | null;
+  code: string;
+  label: string;
+  active: boolean;
+  createdAt: string;
+}
+
 export interface AuditLogEntry {
   id: string;
   orgId: string;
@@ -839,6 +879,9 @@ export interface CaseDetail extends CredentialCase {
   touches: Touch[];
   notes: Note[];
   statusHistory: StatusHistoryEntry[];
+  /** E4.0 F4.0.1 — the read-only payer-pipeline timeline (append-only), each
+   * row attributed and reason/justification-resolved by getCase. */
+  payerPipelineHistory: PayerPipelineHistoryEntry[];
   /** E2.4 F2.4.2 — the creation actor's display name, resolved by getCase via
    * the same profiles fetch that names history/touch authors. */
   createdByName?: string | null;

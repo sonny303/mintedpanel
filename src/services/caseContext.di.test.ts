@@ -115,7 +115,7 @@ describe("getCaseContext — org isolation", () => {
 describe("getCaseContext — projection", () => {
   it("surfaces the reference number, latest note (author-resolved), and latest touchpoint", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: "REF-42" } },
+      { data: { id: CASE_ID, payer_reference_id: "REF-42", payer_pipeline_state: "submitted" } },
       {
         // newest-first, mixed entry types
         data: [
@@ -136,6 +136,7 @@ describe("getCaseContext — projection", () => {
 
     expect(result).toEqual({
       referenceNumbers: ["REF-42"],
+      payerPipelineState: "submitted",
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",
@@ -153,7 +154,7 @@ describe("getCaseContext — projection", () => {
 
   it("empty reference + no touchlog entries -> empty array and null note/touch, no profiles read", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null } },
+      { data: { id: CASE_ID, payer_reference_id: null, payer_pipeline_state: "not_started" } },
       { data: [] },
     ]);
 
@@ -161,6 +162,7 @@ describe("getCaseContext — projection", () => {
 
     expect(result).toEqual({
       referenceNumbers: [],
+      payerPipelineState: "not_started",
       latestNote: null,
       latestTouch: null,
     });

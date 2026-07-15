@@ -6,6 +6,8 @@ export const queryKeys = {
   provider: (orgId: string, id: string) => ["provider", orgId, id] as const,
   cases: (orgId: string, filters?: unknown) => ["cases", orgId, filters ?? {}] as const,
   case: (orgId: string, id: string) => ["case", orgId, id] as const,
+  // E4.0 — the active denial/return reason vocabulary (global + own-org).
+  denialReasonCodes: (orgId: string) => ["denial-reason-codes", orgId] as const,
   contract: (orgId: string, key: unknown) => ["contract", orgId, key] as const,
   contracts: (orgId: string, filters?: unknown) => ["contracts", orgId, filters ?? {}] as const,
   touches: (orgId: string, caseId: string) => ["touches", orgId, caseId] as const,

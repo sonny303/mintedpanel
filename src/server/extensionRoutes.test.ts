@@ -389,6 +389,7 @@ describe("case context handler", () => {
   it("returns 200 with the context projection, forwarding the org-scoped ctx (billing may read)", async () => {
     const context = {
       referenceNumbers: ["REF-42"],
+      payerPipelineState: "submitted",
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",

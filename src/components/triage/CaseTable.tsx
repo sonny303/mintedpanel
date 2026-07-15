@@ -7,6 +7,8 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { StatusPill } from "./StatusPill";
 import { RowCta } from "./RowCta";
+import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
+import type { PayerPipelineState } from "@/lib/payerPipeline";
 
 export interface CaseTableRow {
   id: string;
@@ -15,6 +17,11 @@ export interface CaseTableRow {
   status: { label: string; color: string; suffix?: string };
   /** Derived group-contract status; null renders a muted dash. */
   contract: { label: string; color: string } | null;
+  /** E4.0 — the payer-pipeline state, rendered as its own column (distinct from
+   * the internal credentialing status) when the parent passes showPipeline. */
+  pipeline?: PayerPipelineState | null;
+  /** E4.0 F4.0.2 — the payer Reference/Tracking ID, shown when showTrackingId. */
+  trackingId?: string | null;
   lastTouch: string;
   days: number | null;
   /** Emphasize the days figure (bold ink) — set on rows needing attention. */
@@ -29,6 +36,9 @@ interface CaseTableProps {
   /** Header for the first column: "Payer" or "Provider". */
   leadLabel: string;
   rows: CaseTableRow[];
+  /** E4.0 — opt-in extra columns (Cases view only; Providers view omits them). */
+  showPipeline?: boolean;
+  showTrackingId?: boolean;
 }
 
 const HEAD_CELL =
@@ -65,7 +75,7 @@ function contractCell(row: CaseTableRow) {
   );
 }
 
-export function CaseTable({ leadLabel, rows }: CaseTableProps) {
+export function CaseTable({ leadLabel, rows, showPipeline, showTrackingId }: CaseTableProps) {
   return (
     <div className="border-t border-mp-border">
       {/* Desktop table */}
@@ -73,8 +83,10 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
         <thead>
           <tr className="border-b border-mp-border">
             <th className={`${HEAD_CELL} w-full pl-4 pr-3`}>{leadLabel}</th>
+            {showPipeline ? <th className={`${HEAD_CELL} px-3`}>Payer Pipeline</th> : null}
             <th className={`${HEAD_CELL} px-3`}>Credentialing</th>
             <th className={`${HEAD_CELL} px-3`}>Group Contract</th>
+            {showTrackingId ? <th className={`${HEAD_CELL} px-3`}>Tracking ID</th> : null}
             <th className={`${HEAD_CELL} px-3`}>Last Touch</th>
             <th className={`${HEAD_CELL} px-3`}>Days</th>
             <th className={`${HEAD_CELL} pl-3 pr-4`}>
@@ -93,6 +105,11 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
               className={`cursor-pointer ${row.alert ? "bg-mp-danger/5" : "hover:bg-mp-muted/40"}`}
             >
               <td className="w-full max-w-0 truncate py-3 pl-4 pr-3">{row.lead}</td>
+              {showPipeline ? (
+                <td className="whitespace-nowrap px-3 py-3">
+                  {row.pipeline ? <PayerPipelineBadge state={row.pipeline} /> : null}
+                </td>
+              ) : null}
               <td className="whitespace-nowrap px-3 py-3">
                 <StatusPill
                   label={row.status.label}
@@ -101,6 +118,11 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
                 />
               </td>
               <td className="whitespace-nowrap px-3 py-3">{contractCell(row)}</td>
+              {showTrackingId ? (
+                <td className="whitespace-nowrap px-3 py-3 text-[length:var(--mp-text-sm)] tabular-nums text-[color:var(--mp-ink-secondary)]">
+                  {row.trackingId ?? "—"}
+                </td>
+              ) : null}
               <td className="whitespace-nowrap px-3 py-3 text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
                 {row.lastTouch}
               </td>
@@ -137,7 +159,13 @@ export function CaseTable({ leadLabel, rows }: CaseTableProps) {
               />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {showPipeline && row.pipeline ? <PayerPipelineBadge state={row.pipeline} /> : null}
               {contractCell(row)}
+              {showTrackingId && row.trackingId ? (
+                <span className="text-[length:var(--mp-text-xs)] tabular-nums text-[color:var(--mp-ink-faint)]">
+                  #{row.trackingId}
+                </span>
+              ) : null}
               <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
                 {row.lastTouch}
               </span>

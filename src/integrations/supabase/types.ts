@@ -426,7 +426,11 @@ export type Database = {
           id: string;
           mso_id: string | null;
           org_id: string;
+          payer_group_provider_id: string | null;
           payer_id: string;
+          payer_individual_provider_id: string | null;
+          payer_pipeline_state: string;
+          payer_provider_id: string | null;
           payer_reference_id: string | null;
           provider_id: string;
           specialty: string | null;
@@ -450,7 +454,11 @@ export type Database = {
           id?: string;
           mso_id?: string | null;
           org_id: string;
+          payer_group_provider_id?: string | null;
           payer_id: string;
+          payer_individual_provider_id?: string | null;
+          payer_pipeline_state?: string;
+          payer_provider_id?: string | null;
           payer_reference_id?: string | null;
           provider_id: string;
           specialty?: string | null;
@@ -474,7 +482,11 @@ export type Database = {
           id?: string;
           mso_id?: string | null;
           org_id?: string;
+          payer_group_provider_id?: string | null;
           payer_id?: string;
+          payer_individual_provider_id?: string | null;
+          payer_pipeline_state?: string;
+          payer_provider_id?: string | null;
           payer_reference_id?: string | null;
           provider_id?: string;
           specialty?: string | null;
@@ -552,6 +564,41 @@ export type Database = {
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      denial_reason_codes: {
+        Row: {
+          active: boolean;
+          code: string;
+          created_at: string;
+          id: string;
+          label: string;
+          org_id: string | null;
+        };
+        Insert: {
+          active?: boolean;
+          code: string;
+          created_at?: string;
+          id?: string;
+          label: string;
+          org_id?: string | null;
+        };
+        Update: {
+          active?: boolean;
+          code?: string;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          org_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "denial_reason_codes_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];
@@ -1644,6 +1691,67 @@ export type Database = {
             columns: ["payer_id"];
             isOneToOne: false;
             referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payer_pipeline_history: {
+        Row: {
+          case_id: string;
+          changed_at: string;
+          changed_by: string | null;
+          from_state: string | null;
+          id: string;
+          is_correction: boolean;
+          justification: string | null;
+          org_id: string;
+          reason_code_id: string | null;
+          to_state: string;
+        };
+        Insert: {
+          case_id: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          from_state?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          justification?: string | null;
+          org_id: string;
+          reason_code_id?: string | null;
+          to_state: string;
+        };
+        Update: {
+          case_id?: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          from_state?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          justification?: string | null;
+          org_id?: string;
+          reason_code_id?: string | null;
+          to_state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_pipeline_history_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_pipeline_history_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_pipeline_history_reason_code_id_fkey";
+            columns: ["reason_code_id"];
+            isOneToOne: false;
+            referencedRelation: "denial_reason_codes";
             referencedColumns: ["id"];
           },
         ];
@@ -3026,6 +3134,20 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      advance_payer_pipeline: {
+        Args: {
+          p_case_id: string;
+          p_effective_date?: string;
+          p_expected_state?: string;
+          p_group_provider_id?: string;
+          p_individual_provider_id?: string;
+          p_is_correction?: boolean;
+          p_justification?: string;
+          p_reason_code_id?: string;
+          p_to_state: string;
+        };
+        Returns: Json;
+      };
       assert_contact_valid: {
         Args: { p: Json; p_label: string };
         Returns: undefined;

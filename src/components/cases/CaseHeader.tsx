@@ -14,12 +14,19 @@ export function CaseHeader({
   contractStatus,
   canEdit,
   onOpenStatus,
+  pipelineControl,
+  trackingId,
 }: {
   c: CaseDetail;
   credStatus: StatusConfig | null | undefined;
   contractStatus: StatusConfig | null | undefined;
   canEdit: boolean;
   onOpenStatus: () => void;
+  /** E4.0 — the payer-pipeline control (badge + attribution + transition menu),
+   * rendered by the parent so the header stays presentational. */
+  pipelineControl?: React.ReactNode;
+  /** E4.0 F4.0.2 — the copyable, inline-editable Reference/Tracking ID. */
+  trackingId?: React.ReactNode;
 }) {
   const providerName = c.provider
     ? `${c.provider.firstName} ${c.provider.lastName}${c.provider.credentials ? `, ${c.provider.credentials}` : ""}`
@@ -51,9 +58,16 @@ export function CaseHeader({
             </>
           ) : null}
         </p>
+        {trackingId ? <div className="mt-2">{trackingId}</div> : null}
       </div>
 
       <div className="flex items-center gap-6">
+        {pipelineControl ? (
+          <>
+            {pipelineControl}
+            <Separator orientation="vertical" className="h-8" />
+          </>
+        ) : null}
         <div className="flex flex-col items-end gap-1.5">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
             Credentialing
