@@ -123,6 +123,21 @@ Format per entry:
   No PM/security decision has selected a vault option or approved key custody
   and rotation, retention and deletion, or the browser/extension release
   boundary. E4.4 therefore remains `reviewed: false` and was not edited.
+- **2026-07-15 (re-review, `36d281c` E4.0 pipeline merge cycle):** the
+  triggering push merged PR #155 (E4.0 Payer Pipeline) and touched the
+  already-reviewed E4.0, E4.1, and E4.2 epics (plus `ROADMAP-STATUS.md`,
+  `handoffs/E4.0-claude-handoff.md`, `seed-universe.md`, and the E4.0
+  implementation), so all three epics were skipped per the review-loop guard.
+  E4.4 remains the only `reviewed: false` epic. `AGENTS.md` (line 55:
+  "Providers store `ssn_last4` only. Never store or accept a full SSN.") and
+  `SCHEMA.md` (line 10 PHI-minimization + the `providers` column list carrying
+  `ssn_last4` and no full-SSN field) on the current `redesign` HEAD still bind
+  to last-four-only. E4.4's requirements to accept, store, reveal, and release
+  a full SSN still directly contradict that binding rule, and E4.4 §5 still
+  names encryption key management as a REQUIRED-before-build PM/security
+  decision. No PM/security decision has selected a vault option or approved key
+  custody and rotation, retention and deletion, or the browser/extension
+  release boundary. E4.4 therefore remains `reviewed: false` and was not edited.
 
 ## Resolved
 
