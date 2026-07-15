@@ -106,7 +106,11 @@ Format per entry:
   envelope + external KMS); (b) internal `store_ssn` modal ingress role —
   writer roles (`specialist|admin`, reviewer default) vs admin-only. The
   extension specification update (fill-only token category, masked UI) ships
-  with the E4.3/E4.4 build per TE-5.
+  with the E4.3/E4.4 build per TE-5. **Sub-decisions resolved same day:** key
+  management = TE-2 Option A (in-DB pgcrypto symmetric, server-secret key,
+  Option-B-ready schema); `store_ssn` ingress = writer roles
+  (`specialist|admin`; reveal admin-only unchanged). E4.4 flipped to
+  `reviewed: true`.
 - **2026-07-14 (re-review):** the current `redesign` branch still binds both
   `AGENTS.md` and `SCHEMA.md` to `ssn_last4` only and explicitly prohibits
   accepting or storing a full SSN. No approved key-custody/rotation,
