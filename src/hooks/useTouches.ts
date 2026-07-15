@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  bulkLogTouch,
+  correctTouch,
   getLastTouchDates,
   getLatestTouchFollowUps,
   getTaskTouchlog,
@@ -61,6 +63,50 @@ export function useLogTouch() {
       // last-per-case, and the Home "Follow-ups due" latest-follow-ups queue).
       qc.invalidateQueries({ queryKey: ["touches", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface CorrectTouchVars {
+  caseId: string;
+  originalTouchId: string;
+  input: TouchInput;
+}
+
+// E4.1 corrections: append a correcting touch. Same invalidation fan-out as a
+// normal touch (TE-4) — the follow-ups queue rides the ["touches", orgId] prefix.
+export function useCorrectTouch() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: CorrectTouchVars) =>
+      correctTouch(vars.caseId, vars.originalTouchId, vars.input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface BulkLogTouchVars {
+  caseIds: string[];
+  input: TouchInput;
+}
+
+// E4.1 bulk logging (F4.1.7): one touch per selected case. Invalidate the touch
+// prefix once and every affected case key.
+export function useBulkLogTouch() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: BulkLogTouchVars) => bulkLogTouch(vars.caseIds, vars.input),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
+      for (const caseId of result.caseIds) {
+        qc.invalidateQueries({ queryKey: queryKeys.case(orgId, caseId) });
+      }
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

@@ -3,6 +3,7 @@
 // advance_payer_pipeline mutation, toasts, and the RFI→task follow-up. Stock
 // shadcn compositions (Dialog/Select/Input/Textarea/DatePicker) styled by tokens.
 import { useState } from "react";
+import { format } from "date-fns";
 import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
@@ -26,7 +27,15 @@ import {
 import { DatePicker } from "@/components/DatePicker";
 import { PAYER_PIPELINE_STATES, pipelineLabel, type PayerPipelineState } from "@/lib/payerPipeline";
 import { GROUP_PROVIDER_ID_LABEL, resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
-import type { DenialReasonCode, Payer } from "@/types";
+import {
+  initialPipelineTouchState,
+  PipelineTouchSection,
+  pipelineTouchBlocked,
+  pipelineTouchInput,
+  type PipelineTouchState,
+} from "./PipelineTouchSection";
+import type { TouchInput } from "@/services/touches";
+import type { DenialReasonCode, Payer, TouchType } from "@/types";
 
 const FIELD_LABEL = "text-[11px] uppercase tracking-wide text-muted-foreground";
 
@@ -109,6 +118,16 @@ function ProviderIdFields({
 export interface TransitionConfirmValues {
   trackingId?: string | null;
   reasonCodeId?: string | null;
+  // E4.1 F4.1.8 — the optional touch to log alongside the transition (null when
+  // the "Log this as a touch" section is off). PayerPipelineControl sequences
+  // the transition, then this touch on success.
+  touch?: TouchInput | null;
+}
+
+// A sensible default touch type per target: portal-facing transitions preselect
+// Portal Check; everything else a Call.
+function defaultTouchTypeFor(to: PayerPipelineState): TouchType {
+  return to === "action_required" || to === "in_review" || to === "submitted" ? "portal" : "call";
 }
 
 export function TransitionConfirmDialog({
@@ -136,6 +155,16 @@ export function TransitionConfirmDialog({
   const isSubmit = to === "submitted";
   const isRfi = to === "action_required";
   const isReapply = from === "denied" && to === "drafting";
+
+  const [touchState, setTouchState] = useState<PipelineTouchState>(() =>
+    initialPipelineTouchState(
+      defaultTouchTypeFor(to),
+      isRfi
+        ? "Payer requested action (RFI)"
+        : `Pipeline moved from ${pipelineLabel(from)} to ${pipelineLabel(to)}`,
+    ),
+  );
+  const touchBlocked = pipelineTouchBlocked(touchState);
 
   const title = isReapply ? "Reapply — reopen at Drafting" : `Move to ${pipelineLabel(to)}`;
   const description = isReapply
@@ -180,6 +209,9 @@ export function TransitionConfirmDialog({
               />
             </div>
           ) : null}
+
+          {/* E4.1 F4.1.8 — Action Bridge: optionally log a touch with this move. */}
+          <PipelineTouchSection state={touchState} onChange={setTouchState} />
         </div>
 
         <DialogFooter>
@@ -188,11 +220,12 @@ export function TransitionConfirmDialog({
           </Button>
           <Button
             className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-            disabled={saving}
+            disabled={saving || touchBlocked}
             onClick={() =>
               onConfirm({
                 trackingId: isSubmit && trackingId.trim() ? trackingId.trim() : null,
                 reasonCodeId: isRfi && reasonCodeId ? reasonCodeId : null,
+                touch: pipelineTouchInput(touchState, format(new Date(), "yyyy-MM-dd")),
               })
             }
           >

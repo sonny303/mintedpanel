@@ -11,6 +11,7 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import { useCases } from "@/hooks/useCases";
 import { useFollowUpsDue } from "@/hooks/useTouches";
+import { useQueueRankingConfig } from "@/hooks/useQueueRankingConfig";
 import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderAssignments, useProviderGroupAssignments } from "@/hooks/useProviders";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
@@ -78,6 +79,7 @@ export function useNextBestActions(): NextBestActionsData {
   const tasksQ = useQueueTaskRows();
   const providersQ = useQueueProviderRows();
   const followUpsQ = useFollowUpsDue();
+  const rankingConfigQ = useQueueRankingConfig();
   const facilityAssignmentsQ = useProviderAssignments();
   const facilitiesQ = useFacilities();
   const groupsQ = useProviderGroups();
@@ -103,6 +105,7 @@ export function useNextBestActions(): NextBestActionsData {
     groupsQ,
     payersQ,
     statusConfigsQ,
+    rankingConfigQ,
     targetsQ,
     groupAssignmentsQ,
     factsQ,
@@ -149,13 +152,15 @@ export function useNextBestActions(): NextBestActionsData {
       openGapLabels: row.checks.filter((c) => !c.pass).map((c) => c.label),
     }));
 
-    // The follow-ups read is already the latest touchpoint per case (the
-    // touchpoint-scoped M5 read); the module re-enforces the entry_type rule.
+    // The follow-ups read is the ACTIVE (carry-forward) follow-up per case
+    // (E4.1 F4.1.2 — getLatestTouchFollowUps resolves it); the pure reducer
+    // re-enforces the entry_type rule and is idempotent over this projection.
     const touches: QueueTouchInput[] = [...(followUpsQ.data?.values() ?? [])].map((f) => ({
       caseId: f.caseId,
       entryType: "touchpoint",
       touchDate: f.touchDate,
       nextFollowUpDate: f.nextFollowUpDate,
+      clearsFollowUp: false,
     }));
 
     return buildNextBestActions({
@@ -192,6 +197,8 @@ export function useNextBestActions(): NextBestActionsData {
       groups: (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name })),
       payers: (payersQ.data ?? []).map((p) => ({ id: p.id, name: p.name })),
       readiness,
+      // E4.1 F4.1.3 — org ranking config (null = shipped default).
+      rankingConfig: rankingConfigQ.data ?? null,
     });
   }, [
     resolved,
@@ -200,6 +207,7 @@ export function useNextBestActions(): NextBestActionsData {
     tasksQ.data,
     providersQ.data,
     followUpsQ.data,
+    rankingConfigQ.data,
     facilityAssignmentsQ.data,
     facilitiesQ.data,
     groupsQ.data,

@@ -3021,8 +3021,10 @@ export type Database = {
       touches: {
         Row: {
           case_id: string;
+          clears_follow_up: boolean;
           communication_event_id: string | null;
           coordinator_id: string | null;
+          corrects_touch_id: string | null;
           created_at: string | null;
           entry_type: string;
           id: string;
@@ -3030,6 +3032,8 @@ export type Database = {
           notes: string | null;
           org_id: string;
           outcome: string | null;
+          recipient_contact: string | null;
+          recipient_name: string | null;
           source: string | null;
           task_id: string | null;
           touch_date: string;
@@ -3037,8 +3041,10 @@ export type Database = {
         };
         Insert: {
           case_id: string;
+          clears_follow_up?: boolean;
           communication_event_id?: string | null;
           coordinator_id?: string | null;
+          corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
           id?: string;
@@ -3046,6 +3052,8 @@ export type Database = {
           notes?: string | null;
           org_id: string;
           outcome?: string | null;
+          recipient_contact?: string | null;
+          recipient_name?: string | null;
           source?: string | null;
           task_id?: string | null;
           touch_date: string;
@@ -3053,8 +3061,10 @@ export type Database = {
         };
         Update: {
           case_id?: string;
+          clears_follow_up?: boolean;
           communication_event_id?: string | null;
           coordinator_id?: string | null;
+          corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
           id?: string;
@@ -3062,6 +3072,8 @@ export type Database = {
           notes?: string | null;
           org_id?: string;
           outcome?: string | null;
+          recipient_contact?: string | null;
+          recipient_name?: string | null;
           source?: string | null;
           task_id?: string | null;
           touch_date?: string;
@@ -3087,6 +3099,13 @@ export type Database = {
             columns: ["coordinator_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_corrects_touch_id_fkey";
+            columns: ["corrects_touch_id"];
+            isOneToOne: false;
+            referencedRelation: "touches";
             referencedColumns: ["id"];
           },
           {

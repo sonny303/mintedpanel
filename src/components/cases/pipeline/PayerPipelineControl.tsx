@@ -39,7 +39,10 @@ import {
 } from "@/lib/payerPipeline";
 import { useAdvancePayerPipeline, useSetPayerReference } from "@/hooks/useCases";
 import { useCreateFollowUpTask } from "@/hooks/useTasks";
-import { PipelineTransitionError } from "@/services/cases";
+import { useLogTouch } from "@/hooks/useTouches";
+import { PipelineTransitionError, type AdvancePipelineInput } from "@/services/cases";
+import type { TouchInput } from "@/services/touches";
+import { retryTouchOnly, runTransitionWithTouch } from "@/lib/actionBridge";
 import type { CaseDetail, DenialReasonCode } from "@/types";
 
 const TERMINAL_TARGETS: readonly PayerPipelineState[] = ["approved", "denied", "oon"];
@@ -73,6 +76,18 @@ export function PayerPipelineControl({
   const advanceM = useAdvancePayerPipeline();
   const setReferenceM = useSetPayerReference();
   const createTaskM = useCreateFollowUpTask();
+  const logTouchM = useLogTouch();
+
+  // E4.1 F4.1.8 — retry ONLY the touch after a successful transition whose touch
+  // failed (the transition is never re-run).
+  async function retryTouch(input: TouchInput) {
+    const r = await retryTouchOnly(
+      { logTouch: (i: TouchInput) => logTouchM.mutateAsync({ caseId: c.id, input: i }) },
+      input,
+    );
+    if (r.touch === "logged") toast.success("Touch logged");
+    else handleError(r.touchError);
+  }
 
   const latest = [...(c.payerPipelineHistory ?? [])].sort((a, b) =>
     b.changedAt.localeCompare(a.changedAt),
@@ -98,30 +113,54 @@ export function PayerPipelineControl({
   }
 
   // Generic forward transition (assigned/drafting/submitted/in_review/RFI/reapply).
+  // F4.1.8 Action Bridge: sequence the transition, then (only on success) the
+  // optional touch. A failed transition writes no touch; a failed touch after a
+  // successful transition offers a touch-only retry — never re-runs the move.
   async function confirmTransition(target: PayerPipelineState, v: TransitionConfirmValues) {
-    try {
-      await advanceM.mutateAsync({
-        caseId: c.id,
-        toState: target,
-        expectedState: state,
-        reasonCodeId: v.reasonCodeId ?? null,
-      });
-      // Submit-time tracking ID is a separate audited write (optional, latest-wins).
-      if (target === "submitted" && v.trackingId) {
+    const result = await runTransitionWithTouch(
+      {
+        advance: (args: AdvancePipelineInput) => advanceM.mutateAsync(args),
+        logTouch: (input: TouchInput) => logTouchM.mutateAsync({ caseId: c.id, input }),
+      },
+      {
+        advanceArgs: {
+          caseId: c.id,
+          toState: target,
+          expectedState: state,
+          reasonCodeId: v.reasonCodeId ?? null,
+        },
+        touchArgs: v.touch ?? null,
+      },
+    );
+    if (result.transition === "failed") {
+      handleError(result.transitionError);
+      return;
+    }
+    // Transition succeeded. Submit-time tracking ID is a separate audited write.
+    if (target === "submitted" && v.trackingId) {
+      try {
         await setReferenceM.mutateAsync({ caseId: c.id, value: v.trackingId });
+      } catch (e) {
+        handleError(e);
       }
+    }
+    if (result.touch === "failed") {
+      toast.error("Pipeline moved, but logging the touch failed.", {
+        action: { label: "Retry touch", onClick: () => void retryTouch(v.touch as TouchInput) },
+      });
+    } else if (result.touch === "logged") {
+      toast.success(`Pipeline moved to ${pipelineLabel(target)} · touch logged`);
+    } else {
       toast.success(`Pipeline moved to ${pipelineLabel(target)}`);
-      // RFI→task bridge: offer to spawn an internal task so the case never stalls.
-      if (target === "action_required") {
-        const reasonLabel = v.reasonCodeId
-          ? (reasonCodes.find((r) => r.id === v.reasonCodeId)?.label ?? null)
-          : null;
-        setDialog({ kind: "rfiTask", reasonLabel });
-      } else {
-        setDialog(null);
-      }
-    } catch (e) {
-      handleError(e);
+    }
+    // RFI→task bridge: offer to spawn an internal task so the case never stalls.
+    if (target === "action_required") {
+      const reasonLabel = v.reasonCodeId
+        ? (reasonCodes.find((r) => r.id === v.reasonCodeId)?.label ?? null)
+        : null;
+      setDialog({ kind: "rfiTask", reasonLabel });
+    } else {
+      setDialog(null);
     }
   }
 
@@ -203,7 +242,7 @@ export function PayerPipelineControl({
     }
   }
 
-  const saving = advanceM.isPending || setReferenceM.isPending;
+  const saving = advanceM.isPending || setReferenceM.isPending || logTouchM.isPending;
   const hasMenu = canEdit && (targets.length > 0 || isAdmin);
 
   return (

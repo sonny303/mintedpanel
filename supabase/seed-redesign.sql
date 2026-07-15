@@ -349,3 +349,44 @@ JOIN (VALUES
   ('d4110000-0000-4000-a000-000000000072'::uuid, 'drafting', 'submitted', '2026-07-09T09:00:00Z')
 ) AS v(case_id, from_state, to_state, changed_at) ON v.case_id = c.id
 WHERE NOT EXISTS (SELECT 1 FROM public.payer_pipeline_history h WHERE h.case_id = c.id);
+
+-- ---------------------------------------------------------------------------
+-- E4.1 — Structured touches & follow-up cadence (TS-73..75) on the Dillon cases.
+-- org_id resolved from the case; fixed UUIDs + ON CONFLICT (id) DO NOTHING.
+-- Demonstrates: the seven touch types + legacy `mail`; optional dispositions
+-- (incl. Other + context); prominent recipient capture; follow-up carry-forward
+-- (a date-less touch keeps the prior follow-up — case 069) and an explicit clear
+-- (case 072); an overdue follow-up that surfaces in the queue (case 070, due
+-- 2026-07-10 < the 2026-07-15 fixture "today"); and an append-only correction
+-- pair (case 069). Local fixture only.
+-- ---------------------------------------------------------------------------
+INSERT INTO public.touches (id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, clears_follow_up, recipient_name, recipient_contact, notes, source, created_at)
+SELECT v.id::uuid, c.org_id, c.id, v.touch_date::date, 'touchpoint', v.touch_type, v.outcome,
+       v.next_follow_up_date::date, v.clears_follow_up, v.recipient_name, v.recipient_contact, v.notes,
+       'manual', v.created_at::timestamptz
+FROM public.credential_cases c
+JOIN (VALUES
+  ('e41d0000-0000-4000-a000-000000000001', 'd4110000-0000-4000-a000-000000000069', '2026-07-08', 'portal', 'successful', '2026-07-22', false, 'BCBS TX Provider Relations', '800-555-0069', 'Portal Check — application received, in review. Re-check in ~2 weeks.', '2026-07-08T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000002', 'd4110000-0000-4000-a000-000000000069', '2026-07-11', 'provider_outreach', 'attempted', NULL, false, 'Tim Riggins', 'tim.riggins@example.test', 'Asked the provider to upload an updated COI. No new follow-up — the 07-22 re-check carries forward.', '2026-07-11T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000003', 'd4110000-0000-4000-a000-000000000069', '2026-07-12', 'call', 'attempted', NULL, false, 'BCBS TX Rep', '800-555-0069', 'Left a voicemail; quoted reference TX-APP-77301.', '2026-07-12T10:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000004', 'd4110000-0000-4000-a000-000000000070', '2026-07-02', 'email', 'sent', '2026-07-10', false, 'BCBS TX Enrollment', 'enrollment@example.test', 'Emailed the enrollment packet; awaiting confirmation.', '2026-07-02T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000005', 'd4110000-0000-4000-a000-000000000070', '2026-07-05', 'fax', 'confirmed_received', NULL, false, 'BCBS TX Fax', '800-555-0199', 'Faxed supporting documents; confirmation received.', '2026-07-05T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000006', 'd4110000-0000-4000-a000-000000000071', '2026-06-20', 'mail', 'delivered', NULL, false, NULL, NULL, 'Mailed a W-9 and a voided check to UHC.', '2026-06-20T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000007', 'd4110000-0000-4000-a000-000000000071', '2026-07-01', 'caqh_update', 'successful', NULL, false, NULL, NULL, 'Re-attested CAQH; confirmed taxonomy 225100000X.', '2026-07-01T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000008', 'd4110000-0000-4000-a000-000000000072', '2026-07-08', 'portal', 'successful', '2026-07-25', false, NULL, NULL, 'Portal Check — draft saved, awaiting review.', '2026-07-08T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000009', 'd4110000-0000-4000-a000-000000000072', '2026-07-09', 'internal_sync', 'other', NULL, false, NULL, NULL, 'Internal sync: escalate the UHC delay to the team lead.', '2026-07-09T09:00:00Z'),
+  ('e41d0000-0000-4000-a000-000000000010', 'd4110000-0000-4000-a000-000000000072', '2026-07-12', 'portal', 'successful', NULL, true, NULL, NULL, 'Confirmed submitted in the portal; clearing the open follow-up.', '2026-07-12T09:00:00Z')
+) AS v(id, case_id, touch_date, touch_type, outcome, next_follow_up_date, clears_follow_up, recipient_name, recipient_contact, notes, created_at)
+  ON v.case_id::uuid = c.id
+ON CONFLICT (id) DO NOTHING;
+
+-- The correction row is a SEPARATE insert so its self-FK (corrects_touch_id)
+-- resolves against the already-inserted original above (case 069, row …003).
+INSERT INTO public.touches (id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, clears_follow_up, recipient_name, recipient_contact, notes, corrects_touch_id, source, created_at)
+SELECT 'e41d0000-0000-4000-a000-000000000011'::uuid, c.org_id, c.id, '2026-07-12'::date, 'touchpoint', 'call', 'successful',
+       NULL, false, 'BCBS TX Rep', '800-555-0069',
+       'Correction: the reference number is TX-APP-77031 (digits were transposed in the prior entry).',
+       'e41d0000-0000-4000-a000-000000000003'::uuid, 'manual', '2026-07-12T14:00:00Z'::timestamptz
+FROM public.credential_cases c
+WHERE c.id = 'd4110000-0000-4000-a000-000000000069'
+ON CONFLICT (id) DO NOTHING;

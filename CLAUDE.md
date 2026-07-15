@@ -1879,6 +1879,54 @@ CHECK now allows the Story 3 taxonomy ∪ legacy codes.
   `SOUTHPARK_TASK_ID` fixtures (optional — the gate skips 13 if unset). Every
   write stays org-scoped from ctx.
 
+### Structured touches & follow-up cadence (E4.1, R6, 2026-07-15)
+
+Migration `20260715130000_structured_touches.sql` (repo + hosted): `touch_type`
+widened to the **seven fixed types** `{call, email, portal, fax, caqh_update,
+provider_outreach, internal_sync}` (legacy `mail` kept, no backfill); `outcome`
+gains the optional **disposition** set `{successful, attempted, no_response,
+error, other}`; the touchpoint-shape CHECK loosened so `outcome` may be NULL on
+a typed touch; additive columns `clears_follow_up`, `recipient_name`,
+`recipient_contact`, `corrects_touch_id` (self-FK). `touches` stays append-only —
+corrections are appends, never edits.
+
+- **Pure logic (tested):** `src/lib/touchTypes.ts` (7-type metadata + labels +
+  `touchTypeDirection` payer-facing/internal, F4.1.1); `src/lib/touchDispositions.ts`
+  (5 dispositions, Other needs context, labels folded into `touchOutcomes`);
+  `src/lib/followUps.ts` `resolveActiveFollowUp` (**carry-forward reducer**,
+  F4.1.2 — latest-first by `(touch_date, created_at, id)` DESC; a date-less touch
+  carries the prior follow-up forward, only `clears_follow_up` ends it);
+  `src/lib/touchesExport.ts` (Compliance CSV); `src/lib/actionBridge.ts`
+  (`runTransitionWithTouch`/`retryTouchOnly` — F4.1.8 sequencing).
+- **Service/hooks:** `touches.ts` — `logTouch` takes the structured `TouchInput`
+  (optional outcome, `clearsFollowUp`, recipient, explicit `source`);
+  `correctTouch` (org+case-validated append); `bulkLogTouch` (org-bounded ids,
+  one touch + one `TOUCH_LOGGED` audit **per touch** + a batch summary, F4.1.7).
+  `getLatestTouchFollowUps` now runs the carry-forward reducer (feeds Home +
+  the E2.3 queue). `useTouches.ts` adds `useCorrectTouch`/`useBulkLogTouch`.
+- **F4.1.3 — E2.3 queue:** `buildNextBestActions` (`src/lib/nextBestActions.ts`)
+  extended: the `follow_up` signal uses the carry-forward reducer with the TE-2
+  tie-break; a new optional `rankingConfig` (E4.2 F4.2.5) input +
+  `resolveQueueRankingConfig` (validated, atomic default fallback) rank overdue
+  follow-ups first by default / by enabled-group order when configured; overdue
+  gets a "Follow-up overdue" reason. Config read seam
+  `src/services/queueRankingConfig.ts` + `src/hooks/useQueueRankingConfig.ts`
+  (returns the shipped default until E4.2 F4.2.5 persists a row), wired through
+  `useNextBestActions`.
+- **F4.1.8 — Action Bridge:** every generic pipeline transition dialog
+  (`PipelineDialogs.tsx` `TransitionConfirmDialog`, incl. Action Required/RFI)
+  gains an off-by-default `PipelineTouchSection`; `PayerPipelineControl.confirmTransition`
+  sequences `advancePayerPipeline` → (on success) `logTouch` via
+  `runTransitionWithTouch` — no touch on a failed transition, touch-only retry
+  after a successful one. `advance_payer_pipeline`/`payer_pipeline_history`
+  untouched. (The terminal-close/correction dialogs reuse the same section +
+  orchestrator when needed — mechanical follow-up.)
+- **UI:** `CaseTouchesPanel` rebuilt (structured entry form, type pill +
+  disposition + recipient rows, correction pair, timeline filters,
+  last-payer-communication, CSV export); `BulkLogTouchDialog` from the Cases
+  work-view links to `/cases?ids=…` (new `ids` search param). Seeds:
+  `supabase/seed-redesign.sql` E4.1 touches on the Dillon cases (TS-73..75).
+
 ## Owner-facing view (one, consolidated Jul 2026)
 
 - `/client-progress` (Client Progress v1) is **the** owner view: nav entry
