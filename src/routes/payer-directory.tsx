@@ -1,14 +1,32 @@
 // E1.6 F1.6.1 — the cross-org Payer Directory: the browsable global catalog
 // (org_id IS NULL rows only — org-scoped legacy payers never appear here).
 // Search by name/alias; filter by state and kind (commercial by default —
-// government kinds are dormant until R10). Read-only for org users; the
-// F1.6.3 review queue renders above the table when diffs await. No nav entry
-// yet — Sidebar edits aren't §5-authorized for this epic (logged in
-// TECH-DEBT.md); the route is URL-reachable like other pre-nav surfaces.
+// government kinds are dormant until R10). The F1.6.3 review queue renders above
+// the table when diffs await.
+//
+// E4.2 hardening — the directory is now the SELF-SERVICE starting point for
+// canonical payer selection. For each active catalog payer an org admin sees a
+// single control: Add to organization / Added to organization / Reactivate
+// (derived from the org's org_payer_assignments subscriptions). Adding is
+// idempotent; retired/merged payers cannot be newly added (the row explains why
+// and names the canonical successor); after an add the row offers "Configure
+// credentialing scope" into the Payer Network wizard section. Non-admins browse
+// but cannot mutate. There is deliberately NO free-text payer creation here —
+// identity is Minted-curated (see the missing-payer follow-up in TECH-DEBT).
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -21,6 +39,14 @@ import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { PayerCatalogChangesPanel } from "@/components/payers/PayerCatalogChangesPanel";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import {
+  useAddAssignment,
+  useArchiveAssignment,
+  useOrgPayerAssignments,
+  useReactivateAssignment,
+} from "@/hooks/useOrgPayerAssignments";
+import { useIsAdmin } from "@/lib/permissions";
+import { assignmentsByPayerId, catalogAction, type CatalogAction } from "@/lib/payerCatalogActions";
+import {
   DEFAULT_DIRECTORY_KIND,
   filterDirectoryRows,
   formatStates,
@@ -28,7 +54,7 @@ import {
   type DirectoryKindFilter,
 } from "@/lib/payerDirectory";
 import { US_STATES } from "@/lib/usStates";
-import type { Payer, PayerKind } from "@/types";
+import type { OrgPayerAssignment, Payer, PayerKind } from "@/types";
 
 export const Route = createFileRoute("/payer-directory")({
   component: PayerDirectoryPage,
@@ -43,7 +69,95 @@ const KIND_PILL: Record<PayerKind, StatusColor> = {
   tricare: "violet",
 };
 
-function PayerRow({ payer }: { payer: Payer }) {
+interface RowProps {
+  payer: Payer;
+  action: CatalogAction;
+  canManage: boolean;
+  pending: boolean;
+  onAdd: (payer: Payer) => void;
+  onReactivate: (payer: Payer) => void;
+  onRemove: (payer: Payer) => void;
+}
+
+function ManageCell({
+  payer,
+  action,
+  canManage,
+  pending,
+  onAdd,
+  onReactivate,
+  onRemove,
+}: RowProps) {
+  if (action.kind === "unavailable") {
+    return (
+      <span className="text-[12px] text-muted-foreground">
+        {action.reason === "merged" ? "Merged" : "Retired"} — can&apos;t be added
+        {action.reason === "merged" && action.successor ? (
+          <>
+            {" · use "}
+            <span className="text-foreground">{action.successor.name}</span>
+          </>
+        ) : null}
+      </span>
+    );
+  }
+  if (action.kind === "added") {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <StatusPill status="green" label="Added to organization" />
+        {canManage ? (
+          <>
+            <Link
+              to="/onboarding/wizard"
+              search={{ section: "payer_network" }}
+              className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+            >
+              Configure credentialing scope
+            </Link>
+            <button
+              type="button"
+              className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              disabled={pending}
+              onClick={() => onRemove(payer)}
+            >
+              Remove
+            </button>
+          </>
+        ) : null}
+      </span>
+    );
+  }
+  if (!canManage) {
+    // Non-admin / no-org browse: no mutation control.
+    return <span className="text-[12px] text-muted-foreground">—</span>;
+  }
+  if (action.kind === "reactivate") {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-[11px]"
+        disabled={pending}
+        onClick={() => onReactivate(payer)}
+      >
+        Reactivate
+      </Button>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      className="h-7 bg-[#1B4D3E] px-2 text-[11px] text-white hover:bg-[#163F33]"
+      disabled={pending}
+      onClick={() => onAdd(payer)}
+    >
+      Add to organization
+    </Button>
+  );
+}
+
+function PayerRow(props: RowProps) {
+  const { payer } = props;
   const kind = payer.payerKind ?? "commercial";
   return (
     <tr className="border-b border-border last:border-0">
@@ -85,19 +199,63 @@ function PayerRow({ payer }: { payer: Payer }) {
         )}
       </td>
       <td className="px-3 py-2.5 align-top">
-        {(payer.status ?? "active") !== "active" ? (
-          <StatusPill status="neutral" label={payer.status === "merged" ? "Merged" : "Retired"} />
-        ) : null}
+        <ManageCell {...props} />
       </td>
     </tr>
   );
 }
 
+function RemovePayerConfirmDialog({ payer, onClose }: { payer: Payer; onClose: () => void }) {
+  const archiveMut = useArchiveAssignment();
+  const handleRemove = () => {
+    archiveMut.mutate(payer.id, {
+      onSuccess: (res) => {
+        const n = res.archivedTargetCount;
+        toast.success(
+          n > 0
+            ? `${payer.name} removed — ${n} network target${n === 1 ? "" : "s"} archived.`
+            : `${payer.name} removed from organization`,
+        );
+        onClose();
+      },
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't remove the payer"),
+    });
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md border-[#E8E5E0] shadow-none">
+        <DialogHeader>
+          <DialogTitle>Remove {payer.name} from organization?</DialogTitle>
+          <DialogDescription>
+            This archives the payer for this organization along with any active credentialing scope
+            (group × state targets) it has. Nothing is deleted — you can reactivate it later and
+            restore its targets from Payer Network.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={archiveMut.isPending}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleRemove} disabled={archiveMut.isPending}>
+            {archiveMut.isPending ? "Removing…" : "Remove"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PayerDirectoryPage() {
   const { data, isLoading, isError, refetch } = useGlobalPayers();
+  const assignmentsQ = useOrgPayerAssignments();
+  const isAdmin = useIsAdmin();
+  const addMut = useAddAssignment();
+  const reactivateMut = useReactivateAssignment();
+
   const [query, setQuery] = useState("");
   const [state, setState] = useState<string>("all");
   const [kind, setKind] = useState<DirectoryKindFilter>(DEFAULT_DIRECTORY_KIND);
+  const [removing, setRemoving] = useState<Payer | null>(null);
 
   const payers = useMemo(() => data ?? [], [data]);
   const rows = useMemo(
@@ -105,11 +263,35 @@ function PayerDirectoryPage() {
     [payers, query, state, kind],
   );
 
+  const payerById = useMemo(() => new Map(payers.map((p) => [p.id, p])), [payers]);
+  const assignByPayer = useMemo(
+    () => assignmentsByPayerId((assignmentsQ.data as OrgPayerAssignment[] | undefined) ?? []),
+    [assignmentsQ.data],
+  );
+  // An admin in an active org may mutate; everyone else browses read-only.
+  const canManage = isAdmin && assignmentsQ.data !== undefined;
+
+  const handleAdd = (payer: Payer) => {
+    addMut.mutate(payer.id, {
+      onSuccess: () => toast.success(`${payer.name} added — configure credentialing scope next.`),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't add the payer"),
+    });
+  };
+  const handleReactivate = (payer: Payer) => {
+    reactivateMut.mutate(payer.id, {
+      onSuccess: () => toast.success(`${payer.name} reactivated`),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't reactivate the payer"),
+    });
+  };
+  const pendingId =
+    (addMut.isPending ? addMut.variables : undefined) ??
+    (reactivateMut.isPending ? reactivateMut.variables : undefined);
+
   return (
     <div>
       <PageHeader
         title="Payer Directory"
-        description="The global payer catalog — one canonical identity per payer, with the operational credentialing facts attached."
+        description="The global payer catalog — one canonical identity per payer, with the operational credentialing facts attached. Add the payers your organization works with to build its Payer Network."
       />
       <div className="space-y-4">
         <PayerCatalogChangesPanel payers={payers} />
@@ -167,7 +349,7 @@ function PayerDirectoryPage() {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border border-border bg-card">
-            <table className="w-full min-w-[880px] border-collapse text-left">
+            <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2">Payer</th>
@@ -177,9 +359,7 @@ function PayerDirectoryPage() {
                   <th className="px-3 py-2">Avg decision</th>
                   <th className="px-3 py-2">CAQH pull</th>
                   <th className="px-3 py-2">Portal</th>
-                  <th className="px-3 py-2">
-                    <span className="sr-only">Status</span>
-                  </th>
+                  <th className="px-3 py-2">Manage</th>
                 </tr>
               </thead>
               <tbody>
@@ -202,13 +382,28 @@ function PayerDirectoryPage() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((p) => <PayerRow key={p.id} payer={p} />)
+                  rows.map((p) => (
+                    <PayerRow
+                      key={p.id}
+                      payer={p}
+                      action={catalogAction(p, assignByPayer.get(p.id), payerById)}
+                      canManage={canManage}
+                      pending={pendingId === p.id}
+                      onAdd={handleAdd}
+                      onReactivate={handleReactivate}
+                      onRemove={setRemoving}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {removing ? (
+        <RemovePayerConfirmDialog payer={removing} onClose={() => setRemoving(null)} />
+      ) : null}
     </div>
   );
 }

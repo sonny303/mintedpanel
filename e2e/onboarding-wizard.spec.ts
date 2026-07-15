@@ -308,12 +308,16 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     sectionCard(page, "wizard-assignments").getByRole("button", { name: "Go to Providers" }),
   ).toBeVisible();
 
-  // E1.5 activated Payer Network: with no enabled payers it renders the
-  // curated-shortlist explainer, not a disabled preview.
+  // E1.5 activated Payer Network: with no added payers it renders the
+  // actionable empty state with a Browse payer catalog action (E4.2 hardening),
+  // not a disabled preview.
   await expect(sectionCard(page, "wizard-payer-network")).toContainText("Not started");
   await expect(sectionCard(page, "wizard-payer-network")).toContainText(
-    "No payers are enabled for this organization yet",
+    "No payers have been added to this organization yet",
   );
+  await expect(
+    sectionCard(page, "wizard-payer-network").getByRole("link", { name: "Browse payer catalog" }),
+  ).toBeVisible();
 
   // E1.8 activated Scope Review (the last preview): with zero targets it
   // renders the derive explainer pointing at Payer Network — no preview
@@ -326,6 +330,15 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
 
   // Next action targets the first incomplete section (F1.0.3).
   await expect(page.getByRole("button", { name: "Next: Provider Group" })).toBeVisible();
+
+  // E4.2 F item 4 — the Scope Review "Go to Payer Network" hand-off is
+  // perceivable: it scrolls to and MOVES FOCUS to the Payer Network section
+  // heading (the temporary highlight ring reinforces it visually), not a focus
+  // change users can't see.
+  await sectionCard(page, "wizard-scope-review")
+    .getByRole("button", { name: "Go to Payer Network" })
+    .click();
+  await expect(page.locator("#wizard-payer-network-heading")).toBeFocused();
 });
 
 test("TS-26: a facility added through the admin surface flips the wizard chip — zero wizard writes", async ({
