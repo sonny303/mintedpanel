@@ -52,7 +52,7 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 
 - NEVER rename, restructure, or delete tables or columns. Migrations are additive.
 - `touches`, `status_history`, and `audit_log` are append-only — no UPDATE, no DELETE, in code or policy.
-- Providers store `ssn_last4` only. Never store or accept a full SSN.
+- Providers store `ssn_last4` only in ordinary tables. The full SSN exists ONLY inside the E4.4 server-only Sensitive Identifiers Vault (PM security decision 2026-07-14): a separated, RLS-locked table with no PostgREST/client SELECT grant, encrypted at rest, accessed exclusively through the narrowly scoped audited SECURITY DEFINER RPCs the epic defines (fill-only release with `no-store`, admin reveal with justification, audited ingress). Outside those vault paths the last-4-only rule still binds absolutely: never accept, store, log, export, or render a full SSN anywhere else.
 - One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
 - Contracting status lives on `contracts` (group + payer + state). Never put contracting status on `credential_cases`.
 - All access is scoped by `org_id` RLS. Every insert sets `org_id` from the active org. Every public table needs explicit `GRANT`s alongside RLS.

@@ -16,7 +16,9 @@ Format per entry:
 
 ## Open
 
-## [e4.4] Full-SSN vault conflicts with the binding data/security rule — OPEN
+## Resolved
+
+## [e4.4] Full-SSN vault conflicts with the binding data/security rule — RESOLVED (2026-07-14)
 
 - **Issue:** E4.4 requires Minted Panel to accept, encrypt, store, reveal, and
   release a full SSN to the extension. The binding repository rule in
@@ -49,7 +51,20 @@ Format per entry:
      only a token + last four, while a narrowly authorized one-time fill
      exchange supplies the portal field. Security must still approve the
      extension/browser release boundary.
-- **Decision:** _pending PM/security owner_
+- **Decision:** PM selected **option 1** (2026-07-14): explicitly supersede the
+  no-full-SSN rule and approve a **server-only vault** — full security design
+  first. Applied: `AGENTS.md` and `SCHEMA.md` now carry the controlled
+  supersession (full SSN exists ONLY in the separated vault table with no
+  client SELECT grant, encrypted at rest, audited SECURITY DEFINER RPC access
+  only — fill-only `no-store` release, admin reveal with justification,
+  audited ingress; last-4-only still binds everywhere else). Two build-gating
+  sub-decisions remain with the PM before `reviewed: true`/handoff: (a)
+  key management — TE-2 Option A (in-DB pgcrypto symmetric, key from server
+  secret; reviewer-recommended, Option-B-ready schema) vs Option B (app-layer
+  envelope + external KMS); (b) internal `store_ssn` modal ingress role —
+  writer roles (`specialist|admin`, reviewer default) vs admin-only. The
+  extension specification update (fill-only token category, masked UI) ships
+  with the E4.3/E4.4 build per TE-5.
 - **2026-07-14 (re-review):** the current `redesign` branch still binds both
   `AGENTS.md` and `SCHEMA.md` to `ssn_last4` only and explicitly prohibits
   accepting or storing a full SSN. No approved key-custody/rotation,
@@ -187,8 +202,6 @@ Format per entry:
   selected a vault option or approved key custody and rotation, retention and
   deletion, or the browser/extension release boundary. E4.4 therefore remains
   `reviewed: false` and was not edited.
-
-## Resolved
 
 ## [e4.0] OON terminal state and reapplication-cycle semantics conflict — RESOLVED (2026-07-14)
 

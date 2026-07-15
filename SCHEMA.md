@@ -7,7 +7,7 @@ All tables live in the `public` schema, carry `org_id uuid NOT NULL`, and are RL
 - **Unique case**: one row in `credential_cases` per `(provider_id, group_id, payer_id, state)` — `UNIQUE NULLS NOT DISTINCT` since E2.1 (`20260713150000`), so legacy NULL-group rows stay unique at the old 3-part key. Credentialing only — contracting status lives on `contracts`.
 - **Contracts**: one row per `(group_id, payer_id, state)`. Contracting status, effective/expiration dates.
 - **Append-only**: `touches`, `status_history`, `audit_log`. Never updated, never deleted.
-- **PHI minimization**: `providers.ssn_last4` only. Full SSN is never stored or accepted.
+- **PHI minimization**: `providers.ssn_last4` only in ordinary tables. The full SSN exists solely in the E4.4 server-only vault (separated table, no client SELECT grant, encrypted at rest, audited definer-RPC access only — PM security decision 2026-07-14); it is never stored or accepted anywhere else.
 - **Role checks**: `admin` (full), `specialist` (operational write), `billing` (read-only at policy level). Enforced via `has_role(uid, role)` security-definer function.
 - **Grain rule**: a new field goes on the table whose grain matches how the field varies. A field that varies by state, purpose, or payer is a child row keyed by that dimension — never a new column on a grain-less master row.
 - **M:N rule**: any relationship that could plausibly become many-to-many gets a join table from day one (`memberships`, `org_payer_assignments`, `provider_facility_assignments` are the house pattern).
