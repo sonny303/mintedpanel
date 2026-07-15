@@ -340,17 +340,21 @@ export async function getLatestTouchFollowUps(): Promise<Map<string, CaseFollowU
     byCase.set(r.case_id, list);
   }
 
-  const active = new Map<string, CaseFollowUp>();
+  // Every case with a touchpoint stays in the map — touchDate is the LATEST
+  // touchpoint (the cadence clock input), while nextFollowUpDate is the
+  // reducer-resolved ACTIVE follow-up (null when none is active). Dropping
+  // no-follow-up cases would erase their last-touch date downstream.
+  const result = new Map<string, CaseFollowUp>();
   for (const [caseId, touchpoints] of byCase) {
+    const latest = touchpoints.reduce((a, b) => (b.touchDate > a.touchDate ? b : a));
     const resolved = resolveActiveFollowUp(touchpoints);
-    if (!resolved) continue;
-    const source = touchpoints.find((t) => t.id === resolved.sourceTouchId);
-    active.set(caseId, {
+    const source = resolved ? touchpoints.find((t) => t.id === resolved.sourceTouchId) : undefined;
+    result.set(caseId, {
       caseId,
-      touchDate: source?.touchDate ?? resolved.date,
-      nextFollowUpDate: resolved.date,
-      notes: source?.notes ?? null,
+      touchDate: latest.touchDate,
+      nextFollowUpDate: resolved?.date ?? null,
+      notes: (resolved ? (source?.notes ?? null) : latest.notes) ?? null,
     });
   }
-  return active;
+  return result;
 }
