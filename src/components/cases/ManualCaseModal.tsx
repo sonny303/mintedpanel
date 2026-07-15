@@ -66,33 +66,41 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const [payerId, setPayerId] = useState(NONE);
   const [state, setState] = useState(NONE);
 
-  const providers = useMemo(
+  const roster = useMemo(
     () => (providersQ.data ?? []).filter((p) => p.status !== "terminated"),
     [providersQ.data],
   );
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const currentProviderAssignments = useMemo(
+    () =>
+      (providerAssignmentsQ.data ?? []).filter(
+        (a) => a.endDate == null || a.endDate.slice(0, 10) >= todayIso,
+      ),
+    [providerAssignmentsQ.data, todayIso],
+  );
+  const providers = useMemo(() => {
+    const assignedProviderIds = new Set(currentProviderAssignments.map((a) => a.providerId));
+    return roster.filter((p) => assignedProviderIds.has(p.id));
+  }, [currentProviderAssignments, roster]);
   const payers = useMemo(() => {
     const assigned = new Set(
       (payerAssignmentsQ.data ?? []).filter(isActiveAssignment).map((a) => a.payerId),
     );
     return (payersQ.data ?? []).filter(
-      (p) => assigned.has(p.id) && (p.status ?? "active") === "active",
+      (p) => (p.status ?? "active") === "active" && (Boolean(p.orgId) || assigned.has(p.id)),
     );
   }, [payersQ.data, payerAssignmentsQ.data]);
 
   // TE-6: the group select offers the provider's groups from
   // provider_group_assignments (un-ended memberships, the E1.3 semantic).
-  const todayIso = new Date().toISOString().slice(0, 10);
   const providerGroups = useMemo(() => {
     if (providerId === NONE) return [];
     const groupById = new Map((groupsQ.data ?? []).map((g) => [g.id, g]));
-    return (providerAssignmentsQ.data ?? [])
-      .filter(
-        (a) =>
-          a.providerId === providerId && (a.endDate == null || a.endDate.slice(0, 10) >= todayIso),
-      )
+    return currentProviderAssignments
+      .filter((a) => a.providerId === providerId)
       .map((a) => groupById.get(a.groupId))
       .filter((g): g is NonNullable<typeof g> => Boolean(g));
-  }, [providerId, providerAssignmentsQ.data, groupsQ.data, todayIso]);
+  }, [providerId, currentProviderAssignments, groupsQ.data]);
 
   const selection = useMemo(
     () =>
@@ -213,13 +221,21 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           <div className="space-y-3">
             {providers.length === 0 ? (
               <div className="rounded-md border p-4 text-sm">
-                <p className="font-medium">Add a provider first</p>
+                <p className="font-medium">
+                  {roster.length === 0 ? "Add a provider first" : "Assign a provider to a group"}
+                </p>
                 <p className="mt-1 text-muted-foreground">
-                  A provider with at least one group assignment is required to create a case.
+                  {roster.length === 0
+                    ? "A provider with at least one group assignment is required to create a case."
+                    : "Providers exist, but none has a current group assignment required for the case key."}
                 </p>
                 <Button asChild variant="outline" size="sm" className="mt-3">
                   <Link to="/onboarding/wizard" search={{ section: "providers" }} onClick={onClose}>
-                    {canWrite ? "Add provider" : "View providers"}
+                    {canWrite
+                      ? roster.length === 0
+                        ? "Add provider"
+                        : "Assign provider group"
+                      : "View providers"}
                   </Link>
                 </Button>
               </div>

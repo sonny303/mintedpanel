@@ -109,9 +109,9 @@ const facilityAssignment = (providerId: string, facilityId: string) => ({
   created_at: "2026-07-10T00:00:00Z",
 });
 
-const payerRow = (id: string, name: string) => ({
+const payerRow = (id: string, name: string, orgId: string | null = null) => ({
   id,
-  org_id: null,
+  org_id: orgId,
   name,
   payer_kind: "commercial",
   states: ["NC"],
@@ -831,6 +831,49 @@ test("manual case replaces empty selectors with provider and payer setup actions
   await expect(dialog.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
   await expect(dialog.getByRole("combobox", { name: "Payer" })).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
+});
+
+test("manual case directs providers without group assignments back to the roster", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.provider_group_assignments = [];
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await expect(dialog.getByText("Assign a provider to a group")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Assign provider group" })).toHaveAttribute(
+    "href",
+    "/onboarding/wizard?section=providers",
+  );
+  await expect(dialog.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
+});
+
+test("manual case keeps an active org-owned payer selectable without an assignment", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.payers = [payerRow("pay-legacy", "Legacy Org Payer", ORG_SHELBY)];
+  fixtures.org_payer_assignments = [];
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const dialog = page.getByRole("dialog");
+
+  await dialog.getByRole("combobox", { name: "Payer" }).click();
+  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toBeVisible();
+  await expect(dialog.getByText("Add a payer to this organization")).toHaveCount(0);
 });
 
 test("manual case distinguishes prerequisite query failures from empty data", async ({
