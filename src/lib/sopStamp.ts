@@ -40,6 +40,22 @@ export function stampTasks<T extends object>(
   return tasks.map((t) => ({ ...t, ...stamp }));
 }
 
+/** E4.2 TE-12 — stamp each resolved task's execution type from its SOP task
+ * definition. `resolveTemplate` maps `template.taskDefinitions` in order, so
+ * the resolved tasks align by index with `definitions`; a manual/absent type
+ * is stored as NULL (the DB CHECK's implicit default). Kept out of
+ * sopResolver.ts (protected) — this is the sanctioned stamping seam. */
+export function stampExecutionTypes<T extends object>(
+  tasks: T[],
+  definitions: readonly { executionType?: string | null }[],
+): (T & { executionType: string | null })[] {
+  return tasks.map((t, i) => {
+    const raw = definitions[i]?.executionType;
+    const executionType = raw && raw !== "manual" ? raw : null;
+    return { ...t, executionType };
+  });
+}
+
 /** Minimal task shape the case-list derivations below need. */
 export interface StampedTaskRef {
   caseId: string | null;

@@ -5,10 +5,12 @@ import { queryKeys } from "@/hooks/queryKeys";
 import {
   completeSOPStep,
   createFollowUpTask,
+  createProviderOutreachTask,
   getTask,
   getTasks,
   updateTaskStatus,
   type FollowUpTaskInput,
+  type ProviderOutreachTaskInput,
   type TaskFilters,
 } from "@/services/tasks";
 import type { TaskStatus } from "@/types";
@@ -25,6 +27,19 @@ export function useCreateFollowUpTask() {
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E4.2 F4.2.6 — spawn a provider-outreach task from the generation preview.
+export function useCreateProviderOutreachTask() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: ProviderOutreachTaskInput) => createProviderOutreachTask(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });

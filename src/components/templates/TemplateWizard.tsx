@@ -15,9 +15,12 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Copy,
+  FileEdit,
   History,
   Plus,
   Save,
@@ -25,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,8 +66,16 @@ import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
 import { SopVersionConflictError } from "@/services/templates";
+import { lintSopForPublish } from "@/lib/sopPublishLint";
+import { EXECUTION_TYPES, EXECUTION_TYPE_LABELS, type ExecutionType } from "@/lib/executionTypes";
+import {
+  PROFILE_ATTRIBUTES,
+  normalizeRequiredAttributes,
+  type ProfileAttributeKey,
+} from "@/lib/profileGating";
+import { useSaveSopTemplateDraft, useDeleteSopTemplateDraft } from "@/hooks/useSopTemplateDrafts";
 import { cn } from "@/lib/utils";
-import type { Portal, SOPTaskDefinition, SOPTemplate } from "@/types";
+import type { Portal, SOPTaskDefinition, SOPTemplate, SopTemplateDraft } from "@/types";
 
 interface SopFieldToken {
   token: string;
@@ -157,14 +169,38 @@ const STEPS = [
   { n: 4, label: "Review" },
 ] as const;
 
+interface WizardPrefill {
+  payerId?: string;
+  state?: string;
+  groupId?: string;
+}
+
+/** The serialized draft payload shape (E4.2 F4.2.1 save-as-draft). */
+interface DraftPayload {
+  name: string;
+  payerId: string;
+  state: string;
+  specialty: string;
+  groupId: string;
+  tasks: EditableTask[];
+  requiredProfileAttributes: ProfileAttributeKey[];
+  isArchived: boolean;
+}
+
 interface TemplateWizardProps {
   // null = create mode; a template = edit mode (pre-filled).
   initial: SOPTemplate | null;
+  // E4.2 TE-4 — the "Needs SOP" creation link prefills the match key.
+  prefill?: WizardPrefill;
+  // E4.2 F4.2.1 — resume an existing draft (create mode only).
+  draft?: SopTemplateDraft | null;
 }
 
-export function TemplateWizard({ initial }: TemplateWizardProps) {
+export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps) {
   const navigate = useNavigate();
   const isEdit = initial !== null;
+  const draftPayload = (draft?.payload ?? null) as DraftPayload | null;
+  const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const isAdmin = useIsAdmin();
   // Global templates (org_id NULL — assigned catalog SOPs and the seeded
   // fallback) are platform-managed: read-only for every org user, admin or not.
@@ -181,6 +217,8 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   const createMut = useCreateSop();
   const updateMut = useUpdateSop(initial?.id ?? "");
   const publishMut = usePublishSop(initial?.id ?? "");
+  const saveDraftMut = useSaveSopTemplateDraft();
+  const deleteDraftMut = useDeleteSopTemplateDraft();
 
   const portals = useMemo<Portal[]>(() => portalsQ.data ?? [], [portalsQ.data]);
 
@@ -214,14 +252,30 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   const firstToken = tokens[0]?.token ?? "provider.firstName";
 
   const [step, setStep] = useState(1);
-  const [name, setName] = useState(initial?.name ?? "");
-  const [payerId, setPayerId] = useState<string>(initial?.payerId ?? "none");
-  const [state, setState] = useState<string>(initial?.state ?? "none");
-  const [specialty, setSpecialty] = useState<string>(initial?.specialty ?? "");
-  const [groupId, setGroupId] = useState<string>(initial?.groupId ?? "none");
-  const [tasks, setTasks] = useState<EditableTask[]>(() => toEditable(initial?.taskDefinitions));
+  const [name, setName] = useState(draftPayload?.name ?? initial?.name ?? "");
+  const [payerId, setPayerId] = useState<string>(
+    draftPayload?.payerId ?? initial?.payerId ?? prefill?.payerId ?? "none",
+  );
+  const [state, setState] = useState<string>(
+    draftPayload?.state ?? initial?.state ?? prefill?.state ?? "none",
+  );
+  const [specialty, setSpecialty] = useState<string>(
+    draftPayload?.specialty ?? initial?.specialty ?? "",
+  );
+  const [groupId, setGroupId] = useState<string>(
+    draftPayload?.groupId ?? initial?.groupId ?? prefill?.groupId ?? "none",
+  );
+  const [tasks, setTasks] = useState<EditableTask[]>(() =>
+    draftPayload ? draftPayload.tasks : toEditable(initial?.taskDefinitions),
+  );
+  // E4.2 TE-13 — governed required provider-profile attributes for this SOP.
+  const [requiredAttrs, setRequiredAttrs] = useState<ProfileAttributeKey[]>(() =>
+    draftPayload
+      ? normalizeRequiredAttributes(draftPayload.requiredProfileAttributes)
+      : normalizeRequiredAttributes(initial?.requiredProfileAttributes),
+  );
   const [isArchived, setIsArchived] = useState(
-    Boolean(initial?.archived ?? initial?.isArchived ?? false),
+    Boolean(draftPayload?.isArchived ?? initial?.archived ?? initial?.isArchived ?? false),
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -229,6 +283,12 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [changeNote, setChangeNote] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  // E4.2 F4.2.1 — global-tier blast-radius acknowledgment. A global/shared
+  // template is consumed by every org without an override, so publishing a
+  // change requires an explicit confirmation. (Org templates publish as before;
+  // global rows are platform-managed and read-only in the org UI, so this is a
+  // defense-in-depth gate for any privileged publish path.)
+  const [blastAck, setBlastAck] = useState(false);
 
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragStep, setDragStep] = useState<{ taskId: string; stepId: string } | null>(null);
@@ -266,9 +326,40 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
         title: "New task",
         description: "",
         dueOffsetDays: prev.length * 7,
+        executionType: "manual",
         steps: [],
       },
     ]);
+    markDirty();
+  }
+  // E4.2 PM round-4 — accessible task reorder (move up/down, no drag needed).
+  function moveTask(index: number, delta: -1 | 1) {
+    setTasks((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    markDirty();
+  }
+  function moveStep(taskId: string, index: number, delta: -1 | 1) {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id !== taskId) return t;
+        const target = index + delta;
+        if (target < 0 || target >= t.steps.length) return t;
+        const next = [...t.steps];
+        [next[index], next[target]] = [next[target], next[index]];
+        return { ...t, steps: next };
+      }),
+    );
+    markDirty();
+  }
+  function toggleRequiredAttr(key: ProfileAttributeKey) {
+    setRequiredAttrs((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
     markDirty();
   }
   function removeTask(taskId: string) {
@@ -429,12 +520,54 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
       specialty: specialty.trim() || null,
       groupId: groupId === "none" ? null : groupId,
       taskDefinitions: fromEditable(tasks),
+      requiredProfileAttributes: requiredAttrs,
       archived: isArchived,
     }),
-    [name, payerId, state, specialty, groupId, tasks, isArchived],
+    [name, payerId, state, specialty, groupId, tasks, requiredAttrs, isArchived],
   );
 
   const previewTasks: SOPTaskDefinition[] = useMemo(() => fromEditable(tasks), [tasks]);
+
+  // E4.2 PM round-4 — minimum-content publish lint (≥1 task, every task ≥1 step,
+  // no placeholder labels). Blocks Create/Publish and surfaces on Review.
+  const lint = useMemo(() => lintSopForPublish(previewTasks), [previewTasks]);
+
+  // E4.2 F4.2.1 — save the current wizard state as a draft (WIP, never resolves
+  // for generation). Persisted for handoff; deleted on publish.
+  async function handleSaveDraft() {
+    try {
+      const saved = await saveDraftMut.mutateAsync({
+        id: draftId ?? undefined,
+        templateId: initial?.id ?? null,
+        payload: {
+          name,
+          payerId,
+          state,
+          specialty,
+          groupId,
+          tasks,
+          requiredProfileAttributes: requiredAttrs,
+          isArchived,
+        } satisfies DraftPayload,
+      });
+      setDraftId(saved.id);
+      setDirty(false);
+      toast.success("Draft saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the draft");
+    }
+  }
+
+  async function discardDraftIfAny() {
+    if (draftId) {
+      try {
+        await deleteDraftMut.mutateAsync(draftId);
+      } catch {
+        // A leftover draft is harmless; never block publish on cleanup.
+      }
+      setDraftId(null);
+    }
+  }
 
   // TE-5 split. Content = name + task definitions (versioned via Publish);
   // match keys = payer/state/specialty/group (unversioned head update).
@@ -470,9 +603,15 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
       setStep(1);
       return;
     }
+    if (!lint.ok) {
+      toast.error(lint.errors[0].message);
+      setStep(3);
+      return;
+    }
     setSaving(true);
     try {
       const created = await createMut.mutateAsync(payload);
+      await discardDraftIfAny();
       setDirty(false);
       toast.success("Template created");
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
@@ -494,6 +633,12 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
       setStep(1);
       return;
     }
+    if (contentChanged && !lint.ok) {
+      toast.error(lint.errors[0].message);
+      setPublishOpen(false);
+      setStep(3);
+      return;
+    }
     setSaving(true);
     try {
       if (matchKeyChanged) await saveMatchKey();
@@ -503,11 +648,13 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
           name: name.trim(),
           taskDefinitions: previewTasks,
           changeNote: note.trim() || null,
+          requiredProfileAttributes: requiredAttrs,
         });
         toast.success(`Published version ${result.version}`);
       } else {
         toast.success("Match key updated — no new version");
       }
+      await discardDraftIfAny();
       setDirty(false);
       setPublishOpen(false);
       navigate({ to: "/admin/templates" });
@@ -583,6 +730,16 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
             <Button variant="outline" onClick={() => navigate({ to: "/admin/templates" })}>
               Cancel
             </Button>
+            {canEdit ? (
+              <Button
+                variant="outline"
+                onClick={() => void handleSaveDraft()}
+                disabled={saveDraftMut.isPending}
+              >
+                <FileEdit className="h-4 w-4 mr-2" />
+                {saveDraftMut.isPending ? "Saving…" : "Save draft"}
+              </Button>
+            ) : null}
             {isEdit ? (
               <Button variant="outline" onClick={() => setHistoryOpen(true)}>
                 <History className="h-4 w-4 mr-2" />
@@ -763,6 +920,30 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
               </Select>
             </div>
           </div>
+
+          {/* E4.2 F4.2.6 — required provider-profile attributes (the generation
+              gate). Providers missing these are blocked in the preview instead
+              of generating a stalled case. Governed list — no free text. */}
+          <div className="mt-5 border-t border-[#E8E5E0] pt-4">
+            <h3 className="text-sm font-semibold">Required provider attributes</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              A provider missing any of these is blocked from generation for this SOP (with the
+              specific gap), so it becomes a data-collection task instead of a stalled case.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {PROFILE_ATTRIBUTES.map((attr) => (
+                <label key={attr.key} className="flex items-center gap-2 text-[13px]">
+                  <Checkbox
+                    checked={requiredAttrs.includes(attr.key)}
+                    disabled={!canEdit}
+                    onCheckedChange={() => toggleRequiredAttr(attr.key)}
+                    aria-label={`Require ${attr.label}`}
+                  />
+                  {attr.label}
+                </label>
+              ))}
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -806,7 +987,30 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
             >
               <div className="flex items-start gap-2">
                 {canEdit ? (
-                  <GripVertical className="h-4 w-4 text-muted-foreground mt-2 cursor-grab" />
+                  <div className="mt-1 flex flex-col items-center gap-0.5">
+                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                    {/* E4.2 PM round-4 — keyboard-operable reorder alongside drag. */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      disabled={idx === 0}
+                      aria-label={`Move task ${idx + 1} up`}
+                      onClick={() => moveTask(idx, -1)}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      disabled={idx === tasks.length - 1}
+                      aria-label={`Move task ${idx + 1} down`}
+                      onClick={() => moveTask(idx, 1)}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 ) : null}
                 <div className="flex-1 grid grid-cols-[1fr_140px] gap-3">
                   <div>
@@ -829,6 +1033,28 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                       }
                       disabled={!canEdit}
                     />
+                  </div>
+                  <div>
+                    {/* E4.2 TE-12 — execution type (captured; automation rides later epics). */}
+                    <Label>Execution type</Label>
+                    <Select
+                      value={task.executionType}
+                      onValueChange={(v) =>
+                        updateTask(task.id, { executionType: v as ExecutionType })
+                      }
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXECUTION_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {EXECUTION_TYPE_LABELS[t]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-2">
                     <Label>Description</Label>
@@ -896,6 +1122,7 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                 removeStep={removeStep}
                 updateStep={updateStep}
                 reorderSteps={reorderSteps}
+                moveStep={moveStep}
                 addDataField={addDataField}
                 updateDataField={updateDataField}
                 removeDataField={removeDataField}
@@ -935,6 +1162,28 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                 : ((groupsQ.data ?? []).find((g) => g.id === groupId)?.name ?? "—")}
             </dd>
           </dl>
+
+          {canEdit && !lint.ok ? (
+            <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[13px] text-[#B91C1C]">
+              <p className="font-medium">Fix before publishing:</p>
+              <ul className="mt-1 list-disc pl-5">
+                {lint.errors.map((e, i) => (
+                  <li key={i}>{e.message}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {requiredAttrs.length > 0 ? (
+            <dl className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4 text-sm">
+              <dt className="text-muted-foreground">Required provider attributes</dt>
+              <dd className="mt-1 font-medium">
+                {requiredAttrs
+                  .map((k) => PROFILE_ATTRIBUTES.find((a) => a.key === k)?.label ?? k)
+                  .join(", ")}
+              </dd>
+            </dl>
+          ) : null}
 
           <TemplatePreviewTasks tasks={previewTasks} portals={portals} />
         </section>
@@ -991,6 +1240,21 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
                 Publishing saves this content as an immutable version. Tasks generated from earlier
                 versions keep the content they were created with.
               </p>
+              {isGlobal ? (
+                <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]">
+                  <p className="font-medium">Global template — high blast radius</p>
+                  <p className="mt-1">
+                    This template is shared by every organization without an override. Publishing
+                    changes what all of them generate. Version {(initial?.currentVersion ?? 1) + 1}{" "}
+                    will carry {previewTasks.length} task
+                    {previewTasks.length === 1 ? "" : "s"}.
+                  </p>
+                  <label className="mt-2 flex items-center gap-2">
+                    <Checkbox checked={blastAck} onCheckedChange={(v) => setBlastAck(v === true)} />
+                    I understand this affects every organization.
+                  </label>
+                </div>
+              ) : null}
               <div>
                 <Label className="text-xs">Change note (optional)</Label>
                 <Textarea
@@ -1007,7 +1271,7 @@ export function TemplateWizard({ initial }: TemplateWizardProps) {
               </Button>
               <Button
                 onClick={() => void handlePublish(changeNote)}
-                disabled={saving}
+                disabled={saving || (isGlobal && !blastAck)}
                 style={{ backgroundColor: "#1B4D3E" }}
                 className="text-white hover:opacity-90"
               >

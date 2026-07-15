@@ -390,3 +390,33 @@ SELECT 'e41d0000-0000-4000-a000-000000000011'::uuid, c.org_id, c.id, '2026-07-12
 FROM public.credential_cases c
 WHERE c.id = 'd4110000-0000-4000-a000-000000000069'
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E4.2 — Payer & SOP admin module fixtures on Dillon Sports Medicine.
+--
+-- TS-76: P4 Company Owner / Ops Lead maps to the existing ADMIN role (TE-2).
+-- The P4 persona signs in as an admin membership on Dillon; like every other
+-- membership that seed row is wired by the test harness (this file never seeds
+-- auth.users/memberships — GoTrue owns them). No standalone seed row is needed
+-- beyond the existing Dillon owner (owner.dillon@example.test), who is the P4.
+--
+-- TS-99: a DESIGNATED TEST PROVIDER — an ordinary providers row flagged
+-- is_test_provider, excluded from every work surface by the shared predicate.
+-- The "Sowmya dummy provider" pattern, made first-class.
+INSERT INTO public.providers
+  (id, org_id, group_id, first_name, last_name, credentials, npi, specialty, taxonomy_code, home_state, status, is_test_provider)
+SELECT 'e42d0000-0000-4000-a000-0000000000f1'::uuid, o.id,
+       'd4110000-0000-4000-a000-0000000000a1'::uuid,
+       'Sowmya', 'Test', 'PT, DPT', '1999999999', 'Physical Therapy', '225100000X', 'TX', 'active', true
+FROM public.organizations o
+WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;
+
+-- TS-78: an org-added denial reason code on Dillon (in addition to the six
+-- global defaults seeded by E4.0). Demonstrates add + deactivate + historical
+-- rendering; deactivation is exercised by the e2e, not seeded here.
+INSERT INTO public.denial_reason_codes (id, org_id, code, label, active)
+SELECT 'e42d0000-0000-4000-a000-0000000000f2'::uuid, o.id, 'roster_mismatch', 'Roster mismatch', true
+FROM public.organizations o
+WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;

@@ -3,7 +3,7 @@
 // cross-task reordering keeps working exactly as before.
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,6 +95,8 @@ export interface TemplateTaskRowProps {
   removeStep: (taskId: string, stepId: string) => void;
   updateStep: (taskId: string, stepId: string, patch: Partial<EditableStep>) => void;
   reorderSteps: (taskId: string, fromId: string, toId: string) => void;
+  // E4.2 PM round-4 — accessible step reorder (move up/down, keyboard-operable).
+  moveStep: (taskId: string, index: number, delta: -1 | 1) => void;
   addDataField: (taskId: string, stepId: string) => void;
   updateDataField: (taskId: string, stepId: string, idx: number, patch: Partial<DataField>) => void;
   removeDataField: (taskId: string, stepId: string, idx: number) => void;
@@ -118,6 +120,7 @@ export function TemplateTaskRow({
   removeStep,
   updateStep,
   reorderSteps,
+  moveStep,
   addDataField,
   updateDataField,
   removeDataField,
@@ -215,7 +218,29 @@ export function TemplateTaskRow({
           >
             <div className="flex items-start gap-2">
               {canEdit ? (
-                <GripVertical className="h-4 w-4 text-muted-foreground mt-2 cursor-grab" />
+                <div className="mt-1 flex flex-col items-center gap-0.5">
+                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={stepIdx === 0}
+                    aria-label={`Move step ${stepIdx + 1} up`}
+                    onClick={() => moveStep(task.id, stepIdx, -1)}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={stepIdx === task.steps.length - 1}
+                    aria-label={`Move step ${stepIdx + 1} down`}
+                    onClick={() => moveStep(task.id, stepIdx, 1)}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               ) : null}
               <div className="flex-1 space-y-2">
                 <div>

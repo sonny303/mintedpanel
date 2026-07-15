@@ -200,6 +200,7 @@ export function usePublishSop(id: string) {
       name: string;
       taskDefinitions: SOPTaskDefinition[];
       changeNote?: string | null;
+      requiredProfileAttributes?: string[];
     }) =>
       publishTemplate(
         id,
@@ -207,6 +208,7 @@ export function usePublishSop(id: string) {
         input.name,
         input.taskDefinitions,
         input.changeNote,
+        input.requiredProfileAttributes,
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });

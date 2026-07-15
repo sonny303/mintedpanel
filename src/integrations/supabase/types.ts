@@ -257,6 +257,7 @@ export type Database = {
           id: string;
           org_id: string;
           proposed_count: number;
+          release_scope: Json | null;
           skipped_existing_count: number;
         };
         Insert: {
@@ -268,6 +269,7 @@ export type Database = {
           id?: string;
           org_id: string;
           proposed_count: number;
+          release_scope?: Json | null;
           skipped_existing_count: number;
         };
         Update: {
@@ -279,6 +281,7 @@ export type Database = {
           id?: string;
           org_id?: string;
           proposed_count?: number;
+          release_scope?: Json | null;
           skipped_existing_count?: number;
         };
         Relationships: [
@@ -774,6 +777,7 @@ export type Database = {
           fields_skipped: Json | null;
           fill_mode: string;
           id: string;
+          is_test: boolean;
           org_id: string;
           performed_by: string | null;
           portal_key: string;
@@ -788,6 +792,7 @@ export type Database = {
           fields_skipped?: Json | null;
           fill_mode?: string;
           id?: string;
+          is_test?: boolean;
           org_id: string;
           performed_by?: string | null;
           portal_key: string;
@@ -802,6 +807,7 @@ export type Database = {
           fields_skipped?: Json | null;
           fill_mode?: string;
           id?: string;
+          is_test?: boolean;
           org_id?: string;
           performed_by?: string | null;
           portal_key?: string;
@@ -1281,6 +1287,35 @@ export type Database = {
             foreignKeyName: "msos_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      next_best_action_configs: {
+        Row: {
+          org_id: string;
+          ranking: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          org_id: string;
+          ranking: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          org_id?: string;
+          ranking?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "next_best_action_configs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: true;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
@@ -1778,6 +1813,8 @@ export type Database = {
           provider_type_path: string | null;
           provisional_billing_allowed: boolean | null;
           provisional_billing_notes: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
           retro_billing_allowed: boolean | null;
           retro_billing_window_days: number | null;
           states: string[] | null;
@@ -1804,6 +1841,8 @@ export type Database = {
           provider_type_path?: string | null;
           provisional_billing_allowed?: boolean | null;
           provisional_billing_notes?: string | null;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
           retro_billing_allowed?: boolean | null;
           retro_billing_window_days?: number | null;
           states?: string[] | null;
@@ -1830,6 +1869,8 @@ export type Database = {
           provider_type_path?: string | null;
           provisional_billing_allowed?: boolean | null;
           provisional_billing_notes?: string | null;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
           retro_billing_allowed?: boolean | null;
           retro_billing_window_days?: number | null;
           states?: string[] | null;
@@ -2408,6 +2449,7 @@ export type Database = {
           home_zip: string | null;
           id: string;
           is_new_grad: boolean | null;
+          is_test_provider: boolean;
           languages: string[] | null;
           last_name: string;
           launch_id: string | null;
@@ -2462,6 +2504,7 @@ export type Database = {
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          is_test_provider?: boolean;
           languages?: string[] | null;
           last_name: string;
           launch_id?: string | null;
@@ -2516,6 +2559,7 @@ export type Database = {
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          is_test_provider?: boolean;
           languages?: string[] | null;
           last_name?: string;
           launch_id?: string | null;
@@ -2643,6 +2687,51 @@ export type Database = {
           },
         ];
       };
+      sop_template_drafts: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payload: Json;
+          template_id: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payload: Json;
+          template_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payload?: Json;
+          template_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sop_template_drafts_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sop_template_drafts_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "sop_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       sop_template_versions: {
         Row: {
           change_note: string | null;
@@ -2650,6 +2739,7 @@ export type Database = {
           name: string;
           published_at: string;
           published_by: string | null;
+          required_profile_attributes: Json;
           task_definitions: Json;
           template_id: string;
           version: number;
@@ -2660,6 +2750,7 @@ export type Database = {
           name: string;
           published_at?: string;
           published_by?: string | null;
+          required_profile_attributes?: Json;
           task_definitions: Json;
           template_id: string;
           version: number;
@@ -2670,6 +2761,7 @@ export type Database = {
           name?: string;
           published_at?: string;
           published_by?: string | null;
+          required_profile_attributes?: Json;
           task_definitions?: Json;
           template_id?: string;
           version?: number;
@@ -2694,6 +2786,7 @@ export type Database = {
           name: string;
           org_id: string | null;
           payer_id: string | null;
+          required_profile_attributes: Json;
           specialty: string | null;
           state: string | null;
           task_definitions: Json;
@@ -2708,6 +2801,7 @@ export type Database = {
           name: string;
           org_id?: string | null;
           payer_id?: string | null;
+          required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
           task_definitions?: Json;
@@ -2722,6 +2816,7 @@ export type Database = {
           name?: string;
           org_id?: string | null;
           payer_id?: string | null;
+          required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
           task_definitions?: Json;
@@ -2939,6 +3034,7 @@ export type Database = {
           created_at: string | null;
           description: string | null;
           due_date: string | null;
+          execution_type: string | null;
           id: string;
           is_auto_generated: boolean | null;
           org_id: string;
@@ -2957,6 +3053,7 @@ export type Database = {
           created_at?: string | null;
           description?: string | null;
           due_date?: string | null;
+          execution_type?: string | null;
           id?: string;
           is_auto_generated?: boolean | null;
           org_id: string;
@@ -2975,6 +3072,7 @@ export type Database = {
           created_at?: string | null;
           description?: string | null;
           due_date?: string | null;
+          execution_type?: string | null;
           id?: string;
           is_auto_generated?: boolean | null;
           org_id?: string;
@@ -3255,6 +3353,8 @@ export type Database = {
           provider_type_path: string | null;
           provisional_billing_allowed: boolean | null;
           provisional_billing_notes: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
           retro_billing_allowed: boolean | null;
           retro_billing_window_days: number | null;
           states: string[] | null;
@@ -3276,6 +3376,7 @@ export type Database = {
           p_change_note?: string;
           p_expected_version: number;
           p_name: string;
+          p_required_profile_attributes?: Json;
           p_task_definitions: Json;
           p_template_id: string;
         };

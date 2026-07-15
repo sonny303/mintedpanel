@@ -32,6 +32,7 @@ import {
 import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/auth-store";
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
+import { useIsAdmin } from "@/lib/permissions";
 // The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
 // docs/redesign/design-system/design-system-reference/assets/logo-white.png —
 // replaces the wrong minted-mark asset. Paired with the Geist 600 wordmark on
@@ -52,6 +53,7 @@ import {
   ArrowRight,
   Search,
   Settings,
+  SlidersHorizontal,
   LogOut,
 } from "lucide-react";
 
@@ -149,6 +151,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
   const openCases = useOpenCaseCount();
+  // E4.2 TE-1 — the admin-only Payer & SOP Setup module link (the one
+  // authorized shell edit for this epic; non-admins never see it).
+  const isAdmin = useIsAdmin();
   const [orgQuery, setOrgQuery] = useState("");
 
   // "/" is Home = the E0.4 landing resolver; highlight it only on the root,
@@ -241,6 +246,13 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <div className={sectionLabelClass}>Payers</div>
         <nav className="space-y-0.5" aria-label="Payers">
           {renderNavItem({ to: "/admin/payers", label: "Payer Management", icon: CreditCard })}
+          {isAdmin
+            ? renderNavItem({
+                to: "/admin/payer-admin",
+                label: "Payer & SOP Setup",
+                icon: SlidersHorizontal,
+              })
+            : null}
         </nav>
       </div>
 

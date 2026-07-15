@@ -8,6 +8,7 @@
 // the stored form via normalizePortalKey. Keep these converters faithful to
 // that contract; case creation depends on it.
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { resolveExecutionType, type ExecutionType } from "@/lib/executionTypes";
 import type { SOPStepType, SOPTaskDefinition } from "@/types";
 
 export interface DataField {
@@ -44,6 +45,8 @@ export interface EditableTask {
   title: string;
   description: string;
   dueOffsetDays: number;
+  // E4.2 TE-12 — per-task execution type (default manual).
+  executionType: ExecutionType;
   steps: EditableStep[];
 }
 
@@ -57,6 +60,7 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
     title: d.title ?? "",
     description: d.description ?? "",
     dueOffsetDays: d.dueOffsetDays ?? i * 7,
+    executionType: resolveExecutionType(d.executionType),
     steps: (d.steps ?? []).map((s) => {
       const raw = s as {
         label?: string;
@@ -99,6 +103,8 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
     description: t.description,
     sortOrder: i,
     dueOffsetDays: t.dueOffsetDays,
+    // Store manual as absent (the implicit default), non-manual verbatim.
+    ...(t.executionType && t.executionType !== "manual" ? { executionType: t.executionType } : {}),
     steps: t.steps.map((s) => {
       // A portal link is meaningful only for online_form steps; normalized to
       // the stored (bare/lowercase) form so the extension's page-key match is a

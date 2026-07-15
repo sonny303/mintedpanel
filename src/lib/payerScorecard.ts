@@ -82,7 +82,10 @@ function payerCaseIds(input: PayerScorecardInput): Set<string> {
 // Mapping coverage = mapped ÷ (mapped + proposed) over the payer's portals'
 // field maps, counted by status (matching admin.portals.tsx): approved =
 // mapped, proposed = still-to-review; retired rows are excluded from both.
-function mappingCoverage(input: PayerScorecardInput): ScorecardIndicator {
+// Exported (E4.2 TE-16) so the F4.2.2 form-readiness surface reuses the EXACT
+// same derivation — no second formula to drift. Only payerId/portals/fieldMaps
+// matter for this indicator; the other input fields can be empty.
+export function mappingCoverage(input: PayerScorecardInput): ScorecardIndicator {
   const keys = payerPortalKeys(input);
   let mapped = 0;
   let proposed = 0;
@@ -110,6 +113,8 @@ function firstPassRate(input: PayerScorecardInput): ScorecardIndicator {
   const caseIds = payerCaseIds(input);
   const fillsByCase = new Map<string, number>();
   for (const fs of input.fillSessions) {
+    // E4.2 TE-17 — dry-run test fills never count toward first-pass rate.
+    if (fs.isTest) continue;
     if (!caseIds.has(fs.caseId)) continue;
     fillsByCase.set(fs.caseId, (fillsByCase.get(fs.caseId) ?? 0) + 1);
   }

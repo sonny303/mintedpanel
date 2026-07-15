@@ -28,8 +28,18 @@ export const DEFAULT_RESOLUTION_IDENTIFIER: ResolutionIdentifierConfig = {
 /** Fixed label for the Group/Billing (Type 2 / Tax-ID-linked) identifier. */
 export const GROUP_PROVIDER_ID_LABEL = "Group/Billing Provider ID";
 
-// E4.2 (F4.2.1) replaces this body with a per-payer lookup. Until then every
-// payer resolves to the generic default.
-export function resolveIdentifierConfig(_payer?: Payer | null): ResolutionIdentifierConfig {
-  return DEFAULT_RESOLUTION_IDENTIFIER;
+// E4.2 (F4.2.1) — per-payer lookup. A payer whose config names its individual
+// identifier (e.g. Aetna "Provider PIN") and whether it is expected overrides
+// the generic default; an unconfigured payer (null label) falls back to the
+// generic "Payer-issued ID" optional field.
+export function resolveIdentifierConfig(payer?: Payer | null): ResolutionIdentifierConfig {
+  if (!payer) return DEFAULT_RESOLUTION_IDENTIFIER;
+  const label = payer.resolutionIdLabel?.trim();
+  return {
+    individualLabel: label ? label : DEFAULT_RESOLUTION_IDENTIFIER.individualLabel,
+    expected:
+      typeof payer.resolutionIdExpected === "boolean"
+        ? payer.resolutionIdExpected
+        : DEFAULT_RESOLUTION_IDENTIFIER.expected,
+  };
 }

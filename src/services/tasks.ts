@@ -88,6 +88,44 @@ export async function createFollowUpTask(input: FollowUpTaskInput): Promise<Task
   return task;
 }
 
+// E4.2 F4.2.6 / TE-13 — a provider-outreach task spawned per blocked provider
+// from the generation preview (never auto-created silently). No case exists yet
+// (the provider is gated), so case_id is null; the title is prefilled with the
+// missing attributes and the task references the provider.
+export interface ProviderOutreachTaskInput {
+  providerId: string;
+  title: string;
+}
+
+export async function createProviderOutreachTask(input: ProviderOutreachTaskInput): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert({
+      org_id: orgId,
+      case_id: null,
+      provider_id: input.providerId,
+      title: input.title,
+      description: null,
+      status: "not_started" as const,
+      sort_order: 100,
+      due_date: null,
+      is_auto_generated: false,
+    } as never)
+    .select("*")
+    .single();
+  if (error) throw translateDbError(error);
+  const task = camelizeRow<Task>(data);
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "task",
+    entityId: task.id,
+    after: { providerId: input.providerId, title: input.title },
+    description: `Provider outreach task created: ${input.title}`,
+  });
+  return task;
+}
+
 export interface TaskFilters {
   caseId?: string;
   status?: TaskStatus;

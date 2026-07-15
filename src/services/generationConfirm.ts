@@ -64,8 +64,9 @@ function runRowInput(
 export async function confirmGenerationBatch(
   plan: GenerationConfirmPlan,
   entries: GenerationConfirmEntry[],
+  releaseScope?: unknown,
 ): Promise<GenerationConfirmResult> {
-  const run = await recordGenerationRun(plan.plannedCounts);
+  const run = await recordGenerationRun(plan.plannedCounts, releaseScope);
 
   // E2.4 TE-2: outcomes known AT CONFIRM are recorded first — grayed
   // existing rows (linking the BLOCKING case) and excluded rows (linking the
