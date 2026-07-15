@@ -173,6 +173,20 @@ Format per entry:
   approved key custody and rotation, retention and deletion, or the
   browser/extension release boundary. E4.4 therefore remains `reviewed: false`
   and was not edited.
+- **2026-07-15 (re-review, `37ef0a5` E4.2 round-3 form-onboarding cycle):** the
+  triggering push changed the already-reviewed E4.2 epic (PM round-3 form
+  onboarding — F4.2.2 form readiness TE-16, F4.2.7 form intake + dummy-provider
+  test runner TE-17, TS-98/99), `R6-workflow.md`, and `seed-universe.md`, so
+  E4.2 was skipped per the review-loop guard and the two non-epic docs are out
+  of the reviewer's epic gate. E4.4 remains the only `reviewed: false` epic. Its
+  requirements to accept, store, reveal, and release a full SSN still directly
+  contradict the binding `AGENTS.md` (line 55: "Providers store `ssn_last4`
+  only. Never store or accept a full SSN.") and `SCHEMA.md` (line 10)
+  last-four-only rule, and E4.4 §5 still names encryption key management as a
+  REQUIRED-before-build PM/security decision. No PM/security decision has
+  selected a vault option or approved key custody and rotation, retention and
+  deletion, or the browser/extension release boundary. E4.4 therefore remains
+  `reviewed: false` and was not edited.
 
 ## Resolved
 
