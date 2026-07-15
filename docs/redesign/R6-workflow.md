@@ -239,3 +239,51 @@ derived and the release is staggered:
    dictionary rows + trained forms apply to every subsequent fill, so the
    bulk release lands at a measured, higher first-pass rate instead of
    discovering the same gap 1,000 times.
+
+## Form onboarding inside SOP setup — the detailed workflow (F4.2.7)
+
+PM round-3: "map fields whenever the extension happens to see the form" is
+not a workflow. Form onboarding is now an explicit, testable step of payer
+setup for any SOP containing `extension_fill` tasks:
+
+1. **Intake/scrape:** open the payer's live form (portal registry row) with
+   the extension in capture mode; every observed field lands as an
+   org-scoped `proposed` field-map row (selector + label + page step —
+   existing contract, no new write path).
+2. **Train:** the shipped training deck (`/portals/$key/train`) resolves
+   the proposals — high-confidence dictionary suggestions batch into one
+   confirm; the rest go card-by-card with Approve / Edit / Manual and undo.
+   Coverage rises on the F4.2.2 readiness signal in real time.
+3. **Test run (the "dummy provider" pattern, made first-class):** dry-run
+   fill against a designated org test provider — the extension fills the
+   live form from the test profile while the operator watches; the run
+   reports **filled / skipped-unmapped / empty-token per field**. Nothing
+   submits; no case is required; the session is marked test and excluded
+   from every metric.
+4. **Fix and re-run:** unmapped → one click back into training; empty
+   token → one click into the test provider's profile; repeat until the
+   coverage is acceptable. Bulk release then starts at a measured
+   first-pass rate.
+
+### How "not mapped" is indicated — both flows, one vocabulary
+
+| Flow                        | Where an unresolved field shows up                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Setup (training + test run) | `proposed` rows in the deck; test-run per-field results (`skipped-unmapped` / `empty-token`) with one-click fix paths    |
+| Real fill (specialist)      | Fill session records skipped fields; Fix-It queue derives the cards (provider gap / dictionary confirm / train / broken) |
+
+Both read the same rows, so a field fixed in either flow disappears from
+both. The support ladder for the user, cheapest first: dictionary
+auto-suggestion (org-learned) → confidence-batched confirm → per-card
+Approve/Edit/Manual with keyboard keys → manual (extension skips it,
+counted as intentionally unmapped) → Fix-It card if it still bites at fill
+time.
+
+### Schema impact (all additive)
+
+| Change                                                                          | Why                                                                                               |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `fill_sessions` test marker (`is_test` boolean or additive mode value)          | Distinguish dry runs; excluded from first-pass rate/metrics                                       |
+| `providers` exclusion flag for the designated test provider                     | Keep it out of queues, generation, scorecards (one predicate)                                     |
+| Tighten `fill_sessions.fieldsSkipped` from `unknown` to structured rows         | `{selector, label, reason: "unmapped" \| "empty_token"}[]` — the per-field report both flows read |
+| No changes to `portal_field_maps`, `field_dictionary`, or extension write scope | Capture → proposed-row contract and read-only payload unchanged                                   |
