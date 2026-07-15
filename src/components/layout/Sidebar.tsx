@@ -8,7 +8,7 @@
 // (Payer Management) · Reporting Center (standalone — section labels only
 // over 2+ item groups) · generous break + divider · org zone (the switcher IS
 // the header: a contained tile with an ORGANIZATION eyebrow; children Account
-// Detail / Facilities / Providers; dashed prompt tile when no org) · user
+// Detail / Facilities (reserved) / Providers; dashed prompt tile when no org) · user
 // footer (menu opens upward: identity, Settings, Sign out).
 //
 // Switcher menu groups orgs by lifecycle (Active / Prospects / Inactive —
@@ -66,7 +66,6 @@ type ReservedLink = { title: string; label: string; icon: Icon };
 
 const orgReserved: ReservedLink[] = [
   { title: "Facilities", label: "Facilities", icon: Building },
-  { title: "Providers", label: "Providers", icon: Users },
 ];
 
 // Switcher scale rules (reference readme NAVIGATION): ≤10 orgs plain grouped
@@ -361,6 +360,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             <nav className="space-y-0.5" aria-label={`${active.orgName} navigation`}>
               {renderNavItem({ to: "/get-started", label: "Account Detail", icon: Contact })}
               {orgReserved.map(renderReserved)}
+              {renderNavItem({ to: "/providers", label: "Providers", icon: Users })}
             </nav>
           </>
         ) : (
