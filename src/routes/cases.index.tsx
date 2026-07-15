@@ -536,7 +536,7 @@ function CasesWorkView() {
           message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
           description={
             chip === "all"
-              ? "Open cases from a provider's detail page to start tracking."
+              ? "Use New case for a one-off case, or open a provider to start with context."
               : "No open cases match this filter right now."
           }
         />
