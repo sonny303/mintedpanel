@@ -185,3 +185,57 @@ catches attributes an SOP _declares_ required before generation; the
 **Fix-It queue** catches everything discovered _at fill time_ (unmapped
 portal fields, empty tokens, untrained forms) and routes each back to the
 user as a 30-second decision.
+
+## Measurement: how the workflow feeds the payer scorecard
+
+Yes — the connection is tracked, and it is tighter than a link: the shipped
+scorecard's indicators are direct read-outs of the loops above. Every
+indicator is a pure derivation over rows the workflow already writes, so the
+scorecard is the per-payer measurement dashboard for the whole R6 flow with
+no extra instrumentation:
+
+| Workflow loop                                     | Scorecard indicator                   | What it reads                                                                                                  |
+| ------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Payer/SOP setup completeness                      | **SOP readiness** (added E4.2 F4.2.2) | Does a payer-specific SOP resolve per attached state, or only the fallback                                     |
+| Setup-time form onboarding (training)             | **Mapping coverage**                  | approved ÷ (approved + proposed) field maps on the payer's portals — rises as forms are trained                |
+| Fill-time correction burden (Fix-It loop)         | **First-pass rate**                   | Fraction of the payer's cases filled exactly once — every Fix-It bounce forces a re-fill and drops this number |
+| Execution throughput (queue → touches → pipeline) | **Avg time-in-bucket**                | Ours / waiting-payer / waiting-provider durations from status history                                          |
+
+## Setup-time form onboarding vs fill-time correction — the alignment
+
+Both paths maintain the **same two artifacts** — portal field maps and the
+field dictionary — from opposite ends:
+
+- **Proactive (setup time):** form training on the payer's portal proposes
+  field maps; approving them raises mapping coverage BEFORE any case is
+  filled. This is part of payer onboarding, alongside SOP authoring.
+- **Reactive (fill time):** the Fix-It queue catches what training missed —
+  unmapped fields, empty tokens, broken maps — and routes each back as a
+  30-second card whose action updates the very same maps/dictionary/profile.
+
+Every card resolved reactively makes the next payer's setup more proactive
+(the dictionary is org-learned). The current gap in alignment: the E4.2
+setup workflow surfaces SOP readiness but not **form readiness** — an SOP
+with `extension_fill` tasks can be "Ready" while its portal's mapping
+coverage is 0%. Recommended tightening (PM decision): the readiness signal
+for a payer whose SOP contains `extension_fill` tasks should carry the
+portal's mapping-coverage ratio beside Ready/Needs-SOP, so form training
+becomes a visible setup step, not a fill-time surprise.
+
+## Testing early for throughput
+
+The design makes this measurable BEFORE scale, because every metric is
+derived and the release is staggered:
+
+1. **Train first, measure coverage:** after SOP setup, mapping coverage on
+   the scorecard shows form-fill readiness with zero cases generated.
+2. **Release a probe subset (F4.2.4):** generate a small filtered batch
+   (e.g. one location) instead of all eligible providers.
+3. **Watch two numbers on the probe:** first-pass rate (scorecard) and
+   Fix-It card volume — together they say exactly whether gaps are
+   provider-data (fix profiles / tighten F4.2.6 gates), mapping (train
+   more), or process (SOP task order).
+4. **Fix upstream, then release the remainder:** profile fixes + confirmed
+   dictionary rows + trained forms apply to every subsequent fill, so the
+   bulk release lands at a measured, higher first-pass rate instead of
+   discovering the same gap 1,000 times.
