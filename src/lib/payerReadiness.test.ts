@@ -58,16 +58,36 @@ describe("buildPayerReadiness", () => {
   });
 
   it("aggregate is Needs SOP if ANY underlying group target is uncovered", () => {
+    // A group-specific SOP (t-g1) covers ONLY its own group under the
+    // deterministic precedence — it never leaks onto another group (g2), so the
+    // g2 target falls back to the generic fallback and the aggregate is Needs SOP.
     const templates = [fallback, tpl({ id: "t-g1", payerId: "pay1", state: "NC", groupId: "g1" })];
     const rows = buildPayerReadiness({
       targets: [
         { payerId: "pay1", groupId: "g1", state: "NC" }, // covered by t-g1
-        { payerId: "pay1", groupId: "g2", state: "NC" }, // t-g1 also matches payer+state (tier 2) → covered
+        { payerId: "pay1", groupId: "g2", state: "NC" }, // uncovered — t-g1 is g1-only
       ],
       templates,
       payerName,
     });
-    // t-g1 has state+payer so it covers g2 via tier-2 precedence → both ready
+    expect(rows[0].ready).toBe(false);
+    expect(rows[0].coveredCount).toBe(1);
+    expect(rows[0].totalCount).toBe(2);
+    // The creation link points at the first uncovered group.
+    expect(rows[0].matchKey.groupId).toBe("g2");
+  });
+
+  it("an any-group (null groupId) payer SOP covers every group target", () => {
+    // Contrast: an any-group SOP legitimately covers both g1 and g2.
+    const templates = [fallback, tpl({ id: "t-any", payerId: "pay1", state: "NC", groupId: null })];
+    const rows = buildPayerReadiness({
+      targets: [
+        { payerId: "pay1", groupId: "g1", state: "NC" },
+        { payerId: "pay1", groupId: "g2", state: "NC" },
+      ],
+      templates,
+      payerName,
+    });
     expect(rows[0].ready).toBe(true);
     expect(rows[0].coveredCount).toBe(2);
   });

@@ -6,6 +6,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SOPTaskDefinition, SOPTemplate, SOPTemplateVersion } from "@/types";
 
@@ -41,6 +42,44 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
   const archiveValue = archived ?? isArchived;
   if (archiveValue !== undefined) payload.archived = archiveValue;
   return payload as unknown as SopTemplateInsert;
+}
+
+/** E4.2 SOP hardening — reject a match-key that would create a SECOND active
+ * organization template at the supported grain (payer + state + group, group
+ * NULLS-NOT-DISTINCT). This mirrors the additive `uq_sop_templates_active_org_match`
+ * index and runs BEFORE the write so the author sees a clear blocking message
+ * (the DB constraint stays the backstop for races). Only ACTIVE org templates
+ * WITH payer + state are constrained — archived / payer-or-state-less rows are
+ * outside the runtime-selectable grain and never validated here. */
+async function assertUniqueActiveMatch(
+  orgId: string,
+  key: {
+    payerId: string | null;
+    state: string | null;
+    groupId: string | null;
+    archived: boolean;
+  },
+  excludeId?: string,
+): Promise<void> {
+  if (key.archived || !key.payerId || !key.state) return;
+  let query = supabase
+    .from("sop_templates")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .eq("archived", false)
+    .eq("payer_id", key.payerId)
+    .eq("state", key.state);
+  query = key.groupId === null ? query.is("group_id", null) : query.eq("group_id", key.groupId);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data, error } = await query.limit(1);
+  if (error) throw error;
+  const existing = data?.[0];
+  if (existing) {
+    throw new Error(
+      `An active SOP template already exists for this payer, state, and group ("${existing.name}"). ` +
+        `Archive or edit that template instead of creating a duplicate.`,
+    );
+  }
 }
 
 export async function listTemplates(): Promise<SOPTemplate[]> {
@@ -168,12 +207,18 @@ export async function getTemplateVersion(
 
 export async function createTemplate(input: TemplateInput): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
+  await assertUniqueActiveMatch(orgId, {
+    payerId: input.payerId ?? null,
+    state: input.state ?? null,
+    groupId: input.groupId ?? null,
+    archived: Boolean(input.archived ?? input.isArchived ?? false),
+  });
   const { data, error } = await supabase
     .from("sop_templates")
     .insert(templatePayload(input, orgId))
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = normalizeTemplate(camelizeRow<SOPTemplate>(data));
   await writeAudit({
     actionType: "CREATE",
@@ -191,6 +236,22 @@ export async function updateTemplate(
 ): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
   const before = await getTemplate(id);
+  // Validate the DESTINATION key (before + patch) before saving a match-key or
+  // restore edit — a match-key change or an unarchive must not land on another
+  // active template's grain. Fields absent from the patch keep their prior value.
+  if (before) {
+    const nextArchived = patch.archived ?? patch.isArchived ?? before.archived;
+    await assertUniqueActiveMatch(
+      orgId,
+      {
+        payerId: patch.payerId !== undefined ? patch.payerId : before.payerId,
+        state: patch.state !== undefined ? patch.state : before.state,
+        groupId: patch.groupId !== undefined ? patch.groupId : before.groupId,
+        archived: Boolean(nextArchived),
+      },
+      id,
+    );
+  }
   const payload = templatePayload(patch, orgId) as unknown as SopTemplateUpdate;
   const { data, error } = await supabase
     .from("sop_templates")
@@ -199,7 +260,7 @@ export async function updateTemplate(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = normalizeTemplate(camelizeRow<SOPTemplate>(data));
   await writeAudit({
     actionType: "UPDATE",

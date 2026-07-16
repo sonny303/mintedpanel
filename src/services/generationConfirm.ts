@@ -25,6 +25,7 @@ import {
   type GenerationPreviewRow,
 } from "@/lib/generationPreview";
 import { createCase, type CaseTaskPayload } from "@/services/cases";
+import type { SopResolutionTier } from "@/lib/pickTemplate";
 import {
   recordGenerationRun,
   recordGenerationRunRows,
@@ -37,6 +38,15 @@ export interface GenerationConfirmEntry {
    * launch flows use, version-stamped by the caller (E2.2 TE-2: the stamp is
    * the head snapshot the resolver consumed, threaded here as-is). */
   tasks: CaseTaskPayload[];
+  /** E4.2 SOP hardening — the resolution provenance for THIS candidate, from the
+   * SAME `pickTemplate` selection the tasks were stamped from, recorded on the
+   * created run row so generic-fallback usage is countable per run. Null when no
+   * template resolved. */
+  provenance?: {
+    sopTemplateId: string | null;
+    sopVersion: number | null;
+    sopResolutionTier: SopResolutionTier | null;
+  } | null;
 }
 
 export interface GenerationConfirmResult {
@@ -45,11 +55,21 @@ export interface GenerationConfirmResult {
   summary: GenerationConfirmSummary;
 }
 
-/** E2.4 TE-1 — the disposition-row shape for one preview row. */
+/** E2.4 TE-1 — the disposition-row shape for one preview row. `outcome` may
+ * additionally carry the E4.2 SOP resolution provenance for a `created` row. */
 function runRowInput(
   runId: string,
   row: GenerationPreviewRow,
-  outcome: Pick<GenerationRunRowInput, "disposition" | "reason" | "caseId" | "exclusionId">,
+  outcome: Pick<
+    GenerationRunRowInput,
+    | "disposition"
+    | "reason"
+    | "caseId"
+    | "exclusionId"
+    | "sopTemplateId"
+    | "sopVersion"
+    | "sopResolutionTier"
+  >,
 ): GenerationRunRowInput {
   return {
     runId,
@@ -111,6 +131,11 @@ export async function confirmGenerationBatch(
           disposition: "created",
           reason: row.reason,
           caseId: created.id,
+          // E4.2 — the SOP resolution provenance from the SAME pickTemplate
+          // selection the tasks were stamped from (null when no template resolved).
+          sopTemplateId: entry.provenance?.sopTemplateId ?? null,
+          sopVersion: entry.provenance?.sopVersion ?? null,
+          sopResolutionTier: entry.provenance?.sopResolutionTier ?? null,
         }),
       ]);
     } catch (e) {

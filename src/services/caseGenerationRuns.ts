@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg } from "@/lib/audit";
 import type { GenerationRunCounts } from "@/lib/generationConfirm";
+import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type { CaseGenerationRun, GenerationRowDisposition } from "@/types";
 
 // E2.4 TE-1/TE-2 — the disposition child-row writer: one immutable row per
@@ -28,6 +29,15 @@ export interface GenerationRunRowInput {
   reason?: string | null;
   caseId?: string | null;
   exclusionId?: string | null;
+  /** E4.2 SOP hardening — the structured resolution provenance for a `created`
+   * row: which SOP resolved, at which version, at which deterministic tier
+   * (organization | global_payer | generic_fallback). A snapshot at confirm
+   * time (like `reason`) — never a mutable link — so generic-fallback usage is
+   * countable per run/payer/state/group without reconstructing tier from
+   * template ownership. Null for skipped/excluded/failed rows (no SOP resolved). */
+  sopTemplateId?: string | null;
+  sopVersion?: number | null;
+  sopResolutionTier?: SopResolutionTier | null;
 }
 
 export async function recordGenerationRunRows(rows: GenerationRunRowInput[]): Promise<void> {
@@ -45,6 +55,9 @@ export async function recordGenerationRunRows(rows: GenerationRunRowInput[]): Pr
       reason: r.reason ?? null,
       case_id: r.caseId ?? null,
       exclusion_id: r.exclusionId ?? null,
+      sop_template_id: r.sopTemplateId ?? null,
+      sop_version: r.sopVersion ?? null,
+      sop_resolution_tier: r.sopResolutionTier ?? null,
     })),
   );
   if (error) throw error;

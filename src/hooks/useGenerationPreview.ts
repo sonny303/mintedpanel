@@ -41,9 +41,9 @@ import {
 } from "@/services/caseGenerationExclusions";
 import { listGenerationCaseRows, listGenerationContractRows } from "@/services/generationPreview";
 import { planGenerationConfirm } from "@/lib/generationConfirm";
-import { pickTemplate } from "@/lib/pickTemplate";
+import { isFallbackTemplate, pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
-import { stampTasks, stampExecutionTypes } from "@/lib/sopStamp";
+import { stampTasks, stampExecutionTypes, templateProvenance } from "@/lib/sopStamp";
 import { evaluateGeneration, type GatedRow } from "@/lib/generationGating";
 import { applyReleaseScope, releaseScopeRecord, type ReleaseScope } from "@/lib/releaseScope";
 import {
@@ -125,6 +125,10 @@ export interface GenerationPreviewData {
   exclusions: CaseGenerationExclusion[] | undefined;
   /** E4.2 TE-13 — proposed rows blocked by a missing required attribute. */
   gated: GatedRow[] | undefined;
+  /** E4.2 SOP hardening — keys of PROPOSED rows that resolve to the generic
+   * fallback SOP (no payer-specific SOP matches). The preview labels these and
+   * warns before confirming; the tier is persisted on the created run row. */
+  fallbackRowKeys: Set<string> | undefined;
   /** provider id → facility ids, for a location-based release scope (TE-14). */
   providerFacilities: Map<string, Set<string>> | undefined;
   isLoading: boolean;
@@ -220,7 +224,18 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     const factsById = new Map<string, ProviderReadinessFacts>(
       (factsQ.data ?? []).map((f) => [f.providerId, f]),
     );
-    const gating = evaluateGeneration({ rows, templates: templatesQ.data ?? [], factsById });
+    const templates = templatesQ.data ?? [];
+    const gating = evaluateGeneration({ rows, templates, factsById });
+
+    // E4.2 SOP hardening — flag PROPOSED rows that resolve to the generic
+    // fallback (no payer-specific SOP), via the SAME deterministic pickTemplate
+    // the confirm loop uses. Derived every preview; never stored.
+    const fallbackRowKeys = new Set<string>();
+    for (const r of rows) {
+      if (r.disposition !== "proposed") continue;
+      const tpl = pickTemplate(templates, r.payerId, r.state, r.groupId);
+      if (tpl && isFallbackTemplate(tpl)) fallbackRowKeys.add(previewRowKey(r));
+    }
 
     // TE-14 — provider → facility ids for a location-based release scope.
     const providerFacilities = new Map<string, Set<string>>();
@@ -243,7 +258,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       contracts,
     });
     const readinessByKey = new Map(readinessRows.map((r) => [previewRowKey(r), r]));
-    return { rows, readinessByKey, gated: gating.gated, providerFacilities };
+    return { rows, readinessByKey, gated: gating.gated, providerFacilities, fallbackRowKeys };
   }, [
     resolved,
     today,
@@ -272,6 +287,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     readinessByKey: derived?.readinessByKey,
     exclusions: exclusionsQ.data,
     gated: derived?.gated,
+    fallbackRowKeys: derived?.fallbackRowKeys,
     providerFacilities: derived?.providerFacilities,
     isLoading: sources.some((q) => q.isLoading),
     isError: sources.some((q) => q.isError),
@@ -353,7 +369,9 @@ export function useConfirmGeneration() {
                 template.taskDefinitions,
               )
             : [];
-        return { row, tasks };
+        // Record the resolution provenance from the SAME selection the tasks
+        // were stamped from — the created run row snapshots it (E4.2).
+        return { row, tasks, provenance: templateProvenance(template) };
       });
       const scopeRecord = releaseScopeRecord(scope, released.length, basePlan.toCreate.length);
       return confirmGenerationBatch(plan, entries, scopeRecord);

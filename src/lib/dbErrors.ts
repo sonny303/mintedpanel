@@ -52,6 +52,11 @@ const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string
     "status_configs_org_id_track_label_key",
     "A status with this label already exists in this track.",
   ],
+  // E4.2 SOP hardening — active-org template match-key uniqueness (20260716120000).
+  [
+    "uq_sop_templates_active_org_match",
+    "An active SOP template already exists for this payer, state, and group. Archive or edit the existing template instead of creating a duplicate.",
+  ],
 ];
 
 const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]> = [

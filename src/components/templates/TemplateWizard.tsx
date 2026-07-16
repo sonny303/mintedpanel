@@ -7,7 +7,8 @@
 // through Publish — the publish_sop_template_version RPC inserts an immutable
 // version row, updates the head, and bumps current_version (optimistic
 // concurrency; a losing publish gets a friendly conflict toast). MATCH-KEY
-// edits (payer/state/specialty/group) are head-level identity edits and go
+// edits (payer/state/group — the E4.2 supported grain; legacy specialty is
+// preserved but not an editable match key) are head-level identity edits and go
 // through the plain audited update — no version bump. Global templates
 // (org_id NULL, incl. the seeded fallback) render read-only for org users.
 import { useEffect, useMemo, useState } from "react";
@@ -65,6 +66,7 @@ import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
+import { orgSopMatchKeyError } from "@/lib/sopMatchKey";
 import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
 import { SopVersionConflictError } from "@/services/templates";
 import { lintSopForPublish } from "@/lib/sopPublishLint";
@@ -210,6 +212,14 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     : false;
   const isFallback = initial ? isFallbackTemplate(initial) : false;
   const canEdit = isAdmin && !isGlobal;
+  // E4.2 SOP hardening — the template tier, matching the deterministic
+  // pickTemplate precedence (organization override → global payer SOP → generic
+  // fallback). Org templates authored here are always the organization tier.
+  const tierLabel = isFallback
+    ? "Generic fallback"
+    : isGlobal
+      ? "Global payer SOP"
+      : "Organization override";
 
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
@@ -260,9 +270,9 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
   const [state, setState] = useState<string>(
     draftPayload?.state ?? initial?.state ?? prefill?.state ?? "none",
   );
-  const [specialty, setSpecialty] = useState<string>(
-    draftPayload?.specialty ?? initial?.specialty ?? "",
-  );
+  // Specialty is preserved (stored + displayed) but is NOT an editable runtime
+  // match key any more (E4.2 hardening) — no setter is wired.
+  const [specialty] = useState<string>(draftPayload?.specialty ?? initial?.specialty ?? "");
   const [groupId, setGroupId] = useState<string>(
     draftPayload?.groupId ?? initial?.groupId ?? prefill?.groupId ?? "none",
   );
@@ -687,7 +697,25 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     return true;
   }
 
+  // E4.2 SOP hardening — an organization SOP must target a payer AND a state
+  // (the supported runtime match grain). Block every content-writing save and
+  // steer the author back to Basics. Global rows are read-only / platform-managed.
+  function matchKeyIncompleteBlocked(): boolean {
+    if (isGlobal) return false;
+    const err = orgSopMatchKeyError({
+      payerId: payerId === "none" ? null : payerId,
+      state: state === "none" ? null : state,
+    });
+    if (err) {
+      toast.error(err);
+      setStep(1);
+      return true;
+    }
+    return false;
+  }
+
   function handleSaveClick() {
+    if (matchKeyIncompleteBlocked()) return;
     if (portalConflictBlocked()) return;
     if (!isEdit) {
       void handleCreate();
@@ -708,12 +736,18 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     // task invariant must hold before it is persisted.
     if (portalConflictBlocked()) return;
     try {
+      // E4.2 — the copy shares the source's payer/state/group, which would
+      // collide with it under the active-org uniqueness rule. Create it ARCHIVED
+      // (outside the active grain) so the duplicate always succeeds; the author
+      // re-keys it and restores it (validated at the new key).
       const created = await createMut.mutateAsync({
         ...payload,
         name: `${name} (copy)`,
-        archived: false,
+        archived: true,
       });
-      toast.success("Template duplicated");
+      toast.success(
+        "Duplicated as an archived copy — set a distinct payer/state/group, then restore it.",
+      );
       setDirty(false);
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
@@ -805,8 +839,8 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
       {isEdit && canEdit ? (
         <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           Version {initial?.currentVersion ?? 1}. Content changes publish a new version — earlier
-          versions are never overwritten. Match-key changes (payer/state/specialty/group) update the
-          template identity without a new version.
+          versions are never overwritten. Match-key changes (payer/state/group) update the template
+          identity without a new version.
         </div>
       ) : null}
 
@@ -842,10 +876,17 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
       {/* Step body */}
       {step === 1 ? (
         <section className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4 max-w-2xl">
-          <h2 className="text-sm font-semibold mb-3">Match key</h2>
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Match key</h2>
+            <span className="inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
+              {tierLabel}
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground mb-4">
-            A case picks this template when its payer, state, specialty, and group match. Leave a
-            field on "Any" to match broadly.
+            A case resolves this template by payer + state; the group narrows it further. An
+            organization SOP <span className="font-medium">requires a payer and a state</span>.
+            Leave Group on “Any group” to cover every group — an exact-group SOP always wins over an
+            any-group one. Specialty is legacy metadata and is not used for matching.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
@@ -870,10 +911,13 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                 disabled={!canEdit}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Any payer" />
+                  <SelectValue placeholder="Select a payer" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Any payer</SelectItem>
+                  {/* No "Any payer" — organization SOPs must target a payer. The
+                      read-only path keeps a display item so a global/fallback row
+                      (payerless) still renders a value. */}
+                  {!canEdit ? <SelectItem value="none">Not payer-specific</SelectItem> : null}
                   {(payersQ.data ?? []).map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
@@ -893,10 +937,11 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                 disabled={!canEdit}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Any state" />
+                  <SelectValue placeholder="Select a state" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Any state</SelectItem>
+                  {/* No "Any state" — organization SOPs must target a state. */}
+                  {!canEdit ? <SelectItem value="none">Not state-specific</SelectItem> : null}
                   {US_STATES.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
@@ -904,18 +949,6 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label>Specialty</Label>
-              <Input
-                value={specialty}
-                onChange={(e) => {
-                  setSpecialty(e.target.value);
-                  markDirty();
-                }}
-                placeholder="e.g. Physical Therapy"
-                disabled={!canEdit}
-              />
             </div>
             <div>
               <Label>Group</Label>
@@ -940,6 +973,14 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                 </SelectContent>
               </Select>
             </div>
+            {specialty.trim() ? (
+              <div className="col-span-2">
+                <Label className="text-muted-foreground">
+                  Specialty (legacy — not used for matching)
+                </Label>
+                <p className="mt-1 text-[13px]">{specialty.trim()}</p>
+              </div>
+            ) : null}
           </div>
 
           {/* E4.2 F4.2.6 — required provider-profile attributes (the generation
@@ -1164,24 +1205,30 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
           </div>
 
           <dl className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4 grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+            <dt className="text-muted-foreground">Tier</dt>
+            <dd>{tierLabel}</dd>
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium">{name.trim() || "—"}</dd>
             <dt className="text-muted-foreground">Payer</dt>
             <dd>
               {payerId === "none"
-                ? "Any"
+                ? "— (required)"
                 : ((payersQ.data ?? []).find((p) => p.id === payerId)?.name ?? "—")}
             </dd>
             <dt className="text-muted-foreground">State</dt>
-            <dd>{state === "none" ? "Any" : state}</dd>
-            <dt className="text-muted-foreground">Specialty</dt>
-            <dd>{specialty.trim() || "Any"}</dd>
+            <dd>{state === "none" ? "— (required)" : state}</dd>
             <dt className="text-muted-foreground">Group</dt>
             <dd>
               {groupId === "none"
-                ? "Any"
+                ? "Any group"
                 : ((groupsQ.data ?? []).find((g) => g.id === groupId)?.name ?? "—")}
             </dd>
+            {specialty.trim() ? (
+              <>
+                <dt className="text-muted-foreground">Specialty (legacy)</dt>
+                <dd>{specialty.trim()}</dd>
+              </>
+            ) : null}
           </dl>
 
           {canEdit && !lint.ok ? (

@@ -165,6 +165,9 @@ export type Database = {
           provider_id: string;
           reason: string | null;
           run_id: string;
+          sop_resolution_tier: string | null;
+          sop_template_id: string | null;
+          sop_version: number | null;
           state: string;
         };
         Insert: {
@@ -179,6 +182,9 @@ export type Database = {
           provider_id: string;
           reason?: string | null;
           run_id: string;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           state: string;
         };
         Update: {
@@ -193,6 +199,9 @@ export type Database = {
           provider_id?: string;
           reason?: string | null;
           run_id?: string;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           state?: string;
         };
         Relationships: [
@@ -770,7 +779,7 @@ export type Database = {
       };
       fill_sessions: {
         Row: {
-          case_id: string;
+          case_id: string | null;
           completed_at: string | null;
           docs_attached: Json | null;
           fields_filled: number;
@@ -785,7 +794,7 @@ export type Database = {
           started_at: string;
         };
         Insert: {
-          case_id: string;
+          case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
           fields_filled?: number;
@@ -800,7 +809,7 @@ export type Database = {
           started_at?: string;
         };
         Update: {
-          case_id?: string;
+          case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
           fields_filled?: number;
@@ -3046,6 +3055,7 @@ export type Database = {
           org_id: string;
           provider_id: string | null;
           sop_content: Json | null;
+          sop_resolution_tier: string | null;
           sop_template_id: string | null;
           sop_version: number | null;
           sort_order: number | null;
@@ -3065,6 +3075,7 @@ export type Database = {
           org_id: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
           sort_order?: number | null;
@@ -3084,6 +3095,7 @@ export type Database = {
           org_id?: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_resolution_tier?: string | null;
           sop_template_id?: string | null;
           sop_version?: number | null;
           sort_order?: number | null;

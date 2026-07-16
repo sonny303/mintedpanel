@@ -97,6 +97,12 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
     [preview.gated],
   );
 
+  // E4.2 SOP hardening — proposed rows that resolve to the generic fallback SOP.
+  const fallbackKeys = useMemo(
+    () => preview.fallbackRowKeys ?? new Set<string>(),
+    [preview.fallbackRowKeys],
+  );
+
   // The confirmable proposed rows = proposed, not gated. Gated rows are shown
   // separately and never enter the run.
   const confirmableProposed = useMemo(
@@ -113,9 +119,16 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
     return { kind: "count", limit: n };
   }, [releaseCap]);
 
-  const releasedCount = useMemo(
-    () => applyReleaseScope(confirmableProposed, releaseScope).length,
+  const released = useMemo(
+    () => applyReleaseScope(confirmableProposed, releaseScope),
     [confirmableProposed, releaseScope],
+  );
+  const releasedCount = released.length;
+  // How many of the cases about to be created resolve to the generic fallback —
+  // the operator sees this warning EVERY confirm (no hidden acknowledgment).
+  const releasedFallbackCount = useMemo(
+    () => released.filter((r) => fallbackKeys.has(previewRowKey(r))).length,
+    [released, fallbackKeys],
   );
 
   if (preview.isError) {
@@ -278,6 +291,21 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
         </div>
       ) : null}
 
+      {releasedFallbackCount > 0 ? (
+        <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3" role="alert">
+          <p className="text-[13px] font-medium text-[#92400E]">
+            {releasedFallbackCount} of the {releasedCount} case
+            {releasedCount === 1 ? "" : "s"} you&apos;re about to create will use the generic
+            fallback SOP.
+          </p>
+          <p className="mt-1 text-[13px] text-[#92400E]">
+            No payer-specific SOP matches their payer, state, and group, so they generate with the
+            generic checklist — not a fully payer-ready case. Author a payer SOP to replace it; the
+            fallback usage is recorded on the generation run.
+          </p>
+        </div>
+      ) : null}
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -335,7 +363,17 @@ export function GenerationPreviewContent({ scope }: GenerationPreviewContentProp
                       ) : null}
                     </span>
                   ) : (
-                    row.reason
+                    <span className="inline-flex flex-col gap-1">
+                      {fallbackKeys.has(key) ? (
+                        <Badge
+                          className="w-fit rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
+                          title="No payer-specific SOP matches — generates with the generic checklist"
+                        >
+                          Generic fallback SOP
+                        </Badge>
+                      ) : null}
+                      <span>{row.reason}</span>
+                    </span>
                   )}
                 </TableCell>
               </TableRow>

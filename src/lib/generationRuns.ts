@@ -16,6 +16,25 @@ export const DISPOSITION_LABELS: Record<GenerationRowDisposition, string> = {
   failed: "Failed",
 };
 
+// E4.2 SOP hardening — the dimensions generic-fallback usage is reportable by.
+// (org is the RLS/query scope; these are the per-row grouping keys.)
+export type RunRowDimension = "runId" | "payerId" | "state" | "groupId";
+
+/** Count run rows by a chosen dimension (run / payer / state / group). Pure —
+ * the caller pre-filters to the tier it cares about (e.g. generic_fallback),
+ * so generic-fallback usage is countable per run, payer, state, and group. */
+export function countRunRowsBy(
+  rows: readonly Pick<CaseGenerationRunRow, RunRowDimension>[],
+  dimension: RunRowDimension,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    const key = r[dimension];
+    out.set(key, (out.get(key) ?? 0) + 1);
+  }
+  return out;
+}
+
 export interface RunCounts {
   created: number;
   skippedExisting: number;

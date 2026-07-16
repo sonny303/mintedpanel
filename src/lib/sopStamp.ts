@@ -11,13 +11,27 @@
 // Both-or-neither (the tasks_sop_stamp_both_or_neither CHECK): a head row
 // with no readable currentVersion yields an UNSTAMPED task — legacy-shaped
 // NULL/NULL, never a guessed version paired with content it may not match.
-import { isFallbackTemplate } from "@/lib/pickTemplate";
+import { isFallbackTemplate, resolutionTier, type SopResolutionTier } from "@/lib/pickTemplate";
 import type { SOPTemplate } from "@/types";
 
 export interface SopStamp {
   sopTemplateId: string | null;
   sopVersion: number | null;
 }
+
+/** The full resolution provenance stamped onto a generated task (E4.2 SOP
+ * hardening): the (id, version) pair PLUS the deterministic resolution tier the
+ * template was selected at. The tier is a pure property of the selected
+ * template's ownership, so a manual case (no generation run) stays directly
+ * reportable — its tier is on the task, never reconstructed from mutable
+ * template ownership. Null tier ⇒ no template resolved (legacy / non-SOP task). */
+export interface SopProvenanceStamp extends SopStamp {
+  sopResolutionTier: SopResolutionTier | null;
+}
+
+/** The template shape the provenance stamp needs: the id/version snapshot plus
+ * the ownership fields the tier is derived from. */
+type StampTemplate = Pick<SOPTemplate, "id" | "currentVersion" | "orgId" | "payerId">;
 
 /** The stamp for tasks resolved from this head-row snapshot (null → NULL/NULL). */
 export function templateStamp(
@@ -31,12 +45,24 @@ export function templateStamp(
   return { sopTemplateId: template.id, sopVersion: version };
 }
 
-/** Attach the template's stamp to every resolved task payload. */
+/** The full provenance stamp: the (id, version) pair plus the resolution tier.
+ * The tier is set whenever a template resolved (independent of the version
+ * snapshot), so generic-fallback usage is always reportable; a null template
+ * yields all-null. This is the SINGLE source of the provenance triple —
+ * `stampTasks` and the generation-run-row writer both read it. */
+export function templateProvenance(template: StampTemplate | null): SopProvenanceStamp {
+  return {
+    ...templateStamp(template),
+    sopResolutionTier: template ? resolutionTier(template) : null,
+  };
+}
+
+/** Attach the template's provenance stamp to every resolved task payload. */
 export function stampTasks<T extends object>(
   tasks: T[],
-  template: Pick<SOPTemplate, "id" | "currentVersion"> | null,
-): (T & SopStamp)[] {
-  const stamp = templateStamp(template);
+  template: StampTemplate | null,
+): (T & SopProvenanceStamp)[] {
+  const stamp = templateProvenance(template);
   return tasks.map((t) => ({ ...t, ...stamp }));
 }
 
