@@ -10,11 +10,11 @@
 | Ref               | SHA                                        | Date       | Note                                                                                |
 | ----------------- | ------------------------------------------ | ---------- | ----------------------------------------------------------------------------------- |
 | `origin/main`     | `a1bf4bf7efcd3ca634e6b2732f96472f604f9e4d` | 2026-07-08 | last commit is an epic-file rename; feature work froze at the merge base +4 commits |
-| `origin/redesign` | `cfbfa405fae33a67863db0f0f14666eeec5a7654` | 2026-07-16 | active line, 294 commits ahead of the merge base (R0–R6-partial epic program)       |
+| `origin/redesign` | `371d2616d72ada391355e44101c49699de458709` | 2026-07-16 | active line, 296 commits ahead of the merge base (R0–R6-partial epic program)       |
 | merge-base        | `6419816f75f7632d8edff378454408b1b237bfcb` | 2026-07-08 | `git merge-base origin/main origin/redesign`                                        |
 
 `git log origin/redesign..origin/main` = **12 commits** (4 feature commits + merges + epic
-renames). `git log origin/main..origin/redesign` = **294 commits**. Repo confirmed
+renames). `git log origin/main..origin/redesign` = **296 commits**. Repo confirmed
 non-shallow (`git rev-parse --is-shallow-repository` → `false`) before history use.
 
 ## What "parity" means here
@@ -218,7 +218,17 @@ redesign). Redesign has 39 workflow e2e specs; main has 5 generic specs.
 
 ### WF12 — Draft-email execution · role: specialist
 
-- **Both trees, near-identical:** `SOPEmailTemplate {subject, body}` → `CaseWizard.tsx` → `lib/gmailCompose.ts planGmailHandoff` (human-in-loop Gmail deep link, clipboard fallback). **Neither tree has structured `to`/`cc` recipients** (grep negative both). **Gap vs roadmap:** ROADMAP-STATUS locked (2026-07-15) that `draft_email` steps **require a structured `to` recipient + optional `cc`** — **not yet built in either tree**. **Classification: DEF** (roadmap work owned by E4.2/E4.3 SOP-email hardening; the PR #165 review branch `e1-7b-sop-email` is in flight per the redesign HEAD). **Severity P2.**
+- **Main path:** `SOPEmailTemplate {subject, body}` → `CaseWizard.tsx` →
+  `lib/gmailCompose.ts planGmailHandoff`; no authored recipient source and no
+  Gmail To/CC handoff. **Redesign path:** PR #166 implements reviewed E1.7b
+  F1.7b.5 — authored `SOPEmailRecipient` values are literal addresses or the
+  closed `provider.email` token; publish lint requires To; the resolver
+  preserves source and represents an empty token as `address: null`;
+  `CaseWizard` displays To/CC and passes resolved addresses to the human-reviewed
+  Gmail compose link. BCC, auto-send, and extension email execution remain out
+  of scope. **Tests:** `sop-email-recipients.spec.ts`; recipient cases in
+  `sopResolver`, `sopPublishLint`, `editableTemplate`, and `gmailCompose` unit
+  suites. **Classification: IMP** (redesign broader coverage). **Severity —.**
 
 ### WF13 — Portal registry, mapping, training, drift repair, dry run · role: specialist/admin
 
@@ -242,18 +252,18 @@ redesign). Redesign has 39 workflow e2e specs; main has 5 generic specs.
 
 ## Part A.3 — Severity roll-up & recommended actions
 
-| #              | Workflow                           | Classification | Severity | Recommended action (proposal)                                                                                                                  | Owning epic         |
-| -------------- | ---------------------------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| C1             | one-portal-per-task                | REP (covered)  | —        | none                                                                                                                                           | E1.7b (done)        |
-| C2             | broken-mapping drift cards (WF13)  | REG (partial)  | P2       | reimplement as a 4th `FixitCardKind` from `fill_sessions.fields_skipped`, or confirm superseded by E4.3 inline fix-it + scorecard              | E4.2 / E4.3         |
-| C3             | facility address on profile (WF16) | REG→DEF        | P2       | do NOT re-add to `profile.facilities`; fold into E4.3 TE-2 case-context projection                                                             | E4.3                |
-| C4             | `/api/me/view-prefs` (WF16)        | BIZ            | P2       | PM confirm whether the extension still needs saved detail-view field prefs; if yes, `authenticateUser`-scoped route reusing `user_table_prefs` | E4.3 or drop        |
-| WF12           | structured draft-email recipients  | DEF            | P2       | build the locked `to`/`cc` recipient contract                                                                                                  | E4.2/E4.3 SOP-email |
-| WF7            | single-group → M:N assignment      | REP            | P2       | ensure no redesign reader treats `providers.group_id` as truth (register: frozen mirror)                                                       | E1.3 (done)         |
-| WF1,2,4,8,9,15 | net-new capabilities               | IMP            | —        | none — redesign broadens coverage                                                                                                              | —                   |
+| #                 | Workflow                           | Classification | Severity | Recommended action (proposal)                                                                                                                  | Owning epic  |
+| ----------------- | ---------------------------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| C1                | one-portal-per-task                | REP (covered)  | —        | none                                                                                                                                           | E1.7b (done) |
+| C2                | broken-mapping drift cards (WF13)  | REG (partial)  | P2       | reimplement as a 4th `FixitCardKind` from `fill_sessions.fields_skipped`, or confirm superseded by E4.3 inline fix-it + scorecard              | E4.2 / E4.3  |
+| C3                | facility address on profile (WF16) | REG→DEF        | P2       | do NOT re-add to `profile.facilities`; fold into E4.3 TE-2 case-context projection                                                             | E4.3         |
+| C4                | `/api/me/view-prefs` (WF16)        | BIZ            | P2       | PM confirm whether the extension still needs saved detail-view field prefs; if yes, `authenticateUser`-scoped route reusing `user_table_prefs` | E4.3 or drop |
+| WF7               | single-group → M:N assignment      | REP            | P2       | ensure no redesign reader treats `providers.group_id` as truth (register: frozen mirror)                                                       | E1.3 (done)  |
+| WF1,2,4,8,9,12,15 | net-new/broader capabilities       | IMP            | —        | none — redesign broadens coverage                                                                                                              | —            |
 
 **No P0 and no P1 findings.** All parity gaps are P2 extension/convenience items whose roadmap
 home is E4.2/E4.3 (reviewed; E4.3 unbuilt). The dominant finding is that redesign is a strict
-superset of main's surface — 6 workflows are net-new, 5 are richer replacements — with the sole
-regressions being three un-ported 2026-07-08 extension patches, none of which is a data-integrity
-or isolation risk. **Stop here for PM / business review** before any reimplementation.
+superset of main's surface, with multiple net-new and richer workflows; structured draft-email
+recipients are now one of those redesign-only improvements. The sole regressions are three
+un-ported 2026-07-08 extension patches, none of which is a data-integrity or isolation risk.
+**Stop here for PM / business review** before any reimplementation.
