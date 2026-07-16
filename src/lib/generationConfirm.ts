@@ -12,9 +12,9 @@
 // half-created case.
 //
 // Deliberately absent (F2.1.5, [r4] Q3): NO prerequisite-payer logic of any
-// kind — no blocking, flagging, or auto-creation from
-// payers.prerequisite_payer_id, which stays dormant. Asserted by the unit
-// suite at the code level.
+// kind — no blocking, flagging, or auto-creation. The payer column that would
+// have backed it was dropped in the pre-GA schema cleanup (it was never wired
+// to a consumer). Asserted by the unit suite at the code level.
 
 import type { GenerationPreviewRow } from "@/lib/generationPreview";
 

@@ -8,15 +8,6 @@ export interface PayerInput {
   name: string;
   isActive?: boolean;
   avgDecisionDays?: number | null;
-  provisionalBillingAllowed?: boolean;
-  provisionalBillingNotes?: string | null;
-  retroBillingAllowed?: boolean;
-  retroBillingWindowDays?: number | null;
-  caqhPullDeadlineDays?: number | null;
-  providerTypePath?: "individual" | "organizational" | null;
-  priorAuthVendor?: string | null;
-  payerBillingId?: string | null;
-  portalUrl?: string | null;
   // E4.2 F4.2.1 — per-payer resolution-identifier config.
   resolutionIdLabel?: string | null;
   resolutionIdExpected?: boolean | null;

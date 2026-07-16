@@ -1,7 +1,8 @@
 // E2.1 TE-9 — the batch skip/failure disposition module, plus the F2.1.5
 // negative feature pinned at the code level: NO prerequisite-payer logic
 // exists anywhere in the generation pipeline ([r4] Q3 — dropped by decision,
-// not deferred; payers.prerequisite_payer_id stays dormant).
+// not deferred; the backing payer column was dropped in the pre-GA schema
+// cleanup).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -98,7 +99,7 @@ describe("F2.1.5 — no prerequisite logic in the generation pipeline (code-leve
     "src/hooks/useGenerationPreview.ts",
   ];
 
-  it("never references prerequisite_payer_id or any prerequisite branch", () => {
+  it("never references any prerequisite-payer branch in code", () => {
     for (const file of pipelineModules) {
       const source = readFileSync(join(process.cwd(), file), "utf8");
       // Strip comments — the negative decision may be DOCUMENTED, never coded.

@@ -442,7 +442,6 @@ export type Database = {
           payer_id: string;
           payer_individual_provider_id: string | null;
           payer_pipeline_state: string;
-          payer_provider_id: string | null;
           payer_reference_id: string | null;
           provider_id: string;
           specialty: string | null;
@@ -470,7 +469,6 @@ export type Database = {
           payer_id: string;
           payer_individual_provider_id?: string | null;
           payer_pipeline_state?: string;
-          payer_provider_id?: string | null;
           payer_reference_id?: string | null;
           provider_id: string;
           specialty?: string | null;
@@ -498,7 +496,6 @@ export type Database = {
           payer_id?: string;
           payer_individual_provider_id?: string | null;
           payer_pipeline_state?: string;
-          payer_provider_id?: string | null;
           payer_reference_id?: string | null;
           provider_id?: string;
           specialty?: string | null;
@@ -1810,8 +1807,6 @@ export type Database = {
         Row: {
           aliases: string[] | null;
           avg_decision_days: number | null;
-          caqh_pull_deadline_days: number | null;
-          cms_hios_id: string | null;
           created_at: string | null;
           id: string;
           is_active: boolean | null;
@@ -1819,27 +1814,16 @@ export type Database = {
           merged_into_id: string | null;
           name: string;
           org_id: string | null;
-          payer_billing_id: string | null;
           payer_kind: string;
           payer_slug: string | null;
-          portal_url: string | null;
-          prerequisite_payer_id: string | null;
-          prior_auth_vendor: string | null;
-          provider_type_path: string | null;
-          provisional_billing_allowed: boolean | null;
-          provisional_billing_notes: string | null;
           resolution_id_expected: boolean | null;
           resolution_id_label: string | null;
-          retro_billing_allowed: boolean | null;
-          retro_billing_window_days: number | null;
           states: string[] | null;
           status: string;
         };
         Insert: {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
-          caqh_pull_deadline_days?: number | null;
-          cms_hios_id?: string | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
@@ -1847,27 +1831,16 @@ export type Database = {
           merged_into_id?: string | null;
           name: string;
           org_id?: string | null;
-          payer_billing_id?: string | null;
           payer_kind?: string;
           payer_slug?: string | null;
-          portal_url?: string | null;
-          prerequisite_payer_id?: string | null;
-          prior_auth_vendor?: string | null;
-          provider_type_path?: string | null;
-          provisional_billing_allowed?: boolean | null;
-          provisional_billing_notes?: string | null;
           resolution_id_expected?: boolean | null;
           resolution_id_label?: string | null;
-          retro_billing_allowed?: boolean | null;
-          retro_billing_window_days?: number | null;
           states?: string[] | null;
           status?: string;
         };
         Update: {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
-          caqh_pull_deadline_days?: number | null;
-          cms_hios_id?: string | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
@@ -1875,19 +1848,10 @@ export type Database = {
           merged_into_id?: string | null;
           name?: string;
           org_id?: string | null;
-          payer_billing_id?: string | null;
           payer_kind?: string;
           payer_slug?: string | null;
-          portal_url?: string | null;
-          prerequisite_payer_id?: string | null;
-          prior_auth_vendor?: string | null;
-          provider_type_path?: string | null;
-          provisional_billing_allowed?: boolean | null;
-          provisional_billing_notes?: string | null;
           resolution_id_expected?: boolean | null;
           resolution_id_label?: string | null;
-          retro_billing_allowed?: boolean | null;
-          retro_billing_window_days?: number | null;
           states?: string[] | null;
           status?: string;
         };
@@ -1904,13 +1868,6 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "payers_prerequisite_payer_id_fkey";
-            columns: ["prerequisite_payer_id"];
-            isOneToOne: false;
-            referencedRelation: "payers";
             referencedColumns: ["id"];
           },
         ];
@@ -3357,8 +3314,6 @@ export type Database = {
         Returns: {
           aliases: string[] | null;
           avg_decision_days: number | null;
-          caqh_pull_deadline_days: number | null;
-          cms_hios_id: string | null;
           created_at: string | null;
           id: string;
           is_active: boolean | null;
@@ -3366,19 +3321,10 @@ export type Database = {
           merged_into_id: string | null;
           name: string;
           org_id: string | null;
-          payer_billing_id: string | null;
           payer_kind: string;
           payer_slug: string | null;
-          portal_url: string | null;
-          prerequisite_payer_id: string | null;
-          prior_auth_vendor: string | null;
-          provider_type_path: string | null;
-          provisional_billing_allowed: boolean | null;
-          provisional_billing_notes: string | null;
           resolution_id_expected: boolean | null;
           resolution_id_label: string | null;
-          retro_billing_allowed: boolean | null;
-          retro_billing_window_days: number | null;
           states: string[] | null;
           status: string;
         }[];

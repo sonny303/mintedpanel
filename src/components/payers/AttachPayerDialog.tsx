@@ -1,7 +1,6 @@
 // E1.5 F1.5.1/F1.5.2 attach flow. Phase 1 is the curated picker — ONLY payers
 // enabled for the org via org_payer_assignments (never the full catalog),
-// showing name/kind/states plus the F1.5.4 prerequisite note (informational
-// only — no validation, R4 enforces). Phase 2 is the reviewable group×state
+// showing name/kind/states. Phase 2 is the reviewable group×state
 // expansion (pure expandTargets/reviewExpansion): every row carries its
 // facility-count reason, exceptions are unchecked, previously archived rows
 // arrive PRE-UNCHECKED (F1.5.3 re-attach), and already-active rows render
@@ -50,7 +49,6 @@ export function AttachPayerDialog({
   onClose: () => void;
 }) {
   const [payer, setPayer] = useState<Payer | null>(initialPayer ?? null);
-  const payerById = new Map(wizard.payers.map((p) => [p.id, p]));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -68,36 +66,25 @@ export function AttachPayerDialog({
               </p>
             ) : (
               <ul className="space-y-2">
-                {pickerPayers.map((p) => {
-                  const prerequisite = p.prerequisitePayerId
-                    ? payerById.get(p.prerequisitePayerId)
-                    : undefined;
-                  return (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        className="w-full rounded-md border border-[#E8E5E0] px-3 py-2 text-left hover:bg-[var(--mp-neutral-tint)]"
-                        onClick={() => setPayer(p)}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-[13px] font-medium text-foreground">{p.name}</span>
-                          <span className="flex-none text-[12px] text-muted-foreground">
-                            {PAYER_KIND_LABELS[p.payerKind ?? "commercial"]}
-                          </span>
-                        </div>
-                        <div className="mt-0.5 text-[12px] text-muted-foreground">
-                          States: {formatStates(p.states)}
-                        </div>
-                        {prerequisite ? (
-                          <div className="mt-1 text-[12px] text-muted-foreground">
-                            Requires {prerequisite.name} — noted for later; nothing to do at
-                            attachment.
-                          </div>
-                        ) : null}
-                      </button>
-                    </li>
-                  );
-                })}
+                {pickerPayers.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-[#E8E5E0] px-3 py-2 text-left hover:bg-[var(--mp-neutral-tint)]"
+                      onClick={() => setPayer(p)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[13px] font-medium text-foreground">{p.name}</span>
+                        <span className="flex-none text-[12px] text-muted-foreground">
+                          {PAYER_KIND_LABELS[p.payerKind ?? "commercial"]}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-muted-foreground">
+                        States: {formatStates(p.states)}
+                      </div>
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
             <DialogFooter>

@@ -1,8 +1,9 @@
-// Admin → Payers list and edit. Every payer field exposed in modal because
-// these values drive submission guidance and billing rules for coordinators.
+// Admin → Payers list and edit. Name, active flag, and avg decision days are
+// the org-editable payer settings; catalog identity/curation fields are owned
+// by the sync pipeline, not this screen.
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus, Info } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
@@ -12,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -20,14 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePayers, useCreatePayer, useUpdatePayer } from "@/hooks/useAdmin";
 import { useOrgPayerAssignments, useSetStarter } from "@/hooks/useOrgPayerAssignments";
 import { useIsAdmin } from "@/lib/permissions";
@@ -43,15 +35,6 @@ const EMPTY: PayerInput = {
   name: "",
   isActive: true,
   avgDecisionDays: null,
-  provisionalBillingAllowed: false,
-  provisionalBillingNotes: null,
-  retroBillingAllowed: false,
-  retroBillingWindowDays: null,
-  caqhPullDeadlineDays: null,
-  providerTypePath: null,
-  priorAuthVendor: null,
-  payerBillingId: null,
-  portalUrl: null,
 };
 
 function YesNoPill({ value }: { value: boolean }) {
@@ -83,7 +66,7 @@ function AdminPayersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payers"
-        description="Configure submission and billing rules used across cases."
+        description="Configure the payers available for case creation."
         actions={
           canEdit ? (
             <Button
@@ -97,7 +80,7 @@ function AdminPayersPage() {
       />
 
       <div className="border border-[#E8E5E0] rounded-md bg-[#FAFAF9] px-4 py-3 text-[13px] text-foreground">
-        Changes here affect submission guidance and billing rules immediately.
+        Changes here affect case creation and reporting immediately.
       </div>
 
       <div className="border border-[#E8E5E0] rounded-md overflow-hidden bg-white">
@@ -105,20 +88,7 @@ function AdminPayersPage() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-                {[
-                  "Payer",
-                  "Active",
-                  "Avg decision",
-                  "Provisional",
-                  "Retro",
-                  "CAQH deadline",
-                  "Type path",
-                  "Prior auth",
-                  "Billing ID",
-                  "Portal",
-                  "Starter",
-                  "",
-                ].map((h, i) => (
+                {["Payer", "Active", "Avg decision", "Starter", ""].map((h, i) => (
                   <th
                     key={i}
                     className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium whitespace-nowrap"
@@ -130,10 +100,10 @@ function AdminPayersPage() {
             </thead>
             <tbody>
               {payersQ.isLoading ? (
-                <TableSkeletonRows rows={8} cols={12} />
+                <TableSkeletonRows rows={8} cols={5} />
               ) : payersQ.isError ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-12 text-center">
+                  <td colSpan={5} className="px-3 py-12 text-center">
                     <EmptyState
                       message="Failed to load payers"
                       action={
@@ -146,7 +116,7 @@ function AdminPayersPage() {
                 </tr>
               ) : (payersQ.data ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-12">
+                  <td colSpan={5} className="px-3 py-12">
                     <EmptyState message="No payers yet" />
                   </td>
                 </tr>
@@ -163,59 +133,6 @@ function AdminPayersPage() {
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
                       {p.avgDecisionDays != null ? `${p.avgDecisionDays} d` : "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle">
-                      <div className="flex items-center gap-1.5">
-                        <YesNoPill value={p.provisionalBillingAllowed} />
-                        {p.provisionalBillingNotes ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 text-muted-foreground" />
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                {p.provisionalBillingNotes}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-3 h-10 align-middle">
-                      <div className="flex items-center gap-1.5">
-                        <YesNoPill value={p.retroBillingAllowed} />
-                        {p.retroBillingAllowed && p.retroBillingWindowDays != null ? (
-                          <span className="text-[12px] text-muted-foreground">
-                            {p.retroBillingWindowDays}d
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.caqhPullDeadlineDays != null ? `${p.caqhPullDeadlineDays} d` : "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.providerTypePath ?? "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.priorAuthVendor ?? "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground">
-                      {p.payerBillingId ?? "—"}
-                    </td>
-                    <td className="px-3 h-10 align-middle text-muted-foreground max-w-[180px] truncate">
-                      {p.portalUrl ? (
-                        <a
-                          href={p.portalUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#1B4D3E] hover:underline"
-                        >
-                          {p.portalUrl}
-                        </a>
-                      ) : (
-                        "—"
-                      )}
                     </td>
                     <td className="px-3 h-10 align-middle" onClick={(e) => e.stopPropagation()}>
                       <StarterToggle
@@ -309,15 +226,6 @@ function PayerEditModal({ payer, onClose }: { payer: Payer | null; onClose: () =
           name: payer.name,
           isActive: payer.isActive,
           avgDecisionDays: payer.avgDecisionDays,
-          provisionalBillingAllowed: payer.provisionalBillingAllowed,
-          provisionalBillingNotes: payer.provisionalBillingNotes,
-          retroBillingAllowed: payer.retroBillingAllowed,
-          retroBillingWindowDays: payer.retroBillingWindowDays,
-          caqhPullDeadlineDays: payer.caqhPullDeadlineDays,
-          providerTypePath: payer.providerTypePath,
-          priorAuthVendor: payer.priorAuthVendor,
-          payerBillingId: payer.payerBillingId,
-          portalUrl: payer.portalUrl,
         }
       : EMPTY,
   );
@@ -401,103 +309,6 @@ function PayerEditModal({ payer, onClose }: { payer: Payer | null; onClose: () =
               onChange={(e) => patch({ avgDecisionDays: numOrNull(e.target.value) })}
               className="h-9"
             />
-          </div>
-          <div>
-            <Label className="text-[12px]">CAQH pull deadline (days)</Label>
-            <Input
-              type="number"
-              value={form.caqhPullDeadlineDays ?? ""}
-              onChange={(e) => patch({ caqhPullDeadlineDays: numOrNull(e.target.value) })}
-              className="h-9"
-            />
-          </div>
-
-          <div>
-            <Label className="text-[12px]">Provider type path</Label>
-            <Select
-              value={form.providerTypePath ?? "__none__"}
-              onValueChange={(v) =>
-                patch({
-                  providerTypePath:
-                    v === "__none__" ? null : (v as "individual" | "organizational"),
-                })
-              }
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">—</SelectItem>
-                <SelectItem value="individual">Individual</SelectItem>
-                <SelectItem value="organizational">Organizational</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-[12px]">Prior auth vendor</Label>
-            <Input
-              value={form.priorAuthVendor ?? ""}
-              onChange={(e) => patch({ priorAuthVendor: e.target.value || null })}
-              className="h-9"
-            />
-          </div>
-
-          <div>
-            <Label className="text-[12px]">Payer billing ID</Label>
-            <Input
-              value={form.payerBillingId ?? ""}
-              onChange={(e) => patch({ payerBillingId: e.target.value || null })}
-              className="h-9"
-            />
-          </div>
-          <div>
-            <Label className="text-[12px]">Portal URL</Label>
-            <Input
-              value={form.portalUrl ?? ""}
-              onChange={(e) => patch({ portalUrl: e.target.value || null })}
-              className="h-9"
-              placeholder="https://"
-            />
-          </div>
-
-          <div className="col-span-2 border-t border-[#E8E5E0] pt-3 mt-1">
-            <div className="text-[12px] uppercase tracking-wider text-muted-foreground mb-2">
-              Billing
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
-                <div className="text-[13px] font-medium">Provisional billing allowed</div>
-                <Switch
-                  checked={Boolean(form.provisionalBillingAllowed)}
-                  onCheckedChange={(v) => patch({ provisionalBillingAllowed: v })}
-                />
-              </div>
-              <div className="flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
-                <div className="text-[13px] font-medium">Retro billing allowed</div>
-                <Switch
-                  checked={Boolean(form.retroBillingAllowed)}
-                  onCheckedChange={(v) => patch({ retroBillingAllowed: v })}
-                />
-              </div>
-              <div className="col-span-2">
-                <Label className="text-[12px]">Provisional billing notes</Label>
-                <Textarea
-                  rows={2}
-                  value={form.provisionalBillingNotes ?? ""}
-                  onChange={(e) => patch({ provisionalBillingNotes: e.target.value || null })}
-                />
-              </div>
-              <div>
-                <Label className="text-[12px]">Retro billing window (days)</Label>
-                <Input
-                  type="number"
-                  value={form.retroBillingWindowDays ?? ""}
-                  onChange={(e) => patch({ retroBillingWindowDays: numOrNull(e.target.value) })}
-                  className="h-9"
-                  disabled={!form.retroBillingAllowed}
-                />
-              </div>
-            </div>
           </div>
         </div>
 
