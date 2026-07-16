@@ -13,6 +13,8 @@ const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const CONFLICT_ID = "33333333-3333-4333-8333-333333333331";
 const CLEAN_ID = "33333333-3333-4333-8333-333333333332";
+// E4.2 SOP hardening — an org template must target a payer + state to publish.
+const PAYER_ID = "55555555-5555-4555-8555-555555555555";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -99,9 +101,11 @@ function templateRow(id: string, name: string, defs: unknown[]) {
     org_id: ORG_ID,
     name,
     group_id: null,
-    state: null,
+    // E4.2 SOP hardening — org templates carry a valid payer + state so the
+    // publish gate passes and the portal-integrity behavior under test is reached.
+    state: "KS",
     specialty: null,
-    payer_id: null,
+    payer_id: PAYER_ID,
     task_definitions: defs,
     archived: false,
     current_version: 1,
@@ -121,7 +125,7 @@ const FIXTURES: Record<string, unknown[]> = {
     },
   ],
   profiles: [{ id: USER_ID, full_name: "Sowmya Seed", email: "sowmya.seed@example.test" }],
-  payers: [],
+  payers: [{ id: PAYER_ID, org_id: ORG_ID, name: "BCBS KS", is_active: true, status: "active" }],
   provider_groups: [],
   portals: [
     portalRow("aaaaaaaa-0000-4000-8000-0000000000a1", "availity", "Availity"),

@@ -1226,8 +1226,12 @@ providerFacilities}`, `tasks.createProviderOutreachTask` (F4.2.6), form-runner
   `uq_sop_templates_active_org_match (org_id, payer_id, state, group_id) NULLS NOT
 DISTINCT WHERE org_id IS NOT NULL AND payer_id IS NOT NULL AND state IS NOT NULL
 AND archived = false` (live data verified duplicate-free first) + service-side
-  destination-key validation in `templates.ts` (`assertUniqueActiveMatch`, clear
-  blocking error; `dbErrors.ts` maps the 23505 backstop). **Readiness (F4.2.2)
+  validation in `templates.ts` — the required payer+state contract is enforced at
+  the SERVICE boundary too (`assertActiveOrgMatchKeyComplete`, via the same pure
+  `orgSopMatchKeyError`, on active creates AND update/restore destinations;
+  archived rows exempt so legacy rows stay readable/archivable) plus destination-key
+  uniqueness (`assertUniqueActiveMatch`, clear blocking error; `dbErrors.ts` maps
+  the 23505 backstop). **Readiness (F4.2.2)
   unchanged in logic (Ready = payer-specific SOP resolves; fallback = Needs SOP)
   but `PayerDirectory` relabels the column "SOP coverage" (was "Readiness") and
   "Form coverage", keeping Blocked separate. **Fallback generation is explicit:**

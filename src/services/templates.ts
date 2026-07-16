@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
+import { orgSopMatchKeyError } from "@/lib/sopMatchKey";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SOPTaskDefinition, SOPTemplate, SOPTemplateVersion } from "@/types";
 
@@ -42,6 +43,24 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
   const archiveValue = archived ?? isArchived;
   if (archiveValue !== undefined) payload.archived = archiveValue;
   return payload as unknown as SopTemplateInsert;
+}
+
+/** E4.2 SOP hardening — an ACTIVE organization template MUST target a payer AND
+ * a state (the supported runtime match grain; "Any payer" / "Any state" are not
+ * valid org-authored combinations). Enforced at the service boundary — not only
+ * in the wizard — for active creates and for the destination key of an
+ * update/restore, so no path can persist an unsupported active org SOP. Archived
+ * rows are EXEMPT (legacy rows and archived migration copies stay writable and
+ * archivable); reads are never gated, so legacy rows remain viewable. Uses the
+ * SAME pure `orgSopMatchKeyError` rule the wizard blocks on. */
+function assertActiveOrgMatchKeyComplete(key: {
+  payerId: string | null;
+  state: string | null;
+  archived: boolean;
+}): void {
+  if (key.archived) return;
+  const err = orgSopMatchKeyError({ payerId: key.payerId, state: key.state });
+  if (err) throw new Error(err);
 }
 
 /** E4.2 SOP hardening — reject a match-key that would create a SECOND active
@@ -207,11 +226,17 @@ export async function getTemplateVersion(
 
 export async function createTemplate(input: TemplateInput): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
+  const archived = Boolean(input.archived ?? input.isArchived ?? false);
+  assertActiveOrgMatchKeyComplete({
+    payerId: input.payerId ?? null,
+    state: input.state ?? null,
+    archived,
+  });
   await assertUniqueActiveMatch(orgId, {
     payerId: input.payerId ?? null,
     state: input.state ?? null,
     groupId: input.groupId ?? null,
-    archived: Boolean(input.archived ?? input.isArchived ?? false),
+    archived,
   });
   const { data, error } = await supabase
     .from("sop_templates")
@@ -237,18 +262,23 @@ export async function updateTemplate(
   const orgId = requireActiveOrg();
   const before = await getTemplate(id);
   // Validate the DESTINATION key (before + patch) before saving a match-key or
-  // restore edit — a match-key change or an unarchive must not land on another
-  // active template's grain. Fields absent from the patch keep their prior value.
+  // restore edit — a match-key change or an unarchive must land on a supported,
+  // non-colliding active grain. Fields absent from the patch keep their prior
+  // value. Archiving a legacy row (destination archived) stays exempt, so
+  // read/archive of existing rows is never blocked.
   if (before) {
-    const nextArchived = patch.archived ?? patch.isArchived ?? before.archived;
+    const nextArchived = Boolean(patch.archived ?? patch.isArchived ?? before.archived);
+    const destPayerId = patch.payerId !== undefined ? patch.payerId : before.payerId;
+    const destState = patch.state !== undefined ? patch.state : before.state;
+    const destGroupId = patch.groupId !== undefined ? patch.groupId : before.groupId;
+    assertActiveOrgMatchKeyComplete({
+      payerId: destPayerId,
+      state: destState,
+      archived: nextArchived,
+    });
     await assertUniqueActiveMatch(
       orgId,
-      {
-        payerId: patch.payerId !== undefined ? patch.payerId : before.payerId,
-        state: patch.state !== undefined ? patch.state : before.state,
-        groupId: patch.groupId !== undefined ? patch.groupId : before.groupId,
-        archived: Boolean(nextArchived),
-      },
+      { payerId: destPayerId, state: destState, groupId: destGroupId, archived: nextArchived },
       id,
     );
   }

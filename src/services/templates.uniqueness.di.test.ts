@@ -129,24 +129,37 @@ describe("createTemplate — active-org match-key uniqueness", () => {
     expect(writeAuditMock).toHaveBeenCalledTimes(1);
   });
 
-  it("does not run the uniqueness check for a payer/state-less template (outside the constrained grain)", async () => {
-    // A legacy-shaped template with no payer → the guard is skipped; insert runs.
+  it("rejects an ACTIVE payer/state-less org template (unsupported combination)", async () => {
+    // An organization SOP MUST target a payer and a state — the create is
+    // blocked before any DB call (no insert, no audit).
+    const captures = installDb([]);
+
+    await expect(createTemplate({ name: "Untitled", taskDefinitions: [] })).rejects.toThrow(
+      /payer/i,
+    );
+
+    expect(captures).toHaveLength(0);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("allows an ARCHIVED payer/state-less template (migration copy, outside the active grain)", async () => {
+    // Archived rows are exempt from the required-match-key + uniqueness rules,
+    // so a Duplicate-as-archived copy still persists; only the insert runs.
     const created = {
-      id: "legacy",
+      id: "arch",
       org_id: "org-1",
-      name: "Untitled",
+      name: "Copy",
       payer_id: null,
       state: null,
       group_id: null,
-      archived: false,
+      archived: true,
       task_definitions: [],
     };
     const captures = installDb([{ data: created }]);
 
-    const result = await createTemplate({ name: "Untitled", taskDefinitions: [] });
+    const result = await createTemplate({ name: "Copy", archived: true, taskDefinitions: [] });
 
-    expect(result.id).toBe("legacy");
-    // First (and only) query is the insert — no conflict-check pass.
+    expect(result.id).toBe("arch");
     expect(captures).toHaveLength(1);
     expect(captures[0].op).toBe("insert");
   });
