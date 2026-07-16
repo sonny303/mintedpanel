@@ -9,16 +9,65 @@
 // that contract; case creation depends on it.
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { resolveExecutionType, type ExecutionType } from "@/lib/executionTypes";
-import type { SOPStepType, SOPTaskDefinition } from "@/types";
+import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import type { SOPEmailRecipient, SOPStepType, SOPTaskDefinition } from "@/types";
 
 export interface DataField {
   label: string;
   token: string;
 }
 
+// E1.7b F1.7b.5 (TE-15) — the wizard-editable form of a draft-email recipient.
+// Both value fields are always present so toggling the source in the UI never
+// loses the other's in-progress text; fromEditableRecipients emits only the
+// field matching `source`. `id` keys the React row.
+export interface EditableRecipient {
+  id: string;
+  source: "literal" | "token";
+  address: string;
+  token: string;
+}
+
 export interface EmailTemplate {
   subject: string;
   body: string;
+  // To (≥1 valid on publish per the lint) + optional CC. Absent on legacy
+  // versions; toEditable normalizes them to empty arrays.
+  to: EditableRecipient[];
+  cc: EditableRecipient[];
+}
+
+// The default email-valued token a fresh token-source row starts on. Keeping it
+// resolver-derived means the picker and this default can never drift.
+const DEFAULT_EMAIL_TOKEN = emailValuedTokenKeys()[0] ?? "provider.email";
+
+function toEditableRecipients(list: SOPEmailRecipient[] | undefined): EditableRecipient[] {
+  return (list ?? []).map((r) => ({
+    id: randId(),
+    source: r.source,
+    address: r.source === "literal" ? r.address : "",
+    token: r.source === "token" ? r.token : DEFAULT_EMAIL_TOKEN,
+  }));
+}
+
+// Emit the stored recipient union, source-faithful. Blank rows drop out (a
+// half-filled literal never versions); the publish lint separately rejects a
+// draft-email step left with no valid To.
+function fromEditableRecipients(list: EditableRecipient[]): SOPEmailRecipient[] {
+  return list.flatMap((r): SOPEmailRecipient[] => {
+    if (r.source === "literal") {
+      const address = r.address.trim();
+      return address ? [{ source: "literal", address }] : [];
+    }
+    const token = r.token.trim();
+    return token ? [{ source: "token", token }] : [];
+  });
+}
+
+// A fresh recipient row for the "Add" affordance — literal by default (the
+// common case is a fixed payer inbox, e.g. worked example 1's Optum address).
+export function newEditableRecipient(): EditableRecipient {
+  return { id: randId(), source: "literal", address: "", token: DEFAULT_EMAIL_TOKEN };
 }
 
 export interface EditableStep {
@@ -66,7 +115,12 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         label?: string;
         detail?: string;
         stepType?: SOPStepType;
-        emailTemplate?: { subject?: string; body?: string };
+        emailTemplate?: {
+          subject?: string;
+          body?: string;
+          to?: SOPEmailRecipient[];
+          cc?: SOPEmailRecipient[];
+        };
         dataFields?: DataField[];
         portalKey?: string;
         expectedTurnaroundDays?: number;
@@ -81,6 +135,8 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         emailTemplate: {
           subject: raw.emailTemplate?.subject ?? "",
           body: raw.emailTemplate?.body ?? "",
+          to: toEditableRecipients(raw.emailTemplate?.to),
+          cc: toEditableRecipients(raw.emailTemplate?.cc),
         },
         dataFields: (raw.dataFields ?? []).filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
@@ -151,7 +207,20 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
         detail: s.detail,
         stepType: s.stepType,
         ...(s.stepType === "draft_email"
-          ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
+          ? {
+              emailTemplate: (() => {
+                const to = fromEditableRecipients(s.emailTemplate.to);
+                const cc = fromEditableRecipients(s.emailTemplate.cc);
+                return {
+                  subject: s.emailTemplate.subject,
+                  body: s.emailTemplate.body,
+                  // Omit empty lists so a recipient-less draft_email step stays
+                  // minimal jsonb (legacy round-trip identity, like portalKey).
+                  ...(to.length > 0 ? { to } : {}),
+                  ...(cc.length > 0 ? { cc } : {}),
+                };
+              })(),
+            }
           : {}),
         ...(portalKey ? { portalKey } : {}),
         ...(s.expectedTurnaroundDays !== null

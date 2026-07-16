@@ -409,7 +409,7 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                   label: "New step",
                   detail: "",
                   stepType: "online_form",
-                  emailTemplate: { subject: "", body: "" },
+                  emailTemplate: { subject: "", body: "", to: [], cc: [] },
                   dataFields: [],
                   portalKey: "",
                   expectedTurnaroundDays: null,

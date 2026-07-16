@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvableTokenKeys, resolveTemplate } from "./sopResolver";
+import { emailValuedTokenKeys, resolvableTokenKeys, resolveTemplate } from "./sopResolver";
 import type { Facility, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 function provider(over: Partial<Provider> = {}): Provider {
@@ -259,6 +259,103 @@ describe("buildTokenMap catalog aliases (via resolveTemplate)", () => {
       { label: "State", value: "TX" },
       { label: "Zip", value: "78701" },
     ]);
+  });
+});
+
+// E1.7b F1.7b.5 (TE-14) — structured draft-email recipients resolve alongside
+// subject/body, preserving each recipient's source. Grounded on worked example
+// 1's Optum literal recipient + the provider.email token.
+describe("resolveTemplate draft-email recipients (E1.7b F1.7b.5)", () => {
+  it("carries a literal To verbatim and resolves a provider.email token CC to the address", () => {
+    const tpl = template([
+      {
+        label: "Apply to Optum",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "Application for {{provider.firstName}}",
+          body: "Please enroll {{provider.firstName}} {{provider.lastName}}.",
+          to: [{ source: "literal", address: "network_PhysicalHealth@optum.com" }],
+          cc: [{ source: "token", token: "provider.email" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.subject).toBe("Application for Jordan");
+    expect(email?.to).toEqual([{ source: "literal", address: "network_PhysicalHealth@optum.com" }]);
+    expect(email?.cc).toEqual([
+      { source: "token", token: "provider.email", address: "jordan.rivera@example.com" },
+    ]);
+  });
+
+  it("keeps an empty provider.email token recipient as an unresolved gap (address null), never dropped", () => {
+    const tpl = template([
+      {
+        label: "Notify provider",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "Hello",
+          body: "Body",
+          to: [{ source: "token", token: "provider.email" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider({ email: null }), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.to).toEqual([{ source: "token", token: "provider.email", address: null }]);
+  });
+
+  it("resolves an unknown/unsupported token recipient to a null address (never a fake value)", () => {
+    const tpl = template([
+      {
+        label: "Bad recipient",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "s",
+          body: "b",
+          // A payer.* token has NO resolver value — it must never resolve to an
+          // address (anti-fake-CRM guardrail). Publish lint blocks authoring it;
+          // if one slipped through, resolution keeps it an explicit gap.
+          to: [{ source: "token", token: "payer.name" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    expect(task.sopContent[0].emailTemplate?.to).toEqual([
+      { source: "token", token: "payer.name", address: null },
+    ]);
+  });
+
+  it("leaves to/cc absent for a legacy draft-email step with no recipients (renders subject/body only)", () => {
+    const tpl = template([
+      {
+        label: "Legacy email",
+        stepType: "draft_email",
+        emailTemplate: { subject: "Roster update", body: "Add {{provider.firstName}}." },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.subject).toBe("Roster update");
+    expect(email?.body).toBe("Add Jordan.");
+    expect(email?.to).toBeUndefined();
+    expect(email?.cc).toBeUndefined();
+  });
+});
+
+describe("emailValuedTokenKeys (E1.7b F1.7b.5 / TE-14)", () => {
+  it("is the closed { provider.email } set today", () => {
+    expect(emailValuedTokenKeys()).toEqual(["provider.email"]);
+  });
+
+  it("is a strict subset of resolvableTokenKeys and excludes non-email tokens", () => {
+    const resolvable = new Set(resolvableTokenKeys());
+    for (const k of emailValuedTokenKeys()) expect(resolvable.has(k)).toBe(true);
+    // resolvableTokenKeys advertises non-email tokens (provider.npi); those are
+    // never offered as recipients.
+    expect(emailValuedTokenKeys()).not.toContain("provider.npi");
+    expect(emailValuedTokenKeys().some((k) => k.startsWith("payer."))).toBe(false);
+    expect(emailValuedTokenKeys().length).toBeLessThan(resolvableTokenKeys().length);
   });
 });
 

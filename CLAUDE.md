@@ -666,6 +666,41 @@ p_expected_version`; the RAISE prefix `sop_version_conflict` is the wire
 
   > 1 rows, so fixture handlers MUST honor filters).
 
+  **F1.7b.5 amendment — structured draft-email recipients (2026-07-16, NO
+  migration, TE-18).** A `draft_email` step now versions structured **To** +
+  optional **CC** recipients with its subject/body (BCC/auto-send out of scope).
+  Additive types (`types/index.ts`): the discriminated authored
+  `SOPEmailRecipient` (`{source:'literal',address}` | `{source:'token',token}`)
+  and the resolved `ResolvedSOPEmailRecipient` (token keeps `token` + resolved
+  `address|null`) + `ResolvedSOPEmailTemplate`; `SOPStep.emailTemplate` is now
+  the RESOLVED carrier while `SOPTaskDefinition.steps[].emailTemplate` stays the
+  AUTHORED `SOPEmailTemplate` (which gained optional `to`/`cc`). `sopResolver.ts`
+  (authorized additive edit) gained **`emailValuedTokenKeys()`** — the closed
+  recipient-token set = `{provider.email}` only, a STRICT subset of
+  `resolvableTokenKeys()` (payer.\* has no resolver value and is never a
+  recipient) — and resolves recipients alongside subject/body: a literal is
+  carried verbatim, a token is looked up in `buildTokenMap`, and an empty
+  `provider.email` becomes `address:null` — an explicit fill-before-send gap,
+  never dropped and never blocking generation (AQ1). Authoring carry-chain:
+  `editableTemplate` round-trips `to`/`cc` (written only for `draft_email`,
+  blank rows dropped, source-faithful) via `EditableRecipient` +
+  `newEditableRecipient`; `TemplateTaskRow` renders a To (≥1) / optional CC
+  editor — each row a "Recipient source" select → literal-address input
+  (`isValidEmail`) or an email-valued token select; the Review step chips each
+  recipient (`TemplatePreviewTasks`). `sopPublishLint` requires ≥1 valid To per
+  draft-email step (validates SOURCE, not value — an authored `provider.email`
+  is valid pre-generation; legacy immutable versions are never re-linted).
+  `gmailCompose.planGmailHandoff` now takes `to`/`cc` (comma-joined params; the
+  over-long-URL fallback keeps recipients + subject and drops only the body to
+  the clipboard); `CaseWizard`'s `DraftEmailStep` renders resolved To/CC with
+  provenance ("Email address" / the token) + the amber gap and threads resolved
+  addresses into the hand-off. Human-in-loop only: no BCC, no auto-send (pinned
+  by a code-level assertion in `gmailCompose.test.ts`), and NO `/api` projection
+  change — resolved To/CC ride `tasks.sop_content` for a future extension
+  consumer, but extension email execution stays deferred to E4.3 (TE-20). e2e
+  `e2e/sop-email-recipients.spec.ts` (authoring→Review→publish payload; resolve
+  →Gmail to/cc + the unresolved gap).
+
 - **E2.0 — Case Generation Preview & Exclusions.** ONE additive migration
   (repo + hosted, `20260713130000_case_generation_exclusions.sql`):
   **`case_generation_exclusions`** — persistent reasoned exclusions at the
