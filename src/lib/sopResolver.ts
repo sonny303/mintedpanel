@@ -7,6 +7,9 @@ import type {
   Mso,
   Provider,
   ProviderGroup,
+  ResolvedSOPEmailRecipient,
+  ResolvedSOPEmailTemplate,
+  SOPEmailRecipient,
   SOPEmailTemplate,
   SOPStep,
   SOPStepType,
@@ -80,6 +83,19 @@ export function resolvableTokenKeys(): string[] {
   );
 }
 
+// E1.7b F1.7b.5 (TE-14) — the closed set of email-valued token keys a
+// draft-email recipient may resolve. A STRICT SUBSET of resolvableTokenKeys():
+// that set advertises every substitutable token (provider.npi, facility.city,
+// …), but only these carry an actual email address. Today that is
+// `provider.email` alone — facility/group/mso and payer-contact tokens are
+// deferred (AQ2, additive later once a resolver value exists), and `payer.*` has
+// no resolver value at all and must NEVER be accepted as a recipient token. The
+// authoring picker (TE-15) and the publish lint (TE-16) both read this as the
+// single authority; keep it a subset of the map keys above.
+export function emailValuedTokenKeys(): string[] {
+  return ["provider.email"];
+}
+
 const TOKEN_PATTERN = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;
 
 function interpolate(input: string, tokens: Record<string, string>): string {
@@ -92,6 +108,51 @@ function offsetDate(baseIso: string, days: number): string {
   const d = new Date(baseIso);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+// E1.7b F1.7b.5 (TE-14) — resolve one authored recipient, preserving its source.
+// A literal address is a fixed value, carried through VERBATIM (never
+// interpolated — the portalKey precedent). A token recipient is looked up in the
+// SAME token map as subject/body; an empty value (e.g. a provider with no email)
+// resolves to `address: null` — an explicit unresolved recipient the case
+// workflow renders as a fill-before-send gap (AQ1). It is never dropped and
+// never auto-sent, and its `token` provenance is retained.
+function resolveRecipient(
+  recipient: SOPEmailRecipient,
+  tokens: Record<string, string>,
+): ResolvedSOPEmailRecipient {
+  if (recipient.source === "literal") {
+    return { source: "literal", address: recipient.address };
+  }
+  const raw = Object.prototype.hasOwnProperty.call(tokens, recipient.token)
+    ? tokens[recipient.token]
+    : "";
+  return { source: "token", token: recipient.token, address: raw.trim() ? raw : null };
+}
+
+function resolveRecipients(
+  list: SOPEmailRecipient[] | undefined,
+  tokens: Record<string, string>,
+): ResolvedSOPEmailRecipient[] | undefined {
+  if (!list || list.length === 0) return undefined;
+  return list.map((r) => resolveRecipient(r, tokens));
+}
+
+// Resolve the whole draft-email body: subject/body interpolated, recipients
+// source-tagged (TE-14). Absent to/cc stay absent so a legacy version row (no
+// recipients) resolves to the historical subject/body-only step unchanged.
+function resolveEmailTemplate(
+  authored: SOPEmailTemplate,
+  tokens: Record<string, string>,
+): ResolvedSOPEmailTemplate {
+  const to = resolveRecipients(authored.to, tokens);
+  const cc = resolveRecipients(authored.cc, tokens);
+  return {
+    subject: interpolate(authored.subject, tokens),
+    body: interpolate(authored.body, tokens),
+    ...(to ? { to } : {}),
+    ...(cc ? { cc } : {}),
+  };
 }
 
 function definitionToInsert(
@@ -107,12 +168,9 @@ function definitionToInsert(
       : null;
   const steps: SOPStep[] = definition.steps.map((step, idx) => {
     const stepType: SOPStepType = step.stepType ?? "online_form";
-    const emailTemplate: SOPEmailTemplate | undefined =
+    const emailTemplate: ResolvedSOPEmailTemplate | undefined =
       stepType === "draft_email" && step.emailTemplate
-        ? {
-            subject: interpolate(step.emailTemplate.subject, tokens),
-            body: interpolate(step.emailTemplate.body, tokens),
-          }
+        ? resolveEmailTemplate(step.emailTemplate, tokens)
         : undefined;
     return {
       id: `step-${idx}`,
