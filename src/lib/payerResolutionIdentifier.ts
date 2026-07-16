@@ -9,7 +9,7 @@
 // The Group/Billing (Type 2 / Tax-ID) identifier is NOT per-payer configured —
 // its label is fixed — so only the individual field routes through this seam.
 
-import type { Payer } from "@/types";
+import type { OrgPayerSetting, Payer } from "@/types";
 
 export interface ResolutionIdentifierConfig {
   /** Label for the Individual (Type 1 NPI-linked) provider-ID field. */
@@ -28,18 +28,26 @@ export const DEFAULT_RESOLUTION_IDENTIFIER: ResolutionIdentifierConfig = {
 /** Fixed label for the Group/Billing (Type 2 / Tax-ID-linked) identifier. */
 export const GROUP_PROVIDER_ID_LABEL = "Group/Billing Provider ID";
 
-// E4.2 (F4.2.1) — per-payer lookup. A payer whose config names its individual
-// identifier (e.g. Aetna "Provider PIN") and whether it is expected overrides
-// the generic default; an unconfigured payer (null label) falls back to the
-// generic "Payer-issued ID" optional field.
-export function resolveIdentifierConfig(payer?: Payer | null): ResolutionIdentifierConfig {
-  if (!payer) return DEFAULT_RESOLUTION_IDENTIFIER;
-  const label = payer.resolutionIdLabel?.trim();
+// E4.2 (F4.2.1, hardened by the payer-governance PR) — the per-payer lookup is
+// now a three-tier chain, most specific wins per field:
+//   1. the ORG's own setting (org_payer_settings — the only tier an org admin
+//      can write; configured via the payer-admin "Configure ID" dialog),
+//   2. the Minted-curated GLOBAL config on the payers row (org-read-only),
+//   3. the generic "Payer-issued ID" default (offered, skippable).
+// Pure — callers pass the org setting in (useOrgPayerSetting); no I/O here.
+export function resolveIdentifierConfig(
+  payer?: Payer | null,
+  orgSetting?: OrgPayerSetting | null,
+): ResolutionIdentifierConfig {
+  const orgLabel = orgSetting?.resolutionIdLabel?.trim();
+  const globalLabel = payer?.resolutionIdLabel?.trim();
   return {
-    individualLabel: label ? label : DEFAULT_RESOLUTION_IDENTIFIER.individualLabel,
+    individualLabel: orgLabel || globalLabel || DEFAULT_RESOLUTION_IDENTIFIER.individualLabel,
     expected:
-      typeof payer.resolutionIdExpected === "boolean"
-        ? payer.resolutionIdExpected
-        : DEFAULT_RESOLUTION_IDENTIFIER.expected,
+      typeof orgSetting?.resolutionIdExpected === "boolean"
+        ? orgSetting.resolutionIdExpected
+        : typeof payer?.resolutionIdExpected === "boolean"
+          ? payer.resolutionIdExpected
+          : DEFAULT_RESOLUTION_IDENTIFIER.expected,
   };
 }

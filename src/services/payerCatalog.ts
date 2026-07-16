@@ -1,41 +1,22 @@
-// E1.6 — global payer catalog reads + diff review (cross-org, like
-// portfolio.ts: no requireActiveOrg — these are platform-level surfaces).
+// E1.6 — global payer catalog read (cross-org, like portfolio.ts: no
+// requireActiveOrg — the directory is a platform-level browse surface).
 //
 // listGlobalPayers goes through the SECURITY DEFINER list_global_payers RPC:
 // the P2 RLS disjunction only exposes ASSIGNED global rows to an org, and
 // E1.6 must not touch that policy (TE-1), so the browse-everything directory
-// gets its own authenticated read path. payer_catalog_changes is readable
-// directly under its authenticated shared-queue SELECT policy (TE-3).
+// gets its own authenticated read path.
 //
-// reviewCatalogChange runs the review RPC; the diff row itself is the audit
-// trail (reviewed_by/reviewed_at stamped server-side) — audit_log is
-// org-scoped and catalog curation is platform-level, so no writeAudit here.
+// E4.2 payer governance: the catalog diff review (payer_catalog_changes reads +
+// the review_payer_catalog_change RPC) is PLATFORM tooling only — authenticated
+// SELECT/EXECUTE were revoked (migration 20260716191000) and the in-app review
+// surface was removed. Minted reviews sync diffs via service-role/MCP tooling.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
-import { translateDbError } from "@/lib/dbErrors";
-import type { Payer, PayerCatalogChange } from "@/types";
+import type { Payer } from "@/types";
 
 export async function listGlobalPayers(): Promise<Payer[]> {
   const rpc = supabase.rpc.bind(supabase);
   const { data, error } = await rpc("list_global_payers");
   if (error) throw error;
   return camelizeRow<Payer[]>(data ?? []);
-}
-
-export async function listCatalogChanges(): Promise<PayerCatalogChange[]> {
-  const { data, error } = await supabase
-    .from("payer_catalog_changes")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return camelizeRow<PayerCatalogChange[]>(data ?? []);
-}
-
-export async function reviewCatalogChange(changeId: string, accept: boolean): Promise<void> {
-  const rpc = supabase.rpc.bind(supabase);
-  const { error } = await rpc("review_payer_catalog_change", {
-    p_change_id: changeId,
-    p_accept: accept,
-  });
-  if (error) throw translateDbError(error);
 }

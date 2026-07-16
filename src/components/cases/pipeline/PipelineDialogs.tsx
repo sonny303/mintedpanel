@@ -27,6 +27,7 @@ import {
 import { DatePicker } from "@/components/DatePicker";
 import { PAYER_PIPELINE_STATES, pipelineLabel, type PayerPipelineState } from "@/lib/payerPipeline";
 import { GROUP_PROVIDER_ID_LABEL, resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
+import { useOrgPayerSetting } from "@/hooks/useOrgPayerSettings";
 import {
   initialPipelineTouchState,
   PipelineTouchSection,
@@ -89,7 +90,10 @@ function ProviderIdFields({
   onIndividual: (v: string) => void;
   onGroup: (v: string) => void;
 }) {
-  const config = resolveIdentifierConfig(payer);
+  // E4.2 governance: the org's own setting (org_payer_settings) wins, then the
+  // Minted-curated global label on the payers row, then the generic default.
+  const orgSetting = useOrgPayerSetting(payer?.id);
+  const config = resolveIdentifierConfig(payer, orgSetting);
   return (
     <>
       <div className="space-y-1.5">

@@ -1447,6 +1447,54 @@ export type Database = {
           },
         ];
       };
+      org_payer_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "org_payer_settings_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_payer_settings_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organizations: {
         Row: {
           created_at: string;
