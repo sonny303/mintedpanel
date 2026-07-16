@@ -480,23 +480,12 @@ export interface Payer {
   name: string;
   isActive: boolean;
   avgDecisionDays: number | null;
-  provisionalBillingAllowed: boolean;
-  provisionalBillingNotes: string | null;
-  retroBillingAllowed: boolean;
-  retroBillingWindowDays: number | null;
-  caqhPullDeadlineDays: number | null;
-  providerTypePath: "individual" | "organizational" | null;
-  priorAuthVendor: string | null;
-  payerBillingId: string | null;
-  portalUrl: string | null;
   createdAt: string;
   // E1.6 catalog identity columns (additive; optional so pre-E1.6 fixtures
   // stay valid). payerSlug is the canonical dataset key — the identity and
   // sync dedupe key per the final [e1.6] shape (clearinghouse IDs dropped).
   payerKind?: PayerKind;
-  prerequisitePayerId?: string | null;
   payerSlug?: string | null;
-  cmsHiosId?: string | null;
   aliases?: string[] | null;
   states?: string[] | null;
   status?: PayerCatalogStatus;

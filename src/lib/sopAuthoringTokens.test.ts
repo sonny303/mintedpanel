@@ -17,7 +17,6 @@ const CATALOG = [
   { token: "facility.city", table: "facilities", column: "city" },
   { token: "license.licenseNumber", table: "state_licenses", column: "license_number" },
   { token: "payer.name", table: "payers", column: "name" },
-  { token: "payer.portalUrl", table: "payers", column: "portal_url" },
   { token: "mso.portalUrl", table: "msos", column: "portal_url" },
   { token: "contract.effectiveDate", table: "contracts", column: "effective_date" },
   { token: "assignment.startDate", table: "provider_facility_assignments", column: "start_date" },
@@ -51,7 +50,6 @@ describe("filterAuthoringTokens", () => {
   it("excludes case-scoped families and tokens the resolver cannot substitute", () => {
     const kept = filterAuthoringTokens(CATALOG).map((e) => e.token);
     expect(kept).not.toContain("payer.name");
-    expect(kept).not.toContain("payer.portalUrl");
     expect(kept).not.toContain("contract.effectiveDate");
     expect(kept).not.toContain("assignment.startDate");
     expect(kept).not.toContain("groupInsurance.policyNumber");

@@ -15,7 +15,6 @@
 // identity is Minted-curated (see the missing-payer follow-up in TECH-DEBT).
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -181,23 +180,6 @@ function PayerRow(props: RowProps) {
       <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
         {payer.avgDecisionDays != null ? `${payer.avgDecisionDays} days` : "—"}
       </td>
-      <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
-        {payer.caqhPullDeadlineDays != null ? `${payer.caqhPullDeadlineDays} days` : "—"}
-      </td>
-      <td className="px-3 py-2.5 align-top">
-        {payer.portalUrl ? (
-          <a
-            href={payer.portalUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[13px] text-[#1B4D3E] underline-offset-2 hover:underline"
-          >
-            Portal <ExternalLink className="h-3 w-3" aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="text-[13px] text-muted-foreground">—</span>
-        )}
-      </td>
       <td className="px-3 py-2.5 align-top">
         <ManageCell {...props} />
       </td>
@@ -357,8 +339,6 @@ function PayerDirectoryPage() {
                   <th className="px-3 py-2">States</th>
                   <th className="px-3 py-2">Catalog key</th>
                   <th className="px-3 py-2">Avg decision</th>
-                  <th className="px-3 py-2">CAQH pull</th>
-                  <th className="px-3 py-2">Portal</th>
                   <th className="px-3 py-2">Manage</th>
                 </tr>
               </thead>
@@ -366,7 +346,7 @@ function PayerDirectoryPage() {
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={6}
                       className="px-3 py-8 text-center text-[13px] text-muted-foreground"
                     >
                       Loading the catalog…
@@ -375,7 +355,7 @@ function PayerDirectoryPage() {
                 ) : rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={6}
                       className="px-3 py-8 text-center text-[13px] text-muted-foreground"
                     >
                       No payers match the current filters.
