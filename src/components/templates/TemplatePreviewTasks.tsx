@@ -5,7 +5,7 @@
 // E1.7b step fields (turnaround/cadence/artifacts) render as metadata lines.
 import { EmptyState } from "@/components/EmptyState";
 import { normalizePortalKey } from "@/lib/tokenFormat";
-import type { Portal, SOPTaskDefinition } from "@/types";
+import type { Portal, SOPEmailRecipient, SOPTaskDefinition } from "@/types";
 
 const STEP_TYPE_LABELS: Record<string, string> = {
   online_form: "Online form",
@@ -15,6 +15,40 @@ const STEP_TYPE_LABELS: Record<string, string> = {
   phone: "Phone",
   mail: "Mail",
 };
+
+// E1.7b F1.7b.5 (TE-15) — Review-step chips for a draft-email step's authored
+// recipients, so the author sees To/CC before publishing. A literal shows the
+// address; a token shows its {{token}} form (authoring view — unresolved here).
+function recipientLabel(r: SOPEmailRecipient): string {
+  return r.source === "literal" ? r.address : `{{${r.token}}}`;
+}
+
+function RecipientChipLine({
+  label,
+  recipients,
+}: {
+  label: string;
+  recipients: SOPEmailRecipient[];
+}) {
+  if (recipients.length === 0) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      <span className="text-[11px] text-muted-foreground">{label}:</span>
+      {recipients.map((r, i) => (
+        <span
+          key={i}
+          className={
+            r.source === "token"
+              ? "inline-flex items-center rounded-full border border-[#E8E5E0] bg-muted/40 px-2 py-0.5 font-mono text-[11px]"
+              : "inline-flex items-center rounded-full border border-[#E8E5E0] bg-muted/40 px-2 py-0.5 text-[11px]"
+          }
+        >
+          {recipientLabel(r)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function TemplatePreviewTasks({
   tasks,
@@ -80,6 +114,12 @@ export function TemplatePreviewTasks({
                         Not linked for fill
                       </span>
                     )
+                  ) : null}
+                  {stepType === "draft_email" && s.emailTemplate ? (
+                    <>
+                      <RecipientChipLine label="To" recipients={s.emailTemplate.to ?? []} />
+                      <RecipientChipLine label="Cc" recipients={s.emailTemplate.cc ?? []} />
+                    </>
                   ) : null}
                   {s.detail ? <p className="text-muted-foreground mt-0.5">{s.detail}</p> : null}
                   {cadence.length > 0 ? (

@@ -741,10 +741,54 @@ export interface SOPStepDataField {
  */
 export type SOPStepType = "draft_email" | "online_form" | "pdf" | "fax" | "phone" | "mail";
 
-/** A draft-email step body; carries {{token}} placeholders from the closed catalog. */
+/**
+ * E1.7b F1.7b.5 (TE-13) — an AUTHORED draft-email recipient. A recipient is
+ * explicitly EITHER a fixed literal email address OR a closed email-valued token
+ * key (currently only `provider.email`; see `emailValuedTokenKeys`). It is never
+ * inferred by parsing free text, and there is no BCC and no send variant.
+ */
+export type SOPEmailRecipient =
+  { source: "literal"; address: string } | { source: "token"; token: string };
+
+/**
+ * E1.7b F1.7b.5 (TE-14) — a RESOLVED draft-email recipient. A literal address
+ * carries through verbatim; a token recipient keeps its `token` provenance
+ * ALONGSIDE the resolved `address` (null when the token resolved empty — an
+ * explicit fill-before-send gap, never collapsed to a literal and never
+ * silently dropped).
+ */
+export type ResolvedSOPEmailRecipient =
+  | { source: "literal"; address: string }
+  | { source: "token"; token: string; address: string | null };
+
+/**
+ * A draft-email step body; carries {{token}} placeholders from the closed
+ * catalog. This is the AUTHORED shape (stored in the versioned task_definitions
+ * jsonb). `to`/`cc` (E1.7b F1.7b.5, TE-13) version with the SOP content and are
+ * optional at the type level — legacy versions carry neither; the publish lint
+ * (TE-16), not TypeScript, enforces ≥1 To on new publishes. BCC and auto-send
+ * are out of scope.
+ */
 export interface SOPEmailTemplate {
   subject: string;
   body: string;
+  to?: SOPEmailRecipient[];
+  cc?: SOPEmailRecipient[];
+}
+
+/**
+ * E1.7b F1.7b.5 (TE-14) — the RESOLVED draft-email body carried on a resolved
+ * `SOPStep` (in `tasks.sop_content`). Subject/body are interpolated; recipients
+ * keep their source (this is the read-only task contract future consumers see,
+ * TE-20). Mirrors the authored→resolved split `dataFields` already has
+ * (`{ label, token }` authored → `{ label, value }` resolved), so subject/
+ * body-only callers are unaffected.
+ */
+export interface ResolvedSOPEmailTemplate {
+  subject: string;
+  body: string;
+  to?: ResolvedSOPEmailRecipient[];
+  cc?: ResolvedSOPEmailRecipient[];
 }
 
 export interface SOPStep {
@@ -753,7 +797,10 @@ export interface SOPStep {
   label: string;
   detail?: string;
   stepType?: SOPStepType;
-  emailTemplate?: SOPEmailTemplate;
+  // Resolved shape (TE-14): subject/body interpolated, recipients source-tagged
+  // with their resolved address. The authored SOPEmailTemplate is the input on
+  // SOPTaskDefinition.steps[]; the resolver bridges the two.
+  emailTemplate?: ResolvedSOPEmailTemplate;
   isCompleted: boolean;
   completedAt?: string | null;
   completedBy?: string | null;

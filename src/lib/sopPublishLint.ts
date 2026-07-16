@@ -3,10 +3,16 @@
 // placeholder so a payer can never flip to Ready on a hollow template:
 //   - at least one task,
 //   - every task has at least one step,
-//   - no blank or default "New step"/"New task" labels.
+//   - no blank or default "New step"/"New task" labels,
+//   - E1.7b F1.7b.5 (TE-16): every draft-email step has ≥1 To recipient, every
+//     literal recipient is a valid email address, and every token recipient is
+//     an email-valued token (source validity, not value — an authored
+//     provider.email is valid before generation).
 // Pure; enforced in the wizard — the only publish surface.
 
 import type { SOPTaskDefinition } from "@/types";
+import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import { isValidEmail } from "@/lib/contactValidation";
 
 /** Default placeholder labels the wizard seeds a fresh row with — these must be
  * renamed before publish. Compared case-insensitively after trimming. */
@@ -53,12 +59,46 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
       return;
     }
     steps.forEach((step, si) => {
+      const stepNo = si + 1;
       if (isPlaceholder(step.label)) {
         errors.push({
           taskIndex: taskNo,
-          stepIndex: si + 1,
-          message: `Task ${taskNo}, step ${si + 1} needs a label.`,
+          stepIndex: stepNo,
+          message: `Task ${taskNo}, step ${stepNo} needs a label.`,
         });
+      }
+      // E1.7b F1.7b.5 (TE-16) — a draft-email step needs ≥1 To recipient; every
+      // literal recipient must be a valid address and every token recipient an
+      // email-valued token. This validates recipient SOURCE, not value: an
+      // authored provider.email token is valid at publish even though its value
+      // is unknown until generation (AQ1). Legacy immutable versions are never
+      // re-linted — this only runs on a new publish's authored content.
+      if (step.stepType === "draft_email") {
+        const to = step.emailTemplate?.to ?? [];
+        const cc = step.emailTemplate?.cc ?? [];
+        if (to.length === 0) {
+          errors.push({
+            taskIndex: taskNo,
+            stepIndex: stepNo,
+            message: `Task ${taskNo}, step ${stepNo} (draft email) needs at least one "To" recipient.`,
+          });
+        }
+        const emailTokens = new Set(emailValuedTokenKeys());
+        for (const r of [...to, ...cc]) {
+          if (r.source === "literal" && !isValidEmail(r.address)) {
+            errors.push({
+              taskIndex: taskNo,
+              stepIndex: stepNo,
+              message: `Task ${taskNo}, step ${stepNo} has an invalid recipient email address ("${r.address}").`,
+            });
+          } else if (r.source === "token" && !emailTokens.has(r.token)) {
+            errors.push({
+              taskIndex: taskNo,
+              stepIndex: stepNo,
+              message: `Task ${taskNo}, step ${stepNo} recipient token "${r.token}" is not an email field.`,
+            });
+          }
+        }
       }
     });
   });

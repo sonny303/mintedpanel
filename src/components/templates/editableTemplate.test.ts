@@ -158,6 +158,83 @@ describe("portalKeyConflicts (one portal per task)", () => {
   });
 });
 
+// E1.7b F1.7b.5 (TE-15) — draft-email recipients survive toEditable∘fromEditable,
+// are written ONLY for draft_email steps, keep their source, and drop blanks.
+const DEFS_EMAIL: SOPTaskDefinition[] = [
+  {
+    title: "Apply to Optum",
+    description: "",
+    sortOrder: 0,
+    dueOffsetDays: 0,
+    steps: [
+      {
+        label: "Draft the Optum application email",
+        detail: "",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "Application for {{provider.firstName}}",
+          body: "Please enroll {{provider.firstName}}.",
+          to: [{ source: "literal", address: "network_PhysicalHealth@optum.com" }],
+          cc: [{ source: "token", token: "provider.email" }],
+        },
+        dataFields: [],
+      },
+    ],
+  },
+];
+
+describe("editableTemplate draft-email recipients (E1.7b F1.7b.5)", () => {
+  it("round-trips literal + token To/CC through toEditable → fromEditable", () => {
+    expect(fromEditable(toEditable(DEFS_EMAIL))).toEqual(DEFS_EMAIL);
+  });
+
+  it("omits empty to/cc so a recipient-less draft_email step stays minimal", () => {
+    const out = fromEditable(
+      toEditable([
+        {
+          title: "T",
+          steps: [
+            {
+              label: "Legacy email",
+              stepType: "draft_email",
+              emailTemplate: { subject: "s", body: "b" },
+            },
+          ],
+        },
+      ]),
+    );
+    const step = out[0].steps[0];
+    expect("to" in step.emailTemplate!).toBe(false);
+    expect("cc" in step.emailTemplate!).toBe(false);
+  });
+
+  it("drops a blank literal recipient row and preserves source for token rows", () => {
+    const editable = toEditable(DEFS_EMAIL);
+    // Add a blank literal To row (a half-filled UI row) and a token row whose
+    // stale address field must NOT leak into storage.
+    editable[0].steps[0].emailTemplate.to.push({
+      id: "x",
+      source: "literal",
+      address: "   ",
+      token: "provider.email",
+    });
+    editable[0].steps[0].emailTemplate.cc[0].address = "stale-should-be-ignored@x.com";
+    const step = fromEditable(editable)[0].steps[0];
+    expect(step.emailTemplate?.to).toEqual([
+      { source: "literal", address: "network_PhysicalHealth@optum.com" },
+    ]);
+    // Token CC keeps only { source, token } — the stale address never versions.
+    expect(step.emailTemplate?.cc).toEqual([{ source: "token", token: "provider.email" }]);
+  });
+
+  it("never writes recipients for a non-draft_email step", () => {
+    const editable = toEditable(DEFS_EMAIL);
+    editable[0].steps[0].stepType = "online_form";
+    const step = fromEditable(editable)[0].steps[0];
+    expect(step.emailTemplate).toBeUndefined();
+  });
+});
+
 describe("taskPortalKeys", () => {
   it("returns the distinct normalized online-form keys of a task", () => {
     const [task] = toEditable([
