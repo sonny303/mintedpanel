@@ -4,6 +4,12 @@
 > type, or schema.** It records findings for PM / business review. No behavior is
 > implemented and no field is removed here. Nothing below is a decision — every
 > "recommended action" is a proposal awaiting sign-off.
+>
+> **Governance posture:** this is the PM-approved audit gate in the payer/SOP
+> hardening plan, not an epic implementation PR. It intentionally spans several
+> reviewed epics to compare workflows and assign future ownership; no numbered
+> feature is implemented, so the single-epic build traceability gate does not
+> apply. Each future implementation remains a separate, single-owner PR.
 
 ## Provenance (fetched SHAs)
 

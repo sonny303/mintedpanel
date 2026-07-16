@@ -6,6 +6,9 @@
 > workflow**. A field is not business-critical merely because it appears in a form. Nothing
 > here is a retirement approval — every deprecation candidate is gated (see the Retirement
 > Gate). Where evidence is thin the field is classified **unused/unverified**, not "unused."
+> Under the current binding `AGENTS.md` rule, columns may be retained, hidden,
+> stop-written, or deprecated in place, but may not be renamed, restructured, or
+> dropped.
 
 Companion to `docs/redesign/handoffs/payer-main-redesign-parity-audit.md` (workflow parity).
 Traced against `origin/redesign` @ `371d261`. Live schema + data inventoried via Supabase MCP
@@ -289,13 +292,13 @@ Production: `case_generation_runs` **0 rows**, `case_generation_run_rows` **0 ro
 
 ---
 
-# 9. Consolidated deprecation-candidate shortlist (ALL GATED — none approved)
+# 9. Consolidated deprecation-candidate shortlist (RETAIN IN PLACE — none approved)
 
 | field                                                                                                                          | why a candidate                                                | production non-null | class | required next step                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ------------------- | ----- | ------------------------------------------------------------------------------------------- |
-| `credential_cases.payer_provider_id`                                                                                           | superseded by the Type1/Type2 split; **no live reader/writer** | **0 / 65**          | 8     | full Retirement Gate                                                                        |
-| `payers.cms_hios_id`                                                                                                           | no app consumer; `payer_slug` is the identity policy           | **0 / 287**         | 7     | inventory + gate                                                                            |
-| `payers.prerequisite_payer_id`                                                                                                 | dormant; generation pins no prerequisite branch                | **0 / 287**         | 7/8   | keep as dormant unless roadmap drops MA prerequisites entirely; gate                        |
+| `credential_cases.payer_provider_id`                                                                                           | superseded by the Type1/Type2 split; **no live reader/writer** | **0 / 65**          | 8     | inventory, then PM may approve stop-write/hide/deprecate-in-place                           |
+| `payers.cms_hios_id`                                                                                                           | no app consumer; `payer_slug` is the identity policy           | **0 / 287**         | 7     | inventory, then retain or deprecate in place                                                |
+| `payers.prerequisite_payer_id`                                                                                                 | dormant; generation pins no prerequisite branch                | **0 / 287**         | 7/8   | keep dormant unless roadmap drops MA prerequisites; no physical removal under current rules |
 | `sop_template_versions.required_profile_attributes`                                                                            | write-only snapshot, no reader                                 | 0 set               | 2     | decide version-aware-gate reader vs accept as immutable snapshot                            |
 | `fill_sessions.docs_attached`                                                                                                  | written by extension, no reader                                | —                   | 2     | decide reader (E4.5 doc storage) vs hold                                                    |
 | `payers` curated block (provisional/retro/caqh_pull_deadline/provider_type_path/prior_auth_vendor/payer_billing_id/portal_url) | authorable+displayed, **no downstream consumer**               | 0–9 / 287           | 2     | **hold** — latent capacity; do not deepen UI until a consumer is committed; revisit E4.2/R8 |
@@ -308,10 +311,12 @@ not unused.**
 
 ---
 
-# 10. Retirement Gate (applies to every candidate in §9 — none is approved here)
+# 10. Deprecation Gate (applies to every candidate in §9 — none is approved here)
 
-**No column-removal recommendation in this document is approved.** For any candidate to proceed to
-retirement, ALL of the following must be satisfied, in order:
+**No field deprecation is approved here, and physical column removal is not an
+available outcome under current repository governance.** For any candidate to
+be hidden, stop-written, compatibility-read, or marked deprecated in place, ALL
+of the following must be satisfied, in order:
 
 1. **Named business-owner sign-off** (PM) that the field is truly out of scope for R6–R10 (the payer
    pipeline, payer/SOP admin, government-payer, and outcomes-reporting stages are the exact places a
@@ -335,14 +340,22 @@ retirement, ALL of the following must be satisfied, in order:
    `/api/*` + extension payloads, reports/exports, `supabase/seed*.sql`, and
    `scripts/payer-catalog-sync.mjs`.
 5. **Data backfill / archive plan** for any non-null production values (e.g. copy
-   `payer_provider_id` into the split columns if any legacy value exists before removal).
-6. **Deprecation period + observability** — stop-write first, watch for zero reads over an agreed
-   window before any drop.
-7. **`docs/data-model/table-register.md` updated** in the same PR that changes schema (this PR does
-   **not** touch it, because this PR changes no schema).
-8. **A separate, approved migration PR** performs the actual removal — never this documentation PR;
-   migrations remain additive until that explicitly-approved change.
-9. **Preservation of historical records** throughout (append-only ledgers, prior enrollment outcomes,
-   and audit rows are never deleted).
+   `payer_provider_id` into the split columns before stopping writes to the
+   compatibility column).
+6. **Deprecation period + observability** — stop-write first and watch for zero
+   reads over an agreed window. The column remains physically present.
+7. **`docs/data-model/table-register.md` updated** in the same PR that changes
+   field ownership, write behavior, or deprecation status.
+8. **Binding additive-only rule preserved** — approved outcomes are keep,
+   hide, stop-write, compatibility-read, backfill to a replacement, or mark
+   deprecated in place. No PR may rename, restructure, or drop the column under
+   current `AGENTS.md`.
+9. **Future physical removal requires governance first** — if PM later wants a
+   column dropped, a separate explicit change to the binding repository rule
+   must be reviewed and landed before a new removal proposal is even authored.
+   This audit and its PM sign-off cannot authorize destructive DDL.
+10. **Preservation of historical records** throughout (append-only ledgers,
+    prior enrollment outcomes, and audit rows are never deleted).
 
-A candidate that fails step 1 or 2 stays classified **unused/unverified (7)** and is **not** removed.
+A candidate that fails step 1 or 2 stays classified **unused/unverified (7)**
+with no deprecation action.
