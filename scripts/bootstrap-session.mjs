@@ -24,7 +24,13 @@ const log = (message) => console.log(`[bootstrap] ${message}`);
 
 // Dummy values only — the Playwright harness needs a valid-looking URL/key to
 // construct the Supabase client; unauthenticated paths make no network call.
-const DUMMY_ENV = `VITE_SUPABASE_URL=https://dummy.supabase.co
+// The host ref MUST be `example`: externalClient.ts sets no storageKey, so
+// supabase-js derives the GoTrue localStorage key from the URL ref as
+// `sb-<ref>-auth-token`. Every authenticated e2e spec seeds the session under
+// `sb-example-auth-token` (and CI boots with example.supabase.co), so any
+// other host makes the app read a key the specs never set and log the user
+// out — the whole authenticated suite would fail.
+const DUMMY_ENV = `VITE_SUPABASE_URL=https://example.supabase.co
 VITE_SUPABASE_ANON_KEY=dummy-anon-key
 `;
 

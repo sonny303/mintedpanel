@@ -18,6 +18,20 @@ full 120s webServer timeout before failing), runs `npm ci` only when
 SessionStart hook (`.claude/hooks/session-start.sh`); local sessions run the
 one-liner by hand. It never writes real credentials.
 
+The two dummy values it writes (also what CI uses) — the host **must** be
+`example.supabase.co`, not any other placeholder:
+
+```
+VITE_SUPABASE_URL=https://example.supabase.co
+VITE_SUPABASE_ANON_KEY=dummy-anon-key
+```
+
+`externalClient.ts` sets no `storageKey`, so supabase-js derives the GoTrue
+localStorage key from the URL ref as `sb-<ref>-auth-token`. All 30
+authenticated e2e specs seed the session under `sb-example-auth-token`, so a
+different host (e.g. `dummy.supabase.co` → `sb-dummy-auth-token`) boots the app
+logged-out and every authenticated spec times out.
+
 ## 1. Pick your tier from the diff
 
 | Tier                 | Applies to                                                                                                      | Run                                                                                                                                             |

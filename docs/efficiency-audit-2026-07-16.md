@@ -136,10 +136,12 @@ re-deciding it.
 
 1. **Bootstrap the env automatically:** commit a `SessionStart` hook (or a
    documented one-liner) that writes the dummy `.env`
-   (`VITE_SUPABASE_URL=https://dummy.supabase.co`,
+   (`VITE_SUPABASE_URL=https://example.supabase.co`,
    `VITE_SUPABASE_ANON_KEY=dummy-anon-key`) when absent, runs `npm ci`, and
    fetches `origin/redesign`. Saves a guaranteed 2-min silent failure plus
-   diagnosis in every fresh session.
+   diagnosis in every fresh session. (The host ref must be `example`:
+   supabase-js derives the `sb-example-auth-token` storage key the e2e specs
+   seed from it — the value CI already uses.)
 2. **One dev server per session:** start `npm run dev` once (background) and
    iterate focused specs against it — `reuseExistingServer: true` already
    makes every subsequent `playwright test` invocation skip the ~90s boot.
