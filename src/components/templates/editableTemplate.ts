@@ -97,6 +97,41 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
   }));
 }
 
+// A task's distinct normalized `online_form` portal keys. Blank/unset keys and
+// non-online_form steps never contribute, so legacy tasks (no portalKey) return
+// []. The wizard uses this for the per-task inline warning; case/whitespace
+// variants collapse via normalizePortalKey so they count as one portal.
+export function taskPortalKeys(task: Pick<EditableTask, "steps">): string[] {
+  return [
+    ...new Set(
+      task.steps
+        .filter((s) => s.stepType === "online_form")
+        .map((s) => normalizePortalKey(s.portalKey))
+        .filter((k): k is string => k !== null),
+    ),
+  ];
+}
+
+export interface PortalKeyConflict {
+  taskIdx: number;
+  title: string;
+  keys: string[];
+}
+
+// A task's portal must be unambiguous — the extension closes exactly ONE task
+// per portal submission, so two online_form steps in the same task pointing at
+// different portals would make the close-out target undecidable. Returns every
+// offending task (more than one distinct normalized key) so the wizard can warn
+// on the task and block save before any mutation.
+export function portalKeyConflicts(tasks: EditableTask[]): PortalKeyConflict[] {
+  const out: PortalKeyConflict[] = [];
+  tasks.forEach((task, taskIdx) => {
+    const keys = taskPortalKeys(task);
+    if (keys.length > 1) out.push({ taskIdx, title: task.title, keys });
+  });
+  return out;
+}
+
 export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
   return tasks.map((t, i) => ({
     title: t.title,

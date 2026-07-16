@@ -4,6 +4,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal } from "@/types";
 
 const PORTAL_COLUMNS =
@@ -32,7 +33,12 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
   const payload = {
     org_id: orgId,
     name: input.name.trim(),
-    portal_key: input.portalKey.trim(),
+    // Fold (trim + lowercase) at the write boundary so the portal_key that joins
+    // SOP online_form steps → this portal is a literal string compare, matching
+    // how editableTemplate normalizes step keys. The key is immutable after
+    // create (no update path edits it — a rename would orphan every SOP-step
+    // link), so this is the one chance to canonicalize a hand-typed key.
+    portal_key: normalizePortalKey(input.portalKey) ?? "",
     payer_id: input.payerId ?? null,
     form_url: input.formUrl?.trim() || null,
   };

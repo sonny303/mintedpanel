@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
+import { taskPortalKeys } from "@/components/templates/editableTemplate";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
 
@@ -185,6 +186,12 @@ export function TemplateTaskRow({
       </div>
 
       <div className="p-4 space-y-3">
+        {taskPortalKeys(task).length > 1 ? (
+          <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
+            This task links more than one portal ({taskPortalKeys(task).join(", ")}). A task can
+            fill only one portal — pick one. Save is blocked until then.
+          </div>
+        ) : null}
         <div className="flex items-center justify-between">
           <span className="text-xs uppercase tracking-wider text-muted-foreground">SOP steps</span>
           {canEdit ? (

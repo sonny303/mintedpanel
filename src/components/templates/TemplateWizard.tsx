@@ -54,6 +54,7 @@ import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVer
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
   fromEditable,
+  portalKeyConflicts,
   randId,
   toEditable,
   type EditableTask,
@@ -670,7 +671,24 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     }
   }
 
+  // One portal per task: the extension closes exactly one task per portal
+  // submission, so a task whose online_form steps point at different portals
+  // would make the close-out target ambiguous. Block every content-writing save
+  // (create, publish, duplicate) BEFORE any mutation and steer the author to the
+  // offending task, which also shows an inline warning in Step 3.
+  function portalConflictBlocked(): boolean {
+    const conflicts = portalKeyConflicts(tasks);
+    if (conflicts.length === 0) return false;
+    const c = conflicts[0];
+    toast.error(
+      `"${c.title.trim() || `Task ${c.taskIdx + 1}`}" links more than one portal (${c.keys.join(", ")}). A task can fill only one portal — pick one.`,
+    );
+    setStep(3);
+    return true;
+  }
+
   function handleSaveClick() {
+    if (portalConflictBlocked()) return;
     if (!isEdit) {
       void handleCreate();
       return;
@@ -686,6 +704,9 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
 
   async function handleDuplicate() {
     if (!initial) return;
+    // The copy carries the current in-memory tasks, so the same one-portal-per-
+    // task invariant must hold before it is persisted.
+    if (portalConflictBlocked()) return;
     try {
       const created = await createMut.mutateAsync({
         ...payload,
