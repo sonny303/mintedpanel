@@ -1,11 +1,13 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E1.6 TE-6 — Payer Directory coverage over the mock harness:
+// E1.6 TE-6 + E4.2 payer governance — Payer Directory coverage over the mock
+// harness:
 //   TS-36 directory browse/search/filter: finds BCBS-NC by alias, commercial
 //         default hides MCO/government rows, state filter narrows by states[]
-//   TS-38 reviewable sync diff: an upstream rename lands as an unreviewed
-//         change; accepting runs the review RPC, applies the rename, and
-//         clears the queue
+//   Governance: the catalog diff review is PLATFORM tooling — even with
+//         unreviewed diffs sitting in payer_catalog_changes, the org app never
+//         reads the table, never renders the review panel, and never calls the
+//         review RPC.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -34,18 +36,8 @@ const globalPayer = (over: Record<string, unknown>) => ({
   name: "",
   is_active: true,
   avg_decision_days: null,
-  provisional_billing_allowed: false,
-  provisional_billing_notes: null,
-  retro_billing_allowed: false,
-  retro_billing_window_days: null,
-  caqh_pull_deadline_days: null,
-  provider_type_path: null,
-  prior_auth_vendor: null,
-  payer_billing_id: null,
-  portal_url: null,
   payer_kind: "commercial",
   payer_slug: null,
-  cms_hios_id: null,
   aliases: [],
   states: [],
   status: "active",
@@ -96,7 +88,6 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
         aliases: ["BCBSNC", "Blue Cross NC"],
         states: ["NC"],
         payer_slug: "bcbs-nc",
-        portal_url: "https://bluee.example.test",
         avg_decision_days: 45,
       }),
       globalPayer({
@@ -121,6 +112,7 @@ function makeFixtures(over: Record<string, unknown[]> = {}) {
 
 function makeHandler(fixtures: Record<string, unknown[]>) {
   const rpcCalls: Array<{ name: string; body: Record<string, unknown> }> = [];
+  const tablesRead: string[] = [];
   const handler = async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -132,27 +124,17 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
     if (url.pathname.endsWith("/rpc/list_global_payers")) {
       return json(fixtures.global_payers ?? []);
     }
-    if (url.pathname.endsWith("/rpc/review_payer_catalog_change")) {
-      const body = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
-      rpcCalls.push({ name: "review_payer_catalog_change", body });
-      // Mirror the RPC: apply on accept (identity whitelist), stamp review.
-      const changes = fixtures.payer_catalog_changes as Array<Record<string, unknown>>;
-      const change = changes.find((c) => c.id === body.p_change_id);
-      if (change) {
-        if (body.p_accept === true && change.field === "name") {
-          const payers = fixtures.global_payers as Array<Record<string, unknown>>;
-          const target = payers.find((p) => p.id === change.payer_id);
-          if (target) target.name = change.new_value;
-        }
-        change.review_state = body.p_accept === true ? "accepted" : "rejected";
-        change.reviewed_by = USER_ID;
-        change.reviewed_at = "2026-07-12T21:00:00Z";
-      }
-      return json(null);
+    if (url.pathname.includes("/rest/v1/rpc/")) {
+      const name = url.pathname.split("/rpc/")[1] ?? "";
+      rpcCalls.push({
+        name,
+        body: JSON.parse(req.postData() ?? "{}") as Record<string, unknown>,
+      });
+      return json(0);
     }
-    if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
 
-    const table = url.pathname.split("/rest/v1/")[1] ?? "";
+    const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
+    tablesRead.push(table);
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
     const matchFilters = (row: Record<string, unknown>): boolean => {
       for (const [key, raw] of url.searchParams.entries()) {
@@ -176,7 +158,7 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
     }
     return json(rows);
   };
-  return { handler, rpcCalls };
+  return { handler, rpcCalls, tablesRead };
 }
 
 function seedAuth(context: {
@@ -212,7 +194,8 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(page.getByText("UnitedHealthcare", { exact: true })).toBeVisible();
   await expect(page.getByText("Superior HealthPlan (Centene)")).not.toBeVisible();
 
-  // Alias search finds BCBS-NC with its states and catalog key.
+  // Alias search finds BCBS-NC with its states, catalog key, and Minted-curated
+  // avg decision days (read-only display).
   await page.getByLabel("Search payers").fill("Blue Cross NC");
   const row = page.locator("tbody tr");
   await expect(row).toHaveCount(1);
@@ -232,10 +215,11 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).not.toBeVisible();
 });
 
-test("TS-38: upstream rename lands as a diff; accepting applies it and clears the queue", async ({
-  context,
-  page,
-}) => {
+test("governance: catalog diff review is not exposed to org users", async ({ context, page }) => {
+  // An unreviewed diff EXISTS in the table — and the org app must neither read
+  // it nor offer any review affordance (review is service-role/platform
+  // tooling; authenticated SELECT/EXECUTE are revoked in the schema, and the
+  // app has no code path left that would try).
   const fixtures = makeFixtures({
     payer_catalog_changes: [
       {
@@ -252,28 +236,23 @@ test("TS-38: upstream rename lands as a diff; accepting applies it and clears th
       },
     ],
   });
-  const { handler, rpcCalls } = makeHandler(fixtures);
+  const { handler, rpcCalls, tablesRead } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
   await page.goto("/payer-directory");
-  const panel = page.getByText("Catalog changes to review");
-  await expect(panel).toBeVisible({ timeout: 30000 });
-  // The payer row is UNCHANGED while the diff awaits review (never a silent
-  // overwrite).
-  await expect(
-    page.getByText("Blue Cross and Blue Shield of North Carolina").first(),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payer Directory" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).toBeVisible();
 
-  await page.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByText("Catalog changes to review")).not.toBeVisible({ timeout: 15000 });
+  // No review panel, no accept/reject controls, the payer row unchanged.
+  await expect(page.getByText("Catalog changes to review")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+  await expect(page.getByText("Blue Cross NC (rebranded)")).toHaveCount(0);
 
-  // The swap ran through the review RPC and the rename applied on refetch.
-  expect(rpcCalls).toEqual([
-    {
-      name: "review_payer_catalog_change",
-      body: { p_change_id: "chg-1", p_accept: true },
-    },
-  ]);
-  await expect(page.getByText("Blue Cross NC (rebranded)")).toBeVisible();
+  // And at the wire: the diff table was never read, the review RPC never ran.
+  expect(tablesRead).not.toContain("payer_catalog_changes");
+  expect(rpcCalls.filter((c) => c.name === "review_payer_catalog_change")).toEqual([]);
 });

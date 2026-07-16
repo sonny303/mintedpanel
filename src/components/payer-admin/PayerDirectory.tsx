@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { usePayerReadiness, type EnrichedReadinessRow } from "@/hooks/usePayerReadiness";
 import { usePayers } from "@/hooks/useAdmin";
 import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
+import { useOrgPayerSetting } from "@/hooks/useOrgPayerSettings";
 import { useRole } from "@/lib/auth-store";
 import { payerSetupEmptyState } from "@/lib/payerCatalogActions";
 import { PayerResolutionIdDialog } from "@/components/payer-admin/PayerResolutionIdDialog";
@@ -68,6 +69,9 @@ export function PayerDirectory() {
   const role = useRole();
   const canViewScorecard = role === "admin" || role === "billing";
   const [configuring, setConfiguring] = useState<Payer | null>(null);
+  // The org's setting row for the payer being configured (org_payer_settings —
+  // the dialog writes the org grain, never the Minted-managed payers row).
+  const configuringSetting = useOrgPayerSetting(configuring?.id);
 
   if (readiness.isError) {
     return <EmptyState message="Couldn't load payer readiness." />;
@@ -215,7 +219,11 @@ export function PayerDirectory() {
       </div>
 
       {configuring ? (
-        <PayerResolutionIdDialog payer={configuring} onClose={() => setConfiguring(null)} />
+        <PayerResolutionIdDialog
+          payer={configuring}
+          setting={configuringSetting}
+          onClose={() => setConfiguring(null)}
+        />
       ) : null}
     </div>
   );

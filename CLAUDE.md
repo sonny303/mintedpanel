@@ -1279,6 +1279,54 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   `credential_cases`/`payer_network_targets`, no specialty table, no data
   deleted/rewritten, no new deps. types regenerated.
 
+- **E4.2 — Canonical Payer Governance.** Orgs SELECT canonical payer
+  identities; they never create or rename them. TWO migrations (repo + hosted,
+  `20260716190000`/`191000`, additive/grant-only): **`org_payer_settings`**
+  (the org × payer configuration grain — `UNIQUE (org_id, payer_id)`, ONLY
+  `resolution_id_label`/`resolution_id_expected`; member SELECT / ADMIN
+  INSERT/UPDATE, NO delete; revoke-then-grant floor — hosted default
+  privileges otherwise leave authenticated a DELETE grant) and **catalog
+  review made PLATFORM-ONLY** (`payer_catalog_changes` authenticated
+  SELECT policy dropped + ALL grants revoked; `review_payer_catalog_change`
+  authenticated EXECUTE revoked + body reissued to reject org-user JWTs and
+  ACCEPT service-role/direct-SQL callers — the E1.6 body required auth.uid()
+  so service_role could never call it. **OPERATOR ORDERING NOTE:** the #169
+  drop migration `20260716180000` is operator-gated on hosted and its reissue
+  re-grants authenticated EXECUTE — re-apply `20260716191000` after it).
+  **App:** `Payer.orgId` is honestly `string | null`; `payers.ts` has NO
+  create (free-text "Add payer" is gone — `useCreatePayer` removed); `getPayer`
+  reads own-org OR assigned-global (or-filter); `updatePayer` throws the typed
+  `GlobalPayerUpdateError` BEFORE any write on a global row; `PayerInput` is
+  down to `isActive` (name/avg_decision_days are Minted-curated, org-read-only
+  — avg decision still feeds the SummaryTab report). Admin → Payers is a
+  READ-ONLY governance surface: "Browse payer catalog" CTA (→
+  `/payer-directory`), per-row Source pill ("Minted catalog" vs "Legacy —
+  catalog migration required"), starter toggle kept (org_payer_assignments
+  fact, admin-only render), Scorecard link kept, NO edit modal.
+  `PayerCatalogChangesPanel` DELETED (+ its hooks/service fns/query key) —
+  the directory renders no review queue. **Resolution-ID config moved to the
+  org grain:** `orgPayerSettings.ts` service (audited upsert on the unique
+  key) → `useOrgPayerSettings.ts`; `PayerResolutionIdDialog` writes the org
+  setting (takes a `setting` prop), and `resolveIdentifierConfig(payer,
+orgSetting?)` is now the three-tier chain org setting → Minted global
+  fallback (payers columns) → generic — `PipelineDialogs.ProviderIdFields`
+  reads it via `useOrgPayerSetting`. **Legacy cutover:**
+  `docs/data-model/legacy-payer-cutover.md` records the live inventory (18
+  org-scoped rows, ALL referenced — zero deletions; result = pending
+  human-confirmed re-keying; the Pre-Cred sentinel is never re-keyed/deleted)
+  backed by pure tested `src/lib/payerCutover.ts` (`canDeleteLegacyPayer`,
+  exact-match-only `canonicalMatchCandidates` — no fuzzy auto-match).
+  Governance is machine-checked in `src/lib/payerGovernance.test.ts` (no
+  catalog-review call paths, no payers INSERT, migration grant shape). Types
+  for the new table were HAND-ADDED to `types.ts` (hosted still carries the
+  un-applied #169 drop, so a full regen would resurrect dropped columns —
+  regen only after the operator applies `20260716180000`). e2e:
+  `admin-payers.spec.ts` (new), `payer-directory.spec.ts` (TS-38 replaced by
+  the governance no-review-surface test; stale TS-36 Portal assertion from
+  #169 fixed), `payer-admin-module.spec.ts` (+F4.2.1 Configure-ID writes
+  org_payer_settings, never payers). Platform catalog authoring UI is R7 —
+  deliberately NOT built (no fake platform-admin from org `admin`).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

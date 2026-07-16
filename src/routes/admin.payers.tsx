@@ -1,41 +1,29 @@
-// Admin → Payers list and edit. Name, active flag, and avg decision days are
-// the org-editable payer settings; catalog identity/curation fields are owned
-// by the sync pipeline, not this screen.
-import { useMemo, useState } from "react";
+// Admin → Payers list. E4.2 payer governance: canonical payer identities are
+// SELECTED from the Minted catalog (Payer Directory → Add to organization),
+// never typed — there is no free-text "Add payer" and no org-side edit of
+// identity or Minted-curated facts (name, avg decision days, catalog fields).
+// Global rows are visibly Minted-managed; legacy org-scoped rows are read-only
+// pending the catalog cutover (docs/data-model/legacy-payer-cutover.md). The
+// org-owned config that remains here is the starter-pack toggle (an
+// org_payer_assignments fact, not a payers fact).
+import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { usePayers, useCreatePayer, useUpdatePayer } from "@/hooks/useAdmin";
+import { usePayers } from "@/hooks/useAdmin";
 import { useOrgPayerAssignments, useSetStarter } from "@/hooks/useOrgPayerAssignments";
 import { useIsAdmin } from "@/lib/permissions";
 import { useRole } from "@/lib/auth-store";
 import type { OrgPayerAssignment, Payer } from "@/types";
-import type { PayerInput } from "@/services/payers";
 
 export const Route = createFileRoute("/admin/payers")({
   component: AdminPayersPage,
 });
-
-const EMPTY: PayerInput = {
-  name: "",
-  isActive: true,
-  avgDecisionDays: null,
-};
 
 function YesNoPill({ value }: { value: boolean }) {
   return value ? (
@@ -45,17 +33,25 @@ function YesNoPill({ value }: { value: boolean }) {
   );
 }
 
+// Where the row's identity is owned: a global catalog row is Minted-managed
+// (read-only facts); an org-scoped row is a pre-catalog legacy identity that
+// stays read-only until the supervised cutover re-keys its references.
+function SourceCell({ payer }: { payer: Payer }) {
+  if (payer.orgId === null) {
+    return <StatusPill status="brand" label="Minted catalog" />;
+  }
+  return <StatusPill status="neutral" label="Legacy — catalog migration required" />;
+}
+
 function AdminPayersPage() {
   const canEdit = useIsAdmin();
   const role = useRole();
   const canViewScorecard = role === "admin" || role === "billing";
   const payersQ = usePayers();
   const assignmentsQ = useOrgPayerAssignments();
-  const [editing, setEditing] = useState<{ payer: Payer | null } | null>(null);
 
   // Only assigned global-catalog payers carry a starter toggle; org-scoped
-  // payers have no assignment row. Zero assignments exist today, so no toggle
-  // renders until a global payer is assigned to this org.
+  // legacy payers have no assignment row.
   const assignmentByPayer = useMemo(() => {
     const m = new Map<string, OrgPayerAssignment>();
     for (const a of assignmentsQ.data ?? []) m.set(a.payerId, a);
@@ -66,21 +62,18 @@ function AdminPayersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Payers"
-        description="Configure the payers available for case creation."
+        description="The payers available to this organization. Identities and catalog facts are managed by Minted."
         actions={
-          canEdit ? (
-            <Button
-              onClick={() => setEditing({ payer: null })}
-              className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
-            >
-              <Plus className="w-4 h-4 mr-1" /> Add payer
-            </Button>
-          ) : null
+          <Button asChild className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9">
+            <Link to="/payer-directory">Browse payer catalog</Link>
+          </Button>
         }
       />
 
       <div className="border border-[#E8E5E0] rounded-md bg-[#FAFAF9] px-4 py-3 text-[13px] text-foreground">
-        Changes here affect case creation and reporting immediately.
+        Payers are added from the Minted payer catalog — identities are never typed by hand. Legacy
+        payers created before the catalog are read-only until their cases and contracts are migrated
+        to a canonical identity.
       </div>
 
       <div className="border border-[#E8E5E0] rounded-md overflow-hidden bg-white">
@@ -88,7 +81,7 @@ function AdminPayersPage() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-                {["Payer", "Active", "Avg decision", "Starter", ""].map((h, i) => (
+                {["Payer", "Source", "Active", "Avg decision", "Starter", ""].map((h, i) => (
                   <th
                     key={i}
                     className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium whitespace-nowrap"
@@ -100,10 +93,10 @@ function AdminPayersPage() {
             </thead>
             <tbody>
               {payersQ.isLoading ? (
-                <TableSkeletonRows rows={8} cols={5} />
+                <TableSkeletonRows rows={8} cols={6} />
               ) : payersQ.isError ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-12 text-center">
+                  <td colSpan={6} className="px-3 py-12 text-center">
                     <EmptyState
                       message="Failed to load payers"
                       action={
@@ -116,59 +109,50 @@ function AdminPayersPage() {
                 </tr>
               ) : (payersQ.data ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-12">
-                    <EmptyState message="No payers yet" />
+                  <td colSpan={6} className="px-3 py-12">
+                    <EmptyState
+                      message="No payers yet"
+                      action={
+                        <Button asChild variant="outline" size="sm">
+                          <Link to="/payer-directory">Browse payer catalog</Link>
+                        </Button>
+                      }
+                    />
                   </td>
                 </tr>
               ) : (
                 (payersQ.data ?? []).map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => canEdit && setEditing({ payer: p })}
-                    className={`border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9] ${canEdit ? "cursor-pointer" : ""}`}
-                  >
+                  <tr key={p.id} className="border-b border-[#E8E5E0] last:border-b-0">
                     <td className="px-3 h-10 align-middle font-medium">{p.name}</td>
+                    <td className="px-3 h-10 align-middle">
+                      <SourceCell payer={p} />
+                    </td>
                     <td className="px-3 h-10 align-middle">
                       <YesNoPill value={p.isActive} />
                     </td>
                     <td className="px-3 h-10 align-middle text-muted-foreground">
                       {p.avgDecisionDays != null ? `${p.avgDecisionDays} d` : "—"}
                     </td>
-                    <td className="px-3 h-10 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 h-10 align-middle">
                       <StarterToggle
                         assignment={assignmentByPayer.get(p.id) ?? null}
                         payerName={p.name}
                         canEdit={canEdit}
                       />
                     </td>
-                    <td
-                      className="px-3 h-10 align-middle text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-end gap-1.5">
-                        {canViewScorecard && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px] px-2"
-                            asChild
-                          >
-                            <Link to="/admin/payers/$id/scorecard" params={{ id: p.id }}>
-                              Scorecard
-                            </Link>
-                          </Button>
-                        )}
-                        {canEdit && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px] px-2"
-                            onClick={() => setEditing({ payer: p })}
-                          >
-                            Edit
-                          </Button>
-                        )}
-                      </div>
+                    <td className="px-3 h-10 align-middle text-right">
+                      {canViewScorecard && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] px-2"
+                          asChild
+                        >
+                          <Link to="/admin/payers/$id/scorecard" params={{ id: p.id }}>
+                            Scorecard
+                          </Link>
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -177,8 +161,6 @@ function AdminPayersPage() {
           </table>
         </div>
       </div>
-
-      {editing ? <PayerEditModal payer={editing.payer} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
@@ -194,14 +176,18 @@ function StarterToggle({
 }) {
   const setStarter = useSetStarter();
   // Org-scoped payers (no assignment row) are not part of the global starter
-  // pack, so no toggle is shown.
+  // pack, so no toggle is shown. Non-admins get no control at all — a control
+  // never renders unless the caller can actually complete the action.
   if (!assignment) {
     return <span className="text-muted-foreground">—</span>;
+  }
+  if (!canEdit) {
+    return <span className="text-muted-foreground">{assignment.starter ? "Starter" : "—"}</span>;
   }
   return (
     <Switch
       checked={assignment.starter}
-      disabled={!canEdit || setStarter.isPending}
+      disabled={setStarter.isPending}
       aria-label={`Toggle starter pack for ${payerName}`}
       onCheckedChange={(v) =>
         setStarter.mutate(
@@ -214,123 +200,5 @@ function StarterToggle({
         )
       }
     />
-  );
-}
-
-function PayerEditModal({ payer, onClose }: { payer: Payer | null; onClose: () => void }) {
-  const createMut = useCreatePayer();
-  const updateMut = useUpdatePayer(payer?.id ?? "");
-  const [form, setForm] = useState<PayerInput>(() =>
-    payer
-      ? {
-          name: payer.name,
-          isActive: payer.isActive,
-          avgDecisionDays: payer.avgDecisionDays,
-        }
-      : EMPTY,
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [nameError, setNameError] = useState<string | null>(null);
-  const pending = createMut.isPending || updateMut.isPending;
-
-  function patch(p: Partial<PayerInput>) {
-    setForm((f) => ({ ...f, ...p }));
-  }
-
-  function numOrNull(v: string): number | null {
-    if (v.trim() === "") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  async function save() {
-    setError(null);
-    setNameError(null);
-    if (!form.name.trim()) {
-      setNameError("Name is required");
-      return;
-    }
-    try {
-      if (payer) {
-        await updateMut.mutateAsync(form);
-        toast.success("Payer updated");
-      } else {
-        await createMut.mutateAsync(form);
-        toast.success("Payer created");
-      }
-      onClose();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Save failed";
-      setError(msg);
-      toast.error(msg);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl border-[#E8E5E0] shadow-none">
-        <DialogHeader>
-          <DialogTitle>{payer ? "Edit payer" : "Add payer"}</DialogTitle>
-        </DialogHeader>
-
-        <div className="grid grid-cols-2 gap-4 py-2">
-          <div className="col-span-2">
-            <Label className="text-[12px]">Name</Label>
-            <Input
-              value={form.name}
-              onChange={(e) => {
-                patch({ name: e.target.value });
-                if (nameError) setNameError(null);
-              }}
-              aria-invalid={nameError ? true : undefined}
-              className={`h-9 ${nameError ? "border-[#B91C1C] focus-visible:ring-[#B91C1C]" : ""}`}
-            />
-            {nameError ? <div className="text-[12px] text-[#B91C1C] mt-1">{nameError}</div> : null}
-          </div>
-
-          <div className="col-span-2 flex items-center justify-between border border-[#E8E5E0] rounded-md px-3 py-2">
-            <div>
-              <div className="text-[13px] font-medium">Active</div>
-              <div className="text-[12px] text-muted-foreground">
-                Inactive payers are hidden from case creation.
-              </div>
-            </div>
-            <Switch
-              checked={Boolean(form.isActive)}
-              onCheckedChange={(v) => patch({ isActive: v })}
-            />
-          </div>
-
-          <div>
-            <Label className="text-[12px]">Avg decision days</Label>
-            <Input
-              type="number"
-              value={form.avgDecisionDays ?? ""}
-              onChange={(e) => patch({ avgDecisionDays: numOrNull(e.target.value) })}
-              className="h-9"
-            />
-          </div>
-        </div>
-
-        {error ? (
-          <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
-            {error}
-          </div>
-        ) : null}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button
-            onClick={save}
-            disabled={pending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
-          >
-            {pending ? "Saving…" : payer ? "Save changes" : "Create payer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
-import { createPayer, getPayer, listPayers, updatePayer, type PayerInput } from "@/services/payers";
+import { getPayer, listPayers, updatePayer, type PayerInput } from "@/services/payers";
 import {
   createMso,
   getMso,
@@ -54,15 +54,9 @@ export function usePayer(id: string | undefined) {
   });
 }
 
-export function useCreatePayer() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: PayerInput) => createPayer(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.payers(orgId) }),
-  });
-}
-
+// E4.2 payer governance: there is deliberately NO useCreatePayer — canonical
+// payer identities are selected from the Minted catalog (payer-directory →
+// org_payer_assignments), never typed free-text by an org.
 export function useUpdatePayer(id: string) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";

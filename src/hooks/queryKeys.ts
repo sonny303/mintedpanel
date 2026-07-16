@@ -17,6 +17,7 @@ export const queryKeys = {
   payers: (orgId: string) => ["payers", orgId] as const,
   payer: (orgId: string, id: string) => ["payer", orgId, id] as const,
   orgPayerAssignments: (orgId: string) => ["org-payer-assignments", orgId] as const,
+  orgPayerSettings: (orgId: string) => ["org-payer-settings", orgId] as const,
   payerNetworkTargets: (orgId: string) => ["payer-network-targets", orgId] as const,
   providerReadinessFacts: (orgId: string) => ["provider-readiness-facts", orgId] as const,
   groupReadinessDocuments: (orgId: string) => ["group-readiness-documents", orgId] as const,
@@ -90,7 +91,6 @@ export const queryKeys = {
   // E1.6 — cross-org global catalog keys (deliberately un-scoped, like
   // portfolio()/orgStates(): the catalog is platform-level data).
   payerCatalog: () => ["payer-catalog"] as const,
-  payerCatalogChanges: () => ["payer-catalog-changes"] as const,
   // Org CRM contacts (redesign E0.2): owner + customer + sales-rep parties.
   orgContacts: (orgId: string) => ["org-contacts", orgId] as const,
   // Full Party model (redesign E0.3): all parties in an org + the global,
