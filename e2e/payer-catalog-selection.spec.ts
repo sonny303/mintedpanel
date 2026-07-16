@@ -50,7 +50,6 @@ const globalPayer = (over: Record<string, unknown>) => ({
   payer_billing_id: null,
   portal_url: null,
   payer_kind: "commercial",
-  prerequisite_payer_id: null,
   payer_slug: null,
   cms_hios_id: null,
   aliases: [],

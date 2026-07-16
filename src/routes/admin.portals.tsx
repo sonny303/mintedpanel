@@ -47,6 +47,7 @@ import { fmtDate } from "@/lib/format";
 import { slugifyPortalKey } from "@/lib/portalKey";
 import { countStepsByPortalKey } from "@/lib/portalReferences";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { isUnlinkedFieldMap } from "@/lib/portalMappingHealth";
 import type { FillSession, Payer, Portal, PortalFieldMap } from "@/types";
 import type { PortalInput } from "@/services/portals";
 
@@ -59,6 +60,9 @@ interface PortalRow {
   payerName: string;
   mapped: number;
   proposed: number;
+  // Non-retired maps with a live selector but no token/hardcoded/manual source
+  // — they stay blank on every fill until someone links them.
+  unlinked: number;
   lastFill: FillSession | null;
   sopRefs: number;
 }
@@ -111,11 +115,14 @@ function AdminPortalsPage() {
     const maps = mapsQ.data ?? [];
     const mappedByKey = new Map<string, number>();
     const proposedByKey = new Map<string, number>();
+    const unlinkedByKey = new Map<string, number>();
     for (const m of maps) {
       if (m.status === "approved")
         mappedByKey.set(m.portalKey, (mappedByKey.get(m.portalKey) ?? 0) + 1);
       else if (m.status === "proposed")
         proposedByKey.set(m.portalKey, (proposedByKey.get(m.portalKey) ?? 0) + 1);
+      if (isUnlinkedFieldMap(m))
+        unlinkedByKey.set(m.portalKey, (unlinkedByKey.get(m.portalKey) ?? 0) + 1);
     }
     const lastFills = lastFillsQ.data;
     const sopRefsByKey = countStepsByPortalKey(templatesQ.data ?? []);
@@ -124,6 +131,7 @@ function AdminPortalsPage() {
       payerName: portal.payerId ? (payerById.get(portal.payerId) ?? "—") : "Multi-payer",
       mapped: mappedByKey.get(portal.portalKey) ?? 0,
       proposed: proposedByKey.get(portal.portalKey) ?? 0,
+      unlinked: unlinkedByKey.get(portal.portalKey) ?? 0,
       lastFill: lastFills?.get(portal.portalKey) ?? null,
       sopRefs: sopRefsByKey.get(normalizePortalKey(portal.portalKey) ?? "") ?? 0,
     }));
@@ -270,7 +278,7 @@ function PortalTableRow({
   onViewFields: () => void;
   onTrain: () => void;
 }) {
-  const { portal, payerName, mapped, proposed, lastFill, sopRefs } = row;
+  const { portal, payerName, mapped, proposed, unlinked, lastFill, sopRefs } = row;
   return (
     <>
       <tr className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]">
@@ -296,6 +304,11 @@ function PortalTableRow({
           {mapped} mapped
           {proposed > 0 ? (
             <StatusPill status="amber" label={`${proposed} proposed`} className="ml-1.5" />
+          ) : null}
+          {unlinked > 0 ? (
+            <span title="Mapped selectors with no token or value — they stay blank on every fill">
+              <StatusPill status="amber" label={`${unlinked} no value`} className="ml-1.5" />
+            </span>
           ) : null}
         </td>
         <td className="px-3 h-11 align-middle">
@@ -458,6 +471,13 @@ function ViewFieldsDialog({
                     {f.source === "manual" || f.source === "manual_partial" ? (
                       <span className="inline-flex items-center rounded-md border border-[#E8E5E0] bg-[#F5F5F4] px-2 py-0.5 text-[12px] text-[#78716C] font-mono">
                         manual
+                      </span>
+                    ) : isUnlinkedFieldMap(f) ? (
+                      <span
+                        className="inline-flex items-center rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-2 py-0.5 text-[12px] text-[#92400E]"
+                        title="No token or value linked — this field stays blank on every fill. Assign a token in training or mark it manual."
+                      >
+                        needs value
                       </span>
                     ) : (
                       <span className="inline-flex items-center rounded-md border border-[#C8DBD4] bg-[#E7F0EC] px-2 py-0.5 text-[12px] text-[#1B4D3E] font-mono">

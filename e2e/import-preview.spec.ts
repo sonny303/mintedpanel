@@ -943,9 +943,14 @@ test("TS-63: one-step batch assignment fills gaps and is idempotent on re-run", 
   });
 
   // Re-run the identical batch — idempotent: no new assignments (the DB
-  // uniques + the gap-only plan).
+  // uniques + the gap-only plan). Assert the re-run toast's unique 0-group/
+  // 0-facility text rather than the shared "already assigned" phrase: the
+  // first-run toast also carries that phrase and can still be on screen,
+  // tripping strict mode. The 0 + 0 counts prove nothing new was assigned.
   await page.getByRole("button", { name: "Assign batch" }).click();
-  await expect(page.getByText(/provider\(s\) already assigned/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/Assigned 0 group \+ 0 facility link\(s\)/)).toBeVisible({
+    timeout: 15000,
+  });
   expect(fixtures.provider_group_assignments.length).toBe(groupCountAfterFirst);
   expect(fixtures.provider_facility_assignments.length).toBe(facilityCountAfterFirst);
 });

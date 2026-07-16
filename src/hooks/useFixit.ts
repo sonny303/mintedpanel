@@ -11,12 +11,19 @@ import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
+import { usePortals, usePortalFieldMaps, useRecentFills } from "@/hooks/usePortals";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
 import { updateProvider, type ProviderInput } from "@/services/providers";
+import { reproposeFieldMap } from "@/services/portalFieldMaps";
 import { createFollowUpTask } from "@/services/tasks";
 import { decideDictionaryEntry } from "@/services/fieldDictionary";
-import { buildFixitQueue, type FixitCard, type OpenCaseLite } from "@/lib/fixitQueue";
+import {
+  buildFixitQueue,
+  type BrokenOrgRow,
+  type FixitCard,
+  type LastFillLite,
+  type OpenCaseLite,
+} from "@/lib/fixitQueue";
 import type { FieldDictionaryStatus } from "@/types";
 
 export interface UseFixitQueueResult {
@@ -35,6 +42,7 @@ export function useFixitQueue(): UseFixitQueueResult {
   const portalsQ = usePortals();
   const mapsQ = usePortalFieldMaps();
   const dictQ = useFieldDictionary();
+  const fillsQ = useRecentFills();
 
   // Every query feeds buildFixitQueue, so the deck must not seed until all have
   // loaded — a partial seed would freeze an incomplete deck (missing dictionary
@@ -47,7 +55,8 @@ export function useFixitQueue(): UseFixitQueueResult {
     statusConfigsQ.isLoading ||
     portalsQ.isLoading ||
     mapsQ.isLoading ||
-    dictQ.isLoading;
+    dictQ.isLoading ||
+    fillsQ.isLoading;
   const isError = providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
 
   const cards = useMemo(() => {
@@ -59,6 +68,17 @@ export function useFixitQueue(): UseFixitQueueResult {
     const portals = portalsQ.data ?? [];
     const maps = mapsQ.data ?? [];
     const dictionary = dictQ.data ?? [];
+    // Latest REAL fill per portal (the list arrives newest-first). Dry-run
+    // (is_test) fills never touch the live DOM, so they can't report drift AND
+    // must not mask a real fill's drift signal — exclude them, matching every
+    // other is_test metric reader (scorecard firstPassRate, reporting).
+    const lastFills: LastFillLite[] = [];
+    const seenFillPortals = new Set<string>();
+    for (const f of fillsQ.data ?? []) {
+      if (f.isTest || seenFillPortals.has(f.portalKey)) continue;
+      seenFillPortals.add(f.portalKey);
+      lastFills.push({ portalKey: f.portalKey, fieldsSkipped: f.fieldsSkipped });
+    }
     if (providers.length === 0 && cases.length === 0) return [];
 
     const statusById = new Map(statusConfigs.map((s) => [s.id, s]));
@@ -93,6 +113,7 @@ export function useFixitQueue(): UseFixitQueueResult {
       portals: portals.map((p) => ({ portalKey: p.portalKey, name: p.name, payerId: p.payerId })),
       fieldMaps: maps,
       dictionary,
+      lastFills,
     });
   }, [
     providersQ.data,
@@ -103,6 +124,7 @@ export function useFixitQueue(): UseFixitQueueResult {
     portalsQ.data,
     mapsQ.data,
     dictQ.data,
+    fillsQ.data,
   ]);
 
   return {
@@ -115,6 +137,7 @@ export function useFixitQueue(): UseFixitQueueResult {
       portalsQ.refetch();
       mapsQ.refetch();
       dictQ.refetch();
+      fillsQ.refetch();
     },
   };
 }
@@ -158,5 +181,27 @@ export function useDecideDictionary() {
       status: Extract<FieldDictionaryStatus, "confirmed" | "rejected">;
     }) => decideDictionaryEntry(id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.fieldDictionary(orgId) }),
+  });
+}
+
+// Broken-mapping repair: send the org's own rows whose selectors no longer match
+// the live form back to `proposed`, so they re-enter the training deck for a
+// re-capture. Only ever handed org rows — RLS blocks writes to global
+// (org_id NULL) catalog rows, which stay read-only/informational on the card.
+// On success, re-derive the mapping + fill caches that both the Fix-it queue and
+// the Portals registry compose; the card then opens the training surface.
+export function useSendBrokenToTraining() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: async (rows: BrokenOrgRow[]) => {
+      for (const row of rows) {
+        await reproposeFieldMap(row.id, { token: row.token, source: row.source });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.portalFieldMaps(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.lastFills(orgId) });
+    },
   });
 }

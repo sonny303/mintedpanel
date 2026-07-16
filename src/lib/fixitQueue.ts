@@ -5,7 +5,7 @@
 import { FIXIT_FIELDS, hasProviderValue } from "@/lib/fixitFields";
 import type { FieldDictionaryEntry, PortalFieldMap, Provider } from "@/types";
 
-export type FixitCardKind = "provider_gap" | "dictionary_confirm" | "train_form";
+export type FixitCardKind = "provider_gap" | "dictionary_confirm" | "train_form" | "broken_mapping";
 
 export interface Coverage {
   filled: number;
@@ -34,6 +34,25 @@ export interface FixitCard {
   };
   dictionary?: { entryId: string; label: string; token: string; seenCount: number };
   train?: { portalKey: string; portalName: string; matched: number; total: number };
+  // Form-drift repair card: trained selectors the last real fill couldn't find
+  // on the live page ("field not found"). One consolidated card per portal.
+  broken?: {
+    portalKey: string;
+    portalName: string;
+    count: number;
+    labels: string[];
+    // Own-org rows this card can send back to training. Global rows are the
+    // platform's shared catalog — RLS blocks org writes, so they stay read-only.
+    orgRows: BrokenOrgRow[];
+    globalCount: number;
+  };
+}
+
+// An org-owned broken mapping the repair card can re-propose (send to training).
+export interface BrokenOrgRow {
+  id: string;
+  token: string | null;
+  source: PortalFieldMap["source"];
 }
 
 export interface OpenCaseLite {
@@ -58,6 +77,61 @@ export interface BuildFixitInput {
   portals: PortalLite[];
   fieldMaps: PortalFieldMap[];
   dictionary: FieldDictionaryEntry[];
+  // Latest REAL (non-test) fill per portal — an optional signal; drift cards
+  // are only raised when it's present. The hook excludes dry-run (is_test)
+  // fills, which structurally never carry the drift reason (see useFixit).
+  lastFills?: LastFillLite[];
+}
+
+export interface LastFillLite {
+  portalKey: string;
+  // The stored fill_sessions.fields_skipped jsonb, verbatim — parsed defensively.
+  fieldsSkipped: unknown;
+}
+
+// The extension content script's EXACT wording when a trained selector matched
+// nothing on the live page — the one signal that a mapping no longer fits the
+// form (minted-extension src/content/fillEngine.ts). Any other skip reason
+// (no value, manual, file upload) is NOT drift.
+export const FIELD_NOT_FOUND_REASON = "field not found on this page";
+
+// One parsed entry of the LIVE fill's fields_skipped array. The extension writes
+// `{ label, reason, mapId?, kind: "skipped" | "manual" }` (minted-extension
+// src/background/fill.ts). Distinct from the E4.2 dry-run shape
+// (`{ selector, label, reason: "unmapped" | "empty_token" }`) which shares the
+// column but never carries a "skipped" not-found entry.
+interface SkippedEntry {
+  label: string;
+  reason: string;
+  kind: string;
+  mapId: string | null;
+}
+
+// fields_skipped is client-supplied jsonb — parse defensively, dropping anything
+// that isn't a `{ label, reason }` record. A missing `kind` defaults to
+// "skipped" (older telemetry); a non-string mapId becomes null.
+export function parseSkippedEntries(raw: unknown): SkippedEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SkippedEntry[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.label !== "string" || typeof r.reason !== "string") continue;
+    out.push({
+      label: r.label,
+      reason: r.reason,
+      kind: typeof r.kind === "string" ? r.kind : "skipped",
+      mapId: typeof r.mapId === "string" ? r.mapId : null,
+    });
+  }
+  return out;
+}
+
+// The reporting label the extension derives from a selector (the label text for
+// `label:` selectors, else the selector itself) — the join key for skip reports
+// that predate mapId. Mirrors minted-extension's humanLabel.
+function reportLabelOf(map: PortalFieldMap): string {
+  return map.selector.startsWith("label:") ? map.selector.slice("label:".length) : map.selector;
 }
 
 const FAR_FUTURE = "9999-12-31";
@@ -100,6 +174,7 @@ function cardTitle(c: FixitCard): string {
   if (c.gap) return c.gap.providerName;
   if (c.dictionary) return c.dictionary.label;
   if (c.train) return c.train.portalName;
+  if (c.broken) return c.broken.portalName;
   return "";
 }
 
@@ -222,6 +297,62 @@ export function buildFixitQueue(input: BuildFixitInput): FixitCard[] {
       sortDate,
       fieldsUnlocked: proposed,
       train: { portalKey, portalName: portal.name, matched, total: matched + proposed },
+    });
+  }
+
+  // --- broken_mapping: the last real fill reported trained selectors that no
+  // longer match the live form ("field not found") — the fill → fix → retrain
+  // loop. One consolidated card per portal. ---
+  for (const fill of input.lastFills ?? []) {
+    const portal = portalByKey.get(fill.portalKey);
+    if (!portal) continue;
+    const notFound = parseSkippedEntries(fill.fieldsSkipped).filter(
+      (e) => e.kind === "skipped" && e.reason === FIELD_NOT_FOUND_REASON,
+    );
+    if (notFound.length === 0) continue;
+
+    const liveMaps = input.fieldMaps.filter(
+      (m) => m.portalKey === fill.portalKey && m.status !== "retired",
+    );
+    const byId = new Map(liveMaps.map((m) => [m.id, m]));
+    const byReportLabel = new Map(liveMaps.map((m) => [reportLabelOf(m), m]));
+
+    const broken: PortalFieldMap[] = [];
+    const seen = new Set<string>();
+    for (const e of notFound) {
+      // Prefer the reported map id (exact). Fall back to the report-label join
+      // ONLY for older telemetry that predates mapId — a reported-but-unmatched
+      // id (the mapping was retired/removed) raises no card.
+      const map = e.mapId ? byId.get(e.mapId) : byReportLabel.get(e.label);
+      if (!map || seen.has(map.id)) continue; // duplicate reports collapse to one mapping
+      seen.add(map.id);
+      broken.push(map);
+    }
+    if (broken.length === 0) continue;
+
+    const orgRows: BrokenOrgRow[] = broken
+      .filter((m) => m.orgId !== null)
+      .map((m) => ({ id: m.id, token: m.token, source: m.source }));
+    // Soonest fill this repair would benefit: earliest open case on the payer.
+    let sortDate: string | null = null;
+    if (portal.payerId) {
+      for (const c of input.openCases) {
+        if (c.payerId === portal.payerId) sortDate = minDate(sortDate, c.nextDueDate);
+      }
+    }
+    cards.push({
+      id: `broken:${fill.portalKey}`,
+      kind: "broken_mapping",
+      sortDate,
+      fieldsUnlocked: broken.length,
+      broken: {
+        portalKey: fill.portalKey,
+        portalName: portal.name,
+        count: broken.length,
+        labels: broken.map((m) => m.fieldLabel ?? reportLabelOf(m)),
+        orgRows,
+        globalCount: broken.length - orgRows.length,
+      },
     });
   }
 
