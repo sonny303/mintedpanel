@@ -476,7 +476,10 @@ export type PayerCatalogStatus = "active" | "merged" | "retired";
 
 export interface Payer {
   id: string;
-  orgId: string;
+  // E4.2 governance type correction (additive-honest): org_id has been NULLABLE
+  // since P2 (20260707060000) — NULL = a Minted-managed global-catalog row an
+  // org can read (when assigned) but never create, rename, or update.
+  orgId: string | null;
   name: string;
   isActive: boolean;
   avgDecisionDays: number | null;
@@ -491,12 +494,29 @@ export interface Payer {
   status?: PayerCatalogStatus;
   mergedIntoId?: string | null;
   lastSyncedAt?: string | null;
-  // E4.2 F4.2.1 — per-payer resolution-identifier config (label of the
-  // payer-issued INDIVIDUAL enrollment ID + whether one is expected at
-  // approval). Read through the E4.0 payerResolutionIdentifier seam. NULL label
-  // = unconfigured → generic "Payer-issued ID" fallback.
+  // E4.2 F4.2.1 — resolution-identifier config. Since the E4.2 governance PR
+  // these columns are the MINTED-CURATED GLOBAL fallback tier only (org users
+  // cannot write them); the org-varying override lives in org_payer_settings
+  // (OrgPayerSetting below). Both are read through the E4.0
+  // payerResolutionIdentifier seam: org setting → these → generic default.
   resolutionIdLabel?: string | null;
   resolutionIdExpected?: boolean | null;
+}
+
+// E4.2 payer governance — the org × payer configuration grain. Global payer
+// facts stay Minted-curated on `payers`; anything an ORGANIZATION legitimately
+// configures about a payer lives here. Starts with the one setting that has a
+// confirmed consumer (the E4.0 approval step's resolution-identifier label /
+// expectedness); nothing else moves here without a product-approved consumer.
+export interface OrgPayerSetting {
+  id: string;
+  orgId: string;
+  payerId: string;
+  resolutionIdLabel: string | null;
+  resolutionIdExpected: boolean | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // E1.6 F1.6.3 — append-only catalog diff log row. The diff facts are

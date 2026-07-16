@@ -1,8 +1,9 @@
 // E1.6 F1.6.1 — the cross-org Payer Directory: the browsable global catalog
 // (org_id IS NULL rows only — org-scoped legacy payers never appear here).
 // Search by name/alias; filter by state and kind (commercial by default —
-// government kinds are dormant until R10). The F1.6.3 review queue renders above
-// the table when diffs await.
+// government kinds are dormant until R10). The F1.6.3 diff review queue no
+// longer renders here — catalog review is platform tooling (E4.2 governance;
+// authenticated SELECT/EXECUTE revoked in migration 20260716191000).
 //
 // E4.2 hardening — the directory is now the SELF-SERVICE starting point for
 // canonical payer selection. For each active catalog payer an org admin sees a
@@ -35,7 +36,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
-import { PayerCatalogChangesPanel } from "@/components/payers/PayerCatalogChangesPanel";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import {
   useAddAssignment,
@@ -276,8 +276,6 @@ function PayerDirectoryPage() {
         description="The global payer catalog — one canonical identity per payer, with the operational credentialing facts attached. Add the payers your organization works with to build its Payer Network."
       />
       <div className="space-y-4">
-        <PayerCatalogChangesPanel payers={payers} />
-
         <div className="flex flex-wrap items-center gap-2">
           <Input
             value={query}

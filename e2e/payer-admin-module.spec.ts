@@ -4,12 +4,16 @@ import { test, expect, type Route } from "@playwright/test";
 // Covers: the module is role-gated (P4/admin sees the nav entry + tabs; P2/
 // specialist does not and is denied at the route); the reason-code vocabulary
 // (global defaults are non-deletable "Managed centrally", org codes can be
-// added + deactivated); and the org queue-settings surface (four ranking inputs
-// with move up/down + Reset). No live payer/extension dependency (TE-11).
+// added + deactivated); the org queue-settings surface (four ranking inputs
+// with move up/down + Reset); and the F4.2.1 resolution-identifier dialog,
+// which — per the E4.2 governance PR — writes org_payer_settings (the org ×
+// payer grain), never the Minted-managed payers row. No live payer/extension
+// dependency (TE-11).
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "00000000-0000-4000-a000-000000000005";
+const PAYER_ID = "00000000-0000-4000-a000-0000000000aa";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -58,8 +62,51 @@ function fixtures(): Record<string, unknown[]> {
     ],
     profiles: [{ id: USER_ID, full_name: "Owner Dillon", email: "owner.dillon@example.test" }],
     denial_reason_codes: DENIAL_CODES,
+    // One assigned global payer with one active target → one readiness row on
+    // the Payer directory tab, which carries the admin-only "Configure ID"
+    // control (every other composed query resolves empty via the fallback).
+    payers: [
+      {
+        id: PAYER_ID,
+        org_id: null,
+        name: "Aetna (CVS Health)",
+        is_active: true,
+        avg_decision_days: null,
+        payer_kind: "commercial",
+        payer_slug: "aetna",
+        aliases: ["Aetna"],
+        states: ["NC"],
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
+    payer_network_targets: [
+      {
+        id: "tgt-1",
+        org_id: ORG_ID,
+        payer_id: PAYER_ID,
+        group_id: "grp-1",
+        state: "NC",
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
+    org_payer_assignments: [
+      {
+        id: "assign-1",
+        org_id: ORG_ID,
+        payer_id: PAYER_ID,
+        starter: false,
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
+    org_payer_settings: [],
   };
 }
+
+// Every non-GET REST call, so tests can pin WHERE a mutation landed.
+const writes: Array<{ method: string; table: string; url: string; body: string }> = [];
 
 async function fulfillSupabase(route: Route) {
   const req = route.request();
@@ -71,8 +118,15 @@ async function fulfillSupabase(route: Route) {
   if (url.pathname.includes("/rest/v1/rpc/")) return json(null);
 
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
-  const rows = fixtures()[table] ?? [];
   const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
+  if (req.method() !== "GET") {
+    writes.push({ method: req.method(), table, url: req.url(), body: req.postData() ?? "" });
+    // Echo the inserted/updated row back (return=representation callers).
+    const parsed = JSON.parse(req.postData() || "{}") as unknown;
+    const row = { id: "new-row", ...((Array.isArray(parsed) ? parsed[0] : parsed) as object) };
+    return json(wantsObject ? row : [row], 201);
+  }
+  const rows = fixtures()[table] ?? [];
   if (wantsObject) {
     if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
     return json(rows[0]);
@@ -81,6 +135,7 @@ async function fulfillSupabase(route: Route) {
 }
 
 test.beforeEach(async ({ context }) => {
+  writes.length = 0;
   await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
   await context.addInitScript(
     ([authKey, session, orgId]) => {
@@ -159,4 +214,42 @@ test("TS-91 — queue settings show the four inputs, reorder, and reset", async 
 
   // Reset is present (disabled on the shipped default until a config is saved).
   await expect(page.getByRole("button", { name: "Reset to default" })).toBeVisible();
+});
+
+test("F4.2.1 governance — Configure ID writes org_payer_settings, never the payers row", async ({
+  page,
+}) => {
+  currentRole = "admin";
+  await page.goto("/admin/payer-admin");
+
+  // The assigned payer's readiness row carries the admin-only control.
+  const row = page.locator("tr", { hasText: "Aetna (CVS Health)" });
+  await expect(row).toBeVisible({ timeout: 30000 });
+  await row.getByRole("button", { name: "Configure ID" }).click();
+
+  await expect(page.getByRole("heading", { name: /Resolution identifier/ })).toBeVisible();
+  await page.getByLabel("Identifier label").fill("Provider PIN");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Resolution identifier saved for this organization.")).toBeVisible({
+    timeout: 15000,
+  });
+
+  // The write landed on the org × payer settings grain, upserted on its
+  // (org_id, payer_id) unique key, org-stamped from the active org…
+  const settingWrites = writes.filter((w) => w.table === "org_payer_settings");
+  expect(settingWrites).toHaveLength(1);
+  expect(settingWrites[0].method).toBe("POST");
+  expect(settingWrites[0].url).toContain("on_conflict=org_id%2Cpayer_id");
+  const body = JSON.parse(settingWrites[0].body) as Record<string, unknown>;
+  expect(body).toMatchObject({
+    org_id: ORG_ID,
+    payer_id: PAYER_ID,
+    resolution_id_label: "Provider PIN",
+    resolution_id_expected: true,
+  });
+
+  // …and the Minted-managed payers row was never touched.
+  expect(writes.filter((w) => w.table === "payers")).toEqual([]);
+  // The setting change is audited.
+  expect(writes.some((w) => w.table === "audit_log")).toBe(true);
 });
