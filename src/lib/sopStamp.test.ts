@@ -4,6 +4,7 @@ import {
   distinctStampPairs,
   fallbackTemplateIds,
   stampTasks,
+  templateProvenance,
   templateStamp,
 } from "./sopStamp";
 import type { SOPTemplate } from "@/types";
@@ -65,19 +66,53 @@ describe("templateStamp (TE-2 version-consistency contract)", () => {
   });
 });
 
+describe("templateProvenance (E4.2 — the resolution tier alongside the stamp)", () => {
+  it("carries the organization tier for an org-owned template", () => {
+    expect(templateProvenance(tmpl({ id: "tpl", currentVersion: 3 }))).toEqual({
+      sopTemplateId: "tpl",
+      sopVersion: 3,
+      sopResolutionTier: "organization",
+    });
+  });
+
+  it("carries global_payer for a global (orgId null) payer-specific template", () => {
+    expect(
+      templateProvenance(
+        tmpl({ id: "gp", currentVersion: 2, orgId: null as unknown as string, payerId: "p1" }),
+      ),
+    ).toEqual({ sopTemplateId: "gp", sopVersion: 2, sopResolutionTier: "global_payer" });
+  });
+
+  it("carries generic_fallback for the payerless global fallback", () => {
+    expect(
+      templateProvenance(
+        tmpl({ id: "fb", currentVersion: 1, orgId: null as unknown as string, payerId: null }),
+      ),
+    ).toEqual({ sopTemplateId: "fb", sopVersion: 1, sopResolutionTier: "generic_fallback" });
+  });
+
+  it("yields an all-null provenance when no template resolved", () => {
+    expect(templateProvenance(null)).toEqual({
+      sopTemplateId: null,
+      sopVersion: null,
+      sopResolutionTier: null,
+    });
+  });
+});
+
 describe("stampTasks", () => {
-  it("attaches the same stamp to every resolved task payload", () => {
+  it("attaches the same provenance stamp to every resolved task payload", () => {
     const tasks = [{ title: "A" }, { title: "B" }];
     const stamped = stampTasks(tasks, tmpl({ id: "tpl", currentVersion: 3 }));
     expect(stamped).toEqual([
-      { title: "A", sopTemplateId: "tpl", sopVersion: 3 },
-      { title: "B", sopTemplateId: "tpl", sopVersion: 3 },
+      { title: "A", sopTemplateId: "tpl", sopVersion: 3, sopResolutionTier: "organization" },
+      { title: "B", sopTemplateId: "tpl", sopVersion: 3, sopResolutionTier: "organization" },
     ]);
   });
 
-  it("yields unstamped (NULL/NULL) payloads when no template resolved", () => {
+  it("yields unstamped (NULL/NULL, null tier) payloads when no template resolved", () => {
     expect(stampTasks([{ title: "A" }], null)).toEqual([
-      { title: "A", sopTemplateId: null, sopVersion: null },
+      { title: "A", sopTemplateId: null, sopVersion: null, sopResolutionTier: null },
     ]);
   });
 });

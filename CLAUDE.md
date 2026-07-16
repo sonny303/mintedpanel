@@ -1192,6 +1192,58 @@ providerFacilities}`, `tasks.createProviderOutreachTask` (F4.2.6), form-runner
   is_system/per-org-seed, and it meets every F4.2.3 acceptance criterion). No new
   deps.
 
+- **E4.2 — SOP Resolution Hardening (deterministic template selection).** Makes
+  SOP selection order-independent and adds resolution provenance. ONE additive
+  migration (`20260716120000_e42_sop_resolution_hardening.sql`, repo + hosted).
+  **`src/lib/pickTemplate.ts` rewritten** to an EXPLICIT tier ranking (no more
+  `Array.find` order dependence): org exact-group → org any-group → global-payer
+  exact-group → global-payer any-group → generic fallback → null, with a
+  deterministic within-tier tiebreak (createdAt, then id). "Any group" = a
+  group-agnostic (null-group) template, so a template authored for a DIFFERENT
+  group NEVER resolves (previously the payer+state tier leaked another group's
+  SOP), and an org override always beats a global payer SOP. New pure
+  `resolutionTier(template)` → `organization | global_payer | generic_fallback`
+  (the `SopResolutionTier` union, exported + type-imported by `types/index.ts`).
+  **Provenance stamping:** `sopStamp.templateProvenance` extends the E2.2 stamp
+  with the tier; `stampTasks` now carries `sopResolutionTier` on every task, so
+  the 6 SOP-resolving surfaces (NewCaseModal, ManualCaseModal, CreateCasesDialog,
+  ReapplyCaseAction, `useConfirmGeneration`, `providers.new` starter cases) stamp
+  it with ZERO call-site changes. Additive columns: `tasks.sop_resolution_tier`
+  (nullable CHECK) + `create_case_with_tasks` threads it; `credential_cases`
+  run rows gained `sop_template_id`/`sop_version`/`sop_resolution_tier` (a
+  confirm-time SNAPSHOT — plain columns, no FK, like `reason`), written for
+  `created` rows by `generationConfirm` from the SAME `pickTemplate` selection.
+  `listGenerationRunRowsByTier` + pure `countRunRowsBy` (`generationRuns.ts`)
+  make generic-fallback usage countable by run/payer/state/group/org
+  (`generationRuns.di.test.ts`). **Authoring (`TemplateWizard`):** org SOPs now
+  REQUIRE payer + state (the "Any payer"/"Any state" options are gone; the shared
+  pure `src/lib/sopMatchKey.ts` `orgSopMatchKeyError` blocks unsupported saves);
+  group stays optional ("Any group"); **specialty is no longer an editable match
+  key** — preserved in storage + shown as legacy/non-routing metadata; each
+  template shows its tier (Organization override / Global payer SOP / Generic
+  fallback); Duplicate now creates an ARCHIVED copy (outside the active-uniqueness
+  grain). **Uniqueness:** additive partial unique index
+  `uq_sop_templates_active_org_match (org_id, payer_id, state, group_id) NULLS NOT
+DISTINCT WHERE org_id IS NOT NULL AND payer_id IS NOT NULL AND state IS NOT NULL
+AND archived = false` (live data verified duplicate-free first) + service-side
+  validation in `templates.ts` — the required payer+state contract is enforced at
+  the SERVICE boundary too (`assertActiveOrgMatchKeyComplete`, via the same pure
+  `orgSopMatchKeyError`, on active creates AND update/restore destinations;
+  archived rows exempt so legacy rows stay readable/archivable) plus destination-key
+  uniqueness (`assertUniqueActiveMatch`, clear blocking error; `dbErrors.ts` maps
+  the 23505 backstop). **Readiness (F4.2.2)
+  unchanged in logic (Ready = payer-specific SOP resolves; fallback = Needs SOP)
+  but `PayerDirectory` relabels the column "SOP coverage" (was "Readiness") and
+  "Form coverage", keeping Blocked separate. **Fallback generation is explicit:**
+  `useGenerationPreview` exposes `fallbackRowKeys`; `GenerationPreviewContent`
+  labels fallback-resolving rows ("Generic fallback SOP") and shows a persistent
+  pre-confirm warning (no hidden ack, never suppressed) — fallback generation is
+  still permitted (no new hard block). Nine legacy demo templates with null
+  payer/state stay untouched (outside the constrained grain). GUARDRAILS held:
+  `sopResolver.ts` untouched, case uniqueness untouched, no specialty column on
+  `credential_cases`/`payer_network_targets`, no specialty table, no data
+  deleted/rewritten, no new deps. types regenerated.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1668,9 +1720,13 @@ skips payers with no home-state license, skips existing combos; `facility: null`
 so `{{facility.*}}` resolve empty — the launch `CreateCasesDialog` stays the
 facility-linked path). **Inert until a global payer is assigned+flagged starter**
 (zero assignments today). The formerly-duplicated `pickTemplate` is now centralized
-in `src/lib/pickTemplate.ts` (both `NewCaseModal` and `CreateCasesDialog` import
-it; a null-group template counts as an "exact" match, so array order decides among
-exact candidates).
+in `src/lib/pickTemplate.ts` (every SOP-resolving surface imports it). Since
+**E4.2 SOP resolution hardening** it is an explicit, order-independent tier
+ranking (org exact-group → org any-group → global-payer exact-group →
+global-payer any-group → generic fallback → null) with a deterministic
+within-tier tiebreak — a group-agnostic (null-group) template is the "any group"
+tier and NEVER outranks an exact-group match, and array order is not
+load-bearing (see the Stage 4 E4.2 SOP Resolution Hardening entry).
 
 ### Reference-only data (Epic 2e, P6 PR2, 2026-07-07)
 
@@ -1835,11 +1891,14 @@ location-track status.** The Launches page is a filtered view of locations.
 
 `NewCaseModal` (provider detail) and `CreateCasesDialog` (launch) both:
 resolve the MSO routing rule per payer/state/specialty, pick a SOP template
-(the shared `src/lib/pickTemplate.ts`: exact payer+state+group, then
-payer+state, then the E1.7b global fallback), resolve tokens via
+(the shared `src/lib/pickTemplate.ts` — the **E4.2-hardened deterministic
+ranking**: org exact-group → org any-group → global-payer exact-group →
+global-payer any-group → generic fallback → null; order-independent, and
+another group/payer/state never resolves), resolve tokens via
 `resolveTemplate(template, provider, group, facility, {mso}, licenseNumber)`,
-stamp the resolved tasks with the template's `(id, currentVersion)` via
-`stampTasks` (E2.2), then `createCase(input, tasks)`. Duplicate combos are
+stamp the resolved tasks with the template's `(id, currentVersion,
+resolutionTier)` via `stampTasks` (E2.2 + E4.2 — the stamp now also carries
+`sopResolutionTier`), then `createCase(input, tasks)`. Duplicate combos are
 pre-filtered client-side; the DB unique constraint is the backstop.
 
 ## SOP template authoring — Admin > Templates wizard (2026-07-07)

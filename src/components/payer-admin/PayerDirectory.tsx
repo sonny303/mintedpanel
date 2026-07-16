@@ -115,14 +115,16 @@ export function PayerDirectory() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-              {["Payer", "State", "Groups", "Readiness", "Form", "Blocked", ""].map((h, i) => (
-                <th
-                  key={i}
-                  className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
+              {["Payer", "State", "Groups", "SOP coverage", "Form coverage", "Blocked", ""].map(
+                (h, i) => (
+                  <th
+                    key={i}
+                    className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>

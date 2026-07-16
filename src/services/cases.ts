@@ -9,6 +9,7 @@ import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { isTerminalPipelineState, type PayerPipelineState } from "@/lib/payerPipeline";
+import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type {
   CaseDetail,
   Contract,
@@ -442,6 +443,11 @@ export interface CaseTaskPayload {
   /** E4.2 TE-12 — per-task execution type, stamped onto the generated task.
    * NULL/absent ⇒ manual. */
   executionType?: string | null;
+  /** E4.2 SOP hardening — the deterministic resolution tier the SOP was
+   * selected at (organization | global_payer | generic_fallback). Stamped so a
+   * manual case (no generation run) stays tier-reportable without reconstructing
+   * it from mutable template ownership. NULL/absent ⇒ legacy / non-SOP task. */
+  sopResolutionTier?: SopResolutionTier | null;
 }
 
 export async function createCase(
@@ -476,6 +482,7 @@ export async function createCase(
     sop_template_id: t.sopTemplateId ?? null,
     sop_version: t.sopVersion ?? null,
     execution_type: t.executionType ?? null,
+    sop_resolution_tier: t.sopResolutionTier ?? null,
   }));
 
   // Bound reference: extracting the method bare loses `this` and throws
@@ -531,6 +538,7 @@ export async function appendCaseTasks(caseId: string, tasks: CaseTaskPayload[]):
         sop_template_id: t.sopTemplateId ?? null,
         sop_version: t.sopVersion ?? null,
         execution_type: t.executionType ?? null,
+        sop_resolution_tier: t.sopResolutionTier ?? null,
       })),
     )
     .select("id");

@@ -66,7 +66,7 @@ function TemplatesIndex() {
     <div className="p-6">
       <PageHeader
         title="Templates"
-        description="Reusable SOP definitions. A case auto-generates tasks from the matching template."
+        description="Reusable SOP definitions. A case resolves the most specific match by payer + state + group — an organization SOP overrides a global payer SOP, and the generic fallback applies only when no payer SOP matches."
         actions={
           canEdit ? (
             <Button
@@ -140,7 +140,7 @@ function TemplatesIndex() {
               <th className="text-left px-3 h-10 font-medium">Name</th>
               <th className="text-left px-3 h-10 font-medium">Payer</th>
               <th className="text-left px-3 h-10 font-medium">State</th>
-              <th className="text-left px-3 h-10 font-medium">Specialty</th>
+              <th className="text-left px-3 h-10 font-medium">Specialty (legacy)</th>
               <th className="text-left px-3 h-10 font-medium">Group</th>
               <th className="text-left px-3 h-10 font-medium">Tasks</th>
               <th className="text-left px-3 h-10 font-medium">Last updated</th>

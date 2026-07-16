@@ -4,6 +4,7 @@ import type { FacilityHours } from "@/lib/facilityHours";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
+import type { SopResolutionTier } from "@/lib/pickTemplate";
 
 export type AppRole = "specialist" | "billing" | "admin";
 export type StatusTrack = "credentialing" | "contracting" | "location";
@@ -669,6 +670,13 @@ export interface CaseGenerationRunRow {
   reason: string | null;
   caseId: string | null;
   exclusionId: string | null;
+  /** E4.2 SOP hardening — the resolution provenance for a `created` row: which
+   * SOP resolved (id + version) at which deterministic tier. A confirm-time
+   * snapshot (immutable ledger, like `reason`), so generic-fallback usage is
+   * countable per run/payer/state/group. NULL for skipped/excluded/failed rows. */
+  sopTemplateId: string | null;
+  sopVersion: number | null;
+  sopResolutionTier: SopResolutionTier | null;
   createdAt: string;
 }
 
@@ -794,6 +802,11 @@ export interface Task {
    * generation. NULL ⇒ manual (the DB CHECK allows null). R6 renders + stamps
    * only; automated behaviors ride E4.3/E4.5/R7. */
   executionType?: ExecutionType | null;
+  /** E4.2 SOP hardening — the deterministic resolution tier the SOP was
+   * selected at (organization | global_payer | generic_fallback). Stamped so a
+   * manual case stays tier-reportable without a generation run; NULL ⇒ legacy /
+   * non-SOP task. */
+  sopResolutionTier?: SopResolutionTier | null;
   createdAt: string;
   updatedAt: string;
 }

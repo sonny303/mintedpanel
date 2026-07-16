@@ -7,6 +7,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type { CaseGenerationRun, CaseGenerationRunRow, GenerationRowDisposition } from "@/types";
 
 export interface GenerationRunListEntry extends CaseGenerationRun {
@@ -69,6 +70,26 @@ export async function listGenerationRunRows(runId: string): Promise<CaseGenerati
     .select("*")
     .eq("org_id", orgId)
     .eq("run_id", runId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return camelizeRow<CaseGenerationRunRow[]>(data ?? []);
+}
+
+/** E4.2 SOP hardening — the resolution-tier usage read: every confirmed run row
+ * whose resolved SOP was of `tier` (e.g. the generic fallback), org-scoped. The
+ * returned rows carry the run/payer/state/group dimensions, so generic-fallback
+ * usage is countable by generation run, payer, state, group — and by
+ * organization via this org-scoped read (`countRunRowsBy` in
+ * src/lib/generationRuns.ts does the per-dimension grouping). */
+export async function listGenerationRunRowsByTier(
+  tier: SopResolutionTier,
+): Promise<CaseGenerationRunRow[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("case_generation_run_rows")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("sop_resolution_tier", tier)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return camelizeRow<CaseGenerationRunRow[]>(data ?? []);
