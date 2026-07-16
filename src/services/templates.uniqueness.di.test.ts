@@ -21,7 +21,7 @@ vi.mock("@/lib/audit", () => ({
   requireActiveOrg: () => "org-1",
 }));
 
-import { createTemplate } from "./templates";
+import { createTemplate, updateTemplate } from "./templates";
 
 interface Captured {
   table: string;
@@ -46,8 +46,15 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
         cap.op = "insert";
         return builder;
       },
+      update() {
+        cap.op = "update";
+        return builder;
+      },
       eq(col: string, val: unknown) {
         cap.filters.push([col, val]);
+        return builder;
+      },
+      or() {
         return builder;
       },
       is(col: string, val: unknown) {
@@ -60,6 +67,7 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
       },
       limit: () => Promise.resolve(take()),
       single: () => Promise.resolve(take()),
+      maybeSingle: () => Promise.resolve(take()),
     };
     return builder;
   };
@@ -162,5 +170,61 @@ describe("createTemplate — active-org match-key uniqueness", () => {
     expect(result.id).toBe("arch");
     expect(captures).toHaveLength(1);
     expect(captures[0].op).toBe("insert");
+  });
+});
+
+describe("updateTemplate — legacy compatibility and destination validation", () => {
+  const legacyTemplate = {
+    id: "legacy",
+    org_id: "org-1",
+    name: "Legacy SOP",
+    payer_id: null,
+    state: null,
+    group_id: null,
+    archived: false,
+    task_definitions: [],
+  };
+
+  it("allows a non-routing update on an active legacy template", async () => {
+    const updated = { ...legacyTemplate, name: "Legacy SOP renamed" };
+    const captures = installDb([{ data: legacyTemplate }, { data: updated }]);
+
+    const result = await updateTemplate("legacy", { name: "Legacy SOP renamed" });
+
+    expect(result.name).toBe("Legacy SOP renamed");
+    expect(captures).toHaveLength(2);
+    expect(captures[1].op).toBe("update");
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an incomplete routing-key change on an active legacy template", async () => {
+    const captures = installDb([{ data: legacyTemplate }]);
+
+    await expect(updateTemplate("legacy", { groupId: "group-1" })).rejects.toThrow(/payer/i);
+
+    expect(captures).toHaveLength(1);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects restoring an archived legacy template without payer and state", async () => {
+    const archived = { ...legacyTemplate, archived: true };
+    const captures = installDb([{ data: archived }]);
+
+    await expect(updateTemplate("legacy", { archived: false })).rejects.toThrow(/payer/i);
+
+    expect(captures).toHaveLength(1);
+    expect(writeAuditMock).not.toHaveBeenCalled();
+  });
+
+  it("allows archiving an active legacy template", async () => {
+    const archived = { ...legacyTemplate, archived: true };
+    const captures = installDb([{ data: legacyTemplate }, { data: archived }]);
+
+    const result = await updateTemplate("legacy", { archived: true });
+
+    expect(result.archived).toBe(true);
+    expect(captures).toHaveLength(2);
+    expect(captures[1].op).toBe("update");
+    expect(writeAuditMock).toHaveBeenCalledTimes(1);
   });
 });

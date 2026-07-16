@@ -271,16 +271,23 @@ export async function updateTemplate(
     const destPayerId = patch.payerId !== undefined ? patch.payerId : before.payerId;
     const destState = patch.state !== undefined ? patch.state : before.state;
     const destGroupId = patch.groupId !== undefined ? patch.groupId : before.groupId;
-    assertActiveOrgMatchKeyComplete({
-      payerId: destPayerId,
-      state: destState,
-      archived: nextArchived,
-    });
-    await assertUniqueActiveMatch(
-      orgId,
-      { payerId: destPayerId, state: destState, groupId: destGroupId, archived: nextArchived },
-      id,
-    );
+    const routingMatchKeyChanged =
+      destPayerId !== before.payerId ||
+      destState !== before.state ||
+      destGroupId !== before.groupId;
+    const restoring = Boolean(before.archived ?? before.isArchived) && !nextArchived;
+    if (routingMatchKeyChanged || restoring) {
+      assertActiveOrgMatchKeyComplete({
+        payerId: destPayerId,
+        state: destState,
+        archived: nextArchived,
+      });
+      await assertUniqueActiveMatch(
+        orgId,
+        { payerId: destPayerId, state: destState, groupId: destGroupId, archived: nextArchived },
+        id,
+      );
+    }
   }
   const payload = templatePayload(patch, orgId) as unknown as SopTemplateUpdate;
   const { data, error } = await supabase

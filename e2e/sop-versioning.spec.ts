@@ -18,8 +18,6 @@ const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const TEMPLATE_ID = "33333333-3333-4333-8333-333333333333";
 const FALLBACK_ID = "00000000-0000-4000-a000-00000000e17b";
-// E4.2 SOP hardening — an org template must target a payer + state to publish.
-const PAYER_ID = "55555555-5555-4555-8555-555555555555";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -100,7 +98,7 @@ const FIXTURES: Record<string, unknown[]> = {
     },
   ],
   profiles: [{ id: USER_ID, full_name: "Sowmya Seed", email: "sowmya.seed@example.test" }],
-  payers: [{ id: PAYER_ID, org_id: ORG_ID, name: "Humana", is_active: true, status: "active" }],
+  payers: [],
   provider_groups: [],
   portals: [],
   sop_templates: [
@@ -111,7 +109,7 @@ const FIXTURES: Record<string, unknown[]> = {
       group_id: null,
       state: "KS",
       specialty: null,
-      payer_id: PAYER_ID,
+      payer_id: null,
       task_definitions: HEAD_DEFS,
       archived: false,
       current_version: 2,

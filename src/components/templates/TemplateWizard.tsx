@@ -600,6 +600,12 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
         payload.specialty !== (initial.specialty ?? null) ||
         payload.groupId !== initial.groupId
       : false;
+  const routingMatchKeyChanged =
+    isEdit && initial
+      ? payload.payerId !== initial.payerId ||
+        payload.state !== initial.state ||
+        payload.groupId !== initial.groupId
+      : false;
 
   // Match-key-only head update (no version bump). Content changes go through
   // handlePublish below.
@@ -697,15 +703,17 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     return true;
   }
 
-  // E4.2 SOP hardening — an organization SOP must target a payer AND a state
-  // (the supported runtime match grain). Block every content-writing save and
-  // steer the author back to Basics. Global rows are read-only / platform-managed.
+  // E4.2 SOP hardening — new organization SOPs and routing-key changes must
+  // target a payer AND a state. Existing legacy templates with incomplete keys
+  // may still publish content-only versions under the E1.7b compatibility
+  // contract; changing their routing key requires completing it first.
   function matchKeyIncompleteBlocked(): boolean {
     if (isGlobal) return false;
     const err = orgSopMatchKeyError({
       payerId: payerId === "none" ? null : payerId,
       state: state === "none" ? null : state,
     });
+    if (err && isEdit && initial && !routingMatchKeyChanged) return false;
     if (err) {
       toast.error(err);
       setStep(1);
