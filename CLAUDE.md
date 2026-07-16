@@ -1304,6 +1304,9 @@ for the framework/deploy detail.
 
 ## Running and verifying
 
+- **Read `docs/VERIFY.md` first** — session bootstrap one-liner, the
+  verification tier table (what to run for a given diff), measured costs, and
+  the route→e2e-spec map for focused Playwright runs.
 - `npm run dev` / `build` / `lint` / `test` (vitest) / `format`.
 - Local `.env` needs `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
   (see `.env.example`). The hosted project is `fkvuhfsqcmujywzgczmc`
