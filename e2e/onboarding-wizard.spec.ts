@@ -463,7 +463,6 @@ test("TS-28: every active section complete ends the journey (no preview left)", 
         aliases: [],
         status: "active",
         payer_slug: "blue-cross-and-blue-shield-of-north-carolina",
-        prerequisite_payer_id: null,
       },
     ],
     org_payer_assignments: [

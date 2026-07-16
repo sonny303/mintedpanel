@@ -140,7 +140,6 @@ const payerRow = (id: string, name: string, states: string[]) => ({
   aliases: [],
   status: "active",
   payer_slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-  prerequisite_payer_id: null,
   is_active: true,
   created_at: "2026-07-10T00:00:00Z",
 });

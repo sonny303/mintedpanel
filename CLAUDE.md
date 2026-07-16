@@ -2158,8 +2158,9 @@ celebrated as "good catches", never penalized; the Fix-it deck is ordered by
   path + browser readers/mutations), like `providers.ts`; their `*.di.test.ts`
   now `vi.mock` `externalClient`.
 - **Surface 1 — Fix-it queue** (`/fix-it` + a Home section + a writer-only
-  sidebar entry with live count): impact-ordered deck of three card types
-  (provider data gap / dictionary confirm / train-this-form). Pure derivation in
+  sidebar entry with live count): impact-ordered deck of **four** card types
+  (provider data gap / dictionary confirm / train-this-form / **broken mapping**
+  — the E4.3a form-drift repair card). Pure derivation in
   `src/lib/fixitQueue.ts` (+tests) from existing caches; editable-gap fields
   whitelisted in `src/lib/fixitFields.ts` (scoped to `PROVIDER_LIST_COLUMNS` so
   the list projection never reads `undefined` and false-flags a gap). Weekly
@@ -2167,6 +2168,23 @@ celebrated as "good catches", never penalized; the Fix-it deck is ordered by
 window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
   queue; save/skip/dictionary mutations). Skip → `createFollowUpTask`
   (`services/tasks.ts`).
+  - **Broken-mapping / form-drift (E4.3a, reimplemented from main `e068f1a`, NOT
+    cherry-picked).** The latest REAL fill per portal (`useRecentFills`, dry-run
+    `is_test` fills EXCLUDED — they never touch the live DOM, so they can't carry
+    drift and must not mask a real fill's signal) is parsed defensively in
+    `fixitQueue.ts` (`parseSkippedEntries`, `FIELD_NOT_FOUND_REASON = "field not
+found on this page"` — the extension's exact wording from
+    `minted-extension` `content/fillEngine.ts`). Only a `kind:"skipped"` entry
+    with that reason is drift; the E4.2 dry-run `{selector,label,reason:
+unmapped|empty_token}` shape shares the column but never matches. Each not-found
+    entry joins a live (non-retired) map by reported `mapId` first, then the
+    report-label compat join (`reportLabelOf`) for older telemetry; a
+    reported-but-stale id raises no card. One consolidated `broken_mapping` card
+    per portal, split into own-org rows (`BrokenOrgRow`, actionable) and global
+    (`globalCount`, read-only). `useSendBrokenToTraining` re-proposes ONLY the
+    org rows via `reproposeFieldMap` (RLS blocks global writes), invalidates
+    `portalFieldMaps`+`lastFills`, and the card opens `/portals/$key/train`.
+    e2e `e2e/fix-it.spec.ts`.
 - **Surface 2 — Mapping review** (`/portals/$portalKey/train`): card-by-card
   training. High-confidence fields batch into one confirm screen; the rest go
   one at a time (Approve/Edit/Manual, keys A/E/M, U undo). Confidence + batch
@@ -2192,8 +2210,12 @@ window` guarded). Hook `src/hooks/useFixit.ts` (`useFixitQueue` derives the
   skipped) — approval status gates the training UX, not what autofills.
 - **Surface 3 — Portals admin** (`/admin/portals`, under the Admin nav group):
   registry table — inline URL edit (`updatePortalUrl` clears verification +
-  stamps `url_changed_at` → "Needs re-verify" pill), mapped/proposed counts
-  (from `portal_field_maps`), verification status, last fill result (latest
+  stamps `url_changed_at` → "Needs re-verify" pill), mapped/proposed/**unlinked
+  ("N no value")** counts (from `portal_field_maps`; the "no value" flag +
+  the field-dialog "needs value" state derive from the pure
+  `src/lib/portalMappingHealth.ts` `isUnlinkedFieldMap` — a non-retired map with
+  a live selector but no token/hardcoded/manual source, so it fills blank every
+  time; E4.3a), verification status, last fill result (latest
   `fill_sessions` row per `portal_key`), view-fields dialog, Train action.
   Service `src/services/portals.ts`, hook `src/hooks/usePortals.ts` (also serves
   the field-map + last-fill readers Surfaces 1–2 reuse). Query keys added under

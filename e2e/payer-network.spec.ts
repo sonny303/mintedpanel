@@ -120,7 +120,6 @@ const payerRow = (id: string, slug: string, name: string, states: string[]) => (
   aliases: [],
   status: "active",
   payer_slug: slug,
-  prerequisite_payer_id: null,
   is_active: true,
   created_at: "2026-07-10T00:00:00Z",
 });
@@ -289,11 +288,7 @@ function shelbyFixtures(over: Record<string, unknown[]> = {}) {
         ["NC"],
       ),
       payerRow("pay-bcbs-ks", "blue-cross-and-blue-shield-of-kansas", "BCBS of Kansas", ["KS"]),
-      {
-        ...payerRow("pay-cigna", "cigna-healthcare", "Cigna Healthcare", ["NC"]),
-        // F1.5.4: informational prerequisite note in the picker.
-        prerequisite_payer_id: "pay-bcbs-nc",
-      },
+      payerRow("pay-cigna", "cigna-healthcare", "Cigna Healthcare", ["NC"]),
       payerRow("pay-uhc", "unitedhealthcare", "UnitedHealthcare", ["NC", "KS"]),
     ],
     org_payer_assignments: [
@@ -325,11 +320,8 @@ test("TS-41: curated picker + two-group expansion with an unchecked exception", 
   await expect(dialog).toContainText("BCBS of Kansas");
   await expect(dialog).toContainText("Cigna Healthcare");
   await expect(dialog).not.toContainText("UnitedHealthcare");
-  // F1.5.4: prerequisite note is informational only — no control attached.
-  await expect(dialog).toContainText("Requires Blue Cross and Blue Shield of North Carolina");
 
   // BCBS-NC expands to BOTH groups' NC rows with facility-count reasons.
-  // (^-anchored: Cigna's prerequisite note also contains the BCBS name.)
   await dialog
     .getByRole("button", { name: /^Blue Cross and Blue Shield of North Carolina/ })
     .click();
@@ -360,8 +352,7 @@ test("TS-41: curated picker + two-group expansion with an unchecked exception", 
   // BCBS-KS expands to Group 2 × KS only (Group 1 has no KS facility).
   await card.getByRole("button", { name: "Attach payer" }).click();
   const picker2 = page.getByRole("dialog", { name: "Attach a payer" });
-  // BCBS-NC is attached now, so its picker entry is gone (Cigna's prerequisite
-  // note still mentions the name — assert on the button, not the text).
+  // BCBS-NC is attached now, so its picker entry is gone.
   await expect(
     picker2.getByRole("button", { name: /^Blue Cross and Blue Shield of North Carolina/ }),
   ).toHaveCount(0);

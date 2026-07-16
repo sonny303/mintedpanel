@@ -44,7 +44,6 @@ const globalPayer = (over: Record<string, unknown>) => ({
   payer_billing_id: null,
   portal_url: null,
   payer_kind: "commercial",
-  prerequisite_payer_id: null,
   payer_slug: null,
   cms_hios_id: null,
   aliases: [],
@@ -213,7 +212,7 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(page.getByText("UnitedHealthcare", { exact: true })).toBeVisible();
   await expect(page.getByText("Superior HealthPlan (Centene)")).not.toBeVisible();
 
-  // Alias search finds BCBS-NC with its states, payer ID, and portal link.
+  // Alias search finds BCBS-NC with its states and catalog key.
   await page.getByLabel("Search payers").fill("Blue Cross NC");
   const row = page.locator("tbody tr");
   await expect(row).toHaveCount(1);
@@ -221,7 +220,6 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(row.first()).toContainText("NC");
   await expect(row.first()).toContainText("bcbs-nc");
   await expect(row.first()).toContainText("45 days");
-  await expect(row.first().getByRole("link", { name: /Portal/ })).toBeVisible();
 
   // Widen kind to all → the Medicaid MCO appears; state filter narrows to TX.
   await page.getByLabel("Search payers").fill("");
