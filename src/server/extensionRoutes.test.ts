@@ -390,6 +390,17 @@ describe("case context handler", () => {
     const context = {
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
+      // E4.3 TE-2: the case-selected facility's complete nullable practice
+      // address rides the same projection, pass-through from the service.
+      selectedFacility: {
+        id: "aaaa1111-2222-4333-8444-555566667777",
+        name: "Main Clinic",
+        street: "100 Main St",
+        suite: null,
+        city: "Wichita",
+        state: "KS",
+        zip: "67202",
+      },
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",
