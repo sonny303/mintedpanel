@@ -21,6 +21,12 @@
 // a task and pass its task_id on the submission touch (closing the right task —
 // the Story 7 close-out that had no task source until now).
 //
+// E4.3 TE-11 adds a second read to this file: searchOrgCases — the case half of
+// the extension's unified standalone search (the provider half reuses
+// GET /api/providers?search= verbatim). Org-scoped from ctx, matching payer
+// name / provider name / tracking id, returning ids + display fields only
+// (never beyond the existing list projections).
+//
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizePortalKey } from "@/lib/tokenFormat";
@@ -237,4 +243,98 @@ export async function listOpenProviderCases(
     return a.state.localeCompare(b.state);
   });
   return rows;
+}
+
+// One case-search result row — ids + display fields only, never beyond the
+// existing list projections (TE-11). Provider display name is first+last (both
+// in PROVIDER_LIST_COLUMNS); status is the credentialing label; payerPipeline
+// is the E4.0 pipeline-display input.
+export interface CaseSearchRow {
+  id: string;
+  providerId: string;
+  providerName: string;
+  payerName: string | null;
+  state: string;
+  status: string | null;
+  payerReferenceId: string | null;
+  payerPipelineState: string;
+}
+
+const CASE_SEARCH_MAX = 50;
+
+const CASE_SEARCH_COLUMNS =
+  "id, state, provider_id, payer_reference_id, credentialing_status_id, payer_pipeline_state, " +
+  "providers(id, first_name, last_name), payers(name)";
+
+interface CaseSearchDbRow {
+  id: string;
+  state: string;
+  provider_id: string;
+  payer_reference_id: string | null;
+  credentialing_status_id: string | null;
+  payer_pipeline_state: string | null;
+  providers: { id: string; first_name: string | null; last_name: string | null } | null;
+  payers: { name: string | null } | null;
+}
+
+// E4.3 TE-11 — the case half of the unified standalone search. Org-scoped from
+// ctx, matching payer name / provider name / tracking id (payer_reference_id —
+// the E4.0 case-list search precedent) as a case-insensitive substring, capped
+// at CASE_SEARCH_MAX. Filtering is in memory over the org's own cases (the
+// providerCases.ts idiom, robust across the provider/payer FK embeds); the
+// service-role client is org-scoped by the eq(org_id) on the read, so a
+// cross-org row can never appear. Returns [] for a blank query (no full-table
+// dump).
+export async function searchOrgCases(
+  ctx: ProviderCasesServiceCtx,
+  query: string,
+): Promise<CaseSearchRow[]> {
+  const { db, orgId } = ctx;
+  const q = query.trim().toLowerCase();
+  if (q === "") return [];
+
+  const { data: statuses, error: statusErr } = await db
+    .from("status_configs")
+    .select("id, label")
+    .eq("org_id", orgId)
+    .eq("track", "credentialing");
+  if (statusErr) throw statusErr;
+  const labelById = new Map((statuses ?? []).map((s) => [s.id as string, s.label as string]));
+
+  const { data: cases, error: caseErr } = await db
+    .from("credential_cases")
+    .select(CASE_SEARCH_COLUMNS)
+    .eq("org_id", orgId);
+  if (caseErr) throw caseErr;
+
+  const rows: CaseSearchRow[] = [];
+  for (const row of (cases ?? []) as unknown as CaseSearchDbRow[]) {
+    const providerName =
+      `${row.providers?.first_name ?? ""} ${row.providers?.last_name ?? ""}`.trim();
+    const payerName = row.payers?.name ?? null;
+    const ref = row.payer_reference_id ?? "";
+    const haystack = `${providerName} ${payerName ?? ""} ${ref}`.toLowerCase();
+    if (!haystack.includes(q)) continue;
+    rows.push({
+      id: row.id,
+      providerId: row.provider_id,
+      providerName,
+      payerName,
+      state: row.state,
+      status: row.credentialing_status_id
+        ? (labelById.get(row.credentialing_status_id) ?? null)
+        : null,
+      payerReferenceId: row.payer_reference_id,
+      payerPipelineState: row.payer_pipeline_state ?? "not_started",
+    });
+  }
+
+  // Deterministic order: provider, then payer, then state.
+  rows.sort(
+    (a, b) =>
+      a.providerName.localeCompare(b.providerName) ||
+      (a.payerName ?? "").localeCompare(b.payerName ?? "") ||
+      a.state.localeCompare(b.state),
+  );
+  return rows.slice(0, CASE_SEARCH_MAX);
 }

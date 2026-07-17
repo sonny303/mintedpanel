@@ -8,6 +8,14 @@
 //   - referenceNumbers: credential_cases.payer_reference_id (latest-wins; the
 //     column, not the touchlog history). A small array so the wire shape is
 //     stable if a case ever surfaces more than one.
+//   - provider / payer / state (E4.3 TE-2): the case's identity header — the
+//     panel names the provider, payer, and state it is operating as (the
+//     F4.3.1 identity guard). Display fields only: id + name, never the
+//     provider row (the profile endpoint is the PHI surface).
+//   - openTasks (E4.3 TE-2): the case's open (non-completed) SOP tasks with
+//     their E4.2 execution types (null execution_type resolves to 'manual'),
+//     ordered by sort_order — the E4.2 F4.2.1 "workbench payload tee-up".
+//     Task-state writes stay in the webapp (R6 non-goal); this is read-only.
 //   - selectedFacility: the practice address of the facility the CASE selects
 //     (E4.3 TE-2, parity audit C3) — resolved from the case's explicit
 //     credential_cases.facility_id relationship ONLY, org-scoped. Never derived
@@ -29,6 +37,7 @@
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { resolveExecutionType } from "@/lib/executionTypes";
 
 export interface CaseContextServiceCtx {
   db: SupabaseClient<Database>;
@@ -62,18 +71,44 @@ export interface CaseContextFacility {
   zip: string | null;
 }
 
+// The case's provider/payer identity for the panel header — display fields
+// only (id + name), never a row payload.
+export interface CaseContextParty {
+  id: string;
+  name: string;
+}
+
+// One open SOP task with its E4.2 execution type (TE-2). `extension_fill`
+// tasks are the ones the extension offers the fill action on; the rest render
+// as read-only checklist context.
+export interface CaseContextTask {
+  id: string;
+  title: string;
+  status: string;
+  executionType: string;
+  sortOrder: number;
+  dueDate: string | null;
+}
+
 export interface CaseContext {
   referenceNumbers: string[];
   // E4.0 TE-7 — the external payer-pipeline state (read-only; the extension
   // shows where the payer is without leaving the portal tab). The tracking ID
   // is already carried by referenceNumbers.
   payerPipelineState: string;
-  // E4.3 TE-2 — the facility the case explicitly selects, or null when the
-  // case has no facility relationship. Additive; clients that ignore it are
-  // unaffected. The key follows this contract's camelCase idiom (the
+  // E4.3 TE-2 — the identity header fields: the provider and payer the case
+  // belongs to, and its state. Additive; clients that ignore them are
+  // unaffected. Keys follow this contract's camelCase idiom (the
   // payerPipelineState precedent), unlike the profile endpoint's locked
   // snake_case selected_facility_id.
+  provider: CaseContextParty | null;
+  payer: CaseContextParty | null;
+  state: string;
+  // E4.3 TE-2 — the facility the case explicitly selects, or null when the
+  // case has no facility relationship.
   selectedFacility: CaseContextFacility | null;
+  // E4.3 TE-2 — the case's open SOP tasks with execution types (read-only).
+  openTasks: CaseContextTask[];
   latestNote: CaseContextNote | null;
   latestTouch: CaseContextTouch | null;
 }
@@ -96,25 +131,71 @@ export async function getCaseContext(
 ): Promise<CaseContext | null> {
   const { db, orgId } = ctx;
 
-  // Case ownership + the latest-wins reference in one org-scoped read. A miss
-  // is the route's 404 (cross-org or nonexistent); nothing else is read.
+  // Case ownership + the latest-wins reference + the identity-header fields in
+  // one org-scoped read (provider/payer ride as FK embeds — display columns
+  // only). A miss is the route's 404 (cross-org or nonexistent); nothing else
+  // is read.
   const { data: caseRow, error: caseErr } = await db
     .from("credential_cases")
-    .select("id, payer_reference_id, payer_pipeline_state, facility_id")
+    .select(
+      "id, state, payer_reference_id, payer_pipeline_state, facility_id, " +
+        "providers(id, first_name, last_name), payers(id, name)",
+    )
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (caseErr) throw caseErr;
   if (!caseRow) return null;
 
-  const typedCase = caseRow as {
+  const typedCase = caseRow as unknown as {
+    state: string;
     payer_reference_id: string | null;
     payer_pipeline_state: string | null;
     facility_id: string | null;
+    providers: { id: string; first_name: string | null; last_name: string | null } | null;
+    payers: { id: string; name: string | null } | null;
   };
   const payerRef = typedCase.payer_reference_id;
   const referenceNumbers = payerRef ? [payerRef] : [];
   const payerPipelineState = typedCase.payer_pipeline_state ?? "not_started";
+  const provider: CaseContextParty | null = typedCase.providers
+    ? {
+        id: typedCase.providers.id,
+        name: `${typedCase.providers.first_name ?? ""} ${typedCase.providers.last_name ?? ""}`.trim(),
+      }
+    : null;
+  const payer: CaseContextParty | null = typedCase.payers
+    ? { id: typedCase.payers.id, name: typedCase.payers.name ?? "" }
+    : null;
+
+  // Open SOP tasks with execution types (TE-2) — one org-scoped read, explicit
+  // projection, ordered by sort_order. 'completed' is the closed status; every
+  // other status counts as open (the providerCases.ts idiom).
+  const { data: taskRows, error: taskErr } = await db
+    .from("tasks")
+    .select("id, title, status, execution_type, sort_order, due_date")
+    .eq("org_id", orgId)
+    .eq("case_id", caseId)
+    .neq("status", "completed")
+    .order("sort_order", { ascending: true });
+  if (taskErr) throw taskErr;
+  const openTasks: CaseContextTask[] = (
+    (taskRows ?? []) as Array<{
+      id: string;
+      title: string;
+      status: string;
+      execution_type: string | null;
+      sort_order: number;
+      due_date: string | null;
+    }>
+  ).map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    executionType: resolveExecutionType(t.execution_type),
+    sortOrder: t.sort_order,
+    dueDate: t.due_date,
+  }));
 
   // The case's explicit facility relationship is the ONLY facility source —
   // the provider's other assignments are never consulted and there is no
@@ -187,7 +268,11 @@ export async function getCaseContext(
   return {
     referenceNumbers,
     payerPipelineState,
+    provider,
+    payer,
+    state: typedCase.state,
     selectedFacility,
+    openTasks,
     latestNote: noteRow
       ? { content: noteRow.notes as string, createdAt: noteRow.created_at, authorName }
       : null,

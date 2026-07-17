@@ -23,6 +23,17 @@
 // nothing (the same best-effort model as the R2 touch — a mid-sequence failure
 // returns 500 and the client retry converges on "already submitted").
 //
+// E4.3 TE-5 / F4.3.4 adds a SECOND kind on the same POST: `structured_touch` —
+// the E4.1 structured-touch contract from the extension (log-and-advance loop).
+// The specialist picks one of the seven canonical touch types, adds the
+// single-line context, and optionally a disposition, recipient, follow-up
+// date, and tracking ID. The server appends ONE touchpoint (source
+// 'extension', org/user from ctx) and writes ONE audit event — never the
+// free-text context in the audit (TE-8). The optional payer_reference_id
+// rides the same audited latest-wins write-back as the portal submission's
+// Story 5. Same idempotency semantics: idempotency_id is the touch PK, a
+// replay returns the stored row and re-runs nothing.
+//
 // Isolation contract: case, fill-session, AND task ownership are all validated
 // against the caller's resolved org BEFORE anything is written; org_id and the
 // performing user come from the authenticated context only, never the request
@@ -34,7 +45,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
-import type { Touch } from "@/types";
+import { CANONICAL_TOUCH_TYPES } from "@/lib/touchTypes";
+import { dispositionRequiresContext, isDisposition } from "@/lib/touchDispositions";
+import type { Touch, TouchOutcome, TouchType } from "@/types";
 
 export interface SubmissionTouchServiceCtx {
   db: SupabaseClient<Database>;
@@ -44,10 +57,12 @@ export interface SubmissionTouchServiceCtx {
 }
 
 // Wire shape of POST /api/cases/:id/touches — snake_case body keys per the
-// locked R2 contract (2026-07-05). kind is fixed; anything else is a 422.
+// locked R2 contract (2026-07-05). kind ∈ {portal_submission, structured_touch}
+// (the latter added by E4.3 TE-5); anything else is a 422.
 export interface SubmissionTouchInput {
   kind: string;
-  portal_key: string;
+  // Required for portal_submission; not accepted on structured_touch.
+  portal_key?: string;
   // The fill session this submission followed, when there was one.
   fill_session_id?: string | null;
   note?: string | null;
@@ -65,6 +80,19 @@ export interface SubmissionTouchInput {
   // Story 7: the filename of the PDF the human attached, if any → a second
   // `system_event`.
   pdf_filename?: string | null;
+  // --- E4.3 structured touch (kind 'structured_touch' only; E4.1 contract,
+  // snake_case per this endpoint's locked idiom) ---
+  // REQUIRED for structured_touch: one of the seven canonical E4.1 types.
+  touch_type?: string;
+  // Optional E4.1 disposition; 'other' requires the single-line context.
+  outcome?: string | null;
+  // Optional recipient capture (F4.1.5).
+  recipient_name?: string | null;
+  recipient_contact?: string | null;
+  // Optional follow-up date (YYYY-MM-DD); clears_follow_up is the only way to
+  // END an active follow-up (F4.1.2 — a missing date carries it forward).
+  next_follow_up_date?: string | null;
+  clears_follow_up?: boolean;
 }
 
 export type RecordSubmissionTouchResult =
@@ -73,7 +101,7 @@ export type RecordSubmissionTouchResult =
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
 
 const TOUCH_COLUMNS =
-  "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at";
+  "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at, clears_follow_up, recipient_name, recipient_contact";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -144,12 +172,13 @@ export async function recordSubmissionTouch(
   // The case id is a path segment: a non-UUID can't be a case, so 404 (the
   // profile-route precedent) rather than a Postgres uuid-cast 500.
   if (!UUID_RE.test(caseId ?? "")) return reject(404, "Case not found");
-  if (input.kind !== "portal_submission") {
-    return reject(422, "kind must be 'portal_submission'");
+  if (input.kind !== "portal_submission" && input.kind !== "structured_touch") {
+    return reject(422, "kind must be 'portal_submission' or 'structured_touch'");
   }
   if (!UUID_RE.test(input.idempotency_id ?? "")) {
     return reject(422, "idempotency_id must be a client-generated UUID");
   }
+  if (input.kind === "structured_touch") return recordStructuredTouch(ctx, caseId, input);
   if (typeof input.portal_key !== "string" || input.portal_key.trim() === "") {
     return reject(422, "portal_key is required");
   }
@@ -356,6 +385,172 @@ export async function recordSubmissionTouch(
       source: "extension",
     },
     description: text,
+  });
+
+  return { kind: "created", touch };
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Body fields that belong to the portal_submission flow only. Rejecting them
+// loudly keeps the two kinds unambiguous for the coordinated extension build —
+// a structured touch never closes tasks, links fill sessions, or writes
+// system_events.
+const PORTAL_SUBMISSION_ONLY_FIELDS = [
+  "portal_key",
+  "fill_session_id",
+  "task_id",
+  "wip_note",
+  "pdf_filename",
+] as const;
+
+// E4.3 TE-5 — kind 'structured_touch': ONE E4.1 structured touchpoint appended
+// from the extension. Required type, single-line context in `note`, optional
+// disposition/recipient/follow-up, optional tracking-ID write-back. Server
+// sets source 'extension', org + coordinator from ctx. One touch, one audit
+// event (never the free-text context — TE-8); replays return the stored row.
+async function recordStructuredTouch(
+  ctx: SubmissionTouchServiceCtx,
+  caseId: string,
+  input: SubmissionTouchInput,
+): Promise<RecordSubmissionTouchResult> {
+  // ---- shape validation (nothing has touched the DB yet) ----
+  for (const field of PORTAL_SUBMISSION_ONLY_FIELDS) {
+    if (input[field] != null) {
+      return reject(422, `${field} is only valid for kind 'portal_submission'`);
+    }
+  }
+  const touchType = input.touch_type;
+  if (
+    typeof touchType !== "string" ||
+    !(CANONICAL_TOUCH_TYPES as readonly string[]).includes(touchType)
+  ) {
+    return reject(422, `touch_type must be one of: ${CANONICAL_TOUCH_TYPES.join(", ")}`);
+  }
+  if (input.outcome != null && !isDisposition(input.outcome)) {
+    return reject(422, "outcome must be a valid disposition");
+  }
+  if (input.note != null && typeof input.note !== "string") {
+    return reject(422, "note must be a string");
+  }
+  const note = cleanText(input.note);
+  if (dispositionRequiresContext((input.outcome ?? null) as TouchOutcome | null) && !note) {
+    return reject(422, "outcome 'other' requires a one-line context in note");
+  }
+  if (input.recipient_name != null && typeof input.recipient_name !== "string") {
+    return reject(422, "recipient_name must be a string");
+  }
+  if (input.recipient_contact != null && typeof input.recipient_contact !== "string") {
+    return reject(422, "recipient_contact must be a string");
+  }
+  if (input.next_follow_up_date != null && !ISO_DATE_RE.test(input.next_follow_up_date)) {
+    return reject(422, "next_follow_up_date must be a YYYY-MM-DD date");
+  }
+  if (input.clears_follow_up != null && typeof input.clears_follow_up !== "boolean") {
+    return reject(422, "clears_follow_up must be a boolean");
+  }
+  if (input.payer_reference_id != null && typeof input.payer_reference_id !== "string") {
+    return reject(422, "payer_reference_id must be a string");
+  }
+
+  // ---- org validation before any write (the isolation contract) ----
+  const { data: caseRow, error: caseErr } = await ctx.db
+    .from("credential_cases")
+    .select("id")
+    .eq("id", caseId)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (caseErr) throw caseErr;
+  if (!caseRow) return reject(404, "Case not found");
+
+  // ---- idempotency: a replay returns the stored row, re-runs nothing ----
+  const { data: existing, error: existingErr } = await ctx.db
+    .from("touches")
+    .select(TOUCH_COLUMNS)
+    .eq("id", input.idempotency_id)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existing) return { kind: "duplicate", touch: camelizeRow<Touch>(existing) };
+
+  // ---- optional tracking-ID write-back (the audited Story 5 latest-wins
+  // semantics; a blank value is a no-op, never a clear) ----
+  const payerRef = cleanText(input.payer_reference_id);
+  if (payerRef) {
+    const { data: refRow, error: refErr } = await ctx.db
+      .from("credential_cases")
+      .update({ payer_reference_id: payerRef } as never)
+      .eq("id", caseId)
+      .eq("org_id", ctx.orgId)
+      .select("id")
+      .maybeSingle();
+    if (refErr) throw refErr;
+    if (refRow) {
+      await ctx.writeAudit({
+        actionType: "UPDATE",
+        entityType: "case",
+        entityId: caseId,
+        after: { payerReferenceId: payerRef },
+        description: "Tracking ID set via extension touch",
+      });
+    }
+  }
+
+  // ---- append the ONE touchpoint; org + performer from ctx only ----
+  const row = {
+    id: input.idempotency_id,
+    org_id: ctx.orgId,
+    case_id: caseId,
+    entry_type: "touchpoint",
+    touch_date: today(),
+    touch_type: touchType as TouchType,
+    outcome: (input.outcome ?? null) as TouchOutcome | null,
+    next_follow_up_date: input.next_follow_up_date ?? null,
+    clears_follow_up: input.clears_follow_up ?? false,
+    recipient_name: cleanText(input.recipient_name),
+    recipient_contact: cleanText(input.recipient_contact),
+    coordinator_id: ctx.userId,
+    source: "extension",
+    notes: note,
+  };
+  const { data, error } = await ctx.db
+    .from("touches")
+    .insert(row as never)
+    .select(TOUCH_COLUMNS)
+    .single();
+  if (error) {
+    // Same race semantics as the portal-submission anchor: a same-org winner's
+    // row is the idempotent answer; a foreign-org id collision reveals nothing.
+    if ((error as { code?: string }).code === "23505") {
+      const { data: raced, error: racedErr } = await ctx.db
+        .from("touches")
+        .select(TOUCH_COLUMNS)
+        .eq("id", input.idempotency_id)
+        .eq("org_id", ctx.orgId)
+        .maybeSingle();
+      if (racedErr) throw racedErr;
+      if (raced) return { kind: "duplicate", touch: camelizeRow<Touch>(raced) };
+      return reject(409, "Idempotency id already used");
+    }
+    throw error;
+  }
+  const touch = camelizeRow<Touch>(data);
+
+  // ---- the ONE audit event — IDs/flags only, never the free-text context ----
+  await ctx.writeAudit({
+    actionType: "TOUCH_LOGGED",
+    entityType: "touch",
+    entityId: touch.id,
+    after: {
+      caseId,
+      touchType,
+      outcome: input.outcome ?? null,
+      followUpSet: input.next_follow_up_date != null,
+      clearsFollowUp: input.clears_follow_up ?? false,
+      payerReferenceSet: payerRef != null,
+      source: "extension",
+    },
+    description: `Logged ${touchType} touch via extension`,
   });
 
   return { kind: "created", touch };

@@ -517,3 +517,138 @@ describe("recordSubmissionTouch — idempotency", () => {
     expect(writeAudit).not.toHaveBeenCalled();
   });
 });
+
+describe("recordSubmissionTouch — kind 'structured_touch' (E4.3 TE-5)", () => {
+  const structuredBase: SubmissionTouchInput = {
+    kind: "structured_touch",
+    idempotency_id: TOUCH_ID,
+    touch_type: "call",
+  };
+
+  it("rejects an unknown kind with 422", async () => {
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      kind: "nonsense",
+    });
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("rejects a missing/invalid touch_type with 422 before any DB call", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      touch_type: "smoke_signal",
+    });
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("rejects a portal_submission-only field on a structured touch with 422", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      task_id: TASK_ID,
+    });
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("rejects outcome 'other' without a note (context required)", async () => {
+    const { db } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      outcome: "other",
+    });
+    expectRejected(result, 422);
+  });
+
+  it("rejects a cross-org (or nonexistent) case with 404 before any write", async () => {
+    const { db, captures } = makeFakeDb([{ data: null }]);
+    const { ctx, writeAudit } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, structuredBase);
+    expectRejected(result, 404);
+    expect(touchInserts(captures)).toHaveLength(0);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("appends ONE touchpoint (source 'extension', server-set fields) and ONE audit event", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } }, // case ownership
+      { data: null }, // idempotency miss
+      { data: { ...storedRow, touch_type: "call", outcome: "successful" } }, // insert
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      outcome: "successful",
+      note: "spoke with the rep",
+      recipient_name: "Nadia",
+      next_follow_up_date: "2026-07-20",
+    });
+
+    expect(result.kind).toBe("created");
+    const inserts = touchInserts(captures);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].payload).toMatchObject({
+      id: TOUCH_ID,
+      org_id: "org-1",
+      case_id: CASE_ID,
+      entry_type: "touchpoint",
+      touch_type: "call",
+      outcome: "successful",
+      next_follow_up_date: "2026-07-20",
+      recipient_name: "Nadia",
+      coordinator_id: "user-1",
+      source: "extension",
+      notes: "spoke with the rep",
+    });
+    // Exactly one TOUCH_LOGGED audit event; never the free-text context.
+    expect(writeAudit).toHaveBeenCalledTimes(1);
+    const auditArg = writeAudit.mock.calls[0][0];
+    expect(auditArg).toMatchObject({ actionType: "TOUCH_LOGGED", entityType: "touch" });
+    expect(JSON.stringify(auditArg)).not.toContain("spoke with the rep");
+  });
+
+  it("optionally writes back the tracking id (audited) before appending the touch", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } }, // case ownership
+      { data: null }, // idempotency miss
+      { data: { id: CASE_ID } }, // payer_reference update .maybeSingle
+      { data: { ...storedRow, touch_type: "portal" } }, // insert
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      ...structuredBase,
+      touch_type: "portal",
+      payer_reference_id: "REF-77",
+    });
+
+    expect(result.kind).toBe("created");
+    const caseUpdate = captures.find((c) => c.table === "credential_cases" && c.op === "update");
+    expect(caseUpdate?.payload).toMatchObject({ payer_reference_id: "REF-77" });
+    // Two audit rows: the tracking-ID UPDATE and the touch TOUCH_LOGGED.
+    expect(writeAudit).toHaveBeenCalledTimes(2);
+  });
+
+  it("a replay (same idempotency id in-org) returns the stored row and re-runs nothing", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID } }, // case ownership
+      { data: storedRow }, // idempotency HIT
+    ]);
+    const { ctx, writeAudit } = ctxWith(db);
+
+    const result = await recordSubmissionTouch(ctx, CASE_ID, structuredBase);
+
+    expect(result.kind).toBe("duplicate");
+    expect(touchInserts(captures)).toHaveLength(0);
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+});

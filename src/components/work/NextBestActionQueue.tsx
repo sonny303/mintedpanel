@@ -7,15 +7,23 @@
 // toggle is URL-state (clearing = param removal, never component state).
 // Read-only surface (TE-10): the queue writes nothing — no stored priority,
 // no snooze, no audit rows.
+import { useMemo } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ClipboardCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useGenerationRun, useNextBestActions } from "@/hooks/useNextBestActions";
+import {
+  useCasePortalKeys,
+  useGenerationRun,
+  useNextBestActions,
+} from "@/hooks/useNextBestActions";
+import { usePortals } from "@/hooks/usePortals";
 import { DEADLINE_SOURCE_LABELS, filterQueueToRun, type QueueEntry } from "@/lib/nextBestActions";
+import { resolvePortalTargets, type CasePortalTarget } from "@/lib/casePortals";
 import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
+import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { fmtDate } from "@/lib/format";
 
 function DeadlinePill({ entry }: { entry: QueueEntry }) {
@@ -38,34 +46,51 @@ function DeadlinePill({ entry }: { entry: QueueEntry }) {
   );
 }
 
-function QueueRow({ entry }: { entry: QueueEntry }) {
+function QueueRow({
+  entry,
+  portalTargets,
+}: {
+  entry: QueueEntry;
+  portalTargets: CasePortalTarget[];
+}) {
   return (
-    <li>
+    <li className="flex flex-wrap items-start gap-x-4 gap-y-2 rounded-md border border-[#E8E5E0] p-4">
       <Link
         to="/cases/$id"
         params={{ id: entry.caseId }}
-        className="flex flex-wrap items-start gap-x-4 gap-y-1.5 rounded-md border border-[#E8E5E0] p-4 transition-colors hover:bg-[var(--mp-muted)]"
+        className="min-w-0 flex-1 space-y-0.5 rounded-sm transition-colors hover:opacity-80"
       >
-        <span className="min-w-0 flex-1 space-y-0.5">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
-            {/* E4.0 TE-7 — payer-pipeline state, kept distinct from the action/task. */}
-            {entry.payerPipelineState ? (
-              <PayerPipelineBadge state={entry.payerPipelineState} />
-            ) : null}
-            {entry.actionKind === "readiness_gap" ? (
-              <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
-                Readiness gap
-              </Badge>
-            ) : null}
-          </span>
-          <span className="block text-[12.5px] text-muted-foreground">
-            {entry.providerName} · {entry.payerName} · {entry.state} · {entry.groupName}
-          </span>
-          <span className="block text-[12px] text-muted-foreground">{entry.reason}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
+          {/* E4.0 TE-7 — payer-pipeline state, kept distinct from the action/task. */}
+          {entry.payerPipelineState ? (
+            <PayerPipelineBadge state={entry.payerPipelineState} />
+          ) : null}
+          {entry.actionKind === "readiness_gap" ? (
+            <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
+              Readiness gap
+            </Badge>
+          ) : null}
         </span>
-        <DeadlinePill entry={entry} />
+        <span className="block text-[12.5px] text-muted-foreground">
+          {entry.providerName} · {entry.payerName} · {entry.state} · {entry.groupName}
+        </span>
+        <span className="block text-[12px] text-muted-foreground">{entry.reason}</span>
       </Link>
+      {/* E4.3 F4.3.1 — deadline + "Work in portal" launcher(s), a sibling of
+          the case Link (never nested, so a launch never navigates the row).
+          Only for cases with a resolvable portal-linked open task. */}
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <DeadlinePill entry={entry} />
+        {portalTargets.map((target) => (
+          <WorkInPortalButton
+            key={target.portalKey}
+            caseId={entry.caseId}
+            providerId={entry.providerId}
+            target={target}
+          />
+        ))}
+      </div>
     </li>
   );
 }
@@ -74,6 +99,19 @@ export function NextBestActionQueue({ run }: { run?: string }) {
   const navigate = useNavigate();
   const queue = useNextBestActions();
   const runQ = useGenerationRun(run);
+  const casePortalKeysQ = useCasePortalKeys();
+  const portalsQ = usePortals();
+
+  // caseId → resolvable portal launch targets (from open tasks' portal steps).
+  const portalTargetsByCase = useMemo(() => {
+    const portals = portalsQ.data ?? [];
+    const map = new Map<string, CasePortalTarget[]>();
+    for (const row of casePortalKeysQ.data ?? []) {
+      const targets = resolvePortalTargets(row.portalKeys, portals);
+      if (targets.length > 0) map.set(row.caseId, targets);
+    }
+    return map;
+  }, [casePortalKeysQ.data, portalsQ.data]);
 
   if (queue.isError) {
     return (
@@ -144,7 +182,11 @@ export function NextBestActionQueue({ run }: { run?: string }) {
       ) : (
         <ol className="space-y-2" aria-label="Next best actions, most urgent first">
           {entries.map((entry) => (
-            <QueueRow key={entry.caseId} entry={entry} />
+            <QueueRow
+              key={entry.caseId}
+              entry={entry}
+              portalTargets={portalTargetsByCase.get(entry.caseId) ?? []}
+            />
           ))}
         </ol>
       )}

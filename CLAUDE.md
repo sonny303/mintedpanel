@@ -1389,6 +1389,38 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   TE-18 pins, `legacy-routes.spec.ts` moved /admin/payers to the redirect
   set.
 
+- **E4.3 (Session 1) — Panel-side Workbench Contract.** The PANEL half of the
+  extension-workbench handoff (the extension is Session 2 in
+  `sonny303/minted-extension`). **No migration** (`user_table_prefs` already
+  existed). **Read-only except the existing touch append + one user-scoped prefs
+  upsert.** Four new/extended `/api` surfaces (all detailed in the Server API
+  layer section): `GET/PUT /api/me/view-prefs` (quick-card layout, user-scoped
+  on `authenticateUser`), `GET /api/next-best-action` (queue-top via the SAME
+  pure reducer), the `?q=` case-search mode on `/api/cases`, and the E4.3 TE-2
+  expansion of `GET /api/cases/:id/context` (identity header + open tasks with
+  execution types + no-store + one READ audit). `POST /api/cases/:id/touches`
+  gained a second `kind 'structured_touch'` (E4.1 typed touch from the
+  extension: required `touch_type`, optional
+  disposition/recipient/follow-up/tracking-id, `source 'extension'`, writer-only,
+  one touch + one audit). The Q4 malpractice refinement landed in
+  `providerProfile.ts` (no wire change). **New pure libs (tested):**
+  `src/lib/quickCardCatalog.ts` (the CLOSED server-owned field allowlist +
+  `validateQuickCardFields`), `src/lib/extensionHandoff.ts` (the locked
+  `SET_ACTIVE_CASE` message builder + feature-detect + best-effort send),
+  `src/lib/casePortals.ts` (`casePortalTargets`/`resolvePortalTargets` — a
+  case's launchable portals from its open tasks' portal steps). **New services:**
+  `src/services/extensionViewPrefs.ts` (server-only, user-scoped prefs),
+  `src/services/nextBestAction.ts` (server-only queue assembly). **Browser
+  "Work in portal" launcher (F4.3.1):** `WorkInPortalButton`
+  (`src/components/cases/WorkInPortalButton.tsx`) on case detail
+  (`cases.$id.tsx`, per resolvable portal) and the My Cases queue rows
+  (`NextBestActionQueue.tsx`, via the new `useCasePortalKeys` hook +
+  `listCasePortalKeys` service read) — sends the handoff, opens the portal tab
+  regardless, toasts a non-blocking notice when the extension is absent. Gate:
+  new `casesearch` leak mode + assertions 15/15b; mock-api-server gained the
+  view-prefs, next-best-action, and `?q=` handlers. E2E for TS-100–103 is
+  Session 2 (extension mock harness).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1589,11 +1621,43 @@ them. The current surface:
   `x-org-id`, so the guard's multi-org 400 deliberately doesn't apply. Zero
   memberships = empty list, not an error. Gate assertions 10/10b pin "own
   memberships only".
+- `GET/PUT /api/me/view-prefs` — the caller's saved extension quick-card layout
+  (E4.3 TE-15/TE-16, `src/services/extensionViewPrefs.ts`). USER-scoped like
+  `/api/me/orgs` (runs on `authenticateUser`, no org guard — prefs follow the
+  user across orgs), stored in `user_table_prefs` under
+  `page_key 'extension.quickCards'` keyed by the JWT-verified user id (never a
+  client-supplied id — that scoping IS the isolation under the service-role
+  client). GET returns `{ fields: string[] | null }` (null = nothing saved; the
+  envelope's `data` is never null so the extension never treats it as an error).
+  PUT accepts `{ fields: string[] }` validated to a bounded (≤32), deduplicated,
+  ORDERED array of CLOSED-catalog keys (`src/lib/quickCardCatalog.ts`
+  `validateQuickCardFields`) — anything else (unknown/excluded key, duplicate,
+  non-string, over-length) is a 422. The catalog is a server-owned allowlist of
+  the BARE profile-exposed token keys; `provider.ssnLast4` and the E4.4
+  fill-only/vault category are STRUCTURALLY excluded (absent from the list, so a
+  hand-crafted PUT naming one 422s). Not a PHI read/write (a list of field
+  KEYS, no values) — no audit row.
+- `GET /api/next-best-action` — the extension's log-and-advance queue-top read
+  (E4.3 F4.3.4/TE-6, `src/services/nextBestAction.ts`). A guarded, org-scoped
+  read that ASSEMBLES the same ~17 org caches the browser My Cases queue
+  composes and calls the SAME pure reducer (`buildNextBestActions` +
+  `evaluateEnrollmentReadiness` + `resolveQueueRankingConfig`) under the org's
+  F4.2.5 ranking config — NO ranking logic is duplicated here. Returns
+  `{ item }` where `item` is the single queue TOP (case pointer + display
+  label/reason + deadline + payer-pipeline state + `deepLink '/cases/:id'`) or
+  `null` for an honest "queue clear". Read-only, nothing persisted (the E2.3
+  queue is fully derived); billing may read. The readiness-facts read reduces
+  DOB/SSN/home-address to booleans in the service — values never emitted, so
+  no PHI leaves the endpoint and no audit row is written.
 - `GET /api/providers/:id/profile?state=XX&facilityId=<uuid>` — the fill
   engine's payload: the provider row + every catalog token resolved to a value
   server-side (`src/services/providerProfile.ts`). Deterministic source-row
-  picking: `?state` selects the state license; sole policy selects group
-  insurance; `payers`/`msos`/`contracts` tokens are case-scoped and always
+  picking: `?state` selects the state license; a SOLE group-insurance policy is
+  used as-is, and a MULTI-policy group resolves deterministically to the
+  malpractice policy (`insurance_type 'professional_liability'`) with the newest
+  `policy_end_date`, else honestly unresolved (E4.3 F4.3.5 Q4, PM decision
+  2026-07-17 — a service-internal refinement, no wire change);
+  `payers`/`msos`/`contracts` tokens are case-scoped and always
   come back `null` + listed in `unresolved` with a reason. Facility awareness
   (2026-07-06): the response carries `facilities: [{ id, name }]` (the
   provider's org-scoped facility set via provider_facility_assignments) and
@@ -1638,9 +1702,20 @@ them. The current surface:
   from the guard ctx, never the body. Optional `taskId` marks the task
   completed (org-checked, audited). Writer roles only (billing → 403).
   (`src/services/fillSessions.ts`)
-- `GET /api/cases?providerId=<uuid>` — the popup's case dropdown (R2): the
+- `GET /api/cases?providerId=<uuid>` OR `?q=<text>` — TWO additive modes on one
+  org-scoped route (`providerId` takes precedence when both are present; neither
+  is a 422). **`?providerId=`** is the popup's case dropdown (R2): the
   provider's OPEN cases, `{ id, payerName, state, status, submittedDate,
-payerReferenceId, latestNote, lastSubmittedAt, portalTasks }`. Open =
+payerReferenceId, latestNote, lastSubmittedAt, portalTasks }`. **`?q=`** is the
+  E4.3 TE-11 case-search half of the extension's unified standalone search
+  (`searchOrgCases`, same file): org-scoped, matching payer name / provider name
+  / `payer_reference_id` (tracking id) as a case-insensitive substring in
+  memory over the org's own cases, capped at 50, returning ids + display fields
+  ONLY (`{ id, providerId, providerName, payerName, state, status,
+payerReferenceId, payerPipelineState }` — never beyond the list projections). A
+  blank `q` returns `[]` (never a full-table dump). Gate assertions **15** (own
+  search works) + **15b** (never returns a cross-org case/provider id, red under
+  the new `casesearch` leak mode). Open =
   credentialing status not in the `action_bucket 'complete'` bucket — derived
   from `status_configs`, never from labels; status-less cases count as open.
   Cross-org providerId → 404. The PR C fields are derived from ONE org-scoped
@@ -1676,19 +1751,32 @@ payerReferenceId, latestNote, lastSubmittedAt, portalTasks }`. Open =
   a status change. Portal label derived from `portal_key` (no server-side portal
   catalog — labels live in the extension). (`src/services/submissionTouches.ts`)
 - `GET /api/cases/:id/context` — the Workbench pulls this after case selection
-  so the filler sees the case's reference + latest note/touch without leaving
-  the portal tab (P8, Epic 3d). Returns `{ referenceNumbers, latestNote,
-latestTouch }` for the ONE org-owned case; a cross-org or nonexistent id → 404
-  (case ownership `maybeSingle` miss, mirrors the other case handlers).
+  so the panel has everything it needs without leaving the portal tab (P8, Epic
+  3d; **expanded by E4.3 TE-2**). Returns `{ referenceNumbers, payerPipelineState,
+provider, payer, state, selectedFacility, openTasks, latestNote, latestTouch }`
+  for the ONE org-owned case; a cross-org or nonexistent id → 404 (case
+  ownership `maybeSingle` miss, mirrors the other case handlers).
   `referenceNumbers` = `credential_cases.payer_reference_id` as a 0/1-element
-  array (latest-wins column, not touch history); `latestNote {content,
-createdAt, authorName}` = newest touchlog `entry_type='note'` (author-resolved
-  via `profiles`); `latestTouch {touchDate, touchType, outcome, note}` = newest
+  array (latest-wins column, not touch history); **`provider`/`payer`** =
+  `{ id, name }` display identity via FK embeds (the panel's identity header —
+  the F4.3.1 guard); **`state`** = the case's state; **`openTasks`** =
+  `{ id, title, status, executionType, sortOrder, dueDate }[]` — the case's
+  non-completed SOP tasks WITH their E4.2 execution types (null → `manual`),
+  from ONE org-scoped read ordered by sort_order (the E4.2 F4.2.1 workbench
+  tee-up; task-state writes stay in the webapp for R6);
+  `selectedFacility {id,name,street,suite,city,state,zip}` from the case's
+  explicit `facility_id` only (org-scoped, never the provider's set);
+  `latestNote {content,createdAt,authorName}` = newest touchlog
+  `entry_type='note'` (author-resolved via `profiles`);
+  `latestTouch {touchDate,touchType,outcome,note}` = newest
   `entry_type='touchpoint'`. Note + touch come from ONE org-scoped touchlog read
   — it reads the touchlog spine, NOT the dormant `notes` table (case notes moved
-  there in Story 1). PHI-minimal, read-only (billing may read), no audit. No
-  migration. Gate assertion 14/14b (Kansas reads own context; cross-org South
-  Park case context → 404) + a `casecontext` leak mode. (`src/services/caseContext.ts`)
+  there in Story 1). **PHI discipline (E4.3 TE-2, changed from the P8 posture):**
+  `Cache-Control: no-store`, never log the body, and exactly ONE `READ` audit row
+  per successful read (a failed audit write fails the request; 404s are not
+  reads). Read-only (billing may read). No migration. Gate assertion 14/14b
+  (Kansas reads own context; cross-org South Park case context → 404) + a
+  `casecontext` leak mode. (`src/services/caseContext.ts`)
 
 Layer mechanics:
 

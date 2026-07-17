@@ -25,7 +25,10 @@ import {
 } from "@/hooks/useCases";
 import { useProviders } from "@/hooks/useProviders";
 import { useStatusConfigs } from "@/hooks/useAdmin";
+import { usePortals } from "@/hooks/usePortals";
 import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
+import { casePortalTargets } from "@/lib/casePortals";
+import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { StatusConfig } from "@/types";
@@ -61,6 +64,7 @@ function CaseDetailPage() {
 
   const caseQ = useCase(id);
   const statusesQ = useStatusConfigs();
+  const portalsQ = usePortals();
   const coordinatorsQ = useCoordinators();
   const reasonCodesQ = useDenialReasonCodes();
   const c = caseQ.data;
@@ -162,6 +166,9 @@ function CaseDetailPage() {
   const contractIsExecuted = isExecutedLabel(contractStatus?.label);
 
   const tasks = (c.tasks ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  // E4.3 F4.3.1 — the case's launchable portals (from its open tasks' portal
+  // steps), resolved to a name + URL for the "Work in portal" handoff.
+  const portalTargets = casePortalTargets(tasks, portalsQ.data ?? []);
   const touches = (c.touches ?? [])
     .slice()
     .sort((a, b) => parseISO(b.touchDate).getTime() - parseISO(a.touchDate).getTime());
@@ -245,6 +252,25 @@ function CaseDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
+            {/* E4.3 F4.3.1 — hand the case to the Workbench extension and open
+                the portal tab. One launcher per resolvable portal; hidden when
+                the case has no portal-linked open task. */}
+            {portalTargets.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3">
+                <span className="text-[13px] font-medium text-foreground">Work in portal</span>
+                {portalTargets.map((target) => (
+                  <WorkInPortalButton
+                    key={target.portalKey}
+                    caseId={c.id}
+                    providerId={c.providerId}
+                    target={target}
+                  />
+                ))}
+                <span className="text-[12px] text-muted-foreground">
+                  Opens the portal and hands this case to the extension.
+                </span>
+              </div>
+            ) : null}
             {/* E2.4 F2.4.2 — origin (run link / manual) + actor/date + the
                 E2.2 SOP-version lines + derived reapply cycles. */}
             <CaseProvenancePanel c={c} tasks={tasks} />

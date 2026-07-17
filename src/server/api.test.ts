@@ -20,6 +20,9 @@ vi.mock("./extensionRoutes", () => ({
   handleCaseContext: vi.fn(),
   handleCreateCaseTouch: vi.fn(),
   handleListMyOrgs: vi.fn(),
+  handleNextBestAction: vi.fn(),
+  handleGetViewPrefs: vi.fn(),
+  handlePutViewPrefs: vi.fn(),
 }));
 
 import { authenticate, authenticateUser, GuardError } from "./guard";
@@ -32,6 +35,9 @@ import {
   handleCaseContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
+  handleNextBestAction,
+  handleGetViewPrefs,
+  handlePutViewPrefs,
 } from "./extensionRoutes";
 import { handleApiRequest, isApiRequest } from "./api";
 
@@ -46,6 +52,9 @@ const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
 const caseContextMock = vi.mocked(handleCaseContext);
 const caseTouchMock = vi.mocked(handleCreateCaseTouch);
+const nbaMock = vi.mocked(handleNextBestAction);
+const getViewPrefsMock = vi.mocked(handleGetViewPrefs);
+const putViewPrefsMock = vi.mocked(handlePutViewPrefs);
 
 async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
@@ -200,6 +209,69 @@ describe("handleApiRequest — /api/me/orgs (user-scoped auth, no org resolution
     );
     expect(res.status).toBe(405);
     expect(meOrgsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleApiRequest — /api/me/view-prefs (user-scoped auth, no org resolution)", () => {
+  it("GET dispatches through authenticateUser, never the org guard", async () => {
+    authenticateUserMock.mockResolvedValue({ userId: "u1" } as never);
+    getViewPrefsMock.mockResolvedValue(
+      new Response('{"data":{"fields":null},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/me/view-prefs"));
+    expect(res.status).toBe(200);
+    expect(authenticateUserMock).toHaveBeenCalledTimes(1);
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(getViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "u1" }));
+  });
+
+  it("PUT dispatches the parsed body through authenticateUser", async () => {
+    authenticateUserMock.mockResolvedValue({ userId: "u1" } as never);
+    putViewPrefsMock.mockResolvedValue(
+      new Response('{"data":{"fields":[]},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/me/view-prefs", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fields: ["provider.npi"] }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(authenticateMock).not.toHaveBeenCalled();
+    expect(putViewPrefsMock).toHaveBeenCalledWith(
+      { fields: ["provider.npi"] },
+      expect.objectContaining({ userId: "u1" }),
+    );
+  });
+
+  it.each([["POST"], ["DELETE"]])("%s /api/me/view-prefs is 405", async (method) => {
+    const res = await handleApiRequest(new Request("https://x.test/api/me/view-prefs", { method }));
+    expect(res.status).toBe(405);
+    expect(getViewPrefsMock).not.toHaveBeenCalled();
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleApiRequest — /api/next-best-action (org-guarded read)", () => {
+  it("GET dispatches to the NBA handler with the org-resolved ctx", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "billing" } as never);
+    nbaMock.mockResolvedValue(
+      new Response('{"data":{"item":null},"error":null,"meta":null}', { status: 200 }),
+    );
+    const res = await handleApiRequest(GET("/api/next-best-action"));
+    expect(res.status).toBe(200);
+    expect(authenticateMock).toHaveBeenCalledTimes(1);
+    expect(nbaMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }));
+  });
+
+  it("POST /api/next-best-action is 405", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    const res = await handleApiRequest(
+      new Request("https://x.test/api/next-best-action", { method: "POST" }),
+    );
+    expect(res.status).toBe(405);
+    expect(nbaMock).not.toHaveBeenCalled();
   });
 });
 

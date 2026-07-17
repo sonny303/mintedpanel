@@ -12,6 +12,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 
 export interface QueueProviderRow {
   id: string;
@@ -96,4 +97,42 @@ export async function listQueueTaskRows(): Promise<QueueTaskRow[]> {
     dueDate: r.dueDate ?? null,
     cadenceDays: minStepCadence(r.sopContent),
   }));
+}
+
+/** E4.3 F4.3.1 — per-case distinct portal keys among the case's OPEN tasks'
+ * online_form steps, so the My Cases queue can show a "Work in portal" launcher
+ * without loading full task bodies into its cache. The sop_content jsonb is
+ * reduced to portal keys at this boundary (never cached), mirroring the cadence
+ * reduction above. Keys are normalized bare/lowercase for a literal registry
+ * join. */
+export interface CasePortalKeys {
+  caseId: string;
+  portalKeys: string[];
+}
+
+const CASE_PORTAL_TASK_COLUMNS = "case_id, status, sop_content";
+
+export async function listCasePortalKeys(): Promise<CasePortalKeys[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(CASE_PORTAL_TASK_COLUMNS)
+    .eq("org_id", orgId);
+  if (error) throw error;
+  const byCase = new Map<string, Set<string>>();
+  for (const row of (data ?? []) as Array<{
+    case_id: string | null;
+    status: string;
+    sop_content: unknown;
+  }>) {
+    if (!row.case_id || row.status === "completed") continue;
+    const steps = Array.isArray(row.sop_content) ? row.sop_content : [];
+    for (const step of steps) {
+      const key = normalizePortalKey((step as { portalKey?: string }).portalKey);
+      if (!key) continue;
+      if (!byCase.has(row.case_id)) byCase.set(row.case_id, new Set());
+      byCase.get(row.case_id)?.add(key);
+    }
+  }
+  return [...byCase.entries()].map(([caseId, keys]) => ({ caseId, portalKeys: [...keys] }));
 }

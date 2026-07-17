@@ -228,14 +228,35 @@ function selectFacility(
   };
 }
 
+// E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies
+// resolves deterministically — filter to the malpractice policy
+// (insurance_type 'professional_liability'), newest policy_end_date wins.
+// Additive refinement: a sole policy still resolves as before (whatever its
+// type), and zero-malpractice multi-policy groups stay honestly unresolved.
+const MALPRACTICE_INSURANCE_TYPE = "professional_liability";
+
 function pickPolicy(policies: Row[], hasGroup: boolean): SourcePick {
   if (!hasGroup) return { row: null, reason: "provider has no group" };
   if (policies.length === 0) return { row: null, reason: "group has no insurance policies" };
   if (policies.length === 1) return { row: policies[0] };
-  return {
-    row: null,
-    reason: `group has ${policies.length} insurance policies; not resolvable to a single row`,
-  };
+  const malpractice = policies.filter(
+    (p) => String(p.insurance_type ?? "") === MALPRACTICE_INSURANCE_TYPE,
+  );
+  if (malpractice.length === 0) {
+    return {
+      row: null,
+      reason: `group has ${policies.length} insurance policies and none is malpractice (${MALPRACTICE_INSURANCE_TYPE}); not resolvable to a single row`,
+    };
+  }
+  // Newest policy_end_date wins; a date-less policy never beats a dated one.
+  // Ties (and all-null dates) break by id so the pick is stable across reads.
+  const sorted = [...malpractice].sort((a, b) => {
+    const aEnd = typeof a.policy_end_date === "string" ? a.policy_end_date : "";
+    const bEnd = typeof b.policy_end_date === "string" ? b.policy_end_date : "";
+    if (aEnd !== bEnd) return bEnd.localeCompare(aEnd);
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+  return { row: sorted[0] };
 }
 
 export async function getProviderProfile(
