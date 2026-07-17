@@ -11,7 +11,7 @@
 // preserved but not an editable match key) are head-level identity edits and go
 // through the plain audited update — no version bump. Global templates
 // (org_id NULL, incl. the seeded fallback) render read-only for org users.
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
@@ -324,9 +324,16 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
 
-  function markDirty() {
+  // Stable identity (measured hotfix, 2026-07-17): every handler handed to
+  // TemplateTaskRow is a useCallback so React.memo on the row can actually
+  // bail out — with plain per-render closures, one keystroke in any step field
+  // re-rendered EVERY task card (each a forest of Radix selects), which
+  // measured 264–296ms p50 per keystroke on a 10-task template (prod build,
+  // 4x CPU throttle). All updaters use functional setTasks, so none needs the
+  // current tasks value.
+  const markDirty = useCallback(() => {
     setDirty(true);
-  }
+  }, []);
 
   // --- task-level edits (Step 2 + used by Step 3 via TemplateTaskRow) ---
   function addTask() {
@@ -354,174 +361,207 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     });
     markDirty();
   }
-  function moveStep(taskId: string, index: number, delta: -1 | 1) {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        const target = index + delta;
-        if (target < 0 || target >= t.steps.length) return t;
-        const next = [...t.steps];
-        [next[index], next[target]] = [next[target], next[index]];
-        return { ...t, steps: next };
-      }),
-    );
-    markDirty();
-  }
+  const moveStep = useCallback(
+    (taskId: string, index: number, delta: -1 | 1) => {
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== taskId) return t;
+          const target = index + delta;
+          if (target < 0 || target >= t.steps.length) return t;
+          const next = [...t.steps];
+          [next[index], next[target]] = [next[target], next[index]];
+          return { ...t, steps: next };
+        }),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
   function toggleRequiredAttr(key: ProfileAttributeKey) {
     setRequiredAttrs((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
     markDirty();
   }
-  function removeTask(taskId: string) {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    markDirty();
-  }
-  function updateTask(taskId: string, patch: Partial<EditableTask>) {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
-    markDirty();
-  }
-  function reorderTasks(fromId: string, toId: string) {
-    if (fromId === toId) return;
-    setTasks((prev) => {
-      const next = [...prev];
-      const fromIdx = next.findIndex((t) => t.id === fromId);
-      const toIdx = next.findIndex((t) => t.id === toId);
-      if (fromIdx < 0 || toIdx < 0) return prev;
-      const [moved] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, moved);
-      return next;
-    });
-    markDirty();
-  }
+  const removeTask = useCallback(
+    (taskId: string) => {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      markDirty();
+    },
+    [markDirty],
+  );
+  const updateTask = useCallback(
+    (taskId: string, patch: Partial<EditableTask>) => {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+      markDirty();
+    },
+    [markDirty],
+  );
+  const reorderTasks = useCallback(
+    (fromId: string, toId: string) => {
+      if (fromId === toId) return;
+      setTasks((prev) => {
+        const next = [...prev];
+        const fromIdx = next.findIndex((t) => t.id === fromId);
+        const toIdx = next.findIndex((t) => t.id === toId);
+        if (fromIdx < 0 || toIdx < 0) return prev;
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        return next;
+      });
+      markDirty();
+    },
+    [markDirty],
+  );
 
   // --- step-level edits (Step 3) ---
-  function addStep(taskId: string) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              steps: [
-                ...t.steps,
-                {
-                  id: randId(),
-                  label: "New step",
-                  detail: "",
-                  stepType: "online_form",
-                  emailTemplate: { subject: "", body: "", to: [], cc: [] },
-                  dataFields: [],
-                  portalKey: "",
-                  expectedTurnaroundDays: null,
-                  followUpEveryDays: null,
-                  requiredArtifacts: [],
-                },
-              ],
-            }
-          : t,
-      ),
-    );
-    markDirty();
-  }
-  function removeStep(taskId: string, stepId: string) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId ? { ...t, steps: t.steps.filter((s) => s.id !== stepId) } : t,
-      ),
-    );
-    markDirty();
-  }
-  function updateStep(
-    taskId: string,
-    stepId: string,
-    patch: Partial<EditableTask["steps"][number]>,
-  ) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? { ...t, steps: t.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)) }
-          : t,
-      ),
-    );
-    markDirty();
-  }
-  function reorderSteps(taskId: string, fromId: string, toId: string) {
-    if (fromId === toId) return;
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        const next = [...t.steps];
-        const fi = next.findIndex((s) => s.id === fromId);
-        const ti = next.findIndex((s) => s.id === toId);
-        if (fi < 0 || ti < 0) return t;
-        const [moved] = next.splice(fi, 1);
-        next.splice(ti, 0, moved);
-        return { ...t, steps: next };
-      }),
-    );
-    markDirty();
-  }
+  const addStep = useCallback(
+    (taskId: string) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                steps: [
+                  ...t.steps,
+                  {
+                    id: randId(),
+                    label: "New step",
+                    detail: "",
+                    stepType: "online_form" as const,
+                    emailTemplate: { subject: "", body: "", to: [], cc: [] },
+                    dataFields: [],
+                    portalKey: "",
+                    expectedTurnaroundDays: null,
+                    followUpEveryDays: null,
+                    requiredArtifacts: [],
+                  },
+                ],
+              }
+            : t,
+        ),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
+  const removeStep = useCallback(
+    (taskId: string, stepId: string) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, steps: t.steps.filter((s) => s.id !== stepId) } : t,
+        ),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
+  const updateStep = useCallback(
+    (taskId: string, stepId: string, patch: Partial<EditableTask["steps"][number]>) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? { ...t, steps: t.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)) }
+            : t,
+        ),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
+  const reorderSteps = useCallback(
+    (taskId: string, fromId: string, toId: string) => {
+      if (fromId === toId) return;
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== taskId) return t;
+          const next = [...t.steps];
+          const fi = next.findIndex((s) => s.id === fromId);
+          const ti = next.findIndex((s) => s.id === toId);
+          if (fi < 0 || ti < 0) return t;
+          const [moved] = next.splice(fi, 1);
+          next.splice(ti, 0, moved);
+          return { ...t, steps: next };
+        }),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
 
   // --- data-field edits (Step 3) ---
-  function addDataField(taskId: string, stepId: string) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              steps: t.steps.map((s) =>
-                s.id === stepId
-                  ? { ...s, dataFields: [...s.dataFields, { label: "", token: firstToken }] }
-                  : s,
-              ),
-            }
-          : t,
-      ),
-    );
-    markDirty();
-  }
-  function updateDataField(
-    taskId: string,
-    stepId: string,
-    idx: number,
-    patch: Partial<{ label: string; token: string }>,
-  ) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              steps: t.steps.map((s) =>
-                s.id === stepId
-                  ? {
-                      ...s,
-                      dataFields: s.dataFields.map((f, i) => (i === idx ? { ...f, ...patch } : f)),
-                    }
-                  : s,
-              ),
-            }
-          : t,
-      ),
-    );
-    markDirty();
-  }
-  function removeDataField(taskId: string, stepId: string, idx: number) {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              steps: t.steps.map((s) =>
-                s.id === stepId
-                  ? { ...s, dataFields: s.dataFields.filter((_, i) => i !== idx) }
-                  : s,
-              ),
-            }
-          : t,
-      ),
-    );
-    markDirty();
-  }
+  const addDataField = useCallback(
+    (taskId: string, stepId: string) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                steps: t.steps.map((s) =>
+                  s.id === stepId
+                    ? { ...s, dataFields: [...s.dataFields, { label: "", token: firstToken }] }
+                    : s,
+                ),
+              }
+            : t,
+        ),
+      );
+      markDirty();
+    },
+    [firstToken, markDirty],
+  );
+  const updateDataField = useCallback(
+    (
+      taskId: string,
+      stepId: string,
+      idx: number,
+      patch: Partial<{ label: string; token: string }>,
+    ) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                steps: t.steps.map((s) =>
+                  s.id === stepId
+                    ? {
+                        ...s,
+                        dataFields: s.dataFields.map((f, i) =>
+                          i === idx ? { ...f, ...patch } : f,
+                        ),
+                      }
+                    : s,
+                ),
+              }
+            : t,
+        ),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
+  const removeDataField = useCallback(
+    (taskId: string, stepId: string, idx: number) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                steps: t.steps.map((s) =>
+                  s.id === stepId
+                    ? { ...s, dataFields: s.dataFields.filter((_, i) => i !== idx) }
+                    : s,
+                ),
+              }
+            : t,
+        ),
+      );
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const previewTasks: SOPTaskDefinition[] = useMemo(() => fromEditable(tasks), [tasks]);
 
   const payload = useMemo(
     () => ({
@@ -530,14 +570,12 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
       state: state === "none" ? null : state,
       specialty: specialty.trim() || null,
       groupId: groupId === "none" ? null : groupId,
-      taskDefinitions: fromEditable(tasks),
+      taskDefinitions: previewTasks,
       requiredProfileAttributes: requiredAttrs,
       archived: isArchived,
     }),
-    [name, payerId, state, specialty, groupId, tasks, requiredAttrs, isArchived],
+    [name, payerId, state, specialty, groupId, previewTasks, requiredAttrs, isArchived],
   );
-
-  const previewTasks: SOPTaskDefinition[] = useMemo(() => fromEditable(tasks), [tasks]);
 
   // E4.2 PM round-4 — minimum-content publish lint (≥1 task, every task ≥1 step,
   // no placeholder labels). Blocks Create/Publish and surfaces on Review.
@@ -588,11 +626,16 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     () => (initial ? JSON.stringify(fromEditable(toEditable(initial.taskDefinitions))) : ""),
     [initial],
   );
-  const contentChanged =
-    !isEdit ||
-    !initial ||
-    name.trim() !== initial.name ||
-    JSON.stringify(previewTasks) !== initialNormalizedDefs;
+  // Memoized: the stringify is O(template size) and this ran on EVERY render
+  // (every keystroke) before the measured hotfix.
+  const contentChanged = useMemo(
+    () =>
+      !isEdit ||
+      !initial ||
+      name.trim() !== initial.name ||
+      JSON.stringify(previewTasks) !== initialNormalizedDefs,
+    [isEdit, initial, name, previewTasks, initialNormalizedDefs],
+  );
   const matchKeyChanged =
     isEdit && initial
       ? payload.payerId !== initial.payerId ||

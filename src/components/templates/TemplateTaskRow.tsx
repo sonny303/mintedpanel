@@ -1,7 +1,7 @@
 // Editor card for a single template task, including its SOP steps and
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -116,7 +116,13 @@ export interface TemplateTaskRowProps {
   removeDataField: (taskId: string, stepId: string, idx: number) => void;
 }
 
-export function TemplateTaskRow({
+// memo (measured hotfix, 2026-07-17): the wizard re-renders on every keystroke,
+// and each task card is a forest of Radix selects — without the bailout, typing
+// in ONE step's field re-rendered every card (measured 264–296ms p50 per
+// keystroke on a 10-task template, prod build, 4x CPU throttle; ~30ms with the
+// bailout). Requires every function prop to be referentially stable — the
+// wizard passes useCallback handlers; keep it that way.
+export const TemplateTaskRow = memo(function TemplateTaskRow({
   task,
   taskIdx,
   canEdit,
@@ -493,7 +499,7 @@ export function TemplateTaskRow({
       </div>
     </div>
   );
-}
+});
 
 // E1.7b F1.7b.5 (TE-15) — the To/CC recipient editor for a draft-email step.
 // Every row has an explicit "Recipient source" selector (Email address | Profile
