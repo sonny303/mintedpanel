@@ -137,6 +137,7 @@ describe("getCaseContext — projection", () => {
     expect(result).toEqual({
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
+      selectedFacility: null,
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",
@@ -163,6 +164,7 @@ describe("getCaseContext — projection", () => {
     expect(result).toEqual({
       referenceNumbers: [],
       payerPipelineState: "not_started",
+      selectedFacility: null,
       latestNote: null,
       latestTouch: null,
     });
@@ -195,6 +197,71 @@ describe("getCaseContext — projection", () => {
       authorName: null,
     });
     expect(captures.map((c) => c.table)).not.toContain("profiles");
+  });
+
+  it("resolves the case-selected facility with its complete nullable address", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payer_reference_id: null, facility_id: "fac-1" } },
+      {
+        data: {
+          id: "fac-1",
+          name: "Main Clinic",
+          street: "100 Main St",
+          suite: null,
+          city: "Wichita",
+          state: "KS",
+          zip: "67202",
+        },
+      },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.selectedFacility).toEqual({
+      id: "fac-1",
+      name: "Main Clinic",
+      street: "100 Main St",
+      suite: null,
+      city: "Wichita",
+      state: "KS",
+      zip: "67202",
+    });
+    // The facility read is org-scoped, keyed by the case's facility_id, and an
+    // explicit projection — never select('*').
+    const facilityCap = captures.find((c) => c.table === "facilities");
+    expect(facilityCap).toBeDefined();
+    expect(facilityCap?.filters).toContainEqual(["id", "fac-1"]);
+    expect(facilityCap?.filters).toContainEqual(["org_id", "org-1"]);
+    expect(facilityCap?.selectCols).toBe("id, name, street, suite, city, state, zip");
+  });
+
+  it("excludes a facility that does not resolve inside the org (cross-org facility_id -> explicit null)", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payer_reference_id: null, facility_id: "fac-other-org" } },
+      { data: null },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.selectedFacility).toBeNull();
+    const facilityCap = captures.find((c) => c.table === "facilities");
+    expect(facilityCap?.filters).toContainEqual(["org_id", "org-1"]);
+  });
+
+  it("never consults the provider's facility set: no facility link means an explicit null, no facility or assignment read", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: { id: CASE_ID, payer_reference_id: null, facility_id: null } },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    // Explicit, never guessed: the key is present and null, and neither the
+    // facilities table nor the provider's assignments were ever read.
+    expect(result).toHaveProperty("selectedFacility", null);
+    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "touches"]);
   });
 
   it("ignores system_event / task_update entries for both note and touch", async () => {

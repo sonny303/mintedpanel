@@ -8,6 +8,12 @@
 //   - referenceNumbers: credential_cases.payer_reference_id (latest-wins; the
 //     column, not the touchlog history). A small array so the wire shape is
 //     stable if a case ever surfaces more than one.
+//   - selectedFacility: the practice address of the facility the CASE selects
+//     (E4.3 TE-2, parity audit C3) — resolved from the case's explicit
+//     credential_cases.facility_id relationship ONLY, org-scoped. Never derived
+//     from the provider's facility set and never a fallback-to-first guess: a
+//     case with no facility link (or a link that doesn't resolve inside the
+//     caller's org) carries an explicit null.
 //   - latestNote: the newest `note` entry in the touchlog (author-resolved).
 //     The `notes` table is DORMANT for case entities since the touchlog
 //     migration (Story 1) — case notes live in `touches` now, so this reads the
@@ -44,12 +50,30 @@ export interface CaseContextTouch {
   note: string | null;
 }
 
+// The case-selected facility with its complete (nullable) practice address, so
+// the extension can render the location it is filling for without guessing.
+export interface CaseContextFacility {
+  id: string;
+  name: string;
+  street: string | null;
+  suite: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}
+
 export interface CaseContext {
   referenceNumbers: string[];
   // E4.0 TE-7 — the external payer-pipeline state (read-only; the extension
   // shows where the payer is without leaving the portal tab). The tracking ID
   // is already carried by referenceNumbers.
   payerPipelineState: string;
+  // E4.3 TE-2 — the facility the case explicitly selects, or null when the
+  // case has no facility relationship. Additive; clients that ignore it are
+  // unaffected. The key follows this contract's camelCase idiom (the
+  // payerPipelineState precedent), unlike the profile endpoint's locked
+  // snake_case selected_facility_id.
+  selectedFacility: CaseContextFacility | null;
   latestNote: CaseContextNote | null;
   latestTouch: CaseContextTouch | null;
 }
@@ -76,7 +100,7 @@ export async function getCaseContext(
   // is the route's 404 (cross-org or nonexistent); nothing else is read.
   const { data: caseRow, error: caseErr } = await db
     .from("credential_cases")
-    .select("id, payer_reference_id, payer_pipeline_state")
+    .select("id, payer_reference_id, payer_pipeline_state, facility_id")
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -86,10 +110,47 @@ export async function getCaseContext(
   const typedCase = caseRow as {
     payer_reference_id: string | null;
     payer_pipeline_state: string | null;
+    facility_id: string | null;
   };
   const payerRef = typedCase.payer_reference_id;
   const referenceNumbers = payerRef ? [payerRef] : [];
   const payerPipelineState = typedCase.payer_pipeline_state ?? "not_started";
+
+  // The case's explicit facility relationship is the ONLY facility source —
+  // the provider's other assignments are never consulted and there is no
+  // fallback-to-first. Org-scoped like every other read here: a facility_id
+  // that doesn't resolve inside the caller's org yields the same explicit
+  // null as a case with no facility link.
+  let selectedFacility: CaseContextFacility | null = null;
+  if (typedCase.facility_id) {
+    const { data: facilityRow, error: facilityErr } = await db
+      .from("facilities")
+      .select("id, name, street, suite, city, state, zip")
+      .eq("id", typedCase.facility_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (facilityErr) throw facilityErr;
+    if (facilityRow) {
+      const f = facilityRow as {
+        id: string;
+        name: string;
+        street: string | null;
+        suite: string | null;
+        city: string | null;
+        state: string | null;
+        zip: string | null;
+      };
+      selectedFacility = {
+        id: f.id,
+        name: f.name,
+        street: f.street,
+        suite: f.suite,
+        city: f.city,
+        state: f.state,
+        zip: f.zip,
+      };
+    }
+  }
 
   // One org-scoped touchlog read, newest-first: the latest note entry AND the
   // latest touchpoint are both picked off it (first hit per kind wins).
@@ -126,6 +187,7 @@ export async function getCaseContext(
   return {
     referenceNumbers,
     payerPipelineState,
+    selectedFacility,
     latestNote: noteRow
       ? { content: noteRow.notes as string, createdAt: noteRow.created_at, authorName }
       : null,

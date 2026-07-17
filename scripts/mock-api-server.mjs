@@ -83,17 +83,28 @@ const USERS = {
 };
 
 // One facility per org (mirrors the live fixtures: the Kansas gate provider has
-// exactly one assigned facility, so its profile auto-selects it).
+// exactly one assigned facility, so its profile auto-selects it). Address
+// fields ride along for the case-context selectedFacility projection (E4.3).
 const FACILITIES = [
   {
     id: FIXTURES.KANSAS_FACILITY_ID,
     orgId: FIXTURES.KANSAS_ORG,
     name: "Fitness Physio - Leavenworth",
+    street: "100 Main St",
+    suite: null,
+    city: "Leavenworth",
+    state: "KS",
+    zip: "66048",
   },
   {
     id: FIXTURES.SOUTHPARK_FACILITY_ID,
     orgId: FIXTURES.SOUTHPARK_ORG,
     name: "Casa Bonita Clinic",
+    street: "6715 W Colfax Ave",
+    suite: "Ste 2",
+    city: "Lakewood",
+    state: "CO",
+    zip: "80214",
   },
 ];
 
@@ -126,6 +137,9 @@ const CASES = [
     id: FIXTURES.SOUTHPARK_CASE_ID,
     orgId: FIXTURES.SOUTHPARK_ORG,
     providerId: FIXTURES.SOUTHPARK_PROVIDER_ID,
+    // The case's explicit facility link — the ONLY source the context
+    // endpoint's selectedFacility resolves from (never the provider's set).
+    facilityId: FIXTURES.SOUTHPARK_FACILITY_ID,
     payerName: "South Park Health",
     state: "CO",
     status: "In Progress",
@@ -145,6 +159,7 @@ const CASES = [
     id: FIXTURES.KANSAS_CASE_ID,
     orgId: FIXTURES.KANSAS_ORG,
     providerId: FIXTURES.KANSAS_PROVIDER_ID,
+    facilityId: FIXTURES.KANSAS_FACILITY_ID,
     payerName: "BCBS of Kansas",
     state: "KS",
     status: "Submitted",
@@ -502,8 +517,27 @@ export async function createMockApiServer(options = {}) {
       // "casecontext": the org check is skipped and a cross-org case is served.
       const visible = c && (c.orgId === orgId || leak === "casecontext");
       if (!visible) return envelope(res, 404, null, "Case not found");
+      // E4.3: selectedFacility resolves from the case's explicit facilityId
+      // only, org-scoped against the caller — never the provider's facility
+      // set and never a fallback-to-first. No link (or no org-visible row) is
+      // an explicit null, matching src/services/caseContext.ts.
+      const facility = c.facilityId
+        ? (FACILITIES.find((f) => f.id === c.facilityId && f.orgId === orgId) ?? null)
+        : null;
       return envelope(res, 200, {
         referenceNumbers: c.payerReferenceId ? [c.payerReferenceId] : [],
+        payerPipelineState: c.payerPipelineState ?? "not_started",
+        selectedFacility: facility
+          ? {
+              id: facility.id,
+              name: facility.name,
+              street: facility.street,
+              suite: facility.suite,
+              city: facility.city,
+              state: facility.state,
+              zip: facility.zip,
+            }
+          : null,
         latestNote: c.latestNote ?? null,
         latestTouch: c.latestTouch ?? null,
       });

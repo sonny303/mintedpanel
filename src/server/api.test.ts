@@ -288,14 +288,17 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     expect(casesMock).not.toHaveBeenCalled();
   });
 
-  it("POST /api/cases/:id/context is 405", async () => {
-    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
-    const res = await handleApiRequest(
-      new Request("https://x.test/api/cases/case-1/context", { method: "POST" }),
-    );
-    expect(res.status).toBe(405);
-    expect(caseContextMock).not.toHaveBeenCalled();
-  });
+  it.each([["POST"], ["PUT"], ["PATCH"], ["DELETE"]])(
+    "%s /api/cases/:id/context is 405",
+    async (method) => {
+      authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+      const res = await handleApiRequest(
+        new Request("https://x.test/api/cases/case-1/context", { method }),
+      );
+      expect(res.status).toBe(405);
+      expect(caseContextMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("POST /api/cases/:id/touches dispatches the case id and parsed body with auth", async () => {
     authenticateMock.mockResolvedValue({ orgId: "org-1", role: "specialist" } as never);
