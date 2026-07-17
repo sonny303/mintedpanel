@@ -329,6 +329,58 @@ describe("provider profile service — injected server context", () => {
     expect(captures.some((c) => c.table === "group_insurance_policies")).toBe(false);
   });
 
+  // E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies
+  // resolves deterministically to the malpractice policy with the newest
+  // policy_end_date — a service-internal refinement, no wire change.
+  it("multi-policy group resolves the malpractice policy with the newest end date", async () => {
+    const policies = [
+      {
+        id: "gp-gl",
+        insurance_type: "general_liability",
+        policy_number: "GL-1",
+        policy_end_date: "2030-01-01",
+      },
+      {
+        id: "gp-old",
+        insurance_type: "professional_liability",
+        policy_number: "MAL-OLD",
+        policy_end_date: "2026-01-01",
+      },
+      {
+        id: "gp-new",
+        insurance_type: "professional_liability",
+        policy_number: "MAL-NEW",
+        policy_end_date: "2027-06-01",
+      },
+    ];
+    const { db } = makeFakeDb(
+      { ...happyTables(), group_insurance_policies: { data: policies } },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+    // The newest-end-date malpractice (professional_liability) policy wins —
+    // never the general-liability row, even though its end date is later.
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("MAL-NEW");
+  });
+
+  it("multi-policy group with no malpractice policy is honestly unresolved", async () => {
+    const policies = [
+      { id: "gp-gl1", insurance_type: "general_liability", policy_number: "GL-1" },
+      { id: "gp-gl2", insurance_type: "general_liability", policy_number: "GL-2" },
+    ];
+    const { db } = makeFakeDb(
+      { ...happyTables(), group_insurance_policies: { data: policies } },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBeNull();
+    expect(reasonFor(profile, "groupInsurance.policyNumber")).toContain("none is malpractice");
+  });
+
   it("survives catalog entries pointing at unknown columns or unsupported tables", async () => {
     const oddCatalog: Json = [
       { table: "providers", token: "provider.mystery", column: "mystery_column" },

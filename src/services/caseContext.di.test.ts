@@ -5,10 +5,12 @@ import type { Database } from "@/integrations/supabase/types";
 import { getCaseContext, type CaseContextServiceCtx } from "./caseContext";
 
 // Minimal chainable fake of the supabase-js query builder — enough for the
-// case-context shapes (org-scoped maybeSingle case lookup, the touchlog
-// .eq().order() read, and the profiles maybeSingle author resolution). Records
-// table, select columns, and filters; results consume in call order, which is
-// deterministic in getCaseContext.
+// case-context shapes (org-scoped maybeSingle case lookup, the open-tasks
+// .eq().eq().neq().order() read, the optional facility maybeSingle, the
+// touchlog .eq().order() read, and the profiles maybeSingle author
+// resolution). Records table, select columns, and filters; results consume in
+// call order, which is deterministic in getCaseContext:
+//   credential_cases -> tasks -> [facilities] -> touches -> [profiles]
 interface Captured {
   table?: string;
   selectCols?: string;
@@ -33,6 +35,10 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           cap.filters.push([col, val]);
           return builder;
         },
+        neq(col: string, val: unknown) {
+          cap.filters.push([`neq:${col}`, val]);
+          return builder;
+        },
         order() {
           return builder;
         },
@@ -51,6 +57,20 @@ function ctxWith(db: SupabaseClient<Database>): CaseContextServiceCtx {
 }
 
 const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+// A case row as the FK-embedded read returns it.
+function caseRow(over: Record<string, unknown> = {}) {
+  return {
+    id: CASE_ID,
+    state: "KS",
+    payer_reference_id: null,
+    payer_pipeline_state: "not_started",
+    facility_id: null,
+    providers: { id: "prov-1", first_name: "Kay", last_name: "One" },
+    payers: { id: "pay-1", name: "BCBS of Kansas" },
+    ...over,
+  };
+}
 
 function noteEntry(notes: string, coordinatorId: string | null, createdAt: string) {
   return {
@@ -82,7 +102,7 @@ function touchpointEntry(
 }
 
 describe("getCaseContext — org isolation", () => {
-  it("returns null (the route's 404) for a case outside the org, before any touchlog read", async () => {
+  it("returns null (the route's 404) for a case outside the org, before any further read", async () => {
     const { db, captures } = makeFakeDb([{ data: null }]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
@@ -96,26 +116,46 @@ describe("getCaseContext — org isolation", () => {
     expect(captures[0].selectCols).not.toContain("*");
   });
 
-  it("org-scopes the case AND touchlog reads", async () => {
-    const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null } },
-      { data: [] },
-    ]);
+  it("org-scopes the case, tasks, AND touchlog reads", async () => {
+    const { db, captures } = makeFakeDb([{ data: caseRow() }, { data: [] }, { data: [] }]);
 
     await getCaseContext(ctxWith(db), CASE_ID);
 
-    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "touches"]);
+    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "tasks", "touches"]);
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
+    // tasks read is case-scoped and excludes completed tasks.
     expect(captures[1].filters).toContainEqual(["case_id", CASE_ID]);
+    expect(captures[1].filters).toContainEqual(["neq:status", "completed"]);
+    expect(captures[2].filters).toContainEqual(["case_id", CASE_ID]);
   });
 });
 
 describe("getCaseContext — projection", () => {
-  it("surfaces the reference number, latest note (author-resolved), and latest touchpoint", async () => {
+  it("surfaces identity, open tasks with execution types, reference, latest note (author-resolved), and latest touchpoint", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: "REF-42", payer_pipeline_state: "submitted" } },
+      { data: caseRow({ payer_reference_id: "REF-42", payer_pipeline_state: "submitted" }) },
+      {
+        data: [
+          {
+            id: "task-1",
+            title: "Enroll on BCBS portal",
+            status: "in_progress",
+            execution_type: "extension_fill",
+            sort_order: 1,
+            due_date: null,
+          },
+          {
+            id: "task-2",
+            title: "Verify roster",
+            status: "in_progress",
+            execution_type: null, // null ⇒ manual
+            sort_order: 2,
+            due_date: "2026-07-20",
+          },
+        ],
+      },
       {
         // newest-first, mixed entry types
         data: [
@@ -137,7 +177,28 @@ describe("getCaseContext — projection", () => {
     expect(result).toEqual({
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
+      provider: { id: "prov-1", name: "Kay One" },
+      payer: { id: "pay-1", name: "BCBS of Kansas" },
+      state: "KS",
       selectedFacility: null,
+      openTasks: [
+        {
+          id: "task-1",
+          title: "Enroll on BCBS portal",
+          status: "in_progress",
+          executionType: "extension_fill",
+          sortOrder: 1,
+          dueDate: null,
+        },
+        {
+          id: "task-2",
+          title: "Verify roster",
+          status: "in_progress",
+          executionType: "manual",
+          sortOrder: 2,
+          dueDate: "2026-07-20",
+        },
+      ],
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",
@@ -153,17 +214,15 @@ describe("getCaseContext — projection", () => {
     expect(captures.map((c) => c.table)).toContain("profiles");
   });
 
-  it("empty reference + no touchlog entries -> empty array and null note/touch, no profiles read", async () => {
-    const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null, payer_pipeline_state: "not_started" } },
-      { data: [] },
-    ]);
+  it("empty reference + no tasks/touchlog entries -> empty arrays and null note/touch, no profiles read", async () => {
+    const { db, captures } = makeFakeDb([{ data: caseRow() }, { data: [] }, { data: [] }]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       referenceNumbers: [],
       payerPipelineState: "not_started",
+      openTasks: [],
       selectedFacility: null,
       latestNote: null,
       latestTouch: null,
@@ -173,7 +232,8 @@ describe("getCaseContext — projection", () => {
 
   it("falls back to email when the note author has no full_name", async () => {
     const { db } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null } },
+      { data: caseRow() },
+      { data: [] },
       { data: [noteEntry("note", "user-9", "2026-07-06T10:00:00Z")] },
       { data: { full_name: null, email: "nadia@x.test" } },
     ]);
@@ -185,7 +245,8 @@ describe("getCaseContext — projection", () => {
 
   it("skips the profiles read (author stays null) when the latest note has no author", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null } },
+      { data: caseRow() },
+      { data: [] },
       { data: [noteEntry("system-ish note", null, "2026-07-06T10:00:00Z")] },
     ]);
 
@@ -201,7 +262,8 @@ describe("getCaseContext — projection", () => {
 
   it("resolves the case-selected facility with its complete nullable address", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null, facility_id: "fac-1" } },
+      { data: caseRow({ facility_id: "fac-1" }) },
+      { data: [] },
       {
         data: {
           id: "fac-1",
@@ -238,7 +300,8 @@ describe("getCaseContext — projection", () => {
 
   it("excludes a facility that does not resolve inside the org (cross-org facility_id -> explicit null)", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null, facility_id: "fac-other-org" } },
+      { data: caseRow({ facility_id: "fac-other-org" }) },
+      { data: [] },
       { data: null },
       { data: [] },
     ]);
@@ -250,23 +313,25 @@ describe("getCaseContext — projection", () => {
     expect(facilityCap?.filters).toContainEqual(["org_id", "org-1"]);
   });
 
-  it("never consults the provider's facility set: no facility link means an explicit null, no facility or assignment read", async () => {
+  it("never consults the provider's facility set: no facility link means an explicit null, no facility read", async () => {
     const { db, captures } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null, facility_id: null } },
+      { data: caseRow({ facility_id: null }) },
+      { data: [] },
       { data: [] },
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
 
-    // Explicit, never guessed: the key is present and null, and neither the
-    // facilities table nor the provider's assignments were ever read.
+    // Explicit, never guessed: the key is present and null, and the facilities
+    // table was never read (only case, tasks, touches).
     expect(result).toHaveProperty("selectedFacility", null);
-    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "touches"]);
+    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "tasks", "touches"]);
   });
 
   it("ignores system_event / task_update entries for both note and touch", async () => {
     const { db } = makeFakeDb([
-      { data: { id: CASE_ID, payer_reference_id: null } },
+      { data: caseRow() },
+      { data: [] },
       {
         data: [
           {

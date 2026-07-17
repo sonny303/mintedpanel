@@ -20,6 +20,7 @@
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
+//   casesearch  cross-org case rows leak into ?q= search results      (15b)
 //   touches     cross-org submission touch accepted and stored       (9, 9b)
 //   tasks       cross-org task_id closed by a submission touch        (13)
 //   casecontext cross-org case context served instead of 404         (14b)
@@ -54,6 +55,7 @@ export const LEAK_MODES = [
   "profile",
   "fillevents",
   "cases",
+  "casesearch",
   "touches",
   "tasks",
   "casecontext",
@@ -285,6 +287,9 @@ export async function createMockApiServer(options = {}) {
   // idempotency, like the real handlers).
   const fillSessions = new Map();
   const touches = new Map();
+  // In-memory extension quick-card layout prefs, keyed by userId (the route is
+  // USER-scoped — prefs follow the user across orgs, so never org-keyed).
+  const viewPrefs = new Map();
   // Per-server provider creates from POST /api/providers, so a create lands in
   // the caller's org (and is only visible to that org). Kept separate from the
   // shared PROVIDERS fixture so it never drifts the count assertions across runs.
@@ -336,6 +341,31 @@ export async function createMockApiServer(options = {}) {
         );
       }
       return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- /api/me/view-prefs (E4.3 TE-15: user-scoped, BEFORE org resolution,
+    // like /api/me/orgs — the layout follows the user across orgs) ---
+    if (/^\/api\/me\/view-prefs\/?$/.test(url.pathname)) {
+      if (method === "GET") {
+        return envelope(res, 200, { fields: viewPrefs.get(user.userId) ?? null });
+      }
+      if (method === "PUT") {
+        const body = await readBody(req);
+        const fields = body?.fields;
+        // Contract mirror: a bounded, deduped, ordered array of catalog keys;
+        // ssnLast4 / any excluded key is a 422 (the catalog excludes it).
+        if (
+          !Array.isArray(fields) ||
+          fields.length > 32 ||
+          new Set(fields).size !== fields.length ||
+          fields.some((f) => typeof f !== "string" || f === "provider.ssnLast4")
+        ) {
+          return envelope(res, 422, null, "invalid fields");
+        }
+        viewPrefs.set(user.userId, fields);
+        return envelope(res, 200, { fields });
+      }
+      return envelope(res, 405, null, "Method not allowed");
     }
 
     const requestedOrg = req.headers["x-org-id"] ?? url.searchParams.get("orgId");
@@ -452,17 +482,75 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, p);
     }
 
-    // --- /api/cases?providerId= (open-case dropdown) ---
+    // --- /api/next-best-action (E4.3 TE-6: org-scoped queue-top read) ---
+    if (/^\/api\/next-best-action\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      // Org-scoped: the queue-top of the caller's own org. Stable fixture item
+      // for the caller's first case; { item: null } when the org has none.
+      const own = CASES.find((c) => c.orgId === orgId);
+      if (!own) return envelope(res, 200, { item: null });
+      const p = PROVIDERS.find((row) => row.id === own.providerId);
+      return envelope(res, 200, {
+        item: {
+          caseId: own.id,
+          providerId: own.providerId,
+          providerName: p ? `${p.firstName} ${p.lastName}`.trim() : "",
+          payerName: own.payerName,
+          groupName: "Demo Group",
+          state: own.state,
+          actionKind: "review",
+          action: "Review case — no open tasks",
+          reason: "No deadline signal on this case — ranked after dated work.",
+          deadline: null,
+          deepLink: `/cases/${own.id}`,
+        },
+      });
+    }
+
+    // --- /api/cases?providerId= (open-case dropdown) or ?q= (E4.3 case search) ---
     if (/^\/api\/cases\/?$/.test(url.pathname)) {
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       const providerId = url.searchParams.get("providerId");
-      if (!providerId) return envelope(res, 422, null, "providerId must be a UUID query parameter");
-      const p = PROVIDERS.find((row) => row.id === providerId);
-      // Real contract: a provider outside the caller's org is a 404, no rows.
-      const visible = p && (p.orgId === orgId || leak === "cases");
-      if (!visible) return envelope(res, 404, null, "Provider not found");
-      const rows = CASES.filter((c) => c.providerId === providerId).map(caseListRow);
-      return envelope(res, 200, rows, null, { total: rows.length });
+      const q = url.searchParams.get("q");
+      if (providerId) {
+        const p = PROVIDERS.find((row) => row.id === providerId);
+        // Real contract: a provider outside the caller's org is a 404, no rows.
+        const visible = p && (p.orgId === orgId || leak === "cases");
+        if (!visible) return envelope(res, 404, null, "Provider not found");
+        const rows = CASES.filter((c) => c.providerId === providerId).map(caseListRow);
+        return envelope(res, 200, rows, null, { total: rows.length });
+      }
+      if (q != null) {
+        // E4.3 TE-11 — case search: org-scoped, matching payer name / provider
+        // name / tracking id. Leak "casesearch": the org filter is skipped and
+        // another org's case leaks into the results (assertion 15b red).
+        const needle = q.trim().toLowerCase();
+        const rows =
+          needle === ""
+            ? []
+            : CASES.filter((c) => c.orgId === orgId || leak === "casesearch")
+                .map((c) => {
+                  const p = PROVIDERS.find((row) => row.id === c.providerId);
+                  const providerName = p ? `${p.firstName} ${p.lastName}`.trim() : "";
+                  return {
+                    id: c.id,
+                    providerId: c.providerId,
+                    providerName,
+                    payerName: c.payerName,
+                    state: c.state,
+                    status: c.status,
+                    payerReferenceId: c.payerReferenceId ?? null,
+                    payerPipelineState: c.payerPipelineState ?? "not_started",
+                  };
+                })
+                .filter((r) => {
+                  const hay =
+                    `${r.providerName} ${r.payerName ?? ""} ${r.payerReferenceId ?? ""}`.toLowerCase();
+                  return hay.includes(needle);
+                });
+        return envelope(res, 200, rows, null, { total: rows.length });
+      }
+      return envelope(res, 422, null, "providerId or q query parameter is required");
     }
 
     // --- /api/cases/:id/touches (submission touch, idempotent) ---

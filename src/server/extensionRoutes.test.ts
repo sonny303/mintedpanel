@@ -6,18 +6,28 @@ import type { ProviderProfile, ProviderProfileResult } from "@/services/provider
 vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
-vi.mock("@/services/providerCases", () => ({ listOpenProviderCases: vi.fn() }));
+vi.mock("@/services/providerCases", () => ({
+  listOpenProviderCases: vi.fn(),
+  searchOrgCases: vi.fn(),
+}));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
+vi.mock("@/services/nextBestAction", () => ({ getNextBestAction: vi.fn() }));
+vi.mock("@/services/extensionViewPrefs", () => ({
+  getExtensionViewPrefs: vi.fn(),
+  putExtensionViewPrefs: vi.fn(),
+}));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
-import { listOpenProviderCases } from "@/services/providerCases";
+import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
+import { getNextBestAction } from "@/services/nextBestAction";
+import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
@@ -26,15 +36,22 @@ import {
   handleCaseContext,
   handleCreateCaseTouch,
   handleListMyOrgs,
+  handleNextBestAction,
+  handleGetViewPrefs,
+  handlePutViewPrefs,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
+const searchCasesMock = vi.mocked(searchOrgCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
+const getNbaMock = vi.mocked(getNextBestAction);
+const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
+const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -367,6 +384,131 @@ describe("provider cases handler", () => {
       PROVIDER_ID,
     );
   });
+
+  // E4.3 TE-11 — the additive ?q= case-search mode on the same route.
+  it("routes ?q= to the case search, forwarding the org-scoped ctx", async () => {
+    const rows = [
+      {
+        id: "c1",
+        providerId: "p1",
+        providerName: "Brooke Ostrander",
+        payerName: "Humana",
+        state: "KS",
+        status: "In Progress",
+        payerReferenceId: "REF-9",
+        payerPipelineState: "submitted",
+      },
+    ];
+    searchCasesMock.mockResolvedValue(rows);
+    const res = await handleListProviderCases(url("?q=ostrander"), ctx("billing"));
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual(rows);
+    expect(b.meta).toEqual({ total: 1 });
+    expect(searchCasesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      "ostrander",
+    );
+    // providerId path is untouched by a q-only request.
+    expect(listCasesMock).not.toHaveBeenCalled();
+  });
+
+  it("prefers providerId over q when both are present (the fill flow's primary path)", async () => {
+    listCasesMock.mockResolvedValue([]);
+    await handleListProviderCases(url(`?providerId=${PROVIDER_ID}&q=x`), ctx());
+    expect(listCasesMock).toHaveBeenCalled();
+    expect(searchCasesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("next-best-action handler", () => {
+  it("returns the queue-top item, forwarding the org-scoped ctx (billing may read)", async () => {
+    const result = {
+      item: {
+        caseId: "c1",
+        providerId: "p1",
+        providerName: "Kay One",
+        payerName: "BCBS of Kansas",
+        groupName: "KFP Group",
+        state: "KS",
+        actionKind: "task" as const,
+        action: "Enroll on BCBS portal",
+        reason: "Follow-up overdue since Jul 1, 2026 — surfaced ahead of deadline-only cases.",
+        deadline: { date: "2026-07-01", source: "follow_up" as const, overdue: true },
+        deepLink: "/cases/c1",
+      },
+    };
+    getNbaMock.mockResolvedValue(result);
+    const res = await handleNextBestAction(ctx("billing"));
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual(result);
+    expect(getNbaMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
+  });
+
+  it("returns an explicit empty result for a clear queue", async () => {
+    getNbaMock.mockResolvedValue({ item: null });
+    const res = await handleNextBestAction(ctx());
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ item: null });
+  });
+});
+
+describe("view-prefs handlers (user-scoped)", () => {
+  function userCtx(userId = "u1"): UserContext {
+    return { userId, email: "t@minted.com", userMetadata: null, db: {} as UserContext["db"] };
+  }
+
+  it("GET returns { fields } scoped by the JWT user id, no audit", async () => {
+    getViewPrefsMock.mockResolvedValue({ fields: ["provider.npi", "license.licenseNumber"] });
+    const res = await handleGetViewPrefs(userCtx("uA"));
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ fields: ["provider.npi", "license.licenseNumber"] });
+    expect(getViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "uA" }));
+  });
+
+  it("GET returns { fields: null } when nothing is saved (never a null envelope data)", async () => {
+    getViewPrefsMock.mockResolvedValue({ fields: null });
+    const res = await handleGetViewPrefs(userCtx());
+    const b = await body(res);
+    expect(b.data).toEqual({ fields: null });
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "nope"],
+    ["an array", []],
+  ])("PUT rejects %s body with 422 before writing", async (_n, badBody) => {
+    const res = await handlePutViewPrefs(badBody, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects an excluded/unknown key (ssnLast4) with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["provider.ssnLast4"] }, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects a duplicate key with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["provider.npi", "provider.npi"] }, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT persists a valid ordered layout scoped by the JWT user id", async () => {
+    const fields = ["license.licenseNumber", "provider.npi", "group.tin"];
+    putViewPrefsMock.mockResolvedValue({ fields });
+    const res = await handlePutViewPrefs({ fields }, userCtx("uB"));
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ fields });
+    expect(putViewPrefsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "uB" }),
+      fields,
+    );
+  });
 });
 
 describe("case context handler", () => {
@@ -386,10 +528,14 @@ describe("case context handler", () => {
     expect((await body(res)).error).toBe("Case not found");
   });
 
-  it("returns 200 with the context projection, forwarding the org-scoped ctx (billing may read)", async () => {
+  it("returns 200 with the context projection, no-store + one READ audit, forwarding the org-scoped ctx (billing may read)", async () => {
     const context = {
       referenceNumbers: ["REF-42"],
       payerPipelineState: "submitted",
+      // E4.3 TE-2: identity header + open tasks with execution types.
+      provider: { id: "prov-1", name: "Kay One" },
+      payer: { id: "pay-1", name: "BCBS of Kansas" },
+      state: "KS",
       // E4.3 TE-2: the case-selected facility's complete nullable practice
       // address rides the same projection, pass-through from the service.
       selectedFacility: {
@@ -401,6 +547,16 @@ describe("case context handler", () => {
         state: "KS",
         zip: "67202",
       },
+      openTasks: [
+        {
+          id: "task-1",
+          title: "Enroll on BCBS portal",
+          status: "in_progress",
+          executionType: "extension_fill",
+          sortOrder: 1,
+          dueDate: null,
+        },
+      ],
       latestNote: {
         content: "call the rep tomorrow",
         createdAt: "2026-07-06T10:00:00Z",
@@ -414,8 +570,10 @@ describe("case context handler", () => {
       },
     };
     getCaseContextMock.mockResolvedValue(context);
-    const res = await handleCaseContext(CASE_ID, ctx("billing"));
+    const c = ctx("billing");
+    const res = await handleCaseContext(CASE_ID, c);
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const b = await body(res);
     expect(b.data).toEqual(context);
     expect(b.meta).toBeNull();
@@ -423,6 +581,19 @@ describe("case context handler", () => {
       expect.objectContaining({ orgId: "org-1" }),
       CASE_ID,
     );
+    // Exactly one READ audit row (never the body/token values).
+    expect(c.writeAudit).toHaveBeenCalledTimes(1);
+    expect(c.writeAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: "READ", entityType: "case", entityId: CASE_ID }),
+    );
+  });
+
+  it("writes no audit row when the case is outside the org (404 is not a read)", async () => {
+    getCaseContextMock.mockResolvedValue(null);
+    const c = ctx();
+    const res = await handleCaseContext(CASE_ID, c);
+    expect(res.status).toBe(404);
+    expect(c.writeAudit).not.toHaveBeenCalled();
   });
 });
 

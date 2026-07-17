@@ -65,6 +65,9 @@ export const queryKeys = {
   // queue; plus the one run row the batch-landing banner reads.
   queueTaskRows: (orgId: string) => ["tasks", orgId, "queue-projection"] as const,
   queueProviderRows: (orgId: string) => ["providers", orgId, "queue-projection"] as const,
+  // E4.3 F4.3.1: per-case portal keys for the My Cases "Work in portal"
+  // launcher; rides the ["tasks", orgId] prefix so task edits re-derive it.
+  casePortalKeys: (orgId: string) => ["tasks", orgId, "case-portal-keys"] as const,
   generationRun: (orgId: string, runId: string) => ["generation-run", orgId, runId] as const,
   // E2.4 run history: the org's runs list + one run's immutable disposition
   // rows (INSERT-only data — long staleTime is safe).

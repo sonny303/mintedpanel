@@ -30,10 +30,26 @@ import {
   type QueueReadinessInput,
   type QueueTouchInput,
 } from "@/lib/nextBestActions";
-import { listQueueProviderRows, listQueueTaskRows } from "@/services/nextBestActions";
+import {
+  listCasePortalKeys,
+  listQueueProviderRows,
+  listQueueTaskRows,
+} from "@/services/nextBestActions";
 import { getGenerationRun } from "@/services/caseGenerationRuns";
 
 const THIRTY_SECONDS = 30_000;
+
+/** E4.3 F4.3.1 — per-case portal keys for the My Cases "Work in portal"
+ * launcher (resolved to URLs against usePortals in the component). */
+export function useCasePortalKeys() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.casePortalKeys(orgId),
+    queryFn: listCasePortalKeys,
+    enabled: orgId !== "no-org",
+    staleTime: THIRTY_SECONDS,
+  });
+}
 
 export function useQueueTaskRows() {
   const orgId = useActiveOrgId() ?? "no-org";
