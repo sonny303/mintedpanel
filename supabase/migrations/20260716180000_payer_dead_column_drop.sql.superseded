@@ -1,3 +1,12 @@
+-- SUPERSEDED / NEVER APPLIED — retired 2026-07-17. This migration was NEVER
+-- applied to hosted (absent from supabase_migrations.schema_migrations). It is
+-- replaced by 20260717221914_payer_dead_column_drop_superseding.sql, which does
+-- the same column/constraint/index drops but DELIBERATELY OMITS the
+-- review_payer_catalog_change reissue below — hosted now carries PR #170's
+-- newer platform-only body (20260716191000 / hosted 20260716212728), and this
+-- file's reissue would have clobbered it. The .superseded extension makes the
+-- Supabase CLI ignore this file (it matches *.sql only). Kept for history.
+-- ===========================================================================
 -- Pre-GA dead-column drop — payers + credential_cases.
 --
 -- Governance: authorized by the pre-GA destructive-DDL window added to
