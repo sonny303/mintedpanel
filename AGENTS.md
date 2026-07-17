@@ -50,16 +50,42 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 
 ## Database rules
 
-- NEVER rename, restructure, or delete tables or columns. Migrations are additive.
+- **Schema change policy (pre-GA window).** Until the production cutover PR
+  lands, destructive DDL (DROP COLUMN, DROP TABLE, column renames) is permitted
+  when: (1) the PR description names the PM approval and links the audit or
+  decision doc, (2) the PR includes a pre-drop data inventory (row count,
+  non-null count) pasted into the description, and (3) all code references are
+  removed in the same PR. Append-only ledgers (`audit_log`, `*_history`,
+  `touches`) remain protected: never drop or rewrite. **One-time carve-out
+  (PM SS, 2026-07-17, pre-prod-cut full data wipe):** the operator-run
+  `docs/ops/full-wipe-all-orgs.sql` data wipe — or, if the PM opts for the
+  smaller alternative, `docs/ops/teardown-test-orgs.sql` — (PLAN-full-data-wipe.md;
+  PM decisions Q1=C/Q2=C/Q3=B on record) may DELETE ledger rows as part of
+  clearing organizations from the dev project, subject to the blocking preconditions
+  (verified pg_dump snapshot restore; human-run in the SQL editor, never an
+  agent/MCP). This is a data deletion, not DDL — no table is dropped or
+  restructured — and it does not weaken the ledger rule for application code
+  or policies: the no-UPDATE/no-DELETE rule remains in force before and after
+  the wipe. This carve-out expires once the wipe is executed and verified.
+  The broader pre-GA DDL window closes at production cut. The cutover PR must revert this section to additive-only
+  (retain, hide, stop-write, deprecate in place; no renames, restructures, or
+  drops).
+  - _Post-GA version — restore this verbatim at the cutover PR; swapping the
+    pre-GA block above for this one line re-locks the schema:_ **NEVER rename,
+    restructure, or delete tables or columns. Migrations are additive.**
 - `touches`, `status_history`, and `audit_log` are append-only — no UPDATE, no DELETE, in code or policy.
-- Providers store `ssn_last4` only. Never store or accept a full SSN.
-- One credentialing case per `(provider_id, payer_id, state)`. Credentialing only.
+- Providers store `ssn_last4` only in ordinary tables. The full SSN exists ONLY inside the E4.4 server-only Sensitive Identifiers Vault (PM security decision 2026-07-14): a separated, RLS-locked table with no PostgREST/client SELECT grant, encrypted at rest, accessed exclusively through the narrowly scoped audited SECURITY DEFINER RPCs the epic defines (fill-only release with `no-store`, admin reveal with justification, audited ingress). Outside those vault paths the last-4-only rule still binds absolutely: never accept, store, log, export, or render a full SSN anywhere else.
+- One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
 - Contracting status lives on `contracts` (group + payer + state). Never put contracting status on `credential_cases`.
 - All access is scoped by `org_id` RLS. Every insert sets `org_id` from the active org. Every public table needs explicit `GRANT`s alongside RLS.
+- Any migration that adds or supersedes a table or column updates the row in `docs/data-model/table-register.md` in the same PR.
+- Follow the grain and M:N rules in `SCHEMA.md` — state/purpose/payer-varying data is a child row keyed by that dimension, never a new column; plausible many-to-many relationships get a join table from day one.
+- Epics and feature specs list a table trace (tables read / tables written); reviewers reconcile it against the table register.
 
 ## Style rules
 
 - Design tokens: primary `#1B4D3E`, border `#E8E5E0` 1px, no shadows on cards, no gradients, no decorative color backgrounds.
+- Component governance (E0.9): a component not defined by the design system (`docs/redesign/design-system/`) must be stock shadcn styled by tokens only, and logged in `DESIGN-DEBT.md` in the same PR. Deferred engineering debt lives in `TECH-DEBT.md`; both registers are at the repo root and are triaged each design-review cycle.
 - Border radius: `rounded-md` on cards/inputs/dropdowns; `rounded-full` for pills and avatars only.
 - Rows `h-10`, card padding `p-4` max, section gaps `gap-4` max.
 - Color outside the sidebar accent and chart bars is reserved for status pills and destructive states.

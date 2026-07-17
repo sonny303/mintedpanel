@@ -33,6 +33,7 @@ import { useGenerateLaunchCases } from "@/hooks/useLaunches";
 import { getMsoRoutingRule } from "@/services/lookups";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { pickTemplate } from "@/lib/pickTemplate";
+import { stampTasks } from "@/lib/sopStamp";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import type { GenerationEntry } from "@/services/launches";
 import type { Facility, MsoRoutingRule, Provider } from "@/types";
@@ -177,13 +178,8 @@ export function CreateCasesDialog({
           specialty: provider.specialty ?? null,
           msoId,
         },
-        tasks: tasks.map((t) => ({
-          title: t.title,
-          description: t.description,
-          sopContent: t.sopContent,
-          sortOrder: t.sortOrder,
-          dueDate: t.dueDate,
-        })),
+        // E2.2 F2.2.1: stamp the version resolved above (same head row).
+        tasks: stampTasks(tasks, template),
         providerName: `${provider.firstName} ${provider.lastName}`,
         payerName: row.payerName,
       });

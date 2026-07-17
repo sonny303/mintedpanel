@@ -28,6 +28,7 @@ import { getMsoRoutingRule } from "@/services/lookups";
 
 import { resolveTemplate } from "@/lib/sopResolver";
 import { pickTemplate } from "@/lib/pickTemplate";
+import { stampTasks } from "@/lib/sopStamp";
 import { queryKeys } from "@/hooks/queryKeys";
 import { useCases, useContractFor, useCreateCase } from "@/hooks/useCases";
 import { useFacilityAssignments } from "@/hooks/useLaunches";
@@ -243,13 +244,8 @@ export function NewCaseModal({ open, onOpenChange, provider, group }: NewCaseMod
               msoId,
               assignedTo: coordinatorId === NONE ? null : coordinatorId,
             },
-            tasks: tasks.map((t) => ({
-              title: t.title,
-              description: t.description,
-              sopContent: t.sopContent,
-              sortOrder: t.sortOrder,
-              dueDate: t.dueDate,
-            })),
+            // E2.2 F2.2.1: stamp the version resolved above (same head row).
+            tasks: stampTasks(tasks, template),
           });
 
           created.push({ id: caseRow.id, payerName: payer.name });

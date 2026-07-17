@@ -2,6 +2,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
 import type { StatusConfig, StatusTrack } from "@/types";
 
 export interface StatusConfigInput {
@@ -41,7 +42,8 @@ export async function createStatusConfig(input: StatusConfigInput): Promise<Stat
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  // E0.10: duplicate (org, track, label) is now DB-rejected — surface it friendly.
+  if (error) throw translateDbError(error);
   const created = camelizeRow<StatusConfig>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -67,7 +69,7 @@ export async function updateStatusConfig(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<StatusConfig>(data);
   await writeAudit({
     actionType: "UPDATE",

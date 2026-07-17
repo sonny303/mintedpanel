@@ -4,6 +4,7 @@
 // channel exposes only the outcomes that make sense for it, so a phone call is
 // never marked "Submitted" and an email is never "Left voicemail".
 import type { TouchOutcome, TouchType } from "@/types";
+import { DISPOSITION_LABELS } from "@/lib/touchDispositions";
 
 export type Channel = "phone" | "email" | "portal" | "fax" | "mail";
 
@@ -82,6 +83,8 @@ export const OUTCOME_LABELS: Record<string, string> = {
       .flat()
       .map((o) => [o.value, o.label]),
   ),
+  // E4.1 disposition labels (F4.1.4) so `outcomeLabel` resolves them too.
+  ...DISPOSITION_LABELS,
 };
 
 export function outcomeLabel(code: string | null | undefined): string {

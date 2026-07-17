@@ -5,6 +5,8 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
+import { selectActiveOrgId } from "@/lib/landing";
+import type { LifecycleState } from "@/types";
 
 let registeredQueryClient: QueryClient | null = null;
 export function registerQueryClient(client: QueryClient): void {
@@ -17,6 +19,11 @@ export interface MembershipEntry {
   orgId: string;
   orgName: string;
   role: AppRole;
+  // Internal lifecycle + creation order carried alongside the membership so the
+  // boot-time active-org validation can be lifecycle-aware (E0.4 TE-2). Never
+  // rendered as a status label (E0.0 F0.0.2) — used only for org selection.
+  lifecycleState: LifecycleState;
+  createdAt: string;
 }
 
 export type SignInErrorKind = "invalid" | "network" | "unknown";
@@ -111,7 +118,7 @@ export const useAuthStore = create<AuthState>()(
           .maybeSingle();
         const { data, error } = await supabase
           .from("memberships")
-          .select("org_id, role, organizations(name)")
+          .select("org_id, role, organizations(name, lifecycle_state, created_at)")
           .eq("user_id", user.id);
         if (error) {
           set({ fullName: profile?.full_name ?? null });
@@ -121,14 +128,42 @@ export const useAuthStore = create<AuthState>()(
           set({ memberships: [], activeOrgId: null, fullName: profile?.full_name ?? null });
           return;
         }
-        const memberships: MembershipEntry[] = data.map((row) => ({
-          orgId: row.org_id as string,
-          orgName: (row.organizations as { name: string } | null)?.name ?? "Organization",
-          role: row.role as AppRole,
-        }));
-        const current = get().activeOrgId;
-        const hasValidCurrent = current !== null && memberships.some((m) => m.orgId === current);
-        const activeOrgId = hasValidCurrent ? current : (memberships[0]?.orgId ?? null);
+        const memberships: MembershipEntry[] = data.map((row) => {
+          const org = row.organizations as {
+            name: string;
+            lifecycle_state: string;
+            created_at: string;
+          } | null;
+          return {
+            orgId: row.org_id as string,
+            orgName: org?.name ?? "Organization",
+            role: row.role as AppRole,
+            // Anything other than the three known states coerces to 'active' (only
+            // 'inactive' changes selection); the DB CHECK guarantees one of three.
+            lifecycleState: (org?.lifecycle_state === "prospect" ||
+            org?.lifecycle_state === "inactive"
+              ? org.lifecycle_state
+              : "active") as LifecycleState,
+            createdAt: org?.created_at ?? "",
+          };
+        });
+        // E0.4 TE-2: keep the persisted last-active org if it's still a valid,
+        // non-inactive membership; otherwise fall back to the most recently created
+        // live org (not just the first membership). If every org is inactive,
+        // selectActiveOrgId returns null — keep a membership active anyway so the
+        // shell has an org context (the landing resolver routes such users to the
+        // Portfolio all-inactive fallback).
+        const activeOrgId =
+          selectActiveOrgId(
+            memberships.map((m) => ({
+              id: m.orgId,
+              lifecycleState: m.lifecycleState,
+              createdAt: m.createdAt,
+            })),
+            get().activeOrgId,
+          ) ??
+          memberships[0]?.orgId ??
+          null;
         set({ memberships, activeOrgId, fullName: profile?.full_name ?? null });
       },
 

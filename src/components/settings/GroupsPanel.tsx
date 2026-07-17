@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
+import { StatesMultiSelect } from "@/components/onboarding/StatesMultiSelect";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useCreateProviderGroup, useUpdateProviderGroup } from "@/hooks/useOrgSettings";
 import { useIsAdmin } from "@/lib/permissions";
@@ -136,7 +137,7 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
   const [name, setName] = useState(group?.name ?? "");
   const [tin, setTin] = useState(group?.tin ?? "");
   const [npi, setNpi] = useState(group?.npiType2 ?? "");
-  const [states, setStates] = useState<string>(group?.states?.join(", ") ?? "");
+  const [states, setStates] = useState<string[]>(group?.states ?? []);
   const [active, setActive] = useState<boolean>(group?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,10 +183,6 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
       setError("Name is required");
       return;
     }
-    const stateArr = states
-      .split(",")
-      .map((s) => s.trim().toUpperCase())
-      .filter(Boolean);
     const cs = sameAsBilling ? billStreet : corrStreet;
     const cc = sameAsBilling ? billCity : corrCity;
     const cst = sameAsBilling ? billState : corrState;
@@ -194,7 +191,7 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
       name: name.trim(),
       tin: tin.trim() || null,
       npiType2: npi.trim() || null,
-      states: stateArr.length > 0 ? stateArr : null,
+      states: states.length > 0 ? states : null,
       isActive: active,
       billingStreet: billStreet.trim() || null,
       billingCity: billCity.trim() || null,
@@ -281,13 +278,8 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
             </div>
           </div>
           <div>
-            <Label className="text-[12px] uppercase tracking-wider">States (comma separated)</Label>
-            <Input
-              value={states}
-              onChange={(e) => setStates(e.target.value)}
-              placeholder="TX, CA, NY"
-              className="h-9 rounded-[4px]"
-            />
+            <Label className="text-[12px] uppercase tracking-wider">Operating states</Label>
+            <StatesMultiSelect value={states} onChange={setStates} />
           </div>
 
           <Collapsible open={billingOpen} onOpenChange={setBillingOpen}>

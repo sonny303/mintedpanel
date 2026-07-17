@@ -1,12 +1,16 @@
-// Touchlog card on case detail: the single case-activity timeline. Renders every
-// entry_type (touchpoint / note / system_event / task_update) and offers inline
-// "Add touch" (channel-aware, Story 3) and "Add note" (Story 1) forms. The
-// mutation hooks stay with the parent route (onSave*).
-import { useState } from "react";
+// Touchlog card on case detail: the single case-activity timeline. E4.1 gives it
+// the structured entry form (type + optional disposition + prominent optional
+// recipient + follow-up with an explicit clear), renders the type pill /
+// disposition / recipient on each row, shows the correction pair, filters the
+// timeline (type / outcome / recipient / follow-up status / date), surfaces the
+// last payer communication, and exports the log to CSV. Corrections are appends
+// (onCorrectTouch); the mutation hooks stay with the parent route.
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,17 +23,23 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { fmtDate } from "@/lib/format";
+import { outcomeLabel } from "@/lib/touchOutcomes";
+import { CANONICAL_TOUCH_TYPES, touchTypeDirection, TOUCH_TYPE_LABELS } from "@/lib/touchTypes";
 import {
-  CHANNELS,
-  outcomeLabel,
-  outcomesForChannel,
-  REFERENCE_NUMBER_OUTCOME,
-  touchTypeForChannel,
-  type Channel,
-} from "@/lib/touchOutcomes";
+  dispositionRequiresContext,
+  OTHER_DISPOSITION,
+  TOUCH_DISPOSITIONS,
+} from "@/lib/touchDispositions";
+import { followUpStatus } from "@/lib/followUps";
+import { buildTouchesCsv } from "@/lib/touchesExport";
+import { downloadCsvText } from "@/lib/csv";
+import type { TouchInput } from "@/services/touches";
 import {
   Calendar,
   CheckSquare,
+  Download,
+  FileCheck,
+  Filter,
   Globe,
   Info,
   Mail,
@@ -37,12 +47,14 @@ import {
   Phone,
   Plus,
   Printer,
+  RotateCcw,
   Send,
+  Stethoscope,
   StickyNote,
   User,
+  Users,
 } from "lucide-react";
-import type { Profile } from "@/types";
-import type { Touch, TouchOutcome, TouchType } from "@/types";
+import type { Profile, Touch, TouchOutcome, TouchType } from "@/types";
 
 const TOUCH_TYPE_ICON: Record<TouchType, typeof Phone> = {
   call: Phone,
@@ -50,22 +62,15 @@ const TOUCH_TYPE_ICON: Record<TouchType, typeof Phone> = {
   portal: Globe,
   fax: Printer,
   mail: Send,
-};
-const TOUCH_TYPE_LABEL: Record<TouchType, string> = {
-  call: "Phone",
-  email: "Email",
-  portal: "Portal",
-  fax: "Fax",
-  mail: "Mail",
+  caqh_update: FileCheck,
+  provider_outreach: Stethoscope,
+  internal_sync: Users,
 };
 
-export interface TouchInput {
-  touchDate: string;
-  touchType: TouchType;
-  outcome: TouchOutcome;
-  notes: string | null;
-  nextFollowUpDate: string | null;
-}
+const NO_OUTCOME = "__none__";
+const ALL = "__all__";
+
+type FollowUpFilter = "any" | "overdue" | "active" | "none";
 
 export function CaseTouchesPanel({
   touches,
@@ -75,7 +80,8 @@ export function CaseTouchesPanel({
   savingNote,
   onSaveTouch,
   onSaveNote,
-  onSetReference,
+  onCorrectTouch,
+  today = format(new Date(), "yyyy-MM-dd"),
 }: {
   touches: Touch[];
   coordinators: Profile[];
@@ -84,50 +90,212 @@ export function CaseTouchesPanel({
   savingNote: boolean;
   onSaveTouch: (input: TouchInput) => Promise<void> | void;
   onSaveNote: (content: string) => Promise<void> | void;
-  onSetReference: (value: string) => Promise<void> | void;
+  onCorrectTouch: (originalTouchId: string, input: TouchInput) => Promise<void> | void;
+  today?: string;
 }) {
   const [openForm, setOpenForm] = useState<"none" | "touch" | "note">("none");
+  const [correcting, setCorrecting] = useState<Touch | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string>(ALL);
+  const [outcomeFilter, setOutcomeFilter] = useState<string>(ALL);
+  const [recipientFilter, setRecipientFilter] = useState("");
+  const [followUpFilter, setFollowUpFilter] = useState<FollowUpFilter>("any");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const coordName = (id: string | null) => {
     const coord = coordinators.find((x) => x.id === id);
     return coord?.fullName ?? coord?.email ?? "—";
   };
 
+  // Correction linkage: which touch corrects which, and which have been corrected.
+  const { correctedByOf, correctionTargetDate } = useMemo(() => {
+    const correctedBy = new Map<string, Touch>();
+    const targetDate = new Map<string, string>();
+    const byId = new Map(touches.map((t) => [t.id, t]));
+    for (const t of touches) {
+      if (t.correctsTouchId) {
+        correctedBy.set(t.correctsTouchId, t);
+        const target = byId.get(t.correctsTouchId);
+        if (target) targetDate.set(t.id, target.touchDate);
+      }
+    }
+    return { correctedByOf: correctedBy, correctionTargetDate: targetDate };
+  }, [touches]);
+
+  // Last payer communication (TE): most recent payer-facing touchpoint.
+  const lastPayerTouch = useMemo(() => {
+    return (
+      touches
+        .filter((t) => t.entryType === "touchpoint" && t.touchType)
+        .filter((t) => touchTypeDirection(t.touchType as TouchType) === "payer_facing")
+        .slice()
+        .sort((a, b) => (a.touchDate < b.touchDate ? 1 : a.touchDate > b.touchDate ? -1 : 0))[0] ??
+      null
+    );
+  }, [touches]);
+
+  const filterActive =
+    typeFilter !== ALL ||
+    outcomeFilter !== ALL ||
+    recipientFilter.trim() !== "" ||
+    followUpFilter !== "any" ||
+    dateFrom !== "" ||
+    dateTo !== "";
+
+  const visibleTouches = useMemo(() => {
+    const needle = recipientFilter.trim().toLowerCase();
+    return touches.filter((t) => {
+      if (typeFilter !== ALL && t.touchType !== typeFilter) return false;
+      if (outcomeFilter !== ALL && (t.outcome ?? "") !== outcomeFilter) return false;
+      if (needle) {
+        const hay = `${t.recipientName ?? ""} ${t.recipientContact ?? ""}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      if (followUpFilter !== "any") {
+        const status = followUpStatus(t.nextFollowUpDate, today);
+        if (followUpFilter === "overdue" && status !== "overdue") return false;
+        if (followUpFilter === "active" && !(status === "overdue" || status === "upcoming"))
+          return false;
+        if (followUpFilter === "none" && t.nextFollowUpDate) return false;
+      }
+      if (dateFrom && t.touchDate < dateFrom) return false;
+      if (dateTo && t.touchDate > dateTo) return false;
+      return true;
+    });
+  }, [
+    touches,
+    typeFilter,
+    outcomeFilter,
+    recipientFilter,
+    followUpFilter,
+    dateFrom,
+    dateTo,
+    today,
+  ]);
+
+  const resetFilters = () => {
+    setTypeFilter(ALL);
+    setOutcomeFilter(ALL);
+    setRecipientFilter("");
+    setFollowUpFilter("any");
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  const exportCsv = () => {
+    const csv = buildTouchesCsv(touches, coordName);
+    downloadCsvText(`touchlog-${today}.csv`, csv);
+  };
+
   return (
     <Card className="shadow-none border-border">
-      <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between">
+      <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between gap-2">
         <CardTitle className="text-[14px] font-semibold">Touchlog</CardTitle>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => setOpenForm((v) => (v === "note" ? "none" : "note"))}
-            >
-              <StickyNote className="w-4 h-4 mr-1" /> Add note
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() => setOpenForm((v) => (v === "touch" ? "none" : "touch"))}
-            >
-              <Plus className="w-4 h-4 mr-1" /> Add touch
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setShowFilters((v) => !v)}
+            aria-label="Filter touchlog"
+          >
+            <Filter className="w-4 h-4 mr-1" /> Filter
+            {filterActive ? <span className="ml-1 w-1.5 h-1.5 rounded-full bg-primary" /> : null}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={exportCsv}
+            disabled={touches.length === 0}
+            aria-label="Export touchlog to CSV"
+          >
+            <Download className="w-4 h-4 mr-1" /> Export
+          </Button>
+          {canEdit && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  setCorrecting(null);
+                  setOpenForm((v) => (v === "note" ? "none" : "note"));
+                }}
+              >
+                <StickyNote className="w-4 h-4 mr-1" /> Add note
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  setCorrecting(null);
+                  setOpenForm((v) => (v === "touch" ? "none" : "touch"));
+                }}
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add touch
+              </Button>
+            </>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
+        {showFilters ? (
+          <TouchFilters
+            typeFilter={typeFilter}
+            outcomeFilter={outcomeFilter}
+            recipientFilter={recipientFilter}
+            followUpFilter={followUpFilter}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onType={setTypeFilter}
+            onOutcome={setOutcomeFilter}
+            onRecipient={setRecipientFilter}
+            onFollowUp={setFollowUpFilter}
+            onDateFrom={setDateFrom}
+            onDateTo={setDateTo}
+            onReset={resetFilters}
+            resultCount={visibleTouches.length}
+            totalCount={touches.length}
+          />
+        ) : null}
+
+        {lastPayerTouch ? (
+          <div className="px-4 py-2 border-b border-border bg-muted/20 text-[12px] text-muted-foreground flex items-center gap-1.5">
+            <Phone className="w-3 h-3" />
+            Last payer communication:{" "}
+            <span className="font-medium text-foreground">
+              {TOUCH_TYPE_LABELS[lastPayerTouch.touchType as TouchType]}
+            </span>{" "}
+            on <span className="tabular-nums">{fmtDate(lastPayerTouch.touchDate)}</span>
+            {lastPayerTouch.outcome ? ` · ${outcomeLabel(lastPayerTouch.outcome)}` : ""}
+          </div>
+        ) : null}
+
         {openForm === "touch" && canEdit ? (
           <AddTouchForm
+            key="new-touch"
+            correctionOf={null}
+            saving={savingTouch}
             onCancel={() => setOpenForm("none")}
-            onSave={async (input, reference) => {
+            onSave={async (input) => {
               await onSaveTouch(input);
-              if (reference) await onSetReference(reference);
               setOpenForm("none");
             }}
+          />
+        ) : null}
+        {correcting && canEdit ? (
+          <AddTouchForm
+            key={`correct-${correcting.id}`}
+            correctionOf={correcting}
             saving={savingTouch}
+            onCancel={() => setCorrecting(null)}
+            onSave={async (input) => {
+              await onCorrectTouch(correcting.id, input);
+              setCorrecting(null);
+            }}
           />
         ) : null}
         {openForm === "note" && canEdit ? (
@@ -140,6 +308,7 @@ export function CaseTouchesPanel({
             saving={savingNote}
           />
         ) : null}
+
         {touches.length === 0 ? (
           <EmptyState
             icon={
@@ -150,14 +319,26 @@ export function CaseTouchesPanel({
             message="No activity logged yet"
             description="Calls, emails, portal updates, and notes all show here"
           />
+        ) : visibleTouches.length === 0 ? (
+          <div className="p-6 text-center text-[13px] text-muted-foreground">
+            No entries match these filters.
+          </div>
         ) : (
           <div className="p-4 space-y-6">
-            {touches.map((t, idx) => (
+            {visibleTouches.map((t) => (
               <TouchlogRow
                 key={t.id}
                 touch={t}
-                isLatest={idx === 0}
+                isLatest={t.id === touches[0]?.id}
                 authorName={coordName(t.coordinatorId)}
+                correctedBy={correctedByOf.get(t.id) ?? null}
+                correctionTargetDate={correctionTargetDate.get(t.id) ?? null}
+                canEdit={canEdit}
+                today={today}
+                onCorrect={() => {
+                  setOpenForm("none");
+                  setCorrecting(t);
+                }}
               />
             ))}
           </div>
@@ -167,15 +348,151 @@ export function CaseTouchesPanel({
   );
 }
 
+function TouchFilters({
+  typeFilter,
+  outcomeFilter,
+  recipientFilter,
+  followUpFilter,
+  dateFrom,
+  dateTo,
+  onType,
+  onOutcome,
+  onRecipient,
+  onFollowUp,
+  onDateFrom,
+  onDateTo,
+  onReset,
+  resultCount,
+  totalCount,
+}: {
+  typeFilter: string;
+  outcomeFilter: string;
+  recipientFilter: string;
+  followUpFilter: FollowUpFilter;
+  dateFrom: string;
+  dateTo: string;
+  onType: (v: string) => void;
+  onOutcome: (v: string) => void;
+  onRecipient: (v: string) => void;
+  onFollowUp: (v: FollowUpFilter) => void;
+  onDateFrom: (v: string) => void;
+  onDateTo: (v: string) => void;
+  onReset: () => void;
+  resultCount: number;
+  totalCount: number;
+}) {
+  return (
+    <div className="p-4 bg-muted/20 border-b border-border space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <FilterField label="Type">
+          <Select value={typeFilter} onValueChange={onType}>
+            <SelectTrigger className="h-8 text-[13px] bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All types</SelectItem>
+              {CANONICAL_TOUCH_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {TOUCH_TYPE_LABELS[t]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+        <FilterField label="Outcome">
+          <Select value={outcomeFilter} onValueChange={onOutcome}>
+            <SelectTrigger className="h-8 text-[13px] bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All outcomes</SelectItem>
+              {TOUCH_DISPOSITIONS.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+        <FilterField label="Follow-up">
+          <Select value={followUpFilter} onValueChange={(v) => onFollowUp(v as FollowUpFilter)}>
+            <SelectTrigger className="h-8 text-[13px] bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="any">Any</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="active">Has follow-up</SelectItem>
+              <SelectItem value="none">No follow-up</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterField>
+        <FilterField label="Recipient">
+          <Input
+            value={recipientFilter}
+            onChange={(e) => onRecipient(e.target.value)}
+            placeholder="Name or contact"
+            className="h-8 text-[13px] bg-background"
+          />
+        </FilterField>
+        <FilterField label="From">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => onDateFrom(e.target.value)}
+            className="h-8 text-[13px] bg-background"
+          />
+        </FilterField>
+        <FilterField label="To">
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => onDateTo(e.target.value)}
+            className="h-8 text-[13px] bg-background"
+          />
+        </FilterField>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] text-muted-foreground tabular-nums">
+          {resultCount} of {totalCount} shown
+        </span>
+        <Button variant="ghost" size="sm" className="h-7 text-[12px]" onClick={onReset}>
+          Reset filters
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
 function TouchlogRow({
   touch: t,
   isLatest,
   authorName,
+  correctedBy,
+  correctionTargetDate,
+  canEdit,
+  today,
+  onCorrect,
 }: {
   touch: Touch;
   isLatest: boolean;
   authorName: string;
+  correctedBy: Touch | null;
+  correctionTargetDate: string | null;
+  canEdit: boolean;
+  today: string;
+  onCorrect: () => void;
 }) {
+  const isTouchpoint = t.entryType === "touchpoint" && t.touchType;
   const batchChip = t.communicationEventId ? (
     <Badge
       variant="secondary"
@@ -191,19 +508,19 @@ function TouchlogRow({
 
   let leftBadge: React.ReactNode;
   let heading: React.ReactNode = null;
-  if (t.entryType === "touchpoint" && t.touchType) {
-    const Icon = TOUCH_TYPE_ICON[t.touchType] ?? Phone;
+  if (isTouchpoint) {
+    const Icon = TOUCH_TYPE_ICON[t.touchType as TouchType] ?? Phone;
     leftBadge = (
       <Badge
         variant="outline"
         className="text-[11px] h-5 px-1.5 font-medium bg-background gap-1 text-muted-foreground"
       >
-        <Icon className="w-3 h-3" /> {TOUCH_TYPE_LABEL[t.touchType]}
+        <Icon className="w-3 h-3" /> {TOUCH_TYPE_LABELS[t.touchType as TouchType]}
       </Badge>
     );
-    heading = (
+    heading = t.outcome ? (
       <span className="text-[13px] text-foreground font-medium">· {outcomeLabel(t.outcome)}</span>
-    );
+    ) : null;
   } else if (t.entryType === "note") {
     leftBadge = <EntryBadge icon={StickyNote} label="Note" />;
   } else if (t.entryType === "task_update") {
@@ -211,6 +528,8 @@ function TouchlogRow({
   } else {
     leftBadge = <EntryBadge icon={Info} label="System" />;
   }
+
+  const followStatus = followUpStatus(t.nextFollowUpDate, today);
 
   return (
     <div className="relative pl-6 border-l-2 border-muted pb-2">
@@ -229,19 +548,70 @@ function TouchlogRow({
           {leftBadge}
           {batchChip}
           {heading}
+          {t.correctsTouchId ? (
+            <Badge
+              variant="outline"
+              className="text-[11px] h-5 px-1.5 font-medium bg-[#FEF3C7] border-[#FDE68A] text-[#92400E] gap-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              {correctionTargetDate
+                ? `Correction of ${fmtDate(correctionTargetDate)}`
+                : "Correction"}
+            </Badge>
+          ) : null}
         </div>
-        <span className="text-[12px] text-muted-foreground flex items-center gap-1 shrink-0">
-          <User className="w-3 h-3" /> {authorName}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[12px] text-muted-foreground flex items-center gap-1">
+            <User className="w-3 h-3" /> {authorName}
+          </span>
+          {canEdit && isTouchpoint ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[12px] text-muted-foreground"
+              onClick={onCorrect}
+            >
+              Correct
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      {t.recipientName || t.recipientContact ? (
+        <p className="text-[12px] text-muted-foreground mt-0.5">
+          <span className="font-medium text-foreground">Recipient:</span>{" "}
+          {[t.recipientName, t.recipientContact].filter(Boolean).join(" · ")}
+        </p>
+      ) : null}
+
       {t.notes ? (
         <p className="text-[13px] text-muted-foreground mt-1.5 leading-relaxed whitespace-pre-wrap">
           {t.notes}
         </p>
       ) : null}
-      {t.nextFollowUpDate ? (
-        <div className="mt-2 text-[12px] text-[#D97706] inline-flex items-center gap-1 font-medium bg-[#FEF3C7] px-2 py-0.5 rounded">
-          <Calendar className="w-3 h-3" /> Next follow-up: {fmtDate(t.nextFollowUpDate)}
+
+      {correctedBy ? (
+        <div className="mt-2 text-[12px] text-[#92400E] inline-flex items-center gap-1 font-medium bg-[#FEF3C7] px-2 py-0.5 rounded">
+          <RotateCcw className="w-3 h-3" /> Corrected by a later entry (
+          {fmtDate(correctedBy.touchDate)})
+        </div>
+      ) : null}
+
+      {t.clearsFollowUp ? (
+        <div className="mt-2 text-[12px] text-muted-foreground inline-flex items-center gap-1">
+          <Calendar className="w-3 h-3" /> Follow-up cleared
+        </div>
+      ) : t.nextFollowUpDate ? (
+        <div
+          className={`mt-2 text-[12px] inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded ${
+            followStatus === "overdue"
+              ? "text-[#B91C1C] bg-[#FEF2F2]"
+              : "text-[#D97706] bg-[#FEF3C7]"
+          }`}
+        >
+          <Calendar className="w-3 h-3" />
+          {followStatus === "overdue" ? "Follow-up overdue: " : "Next follow-up: "}
+          {fmtDate(t.nextFollowUpDate)}
         </div>
       ) : null}
     </div>
@@ -259,34 +629,58 @@ function EntryBadge({ icon: Icon, label }: { icon: typeof Phone; label: string }
   );
 }
 
+// Structured entry form (F4.1.1/F4.1.4/F4.1.5/F4.1.2). Also serves corrections
+// when `correctionOf` is set.
 function AddTouchForm({
+  correctionOf,
+  saving,
   onCancel,
   onSave,
-  saving,
 }: {
-  onCancel: () => void;
-  onSave: (input: TouchInput, reference: string | null) => void;
+  correctionOf: Touch | null;
   saving: boolean;
+  onCancel: () => void;
+  onSave: (input: TouchInput) => void;
 }) {
   const today = format(new Date(), "yyyy-MM-dd");
-  const [touchDate, setTouchDate] = useState(today);
-  const [channel, setChannel] = useState<Channel>("phone");
-  const [outcome, setOutcome] = useState<TouchOutcome>(outcomesForChannel("phone")[0].value);
+  const [touchDate, setTouchDate] = useState(correctionOf?.touchDate ?? today);
+  const [touchType, setTouchType] = useState<TouchType>(
+    (correctionOf?.touchType as TouchType | undefined) ?? "call",
+  );
+  const [outcome, setOutcome] = useState<string>(correctionOf?.outcome ?? NO_OUTCOME);
+  const [recipientName, setRecipientName] = useState(correctionOf?.recipientName ?? "");
+  const [recipientContact, setRecipientContact] = useState(correctionOf?.recipientContact ?? "");
   const [notes, setNotes] = useState("");
   const [nextFollowUpDate, setNextFollowUpDate] = useState("");
-  const [reference, setReference] = useState("");
+  const [clearFollowUp, setClearFollowUp] = useState(false);
 
-  const outcomeOptions = outcomesForChannel(channel);
-  const showReference = outcome === REFERENCE_NUMBER_OUTCOME;
+  const requiresContext = dispositionRequiresContext(outcome as TouchOutcome);
+  const contextMissing = requiresContext && !notes.trim();
+  const disableSave = saving || contextMissing;
 
-  const onChannelChange = (next: Channel) => {
-    setChannel(next);
-    // Reset to a valid outcome for the new channel.
-    setOutcome(outcomesForChannel(next)[0].value);
+  const submit = () => {
+    onSave({
+      touchDate,
+      touchType,
+      outcome: outcome === NO_OUTCOME ? null : (outcome as TouchOutcome),
+      recipientName: recipientName.trim() ? recipientName.trim() : null,
+      recipientContact: recipientContact.trim() ? recipientContact.trim() : null,
+      notes: notes.trim() ? notes.trim() : null,
+      nextFollowUpDate: clearFollowUp ? null : nextFollowUpDate || null,
+      clearsFollowUp: clearFollowUp,
+    });
   };
 
   return (
     <div className="p-4 bg-muted/30 border-b border-border space-y-4">
+      {correctionOf ? (
+        <div className="text-[12px] text-[#92400E] bg-[#FEF3C7] border border-[#FDE68A] rounded px-2 py-1.5 inline-flex items-center gap-1.5">
+          <RotateCcw className="w-3.5 h-3.5" />
+          Logging a correction of the {TOUCH_TYPE_LABELS[correctionOf.touchType as TouchType]} touch
+          from {fmtDate(correctionOf.touchDate)}. The original stays in the log.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Date</Label>
@@ -298,61 +692,82 @@ function AddTouchForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Channel
-          </Label>
-          <Select value={channel} onValueChange={(v) => onChannelChange(v as Channel)}>
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Type</Label>
+          <Select value={touchType} onValueChange={(v) => setTouchType(v as TouchType)}>
             <SelectTrigger className="h-8 text-[13px] bg-background">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CHANNELS.map((c) => (
-                <SelectItem key={c.channel} value={c.channel}>
-                  {c.label}
+              {CANONICAL_TOUCH_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {TOUCH_TYPE_LABELS[t]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </div>
+
+      {/* Recipient capture — optional but prominent (F4.1.5). */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Recipient
+          </Label>
+          <Input
+            value={recipientName}
+            onChange={(e) => setRecipientName(e.target.value)}
+            placeholder="Who you contacted"
+            className="h-8 text-[13px] bg-background"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Recipient contact
+          </Label>
+          <Input
+            value={recipientContact}
+            onChange={(e) => setRecipientContact(e.target.value)}
+            placeholder="Phone, email, portal…"
+            className="h-8 text-[13px] bg-background"
+          />
+        </div>
+      </div>
+
       <div className="space-y-1.5">
-        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Outcome</Label>
-        <Select value={outcome} onValueChange={(v) => setOutcome(v as TouchOutcome)}>
+        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          Outcome <span className="normal-case text-muted-foreground/70">(optional)</span>
+        </Label>
+        <Select value={outcome} onValueChange={setOutcome}>
           <SelectTrigger className="h-8 text-[13px] bg-background">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {outcomeOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
+            <SelectItem value={NO_OUTCOME}>— No outcome —</SelectItem>
+            {TOUCH_DISPOSITIONS.map((d) => (
+              <SelectItem key={d.value} value={d.value}>
+                {d.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      {showReference ? (
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Payer reference / submission ID
-          </Label>
-          <Input
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder="Reference number from the rep"
-            className="h-8 text-[13px] bg-background"
-          />
-          <p className="text-[11px] text-muted-foreground">Saved to the case, latest wins.</p>
-        </div>
-      ) : null}
+
       <div className="space-y-1.5">
-        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Notes</Label>
+        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          {outcome === OTHER_DISPOSITION ? "Context (required for Other)" : "Context"}
+        </Label>
         <Textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Enter details about this touch..."
-          className="min-h-[80px] text-[13px] bg-background resize-none"
+          placeholder="What happened on this touch…"
+          className="min-h-[64px] text-[13px] bg-background resize-none"
         />
+        {contextMissing ? (
+          <p className="text-[11px] text-[#B91C1C]">A one-line context is required for “Other”.</p>
+        ) : null}
       </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -361,32 +776,30 @@ function AddTouchForm({
           <Input
             type="date"
             value={nextFollowUpDate}
+            disabled={clearFollowUp}
             onChange={(e) => setNextFollowUpDate(e.target.value)}
-            className="h-8 text-[13px] bg-background"
+            className="h-8 text-[13px] bg-background disabled:opacity-50"
           />
         </div>
+        <label className="flex items-end gap-2 pb-1.5 cursor-pointer">
+          <Checkbox checked={clearFollowUp} onCheckedChange={(v) => setClearFollowUp(Boolean(v))} />
+          <span className="text-[12px] text-muted-foreground leading-tight">
+            Clear the active follow-up
+          </span>
+        </label>
       </div>
+      {!clearFollowUp && !nextFollowUpDate ? (
+        <p className="-mt-2 text-[11px] text-muted-foreground">
+          Leaving this blank keeps any existing follow-up (it carries forward).
+        </p>
+      ) : null}
+
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button
-          size="sm"
-          disabled={saving}
-          onClick={() =>
-            onSave(
-              {
-                touchDate,
-                touchType: touchTypeForChannel(channel),
-                outcome,
-                notes: notes.trim() ? notes.trim() : null,
-                nextFollowUpDate: nextFollowUpDate || null,
-              },
-              showReference && reference.trim() ? reference.trim() : null,
-            )
-          }
-        >
-          {saving ? "Saving…" : "Save touch"}
+        <Button size="sm" disabled={disableSave} onClick={submit}>
+          {saving ? "Saving…" : correctionOf ? "Log correction" : "Save touch"}
         </Button>
       </div>
     </div>

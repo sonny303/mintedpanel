@@ -60,13 +60,6 @@ export interface UnresolvedToken {
 export interface ProviderProfileFacility {
   id: string;
   name: string;
-  // Address fields ride on the facility set so the extension can show the
-  // selected location's full practice address without another profile read.
-  street: string | null;
-  suite: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
 }
 
 export interface ProviderProfile {
@@ -235,14 +228,35 @@ function selectFacility(
   };
 }
 
+// E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies
+// resolves deterministically — filter to the malpractice policy
+// (insurance_type 'professional_liability'), newest policy_end_date wins.
+// Additive refinement: a sole policy still resolves as before (whatever its
+// type), and zero-malpractice multi-policy groups stay honestly unresolved.
+const MALPRACTICE_INSURANCE_TYPE = "professional_liability";
+
 function pickPolicy(policies: Row[], hasGroup: boolean): SourcePick {
   if (!hasGroup) return { row: null, reason: "provider has no group" };
   if (policies.length === 0) return { row: null, reason: "group has no insurance policies" };
   if (policies.length === 1) return { row: policies[0] };
-  return {
-    row: null,
-    reason: `group has ${policies.length} insurance policies; not resolvable to a single row`,
-  };
+  const malpractice = policies.filter(
+    (p) => String(p.insurance_type ?? "") === MALPRACTICE_INSURANCE_TYPE,
+  );
+  if (malpractice.length === 0) {
+    return {
+      row: null,
+      reason: `group has ${policies.length} insurance policies and none is malpractice (${MALPRACTICE_INSURANCE_TYPE}); not resolvable to a single row`,
+    };
+  }
+  // Newest policy_end_date wins; a date-less policy never beats a dated one.
+  // Ties (and all-null dates) break by id so the pick is stable across reads.
+  const sorted = [...malpractice].sort((a, b) => {
+    const aEnd = typeof a.policy_end_date === "string" ? a.policy_end_date : "";
+    const bEnd = typeof b.policy_end_date === "string" ? b.policy_end_date : "";
+    if (aEnd !== bEnd) return bEnd.localeCompare(aEnd);
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+  return { row: sorted[0] };
 }
 
 export async function getProviderProfile(
@@ -311,9 +325,8 @@ export async function getProviderProfile(
 
   // The provider→facility linkage is provider_facility_assignments (unique
   // (provider_id, facility_id)); the resolvable facility set is every assigned
-  // facility that still exists in the caller's org. Fetched with the address
-  // columns so the client can render the selected location's practice
-  // address — this list is part of the response payload, not a token source.
+  // facility that still exists in the caller's org. Fetched id+name only —
+  // this list is part of the response payload, not a token source.
   const assignmentFacilityIds = [
     ...new Set(assignments.map((a) => a.facility_id as string).filter(Boolean)),
   ];
@@ -321,30 +334,15 @@ export async function getProviderProfile(
   if (assignmentFacilityIds.length > 0) {
     const { data: facilityRows, error: facilityListErr } = await db
       .from("facilities")
-      .select("id, name, street, suite, city, state, zip")
+      .select("id, name")
       .in("id", assignmentFacilityIds)
       .eq("org_id", orgId)
       .order("name")
       .order("id");
     if (facilityListErr) throw facilityListErr;
-    facilities = (
-      (facilityRows ?? []) as Array<{
-        id: string;
-        name: string | null;
-        street: string | null;
-        suite: string | null;
-        city: string | null;
-        state: string | null;
-        zip: string | null;
-      }>
-    ).map((f) => ({
+    facilities = ((facilityRows ?? []) as Array<{ id: string; name: string | null }>).map((f) => ({
       id: f.id,
       name: f.name ?? "",
-      street: f.street ?? null,
-      suite: f.suite ?? null,
-      city: f.city ?? null,
-      state: f.state ?? null,
-      zip: f.zip ?? null,
     }));
   }
 

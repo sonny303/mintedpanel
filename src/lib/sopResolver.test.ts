@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveTemplate } from "./sopResolver";
+import { emailValuedTokenKeys, resolvableTokenKeys, resolveTemplate } from "./sopResolver";
 import type { Facility, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 function provider(over: Partial<Provider> = {}): Provider {
@@ -53,6 +53,7 @@ function provider(over: Partial<Provider> = {}): Provider {
     licenseIssueDate: null,
     licenseExpirationDate: null,
     referenceOnly: false,
+    verificationState: "verified",
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...over,
@@ -144,5 +145,239 @@ describe("resolveTemplate step typing", () => {
     const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
     expect(task.sopContent[0].stepType).toBe("online_form");
     expect(task.sopContent[0].emailTemplate).toBeUndefined();
+  });
+});
+
+// E1.7b F1.7b.3 — the step-shape extension survives resolution verbatim (the
+// portalKey precedent), and token-less artifact names never ride dataFields.
+describe("resolveTemplate E1.7b step-shape carry-through", () => {
+  it("carries expectedTurnaroundDays / followUpEveryDays / requiredArtifacts verbatim", () => {
+    const tpl = template([
+      {
+        label: "Status call to the payer",
+        stepType: "phone",
+        expectedTurnaroundDays: 45,
+        followUpEveryDays: 14,
+        requiredArtifacts: ["Call reference number", "Submission confirmation PDF"],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.stepType).toBe("phone");
+    expect(step.expectedTurnaroundDays).toBe(45);
+    expect(step.followUpEveryDays).toBe(14);
+    expect(step.requiredArtifacts).toEqual([
+      "Call reference number",
+      "Submission confirmation PDF",
+    ]);
+  });
+
+  it("carries fax and mail step types through", () => {
+    const tpl = template([
+      { label: "Fax the W-9", stepType: "fax" },
+      { label: "Mail the wet-signature form", stepType: "mail" },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    expect(task.sopContent[0].stepType).toBe("fax");
+    expect(task.sopContent[1].stepType).toBe("mail");
+  });
+
+  it("leaves the new fields absent when the definition does not carry them", () => {
+    const tpl = template([{ label: "Plain step" }]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.expectedTurnaroundDays).toBeUndefined();
+    expect(step.followUpEveryDays).toBeUndefined();
+    expect(step.requiredArtifacts).toBeUndefined();
+  });
+
+  it("filters a token-less dataFields entry at resolution (artifacts belong in requiredArtifacts)", () => {
+    const tpl = template([
+      {
+        label: "Submit application",
+        dataFields: [
+          { label: "Type 1 NPI", token: "provider.npi" },
+          // A named attachment mistakenly authored as a data field: its
+          // "token" resolves to nothing and the entry is dropped.
+          { label: "COA form", token: "attachment.coaForm" },
+        ],
+        requiredArtifacts: ["COA form"],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const step = task.sopContent[0];
+    expect(step.dataFields).toEqual([{ label: "Type 1 NPI", value: "1003456701" }]);
+    expect(step.requiredArtifacts).toEqual(["COA form"]);
+  });
+});
+
+// E1.7b TE-7 — catalog-name aliases resolve to the same values the resolver
+// already holds; existing token names keep working.
+describe("buildTokenMap catalog aliases (via resolveTemplate)", () => {
+  const richFacility: Facility = {
+    ...FACILITY,
+    street: "12 River Rd",
+    city: "Austin",
+    zip: "78701",
+  };
+
+  it("resolves license.licenseNumber to the same value as provider.licenseNumber", () => {
+    const tpl = template([
+      {
+        label: "PSV",
+        dataFields: [
+          { label: "License (resolver name)", token: "provider.licenseNumber" },
+          { label: "License (catalog name)", token: "license.licenseNumber" },
+        ],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, richFacility, null, "KS-12345");
+    expect(task.sopContent[0].dataFields).toEqual([
+      { label: "License (resolver name)", value: "KS-12345" },
+      { label: "License (catalog name)", value: "KS-12345" },
+    ]);
+  });
+
+  it("resolves the facility address-part catalog tokens alongside facility.address", () => {
+    const tpl = template([
+      {
+        label: "Address",
+        dataFields: [
+          { label: "Joined", token: "facility.address" },
+          { label: "Street", token: "facility.street" },
+          { label: "City", token: "facility.city" },
+          { label: "State", token: "facility.state" },
+          { label: "Zip", token: "facility.zip" },
+        ],
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, richFacility);
+    expect(task.sopContent[0].dataFields).toEqual([
+      { label: "Joined", value: "12 River Rd, Austin, TX, 78701" },
+      { label: "Street", value: "12 River Rd" },
+      { label: "City", value: "Austin" },
+      { label: "State", value: "TX" },
+      { label: "Zip", value: "78701" },
+    ]);
+  });
+});
+
+// E1.7b F1.7b.5 (TE-14) — structured draft-email recipients resolve alongside
+// subject/body, preserving each recipient's source. Grounded on worked example
+// 1's Optum literal recipient + the provider.email token.
+describe("resolveTemplate draft-email recipients (E1.7b F1.7b.5)", () => {
+  it("carries a literal To verbatim and resolves a provider.email token CC to the address", () => {
+    const tpl = template([
+      {
+        label: "Apply to Optum",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "Application for {{provider.firstName}}",
+          body: "Please enroll {{provider.firstName}} {{provider.lastName}}.",
+          to: [{ source: "literal", address: "network_PhysicalHealth@optum.com" }],
+          cc: [{ source: "token", token: "provider.email" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.subject).toBe("Application for Jordan");
+    expect(email?.to).toEqual([{ source: "literal", address: "network_PhysicalHealth@optum.com" }]);
+    expect(email?.cc).toEqual([
+      { source: "token", token: "provider.email", address: "jordan.rivera@example.com" },
+    ]);
+  });
+
+  it("keeps an empty provider.email token recipient as an unresolved gap (address null), never dropped", () => {
+    const tpl = template([
+      {
+        label: "Notify provider",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "Hello",
+          body: "Body",
+          to: [{ source: "token", token: "provider.email" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider({ email: null }), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.to).toEqual([{ source: "token", token: "provider.email", address: null }]);
+  });
+
+  it("resolves an unknown/unsupported token recipient to a null address (never a fake value)", () => {
+    const tpl = template([
+      {
+        label: "Bad recipient",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "s",
+          body: "b",
+          // A payer.* token has NO resolver value — it must never resolve to an
+          // address (anti-fake-CRM guardrail). Publish lint blocks authoring it;
+          // if one slipped through, resolution keeps it an explicit gap.
+          to: [{ source: "token", token: "payer.name" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    expect(task.sopContent[0].emailTemplate?.to).toEqual([
+      { source: "token", token: "payer.name", address: null },
+    ]);
+  });
+
+  it("leaves to/cc absent for a legacy draft-email step with no recipients (renders subject/body only)", () => {
+    const tpl = template([
+      {
+        label: "Legacy email",
+        stepType: "draft_email",
+        emailTemplate: { subject: "Roster update", body: "Add {{provider.firstName}}." },
+      },
+    ]);
+    const [task] = resolveTemplate(tpl, provider(), GROUP, FACILITY);
+    const email = task.sopContent[0].emailTemplate;
+    expect(email?.subject).toBe("Roster update");
+    expect(email?.body).toBe("Add Jordan.");
+    expect(email?.to).toBeUndefined();
+    expect(email?.cc).toBeUndefined();
+  });
+});
+
+describe("emailValuedTokenKeys (E1.7b F1.7b.5 / TE-14)", () => {
+  it("is the closed { provider.email } set today", () => {
+    expect(emailValuedTokenKeys()).toEqual(["provider.email"]);
+  });
+
+  it("is a strict subset of resolvableTokenKeys and excludes non-email tokens", () => {
+    const resolvable = new Set(resolvableTokenKeys());
+    for (const k of emailValuedTokenKeys()) expect(resolvable.has(k)).toBe(true);
+    // resolvableTokenKeys advertises non-email tokens (provider.npi); those are
+    // never offered as recipients.
+    expect(emailValuedTokenKeys()).not.toContain("provider.npi");
+    expect(emailValuedTokenKeys().some((k) => k.startsWith("payer."))).toBe(false);
+    expect(emailValuedTokenKeys().length).toBeLessThan(resolvableTokenKeys().length);
+  });
+});
+
+describe("resolvableTokenKeys", () => {
+  it("exposes the closed resolver map including the catalog aliases", () => {
+    const keys = resolvableTokenKeys();
+    for (const expected of [
+      "provider.firstName",
+      "provider.licenseNumber",
+      "license.licenseNumber",
+      "facility.address",
+      "facility.street",
+      "facility.city",
+      "facility.state",
+      "facility.zip",
+      "group.tin",
+      "mso.portalUrl",
+    ]) {
+      expect(keys).toContain(expected);
+    }
+    // Case-scoped families never resolve client-side.
+    expect(keys.some((k) => k.startsWith("payer."))).toBe(false);
+    expect(keys.some((k) => k.startsWith("contract."))).toBe(false);
   });
 });

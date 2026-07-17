@@ -5,18 +5,22 @@
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
-import { listOpenProviderCases } from "@/services/providerCases";
+import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
-import {
-  getExtensionViewPrefs,
-  parseExtensionViewPrefs,
-  putExtensionViewPrefs,
-} from "@/services/extensionViewPrefs";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
+import { getNextBestAction } from "@/services/nextBestAction";
+import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
+import { validateQuickCardFields } from "@/lib/quickCardCatalog";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
+
+// Date-only ISO (YYYY-MM-DD) for the pure queue reducer — a server clock read
+// at the route boundary, never inside the pure module.
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 const STATE_RE = /^[A-Za-z]{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,27 +34,46 @@ export async function handleListMyOrgs(user: UserContext): Promise<Response> {
   return ok(rows, { total: rows.length });
 }
 
-// GET /api/me/view-prefs — the caller's saved extension detail-view field
-// list. `fields: null` means nothing saved (the extension falls back to its
-// default field set) — the envelope's `data` itself is never null, since
-// clients treat a null data as an error. USER-scoped like /api/me/orgs:
-// keyed by the JWT-verified user id only, so it runs on authenticateUser,
-// not the org guard — view prefs follow the user across orgs.
+// GET /api/me/view-prefs — the caller's saved extension quick-card layout.
+// USER-scoped like /api/me/orgs (runs on authenticateUser): the layout follows
+// the user across orgs, so the org guard deliberately does not apply. Not a
+// PHI read (a list of field KEYS, no provider values) — no audit. Returns
+// { fields: string[] | null } (null = nothing saved); the envelope data itself
+// is never null so the extension never treats "no saved layout" as an error.
 export async function handleGetViewPrefs(user: UserContext): Promise<Response> {
-  const prefs = await getExtensionViewPrefs({ db: user.db }, user.userId);
-  return ok({ fields: prefs?.fields ?? null });
+  const prefs = await getExtensionViewPrefs({ db: user.db, userId: user.userId });
+  return ok(prefs);
 }
 
-// PUT /api/me/view-prefs — save the caller's detail-view field list:
-// { fields: ["license.licenseNumber", ...] }, bare token keys, deduped,
-// capped. Not a PHI read/write — no audit row.
+// PUT /api/me/view-prefs — save the caller's quick-card layout. Body:
+// { fields: string[] }, validated to a bounded (<=32), deduplicated, ORDERED
+// array of closed-catalog keys (TE-15/TE-16) — anything else is a 422, incl. a
+// hand-crafted key for ssnLast4 or any vault/excluded field (they are absent
+// from the catalog). user_id comes from the verified JWT, never the body.
 export async function handlePutViewPrefs(body: unknown, user: UserContext): Promise<Response> {
-  const prefs = parseExtensionViewPrefs(body);
-  if (!prefs) {
-    return fail(422, "Body must be { fields: string[] } of bare token keys (max 64)");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
   }
-  await putExtensionViewPrefs({ db: user.db }, user.userId, prefs);
+  const validation = validateQuickCardFields((body as { fields?: unknown }).fields);
+  if (!validation.ok) return fail(422, validation.message);
+  const prefs = await putExtensionViewPrefs(
+    { db: user.db, userId: user.userId },
+    validation.fields,
+  );
   return ok(prefs);
+}
+
+// GET /api/next-best-action — the extension's log-and-advance loop (F4.3.4 /
+// TE-6): assemble the org-scoped queue inputs, rank via the SAME pure
+// E2.3/E4.1 reducer under the org's F4.2.5 ranking config, and return the
+// QUEUE TOP — exactly one item, or { item: null } for an honest "queue clear"
+// state. Read-only, no persisted queue rows (the E2.3 queue is fully derived);
+// the returned item is a case pointer + display label/reason + a webapp deep
+// link, never a token value or PHI. No role gate: billing may read the queue
+// (the /work surface is admin/billing-visible), and the reducer writes nothing.
+export async function handleNextBestAction(ctx: AuthContext): Promise<Response> {
+  const result = await getNextBestAction({ db: ctx.db, orgId: ctx.orgId }, todayIso());
+  return ok(result);
 }
 
 // GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the
@@ -133,33 +156,58 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
   return ok(rows, { total: rows.length });
 }
 
-// GET /api/cases?providerId=<uuid> — the popup's case dropdown: the provider's
-// OPEN cases (open = credentialing status not in the config's 'complete'
-// action bucket — see providerCases.ts). The provider must belong to the
-// caller's org: a cross-org providerId is a 404, same contract the isolation
-// gate proves for the provider routes.
+// GET /api/cases — two additive modes over the same org-scoped route:
+//   ?providerId=<uuid>  the popup's case dropdown: the provider's OPEN cases
+//                       (open = credentialing status not in the 'complete'
+//                       bucket). A cross-org providerId is a 404.
+//   ?q=<text>           E4.3 TE-11 — the case half of the unified standalone
+//                       search: org-scoped, matching payer name / provider
+//                       name / tracking id, ids + display fields only.
+// providerId takes precedence when both are present (the fill flow's primary
+// path). Neither present is a 422 — the route never dumps the whole org.
 export async function handleListProviderCases(url: URL, ctx: AuthContext): Promise<Response> {
   const providerId = url.searchParams.get("providerId");
-  if (!providerId || !UUID_RE.test(providerId)) {
-    return fail(422, "providerId must be a UUID query parameter");
+  const q = url.searchParams.get("q");
+  if (providerId) {
+    if (!UUID_RE.test(providerId)) {
+      return fail(422, "providerId must be a UUID query parameter");
+    }
+    const rows = await listOpenProviderCases({ db: ctx.db, orgId: ctx.orgId }, providerId);
+    if (!rows) return fail(404, "Provider not found");
+    return ok(rows, { total: rows.length });
   }
-  const rows = await listOpenProviderCases({ db: ctx.db, orgId: ctx.orgId }, providerId);
-  if (!rows) return fail(404, "Provider not found");
-  return ok(rows, { total: rows.length });
+  if (q != null) {
+    const rows = await searchOrgCases({ db: ctx.db, orgId: ctx.orgId }, q);
+    return ok(rows, { total: rows.length });
+  }
+  return fail(422, "providerId or q query parameter is required");
 }
 
 // GET /api/cases/:id/context — the Workbench pulls this after case selection so
-// the filler sees the case's reference number(s) + latest note/touch without
-// leaving the portal tab. The case must belong to the resolved org: a cross-org
-// or nonexistent id is a 404 (the service returns null), mirroring the other
-// case handlers. Read-only, PHI-minimal — no role gate, no audit.
+// the filler sees everything the panel needs (identity header, open tasks with
+// execution types, pipeline state, tracking ID, selected facility, latest
+// note/touch) without leaving the portal tab. The case must belong to the
+// resolved org: a cross-org or nonexistent id is a 404 (the service returns
+// null), mirroring the other case handlers. Read-only, no role gate.
+// E4.3 TE-2: Cache-Control no-store, never log the body, and exactly ONE
+// successful read writes one READ audit row (the profile-route posture — a
+// failed audit write fails the request; 404s are not reads).
 export async function handleCaseContext(caseId: string, ctx: AuthContext): Promise<Response> {
   // A non-UUID path segment can't be a case — 404 here rather than a Postgres
   // uuid-cast 500 (the profile/touches-route precedent).
   if (!UUID_RE.test(caseId)) return fail(404, "Case not found");
   const context = await getCaseContext({ db: ctx.db, orgId: ctx.orgId }, caseId);
   if (!context) return fail(404, "Case not found");
-  return ok(context);
+  await ctx.writeAudit({
+    actionType: "READ",
+    entityType: "case",
+    entityId: caseId,
+    after: { route: "/api/cases/:id/context" },
+    description: "Case context read (extension workbench)",
+  });
+  const response = ok(context);
+  response.headers.set("cache-control", "no-store");
+  return response;
 }
 
 // POST /api/cases/:id/touches — the human pressed "Mark submitted" after

@@ -29,9 +29,11 @@ const CASES_ROUTE = /^\/api\/cases\/?$/;
 const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
 // `/api/cases/:id/context` — the Workbench's post-selection case context read.
 const CASE_CONTEXT_ROUTE = /^\/api\/cases\/([^/]+)\/context\/?$/;
+// `/api/next-best-action` — the extension's queue-top read (log-and-advance).
+const NEXT_BEST_ACTION_ROUTE = /^\/api\/next-best-action\/?$/;
 // `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
 const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
-// `/api/me/view-prefs` — the caller's extension detail-view field list
+// `/api/me/view-prefs` — the caller's saved extension quick-card layout
 // (user-scoped, no org context — prefs follow the user across orgs).
 const ME_VIEW_PREFS_ROUTE = /^\/api\/me\/view-prefs\/?$/;
 
@@ -88,6 +90,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
   const caseContextMatch = pathname.match(CASE_CONTEXT_ROUTE);
+  const isNextBestAction = NEXT_BEST_ACTION_ROUTE.test(pathname);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   if (
@@ -98,16 +101,18 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isCases &&
     !caseTouchesMatch &&
     !caseContextMatch &&
+    !isNextBestAction &&
     !isMeOrgs &&
     !isMeViewPrefs
   ) {
     return fail(404, "Not found");
   }
 
-  // /api/me/orgs runs on the user-only auth step — no org resolution. It is
-  // the org-discovery endpoint a multi-org caller needs BEFORE it can send
-  // x-org-id, so the guard's multi-org 400 must not apply here; the service
-  // filters by the JWT-verified user id alone.
+  // /api/me/* runs on the user-only auth step — no org resolution. These are
+  // user-scoped: org discovery (/orgs) must work for a multi-org caller BEFORE
+  // they can send x-org-id, and layout prefs (/view-prefs) follow the user
+  // across orgs. The guard's multi-org 400 must not apply here; the services
+  // filter by the JWT-verified user id alone.
   if (isMeOrgs) {
     if (method !== "GET") return fail(405, "Method not allowed");
     try {
@@ -118,16 +123,14 @@ async function routeApiRequest(request: Request): Promise<Response> {
       return toErrorResponse(error);
     }
   }
-
-  // /api/me/view-prefs is user-scoped for the same reason as /api/me/orgs:
-  // the prefs row is keyed by user id alone, no org context involved.
   if (isMeViewPrefs) {
     if (method !== "GET" && method !== "PUT") return fail(405, "Method not allowed");
     try {
       const user = await authenticateUser(request);
       const routes = await loadExtensionRoutes();
-      if (method === "GET") return await routes.handleGetViewPrefs(user);
-      return await routes.handlePutViewPrefs(await readJsonBody(request), user);
+      return method === "GET"
+        ? await routes.handleGetViewPrefs(user)
+        : await routes.handlePutViewPrefs(await readJsonBody(request), user);
     } catch (error) {
       return toErrorResponse(error);
     }
@@ -175,6 +178,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleCaseContext(caseContextMatch[1], ctx);
+    }
+    if (isNextBestAction) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleNextBestAction(ctx);
     }
 
     const routes = await loadProviderRoutes();

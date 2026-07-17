@@ -565,6 +565,37 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 15. Case search (E4.3 TE-11): the extension's standalone case half. Kansas
+  //     searching its own cases works (proves 15b isn't vacuous against a dead
+  //     route)...
+  const search = await apiGet(`/api/cases?q=${encodeURIComponent(env.SEARCH_QUERY ?? "a")}`, {
+    token: kansasTok,
+  });
+  check(
+    "15. Kansas case search returns 200 with a rows array",
+    search.status === 200 && Array.isArray(search.body?.data),
+    `status=${search.status} rows=${(search.body?.data ?? []).length}` +
+      (search.status !== 200 ? ` body=${(search.raw || "").slice(0, 100)}` : ""),
+  );
+  // 15b. ...and a search that would surface a South Park case under a leak must
+  //      never return that case's id or its provider's id. Org-scoped in
+  //      production (Kansas only ever sees Kansas cases, so the ids never
+  //      appear for any query); the leak mode makes it red.
+  const searchLeak = await apiGet(
+    `/api/cases?q=${encodeURIComponent(env.SEARCH_LEAK_QUERY ?? "South Park")}`,
+    { token: kansasTok },
+  );
+  const searchRows = searchLeak.body?.data ?? [];
+  const searchLeakedCase = searchRows.some(
+    (r) => r?.id === env.SOUTHPARK_CASE_ID || r?.providerId === env.SOUTHPARK_PROVIDER_ID,
+  );
+  check(
+    "15b. Kansas case search never returns a South Park case or provider id",
+    searchLeak.status === 200 && !searchLeakedCase,
+    `status=${searchLeak.status} rows=${searchRows.length} leaked=${searchLeakedCase}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

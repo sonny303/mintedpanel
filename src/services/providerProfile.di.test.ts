@@ -109,24 +109,8 @@ const licenseKS = { id: "l1", state: "KS", license_number: "KS-100", issue_date:
 const licenseMO = { id: "l2", state: "MO", license_number: "MO-200", issue_date: "2023-06-01" };
 const assignmentF1 = { id: "a1", facility_id: "f1", is_primary: true };
 const assignmentF2 = { id: "a2", facility_id: "f2", is_primary: false };
-const facilityListF1 = {
-  id: "f1",
-  name: "Main Clinic",
-  street: "100 Main St",
-  suite: null,
-  city: "Wichita",
-  state: "KS",
-  zip: "67202",
-};
-const facilityListF2 = {
-  id: "f2",
-  name: "Second Clinic",
-  street: "200 Oak Ave",
-  suite: "Ste 5",
-  city: "Topeka",
-  state: "KS",
-  zip: "66603",
-};
+const facilityListF1 = { id: "f1", name: "Main Clinic" };
+const facilityListF2 = { id: "f2", name: "Second Clinic" };
 const facilityRowF1 = { id: "f1", name: "Main Clinic" };
 const facilityRowF2 = { id: "f2", name: "Second Clinic" };
 const policyRow = { id: "gp1", policy_number: "POL-9" };
@@ -138,8 +122,8 @@ function happyTables(): Record<string, FakeResult | FakeResult[]> {
     state_licenses: { data: [licenseKS] },
     provider_facility_assignments: { data: [assignmentF1] },
     group_insurance_policies: { data: [policyRow] },
-    // Queried twice: the org-scoped facility set (id, name, address), then
-    // the selected facility's full-column row.
+    // Queried twice: the org-scoped facility set (id, name), then the selected
+    // facility's full-column row.
     facilities: [{ data: [facilityListF1] }, { data: facilityRowF1 }],
   };
 }
@@ -193,17 +177,7 @@ describe("provider profile service — injected server context", () => {
     expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("POL-9");
 
     // A sole facility is auto-selected and reported in the payload.
-    expect(profile.facilities).toEqual([
-      {
-        id: "f1",
-        name: "Main Clinic",
-        street: "100 Main St",
-        suite: null,
-        city: "Wichita",
-        state: "KS",
-        zip: "67202",
-      },
-    ]);
+    expect(profile.facilities).toEqual([{ id: "f1", name: "Main Clinic" }]);
     expect(profile.selected_facility_id).toBe("f1");
 
     // Case-scoped sources are never resolved from a provider profile.
@@ -220,11 +194,11 @@ describe("provider profile service — injected server context", () => {
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
-    // The facility set is fetched by the assignments' facility ids (id, name,
-    // and address fields), then the selected facility's full row by id.
+    // The facility set is fetched by the assignments' facility ids (id + name
+    // only), then the selected facility's full row by id.
     const facilityCaps = captures.filter((c) => c.table === "facilities");
     expect(facilityCaps).toHaveLength(2);
-    expect(facilityCaps[0].selectCols).toBe("id, name, street, suite, city, state, zip");
+    expect(facilityCaps[0].selectCols).toBe("id, name");
     expect(facilityCaps[0].ins).toEqual([["id", ["f1"]]]);
     expect(facilityCaps[0].orders.map(([col]) => col)).toEqual(["name", "id"]);
     expect(facilityCaps[1].filters).toContainEqual(["id", "f1"]);
@@ -271,24 +245,8 @@ describe("provider profile service — injected server context", () => {
     const profile = result.profile;
     expect(profile.selected_facility_id).toBeNull();
     expect(profile.facilities).toEqual([
-      {
-        id: "f1",
-        name: "Main Clinic",
-        street: "100 Main St",
-        suite: null,
-        city: "Wichita",
-        state: "KS",
-        zip: "67202",
-      },
-      {
-        id: "f2",
-        name: "Second Clinic",
-        street: "200 Oak Ave",
-        suite: "Ste 5",
-        city: "Topeka",
-        state: "KS",
-        zip: "66603",
-      },
+      { id: "f1", name: "Main Clinic" },
+      { id: "f2", name: "Second Clinic" },
     ]);
     expect(valueOf(profile, "facility.name")).toBeNull();
     expect(reasonFor(profile, "facility.name")).toContain("?facilityId=");
@@ -369,6 +327,58 @@ describe("provider profile service — injected server context", () => {
     expect(reasonFor(profile, "groupInsurance.policyNumber")).toBe("provider has no group");
     expect(captures.some((c) => c.table === "provider_groups")).toBe(false);
     expect(captures.some((c) => c.table === "group_insurance_policies")).toBe(false);
+  });
+
+  // E4.3 F4.3.5 Q4 (PM decision 2026-07-17): a group holding SEVERAL policies
+  // resolves deterministically to the malpractice policy with the newest
+  // policy_end_date — a service-internal refinement, no wire change.
+  it("multi-policy group resolves the malpractice policy with the newest end date", async () => {
+    const policies = [
+      {
+        id: "gp-gl",
+        insurance_type: "general_liability",
+        policy_number: "GL-1",
+        policy_end_date: "2030-01-01",
+      },
+      {
+        id: "gp-old",
+        insurance_type: "professional_liability",
+        policy_number: "MAL-OLD",
+        policy_end_date: "2026-01-01",
+      },
+      {
+        id: "gp-new",
+        insurance_type: "professional_liability",
+        policy_number: "MAL-NEW",
+        policy_end_date: "2027-06-01",
+      },
+    ];
+    const { db } = makeFakeDb(
+      { ...happyTables(), group_insurance_policies: { data: policies } },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+    // The newest-end-date malpractice (professional_liability) policy wins —
+    // never the general-liability row, even though its end date is later.
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBe("MAL-NEW");
+  });
+
+  it("multi-policy group with no malpractice policy is honestly unresolved", async () => {
+    const policies = [
+      { id: "gp-gl1", insurance_type: "general_liability", policy_number: "GL-1" },
+      { id: "gp-gl2", insurance_type: "general_liability", policy_number: "GL-2" },
+    ];
+    const { db } = makeFakeDb(
+      { ...happyTables(), group_insurance_policies: { data: policies } },
+      { data: CATALOG },
+    );
+
+    const profile = must(await getProviderProfile(ctxWith(db), "p1"));
+
+    expect(valueOf(profile, "groupInsurance.policyNumber")).toBeNull();
+    expect(reasonFor(profile, "groupInsurance.policyNumber")).toContain("none is malpractice");
   });
 
   it("survives catalog entries pointing at unknown columns or unsupported tables", async () => {

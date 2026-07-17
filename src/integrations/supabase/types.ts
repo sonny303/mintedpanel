@@ -61,6 +61,255 @@ export type Database = {
           },
         ];
       };
+      case_generation_exclusions: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          group_id: string;
+          id: string;
+          note: string | null;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string;
+          state: string;
+          status: string;
+          voided_at: string | null;
+          voided_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          group_id: string;
+          id?: string;
+          note?: string | null;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string;
+          state: string;
+          status?: string;
+          voided_at?: string | null;
+          voided_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          group_id?: string;
+          id?: string;
+          note?: string | null;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          reason?: string;
+          state?: string;
+          status?: string;
+          voided_at?: string | null;
+          voided_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_exclusions_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_exclusions_voided_by_fkey";
+            columns: ["voided_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      case_generation_run_rows: {
+        Row: {
+          case_id: string | null;
+          created_at: string;
+          disposition: string;
+          exclusion_id: string | null;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason: string | null;
+          run_id: string;
+          sop_resolution_tier: string | null;
+          sop_template_id: string | null;
+          sop_version: number | null;
+          state: string;
+        };
+        Insert: {
+          case_id?: string | null;
+          created_at?: string;
+          disposition: string;
+          exclusion_id?: string | null;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          reason?: string | null;
+          run_id: string;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
+          state: string;
+        };
+        Update: {
+          case_id?: string | null;
+          created_at?: string;
+          disposition?: string;
+          exclusion_id?: string | null;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          reason?: string | null;
+          run_id?: string;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_run_rows_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_exclusion_id_fkey";
+            columns: ["exclusion_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_exclusions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_run_rows_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      case_generation_runs: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          created_count: number;
+          excluded_count: number;
+          failed_count: number;
+          id: string;
+          org_id: string;
+          proposed_count: number;
+          release_scope: Json | null;
+          skipped_existing_count: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          created_count: number;
+          excluded_count: number;
+          failed_count: number;
+          id?: string;
+          org_id: string;
+          proposed_count: number;
+          release_scope?: Json | null;
+          skipped_existing_count: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          created_count?: number;
+          excluded_count?: number;
+          failed_count?: number;
+          id?: string;
+          org_id?: string;
+          proposed_count?: number;
+          release_scope?: Json | null;
+          skipped_existing_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_generation_runs_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_generation_runs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       communication_event: {
         Row: {
           channel: string;
@@ -184,11 +433,15 @@ export type Database = {
           credentialing_status_id: string | null;
           expected_effective_date: string | null;
           facility_id: string | null;
+          generation_run_id: string | null;
           group_id: string | null;
           id: string;
           mso_id: string | null;
           org_id: string;
+          payer_group_provider_id: string | null;
           payer_id: string;
+          payer_individual_provider_id: string | null;
+          payer_pipeline_state: string;
           payer_reference_id: string | null;
           provider_id: string;
           specialty: string | null;
@@ -207,11 +460,15 @@ export type Database = {
           credentialing_status_id?: string | null;
           expected_effective_date?: string | null;
           facility_id?: string | null;
+          generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
           mso_id?: string | null;
           org_id: string;
+          payer_group_provider_id?: string | null;
           payer_id: string;
+          payer_individual_provider_id?: string | null;
+          payer_pipeline_state?: string;
           payer_reference_id?: string | null;
           provider_id: string;
           specialty?: string | null;
@@ -230,11 +487,15 @@ export type Database = {
           credentialing_status_id?: string | null;
           expected_effective_date?: string | null;
           facility_id?: string | null;
+          generation_run_id?: string | null;
           group_id?: string | null;
           id?: string;
           mso_id?: string | null;
           org_id?: string;
+          payer_group_provider_id?: string | null;
           payer_id?: string;
+          payer_individual_provider_id?: string | null;
+          payer_pipeline_state?: string;
           payer_reference_id?: string | null;
           provider_id?: string;
           specialty?: string | null;
@@ -273,6 +534,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "credential_cases_generation_run_id_fkey";
+            columns: ["generation_run_id"];
+            isOneToOne: false;
+            referencedRelation: "case_generation_runs";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "credential_cases_group_id_fkey";
             columns: ["group_id"];
             isOneToOne: false;
@@ -305,6 +573,41 @@ export type Database = {
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      denial_reason_codes: {
+        Row: {
+          active: boolean;
+          code: string;
+          created_at: string;
+          id: string;
+          label: string;
+          org_id: string | null;
+        };
+        Insert: {
+          active?: boolean;
+          code: string;
+          created_at?: string;
+          id?: string;
+          label: string;
+          org_id?: string | null;
+        };
+        Update: {
+          active?: boolean;
+          code?: string;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          org_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "denial_reason_codes_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];
@@ -473,13 +776,14 @@ export type Database = {
       };
       fill_sessions: {
         Row: {
-          case_id: string;
+          case_id: string | null;
           completed_at: string | null;
           docs_attached: Json | null;
           fields_filled: number;
           fields_skipped: Json | null;
           fill_mode: string;
           id: string;
+          is_test: boolean;
           org_id: string;
           performed_by: string | null;
           portal_key: string;
@@ -487,13 +791,14 @@ export type Database = {
           started_at: string;
         };
         Insert: {
-          case_id: string;
+          case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
           fields_filled?: number;
           fields_skipped?: Json | null;
           fill_mode?: string;
           id?: string;
+          is_test?: boolean;
           org_id: string;
           performed_by?: string | null;
           portal_key: string;
@@ -501,13 +806,14 @@ export type Database = {
           started_at?: string;
         };
         Update: {
-          case_id?: string;
+          case_id?: string | null;
           completed_at?: string | null;
           docs_attached?: Json | null;
           fields_filled?: number;
           fields_skipped?: Json | null;
           fill_mode?: string;
           id?: string;
+          is_test?: boolean;
           org_id?: string;
           performed_by?: string | null;
           portal_key?: string;
@@ -589,6 +895,191 @@ export type Database = {
           {
             foreignKeyName: "group_insurance_policies_org_id_fkey";
             columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      import_rows: {
+        Row: {
+          created_at: string;
+          error_column: string | null;
+          error_reason: string | null;
+          id: string;
+          line: number;
+          mapped: Json | null;
+          org_id: string;
+          raw: Json;
+          row_state: string | null;
+          run_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          error_column?: string | null;
+          error_reason?: string | null;
+          id?: string;
+          line: number;
+          mapped?: Json | null;
+          org_id: string;
+          raw: Json;
+          row_state?: string | null;
+          run_id: string;
+        };
+        Update: {
+          created_at?: string;
+          error_column?: string | null;
+          error_reason?: string | null;
+          id?: string;
+          line?: number;
+          mapped?: Json | null;
+          org_id?: string;
+          raw?: Json;
+          row_state?: string | null;
+          run_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "import_rows_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "import_rows_run_id_fkey";
+            columns: ["run_id"];
+            isOneToOne: false;
+            referencedRelation: "import_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      import_runs: {
+        Row: {
+          committed_at: string | null;
+          created_at: string;
+          created_by: string;
+          created_provider_ids: string[] | null;
+          entity_kind: string;
+          error_report: Json | null;
+          error_rows: number | null;
+          file_name: string | null;
+          id: string;
+          org_id: string;
+          source: string;
+          staged_rows: number | null;
+          state: string;
+          total_rows: number | null;
+          updated_at: string;
+          updated_provider_ids: string[] | null;
+        };
+        Insert: {
+          committed_at?: string | null;
+          created_at?: string;
+          created_by: string;
+          created_provider_ids?: string[] | null;
+          entity_kind?: string;
+          error_report?: Json | null;
+          error_rows?: number | null;
+          file_name?: string | null;
+          id?: string;
+          org_id: string;
+          source: string;
+          staged_rows?: number | null;
+          state?: string;
+          total_rows?: number | null;
+          updated_at?: string;
+          updated_provider_ids?: string[] | null;
+        };
+        Update: {
+          committed_at?: string | null;
+          created_at?: string;
+          created_by?: string;
+          created_provider_ids?: string[] | null;
+          entity_kind?: string;
+          error_report?: Json | null;
+          error_rows?: number | null;
+          file_name?: string | null;
+          id?: string;
+          org_id?: string;
+          source?: string;
+          staged_rows?: number | null;
+          state?: string;
+          total_rows?: number | null;
+          updated_at?: string;
+          updated_provider_ids?: string[] | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "import_runs_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "import_runs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inbound_leads: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          city: string | null;
+          contact_email: string;
+          contact_name: string;
+          contact_phone: string | null;
+          converted_org_id: string | null;
+          country: string | null;
+          created_at: string;
+          id: string;
+          org_name: string;
+          postal_code: string | null;
+          state: string | null;
+          status: string;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          contact_email: string;
+          contact_name: string;
+          contact_phone?: string | null;
+          converted_org_id?: string | null;
+          country?: string | null;
+          created_at?: string;
+          id?: string;
+          org_name: string;
+          postal_code?: string | null;
+          state?: string | null;
+          status?: string;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          contact_email?: string;
+          contact_name?: string;
+          contact_phone?: string | null;
+          converted_org_id?: string | null;
+          country?: string | null;
+          created_at?: string;
+          id?: string;
+          org_name?: string;
+          postal_code?: string | null;
+          state?: string | null;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inbound_leads_converted_org_id_fkey";
+            columns: ["converted_org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
             referencedColumns: ["id"];
@@ -807,6 +1298,35 @@ export type Database = {
           },
         ];
       };
+      next_best_action_configs: {
+        Row: {
+          org_id: string;
+          ranking: Json;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          org_id: string;
+          ranking: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          org_id?: string;
+          ranking?: Json;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "next_best_action_configs_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       notes: {
         Row: {
           author_id: string | null;
@@ -884,25 +1404,31 @@ export type Database = {
       };
       org_payer_assignments: {
         Row: {
+          archived_at: string | null;
           created_at: string;
           id: string;
           org_id: string;
           payer_id: string;
           starter: boolean;
+          status: string;
         };
         Insert: {
+          archived_at?: string | null;
           created_at?: string;
           id?: string;
           org_id: string;
           payer_id: string;
           starter?: boolean;
+          status?: string;
         };
         Update: {
+          archived_at?: string | null;
           created_at?: string;
           id?: string;
           org_id?: string;
           payer_id?: string;
           starter?: boolean;
+          status?: string;
         };
         Relationships: [
           {
@@ -914,6 +1440,54 @@ export type Database = {
           },
           {
             foreignKeyName: "org_payer_assignments_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      org_payer_settings: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "org_payer_settings_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_payer_settings_payer_id_fkey";
             columns: ["payer_id"];
             isOneToOne: false;
             referencedRelation: "payers";
@@ -942,59 +1516,401 @@ export type Database = {
         };
         Relationships: [];
       };
+      parties: {
+        Row: {
+          address_line1: string | null;
+          address_line2: string | null;
+          city: string | null;
+          country: string | null;
+          created_at: string;
+          created_by: string;
+          email: string | null;
+          id: string;
+          name: string;
+          party_type: string;
+          phone_mobile: string | null;
+          phone_office: string | null;
+          postal_code: string | null;
+          state: string | null;
+        };
+        Insert: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          created_by: string;
+          email?: string | null;
+          id?: string;
+          name: string;
+          party_type?: string;
+          phone_mobile?: string | null;
+          phone_office?: string | null;
+          postal_code?: string | null;
+          state?: string | null;
+        };
+        Update: {
+          address_line1?: string | null;
+          address_line2?: string | null;
+          city?: string | null;
+          country?: string | null;
+          created_at?: string;
+          created_by?: string;
+          email?: string | null;
+          id?: string;
+          name?: string;
+          party_type?: string;
+          phone_mobile?: string | null;
+          phone_office?: string | null;
+          postal_code?: string | null;
+          state?: string | null;
+        };
+        Relationships: [];
+      };
+      party_capture_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          org_id: string;
+          party_id: string;
+          recipient_email: string;
+          state: string;
+          token_hash: string;
+          used_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          org_id: string;
+          party_id: string;
+          recipient_email: string;
+          state?: string;
+          token_hash: string;
+          used_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          org_id?: string;
+          party_id?: string;
+          recipient_email?: string;
+          state?: string;
+          token_hash?: string;
+          used_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "party_capture_links_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_capture_links_party_id_fkey";
+            columns: ["party_id"];
+            isOneToOne: false;
+            referencedRelation: "parties";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      party_role_assignments: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          party_id: string;
+          role_key: string;
+          scope_id: string | null;
+          scope_type: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          party_id: string;
+          role_key: string;
+          scope_id?: string | null;
+          scope_type?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          party_id?: string;
+          role_key?: string;
+          scope_id?: string | null;
+          scope_type?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "party_role_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_role_assignments_party_id_fkey";
+            columns: ["party_id"];
+            isOneToOne: false;
+            referencedRelation: "parties";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "party_role_assignments_role_key_fkey";
+            columns: ["role_key"];
+            isOneToOne: false;
+            referencedRelation: "party_role_types";
+            referencedColumns: ["role_key"];
+          },
+        ];
+      };
+      party_role_types: {
+        Row: {
+          is_active: boolean;
+          label: string;
+          role_key: string;
+        };
+        Insert: {
+          is_active: boolean;
+          label: string;
+          role_key: string;
+        };
+        Update: {
+          is_active?: boolean;
+          label?: string;
+          role_key?: string;
+        };
+        Relationships: [];
+      };
+      payer_catalog_changes: {
+        Row: {
+          created_at: string;
+          field: string;
+          id: string;
+          new_value: string | null;
+          old_value: string | null;
+          payer_id: string;
+          review_state: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          source: string;
+        };
+        Insert: {
+          created_at?: string;
+          field: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          payer_id: string;
+          review_state?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source?: string;
+        };
+        Update: {
+          created_at?: string;
+          field?: string;
+          id?: string;
+          new_value?: string | null;
+          old_value?: string | null;
+          payer_id?: string;
+          review_state?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_catalog_changes_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payer_network_targets: {
+        Row: {
+          created_at: string;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          state: string;
+          status: string;
+        };
+        Insert: {
+          created_at?: string;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          state: string;
+          status?: string;
+        };
+        Update: {
+          created_at?: string;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          state?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_network_targets_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_network_targets_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_network_targets_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payer_pipeline_history: {
+        Row: {
+          case_id: string;
+          changed_at: string;
+          changed_by: string | null;
+          from_state: string | null;
+          id: string;
+          is_correction: boolean;
+          justification: string | null;
+          org_id: string;
+          reason_code_id: string | null;
+          to_state: string;
+        };
+        Insert: {
+          case_id: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          from_state?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          justification?: string | null;
+          org_id: string;
+          reason_code_id?: string | null;
+          to_state: string;
+        };
+        Update: {
+          case_id?: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          from_state?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          justification?: string | null;
+          org_id?: string;
+          reason_code_id?: string | null;
+          to_state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_pipeline_history_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_pipeline_history_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_pipeline_history_reason_code_id_fkey";
+            columns: ["reason_code_id"];
+            isOneToOne: false;
+            referencedRelation: "denial_reason_codes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payers: {
         Row: {
+          aliases: string[] | null;
           avg_decision_days: number | null;
-          caqh_pull_deadline_days: number | null;
           created_at: string | null;
           id: string;
           is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
           name: string;
           org_id: string | null;
-          payer_billing_id: string | null;
-          portal_url: string | null;
-          prior_auth_vendor: string | null;
-          provider_type_path: string | null;
-          provisional_billing_allowed: boolean | null;
-          provisional_billing_notes: string | null;
-          retro_billing_allowed: boolean | null;
-          retro_billing_window_days: number | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          states: string[] | null;
+          status: string;
         };
         Insert: {
+          aliases?: string[] | null;
           avg_decision_days?: number | null;
-          caqh_pull_deadline_days?: number | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
+          last_synced_at?: string | null;
+          merged_into_id?: string | null;
           name: string;
           org_id?: string | null;
-          payer_billing_id?: string | null;
-          portal_url?: string | null;
-          prior_auth_vendor?: string | null;
-          provider_type_path?: string | null;
-          provisional_billing_allowed?: boolean | null;
-          provisional_billing_notes?: string | null;
-          retro_billing_allowed?: boolean | null;
-          retro_billing_window_days?: number | null;
+          payer_kind?: string;
+          payer_slug?: string | null;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          states?: string[] | null;
+          status?: string;
         };
         Update: {
+          aliases?: string[] | null;
           avg_decision_days?: number | null;
-          caqh_pull_deadline_days?: number | null;
           created_at?: string | null;
           id?: string;
           is_active?: boolean | null;
+          last_synced_at?: string | null;
+          merged_into_id?: string | null;
           name?: string;
           org_id?: string | null;
-          payer_billing_id?: string | null;
-          portal_url?: string | null;
-          prior_auth_vendor?: string | null;
-          provider_type_path?: string | null;
-          provisional_billing_allowed?: boolean | null;
-          provisional_billing_notes?: string | null;
-          retro_billing_allowed?: boolean | null;
-          retro_billing_window_days?: number | null;
+          payer_kind?: string;
+          payer_slug?: string | null;
+          resolution_id_expected?: boolean | null;
+          resolution_id_label?: string | null;
+          states?: string[] | null;
+          status?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "payers_merged_into_id_fkey";
+            columns: ["merged_into_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "payers_org_id_fkey";
             columns: ["org_id"];
@@ -1326,6 +2242,61 @@ export type Database = {
           },
         ];
       };
+      provider_group_assignments: {
+        Row: {
+          created_at: string;
+          end_date: string | null;
+          group_id: string;
+          id: string;
+          is_primary: boolean;
+          org_id: string;
+          provider_id: string;
+          start_date: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          end_date?: string | null;
+          group_id: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id: string;
+          provider_id: string;
+          start_date?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          end_date?: string | null;
+          group_id?: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id?: string;
+          provider_id?: string;
+          start_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_group_assignments_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_group_assignments_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_group_assignments_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       provider_groups: {
         Row: {
           billing_city: string | null;
@@ -1498,6 +2469,7 @@ export type Database = {
           home_zip: string | null;
           id: string;
           is_new_grad: boolean | null;
+          is_test_provider: boolean;
           languages: string[] | null;
           last_name: string;
           launch_id: string | null;
@@ -1525,6 +2497,7 @@ export type Database = {
           taxonomy_code: string | null;
           terminated_date: string | null;
           updated_at: string | null;
+          verification_state: string;
         };
         Insert: {
           additional_certifications?: Json | null;
@@ -1551,6 +2524,7 @@ export type Database = {
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          is_test_provider?: boolean;
           languages?: string[] | null;
           last_name: string;
           launch_id?: string | null;
@@ -1578,6 +2552,7 @@ export type Database = {
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
+          verification_state?: string;
         };
         Update: {
           additional_certifications?: Json | null;
@@ -1604,6 +2579,7 @@ export type Database = {
           home_zip?: string | null;
           id?: string;
           is_new_grad?: boolean | null;
+          is_test_provider?: boolean;
           languages?: string[] | null;
           last_name?: string;
           launch_id?: string | null;
@@ -1631,6 +2607,7 @@ export type Database = {
           taxonomy_code?: string | null;
           terminated_date?: string | null;
           updated_at?: string | null;
+          verification_state?: string;
         };
         Relationships: [
           {
@@ -1656,15 +2633,180 @@ export type Database = {
           },
         ];
       };
+      public_rpc_attempts: {
+        Row: {
+          attempted_at: string;
+          caller_hash: string;
+          id: string;
+          rpc_name: string;
+          was_valid: boolean;
+        };
+        Insert: {
+          attempted_at?: string;
+          caller_hash: string;
+          id?: string;
+          rpc_name: string;
+          was_valid?: boolean;
+        };
+        Update: {
+          attempted_at?: string;
+          caller_hash?: string;
+          id?: string;
+          rpc_name?: string;
+          was_valid?: boolean;
+        };
+        Relationships: [];
+      };
+      report_shares: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          recipient_email: string;
+          report_key: string;
+          revoked_at: string | null;
+          scope: string;
+          scope_org_id: string | null;
+          state: string;
+          token_hash: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          recipient_email: string;
+          report_key: string;
+          revoked_at?: string | null;
+          scope: string;
+          scope_org_id?: string | null;
+          state?: string;
+          token_hash: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          recipient_email?: string;
+          report_key?: string;
+          revoked_at?: string | null;
+          scope?: string;
+          scope_org_id?: string | null;
+          state?: string;
+          token_hash?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "report_shares_scope_org_id_fkey";
+            columns: ["scope_org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sop_template_drafts: {
+        Row: {
+          created_at: string;
+          id: string;
+          org_id: string;
+          payload: Json;
+          template_id: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          org_id: string;
+          payload: Json;
+          template_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          org_id?: string;
+          payload?: Json;
+          template_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sop_template_drafts_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "sop_template_drafts_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "sop_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sop_template_versions: {
+        Row: {
+          change_note: string | null;
+          id: string;
+          name: string;
+          published_at: string;
+          published_by: string | null;
+          required_profile_attributes: Json;
+          task_definitions: Json;
+          template_id: string;
+          version: number;
+        };
+        Insert: {
+          change_note?: string | null;
+          id?: string;
+          name: string;
+          published_at?: string;
+          published_by?: string | null;
+          required_profile_attributes?: Json;
+          task_definitions: Json;
+          template_id: string;
+          version: number;
+        };
+        Update: {
+          change_note?: string | null;
+          id?: string;
+          name?: string;
+          published_at?: string;
+          published_by?: string | null;
+          required_profile_attributes?: Json;
+          task_definitions?: Json;
+          template_id?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "sop_template_versions_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "sop_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       sop_templates: {
         Row: {
           archived: boolean;
           created_at: string | null;
+          current_version: number;
           group_id: string | null;
           id: string;
           name: string;
           org_id: string | null;
           payer_id: string | null;
+          required_profile_attributes: Json;
           specialty: string | null;
           state: string | null;
           task_definitions: Json;
@@ -1673,11 +2815,13 @@ export type Database = {
         Insert: {
           archived?: boolean;
           created_at?: string | null;
+          current_version?: number;
           group_id?: string | null;
           id?: string;
           name: string;
           org_id?: string | null;
           payer_id?: string | null;
+          required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
           task_definitions?: Json;
@@ -1686,11 +2830,13 @@ export type Database = {
         Update: {
           archived?: boolean;
           created_at?: string | null;
+          current_version?: number;
           group_id?: string | null;
           id?: string;
           name?: string;
           org_id?: string | null;
           payer_id?: string | null;
+          required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
           task_definitions?: Json;
@@ -1732,6 +2878,10 @@ export type Database = {
           provider_id: string | null;
           state: string;
           status: string | null;
+          verification_source_url: string | null;
+          verified_at: string | null;
+          verified_by: string | null;
+          verified_status: string;
         };
         Insert: {
           created_at?: string | null;
@@ -1744,6 +2894,10 @@ export type Database = {
           provider_id?: string | null;
           state: string;
           status?: string | null;
+          verification_source_url?: string | null;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          verified_status?: string;
         };
         Update: {
           created_at?: string | null;
@@ -1756,6 +2910,10 @@ export type Database = {
           provider_id?: string | null;
           state?: string;
           status?: string | null;
+          verification_source_url?: string | null;
+          verified_at?: string | null;
+          verified_by?: string | null;
+          verified_status?: string;
         };
         Relationships: [
           {
@@ -1896,11 +3054,15 @@ export type Database = {
           created_at: string | null;
           description: string | null;
           due_date: string | null;
+          execution_type: string | null;
           id: string;
           is_auto_generated: boolean | null;
           org_id: string;
           provider_id: string | null;
           sop_content: Json | null;
+          sop_resolution_tier: string | null;
+          sop_template_id: string | null;
+          sop_version: number | null;
           sort_order: number | null;
           status: string;
           title: string;
@@ -1912,11 +3074,15 @@ export type Database = {
           created_at?: string | null;
           description?: string | null;
           due_date?: string | null;
+          execution_type?: string | null;
           id?: string;
           is_auto_generated?: boolean | null;
           org_id: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           sort_order?: number | null;
           status?: string;
           title: string;
@@ -1928,11 +3094,15 @@ export type Database = {
           created_at?: string | null;
           description?: string | null;
           due_date?: string | null;
+          execution_type?: string | null;
           id?: string;
           is_auto_generated?: boolean | null;
           org_id?: string;
           provider_id?: string | null;
           sop_content?: Json | null;
+          sop_resolution_tier?: string | null;
+          sop_template_id?: string | null;
+          sop_version?: number | null;
           sort_order?: number | null;
           status?: string;
           title?: string;
@@ -1960,13 +3130,22 @@ export type Database = {
             referencedRelation: "providers";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "tasks_sop_version_fkey";
+            columns: ["sop_template_id", "sop_version"];
+            isOneToOne: false;
+            referencedRelation: "sop_template_versions";
+            referencedColumns: ["template_id", "version"];
+          },
         ];
       };
       touches: {
         Row: {
           case_id: string;
+          clears_follow_up: boolean;
           communication_event_id: string | null;
           coordinator_id: string | null;
+          corrects_touch_id: string | null;
           created_at: string | null;
           entry_type: string;
           id: string;
@@ -1974,6 +3153,8 @@ export type Database = {
           notes: string | null;
           org_id: string;
           outcome: string | null;
+          recipient_contact: string | null;
+          recipient_name: string | null;
           source: string | null;
           task_id: string | null;
           touch_date: string;
@@ -1981,8 +3162,10 @@ export type Database = {
         };
         Insert: {
           case_id: string;
+          clears_follow_up?: boolean;
           communication_event_id?: string | null;
           coordinator_id?: string | null;
+          corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
           id?: string;
@@ -1990,6 +3173,8 @@ export type Database = {
           notes?: string | null;
           org_id: string;
           outcome?: string | null;
+          recipient_contact?: string | null;
+          recipient_name?: string | null;
           source?: string | null;
           task_id?: string | null;
           touch_date: string;
@@ -1997,8 +3182,10 @@ export type Database = {
         };
         Update: {
           case_id?: string;
+          clears_follow_up?: boolean;
           communication_event_id?: string | null;
           coordinator_id?: string | null;
+          corrects_touch_id?: string | null;
           created_at?: string | null;
           entry_type?: string;
           id?: string;
@@ -2006,6 +3193,8 @@ export type Database = {
           notes?: string | null;
           org_id?: string;
           outcome?: string | null;
+          recipient_contact?: string | null;
+          recipient_name?: string | null;
           source?: string | null;
           task_id?: string | null;
           touch_date?: string;
@@ -2031,6 +3220,13 @@ export type Database = {
             columns: ["coordinator_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "touches_corrects_touch_id_fkey";
+            columns: ["corrects_touch_id"];
+            isOneToOne: false;
+            referencedRelation: "touches";
             referencedColumns: ["id"];
           },
           {
@@ -2078,15 +3274,152 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      advance_payer_pipeline: {
+        Args: {
+          p_case_id: string;
+          p_effective_date?: string;
+          p_expected_state?: string;
+          p_group_provider_id?: string;
+          p_individual_provider_id?: string;
+          p_is_correction?: boolean;
+          p_justification?: string;
+          p_reason_code_id?: string;
+          p_to_state: string;
+        };
+        Returns: Json;
+      };
+      archive_org_payer_assignment: {
+        Args: { p_org_id: string; p_payer_id: string };
+        Returns: Json;
+      };
+      assert_contact_valid: {
+        Args: { p: Json; p_label: string };
+        Returns: undefined;
+      };
+      check_rpc_throttle: {
+        Args: {
+          p_count_all?: boolean;
+          p_max_attempts: number;
+          p_rpc_name: string;
+          p_window_minutes: number;
+        };
+        Returns: boolean;
+      };
       claim_invites: { Args: never; Returns: number };
+      commit_import_run: {
+        Args: { p_plan: Json; p_run_id: string };
+        Returns: Json;
+      };
+      create_capture_link: {
+        Args: {
+          p_org_id: string;
+          p_party_id: string;
+          p_recipient_email: string;
+          p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
       create_case_with_tasks: {
         Args: { p_input: Json; p_tasks?: Json };
         Returns: Json;
       };
-      create_organization: { Args: { p_name: string }; Returns: string };
+      create_organization:
+        | { Args: { p_name: string }; Returns: string }
+        | {
+            Args: {
+              p_name: string;
+              p_owner_email: string;
+              p_owner_name: string;
+            };
+            Returns: string;
+          }
+        | {
+            Args: {
+              p_customer: Json;
+              p_name: string;
+              p_owner_email: string;
+              p_owner_name: string;
+              p_sales_rep?: Json;
+            };
+            Returns: string;
+          };
+      create_report_share: {
+        Args: {
+          p_recipient_email: string;
+          p_report_key: string;
+          p_scope: string;
+          p_scope_org_id: string;
+        };
+        Returns: Json;
+      };
       get_sop_field_tokens: { Args: never; Returns: Json };
+      insert_contact_party: {
+        Args: { p: Json; p_uid: string };
+        Returns: string;
+      };
+      list_global_payers: {
+        Args: never;
+        Returns: {
+          aliases: string[] | null;
+          avg_decision_days: number | null;
+          created_at: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          states: string[] | null;
+          status: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      mark_rpc_attempt_valid: {
+        Args: { p_rpc_name: string };
+        Returns: undefined;
+      };
+      publish_sop_template_version: {
+        Args: {
+          p_change_note?: string;
+          p_expected_version: number;
+          p_name: string;
+          p_required_profile_attributes?: Json;
+          p_task_definitions: Json;
+          p_template_id: string;
+        };
+        Returns: Json;
+      };
+      review_payer_catalog_change: {
+        Args: { p_accept: boolean; p_change_id: string };
+        Returns: undefined;
+      };
+      revoke_report_share: { Args: { p_id: string }; Returns: undefined };
+      set_primary_assignment: {
+        Args: { p_assignment_id: string; p_provider_id: string };
+        Returns: undefined;
+      };
+      stage_import_rows: {
+        Args: { p_rows: Json; p_run_id: string };
+        Returns: undefined;
+      };
+      submit_capture: {
+        Args: { p_payload: Json; p_token: string };
+        Returns: Json;
+      };
+      submit_inbound_lead: { Args: { p_payload: Json }; Returns: Json };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      validate_capture_token: { Args: { p_token: string }; Returns: Json };
+      validate_report_share: { Args: { p_token: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;

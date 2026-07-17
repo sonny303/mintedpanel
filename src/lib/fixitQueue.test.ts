@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildFixitQueue,
   coverageFor,
+  FIELD_NOT_FOUND_REASON,
   type BuildFixitInput,
   type OpenCaseLite,
 } from "./fixitQueue";
@@ -58,6 +59,7 @@ function provider(p: Partial<Provider> = {}): Provider {
     licenseIssueDate: null,
     licenseExpirationDate: null,
     referenceOnly: false,
+    verificationState: "verified",
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     ...p,
@@ -241,7 +243,7 @@ describe("buildFixitQueue — dictionary + train", () => {
 describe("buildFixitQueue — broken mappings from fill telemetry", () => {
   const portals = [{ portalKey: "bcbs_ks", name: "BCBS KS", payerId: "pay-1" }];
 
-  it("raises a card for selectors the last fill couldn't find, joined by mapId then label", () => {
+  it("raises one card per portal, joins by mapId then label, and collapses duplicates", () => {
     const cards = buildFixitQueue({
       ...emptyInput,
       portals,
@@ -261,24 +263,27 @@ describe("buildFixitQueue — broken mappings from fill telemetry", () => {
           portalKey: "bcbs_ks",
           fieldsSkipped: [
             // exact join via mapId
-            { label: "NPI", reason: "field not found on this page", kind: "skipped", mapId: "m1" },
+            { label: "NPI", reason: FIELD_NOT_FOUND_REASON, kind: "skipped", mapId: "m1" },
             // legacy report without mapId → joins via the selector's label
-            { label: "City", reason: "field not found on this page", kind: "skipped" },
-            // other skip reasons and manual entries never raise the card
+            { label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" },
+            // duplicate report of m1 → collapses to one mapping
+            { label: "NPI", reason: FIELD_NOT_FOUND_REASON, kind: "skipped", mapId: "m1" },
+            // other skip reasons and manual entries never create a drift card
             { label: "CAQH", reason: "no value", kind: "skipped" },
-            { label: "CAQH", reason: "manual entry", kind: "manual" },
+            { label: "CAQH", reason: FIELD_NOT_FOUND_REASON, kind: "manual" },
           ],
         },
       ],
     });
-    const broken = cards.find((c) => c.kind === "broken_mapping");
-    expect(broken?.broken).toMatchObject({
+    const broken = cards.filter((c) => c.kind === "broken_mapping");
+    expect(broken).toHaveLength(1);
+    expect(broken[0].broken).toMatchObject({
       portalKey: "bcbs_ks",
       count: 2,
       globalCount: 0,
       labels: ["NPI", "Service location city"],
     });
-    expect(broken?.broken?.orgRows.map((r) => r.id)).toEqual(["m1", "m2"]);
+    expect(broken[0].broken?.orgRows.map((r) => r.id)).toEqual(["m1", "m2"]);
   });
 
   it("splits org rows (actionable) from global rows (read-only)", () => {
@@ -293,8 +298,8 @@ describe("buildFixitQueue — broken mappings from fill telemetry", () => {
         {
           portalKey: "bcbs_ks",
           fieldsSkipped: [
-            { label: "City", reason: "field not found on this page", kind: "skipped" },
-            { label: "State", reason: "field not found on this page", kind: "skipped" },
+            { label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" },
+            { label: "State", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" },
           ],
         },
       ],
@@ -303,6 +308,50 @@ describe("buildFixitQueue — broken mappings from fill telemetry", () => {
     expect(broken?.broken?.count).toBe(2);
     expect(broken?.broken?.globalCount).toBe(1);
     expect(broken?.broken?.orgRows.map((r) => r.id)).toEqual(["o1"]);
+  });
+
+  it("only an exact field-not-found event creates drift; other reasons do not", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [map({ portalKey: "bcbs_ks", id: "m1", selector: "label:City" })],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            { label: "City", reason: "no value in Minted Panel", kind: "skipped" },
+            { label: "City", reason: "field is disabled or read-only", kind: "skipped" },
+          ],
+        },
+      ],
+    });
+    expect(cards.find((c) => c.kind === "broken_mapping")).toBeUndefined();
+  });
+
+  it("raises a global-only card that stays informational (no org rows to re-propose)", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [
+        map({ portalKey: "bcbs_ks", id: "g1", orgId: null, selector: "label:City" }),
+        map({ portalKey: "bcbs_ks", id: "g2", orgId: null, selector: "label:State" }),
+      ],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            { label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" },
+            { label: "State", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" },
+          ],
+        },
+      ],
+    });
+    const broken = cards.find((c) => c.kind === "broken_mapping");
+    // The card is still raised (the drift is real), but every row is global —
+    // orgRows empty means the UI shows the read-only "managed centrally" path.
+    expect(broken?.broken?.count).toBe(2);
+    expect(broken?.broken?.globalCount).toBe(2);
+    expect(broken?.broken?.orgRows).toEqual([]);
   });
 
   it("ignores retired rows, unmatched labels, and malformed telemetry", () => {
@@ -316,14 +365,33 @@ describe("buildFixitQueue — broken mappings from fill telemetry", () => {
         {
           portalKey: "bcbs_ks",
           fieldsSkipped: [
-            { label: "City", reason: "field not found on this page", kind: "skipped" },
-            { label: "Ghost", reason: "field not found on this page", kind: "skipped" },
+            { label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" }, // only a retired row
+            { label: "Ghost", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" }, // no map
             "not-an-object",
-            { reason: "field not found on this page" },
+            { reason: FIELD_NOT_FOUND_REASON }, // no label
           ],
         },
         { portalKey: "bcbs_ks", fieldsSkipped: "corrupt" },
         { portalKey: "unknown_portal", fieldsSkipped: [] },
+      ],
+    });
+    expect(cards.find((c) => c.kind === "broken_mapping")).toBeUndefined();
+  });
+
+  it("prefers the reported mapId and never falls back to label for a stale id", () => {
+    const cards = buildFixitQueue({
+      ...emptyInput,
+      portals,
+      fieldMaps: [map({ portalKey: "bcbs_ks", id: "m2", selector: "label:City" })],
+      lastFills: [
+        {
+          portalKey: "bcbs_ks",
+          fieldsSkipped: [
+            // id "gone" matches no live map; its label WOULD match m2, but a
+            // reported id is authoritative — no label fallback → no card.
+            { label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped", mapId: "gone" },
+          ],
+        },
       ],
     });
     expect(cards.find((c) => c.kind === "broken_mapping")).toBeUndefined();
@@ -339,9 +407,7 @@ describe("buildFixitQueue — broken mappings from fill telemetry", () => {
       lastFills: [
         {
           portalKey: "bcbs_ks",
-          fieldsSkipped: [
-            { label: "City", reason: "field not found on this page", kind: "skipped" },
-          ],
+          fieldsSkipped: [{ label: "City", reason: FIELD_NOT_FOUND_REASON, kind: "skipped" }],
         },
       ],
     });

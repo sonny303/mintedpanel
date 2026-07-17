@@ -3,6 +3,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
@@ -35,7 +36,8 @@ export async function createTasksForCase(inputs: CaseTaskInput[]): Promise<Task[
     .from("tasks")
     .insert(payload as never)
     .select("*");
-  if (error) throw error;
+  // E0.10: tasks_owner_check rejects ownerless tasks — surface it friendly.
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Task[]>(data ?? []);
   await writeAudit({
     actionType: "CREATE",
@@ -74,7 +76,7 @@ export async function createFollowUpTask(input: FollowUpTaskInput): Promise<Task
     } as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const task = camelizeRow<Task>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -86,6 +88,44 @@ export async function createFollowUpTask(input: FollowUpTaskInput): Promise<Task
   return task;
 }
 
+// E4.2 F4.2.6 / TE-13 — a provider-outreach task spawned per blocked provider
+// from the generation preview (never auto-created silently). No case exists yet
+// (the provider is gated), so case_id is null; the title is prefilled with the
+// missing attributes and the task references the provider.
+export interface ProviderOutreachTaskInput {
+  providerId: string;
+  title: string;
+}
+
+export async function createProviderOutreachTask(input: ProviderOutreachTaskInput): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("tasks")
+    .insert({
+      org_id: orgId,
+      case_id: null,
+      provider_id: input.providerId,
+      title: input.title,
+      description: null,
+      status: "not_started" as const,
+      sort_order: 100,
+      due_date: null,
+      is_auto_generated: false,
+    } as never)
+    .select("*")
+    .single();
+  if (error) throw translateDbError(error);
+  const task = camelizeRow<Task>(data);
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "task",
+    entityId: task.id,
+    after: { providerId: input.providerId, title: input.title },
+    description: `Provider outreach task created: ${input.title}`,
+  });
+  return task;
+}
+
 export interface TaskFilters {
   caseId?: string;
   status?: TaskStatus;
@@ -93,8 +133,11 @@ export interface TaskFilters {
   assignedTo?: string;
 }
 
+// sop_template_id/sop_version (E2.2) ride the list so the cases work view can
+// derive "distinct stamped template ids per case" from the already-loaded
+// cache — two id columns, never task bodies (TE-7).
 const TASK_LIST_COLUMNS =
-  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, created_at, updated_at";
+  "id, case_id, provider_id, title, status, sort_order, due_date, completed_date, is_auto_generated, sop_template_id, sop_version, created_at, updated_at";
 
 export async function getTasks(filters: TaskFilters = {}): Promise<Task[]> {
   const orgId = requireActiveOrg();

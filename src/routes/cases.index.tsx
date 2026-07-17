@@ -9,7 +9,7 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 import { fmtDate } from "@/lib/format";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { FilterCards } from "@/components/triage/FilterCards";
+import { SummaryChips } from "@/components/triage/SummaryChips";
 import { GroupedList } from "@/components/triage/GroupedList";
 import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
 import { ActionBadge } from "@/components/triage/ActionBadge";
@@ -19,7 +19,7 @@ import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { usePayers, useSops, useStatusConfigs } from "@/hooks/useAdmin";
 import {
   getActionState,
   worstActionState,
@@ -32,18 +32,55 @@ import {
   badgeLabel,
   chipCounts,
   isAlertState,
+  isOpenState,
   matchesChip,
   type ChipId,
 } from "@/lib/workView";
+import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
 import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
-import { Phone } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MessageSquarePlus, Phone, Plus, Search, X } from "lucide-react";
 import { useCanWrite } from "@/lib/permissions";
+import { useTablePrefs } from "@/hooks/useTablePrefs";
 import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
+import { BulkLogTouchDialog, type BulkCaseCandidate } from "@/components/cases/BulkLogTouchDialog";
+import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
 import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
+
+// E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the view to the cases a
+// confirmed generation batch created (URL-state, sharable). E2.3 F2.3.2
+// superseded it as the post-generation landing (/work?run=); this filter
+// stays URL-reachable — old links live.
+//
+// E2.2 F2.2.2: the selected filter card lives in the URL (?chip=..., no param
+// = all) — the /providers?chip= idiom — so other surfaces can deep-link a
+// filtered view. "generic" is the coverage-gap list: open cases with a task
+// stamped by the fallback SOP (derived from stamps, never stored).
+type CasesChipId = ChipId | "generic";
+
+interface CasesSearch {
+  runId?: string;
+  chip?: Exclude<CasesChipId, "all">;
+  // ?ids=<comma-separated case ids> pins the view to exactly a set of cases —
+  // the bulk-touch confirmation links here so an exception is fixed in place
+  // (F4.1.7).
+  ids?: string;
+}
 
 export const Route = createFileRoute("/cases/")({
   component: CasesWorkView,
+  validateSearch: (search: Record<string, unknown>): CasesSearch => ({
+    runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
+    chip:
+      search.chip === "needs" ||
+      search.chip === "inprog" ||
+      search.chip === "awaiting" ||
+      search.chip === "generic"
+        ? search.chip
+        : undefined,
+    ids: typeof search.ids === "string" && search.ids.trim() ? search.ids : undefined,
+  }),
 });
 
 interface CaseRow {
@@ -74,17 +111,52 @@ const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
 
 function CasesWorkView() {
   const navigate = useNavigate();
+  const { runId, chip: chipParam, ids: idsParam } = Route.useSearch();
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
   const contractsQ = useContracts();
   const payersQ = usePayers();
+  const templatesQ = useSops();
   const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
   const canWrite = useCanWrite();
 
-  const [chip, setChip] = useState<ChipId>("all");
+  const chip: CasesChipId = chipParam ?? "all";
+  const setChip = (id: CasesChipId) =>
+    navigate({
+      to: "/cases",
+      search: {
+        ...(runId ? { runId } : {}),
+        ...(id === "all" ? {} : { chip: id }),
+      },
+    });
   const [batchOpen, setBatchOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [newCaseOpen, setNewCaseOpen] = useState(false);
+
+  // ?ids pins the view to exactly these cases (bulk-touch follow-up link).
+  const idSet = useMemo(
+    () => (idsParam ? new Set(idsParam.split(",").filter(Boolean)) : null),
+    [idsParam],
+  );
+  // F4.0.2 — case search matches on the tracking ID (+ provider/payer/state).
+  const [search, setSearch] = useState("");
+  // F4.0.2 — the Tracking ID column is default-hidden, toggled via user prefs.
+  const { prefs, savePrefs } = useTablePrefs("cases.list");
+  const showTrackingId = prefs?.visibleCols?.trackingId ?? false;
+  const toggleTrackingId = () =>
+    savePrefs({
+      visibleCols: { ...(prefs?.visibleCols ?? {}), trackingId: !showTrackingId },
+    }).catch(() => undefined);
+
+  // F2.2.2 — a case "uses the generic SOP" iff a task of it is stamped with a
+  // fallback (global payerless) template id; both inputs are already-loaded
+  // org caches (the tasks list projection carries the two stamp columns).
+  const genericCaseIds = useMemo(
+    () => caseIdsUsingGenericSop(tasksQ.data ?? [], fallbackTemplateIds(templatesQ.data ?? [])),
+    [tasksQ.data, templatesQ.data],
+  );
 
   const loading =
     providersQ.isLoading ||
@@ -97,7 +169,9 @@ function CasesWorkView() {
   const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
 
   const groups: PayerGroup[] = useMemo(() => {
-    const cases = casesQ.data ?? [];
+    const cases = (casesQ.data ?? []).filter(
+      (c) => !runId || (c.generationRunId ?? null) === runId,
+    );
     const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
     const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
@@ -218,26 +292,69 @@ function CasesWorkView() {
     payersQ.data,
     statusConfigsQ.data,
     lastTouchQ.data,
+    runId,
   ]);
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
   const counts = chipCounts(openRowsAll.map((r) => r.state));
+  const genericCount = openRowsAll.filter((r) => genericCaseIds.has(r.case.id)).length;
   const cards = [
     { id: "all", label: "All open cases", n: counts.all },
     { id: "needs", label: "Needs your action", n: counts.needs },
     { id: "inprog", label: "In progress", n: counts.inprog },
     { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
+    { id: "generic", label: "Using generic SOP", n: genericCount },
   ];
 
-  // Same predicate as the card counts (matchesChip), so a card that says N
-  // always leaves exactly N case rows on screen.
+  // Same predicate as the card counts (matchesChip / the generic derivation),
+  // so a card that says N always leaves exactly N case rows on screen. The
+  // free-text search (F4.0.2) additionally narrows by provider/payer/state and
+  // — the point of the feature — the tracking ID.
+  // Bulk-touch candidates: every open case, labelled provider · state · payer.
+  const bulkCandidates: BulkCaseCandidate[] = useMemo(
+    () =>
+      groups.flatMap((g) =>
+        g.openRows.map((r) => ({
+          caseId: r.case.id,
+          label: `${
+            r.provider ? `${r.provider.firstName} ${r.provider.lastName}` : "Unknown provider"
+          } · ${r.case.state} · ${g.payerName}`,
+        })),
+      ),
+    [groups],
+  );
+
+  const q = search.trim().toLowerCase();
   const visibleGroups = useMemo(
     () =>
       groups
-        .map((g) => ({ group: g, visibleRows: g.rows.filter((r) => matchesChip(chip, r.state)) }))
+        .map((g) => ({
+          group: g,
+          visibleRows: g.rows.filter((r) => {
+            // ids pinning takes precedence over chip/generic/search so the
+            // bulk-touch link shows exactly the affected set.
+            if (idSet) return idSet.has(r.case.id);
+            const chipOk =
+              chip === "generic"
+                ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
+                : matchesChip(chip, r.state);
+            if (!chipOk) return false;
+            if (!q) return true;
+            const providerName = r.provider
+              ? `${r.provider.firstName} ${r.provider.lastName}`.toLowerCase()
+              : "";
+            return [
+              providerName,
+              g.payerName.toLowerCase(),
+              r.case.state.toLowerCase(),
+              (r.case.payerReferenceId ?? "").toLowerCase(),
+            ].some((h) => h.includes(q));
+          }),
+        }))
         .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip],
+    [groups, chip, genericCaseIds, q, idSet],
   );
+  const pinnedCount = visibleGroups.reduce((n, { visibleRows }) => n + visibleRows.length, 0);
 
   function tableRow(row: CaseRow): CaseTableRow {
     const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
@@ -263,6 +380,8 @@ function CasesWorkView() {
       id: row.case.id,
       lead,
       status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
+      pipeline: row.case.payerPipelineState,
+      trackingId: row.case.payerReferenceId ?? null,
       contract: row.contractStatus
         ? { label: row.contractStatus.label, color: row.contractStatus.color }
         : null,
@@ -312,18 +431,94 @@ function CasesWorkView() {
         description={`${totalPayers} payers · ${counts.all} open cases`}
         actions={
           canWrite ? (
-            <Button variant="outline" size="sm" className="h-8" onClick={() => setBatchOpen(true)}>
-              <Phone className="w-4 h-4 mr-1" /> Log payer call
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setBulkOpen(true)}>
+                <MessageSquarePlus className="w-4 h-4 mr-1" /> Log touch
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => setBatchOpen(true)}
+              >
+                <Phone className="w-4 h-4 mr-1" /> Log payer call
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+                onClick={() => setNewCaseOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-1" /> New case
+              </Button>
+            </div>
           ) : null
         }
       />
       {batchOpen ? (
         <BatchTouchpointDialog open={batchOpen} onClose={() => setBatchOpen(false)} />
       ) : null}
+      {bulkOpen ? (
+        <BulkLogTouchDialog
+          open={bulkOpen}
+          candidates={bulkCandidates}
+          onClose={() => setBulkOpen(false)}
+          onLogged={(caseIds) => navigate({ to: "/cases", search: { ids: caseIds.join(",") } })}
+        />
+      ) : null}
+      {newCaseOpen ? <ManualCaseModal onClose={() => setNewCaseOpen(false)} /> : null}
+
+      {idSet ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            Showing {pinnedCount} {pinnedCount === 1 ? "case" : "cases"} you just logged a touch on.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() => navigate({ to: "/cases", search: {} })}
+          >
+            <X className="mr-1 h-4 w-4" /> Show all cases
+          </Button>
+        </div>
+      ) : null}
+
+      {runId ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            Showing only the {groups.reduce((n, g) => n + g.rows.length, 0)}{" "}
+            {groups.reduce((n, g) => n + g.rows.length, 0) === 1 ? "case" : "cases"} created by this
+            generation run.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() => navigate({ to: "/cases", search: {} })}
+          >
+            Show all cases
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search provider, payer, or tracking ID…"
+            className="h-9 pl-8"
+            aria-label="Search cases"
+          />
+        </div>
+        <Button variant="outline" size="sm" className="h-9" onClick={toggleTrackingId}>
+          {showTrackingId ? "Hide tracking ID" : "Show tracking ID"}
+        </Button>
+      </div>
 
       <div className="mb-6">
-        <FilterCards cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
+        <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as CasesChipId)} />
       </div>
 
       {failed ? (
@@ -341,7 +536,7 @@ function CasesWorkView() {
           message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
           description={
             chip === "all"
-              ? "Open cases from a provider's detail page to start tracking."
+              ? "Use New case for a one-off case, or open a provider to start with context."
               : "No open cases match this filter right now."
           }
         />
@@ -350,7 +545,14 @@ function CasesWorkView() {
           groups={visibleGroups.map(({ group, visibleRows }) => ({
             id: group.payerId,
             header: groupHeader(group),
-            children: <CaseTable leadLabel="Provider" rows={visibleRows.map(tableRow)} />,
+            children: (
+              <CaseTable
+                leadLabel="Provider"
+                rows={visibleRows.map(tableRow)}
+                showPipeline
+                showTrackingId={showTrackingId}
+              />
+            ),
           }))}
         />
       )}

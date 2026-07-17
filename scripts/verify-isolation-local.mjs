@@ -42,6 +42,11 @@ function runGate(baseUrl) {
         // the mock run exercises it; optional in the real gate.
         KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
         SOUTHPARK_TASK_ID: FIXTURES.SOUTHPARK_TASK_ID,
+        // Assertion 15/15b (E4.3 case search) — a query the Kansas fixtures
+        // match (15 non-vacuous) and one that would surface the South Park
+        // fixture case only under the casesearch leak (15b).
+        SEARCH_QUERY: "kay",
+        SEARCH_LEAK_QUERY: "South Park",
         VERCEL_BYPASS_SECRET: "",
         GITHUB_STEP_SUMMARY: "",
       },
@@ -72,6 +77,8 @@ const EXPECTED_FAILS = {
   profile: ["6"],
   fillevents: ["7", "7b"],
   cases: ["8b", "8d"],
+  // The case-search leak surfaces a cross-org case row in ?q= results (15b).
+  casesearch: ["15b"],
   touches: ["9", "9b"],
   tasks: ["13"],
   casecontext: ["14b"],

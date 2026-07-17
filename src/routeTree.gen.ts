@@ -11,48 +11,65 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as SoonRouteImport } from './routes/soon'
 import { Route as ScopeRouteImport } from './routes/scope'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
+import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as GetStartedRouteImport } from './routes/get-started'
+import { Route as GenerationRouteImport } from './routes/generation'
 import { Route as FixItRouteImport } from './routes/fix-it'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
+import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
+import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
+import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
+import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
+import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
+import { Route as CaptureTokenRouteImport } from './routes/capture.$token'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminStatusesRouteImport } from './routes/admin.statuses'
 import { Route as AdminSopsRouteImport } from './routes/admin.sops'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminPortalsRouteImport } from './routes/admin.portals'
 import { Route as AdminPayersRouteImport } from './routes/admin.payers'
+import { Route as AdminPayerAdminRouteImport } from './routes/admin.payer-admin'
 import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
+import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
+import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
+import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
 
 const WorkRoute = WorkRouteImport.update({
   id: '/work',
@@ -62,6 +79,11 @@ const WorkRoute = WorkRouteImport.update({
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoonRoute = SoonRouteImport.update({
+  id: '/soon',
+  path: '/soon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScopeRoute = ScopeRouteImport.update({
@@ -94,6 +116,11 @@ const PortfolioRoute = PortfolioRouteImport.update({
   path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PayerDirectoryRoute = PayerDirectoryRouteImport.update({
+  id: '/payer-directory',
+  path: '/payer-directory',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OutcomesRoute = OutcomesRouteImport.update({
   id: '/outcomes',
   path: '/outcomes',
@@ -119,9 +146,19 @@ const GetStartedRoute = GetStartedRouteImport.update({
   path: '/get-started',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GenerationRoute = GenerationRouteImport.update({
+  id: '/generation',
+  path: '/generation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FixItRoute = FixItRouteImport.update({
   id: '/fix-it',
   path: '/fix-it',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientProgressRoute = ClientProgressRouteImport.update({
@@ -139,10 +176,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingIndexRoute = ReportingIndexRouteImport.update({
+  id: '/reporting/',
+  path: '/reporting/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersIndexRoute = ProvidersIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProvidersRoute,
+} as any)
+const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
+  id: '/onboarding/',
+  path: '/onboarding/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
   id: '/',
@@ -159,6 +206,16 @@ const TasksIdRoute = TasksIdRouteImport.update({
   path: '/tasks/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
+  id: '/reporting/portfolio',
+  path: '/reporting/portfolio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -169,10 +226,25 @@ const ProvidersIdRoute = ProvidersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ProvidersRoute,
 } as any)
+const OnboardingWizardRoute = OnboardingWizardRouteImport.update({
+  id: '/onboarding/wizard',
+  path: '/onboarding/wizard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LaunchesIdRoute = LaunchesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => LaunchesRoute,
+} as any)
+const ImportRunIdRoute = ImportRunIdRouteImport.update({
+  id: '/import/$runId',
+  path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GenerationRunsRoute = GenerationRunsRouteImport.update({
+  id: '/generation_/runs',
+  path: '/generation/runs',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DevPrimitivesRoute = DevPrimitivesRouteImport.update({
   id: '/dev/primitives',
@@ -183,6 +255,11 @@ const CasesIdRoute = CasesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => CasesRoute,
+} as any)
+const CaptureTokenRoute = CaptureTokenRouteImport.update({
+  id: '/capture/$token',
+  path: '/capture/$token',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminTemplatesRoute = AdminTemplatesRouteImport.update({
   id: '/admin/templates',
@@ -214,6 +291,11 @@ const AdminPayersRoute = AdminPayersRouteImport.update({
   path: '/admin/payers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPayerAdminRoute = AdminPayerAdminRouteImport.update({
+  id: '/admin/payer-admin',
+  path: '/admin/payer-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminMsoRoutingRoute = AdminMsoRoutingRouteImport.update({
   id: '/admin/mso-routing',
   path: '/admin/mso-routing',
@@ -234,6 +316,11 @@ const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersIdRoute,
 } as any)
+const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GenerationRunsRoute,
+} as any)
 const AdminTemplatesIndexRoute = AdminTemplatesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -244,6 +331,11 @@ const AdminSopsIndexRoute = AdminSopsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminSopsRoute,
 } as any)
+const AdminPayerAdminIndexRoute = AdminPayerAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
 const ProvidersIdEditRoute = ProvidersIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -253,6 +345,11 @@ const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
   id: '/portals/$portalKey/train',
   path: '/portals/$portalKey/train',
   getParentRoute: () => rootRouteImport,
+} as any)
+const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => GenerationRunsRoute,
 } as any)
 const AdminTemplatesNewRoute = AdminTemplatesNewRouteImport.update({
   id: '/new',
@@ -274,66 +371,93 @@ const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   path: '/admin/payers/$id/scorecard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPayerAdminFormsPayerIdRoute =
+  AdminPayerAdminFormsPayerIdRouteImport.update({
+    id: '/forms/$payerId',
+    path: '/forms/$payerId',
+    getParentRoute: () => AdminPayerAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payer-admin': typeof AdminPayerAdminRouteWithChildren
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/generation/runs': typeof GenerationRunsRouteWithChildren
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/generation/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -343,22 +467,33 @@ export interface FileRoutesByTo {
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/statuses': typeof AdminStatusesRoute
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
+  '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
+  '/reporting': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin': typeof AdminPayerAdminIndexRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
+  '/generation/runs': typeof GenerationRunsIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesById {
@@ -366,46 +501,63 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
+  '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
+  '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
   '/outcomes': typeof OutcomesRoute
+  '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
   '/privacy': typeof PrivacyRoute
   '/progress': typeof ProgressRoute
   '/providers': typeof ProvidersRouteWithChildren
   '/reports': typeof ReportsRoute
   '/scope': typeof ScopeRoute
+  '/soon': typeof SoonRoute
   '/welcome': typeof WelcomeRoute
   '/work': typeof WorkRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/mso-routing': typeof AdminMsoRoutingRoute
+  '/admin/payer-admin': typeof AdminPayerAdminRouteWithChildren
   '/admin/payers': typeof AdminPayersRoute
   '/admin/portals': typeof AdminPortalsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/sops': typeof AdminSopsRouteWithChildren
   '/admin/statuses': typeof AdminStatusesRoute
   '/admin/templates': typeof AdminTemplatesRouteWithChildren
+  '/capture/$token': typeof CaptureTokenRoute
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
+  '/generation_/runs': typeof GenerationRunsRouteWithChildren
+  '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
+  '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/portfolio': typeof ReportingPortfolioRoute
+  '/share/$token': typeof ShareTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
+  '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
+  '/reporting/': typeof ReportingIndexRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
+  '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
+  '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
+  '/generation_/runs/': typeof GenerationRunsIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
+  '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRouteTypes {
@@ -414,61 +566,82 @@ export interface FileRouteTypes {
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/launches'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
+    | '/admin/payer-admin'
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
     | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/generation/runs'
+    | '/import/$runId'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
+    | '/onboarding/'
     | '/providers/'
+    | '/reporting/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
+    | '/generation/runs/'
     | '/providers/$id/'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
@@ -478,68 +651,96 @@ export interface FileRouteTypes {
     | '/admin/portals'
     | '/admin/settings'
     | '/admin/statuses'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/import/$runId'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases'
     | '/launches'
+    | '/onboarding'
     | '/providers'
+    | '/reporting'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin'
     | '/admin/sops'
     | '/admin/templates'
+    | '/generation/runs'
     | '/providers/$id'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
   id:
     | '__root__'
     | '/'
     | '/cases'
     | '/client-progress'
+    | '/contact'
     | '/fix-it'
+    | '/generation'
     | '/get-started'
     | '/home'
     | '/launches'
     | '/login'
     | '/outcomes'
+    | '/payer-directory'
     | '/portfolio'
     | '/privacy'
     | '/progress'
     | '/providers'
     | '/reports'
     | '/scope'
+    | '/soon'
     | '/welcome'
     | '/work'
     | '/admin/audit'
     | '/admin/import'
     | '/admin/mso-routing'
+    | '/admin/payer-admin'
     | '/admin/payers'
     | '/admin/portals'
     | '/admin/settings'
     | '/admin/sops'
     | '/admin/statuses'
     | '/admin/templates'
+    | '/capture/$token'
     | '/cases/$id'
     | '/dev/primitives'
+    | '/generation_/runs'
+    | '/import/$runId'
     | '/launches/$id'
+    | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/portfolio'
+    | '/share/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
+    | '/onboarding/'
     | '/providers/'
+    | '/reporting/'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
+    | '/generation_/runs/$runId'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
+    | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
+    | '/generation_/runs/'
     | '/providers/$id/'
+    | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers_/$id/scorecard'
   fileRoutesById: FileRoutesById
 }
@@ -547,31 +748,44 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CasesRoute: typeof CasesRouteWithChildren
   ClientProgressRoute: typeof ClientProgressRoute
+  ContactRoute: typeof ContactRoute
   FixItRoute: typeof FixItRoute
+  GenerationRoute: typeof GenerationRoute
   GetStartedRoute: typeof GetStartedRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
   OutcomesRoute: typeof OutcomesRoute
+  PayerDirectoryRoute: typeof PayerDirectoryRoute
   PortfolioRoute: typeof PortfolioRoute
   PrivacyRoute: typeof PrivacyRoute
   ProgressRoute: typeof ProgressRoute
   ProvidersRoute: typeof ProvidersRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   ScopeRoute: typeof ScopeRoute
+  SoonRoute: typeof SoonRoute
   WelcomeRoute: typeof WelcomeRoute
   WorkRoute: typeof WorkRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminImportRoute: typeof AdminImportRoute
   AdminMsoRoutingRoute: typeof AdminMsoRoutingRoute
+  AdminPayerAdminRoute: typeof AdminPayerAdminRouteWithChildren
   AdminPayersRoute: typeof AdminPayersRoute
   AdminPortalsRoute: typeof AdminPortalsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSopsRoute: typeof AdminSopsRouteWithChildren
   AdminStatusesRoute: typeof AdminStatusesRoute
   AdminTemplatesRoute: typeof AdminTemplatesRouteWithChildren
+  CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
+  GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
+  ImportRunIdRoute: typeof ImportRunIdRoute
+  OnboardingWizardRoute: typeof OnboardingWizardRoute
+  ReportingPortfolioRoute: typeof ReportingPortfolioRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   TasksIdRoute: typeof TasksIdRoute
+  OnboardingIndexRoute: typeof OnboardingIndexRoute
+  ReportingIndexRoute: typeof ReportingIndexRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
 }
@@ -590,6 +804,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/soon': {
+      id: '/soon'
+      path: '/soon'
+      fullPath: '/soon'
+      preLoaderRoute: typeof SoonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scope': {
@@ -634,6 +855,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payer-directory': {
+      id: '/payer-directory'
+      path: '/payer-directory'
+      fullPath: '/payer-directory'
+      preLoaderRoute: typeof PayerDirectoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/outcomes': {
       id: '/outcomes'
       path: '/outcomes'
@@ -669,11 +897,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GetStartedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/generation': {
+      id: '/generation'
+      path: '/generation'
+      fullPath: '/generation'
+      preLoaderRoute: typeof GenerationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fix-it': {
       id: '/fix-it'
       path: '/fix-it'
       fullPath: '/fix-it'
       preLoaderRoute: typeof FixItRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/client-progress': {
@@ -697,12 +939,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/': {
+      id: '/reporting/'
+      path: '/reporting'
+      fullPath: '/reporting/'
+      preLoaderRoute: typeof ReportingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/providers/': {
       id: '/providers/'
       path: '/'
       fullPath: '/providers/'
       preLoaderRoute: typeof ProvidersIndexRouteImport
       parentRoute: typeof ProvidersRoute
+    }
+    '/onboarding/': {
+      id: '/onboarding/'
+      path: '/onboarding'
+      fullPath: '/onboarding/'
+      preLoaderRoute: typeof OnboardingIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/launches/': {
       id: '/launches/'
@@ -725,6 +981,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TasksIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/portfolio': {
+      id: '/reporting/portfolio'
+      path: '/reporting/portfolio'
+      fullPath: '/reporting/portfolio'
+      preLoaderRoute: typeof ReportingPortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/providers/new': {
       id: '/providers/new'
       path: '/new'
@@ -739,12 +1009,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdRouteImport
       parentRoute: typeof ProvidersRoute
     }
+    '/onboarding/wizard': {
+      id: '/onboarding/wizard'
+      path: '/onboarding/wizard'
+      fullPath: '/onboarding/wizard'
+      preLoaderRoute: typeof OnboardingWizardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/launches/$id': {
       id: '/launches/$id'
       path: '/$id'
       fullPath: '/launches/$id'
       preLoaderRoute: typeof LaunchesIdRouteImport
       parentRoute: typeof LaunchesRoute
+    }
+    '/import/$runId': {
+      id: '/import/$runId'
+      path: '/import/$runId'
+      fullPath: '/import/$runId'
+      preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/generation_/runs': {
+      id: '/generation_/runs'
+      path: '/generation/runs'
+      fullPath: '/generation/runs'
+      preLoaderRoute: typeof GenerationRunsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dev/primitives': {
       id: '/dev/primitives'
@@ -759,6 +1050,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/cases/$id'
       preLoaderRoute: typeof CasesIdRouteImport
       parentRoute: typeof CasesRoute
+    }
+    '/capture/$token': {
+      id: '/capture/$token'
+      path: '/capture/$token'
+      fullPath: '/capture/$token'
+      preLoaderRoute: typeof CaptureTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/templates': {
       id: '/admin/templates'
@@ -802,6 +1100,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/payer-admin': {
+      id: '/admin/payer-admin'
+      path: '/admin/payer-admin'
+      fullPath: '/admin/payer-admin'
+      preLoaderRoute: typeof AdminPayerAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/mso-routing': {
       id: '/admin/mso-routing'
       path: '/admin/mso-routing'
@@ -830,6 +1135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdIndexRouteImport
       parentRoute: typeof ProvidersIdRoute
     }
+    '/generation_/runs/': {
+      id: '/generation_/runs/'
+      path: '/'
+      fullPath: '/generation/runs/'
+      preLoaderRoute: typeof GenerationRunsIndexRouteImport
+      parentRoute: typeof GenerationRunsRoute
+    }
     '/admin/templates/': {
       id: '/admin/templates/'
       path: '/'
@@ -844,6 +1156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSopsIndexRouteImport
       parentRoute: typeof AdminSopsRoute
     }
+    '/admin/payer-admin/': {
+      id: '/admin/payer-admin/'
+      path: '/'
+      fullPath: '/admin/payer-admin/'
+      preLoaderRoute: typeof AdminPayerAdminIndexRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
     '/providers/$id/edit': {
       id: '/providers/$id/edit'
       path: '/edit'
@@ -857,6 +1176,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/portals/$portalKey/train'
       preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/generation_/runs/$runId': {
+      id: '/generation_/runs/$runId'
+      path: '/$runId'
+      fullPath: '/generation/runs/$runId'
+      preLoaderRoute: typeof GenerationRunsRunIdRouteImport
+      parentRoute: typeof GenerationRunsRoute
     }
     '/admin/templates/new': {
       id: '/admin/templates/new'
@@ -885,6 +1211,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/payers/$id/scorecard'
       preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/payer-admin/forms/$payerId': {
+      id: '/admin/payer-admin/forms/$payerId'
+      path: '/forms/$payerId'
+      fullPath: '/admin/payer-admin/forms/$payerId'
+      preLoaderRoute: typeof AdminPayerAdminFormsPayerIdRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
     }
   }
 }
@@ -945,6 +1278,20 @@ const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
   ProvidersRouteChildren,
 )
 
+interface AdminPayerAdminRouteChildren {
+  AdminPayerAdminIndexRoute: typeof AdminPayerAdminIndexRoute
+  AdminPayerAdminFormsPayerIdRoute: typeof AdminPayerAdminFormsPayerIdRoute
+}
+
+const AdminPayerAdminRouteChildren: AdminPayerAdminRouteChildren = {
+  AdminPayerAdminIndexRoute: AdminPayerAdminIndexRoute,
+  AdminPayerAdminFormsPayerIdRoute: AdminPayerAdminFormsPayerIdRoute,
+}
+
+const AdminPayerAdminRouteWithChildren = AdminPayerAdminRoute._addFileChildren(
+  AdminPayerAdminRouteChildren,
+)
+
 interface AdminSopsRouteChildren {
   AdminSopsIdRoute: typeof AdminSopsIdRoute
   AdminSopsIndexRoute: typeof AdminSopsIndexRoute
@@ -975,35 +1322,62 @@ const AdminTemplatesRouteWithChildren = AdminTemplatesRoute._addFileChildren(
   AdminTemplatesRouteChildren,
 )
 
+interface GenerationRunsRouteChildren {
+  GenerationRunsRunIdRoute: typeof GenerationRunsRunIdRoute
+  GenerationRunsIndexRoute: typeof GenerationRunsIndexRoute
+}
+
+const GenerationRunsRouteChildren: GenerationRunsRouteChildren = {
+  GenerationRunsRunIdRoute: GenerationRunsRunIdRoute,
+  GenerationRunsIndexRoute: GenerationRunsIndexRoute,
+}
+
+const GenerationRunsRouteWithChildren = GenerationRunsRoute._addFileChildren(
+  GenerationRunsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
   ClientProgressRoute: ClientProgressRoute,
+  ContactRoute: ContactRoute,
   FixItRoute: FixItRoute,
+  GenerationRoute: GenerationRoute,
   GetStartedRoute: GetStartedRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
   OutcomesRoute: OutcomesRoute,
+  PayerDirectoryRoute: PayerDirectoryRoute,
   PortfolioRoute: PortfolioRoute,
   PrivacyRoute: PrivacyRoute,
   ProgressRoute: ProgressRoute,
   ProvidersRoute: ProvidersRouteWithChildren,
   ReportsRoute: ReportsRoute,
   ScopeRoute: ScopeRoute,
+  SoonRoute: SoonRoute,
   WelcomeRoute: WelcomeRoute,
   WorkRoute: WorkRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminImportRoute: AdminImportRoute,
   AdminMsoRoutingRoute: AdminMsoRoutingRoute,
+  AdminPayerAdminRoute: AdminPayerAdminRouteWithChildren,
   AdminPayersRoute: AdminPayersRoute,
   AdminPortalsRoute: AdminPortalsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSopsRoute: AdminSopsRouteWithChildren,
   AdminStatusesRoute: AdminStatusesRoute,
   AdminTemplatesRoute: AdminTemplatesRouteWithChildren,
+  CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
+  GenerationRunsRoute: GenerationRunsRouteWithChildren,
+  ImportRunIdRoute: ImportRunIdRoute,
+  OnboardingWizardRoute: OnboardingWizardRoute,
+  ReportingPortfolioRoute: ReportingPortfolioRoute,
+  ShareTokenRoute: ShareTokenRoute,
   TasksIdRoute: TasksIdRoute,
+  OnboardingIndexRoute: OnboardingIndexRoute,
+  ReportingIndexRoute: ReportingIndexRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
 }

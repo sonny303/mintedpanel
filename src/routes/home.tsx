@@ -327,6 +327,14 @@ function FixitHomeRow({ card, onOpen }: { card: FixitCard; onOpen: () => void })
     detail = card.train.portalName;
     impact = `${card.train.total - card.train.matched} fields need your call`;
     cta = "Train";
+  } else if (card.broken) {
+    subject = "Form drift";
+    detail = card.broken.portalName;
+    impact = card.sortDate
+      ? `${card.broken.count} field${card.broken.count === 1 ? "" : "s"} drifted · fills due ${fmtDate(card.sortDate)}`
+      : `${card.broken.count} field${card.broken.count === 1 ? "" : "s"} no longer match`;
+    dated = Boolean(card.sortDate);
+    cta = "Train";
   }
   return (
     <li

@@ -3,7 +3,10 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
-import type { AppRole, Facility, Organization, ProviderGroup } from "@/types";
+import { normalizeOptionalStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
+import type { AdaCompliance, AppRole, Facility, Organization, ProviderGroup } from "@/types";
+import type { FacilityHours } from "@/lib/facilityHours";
 import type { Database } from "@/integrations/supabase/types";
 
 /* ------------------------------ Organization ------------------------------ */
@@ -59,6 +62,27 @@ export interface ProviderGroupInput {
   correspondenceCity?: string | null;
   correspondenceState?: string | null;
   correspondenceZip?: string | null;
+  // E1.1 TE-3 (additive): suites, per-block contacts, and the full
+  // credentialing block — all existing baseline columns, riding snakeizeRow.
+  billingSuite?: string | null;
+  billingContactName?: string | null;
+  billingPhone?: string | null;
+  billingFax?: string | null;
+  billingEmail?: string | null;
+  correspondenceSuite?: string | null;
+  correspondenceContactName?: string | null;
+  correspondencePhone?: string | null;
+  correspondenceFax?: string | null;
+  correspondenceEmail?: string | null;
+  credentialingStreet?: string | null;
+  credentialingSuite?: string | null;
+  credentialingCity?: string | null;
+  credentialingState?: string | null;
+  credentialingZip?: string | null;
+  credentialingContactName?: string | null;
+  credentialingPhone?: string | null;
+  credentialingFax?: string | null;
+  credentialingEmail?: string | null;
 }
 
 export async function listProviderGroups(): Promise<ProviderGroup[]> {
@@ -87,13 +111,23 @@ async function getProviderGroup(id: string): Promise<ProviderGroup | null> {
 export async function createProviderGroup(input: ProviderGroupInput): Promise<ProviderGroup> {
   const orgId = requireActiveOrg();
   if (!input.name.trim()) throw new Error("Name is required");
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
+  // E0.10: billing/correspondence state are DB-checked to ^[A-Z]{2}$ when present.
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    org_id: orgId,
+  };
+  if ("billingState" in input)
+    payload.billing_state = normalizeOptionalStateCode(input.billingState);
+  if ("correspondenceState" in input)
+    payload.correspondence_state = normalizeOptionalStateCode(input.correspondenceState);
+  if ("credentialingState" in input)
+    payload.credentialing_state = normalizeOptionalStateCode(input.credentialingState);
   const { data, error } = await supabase
     .from("provider_groups")
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<ProviderGroup>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -112,6 +146,12 @@ export async function updateProviderGroup(
   const orgId = requireActiveOrg();
   const before = await getProviderGroup(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
+  if ("billingState" in patch)
+    payload.billing_state = normalizeOptionalStateCode(patch.billingState);
+  if ("correspondenceState" in patch)
+    payload.correspondence_state = normalizeOptionalStateCode(patch.correspondenceState);
+  if ("credentialingState" in patch)
+    payload.credentialing_state = normalizeOptionalStateCode(patch.credentialingState);
   const { data, error } = await supabase
     .from("provider_groups")
     .update(payload as never)
@@ -119,7 +159,7 @@ export async function updateProviderGroup(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<ProviderGroup>(data);
   await writeAudit({
     actionType: "UPDATE",
@@ -146,6 +186,21 @@ export interface FacilityInput {
   // so existing panel callers are unchanged. The CSV import sets it from the
   // per-import toggle. Rides through snakeizeRow → reference_only.
   referenceOnly?: boolean;
+  // E1.2 TE-2 (additive): the CAQH practice-location fields — all existing
+  // baseline columns, riding snakeizeRow. `hours` must be encoded through
+  // src/lib/facilityHours (the locked jsonb contract) before it gets here.
+  suite?: string | null;
+  county?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  email?: string | null;
+  appointmentPhone?: string | null;
+  contactName?: string | null;
+  acceptingNewPatients?: boolean | null;
+  languagesOffered?: string[] | null;
+  interpreterLanguages?: string[] | null;
+  hours?: FacilityHours | null;
+  adaCompliance?: AdaCompliance | null;
 }
 
 export async function listFacilities(): Promise<Facility[]> {
@@ -174,13 +229,18 @@ async function getFacility(id: string): Promise<Facility | null> {
 export async function createFacility(input: FacilityInput): Promise<Facility> {
   const orgId = requireActiveOrg();
   if (!input.name.trim()) throw new Error("Name is required");
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
+  // E0.10: facilities.state is DB-checked to ^[A-Z]{2}$ when present.
+  const payload: Record<string, unknown> = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    org_id: orgId,
+  };
+  if ("state" in input) payload.state = normalizeOptionalStateCode(input.state);
   const { data, error } = await supabase
     .from("facilities")
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Facility>(data);
   await writeAudit({
     actionType: "CREATE",
@@ -196,6 +256,7 @@ export async function updateFacility(id: string, patch: Partial<FacilityInput>):
   const orgId = requireActiveOrg();
   const before = await getFacility(id);
   const payload = snakeizeRow<Record<string, unknown>>(patch);
+  if ("state" in patch) payload.state = normalizeOptionalStateCode(patch.state);
   const { data, error } = await supabase
     .from("facilities")
     .update(payload as never)
@@ -203,7 +264,7 @@ export async function updateFacility(id: string, patch: Partial<FacilityInput>):
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = camelizeRow<Facility>(data);
   await writeAudit({
     actionType: "UPDATE",

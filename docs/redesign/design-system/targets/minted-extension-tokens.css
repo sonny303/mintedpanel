@@ -1,0 +1,102 @@
+/* ============================================================================
+ * Minted Panel side panel — design tokens, CONFORMED to the Minted Panel
+ * Design System (source of truth). Replaces the :root token block in
+ * minted-extension/src/sidepanel/sidepanel.css.
+ *
+ * The legacy alias names (--mp-green-*, --mp-cream-*, --mp-line-*, --mp-red-*,
+ * etc.) are preserved and still point at the canonical tokens, so every
+ * existing selector keeps working — only the canonical VALUES change.
+ *
+ * FONT: the panel self-hosts its UI font via @font-face at the top of
+ * sidepanel.css. Replace the four "Instrument Sans" @font-face blocks with
+ * Geist (ship geist-latin-400/500/600/700.woff2 in /fonts) — see changes.md.
+ * Geist Mono stays as the mono fallback.
+ * ============================================================================ */
+
+:root {
+  /* ---- Type families ---- */
+  --mp-font: "Geist", "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mp-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---- Surfaces (warm neutral) ---- */
+  --mp-sidebar: #0C2A1D;
+  --mp-app: #FDFDFC;
+  --mp-card: #FFFFFF;
+  --mp-border: #E8E5E0;
+  --mp-muted: #F5F4F1;
+  --mp-primary: #1B4D3E;
+  --mp-primary-hover: #163F33;
+  --mp-primary-tint: #E7EFEA;
+
+  /* ---- Ink ---- */
+  --mp-ink: #1F2937;
+  --mp-ink-secondary: #6B7280;
+  --mp-ink-faint: #9CA3AF;
+
+  /* ---- Status hues (unchanged — already match) ---- */
+  --mp-ok: #059669;
+  --mp-info: #2563EB;
+  --mp-warn: #D97706;
+  --mp-danger: #DC2626;
+  --mp-pending: #0891B2;
+  --mp-neutral: #9CA3AF;
+
+  /* ---- Status tints — DS fixed values (replaces color-mix). The panel's
+     pill text currently uses the *-700 aliases; those now resolve to the DS
+     ink values below, so pills get the darker DS foreground automatically. ---- */
+  --mp-ok-tint: #E7F5EF;
+  --mp-info-tint: #E8EEFD;
+  --mp-warn-tint: #FBF0E1;
+  --mp-danger-tint: #FBEAEA;
+  --mp-pending-tint: #E4F3F7;
+  --mp-neutral-tint: #F1F1EF;
+
+  /* ---- Radius. DS: 4px controls, 6px tiles/cards; status pills 4px, count
+     chips round. --mp-radius-control drives shadcn-style controls. ---- */
+  --mp-radius-sm: 6px;
+  --mp-radius-md: 6px;
+  --mp-radius-lg: 6px;
+  --mp-radius-control: 4px;
+  --mp-radius-pill: 999px; /* count chips; status .pill → switch to --mp-radius-control (changes.md) */
+
+  /* ---- Elevation — DS carries structure with 1px borders. Controls/cards get
+     none; the panel's inputs/buttons currently use --mp-shadow-sm, so setting
+     it to `none` removes those shadows with no selector edits. ---- */
+  --mp-shadow-sm: none;
+  --mp-shadow-md: 0 2px 8px rgba(31, 41, 55, 0.08);
+  --mp-shadow-lg: 0 8px 24px rgba(31, 41, 55, 0.12);
+  --mp-focus: 0 0 0 2px rgba(27, 77, 62, 0.18); /* DS 2px soft primary ring */
+
+  /* ---- Legacy aliases → canonical tokens (kept so existing selectors resolve
+     to Minted Panel Design System values) ---- */
+  --mp-green-950: var(--mp-sidebar);
+  --mp-green-900: var(--mp-primary);
+  --mp-green-800: #163F33;
+  --mp-green-700: var(--mp-primary);
+  --mp-green-600: var(--mp-ok);
+  --mp-mint-300: #C8DBD4;
+  --mp-mint-200: var(--mp-primary-tint);
+  --mp-mint-150: var(--mp-primary-tint);
+  --mp-cream-50: var(--mp-app);
+  --mp-cream-100: var(--mp-muted);
+  --mp-line-200: var(--mp-border);
+  --mp-line-100: var(--mp-border-subtle, #F0EEEA);
+  --mp-line-dash: #D6D3CE;
+  --mp-ink-900: var(--mp-ink);
+  --mp-ink-600: var(--mp-ink-secondary);
+  --mp-ink-400: var(--mp-ink-faint);
+  --mp-label: color-mix(in srgb, var(--mp-ink-secondary) 62%, white);
+  --mp-disabled-bg: var(--mp-muted);
+  --mp-disabled-ink: var(--mp-ink-faint);
+  --mp-blue-100: var(--mp-info-tint);   --mp-blue-700: #1D4ED8;
+  --mp-indigo-100: var(--mp-pending-tint); --mp-indigo-700: #0E7490;
+  --mp-grn-100: var(--mp-ok-tint);      --mp-grn-700: #047857;
+  --mp-slate-100: var(--mp-neutral-tint); --mp-slate-700: var(--mp-ink-secondary);
+  --mp-red-100: var(--mp-danger-tint);  --mp-red-300: #F3D3D3; --mp-red-600: var(--mp-danger); --mp-red-800: #B91C1C;
+  --mp-border-subtle: #F0EEEA;
+  --mp-r-ctl: var(--mp-radius-control);
+  --mp-r-card: var(--mp-radius-sm);   /* DS cards = 6px (was --mp-radius-control) */
+  --mp-r-btn: var(--mp-radius-control);
+  --mp-shadow-menu: var(--mp-shadow-lg);
+  --mp-shadow-ctl: var(--mp-shadow-sm);
+}

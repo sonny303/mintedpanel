@@ -116,21 +116,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      // Instrument Sans is self-hosted from public/fonts (C1-era rule: no Google Fonts CDN).
-      {
-        rel: "preload",
-        href: "/fonts/instrument-sans-latin-400-normal.woff2",
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "preload",
-        href: "/fonts/instrument-sans-latin-600-normal.woff2",
-        as: "font",
-        type: "font/woff2",
-        crossOrigin: "anonymous",
-      },
+      // Geist (E0.9 design-system conformance) is self-hosted via @fontsource
+      // imports in styles.css (no Google Fonts CDN) — no manual preload needed.
       { rel: "stylesheet", href: appCss },
     ],
   }),
@@ -165,7 +152,20 @@ function RootComponent() {
   // /privacy is fully public (Chrome Web Store requires a hosted policy URL
   // reachable without sign-in): no session redirect, rendered outside AppShell.
   const isPrivacyRoute = pathname === "/privacy";
-  const isPublicRoute = isAuthRoute || isRootRoute || isDevRoute || isPrivacyRoute;
+  // E0.5/E0.6 public trust-boundary surfaces: the E0.5 token capture link, the
+  // E0.5 inbound contact form, and the E0.6 read-only report share all render
+  // WITHOUT a session, outside the app shell (BD-1).
+  const isCaptureRoute = pathname.startsWith("/capture/");
+  const isContactRoute = pathname === "/contact";
+  const isShareRoute = pathname.startsWith("/share/");
+  const isChromelessRoute =
+    isAuthRoute ||
+    isRootRoute ||
+    isPrivacyRoute ||
+    isCaptureRoute ||
+    isContactRoute ||
+    isShareRoute;
+  const isPublicRoute = isChromelessRoute || isDevRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);
   const initialized = useAuthStore((s) => s.initialized);
@@ -222,7 +222,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAuthRoute || isRootRoute || isPrivacyRoute ? (
+      {isChromelessRoute ? (
         <Outlet />
       ) : memberships.length === 0 ? (
         // Signed in but part of no org yet — bootstrap the first org before the

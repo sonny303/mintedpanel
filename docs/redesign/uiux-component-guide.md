@@ -92,18 +92,25 @@ Selection rules:
    `npx tsc --noEmit`; `npm run test:e2e` where touched surfaces have
    coverage. No `console.log`, no TODO/FIXME, no shipped placeholder text.
 
-## Pending: UX design system alignment
+## UX design system alignment (received 2026-07-10)
 
-The PM will supply the target UX design system separately. When received, the
-reviewer will:
+The PM-approved design system landed at `docs/redesign/design-system/`
+(README + `changes.md` phased plan + `design-system-reference/` + drop-in
+token targets). It is now the visual source of truth and supersedes the token
+values above where they differ. Headline deltas from the shipped code:
 
-1. Map its tokens (color, type scale, spacing, radius, elevation) onto the
-   current Tailwind v4 token set and document deltas here.
-2. Audit the primitive inventory against the design system's component
-   catalog; list additions/replacements as technical enablers on the affected
-   epics.
-3. Update the composition patterns above where the design system prescribes
-   different behavior (e.g. navigation model, density, feedback patterns).
+- UI font: Instrument Sans → **Geist** (Geist Mono unchanged).
+- Primary `#1B4D3E` / hover `#163F33`; warm neutrals (`#FDFDFC` app,
+  `#E8E5E0` border, `#F5F4F1` muted, `#1F2937/#6B7280/#9CA3AF` ink).
+- Status pills: fixed tint + darker ink pairs (no `color-mix`), **4px**
+  radius, no border. Cards/panels 6px; controls 4px.
+- No shadows on inputs/buttons/cards (overlays keep a soft shadow); focus =
+  2px soft primary ring.
+- Sidebar IA v2 per `design-system-reference/Sidebar Nav.dc.html` + the
+  NAVIGATION section of its readme (supersedes the E0.6 segmented nav and
+  the E0.8 `Org space` label).
+- Component governance: unspecced components must be stock shadcn styled by
+  tokens only and logged in `DESIGN-DEBT.md` (see COMPONENT GOVERNANCE in
+  the reference readme).
 
-Until then, the tokens and rules above are the binding baseline; epics should
-not assume any visual language beyond them.
+The conformance build follows `docs/redesign/design-system/changes.md`.

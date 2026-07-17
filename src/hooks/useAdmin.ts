@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
-import { createPayer, getPayer, listPayers, updatePayer, type PayerInput } from "@/services/payers";
+import { getPayer, listPayers, updatePayer, type PayerInput } from "@/services/payers";
 import {
   createMso,
   getMso,
@@ -17,10 +17,14 @@ import {
 import {
   createTemplate,
   getTemplate,
+  getTemplateVersion,
   listTemplates,
+  listTemplateVersions,
+  publishTemplate,
   updateTemplate,
   type TemplateInput,
 } from "@/services/templates";
+import type { SOPTaskDefinition } from "@/types";
 import {
   createStatusConfig,
   getStatusConfig,
@@ -50,15 +54,9 @@ export function usePayer(id: string | undefined) {
   });
 }
 
-export function useCreatePayer() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: PayerInput) => createPayer(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.payers(orgId) }),
-  });
-}
-
+// E4.2 payer governance: there is deliberately NO useCreatePayer — canonical
+// payer identities are selected from the Minted catalog (payer-directory →
+// org_payer_assignments), never typed free-text by an org.
 export function useUpdatePayer(id: string) {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
@@ -182,6 +180,55 @@ export function useUpdateSop(id: string) {
       qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
       qc.invalidateQueries({ queryKey: queryKeys.template(orgId, id) });
     },
+  });
+}
+
+// E1.7b — publish creates an immutable version row via the RPC (which writes
+// the audit row). Invalidates the head caches AND the version history.
+export function usePublishSop(id: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: {
+      expectedVersion: number;
+      name: string;
+      taskDefinitions: SOPTaskDefinition[];
+      changeNote?: string | null;
+      requiredProfileAttributes?: string[];
+    }) =>
+      publishTemplate(
+        id,
+        input.expectedVersion,
+        input.name,
+        input.taskDefinitions,
+        input.changeNote,
+        input.requiredProfileAttributes,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.template(orgId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.templateVersions(orgId, id) });
+    },
+  });
+}
+
+export function useTemplateVersions(templateId: string | undefined) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.templateVersions(orgId, templateId ?? ""),
+    queryFn: () => listTemplateVersions(templateId as string),
+    enabled: orgId !== "no-org" && Boolean(templateId),
+  });
+}
+
+export function useTemplateVersion(templateId: string | undefined, version: number | null) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.templateVersion(orgId, templateId ?? "", version ?? 0),
+    queryFn: () => getTemplateVersion(templateId as string, version as number),
+    // Version rows are immutable — never refetch a loaded one.
+    staleTime: Infinity,
+    enabled: orgId !== "no-org" && Boolean(templateId) && version !== null && version > 0,
   });
 }
 

@@ -4,18 +4,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  advancePayerPipeline,
+  appendCaseTasks,
   createCase,
   getCase,
   getCases,
   getContractFor,
+  listDenialReasonCodes,
   setPayerReference,
   updateCaseStatus,
+  type AdvancePipelineInput,
   type CaseFilters,
   type CaseInput,
   type CaseTaskPayload,
 } from "@/services/cases";
 
 const THIRTY_SECONDS = 30_000;
+const FIVE_MINUTES = 300_000;
 
 export function useCases(filters: CaseFilters = {}) {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -85,6 +90,65 @@ export function useSetPayerReference() {
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
+  });
+}
+
+// E2.1 F2.1.3 — reapplication after a denial: a status transition (Denied →
+// In Progress, recorded in status_history by the existing updateCaseStatus
+// path) plus the restamped task set appended to the SAME case. Never a second
+// case at the key; the case keeps its full touches/status history.
+export interface ReapplyCaseVars {
+  caseId: string;
+  /** The org's In Progress credentialing status id ([r4-review] Q6). */
+  statusId: string;
+  /** Tasks resolved from the CURRENT SOP version (Model A: new work gets
+   * latest), sort-ordered after the case's existing tasks. */
+  tasks: CaseTaskPayload[];
+}
+
+export function useReapplyCase() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: async (vars: ReapplyCaseVars) => {
+      // Metadata keys become UPDATE columns in updateCaseStatus — pass none.
+      // The reapplication trace is the appendCaseTasks audit row plus the
+      // Denied → In Progress status_history entry this call writes.
+      await updateCaseStatus(vars.caseId, vars.statusId, {});
+      await appendCaseTasks(vars.caseId, vars.tasks);
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E4.0 F4.0.1 — advance the payer pipeline through the atomic RPC. Invalidates
+// the case detail (state + timeline), the cases list (badge), and the audit log.
+export function useAdvancePayerPipeline() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: AdvancePipelineInput) => advancePayerPipeline(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E4.0 TE-4 — global + own-org active reason codes; long-lived (governance data).
+export function useDenialReasonCodes() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.denialReasonCodes(orgId),
+    queryFn: () => listDenialReasonCodes(),
+    enabled: orgId !== "no-org",
+    staleTime: FIVE_MINUTES,
   });
 }
 

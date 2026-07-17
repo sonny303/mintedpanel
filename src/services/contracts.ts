@@ -3,6 +3,8 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { normalizeStateCode } from "@/lib/stateCode";
+import { translateDbError } from "@/lib/dbErrors";
 import { appendStatusHistory } from "@/services/cases";
 import type { Contract } from "@/types";
 
@@ -52,13 +54,19 @@ export async function getContract(id: string): Promise<Contract | null> {
 
 export async function createContract(input: ContractInput): Promise<Contract> {
   const orgId = requireActiveOrg();
-  const payload = { ...snakeizeRow<Record<string, unknown>>(input), org_id: orgId };
+  // E0.10: the DB enforces ^[A-Z]{2}$ on contracts.state — normalize casing at
+  // the boundary; constraint violations surface as domain messages.
+  const payload = {
+    ...snakeizeRow<Record<string, unknown>>(input),
+    state: normalizeStateCode(input.state),
+    org_id: orgId,
+  };
   const { data, error } = await supabase
     .from("contracts")
     .insert(payload as never)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = camelizeRow<Contract>(data);
   if (created.contractingStatusId) {
     await appendStatusHistory({
@@ -98,7 +106,7 @@ export async function updateContractStatus(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
 
   await appendStatusHistory({
     track: "contracting",

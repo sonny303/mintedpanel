@@ -77,6 +77,9 @@ function credCase(over: Partial<CredentialCase>): CredentialCase {
     updatedAt: "",
     caseEmailToken: "tok",
     payerReferenceId: null,
+    payerPipelineState: "not_started",
+    payerIndividualProviderId: null,
+    payerGroupProviderId: null,
     ...over,
   };
 }

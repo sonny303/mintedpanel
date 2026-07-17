@@ -5,8 +5,9 @@
 // existing primitives (card + text + button) and a lucide icon; it introduces
 // no new primitive and no new styling system.
 //
-// It always proposes the next action (return to the Portfolio) rather than
-// showing a blank region.
+// It always proposes the next action (open the Reporting Center) rather than
+// showing a blank region. (E0.6 retargets this from the old top-level Portfolio,
+// which now lives inside the Reporting Center.)
 import { Link } from "@tanstack/react-router";
 import { Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,11 +25,12 @@ export function NotYetAvailable({ title }: { title: string }) {
             {title} isn't available yet
           </div>
           <p className="mt-1 max-w-sm text-[13px] text-muted-foreground">
-            This part of the workspace is coming in a later release. Your Portfolio is ready now.
+            This part of the workspace is coming in a later release. Your Reporting Center is ready
+            now.
           </p>
         </div>
-        <Link to="/portfolio" className={buttonVariants({ variant: "outline" })}>
-          Go to Portfolio
+        <Link to="/reporting" className={buttonVariants({ variant: "outline" })}>
+          Go to Reporting Center
         </Link>
       </CardContent>
     </Card>

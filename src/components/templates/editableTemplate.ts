@@ -8,16 +8,66 @@
 // the stored form via normalizePortalKey. Keep these converters faithful to
 // that contract; case creation depends on it.
 import { normalizePortalKey } from "@/lib/tokenFormat";
-import type { SOPStepType, SOPTaskDefinition } from "@/types";
+import { resolveExecutionType, type ExecutionType } from "@/lib/executionTypes";
+import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import type { SOPEmailRecipient, SOPStepType, SOPTaskDefinition } from "@/types";
 
 export interface DataField {
   label: string;
   token: string;
 }
 
+// E1.7b F1.7b.5 (TE-15) — the wizard-editable form of a draft-email recipient.
+// Both value fields are always present so toggling the source in the UI never
+// loses the other's in-progress text; fromEditableRecipients emits only the
+// field matching `source`. `id` keys the React row.
+export interface EditableRecipient {
+  id: string;
+  source: "literal" | "token";
+  address: string;
+  token: string;
+}
+
 export interface EmailTemplate {
   subject: string;
   body: string;
+  // To (≥1 valid on publish per the lint) + optional CC. Absent on legacy
+  // versions; toEditable normalizes them to empty arrays.
+  to: EditableRecipient[];
+  cc: EditableRecipient[];
+}
+
+// The default email-valued token a fresh token-source row starts on. Keeping it
+// resolver-derived means the picker and this default can never drift.
+const DEFAULT_EMAIL_TOKEN = emailValuedTokenKeys()[0] ?? "provider.email";
+
+function toEditableRecipients(list: SOPEmailRecipient[] | undefined): EditableRecipient[] {
+  return (list ?? []).map((r) => ({
+    id: randId(),
+    source: r.source,
+    address: r.source === "literal" ? r.address : "",
+    token: r.source === "token" ? r.token : DEFAULT_EMAIL_TOKEN,
+  }));
+}
+
+// Emit the stored recipient union, source-faithful. Blank rows drop out (a
+// half-filled literal never versions); the publish lint separately rejects a
+// draft-email step left with no valid To.
+function fromEditableRecipients(list: EditableRecipient[]): SOPEmailRecipient[] {
+  return list.flatMap((r): SOPEmailRecipient[] => {
+    if (r.source === "literal") {
+      const address = r.address.trim();
+      return address ? [{ source: "literal", address }] : [];
+    }
+    const token = r.token.trim();
+    return token ? [{ source: "token", token }] : [];
+  });
+}
+
+// A fresh recipient row for the "Add" affordance — literal by default (the
+// common case is a fixed payer inbox, e.g. worked example 1's Optum address).
+export function newEditableRecipient(): EditableRecipient {
+  return { id: randId(), source: "literal", address: "", token: DEFAULT_EMAIL_TOKEN };
 }
 
 export interface EditableStep {
@@ -30,6 +80,13 @@ export interface EditableStep {
   // portal_key for an online_form step, "" = not linked. Editor value is raw;
   // normalized on write.
   portalKey: string;
+  // E1.7b step-shape extension. null = not set (omitted on write).
+  expectedTurnaroundDays: number | null;
+  followUpEveryDays: number | null;
+  // Token-less named artifacts ("Submission confirmation PDF"). Attachment
+  // checklists live HERE, never as token-less dataFields — a dataFields entry
+  // without a resolvable token is silently filtered at resolution.
+  requiredArtifacts: string[];
 }
 
 export interface EditableTask {
@@ -37,6 +94,8 @@ export interface EditableTask {
   title: string;
   description: string;
   dueOffsetDays: number;
+  // E4.2 TE-12 — per-task execution type (default manual).
+  executionType: ExecutionType;
   steps: EditableStep[];
 }
 
@@ -50,14 +109,23 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
     title: d.title ?? "",
     description: d.description ?? "",
     dueOffsetDays: d.dueOffsetDays ?? i * 7,
+    executionType: resolveExecutionType(d.executionType),
     steps: (d.steps ?? []).map((s) => {
       const raw = s as {
         label?: string;
         detail?: string;
         stepType?: SOPStepType;
-        emailTemplate?: { subject?: string; body?: string };
+        emailTemplate?: {
+          subject?: string;
+          body?: string;
+          to?: SOPEmailRecipient[];
+          cc?: SOPEmailRecipient[];
+        };
         dataFields?: DataField[];
         portalKey?: string;
+        expectedTurnaroundDays?: number;
+        followUpEveryDays?: number;
+        requiredArtifacts?: string[];
       };
       return {
         id: randId(),
@@ -67,38 +135,55 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         emailTemplate: {
           subject: raw.emailTemplate?.subject ?? "",
           body: raw.emailTemplate?.body ?? "",
+          to: toEditableRecipients(raw.emailTemplate?.to),
+          cc: toEditableRecipients(raw.emailTemplate?.cc),
         },
         dataFields: (raw.dataFields ?? []).filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),
         portalKey: raw.portalKey ?? "",
+        expectedTurnaroundDays:
+          typeof raw.expectedTurnaroundDays === "number" ? raw.expectedTurnaroundDays : null,
+        followUpEveryDays: typeof raw.followUpEveryDays === "number" ? raw.followUpEveryDays : null,
+        requiredArtifacts: (raw.requiredArtifacts ?? []).filter(
+          (a): a is string => typeof a === "string",
+        ),
       };
     }),
   }));
 }
 
-// A task's portal must be unambiguous — the extension closes ONE task per
-// portal submission, so two steps in the same task pointing at different
-// portals would make the close-out target undecidable. Returns the offending
-// tasks (normalized distinct keys > 1) so the wizard can warn and block save.
+// A task's distinct normalized `online_form` portal keys. Blank/unset keys and
+// non-online_form steps never contribute, so legacy tasks (no portalKey) return
+// []. The wizard uses this for the per-task inline warning; case/whitespace
+// variants collapse via normalizePortalKey so they count as one portal.
+export function taskPortalKeys(task: Pick<EditableTask, "steps">): string[] {
+  return [
+    ...new Set(
+      task.steps
+        .filter((s) => s.stepType === "online_form")
+        .map((s) => normalizePortalKey(s.portalKey))
+        .filter((k): k is string => k !== null),
+    ),
+  ];
+}
+
 export interface PortalKeyConflict {
   taskIdx: number;
   title: string;
   keys: string[];
 }
 
+// A task's portal must be unambiguous — the extension closes exactly ONE task
+// per portal submission, so two online_form steps in the same task pointing at
+// different portals would make the close-out target undecidable. Returns every
+// offending task (more than one distinct normalized key) so the wizard can warn
+// on the task and block save before any mutation.
 export function portalKeyConflicts(tasks: EditableTask[]): PortalKeyConflict[] {
   const out: PortalKeyConflict[] = [];
-  tasks.forEach((t, i) => {
-    const keys = [
-      ...new Set(
-        t.steps
-          .filter((s) => s.stepType === "online_form")
-          .map((s) => normalizePortalKey(s.portalKey))
-          .filter((k): k is string => k !== null),
-      ),
-    ];
-    if (keys.length > 1) out.push({ taskIdx: i, title: t.title, keys });
+  tasks.forEach((task, taskIdx) => {
+    const keys = taskPortalKeys(task);
+    if (keys.length > 1) out.push({ taskIdx, title: task.title, keys });
   });
   return out;
 }
@@ -109,19 +194,40 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
     description: t.description,
     sortOrder: i,
     dueOffsetDays: t.dueOffsetDays,
+    // Store manual as absent (the implicit default), non-manual verbatim.
+    ...(t.executionType && t.executionType !== "manual" ? { executionType: t.executionType } : {}),
     steps: t.steps.map((s) => {
       // A portal link is meaningful only for online_form steps; normalized to
       // the stored (bare/lowercase) form so the extension's page-key match is a
       // literal string compare.
       const portalKey = s.stepType === "online_form" ? normalizePortalKey(s.portalKey) : null;
+      const requiredArtifacts = s.requiredArtifacts.map((a) => a.trim()).filter(Boolean);
       return {
         label: s.label,
         detail: s.detail,
         stepType: s.stepType,
         ...(s.stepType === "draft_email"
-          ? { emailTemplate: { subject: s.emailTemplate.subject, body: s.emailTemplate.body } }
+          ? {
+              emailTemplate: (() => {
+                const to = fromEditableRecipients(s.emailTemplate.to);
+                const cc = fromEditableRecipients(s.emailTemplate.cc);
+                return {
+                  subject: s.emailTemplate.subject,
+                  body: s.emailTemplate.body,
+                  // Omit empty lists so a recipient-less draft_email step stays
+                  // minimal jsonb (legacy round-trip identity, like portalKey).
+                  ...(to.length > 0 ? { to } : {}),
+                  ...(cc.length > 0 ? { cc } : {}),
+                };
+              })(),
+            }
           : {}),
         ...(portalKey ? { portalKey } : {}),
+        ...(s.expectedTurnaroundDays !== null
+          ? { expectedTurnaroundDays: s.expectedTurnaroundDays }
+          : {}),
+        ...(s.followUpEveryDays !== null ? { followUpEveryDays: s.followUpEveryDays } : {}),
+        ...(requiredArtifacts.length > 0 ? { requiredArtifacts } : {}),
         dataFields: s.dataFields.filter(
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),

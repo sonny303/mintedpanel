@@ -1,5 +1,7 @@
 // StatusPill renders a small colored pill for status labels.
 // Also exports hexToStatusColor to map DB hex colors to the pill's semantic color name.
+// E0.9 design-system conformance: 4px radius, fixed tint + darker ink token
+// pairs, no border (the DS status Badge contract).
 import React from "react";
 
 export type StatusColor =
@@ -38,21 +40,24 @@ export function hexToStatusColor(hex: string | null | undefined): StatusColor {
   }
 }
 
+// DS tint + ink pairs from tokens.css — background is the *-tint, text is the
+// darker *-ink (never the raw status hue), borderless.
+export const statusToneClasses: Record<StatusColor, string> = {
+  gray: "bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]",
+  blue: "bg-[var(--mp-info-tint)] text-[var(--mp-info-ink)]",
+  amber: "bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]",
+  red: "bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]",
+  teal: "bg-[var(--mp-pending-tint)] text-[var(--mp-pending-ink)]",
+  green: "bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]",
+  neutral: "bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]",
+  brand: "bg-[var(--mp-brand-tint)] text-[var(--mp-brand-ink)]",
+  violet: "bg-[var(--mp-violet-tint)] text-[var(--mp-violet-ink)]",
+};
+
 export const StatusPill = ({ status, label, className = "" }: StatusPillProps) => {
-  const statusStyles: Record<StatusColor, string> = {
-    gray: "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]",
-    blue: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
-    amber: "bg-[#FEF3C7] text-[#D97706] border-[#FDE68A]",
-    red: "bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]",
-    teal: "bg-[#CCFBF1] text-[#0F766E] border-[#99F6E4]",
-    green: "bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]",
-    neutral: "bg-[#F5F5F4] text-[#57534E] border-[#E8E5E0]",
-    brand: "bg-[#E7F0EC] text-[#1B4D3E] border-[#C8DBD4]",
-    violet: "bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]",
-  };
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border ${statusStyles[status]} ${className}`}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-[4px] text-[12px] font-medium ${statusToneClasses[status]} ${className}`}
     >
       {label}
     </span>

@@ -11,7 +11,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
-import { usePortals, usePortalFieldMaps, useLastFills } from "@/hooks/usePortals";
+import { usePortals, usePortalFieldMaps, useRecentFills } from "@/hooks/usePortals";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
 import { updateProvider, type ProviderInput } from "@/services/providers";
 import { reproposeFieldMap } from "@/services/portalFieldMaps";
@@ -21,6 +21,7 @@ import {
   buildFixitQueue,
   type BrokenOrgRow,
   type FixitCard,
+  type LastFillLite,
   type OpenCaseLite,
 } from "@/lib/fixitQueue";
 import type { FieldDictionaryStatus } from "@/types";
@@ -41,7 +42,7 @@ export function useFixitQueue(): UseFixitQueueResult {
   const portalsQ = usePortals();
   const mapsQ = usePortalFieldMaps();
   const dictQ = useFieldDictionary();
-  const lastFillsQ = useLastFills();
+  const fillsQ = useRecentFills();
 
   // Every query feeds buildFixitQueue, so the deck must not seed until all have
   // loaded — a partial seed would freeze an incomplete deck (missing dictionary
@@ -55,7 +56,7 @@ export function useFixitQueue(): UseFixitQueueResult {
     portalsQ.isLoading ||
     mapsQ.isLoading ||
     dictQ.isLoading ||
-    lastFillsQ.isLoading;
+    fillsQ.isLoading;
   const isError = providersQ.isError || casesQ.isError || portalsQ.isError || mapsQ.isError;
 
   const cards = useMemo(() => {
@@ -67,10 +68,17 @@ export function useFixitQueue(): UseFixitQueueResult {
     const portals = portalsQ.data ?? [];
     const maps = mapsQ.data ?? [];
     const dictionary = dictQ.data ?? [];
-    const lastFills = [...(lastFillsQ.data?.values() ?? [])].map((f) => ({
-      portalKey: f.portalKey,
-      fieldsSkipped: f.fieldsSkipped,
-    }));
+    // Latest REAL fill per portal (the list arrives newest-first). Dry-run
+    // (is_test) fills never touch the live DOM, so they can't report drift AND
+    // must not mask a real fill's drift signal — exclude them, matching every
+    // other is_test metric reader (scorecard firstPassRate, reporting).
+    const lastFills: LastFillLite[] = [];
+    const seenFillPortals = new Set<string>();
+    for (const f of fillsQ.data ?? []) {
+      if (f.isTest || seenFillPortals.has(f.portalKey)) continue;
+      seenFillPortals.add(f.portalKey);
+      lastFills.push({ portalKey: f.portalKey, fieldsSkipped: f.fieldsSkipped });
+    }
     if (providers.length === 0 && cases.length === 0) return [];
 
     const statusById = new Map(statusConfigs.map((s) => [s.id, s]));
@@ -116,7 +124,7 @@ export function useFixitQueue(): UseFixitQueueResult {
     portalsQ.data,
     mapsQ.data,
     dictQ.data,
-    lastFillsQ.data,
+    fillsQ.data,
   ]);
 
   return {
@@ -129,7 +137,7 @@ export function useFixitQueue(): UseFixitQueueResult {
       portalsQ.refetch();
       mapsQ.refetch();
       dictQ.refetch();
-      lastFillsQ.refetch();
+      fillsQ.refetch();
     },
   };
 }
@@ -176,9 +184,12 @@ export function useDecideDictionary() {
   });
 }
 
-// Broken-mapping card action: send the org's own rows whose selectors no longer
-// match the live form back to proposed, so they re-enter the training deck for
-// a re-decision (RLS blocks writes to global rows — those stay informational).
+// Broken-mapping repair: send the org's own rows whose selectors no longer match
+// the live form back to `proposed`, so they re-enter the training deck for a
+// re-capture. Only ever handed org rows — RLS blocks writes to global
+// (org_id NULL) catalog rows, which stay read-only/informational on the card.
+// On success, re-derive the mapping + fill caches that both the Fix-it queue and
+// the Portals registry compose; the card then opens the training surface.
 export function useSendBrokenToTraining() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
@@ -188,6 +199,9 @@ export function useSendBrokenToTraining() {
         await reproposeFieldMap(row.id, { token: row.token, source: row.source });
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.portalFieldMaps(orgId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.portalFieldMaps(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.lastFills(orgId) });
+    },
   });
 }

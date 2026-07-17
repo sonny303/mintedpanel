@@ -4,18 +4,65 @@
 // their text in `notes`. Reads filter by org; touchpoint inserts also write an
 // audit_log row with action_type 'TOUCH_LOGGED', note inserts write a CREATE row.
 import { supabase } from "@/integrations/supabase/externalClient";
-import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { resolveActiveFollowUp, type FollowUpTouch } from "@/lib/followUps";
 import type { Touch, TouchEntryType, TouchOutcome, TouchType } from "@/types";
 
+// E4.1 structured touch input. `touchType` is required; everything else is
+// optional. `outcome` (the disposition) is optional and never synthesized
+// (F4.1.4). `clearsFollowUp` is the ONLY way to clear a follow-up (F4.1.2) — a
+// missing `nextFollowUpDate` carries the prior one forward. `recipientName` /
+// `recipientContact` are the optional recipient capture (F4.1.5). `source` is
+// explicit per row (TE-6), defaulting to the webapp 'manual'. `correctsTouchId`
+// makes this row a correction of an earlier touch (appended, never an edit).
 export interface TouchInput {
   touchDate: string;
   touchType: TouchType;
-  outcome: TouchOutcome;
+  outcome?: TouchOutcome | null;
   nextFollowUpDate?: string | null;
+  clearsFollowUp?: boolean;
+  recipientName?: string | null;
+  recipientContact?: string | null;
   notes?: string | null;
+  source?: "manual" | "extension";
+  correctsTouchId?: string | null;
   // Story 8: set when this touchpoint is one child of a batch payer call.
   communicationEventId?: string | null;
+}
+
+function trimOrNull(v: string | null | undefined): string | null {
+  const t = v?.trim();
+  return t ? t : null;
+}
+
+// Build the append-only touchpoint row from a structured input. Org, case, and
+// coordinator are set by the caller-facing functions, never from the input.
+function touchpointRow(orgId: string, caseId: string, input: TouchInput): Record<string, unknown> {
+  return {
+    entry_type: "touchpoint",
+    org_id: orgId,
+    case_id: caseId,
+    coordinator_id: currentUserId(),
+    touch_date: input.touchDate,
+    touch_type: input.touchType,
+    outcome: input.outcome ?? null,
+    next_follow_up_date: input.nextFollowUpDate ?? null,
+    clears_follow_up: input.clearsFollowUp ?? false,
+    recipient_name: trimOrNull(input.recipientName),
+    recipient_contact: trimOrNull(input.recipientContact),
+    notes: trimOrNull(input.notes),
+    corrects_touch_id: input.correctsTouchId ?? null,
+    communication_event_id: input.communicationEventId ?? null,
+    source: input.source ?? "manual",
+  };
+}
+
+function touchAuditDescription(t: Touch): string {
+  const outcome = t.outcome ? ` (${t.outcome})` : "";
+  return t.correctsTouchId
+    ? `Correction: logged ${t.touchType} touch${outcome}`
+    : `Logged ${t.touchType} touch${outcome}`;
 }
 
 export interface NoteInput {
@@ -69,18 +116,9 @@ export async function getLastTouchDates(): Promise<Map<string, string>> {
 
 export async function logTouch(caseId: string, input: TouchInput): Promise<Touch> {
   const orgId = requireActiveOrg();
-  const source = "manual" as const;
-  const payload = {
-    ...snakeizeRow<Record<string, unknown>>(input),
-    entry_type: "touchpoint",
-    org_id: orgId,
-    case_id: caseId,
-    coordinator_id: currentUserId(),
-    source,
-  };
   const { data, error } = await supabase
     .from("touches")
-    .insert(payload as never)
+    .insert(touchpointRow(orgId, caseId, input) as never)
     .select("*")
     .single();
   if (error) throw error;
@@ -90,9 +128,93 @@ export async function logTouch(caseId: string, input: TouchInput): Promise<Touch
     entityType: "touch",
     entityId: created.id,
     after: created,
-    description: `Logged ${created.touchType} touch (${created.outcome})`,
+    description: touchAuditDescription(created),
   });
   return created;
+}
+
+// E4.1 corrections (Edge Cases & Corrections): append a NEW touch that points at
+// the one being corrected. No UPDATE path exists — the original stays intact and
+// the log renders the pair ("corrected by …"). The target must be an org-owned
+// touch on the same case.
+export async function correctTouch(
+  caseId: string,
+  originalTouchId: string,
+  input: TouchInput,
+): Promise<Touch> {
+  const orgId = requireActiveOrg();
+  const { data: original, error: origErr } = await supabase
+    .from("touches")
+    .select("id, case_id")
+    .eq("org_id", orgId)
+    .eq("id", originalTouchId)
+    .maybeSingle();
+  if (origErr) throw origErr;
+  if (!original) throw new Error("Original touch not found");
+  if ((original as { case_id: string }).case_id !== caseId) {
+    throw new Error("Correction must target a touch on the same case");
+  }
+  return logTouch(caseId, { ...input, correctsTouchId: originalTouchId });
+}
+
+export interface BulkTouchResult {
+  created: Touch[];
+  caseIds: string[];
+}
+
+// E4.1 bulk logging (F4.1.7/TE-6): one service call writes one touch row per
+// selected case and one TOUCH_LOGGED audit row per touch, plus one batch-summary
+// audit (additional, never a replacement). Case selection is bounded to
+// org-scoped case ids server-side — any id outside the org aborts the whole
+// write before a single row lands.
+export async function bulkLogTouch(caseIds: string[], input: TouchInput): Promise<BulkTouchResult> {
+  const orgId = requireActiveOrg();
+  const uniqueIds = Array.from(new Set(caseIds));
+  if (uniqueIds.length === 0) throw new Error("Select at least one case");
+
+  // Org-bound the selection: every id must be a case in the active org.
+  const { data: owned, error: ownErr } = await supabase
+    .from("credential_cases")
+    .select("id")
+    .eq("org_id", orgId)
+    .in("id", uniqueIds);
+  if (ownErr) throw ownErr;
+  const ownedIds = new Set((owned ?? []).map((r) => (r as { id: string }).id));
+  const missing = uniqueIds.filter((id) => !ownedIds.has(id));
+  if (missing.length > 0) {
+    throw new Error("One or more selected cases are not in this organization");
+  }
+
+  const rows = uniqueIds.map((caseId) => touchpointRow(orgId, caseId, input));
+  const { data, error } = await supabase
+    .from("touches")
+    .insert(rows as never)
+    .select("*");
+  if (error) throw error;
+  const created = camelizeRow<Touch[]>(data ?? []);
+
+  // One TOUCH_LOGGED audit per touch (TE-6).
+  for (const t of created) {
+    await writeAudit({
+      actionType: "TOUCH_LOGGED",
+      entityType: "touch",
+      entityId: t.id,
+      after: t,
+      description: touchAuditDescription(t),
+    });
+  }
+  // Additional batch summary (never a replacement for the per-touch rows).
+  await writeAudit({
+    actionType: "TOUCH_LOGGED",
+    entityType: "touch_batch",
+    entityId: null,
+    after: { touchType: input.touchType, outcome: input.outcome ?? null, cases: created.length },
+    description: `Bulk-logged ${input.touchType} touch across ${created.length} case${
+      created.length === 1 ? "" : "s"
+    }`,
+  });
+
+  return { created, caseIds: uniqueIds };
 }
 
 // Story 1: append a note entry to the touchlog, optionally task-linked. Content
@@ -184,29 +306,55 @@ export interface CaseFollowUp {
 
 export async function getLatestTouchFollowUps(): Promise<Map<string, CaseFollowUp>> {
   const orgId = requireActiveOrg();
+  // Read EVERY touchpoint per case — the active follow-up is resolved by the
+  // carry-forward reducer (F4.1.2), not by taking the latest row's date. A
+  // date-less touch carries the prior follow-up forward; only an explicit
+  // clears_follow_up ends it.
   const { data, error } = await supabase
     .from("touches")
-    .select("case_id, touch_date, next_follow_up_date, notes")
+    .select("id, case_id, touch_date, created_at, next_follow_up_date, clears_follow_up, notes")
     .eq("org_id", orgId)
-    .eq("entry_type", "touchpoint")
-    .order("touch_date", { ascending: false });
+    .eq("entry_type", "touchpoint");
   if (error) throw error;
-  const latest = new Map<string, CaseFollowUp>();
+
+  const byCase = new Map<string, Array<FollowUpTouch & { notes: string | null }>>();
   for (const row of data ?? []) {
     const r = row as {
+      id: string;
       case_id: string;
       touch_date: string;
+      created_at: string | null;
       next_follow_up_date: string | null;
+      clears_follow_up: boolean | null;
       notes: string | null;
     };
-    if (!latest.has(r.case_id)) {
-      latest.set(r.case_id, {
-        caseId: r.case_id,
-        touchDate: r.touch_date,
-        nextFollowUpDate: r.next_follow_up_date,
-        notes: r.notes,
-      });
-    }
+    const list = byCase.get(r.case_id) ?? [];
+    list.push({
+      id: r.id,
+      touchDate: r.touch_date,
+      createdAt: r.created_at ?? r.touch_date,
+      nextFollowUpDate: r.next_follow_up_date,
+      clearsFollowUp: r.clears_follow_up ?? false,
+      notes: r.notes,
+    });
+    byCase.set(r.case_id, list);
   }
-  return latest;
+
+  // Every case with a touchpoint stays in the map — touchDate is the LATEST
+  // touchpoint (the cadence clock input), while nextFollowUpDate is the
+  // reducer-resolved ACTIVE follow-up (null when none is active). Dropping
+  // no-follow-up cases would erase their last-touch date downstream.
+  const result = new Map<string, CaseFollowUp>();
+  for (const [caseId, touchpoints] of byCase) {
+    const latest = touchpoints.reduce((a, b) => (b.touchDate > a.touchDate ? b : a));
+    const resolved = resolveActiveFollowUp(touchpoints);
+    const source = resolved ? touchpoints.find((t) => t.id === resolved.sourceTouchId) : undefined;
+    result.set(caseId, {
+      caseId,
+      touchDate: latest.touchDate,
+      nextFollowUpDate: resolved?.date ?? null,
+      notes: (resolved ? (source?.notes ?? null) : latest.notes) ?? null,
+    });
+  }
+  return result;
 }

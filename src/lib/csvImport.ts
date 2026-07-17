@@ -2,10 +2,12 @@
 //
 // A three-file package — facilities.csv, providers.csv,
 // provider_facility_assignments.csv — is parsed, header-mapped, coerced, and
-// row-validated here with NO I/O. The wizard previews the structured result and
-// the commit step (src/services/importCommit.ts) feeds the mapped rows through
-// the existing create services, so org-scoping + audit hold. There is no
-// LLM/AI ingestion anywhere in this path.
+// row-validated here with NO I/O. There is no LLM/AI ingestion anywhere in
+// this path. The Epic 2c direct-commit wizard that consumed the package shape
+// was superseded by the E3.0 staged roster import (TE-8; its importCommit
+// service was retired with it) — the RFC4180 record parser and coercions
+// below remain the shared core src/lib/rosterImport.ts builds on (E3.0 TE-1),
+// and parseImportPackage stays for its tests and any future package needs.
 //
 // A hand-rolled RFC4180-ish parser is used (no CSV lib is a dependency and a
 // heavy one is not warranted): quoted fields, embedded commas/newlines, "" as

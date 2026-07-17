@@ -1,9 +1,9 @@
 // Editor card for a single template task, including its SOP steps and
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  newEditableRecipient,
+  taskPortalKeys,
+  type EditableRecipient,
+} from "@/components/templates/editableTemplate";
+import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import { isValidEmail } from "@/lib/contactValidation";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
 
@@ -27,6 +34,8 @@ interface DataField {
 interface EmailTemplate {
   subject: string;
   body: string;
+  to: EditableRecipient[];
+  cc: EditableRecipient[];
 }
 
 interface EditableStep {
@@ -37,7 +46,15 @@ interface EditableStep {
   emailTemplate: EmailTemplate;
   dataFields: DataField[];
   portalKey: string;
+  expectedTurnaroundDays: number | null;
+  followUpEveryDays: number | null;
+  requiredArtifacts: string[];
 }
+
+// E1.7b F1.7b.5 (TE-15) — the closed email-valued token set the recipient token
+// picker offers (a strict subset of the body "Insert token" catalog). Resolver-
+// derived so it never drifts from what actually resolves to an address.
+const EMAIL_TOKENS = emailValuedTokenKeys();
 
 const NO_PORTAL = "__none__";
 
@@ -92,12 +109,20 @@ export interface TemplateTaskRowProps {
   removeStep: (taskId: string, stepId: string) => void;
   updateStep: (taskId: string, stepId: string, patch: Partial<EditableStep>) => void;
   reorderSteps: (taskId: string, fromId: string, toId: string) => void;
+  // E4.2 PM round-4 — accessible step reorder (move up/down, keyboard-operable).
+  moveStep: (taskId: string, index: number, delta: -1 | 1) => void;
   addDataField: (taskId: string, stepId: string) => void;
   updateDataField: (taskId: string, stepId: string, idx: number, patch: Partial<DataField>) => void;
   removeDataField: (taskId: string, stepId: string, idx: number) => void;
 }
 
-export function TemplateTaskRow({
+// memo (measured hotfix, 2026-07-17): the wizard re-renders on every keystroke,
+// and each task card is a forest of Radix selects — without the bailout, typing
+// in ONE step's field re-rendered every card (measured 264–296ms p50 per
+// keystroke on a 10-task template, prod build, 4x CPU throttle; ~30ms with the
+// bailout). Requires every function prop to be referentially stable — the
+// wizard passes useCallback handlers; keep it that way.
+export const TemplateTaskRow = memo(function TemplateTaskRow({
   task,
   taskIdx,
   canEdit,
@@ -115,6 +140,7 @@ export function TemplateTaskRow({
   removeStep,
   updateStep,
   reorderSteps,
+  moveStep,
   addDataField,
   updateDataField,
   removeDataField,
@@ -182,7 +208,7 @@ export function TemplateTaskRow({
         {taskPortalKeys(task).length > 1 ? (
           <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
             This task links more than one portal ({taskPortalKeys(task).join(", ")}). A task can
-            fill only one portal — pick one; save is blocked until then.
+            fill only one portal — pick one. Save is blocked until then.
           </div>
         ) : null}
         <div className="flex items-center justify-between">
@@ -218,7 +244,29 @@ export function TemplateTaskRow({
           >
             <div className="flex items-start gap-2">
               {canEdit ? (
-                <GripVertical className="h-4 w-4 text-muted-foreground mt-2 cursor-grab" />
+                <div className="mt-1 flex flex-col items-center gap-0.5">
+                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={stepIdx === 0}
+                    aria-label={`Move step ${stepIdx + 1} up`}
+                    onClick={() => moveStep(task.id, stepIdx, -1)}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={stepIdx === task.steps.length - 1}
+                    aria-label={`Move step ${stepIdx + 1} down`}
+                    onClick={() => moveStep(task.id, stepIdx, 1)}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               ) : null}
               <div className="flex-1 space-y-2">
                 <div>
@@ -246,6 +294,9 @@ export function TemplateTaskRow({
                     <SelectContent>
                       <SelectItem value="online_form">Online form</SelectItem>
                       <SelectItem value="draft_email">Draft email</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                      <SelectItem value="fax">Fax</SelectItem>
+                      <SelectItem value="mail">Mail</SelectItem>
                       <SelectItem value="pdf" disabled>
                         PDF (coming soon)
                       </SelectItem>
@@ -256,8 +307,30 @@ export function TemplateTaskRow({
                 {step.stepType === "draft_email" ? (
                   <div className="space-y-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
                     <p className="text-[11px] text-[#92400E]">
-                      Tokens like {"{{provider.firstName}}"} resolve when the task is created.
+                      Tokens like {"{{provider.firstName}}"} resolve when the task is created. The
+                      product drafts the email for review — it never sends.
                     </p>
+                    <RecipientListEditor
+                      label="To"
+                      required
+                      recipients={step.emailTemplate.to}
+                      canEdit={canEdit}
+                      onChange={(to) =>
+                        updateStep(task.id, step.id, {
+                          emailTemplate: { ...step.emailTemplate, to },
+                        })
+                      }
+                    />
+                    <RecipientListEditor
+                      label="Cc"
+                      recipients={step.emailTemplate.cc}
+                      canEdit={canEdit}
+                      onChange={(cc) =>
+                        updateStep(task.id, step.id, {
+                          emailTemplate: { ...step.emailTemplate, cc },
+                        })
+                      }
+                    />
                     <div>
                       <Label className="text-xs">Subject</Label>
                       <Input
@@ -403,6 +476,12 @@ export function TemplateTaskRow({
                     </div>
                   </div>
                 )}
+
+                <StepCadenceFields
+                  step={step}
+                  canEdit={canEdit}
+                  onChange={(patch) => updateStep(task.id, step.id, patch)}
+                />
               </div>
               {canEdit ? (
                 <Button
@@ -420,20 +499,237 @@ export function TemplateTaskRow({
       </div>
     </div>
   );
+});
+
+// E1.7b F1.7b.5 (TE-15) — the To/CC recipient editor for a draft-email step.
+// Every row has an explicit "Recipient source" selector (Email address | Profile
+// token) and, for that source, either a validated literal-address input or a
+// token select narrowed to the closed email-valued set (never the full authoring
+// catalog). No recipient is inferred from prose; BCC is not offered.
+function RecipientListEditor({
+  label,
+  recipients,
+  canEdit,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  recipients: EditableRecipient[];
+  canEdit: boolean;
+  onChange: (next: EditableRecipient[]) => void;
+  required?: boolean;
+}) {
+  function update(id: string, patch: Partial<EditableRecipient>) {
+    onChange(recipients.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+  function remove(id: string) {
+    onChange(recipients.filter((r) => r.id !== id));
+  }
+  function add() {
+    onChange([...recipients, newEditableRecipient()]);
+  }
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <Label className="text-xs">
+          {label}
+          {required ? <span className="text-[#B91C1C]"> *</span> : null}
+        </Label>
+        {canEdit ? (
+          <Button size="sm" variant="ghost" onClick={add}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add {label.toLowerCase()}
+          </Button>
+        ) : null}
+      </div>
+      {recipients.length === 0 ? (
+        <p className="text-[11px] text-[#92400E]">
+          {required
+            ? "Add at least one recipient — a fixed email address or the provider.email token."
+            : "No Cc recipients."}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {recipients.map((r) => {
+            const literalInvalid =
+              r.source === "literal" && r.address.trim() !== "" && !isValidEmail(r.address);
+            return (
+              <div key={r.id} className="grid grid-cols-[130px_1fr_auto] gap-2 items-start">
+                <Select
+                  value={r.source}
+                  onValueChange={(v) => update(r.id, { source: v as EditableRecipient["source"] })}
+                  disabled={!canEdit}
+                >
+                  <SelectTrigger aria-label={`${label} recipient source`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="literal">Email address</SelectItem>
+                    <SelectItem value="token">Profile token</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div>
+                  {r.source === "literal" ? (
+                    <Input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={r.address}
+                      onChange={(e) => update(r.id, { address: e.target.value })}
+                      disabled={!canEdit}
+                      aria-label={`${label} email address`}
+                      aria-invalid={literalInvalid || undefined}
+                    />
+                  ) : (
+                    <Select
+                      value={r.token}
+                      onValueChange={(v) => update(r.id, { token: v })}
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger aria-label={`${label} recipient token`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EMAIL_TOKENS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {literalInvalid ? (
+                    <p className="mt-0.5 text-[11px] text-[#B91C1C]">
+                      Enter a valid email address.
+                    </p>
+                  ) : null}
+                </div>
+                {canEdit ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => remove(r.id)}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove ${label} recipient`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
-// A task's distinct normalized portal keys across its online_form steps. More
-// than one makes the extension's close-out target ambiguous, so the wizard
-// warns here and blocks save.
-function taskPortalKeys(task: EditableTask): string[] {
-  return [
-    ...new Set(
-      task.steps
-        .filter((s) => s.stepType === "online_form")
-        .map((s) => normalizePortalKey(s.portalKey))
-        .filter((k): k is string => k !== null),
-    ),
-  ];
+// E1.7b step-shape extension editor: expected payer turnaround, follow-up
+// cadence (both optional day counts), and the required-artifacts checklist.
+// Artifacts are NAMED attachments with no backing token ("Submission
+// confirmation PDF") — they belong here, not in data fields: a data-field
+// entry without a resolvable token is silently dropped at resolution.
+function StepCadenceFields({
+  step,
+  canEdit,
+  onChange,
+}: {
+  step: EditableStep;
+  canEdit: boolean;
+  onChange: (patch: Partial<EditableStep>) => void;
+}) {
+  function parseDays(raw: string): number | null {
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label htmlFor={`step-${step.id}-turnaround`} className="text-xs">
+            Expected turnaround (days)
+          </Label>
+          <Input
+            id={`step-${step.id}-turnaround`}
+            type="number"
+            min={1}
+            value={step.expectedTurnaroundDays ?? ""}
+            onChange={(e) => onChange({ expectedTurnaroundDays: parseDays(e.target.value) })}
+            disabled={!canEdit}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`step-${step.id}-follow-up`} className="text-xs">
+            Follow up every (days)
+          </Label>
+          <Input
+            id={`step-${step.id}-follow-up`}
+            type="number"
+            min={1}
+            value={step.followUpEveryDays ?? ""}
+            onChange={(e) => onChange({ followUpEveryDays: parseDays(e.target.value) })}
+            disabled={!canEdit}
+          />
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <Label className="text-xs">Required artifacts</Label>
+          {canEdit ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange({ requiredArtifacts: [...step.requiredArtifacts, ""] })}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add artifact
+            </Button>
+          ) : null}
+        </div>
+        {step.requiredArtifacts.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            Name the attachments or proofs this step must produce (e.g. &quot;Submission
+            confirmation PDF&quot;). Reference shared logins by name only — never record a password
+            in an SOP step.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {step.requiredArtifacts.map((artifact, i) => (
+              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                <Input
+                  placeholder="Artifact name"
+                  value={artifact}
+                  onChange={(e) =>
+                    onChange({
+                      requiredArtifacts: step.requiredArtifacts.map((a, j) =>
+                        j === i ? e.target.value : a,
+                      ),
+                    })
+                  }
+                  disabled={!canEdit}
+                />
+                {canEdit ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() =>
+                      onChange({
+                        requiredArtifacts: step.requiredArtifacts.filter((_, j) => j !== i),
+                      })
+                    }
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Portal picker for an online_form step. Options default to portals registered

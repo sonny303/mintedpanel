@@ -1,18 +1,19 @@
 // Login page: 46/54 split. Deep-green left panel with dot texture, logo
 // tile, headline and watermark. Off-white right panel with sign-in form.
-import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuthStore } from "@/lib/auth-store";
+import { useLandingRedirect } from "@/hooks/useLandingRedirect";
 import logoAsset from "@/assets/minted-mark.png.asset.json";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-const FONT = { fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' };
+const FONT = { fontFamily: '"Geist", ui-sans-serif, system-ui, sans-serif' };
 
 function LoginPage() {
-  const navigate = useNavigate();
+  const goToLanding = useLandingRedirect();
   const session = useAuthStore((s) => s.session);
   const signIn = useAuthStore((s) => s.signIn);
   const loading = useAuthStore((s) => s.loading);
@@ -22,13 +23,17 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Guards the resolver against re-firing while it navigates away from /login.
+  const redirected = useRef(false);
 
   useEffect(() => {
-    if (initialized && session && pathname === "/login") {
-      // Redesign E0.0: land on the cross-org Portfolio, not the legacy /home.
-      navigate({ to: "/portfolio" });
+    if (initialized && session && pathname === "/login" && !redirected.current) {
+      // Redesign E0.4 TE-1: resolve the landing (last-active org workspace, or the
+      // Portfolio fallback), superseding E0.0's flat /portfolio default.
+      redirected.current = true;
+      void goToLanding();
     }
-  }, [initialized, session, pathname, navigate]);
+  }, [initialized, session, pathname, goToLanding]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,7 +43,8 @@ function LoginPage() {
       setError(result.error);
       return;
     }
-    navigate({ to: "/portfolio" });
+    redirected.current = true;
+    await goToLanding();
   }
 
   return (

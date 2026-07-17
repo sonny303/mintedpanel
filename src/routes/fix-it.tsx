@@ -1,7 +1,8 @@
 // Fix-it queue (Surface 1): a deck of 30-second decisions that improve fill
 // coverage, ordered by soonest blocked fill — never by ease. Four card types
-// (provider gap / dictionary confirm / train form / broken mapping). No timers, no speed
-// mechanics; corrections are celebrated as good catches, never penalized.
+// (provider gap / dictionary confirm / train form / broken mapping). No timers,
+// no speed mechanics; corrections are celebrated as good catches, never
+// penalized.
 import { useEffect, useMemo, useReducer, useState } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Check, CheckCircle2 } from "lucide-react";
@@ -260,7 +261,7 @@ function CardShell({
     data: "bg-[#EFF6FF] text-[#2563EB]",
     dict: "bg-[color:var(--mp-primary-tint)] text-[color:var(--mp-primary)]",
     form: "bg-[#FEF3C7] text-[#92400E]",
-    broken: "bg-[#FEE2E2] text-[#B91C1C]",
+    broken: "bg-[color:var(--mp-danger-tint)] text-[color:var(--mp-danger-ink)]",
   }[chipTone];
   return (
     <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card px-6 py-5">
@@ -612,7 +613,7 @@ function BrokenMappingCard({
       title={`${b.count} trained field${b.count === 1 ? "" : "s"} didn't match the live ${b.portalName} form.`}
       why={
         b.orgRows.length > 0
-          ? `The last fill couldn't find ${b.count === 1 ? "this field" : "these fields"} on the page — the form likely changed. Sending them back to training re-opens the decision so a re-capture can refresh the selectors.`
+          ? `The last fill couldn't find ${b.count === 1 ? "this field" : "these fields"} on the page — the form likely changed. Sending ${b.orgRows.length === 1 ? "it" : "them"} back to training re-opens the decision so a re-capture can refresh the selectors.`
           : `The last fill couldn't find ${b.count === 1 ? "this field" : "these fields"} on the page. ${b.globalCount === 1 ? "This mapping is" : "These mappings are"} managed centrally by Minted Panel — re-capture the form with the extension to propose fresh selectors for your org.`
       }
       footer={
@@ -658,7 +659,7 @@ function BrokenMappingCard({
             key={`${label}-${i}`}
             className="flex items-center gap-2 text-[13px] text-[color:var(--mp-ink)]"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626] shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--mp-danger)] shrink-0" />
             <span className="truncate">{label}</span>
             <span className="ml-auto text-[11.5px] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
               not found on page

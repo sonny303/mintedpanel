@@ -33,10 +33,11 @@ export async function createPortal(input: PortalInput): Promise<Portal> {
   const payload = {
     org_id: orgId,
     name: input.name.trim(),
-    // Folded (trim + lowercase) at the write boundary so SOP-step portalKey
-    // joins are literal string compares. The key is immutable after create —
-    // no update path edits it; a rename would orphan every SOP-step link and
-    // field mapping, so it stays out of the UI deliberately.
+    // Fold (trim + lowercase) at the write boundary so the portal_key that joins
+    // SOP online_form steps → this portal is a literal string compare, matching
+    // how editableTemplate normalizes step keys. The key is immutable after
+    // create (no update path edits it — a rename would orphan every SOP-step
+    // link), so this is the one chance to canonicalize a hand-typed key.
     portal_key: normalizePortalKey(input.portalKey) ?? "",
     payer_id: input.payerId ?? null,
     form_url: input.formUrl?.trim() || null,

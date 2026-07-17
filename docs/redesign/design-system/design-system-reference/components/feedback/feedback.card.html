@@ -1,0 +1,52 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Feedback" subtitle="Dialog on a dimmed backdrop · EmptyState (empty + loading)" -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-bg); font-family: var(--font-sans); color: var(--text-primary); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  .wrap { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 11px; }
+  .ctrl { height: 34px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); font-size: 13px; color: var(--text-primary); font-family: inherit; width: 100%; }
+  .flabel { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-secondary); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border-radius: var(--radius-control); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; }
+  .pulse { animation: mp-pulse 1.4s ease-in-out infinite; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <div class="lbl">Dialog</div>
+      <div style="background:var(--color-backdrop);border:1px solid var(--color-border);border-radius:var(--radius-tile);padding:22px;display:flex;justify-content:center;">
+        <div style="width:100%;max-width:320px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-tile);overflow:hidden;">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;gap:12px;"><div style="font-size:16px;font-weight:600;">Change case status</div><span style="color:var(--text-tertiary);font-size:18px;line-height:1;">&times;</span></div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:6px;">
+            <label class="flabel">Status</label>
+            <div style="position:relative;"><select class="ctrl" style="padding-right:30px;appearance:none;-webkit-appearance:none;"><option>Under review</option></select><span style="position:absolute;right:12px;top:12px;width:7px;height:7px;border-right:1.5px solid var(--text-secondary);border-bottom:1.5px solid var(--text-secondary);transform:rotate(45deg);pointer-events:none;"></span></div>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid var(--color-border);display:flex;justify-content:flex-end;gap:8px;background:var(--color-bg);">
+            <button class="btn" style="border:1px solid var(--color-border);background:var(--color-surface);color:var(--text-primary);">Cancel</button>
+            <button class="btn" style="border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl">EmptyState</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-tile);min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px;text-align:center;">
+          <div style="width:36px;height:36px;border-radius:var(--radius-tile);background:var(--color-surface-muted);border:1px solid var(--color-border);"></div>
+          <div><div style="font-size:14px;font-weight:600;margin-bottom:3px;">No cases match these filters</div><div style="font-size:13px;color:var(--text-secondary);">Try clearing a filter.</div></div>
+          <button class="btn" style="border:1px solid var(--color-border);background:var(--color-surface);color:var(--text-primary);">Clear filters</button>
+        </div>
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-tile);padding:14px;display:flex;align-items:center;gap:12px;">
+          <div class="pulse" style="width:36px;height:36px;border-radius:var(--radius-tile);background:var(--mp-chip-idle);flex:none;"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div class="pulse" style="height:11px;width:55%;border-radius:4px;background:var(--mp-chip-idle);"></div><div class="pulse" style="height:9px;width:35%;border-radius:4px;background:var(--color-border-subtle);"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -150,7 +150,10 @@ export function useCreateGroupInsurancePolicy(groupId: string) {
   return useMutation({
     mutationFn: (input: InsurancePolicyInput) => createGroupInsurancePolicy(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["group-insurance-policies", orgId, groupId] });
+      // Prefix invalidation: the per-group editor read AND the E1.8 org-wide
+      // readiness read (["group-insurance-policies", orgId]) both refresh, so
+      // a recorded policy flips the group COI check immediately (F1.8.1).
+      qc.invalidateQueries({ queryKey: ["group-insurance-policies", orgId] });
       qc.invalidateQueries({ queryKey: auditKey(orgId) });
     },
   });
@@ -162,7 +165,7 @@ export function useUpdateGroupInsurancePolicy(id: string, groupId: string) {
   return useMutation({
     mutationFn: (patch: Partial<InsurancePolicyInput>) => updateGroupInsurancePolicy(id, patch),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["group-insurance-policies", orgId, groupId] });
+      qc.invalidateQueries({ queryKey: ["group-insurance-policies", orgId] });
       qc.invalidateQueries({ queryKey: auditKey(orgId) });
     },
   });

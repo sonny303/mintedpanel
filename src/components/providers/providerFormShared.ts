@@ -1,59 +1,11 @@
 // Shared constants, types, and validation for Add/Edit provider forms.
 // Owned by ProviderForm.tsx and EditProviderForm.tsx.
+import { isPtTaxonomyCode } from "@/lib/ptTaxonomy";
 
-export const US_STATES = [
-  "AL",
-  "AK",
-  "AZ",
-  "AR",
-  "CA",
-  "CO",
-  "CT",
-  "DE",
-  "FL",
-  "GA",
-  "HI",
-  "ID",
-  "IL",
-  "IN",
-  "IA",
-  "KS",
-  "KY",
-  "LA",
-  "ME",
-  "MD",
-  "MA",
-  "MI",
-  "MN",
-  "MS",
-  "MO",
-  "MT",
-  "NE",
-  "NV",
-  "NH",
-  "NJ",
-  "NM",
-  "NY",
-  "NC",
-  "ND",
-  "OH",
-  "OK",
-  "OR",
-  "PA",
-  "RI",
-  "SC",
-  "SD",
-  "TN",
-  "TX",
-  "UT",
-  "VT",
-  "VA",
-  "WA",
-  "WV",
-  "WI",
-  "WY",
-  "DC",
-] as const;
+// Re-export the single mastered state list (src/lib/usStates.ts) rather than
+// keep a second copy in sync — the provider Add/Edit forms and LaunchEditModal
+// import US_STATES from here.
+export { US_STATES } from "@/lib/usStates";
 
 export const SSN_LAST4_RE = /^\d{4}$/;
 export const NPI_RE = /^1\d{9}$/;
@@ -161,6 +113,8 @@ export function validateCredentials(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
   if (f.npi && !NPI_RE.test(f.npi)) e.npi = "NPI must be 10 digits and start with 1";
   if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = "CAQH must be 8 digits";
+  if (f.taxonomyCode && !isPtTaxonomyCode(f.taxonomyCode))
+    e.taxonomyCode = "Must be a PT/PTA taxonomy code (225X series)";
   return e;
 }
 
