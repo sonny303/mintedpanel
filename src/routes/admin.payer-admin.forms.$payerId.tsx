@@ -33,7 +33,7 @@ function FormOnboardingPage() {
         actions={
           <Button asChild variant="outline" size="sm" className="h-8">
             <Link to="/admin/payer-admin">
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Payer & SOP Setup
+              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Payer Setup
             </Link>
           </Button>
         }

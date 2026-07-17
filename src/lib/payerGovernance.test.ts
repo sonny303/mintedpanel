@@ -109,11 +109,21 @@ describe("free-text payer creation is gone at the service boundary", () => {
   });
 
   it("the admin payers route has no Add-payer affordance", () => {
+    // E4.2 unified payer setup: /admin/payers is a redirect shell into the
+    // Payer Setup workspace, whose Catalog tab is the canonical add path.
     const route = stripComments(readFileSync(join(SRC, "routes/admin.payers.tsx"), "utf8"));
     expect(route).not.toContain("Add payer");
     expect(route).not.toContain("useCreatePayer");
-    // The canonical path is offered instead.
-    expect(route).toContain("/payer-directory");
+    expect(route).toContain("/admin/payer-admin");
+  });
+
+  it("the Payer Setup list keeps the read-only posture (no free-text creation, no identity edit)", () => {
+    const setupList = stripComments(
+      readFileSync(join(SRC, "components/payer-admin/PayerSetupList.tsx"), "utf8"),
+    );
+    expect(setupList).not.toContain("Add payer");
+    expect(setupList).not.toContain("useCreatePayer");
+    expect(setupList).not.toContain("updatePayer");
   });
 });
 

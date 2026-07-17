@@ -1327,6 +1327,68 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   org_payer_settings, never payers). Platform catalog authoring UI is R7 —
   deliberately NOT built (no fake platform-admin from org `admin`).
 
+- **E4.2 — Unified Payer Setup (§5 amendment TE-18–TE-21, e4-2d).** ONE
+  administrative home called **"Payer Setup"** at `/admin/payer-admin` — no
+  migration, presentation-layer consolidation only. **Sidebar (TE-18, the one
+  authorized shell edit):** the two-item Payers section ("Payer Management" →
+  `/admin/payers` + admin-only "Payer & SOP Setup") is replaced by a single
+  ADMIN-ONLY "Payer Setup" entry rendered standalone (F0.9.3's 2+-item
+  section-label rule); specialist/billing get NO Payers nav entry (TS-76 pin).
+  **The workspace** presents five URL-driven tabs (`?tab=` — setup default |
+  catalog | templates | forms | org-settings) composed over EXISTING feature
+  components: **Setup** = the new per-PAYER funnel `PayerSetupList`
+  (`src/components/payer-admin/`, superseding + deleting the payer × state
+  `payer-admin/PayerDirectory.tsx`); **Catalog** = the shared
+  `src/components/payers/PayerCatalogBrowser.tsx` (extracted from the
+  `/payer-directory` route, which stays live with its NON-ADMIN browse);
+  **SOP templates** = the shared `src/components/templates/TemplatesList.tsx`
+  (extracted from `/admin/templates`, which stays live; the "New Template"
+  button moved from PageHeader into the list toolbar); **Forms & portals** =
+  the shared `src/components/portals/PortalsRegistry.tsx` (extracted from
+  `/admin/portals`, which stays live and gained `?payerId=` — opens the Add
+  dialog with that payer preselected, the funnel's "Register portal" target);
+  **Organization settings** = payer-relevant org settings ONLY (PM decision):
+  ReasonCodeManager + QueueSettingsPanel + the new
+  `ResolutionIdSettingsSection` (per-payer effective label/source table over
+  the e4-2c `PayerResolutionIdDialog`; never the general /admin/settings
+  panels). The tab composition lives in the ROUTE file — `moduleBoundary`
+  Rule B only constrains `components/payer-admin/*`, which still imports no
+  specialist feature dir. **Setup funnel derivation:** pure
+  `src/lib/payerSetup.ts` (+16-case suite) — `activeOrgPayers` (inclusion =
+  ACTIVE `org_payer_assignments` subscription or active legacy org payer,
+  NEVER targets, so a zero-target payer is visible; Pre-Cred sentinel
+  excluded), separate dimensions per row (scope targets/states · SOP
+  covered/total vs Needs-payer-SOP · form N/A / Unregistered / %-mapped +
+  e4-3a unlinked count / dry-run status · blocker count · generation
+  Ready/Warning("Generic fallback SOP would be used", blocker reasons)/
+  Blocked(no scope) — never one collapsed badge), and ONE dominant
+  `nextAction` in the locked priority order (configure scope → create SOP
+  [prefilled matchKey link] → resolve blockers [payer-scoped /generation] →
+  register portal [`/admin/portals?payerId=`] → capture/train
+  [`/portals/$key/train`] → dry test [forms runner] → configure resolution ID
+  [e4-2c dialog] → review generation); a zero-scope LEGACY payer gets
+  "Find canonical payer" → Catalog tab instead (it can never satisfy the
+  targets WITH CHECK). Reuses `mappingCoverage`/`isUnlinkedFieldMap`/
+  readiness rows verbatim — no re-derived signals; dry runs read the F4.2.7
+  `is_test` fills off the `useRecentFills` cache. Hook
+  `src/hooks/usePayerSetup.ts` composes the existing caches. Each setup row
+  expands (aria-expanded chevron) to the per-state readiness detail +
+  starter toggle; source pills, scorecard link, and read-only identity
+  posture are preserved from the old /admin/payers (its **route is now a
+  redirect shell** → `/admin/payer-admin`, the /admin/sops precedent; the
+  scorecard back-link re-points to the workspace;
+  `payerGovernance.test.ts`'s route pin now checks the redirect target and
+  the setup list's read-only posture). `FormOnboardingPanel` empty states
+  gained direct actions (register-portal with payer context; roster link for
+  the missing test provider). e2e: new `payer-setup-funnel.spec.ts` (funnel
+  steps 1–11 incl. a gated-provider fixture and the visible fallback
+  warning), `admin-payers.spec.ts` rewritten (redirect + governance
+  affordances + specialist denial-with-catalog-pointer),
+  `payer-admin-module.spec.ts` rewritten (five tabs, TE-20c keyboard
+  traversal, Configure-ID via the org-settings tab), `sidebar-ia.spec.ts`
+  TE-18 pins, `legacy-routes.spec.ts` moved /admin/payers to the redirect
+  set.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
