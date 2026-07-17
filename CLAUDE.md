@@ -1480,6 +1480,89 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   identifier, SSN in CSV/exports/reports (the E3.0 reject-never-truncate rule
   stands), any provider self-service beyond the intake link.
 
+- **E4.5 — Document Storage: Provider & Group Documents with Expiration
+  Tracking.** The dormant `provider_documents` table is ACTIVATED as immutable
+  version metadata and the FIRST Supabase Storage bucket ships. TWO additive
+  migrations (repo file ONLY — **hosted apply + bucket provisioning are an
+  OPERATOR task**, see the PR body): `20260717150000_e45_provider_documents_activation.sql`
+  (TE-1/5/9 — `document_family_id` NOT NULL volatile-default so legacy rows
+  become their own single-row families, `version_number > 0`,
+  `supersedes_document_id` self-FK + partial unique = ONE successor per row,
+  `UNIQUE (org_id, document_family_id, version_number)` = the idempotent
+  finalize key; doc_type CHECK += `cms_460`/`cv`; NOT VALID CHECK
+  state_license|dea|coi require expiration_date; grants cut to SELECT+INSERT +
+  delete policy dropped — replacement INSERTS, never updates/deletes, "current"
+  = the family row with no successor, DERIVED) and
+  `20260717150100_e45_document_storage_bucket.sql` (TE-2 — private
+  `provider-documents` bucket, 25 MiB + PDF/PNG/JPEG backstop limits, path
+  contract `org/{orgId}/{provider|group}/{ownerId}/{familyId}/{version}/{file}`,
+  storage.objects policies validate the path org via
+  `public.document_storage_org_id()`; member read / writer insert / NO
+  update-delete; guarded on the storage schema for repo-only rebuilds).
+  **Pure `src/lib/documents.ts`** (+38-case suite): THE shared kind metadata
+  map (labels, D1 owner grains — coi is dual-grain, expiration-required,
+  expiring-soon thresholds 90 license / 60 DEA / 30 else — a PM change is one
+  edit, TE-6), MIME/size constants, `safeFileName`/`documentObjectPath`,
+  `currentVersions` (runtime-defensive: a row with no family id acts as its
+  own family — the migration's backfill semantic, so pre-E4.5 e2e fixtures
+  stay valid), `classifyExpiration` (boundary-tested 30/60/90),
+  `expiringCredentialRows`, `parseDocumentKind`/`requiredDocumentKinds` (TE-7
+  — SOP `requiredArtifacts` entries that resolve to a MACHINE kind join the
+  store; free-form artifact names never do), `caseDocumentStatus`,
+  `currentGroupReadinessDocuments` (the ONE reducer both readiness services
+  run their group-doc reads through), orphan-sweep halves. **Server boundary
+  (TE-3/TE-4):** `src/services/documentStorage.ts` (server-only ctx —
+  upload-intent validates owner/kind/file + resolves family/next-version +
+  sweeps expired orphans in the family prefix (the bounded TE-4 maintenance
+  job, on the natural retry path) + mints `createSignedUploadUrl`; finalize
+  verifies the object at the SERVER-derived path (size/MIME) before the
+  immutable insert, links supersedes = family head, replays idempotently
+  incl. the 23505 race; download = org-scoped maybeSingle miss → 404 BEFORE
+  any signing, then a 120s `createSignedUrl`) → `src/server/documentRoutes.ts`
+  (writer gate on intent/finalize, member download incl. billing; no-store;
+  ONE audit row per action — intent CREATE on the family, finalize CREATE,
+  download READ; never contents/URLs/tokens; failed audit fails the request)
+  wired in `api.ts` (`/api/documents/upload-intent|finalize|:id/download`).
+  **These are the FIRST /api routes the browser app consumes** — the epic §5
+  supersedes the no-frontend-consumer posture for exactly this narrow signing
+  surface (a signed URL cannot be minted client-side); metadata LIST reads
+  stay browser-RLS (`src/services/documents.ts` + `useDocuments.ts`, keys
+  under the `["documents", orgId]` prefix; upload invalidates documents +
+  readiness families; download is a MUTATION so short-lived URLs never sit in
+  the cache). Upload bytes PUT browser→Storage direct (never through nitro).
+  **UI (`src/components/documents/`):** `DocumentsPanel` (dense per-owner
+  table — current versions, derived expiration pills, vN + history dialog,
+  uploader names via the touchlog author idiom, writer Upload/Replace) on
+  provider detail (below the grid) and per-group Collapsible in the wizard
+  `ProviderGroupSection`; `UploadDocumentDialog` (kind select from the shared
+  map per grain, required-expiration enforcement, MIME/size pre-flight);
+  `CaseRequiredDocuments` on case detail (F4.5.3 — present/missing/expired
+  derived LIVE from current provider+group versions vs the tasks'
+  required kinds, one-click audited download, hidden when no kinds; advisory
+  only, nothing copied onto the case); `ExpiringCredentialsTable` on the new
+  **`/reporting/expiring-credentials`** report (REPORTS entry + route — the
+  E0.6 add-a-report pattern; org-scoped inside the cross-org Center).
+  **Readiness (TE-6):** `ReadinessCheck` gained optional `advisory` —
+  group_coi passes WITH an amber "COI expires …" note when the LATEST
+  covering end date sits inside the 30-day window (dateless COI suppresses
+  it; never flips pass); both `enrollmentReadiness.ts` and
+  `nextBestAction.ts` group-doc reads now reduce to CURRENT versions.
+  **Gate:** `documentdownload` leak mode + assertion pair 17/17b (own
+  download works / cross-org 404s before signing; soft-skipped on prod until
+  the operator seeds + pins `KANSAS_DOCUMENT_ID`/`SOUTHPARK_DOCUMENT_ID`).
+  Types hand-added to `types.ts` (regen unavailable — hosted migration not
+  applied) + domain types (`DocumentKind`/`ProviderDocument`/…) in
+  `types/index.ts`. Seed: TS-89 staggered-expiration fixtures on Dillon
+  (CURRENT_DATE-relative; metadata-only — no storage objects). e2e
+  `e2e/document-storage.spec.ts` (TS-88 two-grain upload + required
+  expiration + re-upload versioning + org-scoped/signed wire; TS-89 sorted
+  derived states + the readiness COI advisory; TS-90 case verification +
+  short-lived download; its harness mocks /rest, the app's own
+  /api/documents/* SAME-ORIGIN with a write-through, and /storage/v1 —
+  generated non-PHI bytes only). D3 stays deferred: NO auto-attach, no
+  extension-repo change — the download endpoint IS the future-auto-attach
+  contract (TE-11: audited links only, never bucket credentials).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1500,8 +1583,12 @@ Workbench — open cases, submission touches; 2026-07-06 — org discovery
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
-extension. See the "Server API layer" section below and `docs/phase-0-audit.md`
-for the framework/deploy detail.
+extension. **The ONE sanctioned exception since E4.5:** the three
+`/api/documents/*` signing endpoints (upload-intent/finalize/download) are
+called by the browser documents service — a signed Storage URL can only be
+minted server-side — while document metadata reads stay on RLS. See the
+"Server API layer" section below and `docs/phase-0-audit.md` for the
+framework/deploy detail.
 
 ## Running and verifying
 
@@ -1666,13 +1753,30 @@ Component (src/routes/*, src/components/[module]/*)
 
 ### Server API layer (`src/server/*` — Chunk 3 pilot PR #19, Chunk 4 extension endpoints)
 
-`/api` routes run on the nitro server. **No frontend hook consumes them** — the
-browser still talks straight to Supabase for everything. That is deliberate
-(locked decisions below): routes get built only when a real consumer pulls
-them. The current surface:
+`/api` routes run on the nitro server. **No frontend hook consumes them** —
+with ONE sanctioned E4.5 exception: the browser documents service calls the
+three `/api/documents/*` signing endpoints (a signed Storage URL cannot be
+minted client-side; metadata reads stay on RLS). Everything else stays
+browser → Supabase. That is deliberate (locked decisions below): routes get
+built only when a real consumer pulls them. The current surface:
 
 - `GET /api/health` (public) · provider CRUD (`GET/POST /api/providers`,
   `GET/PATCH /api/providers/:id`) — Chunk 3.
+- **`POST /api/documents/upload-intent` / `POST /api/documents/finalize` /
+  `GET /api/documents/:id/download`** — the E4.5 document-storage signing
+  boundary (`src/server/documentRoutes.ts` → `src/services/documentStorage.ts`,
+  server-only ctx). Writers mint a short-lived signed upload target for a
+  SERVER-generated org-bound object key, finalize verifies the object
+  (path/size/MIME/owner/family/version) before the immutable metadata insert
+  (idempotent on `(org, family, version)`), and any org member (billing too)
+  gets a 120s signed download for one org-owned version — a cross-org id 404s
+  BEFORE anything is signed (gate assertions 17/17b, `documentdownload` leak
+  mode). All three: `Cache-Control: no-store` + one audit row per action
+  (actor/document/owner/kind — never contents or URLs; a failed audit write
+  fails the request). Consumers: the browser documents service today; the
+  extension consumes the SAME download contract later (TE-11 — audited links
+  only, never bucket credentials or object-list access; the D3
+  future-auto-attach seam).
 - `GET /api/me/orgs` — the caller's own memberships, `{ orgId, orgName, role }`
   rows derived from the JWT user id only (`src/services/orgMemberships.ts`).
   Runs on `authenticateUser` (the guard's JWT-only step, no org resolution):

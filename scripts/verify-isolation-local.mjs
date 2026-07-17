@@ -42,6 +42,10 @@ function runGate(baseUrl) {
         // the mock run exercises it; optional in the real gate.
         KANSAS_CASE_ID: FIXTURES.KANSAS_CASE_ID,
         SOUTHPARK_TASK_ID: FIXTURES.SOUTHPARK_TASK_ID,
+        // Assertions 17/17b (E4.5 signed document download) — always set here;
+        // optional in the real gate until the operator seeds fixture documents.
+        KANSAS_DOCUMENT_ID: FIXTURES.KANSAS_DOCUMENT_ID,
+        SOUTHPARK_DOCUMENT_ID: FIXTURES.SOUTHPARK_DOCUMENT_ID,
         // Assertion 15/15b (E4.3 case search) — a query the Kansas fixtures
         // match (15 non-vacuous) and one that would surface the South Park
         // fixture case only under the casesearch leak (15b).
@@ -88,6 +92,8 @@ const EXPECTED_FAILS = {
   facility: ["11"],
   // The SSN-release leak serves a cross-org provider's full SSN (assertion 16).
   ssnrelease: ["16"],
+  // The document-download leak serves a cross-org signed URL (assertion 17b).
+  documentdownload: ["17b"],
 };
 
 function failedAssertions(output) {

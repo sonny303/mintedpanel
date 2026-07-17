@@ -106,6 +106,11 @@ function CheckList({ checks, owner }: { checks: ReadinessCheck[]; owner: "provid
               {c.label}
             </span>
             {c.detail ? <span className="text-muted-foreground">— {c.detail}</span> : null}
+            {/* E4.5 TE-6 — the advisory document dimension: a passing check
+                whose backing document expires soon. Amber, never a gap. */}
+            {c.pass && c.advisory ? (
+              <span className="text-[var(--mp-warn-ink)]">— {c.advisory}</span>
+            ) : null}
             {!c.pass ? <FixHereLink check={c} /> : null}
           </li>
         ))}

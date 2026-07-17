@@ -37,6 +37,13 @@
 //                          target) + a South Park task id (the cross-org task_id
 //                          that must 404). Both must be set or assertion 13 is
 //                          skipped; the in-sandbox mock run always sets them.
+//   KANSAS_DOCUMENT_ID + SOUTHPARK_DOCUMENT_ID
+//                          Fixtures for the E4.5 signed-download pair (17/17b):
+//                          an own-org document (positive) + a cross-org document
+//                          id that must 404 before anything is signed. Skipped
+//                          when unset (the real gate waits for the operator to
+//                          seed + pin fixture documents); the in-sandbox mock
+//                          run always sets both.
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
@@ -614,6 +621,44 @@ function looksLikeVercelGate(r) {
     `status=${xSsn.status} (expect 404) dataPresent=${xSsn.body?.data != null}`,
     { leak: true },
   );
+
+  // 17. Signed document download (E4.5 TE-3/TE-11): documents are the most
+  //     sensitive files in the system. Kansas downloading its OWN document
+  //     works (proves 17b isn't vacuous against a dead route — conditional on
+  //     KANSAS_DOCUMENT_ID; the in-sandbox mock run always sets it, the real
+  //     gate skips until the operator seeds + pins a fixture document)...
+  if (env.KANSAS_DOCUMENT_ID) {
+    const ownDoc = await apiGet(`/api/documents/${env.KANSAS_DOCUMENT_ID}/download`, {
+      token: kansasTok,
+    });
+    check(
+      "17. Kansas downloads its own document (signed URL issued)",
+      ownDoc.status === 200 && typeof ownDoc.body?.data?.url === "string",
+      `status=${ownDoc.status}` +
+        (ownDoc.status !== 200 ? ` body=${(ownDoc.raw || "").slice(0, 100)}` : ""),
+    );
+  } else {
+    console.log("SKIP  17. own document download — KANSAS_DOCUMENT_ID not set");
+  }
+  //     ...and a South Park document id must 404 with no signed URL — the
+  //     org-scoped metadata lookup misses BEFORE anything is signed, so no
+  //     storage access ever happens for a cross-org id. Conditional on
+  //     SOUTHPARK_DOCUMENT_ID (mock run always sets it); leak mode
+  //     "documentdownload" makes it red.
+  if (env.SOUTHPARK_DOCUMENT_ID) {
+    const xDoc = await apiGet(`/api/documents/${env.SOUTHPARK_DOCUMENT_ID}/download`, {
+      token: kansasTok,
+    });
+    const docLeaked = xDoc.status < 400 || xDoc.body?.data != null;
+    check(
+      "17b. Kansas GET download of a South Park document -> 404, no signed URL",
+      xDoc.status === 404 && !docLeaked,
+      `status=${xDoc.status} (expect 404) dataPresent=${xDoc.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  17b. cross-org document download — SOUTHPARK_DOCUMENT_ID not set");
+  }
 
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));

@@ -14,6 +14,7 @@
 
 import { canonicalLabel } from "@/lib/canonicalStatuses";
 import { CONTRACTED_LABEL } from "@/lib/statusLabels";
+import { isExpiringSoon } from "@/lib/documents";
 
 /** The locked CAQH freshness window (PM decision 2026-07-11). */
 export const CAQH_CURRENT_DAYS = 120;
@@ -49,6 +50,11 @@ export interface ReadinessCheck {
    * 2026-01-31", "Missing: SSN last 4") — never a PHI value itself. */
   detail: string | null;
   fixTarget: FixTarget;
+  /** E4.5 TE-6 — the ADVISORY document dimension: a passing check whose
+   * backing document/policy expires inside its kind's expiring-soon window
+   * (30d COI). Derived at evaluation time, never stored, and never flips
+   * `pass` — the locked readiness rule stands. */
+  advisory?: string | null;
 }
 
 // ---------- inputs (assembled by services; no Supabase here) ----------
@@ -268,15 +274,26 @@ function groupChecks(
   const hasDoc = (type: string) => docs.some((d) => d.docType === type);
   // A COI document with no expiration counts as current; a dated one must be
   // unexpired. Insurance policies satisfy the same check via policy_end_date.
+  const unexpiredPolicyEnds = input.groupInsurancePolicies
+    .filter((p) => p.groupId === groupId && onOrAfter(p.policyEndDate, input.today))
+    .map((p) => p.policyEndDate as string);
+  const coiDocs = docs.filter((d) => d.docType === "coi");
+  const datelessCoi = coiDocs.some((d) => d.expirationDate === null);
+  const unexpiredCoiDocEnds = coiDocs
+    .filter((d) => d.expirationDate !== null && onOrAfter(d.expirationDate, input.today))
+    .map((d) => d.expirationDate as string);
   const coiCurrent =
-    input.groupInsurancePolicies.some(
-      (p) => p.groupId === groupId && onOrAfter(p.policyEndDate, input.today),
-    ) ||
-    docs.some(
-      (d) =>
-        d.docType === "coi" &&
-        (d.expirationDate === null || onOrAfter(d.expirationDate, input.today)),
-    );
+    unexpiredPolicyEnds.length > 0 || datelessCoi || unexpiredCoiDocEnds.length > 0;
+  // E4.5 TE-6 — the advisory document dimension where the credential already
+  // participates: COI passes but the LATEST covering end date sits inside the
+  // shared 30-day window (a dateless COI never "expires" per our data, so it
+  // suppresses the advisory). Never flips pass.
+  const coiEnds = [...unexpiredPolicyEnds, ...unexpiredCoiDocEnds].sort();
+  const coiLatestEnd = coiEnds[coiEnds.length - 1] ?? null;
+  const coiAdvisory =
+    coiCurrent && !datelessCoi && coiLatestEnd && isExpiringSoon("coi", coiLatestEnd, input.today)
+      ? `COI expires ${coiLatestEnd}`
+      : null;
 
   return [
     {
@@ -302,6 +319,7 @@ function groupChecks(
       pass: coiCurrent,
       detail: coiCurrent ? null : "No current COI or insurance policy",
       fixTarget: "group_screen",
+      advisory: coiAdvisory,
     },
     {
       key: "voided_check",

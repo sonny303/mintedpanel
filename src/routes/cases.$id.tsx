@@ -41,6 +41,7 @@ import {
 import { PayerPipelineHistoryPanel } from "@/components/cases/pipeline/PayerPipelineHistoryPanel";
 import { isTerminalPipelineState } from "@/lib/payerPipeline";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
+import { CaseRequiredDocuments } from "@/components/documents/CaseRequiredDocuments";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseWizard } from "@/components/cases/CaseWizard";
@@ -274,6 +275,12 @@ function CaseDetailPage() {
             {/* E2.4 F2.4.2 — origin (run link / manual) + actor/date + the
                 E2.2 SOP-version lines + derived reapply cycles. */}
             <CaseProvenancePanel c={c} tasks={tasks} />
+            {/* E4.5 F4.5.3 — the Assigned-phase document verification: the
+                SOP-required kinds derived live against the provider's and
+                group's current document versions, with one-click audited
+                download for the manual portal attach (D3 interim path).
+                Hidden when the case's tasks require no documents. */}
+            <CaseRequiredDocuments providerId={c.providerId} groupId={c.groupId} tasks={tasks} />
             <Tabs value={taskView} onValueChange={setTaskView}>
               <TabsList className="mb-3">
                 <TabsTrigger value="list">List</TabsTrigger>

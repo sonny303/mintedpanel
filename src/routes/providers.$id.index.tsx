@@ -27,6 +27,7 @@ import { useCanWrite } from "@/lib/permissions";
 import { NewCaseModal } from "@/components/cases/NewCaseModal";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 import { SsnVaultField } from "@/components/providers/SsnVaultField";
+import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 
 import {
   Dialog,
@@ -190,6 +191,16 @@ function ProviderDetailPage() {
           <CaqhCard provider={provider} />
           <ProviderNotes providerId={provider.id} canEdit={canEdit} />
         </div>
+      </div>
+
+      {/* E4.5 F4.5.1 — the provider document store (kind, dates, current
+          version, uploader; versioned re-upload; audited signed download). */}
+      <div className="mt-6">
+        <DocumentsPanel
+          ownerType="provider"
+          ownerId={provider.id}
+          ownerName={`${provider.firstName} ${provider.lastName}`.trim()}
+        />
       </div>
     </TooltipProvider>
   );
