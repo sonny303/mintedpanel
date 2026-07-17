@@ -56,7 +56,17 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
   decision doc, (2) the PR includes a pre-drop data inventory (row count,
   non-null count) pasted into the description, and (3) all code references are
   removed in the same PR. Append-only ledgers (`audit_log`, `*_history`,
-  `touches`) remain protected: never drop or rewrite. This window closes at
+  `touches`) remain protected: never drop or rewrite. **One-time carve-out
+  (PM SS, 2026-07-17, pre-prod-cut full data wipe):** the operator-run
+  `full-wipe-all-orgs.sql` data wipe (PLAN-full-data-wipe.md; PM decisions
+  Q1=C/Q2=C/Q3=B on record) may DELETE ledger rows as part of clearing every
+  organization from the dev project, subject to its blocking preconditions
+  (verified pg_dump snapshot restore; human-run in the SQL editor, never an
+  agent/MCP). This is a data deletion, not DDL — no table is dropped or
+  restructured — and it does not weaken the ledger rule for application code
+  or policies: the no-UPDATE/no-DELETE rule remains in force before and after
+  the wipe. This carve-out expires once the wipe is executed and verified.
+  This window closes at
   production cut. The cutover PR must revert this section to additive-only
   (retain, hide, stop-write, deprecate in place; no renames, restructures, or
   drops).
