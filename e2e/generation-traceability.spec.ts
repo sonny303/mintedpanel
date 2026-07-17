@@ -620,3 +620,121 @@ test("TS-57: a mixed-disposition run is fully explainable — immutable rows wit
   expect(auditWrites.filter((w) => w.body?.entity_type === "credential_case")).toHaveLength(0);
   expect(fixtures.audit_log.filter((a) => a.entity_type === "credential_case")).toHaveLength(1);
 });
+
+// E4.2 SOP resolution hardening — created run rows snapshot the SOP resolution
+// provenance (template id + version + tier) from the SAME pickTemplate
+// selection the tasks were stamped from, alongside the org/run/payer/state/
+// group dimension columns that make generic-fallback usage countable per run
+// (the by-dimension counting itself is pinned in generationRuns.di.test.ts).
+test("created run rows snapshot SOP template, version, and resolution tier at the wire (E4.2)", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  // BCBS-NC resolves the org's own SOP at head version 3 (organization tier);
+  // Cigna-NC has no payer SOP and resolves the global generic fallback.
+  fixtures.payers.push({
+    id: "pay-cigna",
+    org_id: null,
+    name: "Cigna-NC",
+    payer_kind: "commercial",
+    states: ["NC"],
+    aliases: [],
+    status: "active",
+    payer_slug: "cigna-nc",
+    is_active: true,
+    created_at: "2026-07-10T00:00:00Z",
+  });
+  fixtures.payer_network_targets.push({
+    id: "t-2",
+    org_id: ORG_SHELBY,
+    payer_id: "pay-cigna",
+    group_id: "g-1",
+    state: "NC",
+    status: "active",
+    created_at: "2026-07-12T00:00:00Z",
+  });
+  const templateBase = {
+    group_id: null,
+    specialty: null,
+    archived: false,
+    required_profile_attributes: [],
+    task_definitions: [
+      {
+        title: "Submit enrollment",
+        dueOffsetDays: 0,
+        steps: [{ label: "Portal form", stepType: "online_form", dataFields: [] }],
+      },
+    ],
+    created_at: "2026-07-12T00:00:00Z",
+    updated_at: "2026-07-12T00:00:00Z",
+  };
+  fixtures.sop_templates.push(
+    {
+      ...templateBase,
+      id: "tpl-org-bcbsnc",
+      org_id: ORG_SHELBY,
+      payer_id: "pay-bcbsnc",
+      state: "NC",
+      name: "BCBS-NC enrollment SOP",
+      current_version: 3,
+    },
+    {
+      ...templateBase,
+      id: "tpl-fallback",
+      org_id: null,
+      payer_id: null,
+      state: null,
+      name: "Generic credentialing checklist",
+      current_version: 1,
+    },
+  );
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  // Jane's legacy NULL-group case blocks only her BCBS-NC key; every other
+  // provider × payer key is proposed: 2 × BCBS-NC + 3 × Cigna-NC = 5.
+  await page.goto("/generation");
+  await expect(
+    page.getByText("6 combinations: 5 proposed · 1 already exists · 0 excluded", { exact: false }),
+  ).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Confirm & create 5 cases" }).click();
+  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
+
+  const runId = fixtures.case_generation_runs[0].id as string;
+  const created = writes
+    .filter((w) => w.table === "case_generation_run_rows" && w.method === "POST")
+    .map((w) => w.body)
+    .filter((b) => b?.disposition === "created");
+  expect(created).toHaveLength(5);
+
+  // Every created row carries the full reporting grain: run + org + the
+  // 4-part key + the SOP provenance snapshot.
+  const noelBcbs = created.find(
+    (b) => b?.provider_id === "pr-noel" && b?.payer_id === "pay-bcbsnc",
+  );
+  expect(noelBcbs).toMatchObject({
+    org_id: ORG_SHELBY,
+    run_id: runId,
+    group_id: "g-1",
+    state: "NC",
+    sop_template_id: "tpl-org-bcbsnc",
+    sop_version: 3,
+    sop_resolution_tier: "organization",
+  });
+  const noelCigna = created.find(
+    (b) => b?.provider_id === "pr-noel" && b?.payer_id === "pay-cigna",
+  );
+  expect(noelCigna).toMatchObject({
+    org_id: ORG_SHELBY,
+    run_id: runId,
+    group_id: "g-1",
+    state: "NC",
+    sop_template_id: "tpl-fallback",
+    sop_version: 1,
+    sop_resolution_tier: "generic_fallback",
+  });
+  // The tier rides EVERY created row — reportable by run/payer/state/group.
+  expect(created.every((b) => typeof b?.sop_resolution_tier === "string")).toBe(true);
+});

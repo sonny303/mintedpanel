@@ -328,6 +328,11 @@ test.describe("E1.7b draft-email recipients (TS-46)", () => {
     await page.getByRole("button", { name: "Add to" }).click();
     await page.getByLabel("To email address").fill(OPTUM);
 
+    // Turnaround + follow-up cadence are authored on the SAME draft-email step
+    // and version with it (E1.7b step-shape extension).
+    await page.getByLabel("Expected turnaround (days)").fill("45");
+    await page.getByLabel("Follow up every (days)").fill("14");
+
     // Review chips both recipients (To literal + Cc provider.email token).
     await page.getByRole("button", { name: "Review" }).click();
     await expect(page.getByText(OPTUM)).toBeVisible();
@@ -341,11 +346,19 @@ test.describe("E1.7b draft-email recipients (TS-46)", () => {
     await expect(page.getByText("Published version 2")).toBeVisible({ timeout: 15000 });
 
     const defs = (captured.publish?.p_task_definitions ?? []) as Array<{
-      steps: Array<{ stepType?: string; emailTemplate?: Record<string, unknown> }>;
+      steps: Array<{
+        stepType?: string;
+        emailTemplate?: Record<string, unknown>;
+        expectedTurnaroundDays?: number;
+        followUpEveryDays?: number;
+      }>;
     }>;
     const emailStep = defs.flatMap((t) => t.steps).find((s) => s.stepType === "draft_email");
     expect(emailStep?.emailTemplate?.to).toEqual([{ source: "literal", address: OPTUM }]);
     expect(emailStep?.emailTemplate?.cc).toEqual([{ source: "token", token: "provider.email" }]);
+    // The cadence versions with the step (subject/body already ride emailTemplate).
+    expect(emailStep?.expectedTurnaroundDays).toBe(45);
+    expect(emailStep?.followUpEveryDays).toBe(14);
   });
 
   test("Case Wizard: renders resolved To/CC, threads them into the Gmail hand-off, and shows the unresolved gap", async ({
