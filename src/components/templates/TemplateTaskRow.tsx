@@ -640,8 +640,11 @@ function StepCadenceFields({
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label className="text-xs">Expected turnaround (days)</Label>
+          <Label htmlFor={`step-${step.id}-turnaround`} className="text-xs">
+            Expected turnaround (days)
+          </Label>
           <Input
+            id={`step-${step.id}-turnaround`}
             type="number"
             min={1}
             value={step.expectedTurnaroundDays ?? ""}
@@ -650,8 +653,11 @@ function StepCadenceFields({
           />
         </div>
         <div>
-          <Label className="text-xs">Follow up every (days)</Label>
+          <Label htmlFor={`step-${step.id}-follow-up`} className="text-xs">
+            Follow up every (days)
+          </Label>
           <Input
+            id={`step-${step.id}-follow-up`}
             type="number"
             min={1}
             value={step.followUpEveryDays ?? ""}

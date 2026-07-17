@@ -544,3 +544,109 @@ test("TS-49: exclusions persist with reasons across delta runs and restore by vo
     new Set(["case_generation_exclusions", "audit_log"]),
   );
 });
+
+// E4.2 SOP resolution hardening — fallback-resolving rows are labeled on the
+// PREVIEW surface itself and a persistent, non-dismissable warning precedes
+// confirm. Fallback generation stays allowed (no new hard block per [r4]).
+const sopTemplateRow = (over: Record<string, unknown>) => ({
+  id: "tpl-x",
+  org_id: ORG_SHELBY,
+  payer_id: null,
+  state: null,
+  group_id: null,
+  specialty: null,
+  name: "Template",
+  archived: false,
+  current_version: 1,
+  required_profile_attributes: [],
+  task_definitions: [
+    {
+      title: "Submit enrollment",
+      dueOffsetDays: 0,
+      steps: [{ label: "Portal form", stepType: "online_form", dataFields: [] }],
+    },
+  ],
+  created_at: "2026-07-12T00:00:00Z",
+  updated_at: "2026-07-12T00:00:00Z",
+  ...over,
+});
+
+test("fallback-resolving rows are visibly labeled and a persistent warning precedes confirm — generation stays allowed (E4.2)", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  // BCBS-NC has an org SOP (organization tier); BCBS-KS resolves only the
+  // generic fallback (global + payerless) — the SAME deterministic
+  // pickTemplate tier every creation surface uses.
+  fixtures.sop_templates = [
+    sopTemplateRow({
+      id: "tpl-org-bcbsnc",
+      payer_id: "pay-bcbsnc",
+      state: "NC",
+      name: "BCBS-NC enrollment SOP",
+    }),
+    sopTemplateRow({ id: "tpl-fallback", org_id: null, name: "Generic credentialing checklist" }),
+  ];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/generation");
+  await expect(
+    page.getByText("7 combinations: 6 proposed · 1 already exists · 0 excluded", { exact: false }),
+  ).toBeVisible({ timeout: 30000 });
+
+  // Only the two BCBS-KS rows (no payer-specific SOP) carry the fallback badge;
+  // the org-SOP-covered BCBS-NC rows do not.
+  const dataRows = page.locator("table tbody tr");
+  const omarKsRow = dataRows.filter({ hasText: "Omar Sallis" }).filter({ hasText: "KS" });
+  const tessaKsRow = dataRows.filter({ hasText: "Tessa Nguyen" }).filter({ hasText: "KS" });
+  await expect(omarKsRow.getByText("Generic fallback SOP")).toBeVisible();
+  await expect(tessaKsRow.getByText("Generic fallback SOP")).toBeVisible();
+  const noelRow = dataRows.filter({ hasText: "Noel Baxter" });
+  await expect(noelRow.getByText("Generic fallback SOP")).toHaveCount(0);
+
+  // The pre-confirm warning is persistent and structural: role="alert", counts
+  // the fallback share of the release, and offers NO dismiss/ack control.
+  const warning = page.getByRole("alert").filter({ hasText: "generic" });
+  await expect(warning).toContainText("2 of the 6 cases");
+  await expect(warning).toContainText("will use the generic fallback SOP");
+  await expect(warning.getByRole("button")).toHaveCount(0);
+
+  // Fallback generation remains permitted — confirm is enabled, not blocked.
+  await expect(page.getByRole("button", { name: "Confirm & create 6 cases" })).toBeEnabled();
+
+  // Still a pure preview: labeling + warning wrote nothing.
+  expect(writes).toHaveLength(0);
+});
+
+// Zero/error state: an empty roster derives ZERO candidates — the surface says
+// so honestly with the recovery path (wizard), never a blank table or a crash.
+test("empty roster: the generation surface renders its guidance empty state and writes nothing", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.providers = [];
+  fixtures.provider_group_assignments = [];
+  fixtures.provider_facility_assignments = [];
+  fixtures.state_licenses = [];
+  fixtures.credential_cases = [];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_SHELBY);
+
+  await page.goto("/generation");
+  await expect(page.getByRole("heading", { name: "Generate applications" })).toBeVisible({
+    timeout: 30000,
+  });
+
+  await expect(page.getByText("No combinations to propose yet")).toBeVisible({ timeout: 30000 });
+  await expect(
+    page.getByText("Attach payers and assign providers to facilities in the onboarding wizard", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  expect(writes).toHaveLength(0);
+});

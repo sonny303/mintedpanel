@@ -564,3 +564,60 @@ test("F1.0.4: sidebar shows the approved white mark and conformed rail text alph
   await inactiveNav.focus();
   await expect(inactiveNav).toHaveCSS("outline-color", "rgba(255, 255, 255, 0.35)");
 });
+
+// Zero/error state (E1.0 TE-4): a failed section read renders an inline
+// RETRIABLE error — never "Not started", never a guessed chip — and no next
+// action is computed from unknown state. Retry refetches and recovers in place.
+test("a failed section read shows a retriable error, never 'Not started'; Retry recovers the derived state", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures({
+    party_role_assignments: contactAssignments(ORG_LONE_STAR, "tree-hill"),
+    facilities: [facilityRow(ORG_LONE_STAR, "fac-1", "Lone Star Central Clinic")],
+  });
+  const inner = makeHandler(fixtures);
+  let failFacilities = true;
+  await context.route(/\/(rest|auth)\/v1\//, async (route) => {
+    const url = new URL(route.request().url());
+    const table = url.pathname.split("/rest/v1/")[1] ?? "";
+    if (failFacilities && table === "facilities" && route.request().method() === "GET") {
+      return route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "temporary backend failure" }),
+      });
+    }
+    return inner(route);
+  });
+  await seedAuth(context, ORG_LONE_STAR);
+
+  await page.goto("/onboarding/wizard");
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({ timeout: 30000 });
+
+  // The failed section states the problem and offers Retry inline. Progress is
+  // UNKNOWN — the card must not claim "Not started" (the org HAS a facility).
+  const facilitiesCard = sectionCard(page, "wizard-facilities");
+  await expect(facilitiesCard.getByText("We couldn't load this section")).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(facilitiesCard.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(facilitiesCard.getByText("Not started")).toHaveCount(0);
+
+  // Healthy sections are unaffected; no "Next:" action is computed while a
+  // required read is unresolved (TE-4 — never derived from unknown state).
+  await expect(sectionCard(page, "wizard-org-details")).toContainText("Complete");
+  await expect(sectionCard(page, "wizard-provider-group")).toContainText("Not started");
+  await expect(page.getByRole("button", { name: /^Next:/ })).toHaveCount(0);
+
+  // Direct recovery: the backend heals, Retry refetches, and the DERIVED state
+  // lands (the seeded facility flips the chip to Complete — no reload needed).
+  failFacilities = false;
+  await facilitiesCard.getByRole("button", { name: "Retry" }).click();
+  await expect(facilitiesCard.getByText("Lone Star Central Clinic")).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(facilitiesCard).toContainText("Complete");
+  await expect(facilitiesCard.getByText("We couldn't load this section")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Next: Provider Group" })).toBeVisible();
+});
