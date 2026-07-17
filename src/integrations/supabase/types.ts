@@ -2443,6 +2443,111 @@ export type Database = {
           },
         ];
       };
+      provider_ssn_intake_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          org_id: string;
+          provider_id: string;
+          recipient_email: string;
+          state: string;
+          token_hash: string;
+          used_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          org_id: string;
+          provider_id: string;
+          recipient_email: string;
+          state?: string;
+          token_hash: string;
+          used_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          org_id?: string;
+          provider_id?: string;
+          recipient_email?: string;
+          state?: string;
+          token_hash?: string;
+          used_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_ssn_intake_links_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_ssn_intake_links_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_ssn_vault: {
+        Row: {
+          algo: string;
+          created_at: string;
+          created_by: string | null;
+          key_version: number;
+          org_id: string;
+          provider_id: string;
+          ssn_ciphertext: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          algo?: string;
+          created_at?: string;
+          created_by?: string | null;
+          key_version?: number;
+          org_id: string;
+          provider_id: string;
+          ssn_ciphertext: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          algo?: string;
+          created_at?: string;
+          created_by?: string | null;
+          key_version?: number;
+          org_id?: string;
+          provider_id?: string;
+          ssn_ciphertext?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_ssn_vault_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_ssn_vault_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: true;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       providers: {
         Row: {
           additional_certifications: Json | null;

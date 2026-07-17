@@ -19,6 +19,9 @@ const loadExtensionRoutes = () => import("./extensionRoutes");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
+// `/api/providers/:id/ssn-release?caseId=` — E4.4 fill-only SSN release. Must be
+// matched before the generic :id route.
+const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
@@ -84,7 +87,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
   }
 
   const profileMatch = pathname.match(PROVIDER_PROFILE_ROUTE);
-  const providersMatch = profileMatch ? null : pathname.match(PROVIDERS_ROUTE);
+  const ssnReleaseMatch = pathname.match(SSN_RELEASE_ROUTE);
+  const providersMatch = profileMatch || ssnReleaseMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
@@ -95,6 +99,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   if (
     !profileMatch &&
+    !ssnReleaseMatch &&
     !providersMatch &&
     !isFieldMaps &&
     !isFillEvents &&
@@ -149,6 +154,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleProviderProfile(profileMatch[1], url, ctx);
+    }
+    if (ssnReleaseMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleSsnRelease(ssnReleaseMatch[1], url, ctx);
     }
     if (isFieldMaps) {
       if (method !== "GET") return fail(405, "Method not allowed");

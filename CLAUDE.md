@@ -1421,6 +1421,61 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   view-prefs, next-best-action, and `?q=` handlers. E2E for TS-100–103 is
   Session 2 (extension mock harness).
 
+- **E4.4 — Sensitive Identifiers Vault: Zero-Trust Full SSN.** The FIRST place
+  the system holds a decryptable secret. TWO additive migrations (repo file
+  ONLY — **hosted apply is an OPERATOR task**, deliberately not applied by the
+  build session since it carries a decrypt secret + needs the master-key GUC):
+  `20260717120000_ssn_vault.sql` + `20260717120100_ssn_intake_links.sql`.
+  **PM security decisions (2026-07-14, do not re-open):** server-only vault
+  (option 1); Option A key management (in-DB pgcrypto, key from a server GUC);
+  `store_ssn` ingress = specialist+admin; reveal admin-only. **Vault (TE-1/TE-2,
+  `provider_ssn_vault`):** `ssn_ciphertext bytea` + `algo`/`key_version`
+  (Option-B-ready), one row per provider; RLS on, `REVOKE ALL` from
+  anon+authenticated, **NO client SELECT grant and NO service_role table grant**
+  — the only access is the SECURITY DEFINER RPCs. Private `_ssn_vault_key`
+  (reads `current_setting('app.settings.ssn_vault_key')`, fails closed) /
+  `_ssn_encrypt` / `_ssn_decrypt` (`extensions.pgp_sym_*`) / `_ssn_digits`
+  (9-digit normalize, never echoes the value) / `_ssn_vault_upsert` (the shared
+  encrypt-and-set-`ssn_last4` write). **RPCs (TE-3/TE-4):** `store_ssn` (authed
+  writer, mask + audit), `reveal_ssn` (admin + non-empty justification; decrypt
+  once + immutable `READ` audit carrying who/when/provider/justification in
+  `after`), `release_ssn_for_fill(provider, org, case)` (**service_role EXECUTE
+  only** — the /api fill path; re-checks the active-fill context then decrypts;
+  the /api handler writes the `READ` audit with the JWT actor since the
+  service-role RPC has no `auth.uid()`), plus the intake trio. **`ssn_last4`
+  stays the ONLY value any ordinary read/list/export/API returns; mask
+  `***--1234`** (`src/lib/ssnMask.ts` `maskSsn`/`formatFullSsn`, +test) applied
+  at the two render sites (provider IdentityCard, ProviderForm review). **App
+  layer:** `src/services/ssnVault.ts` (browser: `storeSsn`/`revealSsn`/
+  `getSsnIntakeLink`/`issueSsnIntakeLink`; anon: `validateSsnIntakeToken`/
+  `submitSsnIntake`) + server-only `src/services/ssnRelease.ts` (the two-wall
+  fill release, mirrors `caseContext.ts`) → `src/hooks/useSsnVault.ts` (reveal is
+  a MUTATION so plaintext never enters the cache). **UI
+  (`src/components/providers/`):** `SsnVaultField` on the provider Identity card
+  (mask + role-gated menu: admin Reveal, writer Store/Send-link) composing
+  `SsnRevealDialog` (justification + auto-rehide ~20s, value in local state only)
+  / `SsnStoreDialog` (F4.4.4 internal modal, encrypt-on-save) /
+  `SsnIntakeLinkDialog` (issue + copy-able link). **Ingress link (TE-4,
+  E0.5 pattern):** `provider_ssn_intake_links` (hashed token, single active per
+  provider, 72h, state machine, E0.8-throttled anon RPCs, uniform invalid
+  responses) → public **`/ssn-intake/$token`** route (chromeless via `__root`
+  `isSsnIntakeRoute`; write-only — never echoes the SSN). **Fill-only /api
+  endpoint (F4.4.2):** `GET /api/providers/:id/ssn-release?caseId=` in
+  `extensionRoutes.ts` (writer-only, caseId required, no-store, one `READ`
+  audit) — wired in `api.ts` (matched before the generic `:id`); the extension
+  consumes it later (no extension-repo change this session). **Gate:** new
+  `ssnrelease` leak mode + assertion 16 (cross-org release → 404, safe on prod
+  because the case-ownership miss short-circuits before any decrypt);
+  mock-api-server + verify-isolation-local updated. Types hand-added to
+  `types.ts` (regen unavailable — hosted migration not applied) + domain types
+  in `types/index.ts`. Tests: `ssnMask.test.ts`, `ssnRelease.di.test.ts`,
+  `extensionRoutes.test.ts` (release handler), e2e `e2e/ssn-vault.spec.ts`
+  (TS-84 masking + no ordinary decrypt + direct-read-returns-nothing; TS-86
+  admin-vs-non-admin reveal; TS-87 both ingress paths + lockdowns; a FAKE
+  `900-55-6789` test value — never a real SSN). Out of scope: vaulting any other
+  identifier, SSN in CSV/exports/reports (the E3.0 reject-never-truncate rule
+  stands), any provider self-service beyond the intake link.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

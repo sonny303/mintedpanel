@@ -106,6 +106,14 @@ Demographic/attestation/license fields (all nullable per the live schema): `midd
 
 `id, org_id, provider_id, state, license_number, license_type, issue_date, expiration_date, status, created_at`. **E1.3 PSV trail (`20260712120100`):** `verified_status` (unverified|verified|failed CHECK), `verified_at`, `verified_by`, `verification_source_url`.
 
+### provider_ssn_vault (E4.4, 2026-07-17)
+
+`provider_id (PK, FK providers), org_id, ssn_ciphertext bytea, algo, key_version, created_by, created_at, updated_by, updated_at` (migration `20260717120000`). The server-only Sensitive Identifiers Vault holding the encrypted full SSN — one row per provider. **Zero-trust:** RLS enabled, `REVOKE ALL` from anon+authenticated, **no client SELECT grant and no service_role grant** — a direct PostgREST read returns nothing and could not decrypt anyway. The only access paths are the SECURITY DEFINER RPCs: `store_ssn(provider, ssn)` (authenticated writer, encrypt-on-save, mask + audit), `reveal_ssn(provider, justification)` (admin-only, decrypt once + immutable audit READ with the justification), `release_ssn_for_fill(provider, org, case)` (service_role only, the /api fill path, active-fill-context re-check + decrypt; the /api handler writes the audit READ with the real actor), and `submit_ssn_intake(token, ssn)` (anon, via the intake link). Encryption is in-DB pgcrypto (`pgp_sym_encrypt/decrypt` via the private `_ssn_*` helpers) with the master key from the server GUC `app.settings.ssn_vault_key` (operator-provisioned, never stored beside the ciphertext); `algo`/`key_version` keep the schema Option-B-ready. `providers.ssn_last4` stays the ONLY value ordinary reads return (mask `***--1234`).
+
+### provider_ssn_intake_links (E4.4, 2026-07-17)
+
+`id, org_id, provider_id, recipient_email, token_hash, state, expires_at, used_at, created_by, created_at` (migration `20260717120100`, E0.5 capture-link pattern). Secure, single-use, provider-bound intake links: only the token HASH is stored, one active link per provider (partial unique `WHERE state='active'`), 72h expiry, `state active|used|expired|revoked`. Member SELECT RLS; all writes via RPC — `create_ssn_intake_link` (authenticated writer, revoke-then-issue), `validate_ssn_intake_token`/`submit_ssn_intake` (anon SECURITY DEFINER, E0.8-throttled, uniform invalid responses). Carries NO SSN; `submit_ssn_intake` encrypts the value straight into `provider_ssn_vault` and echoes only the mask.
+
 ### provider_group_assignments (E1.3, 2026-07-12)
 
 `id, org_id, provider_id, group_id, is_primary, created_at`. The M:N provider↔group join (migration `20260712120000`, mirrors the `provider_facility_assignments` template): org-scoped RLS, `UNIQUE (provider_id, group_id)`, partial unique ONE `is_primary` per provider. `providers.group_id` is a FROZEN legacy mirror of the primary assignment — no new readers.
