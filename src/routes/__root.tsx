@@ -158,13 +158,16 @@ function RootComponent() {
   const isCaptureRoute = pathname.startsWith("/capture/");
   const isContactRoute = pathname === "/contact";
   const isShareRoute = pathname.startsWith("/share/");
+  // E4.4 public secure SSN intake link — write-only ingress, no session.
+  const isSsnIntakeRoute = pathname.startsWith("/ssn-intake/");
   const isChromelessRoute =
     isAuthRoute ||
     isRootRoute ||
     isPrivacyRoute ||
     isCaptureRoute ||
     isContactRoute ||
-    isShareRoute;
+    isShareRoute ||
+    isSsnIntakeRoute;
   const isPublicRoute = isChromelessRoute || isDevRoute;
   const router = useRouter();
   const init = useAuthStore((s) => s.init);

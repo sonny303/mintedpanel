@@ -6,6 +6,7 @@ import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
+import { maskSsn } from "@/lib/ssnMask";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   CredentialsSection,
@@ -240,7 +241,7 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <Row label="Name" value={`${form.firstName} ${form.lastName}`.trim()} />
         <Row label="Credentials" value={form.credentials} />
         <Row label="Date of birth" value={form.dateOfBirth} />
-        <Row label="SSN" value={form.ssnLast4 ? `xxx-xx-${form.ssnLast4}` : null} />
+        <Row label="SSN" value={form.ssnLast4 ? maskSsn(form.ssnLast4) : null} />
         <Row label="Email" value={form.email} />
         <Row label="Phone" value={form.phone} />
         <Row

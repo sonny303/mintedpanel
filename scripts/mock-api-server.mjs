@@ -26,6 +26,7 @@
 //   casecontext cross-org case context served instead of 404         (14b)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
+//   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -61,6 +62,7 @@ export const LEAK_MODES = [
   "casecontext",
   "meorgs",
   "facility",
+  "ssnrelease",
 ];
 
 const USERS = {
@@ -413,6 +415,30 @@ export async function createMockApiServer(options = {}) {
         null,
         needsFacility ? { needs_facility: true } : null,
       );
+    }
+
+    // --- /api/providers/:id/ssn-release?caseId= (E4.4 fill-only SSN release) ---
+    // Matched before the generic providers route. Writer-only; caseId required;
+    // the case must be this org's AND this provider's (an active fill context) or
+    // it's a 404 — cross-org indistinguishable from missing. Leak "ssnrelease":
+    // the org check is skipped and a cross-org SSN is released. The value is a
+    // FAKE fixture (never a real vault/decrypt) — the gate checks isolation only.
+    const ssnReleaseMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/ssn-release\/?$/);
+    if (ssnReleaseMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot release an SSN for fill");
+      }
+      const providerId = ssnReleaseMatch[1];
+      const caseId = url.searchParams.get("caseId");
+      if (!caseId) {
+        return envelope(res, 422, null, "caseId is required to release an SSN for fill");
+      }
+      const c = CASES.find((row) => row.id === caseId && row.providerId === providerId);
+      const visible = c && (c.orgId === orgId || leak === "ssnrelease");
+      if (!visible) return envelope(res, 404, null, "Case not found for this provider");
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, { ssn: "900000000", ssnLast4: "0000" });
     }
 
     // --- /api/providers and /api/providers/:id (GET list/by-id, POST create,

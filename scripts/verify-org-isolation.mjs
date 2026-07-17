@@ -596,6 +596,25 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 16. Fill-only SSN release (E4.4 F4.4.2): a Kansas writer requesting the
+  //     full SSN for a South Park provider — even naming a South Park caseId —
+  //     must 404 with no data. The value is the system's most sensitive PHI;
+  //     the release must never cross the org boundary. Safe against production:
+  //     the case-ownership check (org_id = the caller's Kansas org) misses BEFORE
+  //     the decrypt RPC is ever called, so nothing is decrypted and no vaulted
+  //     value is required for this assertion to hold. The leak mode makes it red.
+  const xSsn = await apiGet(
+    `/api/providers/${env.SOUTHPARK_PROVIDER_ID}/ssn-release?caseId=${env.SOUTHPARK_CASE_ID}`,
+    { token: kansasTok },
+  );
+  const ssnLeaked = xSsn.status < 400 || xSsn.body?.data != null;
+  check(
+    "16. Kansas GET SSN release for a South Park provider -> 404, no data",
+    xSsn.status === 404 && !ssnLeaked,
+    `status=${xSsn.status} (expect 404) dataPresent=${xSsn.body?.data != null}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";
