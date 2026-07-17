@@ -9,12 +9,18 @@
 // stays reserved and the flat /providers route stays direct-URL-only (F0.9.6).
 //
 // IA top-to-bottom: Workspace (Home, My Cases — the E2.3 queue, its one
-// authorized shell edit —, Cases + open-case CountBadge) · Payers
-// (Payer Management) · Reporting Center (standalone — section labels only
-// over 2+ item groups) · generous break + divider · org zone (the switcher IS
-// the header: a contained tile with an ORGANIZATION eyebrow; children Account
-// Detail / Facilities (reserved) / Providers setup; dashed prompt tile when no org) · user
-// footer (menu opens upward: identity, Settings, Sign out).
+// authorized shell edit —, Cases + open-case CountBadge) · Payer Setup
+// (ADMIN-ONLY, standalone — E4.2 TE-18: the single consolidated Payers
+// destination at /admin/payer-admin, replacing the former two-item Payers
+// section "Payer Management" → /admin/payers + "Payer & SOP Setup"; with one
+// destination, F0.9.3's "section labels only over 2+ item groups" rule makes
+// it render standalone like Reporting Center; non-admins get NO Payers entry
+// per the TS-76 pin, while /admin/payers and /payer-directory stay
+// URL-reachable) · Reporting Center (standalone) · generous break + divider ·
+// org zone (the switcher IS the header: a contained tile with an ORGANIZATION
+// eyebrow; children Account Detail / Facilities (reserved) / Providers setup;
+// dashed prompt tile when no org) · user footer (menu opens upward: identity,
+// Settings, Sign out).
 //
 // Switcher menu groups orgs by lifecycle (Active / Prospects / Inactive —
 // group headings ONLY, never a per-org status label, E0.0 locked decision);
@@ -58,7 +64,6 @@ import {
   ArrowRight,
   Search,
   Settings,
-  SlidersHorizontal,
   LogOut,
 } from "lucide-react";
 
@@ -153,8 +158,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
   const openCases = useOpenCaseCount();
-  // E4.2 TE-1 — the admin-only Payer & SOP Setup module link (the one
-  // authorized shell edit for this epic; non-admins never see it).
+  // E4.2 TE-18 — the admin-only "Payer Setup" entry (the consolidation's one
+  // authorized shell edit, superseding TE-1's added link; non-admins never
+  // see a Payers entry).
   const isAdmin = useIsAdmin();
   const [orgQuery, setOrgQuery] = useState("");
 
@@ -243,20 +249,13 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         </nav>
       </div>
 
-      {/* Payers */}
-      <div className="px-3 pt-3.5">
-        <div className={sectionLabelClass}>Payers</div>
-        <nav className="space-y-0.5" aria-label="Payers">
-          {renderNavItem({ to: "/admin/payers", label: "Payer Management", icon: CreditCard })}
-          {isAdmin
-            ? renderNavItem({
-                to: "/admin/payer-admin",
-                label: "Payer & SOP Setup",
-                icon: SlidersHorizontal,
-              })
-            : null}
+      {/* Payer Setup — the ONE Payers destination (E4.2 TE-18), admin-only.
+          Standalone per F0.9.3 (section labels only over 2+ item groups). */}
+      {isAdmin ? (
+        <nav className="px-3 pt-3.5 space-y-0.5" aria-label="Payers">
+          {renderNavItem({ to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard })}
         </nav>
-      </div>
+      ) : null}
 
       {/* Reporting Center — standalone (labels only over 2+ item groups) */}
       <nav className="px-3 pt-3.5 space-y-0.5" aria-label="Reporting">

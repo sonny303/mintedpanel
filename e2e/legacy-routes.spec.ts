@@ -98,7 +98,6 @@ function seedAuth(context: {
 // the rest are the enumerated legacy set that stays URL-reachable on purpose.
 const RENDERING_ROUTES = [
   "/cases",
-  "/admin/payers",
   "/admin/settings",
   "/home",
   "/providers",
@@ -121,6 +120,9 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
   { from: "/progress", to: /\/client-progress\/?$/ },
   { from: "/admin/sops", to: /\/admin\/templates\/?$/ },
+  // E4.2 TE-18/TE-19 — Admin → Payers consolidated into the Payer Setup
+  // workspace (the /admin/sops redirect-shell precedent).
+  { from: "/admin/payers", to: /\/admin\/payer-admin\/?$/ },
 ];
 
 // Reserved destinations render the shared not-yet-available state.

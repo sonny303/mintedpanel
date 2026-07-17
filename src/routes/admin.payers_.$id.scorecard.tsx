@@ -172,10 +172,12 @@ function PayerScorecardPage() {
     [scorecard],
   );
 
+  // E4.2 TE-19 — /admin/payers is a redirect shell now; link the workspace
+  // the scorecard is reached from instead.
   const backButton = (
     <Button variant="outline" size="sm" asChild>
-      <Link to="/admin/payers">
-        <ArrowLeft className="w-4 h-4 mr-1" /> Payers
+      <Link to="/admin/payer-admin">
+        <ArrowLeft className="w-4 h-4 mr-1" /> Payer Setup
       </Link>
     </Button>
   );

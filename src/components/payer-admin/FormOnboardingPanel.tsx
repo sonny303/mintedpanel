@@ -159,13 +159,31 @@ export function FormOnboardingPanel({ payerId }: { payerId: string }) {
 
   if (!testProviderRow) {
     return (
-      <EmptyState message="Designate a test provider first (an ordinary provider marked as the test provider) to run dry fills." />
+      <EmptyState
+        message="Designate a test provider first."
+        description="Dry runs fill against an ordinary provider row marked as the test provider — it is excluded from queues, generation, and every metric."
+        action={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/onboarding/wizard" search={{ section: "providers" }}>
+              Open the provider roster
+            </Link>
+          </Button>
+        }
+      />
     );
   }
   if (portals.length === 0) {
     return (
       <EmptyState
-        message={`No portals registered for ${payer?.name ?? "this payer"}. Register the payer's portal in Admin > Portals to onboard its form.`}
+        message={`No portals registered for ${payer?.name ?? "this payer"} yet.`}
+        description="Register the payer's portal to capture its form fields and onboard the form."
+        action={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/admin/portals" search={{ payerId }}>
+              Register portal
+            </Link>
+          </Button>
+        }
       />
     );
   }

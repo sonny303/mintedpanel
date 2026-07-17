@@ -1,15 +1,20 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 payer governance — Admin → Payers is a read-only governance surface:
-//   - an org ADMIN sees no free-text "Add payer" and no per-row Edit control;
-//     the canonical path ("Browse payer catalog" → /payer-directory) is offered
-//     instead;
+// E4.2 payer governance + the unified-payer-setup consolidation (TE-18/TE-19):
+// /admin/payers is a REDIRECT SHELL into the Payer Setup workspace, and the
+// governance affordances the old route carried live on the workspace's Setup
+// tab —
+//   - a legacy deep link lands safely in Payer Setup (funnel step 12);
+//   - no free-text "Add payer" and no per-row Edit control anywhere; the
+//     canonical path is the workspace's Catalog tab;
 //   - an assigned global row is visibly Minted-managed ("Minted catalog");
 //   - a legacy org-scoped row shows the read-only "Legacy — catalog migration
-//     required" state;
+//     required" state and its next action points at the catalog;
 //   - the starter toggle (org-owned org_payer_assignments fact) renders only
 //     where an assignment row exists, and only for admins — a control never
-//     renders unless the caller can complete the action.
+//     renders unless the caller can complete the action;
+//   - a specialist following the old URL gets the module's explicit denial
+//     with a read-only catalog pointer (TE-20b — no dead end).
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -111,6 +116,7 @@ async function fulfillSupabase(route: Route) {
 
   if (url.pathname.includes("/auth/v1/")) return json(SESSION);
   if (url.pathname.endsWith("/rpc/claim_invites")) return json(0);
+  if (url.pathname.endsWith("/rpc/list_global_payers")) return json([]);
   if (url.pathname.includes("/rest/v1/rpc/")) return json(null);
 
   const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
@@ -143,49 +149,49 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("admin sees no free-text creation and no edit controls; catalog is the path", async ({
+test("legacy /admin/payers deep link redirects into Payer Setup with the governance affordances intact", async ({
   page,
 }) => {
   currentRole = "admin";
   await page.goto("/admin/payers");
-  await expect(page.getByRole("heading", { name: "Payers" })).toBeVisible({ timeout: 30000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
-  // No free-text payer creation, anywhere on the page.
+  // No free-text payer creation and no per-row Edit control, anywhere.
   await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
-  // No per-row Edit control (identity + Minted-curated facts are read-only).
-  await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
-  // The canonical path is offered instead.
-  await expect(page.getByRole("link", { name: "Browse payer catalog" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 
-  // The assigned global row is visibly Minted-managed…
-  const globalRow = page.locator("tr", { hasText: "Aetna (CVS Health)" });
+  // The assigned global row is visibly Minted-managed; the legacy org row
+  // carries the read-only migration-required state and its action points at
+  // the catalog (a legacy payer can't take the configure-scope path).
+  const globalRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
   await expect(globalRow.getByText("Minted catalog")).toBeVisible();
-  // …with its Minted-curated avg decision days displayed read-only.
-  await expect(globalRow).toContainText("45 d");
-
-  // The legacy org row carries the read-only migration-required state.
-  const legacyRow = page.locator("tr", { hasText: "BCBS of Kansas" });
+  const legacyRow = page.locator("tr", { hasText: "BCBS of Kansas" }).first();
   await expect(legacyRow.getByText("Legacy — catalog migration required")).toBeVisible();
+  await expect(legacyRow.getByRole("link", { name: "Find canonical payer" })).toBeVisible();
 
-  // Starter toggle: only the assigned global payer has one; the legacy row
-  // (no assignment) renders none.
+  // Starter toggle: only the assigned global payer has one (in its expanded
+  // setup detail); the legacy row (no assignment) renders none.
+  await globalRow.getByRole("button", { name: "Show setup detail for Aetna (CVS Health)" }).click();
   await expect(
-    globalRow.getByRole("switch", { name: "Toggle starter pack for Aetna (CVS Health)" }),
+    page.getByRole("switch", { name: "Toggle starter pack for Aetna (CVS Health)" }),
   ).toBeVisible();
-  await expect(legacyRow.getByRole("switch")).toHaveCount(0);
+  await legacyRow.getByRole("button", { name: "Show setup detail for BCBS of Kansas" }).click();
+  await expect(page.getByRole("switch")).toHaveCount(1); // still just Aetna's
 
   // Nothing on this page wrote anywhere.
   expect(writes).toEqual([]);
 });
 
-test("non-admin sees no mutation controls at all", async ({ page }) => {
+test("specialist following the old URL lands on the explicit denial with a catalog pointer", async ({
+  page,
+}) => {
   currentRole = "specialist";
   await page.goto("/admin/payers");
-  await expect(page.getByRole("heading", { name: "Payers" })).toBeVisible({ timeout: 30000 });
-
-  await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
-  // The starter toggle never renders for a role that couldn't complete it.
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
+  await expect(page.getByText("available to administrators only")).toBeVisible({ timeout: 30000 });
+  const catalogLink = page.getByRole("link", { name: "Browse payer catalog" });
+  await expect(catalogLink).toBeVisible();
+  await expect(catalogLink).toHaveAttribute("href", "/payer-directory");
   await expect(page.getByRole("switch")).toHaveCount(0);
-  await expect(page.locator("tr", { hasText: "BCBS of Kansas" })).toBeVisible();
 });

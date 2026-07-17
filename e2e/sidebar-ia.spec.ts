@@ -1,11 +1,13 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E0.9 F0.9.3 / TS-22 (Providers destination amended by E1.3 TE-11) — Sidebar
-// IA v2 + lifecycle-grouped org switcher over the mock harness, using the
-// 11-org seed universe (seed-universe.md). Covers:
+// E0.9 F0.9.3 / TS-22 (Providers destination amended by E1.3 TE-11; Payers
+// zone consolidated by E4.2 TE-18) — Sidebar IA v2 + lifecycle-grouped org
+// switcher over the mock harness, using the 11-org seed universe
+// (seed-universe.md). Covers:
 //   - nav shows exactly Workspace (Home, My Cases — the E2.3 queue —, Cases +
-//     count) / Payers (Payer Management) / Reporting Center; no Tasks, SOP,
-//     Setup/Config, or "Org space" label
+//     count) / Payer Setup (the ONE admin-only Payers destination, E4.2
+//     TE-18 — the "Payer Management" + "Payer & SOP Setup" pair is gone) /
+//     Reporting Center; no Tasks, SOP, Setup/Config, or "Org space" label
 //   - the org switcher tile (ORGANIZATION eyebrow) opens a lifecycle-grouped
 //     menu (Active / Prospects / Inactive) with a check on the active org and
 //     NO per-org lifecycle status label (E0.0 locked decision)
@@ -154,8 +156,15 @@ test("IA v2 nav shows exactly the approved destinations", async ({ page }) => {
   // alongside the existing Cases work view.
   await expect(rail.getByRole("link", { name: "My Cases" })).toBeVisible();
   await expect(rail.getByRole("link", { name: /^Cases/ })).toBeVisible();
-  await expect(rail.getByText("Payers", { exact: true })).toBeVisible();
-  await expect(rail.getByRole("link", { name: "Payer Management" })).toBeVisible();
+  // E4.2 TE-18 — ONE consolidated, admin-only "Payer Setup" destination
+  // (standalone per F0.9.3's 2+-item section-label rule; this fixture user is
+  // an admin). The superseded two-item Payers section never renders.
+  const payerSetup = rail.getByRole("link", { name: "Payer Setup" });
+  await expect(payerSetup).toBeVisible();
+  await expect(payerSetup).toHaveAttribute("href", "/admin/payer-admin");
+  await expect(rail.getByRole("link", { name: "Payer Management" })).toHaveCount(0);
+  await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
+  await expect(rail.getByText("Payers", { exact: true })).toHaveCount(0);
   await expect(rail.getByRole("link", { name: "Reporting Center" })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Account Detail" })).toBeVisible();
   await expect(rail.getByRole("link", { name: "Facilities" })).toBeVisible();
