@@ -103,6 +103,9 @@ export const queryKeys = {
   // Secure data capture link (redesign E0.5): the active org's current link
   // state. Inbound leads are CROSS-org (no org until converted) — not scoped.
   captureLink: (orgId: string) => ["capture-link", orgId] as const,
+  // E4.4 SSN intake link state, per provider (operator status surface).
+  ssnIntakeLink: (orgId: string, providerId: string) =>
+    ["ssn-intake-link", orgId, providerId] as const,
   inboundLeads: () => ["inbound-leads"] as const,
   // Reporting Center (redesign E0.6). CROSS-org (renders without an active org):
   // per-org geography for the state breakdown, and the caller's shares per report.

@@ -86,6 +86,8 @@ const EXPECTED_FAILS = {
   // (10) and the no-South-Park leak check (10b).
   meorgs: ["10", "10b"],
   facility: ["11"],
+  // The SSN-release leak serves a cross-org provider's full SSN (assertion 16).
+  ssnrelease: ["16"],
 };
 
 function failedAssertions(output) {

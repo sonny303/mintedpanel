@@ -11,6 +11,7 @@ vi.mock("@/services/providerCases", () => ({
   searchOrgCases: vi.fn(),
 }));
 vi.mock("@/services/caseContext", () => ({ getCaseContext: vi.fn() }));
+vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
 vi.mock("@/services/nextBestAction", () => ({ getNextBestAction: vi.fn() }));
@@ -24,6 +25,7 @@ import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
+import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { getNextBestAction } from "@/services/nextBestAction";
@@ -39,6 +41,7 @@ import {
   handleNextBestAction,
   handleGetViewPrefs,
   handlePutViewPrefs,
+  handleSsnRelease,
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
@@ -47,6 +50,7 @@ const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
 const searchCasesMock = vi.mocked(searchOrgCases);
 const getCaseContextMock = vi.mocked(getCaseContext);
+const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 const getNbaMock = vi.mocked(getNextBestAction);
@@ -594,6 +598,87 @@ describe("case context handler", () => {
     const res = await handleCaseContext(CASE_ID, c);
     expect(res.status).toBe(404);
     expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe("ssn release handler (E4.4 F4.4.2 fill-only)", () => {
+  const PROVIDER_ID = "11111111-2222-4333-8444-555566667777";
+  const CASE_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const releaseUrl = (id = PROVIDER_ID, caseId: string | null = CASE_ID) =>
+    new URL(
+      `http://x/api/providers/${id}/ssn-release${caseId === null ? "" : `?caseId=${caseId}`}`,
+    );
+
+  it("rejects billing (read-only) with 403 and never touches the service", async () => {
+    const c = ctx("billing");
+    const res = await handleSsnRelease(PROVIDER_ID, releaseUrl(), c);
+    expect(res.status).toBe(403);
+    expect(releaseSsnMock).not.toHaveBeenCalled();
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a non-UUID provider id without touching the service", async () => {
+    const c = ctx();
+    const res = await handleSsnRelease("not-a-uuid", releaseUrl("not-a-uuid"), c);
+    expect(res.status).toBe(404);
+    expect(releaseSsnMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 when caseId is missing (an active fill context is required)", async () => {
+    const c = ctx();
+    const res = await handleSsnRelease(PROVIDER_ID, releaseUrl(PROVIDER_ID, null), c);
+    expect(res.status).toBe(422);
+    expect(releaseSsnMock).not.toHaveBeenCalled();
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a non-UUID caseId without touching the service", async () => {
+    const c = ctx();
+    const res = await handleSsnRelease(PROVIDER_ID, releaseUrl(PROVIDER_ID, "nope"), c);
+    expect(res.status).toBe(404);
+    expect(releaseSsnMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the rejection status and writes NO audit row when the service rejects", async () => {
+    releaseSsnMock.mockResolvedValue({
+      kind: "rejected",
+      status: 404,
+      message: "Case not found for this provider",
+    });
+    const c = ctx();
+    const res = await handleSsnRelease(PROVIDER_ID, releaseUrl(), c);
+    expect(res.status).toBe(404);
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+
+  it("releases with 200 + no-store + one READ audit (actor/provider/case, never the value)", async () => {
+    releaseSsnMock.mockResolvedValue({
+      kind: "released",
+      ssn: "900000000",
+      ssnLast4: "0000",
+    });
+    const c = ctx("specialist");
+    const res = await handleSsnRelease(PROVIDER_ID, releaseUrl(), c);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const b = await body(res);
+    expect(b.data).toEqual({ ssn: "900000000", ssnLast4: "0000" });
+    expect(releaseSsnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      PROVIDER_ID,
+      CASE_ID,
+    );
+    expect(c.writeAudit).toHaveBeenCalledTimes(1);
+    const auditArg = vi.mocked(c.writeAudit).mock.calls[0][0];
+    expect(auditArg).toEqual(
+      expect.objectContaining({
+        actionType: "READ",
+        entityType: "provider_ssn_vault",
+        entityId: PROVIDER_ID,
+      }),
+    );
+    // The value is never carried in the audit payload.
+    expect(JSON.stringify(auditArg)).not.toContain("900000000");
   });
 });
 

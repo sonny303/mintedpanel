@@ -36,6 +36,7 @@ import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
+import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
@@ -204,6 +205,11 @@ const CasesIndexRoute = CasesIndexRouteImport.update({
 const TasksIdRoute = TasksIdRouteImport.update({
   id: '/tasks/$id',
   path: '/tasks/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SsnIntakeTokenRoute = SsnIntakeTokenRouteImport.update({
+  id: '/ssn-intake/$token',
+  path: '/ssn-intake/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareTokenRoute = ShareTokenRouteImport.update({
@@ -421,6 +427,7 @@ export interface FileRoutesByFullPath {
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
@@ -476,6 +483,7 @@ export interface FileRoutesByTo {
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
@@ -540,6 +548,7 @@ export interface FileRoutesById {
   '/providers/new': typeof ProvidersNewRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
@@ -605,6 +614,7 @@ export interface FileRouteTypes {
     | '/providers/new'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
@@ -660,6 +670,7 @@ export interface FileRouteTypes {
     | '/providers/new'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases'
     | '/launches'
@@ -723,6 +734,7 @@ export interface FileRouteTypes {
     | '/providers/new'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
@@ -783,6 +795,7 @@ export interface RootRouteChildren {
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
+  SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
   TasksIdRoute: typeof TasksIdRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
@@ -979,6 +992,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks/$id'
       fullPath: '/tasks/$id'
       preLoaderRoute: typeof TasksIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ssn-intake/$token': {
+      id: '/ssn-intake/$token'
+      path: '/ssn-intake/$token'
+      fullPath: '/ssn-intake/$token'
+      preLoaderRoute: typeof SsnIntakeTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share/$token': {
@@ -1375,6 +1395,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,
+  SsnIntakeTokenRoute: SsnIntakeTokenRoute,
   TasksIdRoute: TasksIdRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
