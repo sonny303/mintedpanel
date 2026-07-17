@@ -2073,7 +2073,13 @@ already hidden from billing. **Retired:** the old single-page editor at
 (param-preserving), mirroring the earlier `/admin/templates`→`/admin/sops`
 redirects which were flipped back. Reused: `TemplateTaskRow`,
 `DiscardConfirmDialog`, and the `useSops`/`useSop`/`useCreateSop`/`useUpdateSop`
-hooks (`useAdmin.ts`).
+hooks (`useAdmin.ts`). **Render contract (measured INP hotfix, 2026-07-17):**
+`TemplateTaskRow` is `React.memo` and every handler the wizard passes it is a
+`useCallback` — keep BOTH, or typing in any Step 3 field re-renders every task
+card again (measured 264–296ms p50 per keystroke on a 10-task template, prod
+build @ 4x CPU throttle; ~50ms with the bailout). Pinned by
+`TemplateTaskRow.test.ts` (memo) + `e2e/template-typing-latency.spec.ts`
+(latency budget + toast never blocks the primary action).
 
 ## SOP step ↔ portal linking (2026-07-08, no migration)
 
