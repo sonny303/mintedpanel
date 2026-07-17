@@ -1246,3 +1246,54 @@ export interface ImportRun {
   createdAt: string;
   updatedAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// E4.5 — Document storage (provider & group documents with expiration
+// tracking). One interface per provider_documents row: immutable version
+// metadata (TE-1) — a replacement INSERTS a new row; "current" is derived as
+// the family row with no successor, never stored.
+// ---------------------------------------------------------------------------
+
+/** The two canonical owner grains (D1). `case_id` may additionally record
+ * usage context but is never the canonical owner for E4.5 uploads. */
+export type DocumentOwnerType = "provider" | "group";
+
+/** The governed document-kind vocabulary — mirrors the DB
+ * provider_documents_doc_type_check exactly (TE-5). Labels, owner grains, and
+ * expiration rules live in ONE shared map: src/lib/documents.ts
+ * DOCUMENT_KIND_META. */
+export type DocumentKind =
+  | "state_license"
+  | "dea"
+  | "coi"
+  | "w9"
+  | "cms_460"
+  | "voided_check"
+  | "cv"
+  | "diploma"
+  | "board_cert"
+  | "filled_form"
+  | "other";
+
+/** Derived at render time from expiration_date + the shared per-kind
+ * thresholds — never a stored flag (TE-6). */
+export type DocumentExpirationStatus = "expired" | "expiring_soon" | "current";
+
+export interface ProviderDocument {
+  id: string;
+  orgId: string;
+  providerId: string | null;
+  groupId: string | null;
+  caseId: string | null;
+  docType: DocumentKind;
+  fileName: string;
+  filePath: string;
+  effectiveDate: string | null;
+  expirationDate: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+  /** Stable lineage id — re-upload versions the family (TE-1). */
+  documentFamilyId: string;
+  versionNumber: number;
+  supersedesDocumentId: string | null;
+}

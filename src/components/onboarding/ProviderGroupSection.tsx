@@ -8,7 +8,7 @@
 // via derived resolvers only (≥1 active group = Complete).
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,9 +17,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProviderGroupForm } from "@/components/onboarding/ProviderGroupForm";
 import { openSection } from "@/components/onboarding/openSection";
 import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
+import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { useUpdateProviderGroup } from "@/hooks/useOrgSettings";
 import { formatTin } from "@/lib/providerGroup";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
@@ -73,6 +76,7 @@ function DeactivateConfirm({ group, onClose }: { group: ProviderGroup; onClose: 
 export function ProviderGroupSection({ wizard }: SectionBodyProps) {
   const [modal, setModal] = useState<{ group: ProviderGroup | null } | null>(null);
   const [deactivating, setDeactivating] = useState<ProviderGroup | null>(null);
+  const [openDocsGroupId, setOpenDocsGroupId] = useState<string | null>(null);
   const activeGroups = wizard.providerGroups.filter((g) => g.isActive);
 
   if (activeGroups.length === 0) {
@@ -101,39 +105,62 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
     <div className="space-y-4">
       <ul className="space-y-2">
         {activeGroups.map((g) => (
-          <li
-            key={g.id}
-            className="flex items-center justify-between gap-3 rounded-md border border-[#E8E5E0] px-3 py-2"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-foreground">{g.name}</div>
-              <div className="text-[12px] text-muted-foreground">
-                {[
-                  g.tin ? `TIN ${formatTin(g.tin)}` : null,
-                  g.states?.length ? g.states.join(", ") : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "—"}
+          <li key={g.id} className="rounded-md border border-[#E8E5E0] px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-medium text-foreground">{g.name}</div>
+                <div className="text-[12px] text-muted-foreground">
+                  {[
+                    g.tin ? `TIN ${formatTin(g.tin)}` : null,
+                    g.states?.length ? g.states.join(", ") : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </div>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => setModal({ group: g })}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-[11px] text-muted-foreground"
+                  onClick={() => setDeactivating(g)}
+                >
+                  Deactivate
+                </Button>
               </div>
             </div>
-            <div className="flex flex-none items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={() => setModal({ group: g })}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-[11px] text-muted-foreground"
-                onClick={() => setDeactivating(g)}
-              >
-                Deactivate
-              </Button>
-            </div>
+            {/* E4.5 F4.5.1 — the group record's document table (W-9, COI,
+                CMS-460, Voided Check …), collapsed by default. */}
+            <Collapsible
+              open={openDocsGroupId === g.id}
+              onOpenChange={(o) => setOpenDocsGroupId(o ? g.id : null)}
+            >
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                  aria-expanded={openDocsGroupId === g.id}
+                >
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${openDocsGroupId === g.id ? "rotate-180" : ""}`}
+                  />
+                  Documents
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <TooltipProvider delayDuration={200}>
+                  <DocumentsPanel ownerType="group" ownerId={g.id} ownerName={g.name} />
+                </TooltipProvider>
+              </CollapsibleContent>
+            </Collapsible>
           </li>
         ))}
       </ul>

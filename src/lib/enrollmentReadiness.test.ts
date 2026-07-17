@@ -201,6 +201,45 @@ describe("group checklist (computed once per group × state, TE-7)", () => {
     expect(check(expiredBoth, "group_coi").pass).toBe(false);
   });
 
+  // E4.5 TE-6 — the advisory document dimension (the TS-89 gherkin: a group
+  // COI expiring in 21 days passes WITH an advisory warning; never a gap).
+  it("COI expiring inside the 30-day window passes with an advisory", () => {
+    const soon = baseInput({
+      groupDocuments: [{ groupId: "g-1", docType: "coi", expirationDate: "2026-08-02" }], // +21d
+    });
+    const c = check(soon, "group_coi");
+    expect(c.pass).toBe(true);
+    expect(c.advisory).toBe("COI expires 2026-08-02");
+  });
+
+  it("COI advisory follows the LATEST covering end date across sources", () => {
+    // A doc expiring soon is covered by a policy running to 2027 — no advisory.
+    const covered = baseInput({
+      groupDocuments: [{ groupId: "g-1", docType: "coi", expirationDate: "2026-08-02" }],
+      groupInsurancePolicies: [{ groupId: "g-1", policyEndDate: "2027-01-01" }],
+    });
+    const c = check(covered, "group_coi");
+    expect(c.pass).toBe(true);
+    expect(c.advisory).toBeNull();
+  });
+
+  it("a dateless COI document never carries an advisory (nothing to expire)", () => {
+    const c = check(baseInput(), "group_coi"); // base fixtures: dateless coi doc
+    expect(c.pass).toBe(true);
+    expect(c.advisory).toBeNull();
+  });
+
+  it("a comfortably-dated COI carries no advisory; a failing COI carries none either", () => {
+    const current = baseInput({
+      groupDocuments: [{ groupId: "g-1", docType: "coi", expirationDate: "2027-07-12" }],
+    });
+    expect(check(current, "group_coi").advisory).toBeNull();
+    const missing = baseInput({ groupDocuments: [] });
+    const failed = check(missing, "group_coi");
+    expect(failed.pass).toBe(false);
+    expect(failed.advisory).toBeNull();
+  });
+
   it("group checks are the SAME object across a group's provider rows (dedupe)", () => {
     const input = baseInput({
       groupAssignments: [

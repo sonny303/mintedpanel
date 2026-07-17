@@ -2118,6 +2118,7 @@ export type Database = {
           case_id: string | null;
           created_at: string;
           doc_type: string;
+          document_family_id: string;
           effective_date: string | null;
           expiration_date: string | null;
           file_name: string;
@@ -2126,12 +2127,15 @@ export type Database = {
           id: string;
           org_id: string;
           provider_id: string | null;
+          supersedes_document_id: string | null;
           uploaded_by: string | null;
+          version_number: number;
         };
         Insert: {
           case_id?: string | null;
           created_at?: string;
           doc_type: string;
+          document_family_id?: string;
           effective_date?: string | null;
           expiration_date?: string | null;
           file_name: string;
@@ -2140,12 +2144,15 @@ export type Database = {
           id?: string;
           org_id: string;
           provider_id?: string | null;
+          supersedes_document_id?: string | null;
           uploaded_by?: string | null;
+          version_number?: number;
         };
         Update: {
           case_id?: string | null;
           created_at?: string;
           doc_type?: string;
+          document_family_id?: string;
           effective_date?: string | null;
           expiration_date?: string | null;
           file_name?: string;
@@ -2154,7 +2161,9 @@ export type Database = {
           id?: string;
           org_id?: string;
           provider_id?: string | null;
+          supersedes_document_id?: string | null;
           uploaded_by?: string | null;
+          version_number?: number;
         };
         Relationships: [
           {
@@ -2183,6 +2192,13 @@ export type Database = {
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_documents_supersedes_fkey";
+            columns: ["supersedes_document_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_documents";
             referencedColumns: ["id"];
           },
         ];

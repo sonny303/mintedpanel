@@ -18,6 +18,15 @@ export const REPORTS: ReportDef[] = [
     description: "Your organizations across the business — prospects, in motion, and geography.",
     path: "/reporting/portfolio",
   },
+  // E4.5 F4.5.2 — the expiring-credentials table (org-scoped; the report
+  // renders a select-an-organization state without an active org).
+  {
+    key: "expiring-credentials",
+    title: "Expiring Credentials",
+    description:
+      "Provider and group documents by soonest expiration — expired, expiring soon, current.",
+    path: "/reporting/expiring-credentials",
+  },
 ];
 
 export function findReport(key: string): ReportDef | undefined {

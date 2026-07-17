@@ -10,6 +10,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import { currentGroupReadinessDocuments, type GroupReadinessDocumentRow } from "@/lib/documents";
 import type {
   GroupDocumentInput,
   GroupInsuranceInput,
@@ -72,17 +73,22 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
 }
 
 /** Group-owned documents relevant to the group checklist (presence +
- * expiration only — never file paths or contents). */
+ * expiration only — never file paths or contents). E4.5: reduced to CURRENT
+ * versions through the shared reducer, so a superseded W-9/COI version never
+ * satisfies (or fails) a check — the version columns are read only to derive
+ * currency and never leave this module. */
 export async function listGroupReadinessDocuments(): Promise<GroupDocumentInput[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("provider_documents")
-    .select("group_id, doc_type, expiration_date")
+    .select(
+      "id, group_id, doc_type, expiration_date, document_family_id, version_number, supersedes_document_id",
+    )
     .eq("org_id", orgId)
     .not("group_id", "is", null)
     .in("doc_type", ["w9", "coi", "voided_check"]);
   if (error) throw error;
-  return camelizeRow<GroupDocumentInput[]>(data ?? []);
+  return currentGroupReadinessDocuments(camelizeRow<GroupReadinessDocumentRow[]>(data ?? []));
 }
 
 export async function listGroupInsurancePolicies(): Promise<GroupInsuranceInput[]> {
