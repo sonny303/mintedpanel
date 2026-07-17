@@ -131,7 +131,15 @@ delete from sop_template_versions
  where template_id in (select id from sop_templates where org_id in (select id from _targets));  -- exp 11
 
 delete from sop_templates   where org_id in (select id from _targets);  -- exp 11
+-- providers <-> launches is a mutual NO ACTION FK cycle
+-- (providers.launch_id -> launches, launches.clinic_director_provider_id ->
+-- providers), and launches also carries NO ACTION FKs to organizations and
+-- facilities: null the provider side, delete providers, then launches, all
+-- BEFORE facilities and the org delete.
+update launches set clinic_director_provider_id = null
+ where org_id in (select id from _targets);
 delete from providers       where org_id in (select id from _targets);  -- exp 9
+delete from launches        where org_id in (select id from _targets);
 delete from facilities      where org_id in (select id from _targets);  -- exp 5
 delete from msos            where org_id in (select id from _targets);  -- exp 2
 delete from payers          where org_id in (select id from _targets);  -- exp 10

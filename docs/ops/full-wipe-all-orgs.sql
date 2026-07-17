@@ -69,6 +69,17 @@ begin
   if v <> 269 then
     raise exception 'ABORT: expected 269 global payers, found %. Catalog changed.', v;
   end if;
+
+  -- Global catalog rows must not reference org-scoped payers, or the Phase 4
+  -- org-payer delete throws (payers.prerequisite_payer_id / merged_into_id are
+  -- NO ACTION self-FKs). Kept rows referencing deleted rows need a human call.
+  select count(*) into v from payers
+   where org_id is null
+     and (prerequisite_payer_id in (select id from payers where org_id is not null)
+       or merged_into_id       in (select id from payers where org_id is not null));
+  if v > 0 then
+    raise exception 'ABORT: % global payer(s) reference an org-scoped payer. Resolve before wiping.', v;
+  end if;
 end $$;
 
 -- ---------------------------------------------------------------------
@@ -108,8 +119,26 @@ delete from sop_template_versions
  where template_id in (select id from sop_templates where org_id is not null);
 
 delete from sop_templates where org_id is not null;   -- keeps the 1 global
+
+-- providers <-> launches is a mutual NO ACTION FK cycle
+-- (providers.launch_id -> launches, launches.clinic_director_provider_id ->
+-- providers). Both tables are fully wiped, so no pure ordering works when both
+-- columns are populated: null one side first, then delete providers, then
+-- launches.
+update launches set clinic_director_provider_id = null;
 delete from providers;
 delete from launches;
+
+-- communication_event carries org_id but has NO FK to organizations (never
+-- cascades) and a NO ACTION NOT NULL FK to payers -- clear it before the
+-- org-payer delete. All rows are org data; a full wipe removes them all.
+delete from communication_event;
+
+-- payer_catalog_changes.payer_id is a NO ACTION NOT NULL FK to payers; rows
+-- pointing at org-scoped payers block the delete below. Global-payer rows
+-- (the catalog diff log) are KEPT.
+delete from payer_catalog_changes
+ where payer_id in (select id from payers where org_id is not null);
 delete from facilities;                               -- explicit: parent of status_configs
 delete from msos;
 delete from payers         where org_id is not null;  -- keeps the 269 global
