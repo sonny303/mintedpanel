@@ -1290,9 +1290,12 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   SELECT policy dropped + ALL grants revoked; `review_payer_catalog_change`
   authenticated EXECUTE revoked + body reissued to reject org-user JWTs and
   ACCEPT service-role/direct-SQL callers — the E1.6 body required auth.uid()
-  so service_role could never call it. **OPERATOR ORDERING NOTE:** the #169
-  drop migration `20260716180000` is operator-gated on hosted and its reissue
-  re-grants authenticated EXECUTE — re-apply `20260716191000` after it).
+  so service_role could never call it. **OPERATOR ORDERING NOTE (resolved
+  2026-07-17, Option B):** #169's drop migration `20260716180000` was NEVER
+  applied and is now retired (`.superseded`); the drop ships instead via
+  `20260717221914_payer_dead_column_drop_superseding.sql`, which does NOT
+  reissue `review_payer_catalog_change` — so this platform-only body stands
+  and no re-apply of `20260716191000` is needed).
   **App:** `Payer.orgId` is honestly `string | null`; `payers.ts` has NO
   create (free-text "Add payer" is gone — `useCreatePayer` removed); `getPayer`
   reads own-org OR assigned-global (or-filter); `updatePayer` throws the typed
@@ -1320,7 +1323,8 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   catalog-review call paths, no payers INSERT, migration grant shape). Types
   for the new table were HAND-ADDED to `types.ts` (hosted still carries the
   un-applied #169 drop, so a full regen would resurrect dropped columns —
-  regen only after the operator applies `20260716180000`). e2e:
+  regen only after the operator applies the superseding drop
+  `20260717221914` (#169's `20260716180000` is retired, never applied)). e2e:
   `admin-payers.spec.ts` (new), `payer-directory.spec.ts` (TS-38 replaced by
   the governance no-review-surface test; stale TS-36 Portal assertion from
   #169 fixed), `payer-admin-module.spec.ts` (+F4.2.1 Configure-ID writes
