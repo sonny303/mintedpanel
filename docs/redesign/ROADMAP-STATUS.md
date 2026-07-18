@@ -82,10 +82,10 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 
 ## Current jobs to be done
 
-1. **Vault master-key provisioning (PM)** — hosted migrations are applied and types regenerated (#187 merged); the remaining operator step is the `app.settings.ssn_vault_key` `ALTER DATABASE`, run by the PM directly in the SQL Editor. Vault RPCs fail closed until then.
-2. **Payer-setup workflow feedback (PM)** — PM is testing the payer setup workflow; feedback to be documented and implemented before the production cut and before R7 starts.
-3. **R7 epic authoring** — platform payer-catalog administration, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the payer-setup feedback round.
-4. **Main promotion** — PR #181 (redesign → main, plain sync per PM 2026-07-18, not the production cut) needs a fresh re-sync now that R6 landed, then the PM's merge.
+1. **Vault master-key provisioning (PM)** — hosted migrations are applied and types regenerated (#187 merged); the GUC path is blocked on hosted, so the key is read from Supabase Vault (#190). Remaining operator steps: apply migration `20260718020000` to hosted, then add the `ssn_vault_key` secret via Dashboard → Project Settings → Vault. Vault RPCs fail closed until then.
+2. **R6.5 payer-setup enhancement wave** (PM decisions D1–D10 locked 2026-07-18; ships before the production cut and before R7). Epic slate: **E5.0** nav restoration & wayfinding (authored — presentation-only, ships first), **E5.1** auto-scope + intake defaults (WP-1), **E5.2** forms library decoupling (WP-3), **E5.3** SOP data fields: literals + token expansion (WP-4), **E5.4** consolidated readiness queue (WP-2, after E5.1), **E5.5** provider data-change lifecycle (WP-5, after E5.3), **E5.6** accelerators (WP-6, after E5.4), **E5.7** UI usability conformance pack (shared primitives; parallel-safe). Each epic: author → independent review → `reviewed: true` → build.
+3. **R7 epic authoring** — platform payer-catalog administration, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the R6.5 wave.
+4. **Main promotion** — PR #189 (redesign → main, plain sync per PM 2026-07-18, not the production cut) is open and awaits the PM's merge.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 
 Done since last refresh: hosted operator run complete (all five R6 migrations verified on hosted, types regen #187); full data wipe confirmed complete/verified by the PM — the one-time AGENTS.md ledger carve-out is expired.
