@@ -82,11 +82,13 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 
 ## Current jobs to be done
 
-1. **Hosted operator run (PM)** — apply the superseding payer dead-column drop (#184), the E4.4 vault migrations + master-key provisioning, and the E4.5 activation + Storage bucket migrations to hosted, then the types-regen PR (runbook: prompt-15 + the #185 PR body).
-2. **R7 epic authoring** — platform payer-catalog administration, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build.
-3. **Data wipe close-out** — PM confirms the full wipe is complete/verified; then expire the one-time AGENTS.md ledger carve-out (docs PR).
-4. **Main promotion** — PR #181 (redesign → main sync) awaits the PM's merge; a fresh sync will be needed after R6's merges.
+1. **Vault master-key provisioning (PM)** — hosted migrations are applied and types regenerated (#187 merged); the remaining operator step is the `app.settings.ssn_vault_key` `ALTER DATABASE`, run by the PM directly in the SQL Editor. Vault RPCs fail closed until then.
+2. **Payer-setup workflow feedback (PM)** — PM is testing the payer setup workflow; feedback to be documented and implemented before the production cut and before R7 starts.
+3. **R7 epic authoring** — platform payer-catalog administration, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the payer-setup feedback round.
+4. **Main promotion** — PR #181 (redesign → main, plain sync per PM 2026-07-18, not the production cut) needs a fresh re-sync now that R6 landed, then the PM's merge.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
+
+Done since last refresh: hosted operator run complete (all five R6 migrations verified on hosted, types regen #187); full data wipe confirmed complete/verified by the PM — the one-time AGENTS.md ledger carve-out is expired.
 
 ## Key locked decisions
 
