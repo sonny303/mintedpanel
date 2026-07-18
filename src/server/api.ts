@@ -16,9 +16,13 @@ import { handlePreflight, withCors } from "./cors";
 // server-route path even when Supabase env is absent.
 const loadProviderRoutes = () => import("./providerRoutes");
 const loadExtensionRoutes = () => import("./extensionRoutes");
+const loadDocumentRoutes = () => import("./documentRoutes");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
+// `/api/providers/:id/ssn-release?caseId=` — E4.4 fill-only SSN release. Must be
+// matched before the generic :id route.
+const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
@@ -36,6 +40,10 @@ const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
 // `/api/me/view-prefs` — the caller's saved extension quick-card layout
 // (user-scoped, no org context — prefs follow the user across orgs).
 const ME_VIEW_PREFS_ROUTE = /^\/api\/me\/view-prefs\/?$/;
+// E4.5 document storage: signed upload intent, finalize, signed download.
+const DOCUMENT_UPLOAD_INTENT_ROUTE = /^\/api\/documents\/upload-intent\/?$/;
+const DOCUMENT_FINALIZE_ROUTE = /^\/api\/documents\/finalize\/?$/;
+const DOCUMENT_DOWNLOAD_ROUTE = /^\/api\/documents\/([^/]+)\/download\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
@@ -84,7 +92,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
   }
 
   const profileMatch = pathname.match(PROVIDER_PROFILE_ROUTE);
-  const providersMatch = profileMatch ? null : pathname.match(PROVIDERS_ROUTE);
+  const ssnReleaseMatch = pathname.match(SSN_RELEASE_ROUTE);
+  const providersMatch = profileMatch || ssnReleaseMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
@@ -93,8 +102,13 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isNextBestAction = NEXT_BEST_ACTION_ROUTE.test(pathname);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
+  const isDocumentUploadIntent = DOCUMENT_UPLOAD_INTENT_ROUTE.test(pathname);
+  const isDocumentFinalize = DOCUMENT_FINALIZE_ROUTE.test(pathname);
+  const documentDownloadMatch =
+    isDocumentUploadIntent || isDocumentFinalize ? null : pathname.match(DOCUMENT_DOWNLOAD_ROUTE);
   if (
     !profileMatch &&
+    !ssnReleaseMatch &&
     !providersMatch &&
     !isFieldMaps &&
     !isFillEvents &&
@@ -103,7 +117,10 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !caseContextMatch &&
     !isNextBestAction &&
     !isMeOrgs &&
-    !isMeViewPrefs
+    !isMeViewPrefs &&
+    !isDocumentUploadIntent &&
+    !isDocumentFinalize &&
+    !documentDownloadMatch
   ) {
     return fail(404, "Not found");
   }
@@ -150,6 +167,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       const routes = await loadExtensionRoutes();
       return await routes.handleProviderProfile(profileMatch[1], url, ctx);
     }
+    if (ssnReleaseMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleSsnRelease(ssnReleaseMatch[1], url, ctx);
+    }
     if (isFieldMaps) {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
@@ -183,6 +205,21 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleNextBestAction(ctx);
+    }
+    if (isDocumentUploadIntent) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadDocumentRoutes();
+      return await routes.handleCreateUploadIntent(await readJsonBody(request), ctx);
+    }
+    if (isDocumentFinalize) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadDocumentRoutes();
+      return await routes.handleFinalizeDocument(await readJsonBody(request), ctx);
+    }
+    if (documentDownloadMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadDocumentRoutes();
+      return await routes.handleDocumentDownload(documentDownloadMatch[1], ctx);
     }
 
     const routes = await loadProviderRoutes();

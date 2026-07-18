@@ -420,3 +420,68 @@ SELECT 'e42d0000-0000-4000-a000-0000000000f2'::uuid, o.id, 'roster_mismatch', 'R
 FROM public.organizations o
 WHERE o.name = 'Dillon Sports Medicine'
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E4.5 — Document storage fixtures on Dillon Sports Medicine (TS-89 L3).
+--
+-- Staggered expirations for the expiring-credentials table + the advisory
+-- readiness integration: an EXPIRED provider State License, a group COI
+-- expiring INSIDE the 30-day window (two versions — the superseded v1 shows
+-- immutable history, TS-88's re-upload shape), and a comfortably CURRENT
+-- provider DEA. Dates are relative to the seeding day (CURRENT_DATE) so the
+-- classification holds whenever the universe is seeded; ON CONFLICT keeps
+-- re-seeds idempotent (dates freeze at first insert — L3 metadata only).
+--
+-- METADATA-ONLY fixtures: the file_path rows follow the TE-2 org-bound
+-- contract but no object exists in Storage (TS-88/TS-90 downloads run through
+-- the mock e2e harness; live download of a seed row 404s honestly).
+INSERT INTO public.provider_documents
+  (id, org_id, provider_id, group_id, doc_type, file_name, file_path, expiration_date,
+   document_family_id, version_number, supersedes_document_id)
+SELECT 'e45d0000-0000-4000-a000-000000000001'::uuid, o.id,
+       'd4110000-0000-4000-a000-0000000000b1'::uuid, NULL,
+       'state_license', 'tx-license-riggins.pdf',
+       'org/' || o.id || '/provider/d4110000-0000-4000-a000-0000000000b1/e45f0000-0000-4000-a000-000000000001/1/tx-license-riggins.pdf',
+       CURRENT_DATE - 10,
+       'e45f0000-0000-4000-a000-000000000001'::uuid, 1, NULL
+FROM public.organizations o WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;
+
+-- The group COI family: v1 (long expired, superseded) -> v2 (current head,
+-- expiring in 21 days -> the TS-89 gherkin's advisory + expiring-soon row).
+INSERT INTO public.provider_documents
+  (id, org_id, provider_id, group_id, doc_type, file_name, file_path, expiration_date,
+   document_family_id, version_number, supersedes_document_id)
+SELECT 'e45d0000-0000-4000-a000-000000000002'::uuid, o.id,
+       NULL, 'd4110000-0000-4000-a000-0000000000a1'::uuid,
+       'coi', 'dillon-coi-2025.pdf',
+       'org/' || o.id || '/group/d4110000-0000-4000-a000-0000000000a1/e45f0000-0000-4000-a000-000000000002/1/dillon-coi-2025.pdf',
+       CURRENT_DATE - 300,
+       'e45f0000-0000-4000-a000-000000000002'::uuid, 1, NULL
+FROM public.organizations o WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.provider_documents
+  (id, org_id, provider_id, group_id, doc_type, file_name, file_path, expiration_date,
+   document_family_id, version_number, supersedes_document_id)
+SELECT 'e45d0000-0000-4000-a000-000000000003'::uuid, o.id,
+       NULL, 'd4110000-0000-4000-a000-0000000000a1'::uuid,
+       'coi', 'dillon-coi-2026.pdf',
+       'org/' || o.id || '/group/d4110000-0000-4000-a000-0000000000a1/e45f0000-0000-4000-a000-000000000002/2/dillon-coi-2026.pdf',
+       CURRENT_DATE + 21,
+       'e45f0000-0000-4000-a000-000000000002'::uuid, 2,
+       'e45d0000-0000-4000-a000-000000000002'::uuid
+FROM public.organizations o WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.provider_documents
+  (id, org_id, provider_id, group_id, doc_type, file_name, file_path, expiration_date,
+   document_family_id, version_number, supersedes_document_id)
+SELECT 'e45d0000-0000-4000-a000-000000000004'::uuid, o.id,
+       'd4110000-0000-4000-a000-0000000000b1'::uuid, NULL,
+       'dea', 'dea-riggins.pdf',
+       'org/' || o.id || '/provider/d4110000-0000-4000-a000-0000000000b1/e45f0000-0000-4000-a000-000000000004/1/dea-riggins.pdf',
+       CURRENT_DATE + 200,
+       'e45f0000-0000-4000-a000-000000000004'::uuid, 1, NULL
+FROM public.organizations o WHERE o.name = 'Dillon Sports Medicine'
+ON CONFLICT (id) DO NOTHING;

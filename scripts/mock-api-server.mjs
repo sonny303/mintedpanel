@@ -26,6 +26,8 @@
 //   casecontext cross-org case context served instead of 404         (14b)
 //   meorgs      other users' membership rows leak into /api/me/orgs  (10, 10b)
 //   facility    cross-org profile facilityId honored instead of 404  (11)
+//   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
+//   documentdownload cross-org signed document download served instead of 404 (17b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -44,6 +46,10 @@ export const FIXTURES = {
   // Park task is the cross-org task_id a Kansas caller must be denied.
   KANSAS_TASK_ID: "b7a90000-0000-4000-a000-0000000000d1",
   SOUTHPARK_TASK_ID: "d0e40000-0000-4000-a000-000000000071",
+  // E4.5 documents for the signed-download assertion pair (17/17b). The South
+  // Park document is the cross-org id a Kansas caller must be denied.
+  KANSAS_DOCUMENT_ID: "b7a90000-0000-4000-a000-0000000000e1",
+  SOUTHPARK_DOCUMENT_ID: "d0e40000-0000-4000-a000-000000000081",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
@@ -61,6 +67,8 @@ export const LEAK_MODES = [
   "casecontext",
   "meorgs",
   "facility",
+  "ssnrelease",
+  "documentdownload",
 ];
 
 const USERS = {
@@ -199,6 +207,23 @@ function caseListRow(c) {
 const TASKS = [
   { id: FIXTURES.KANSAS_TASK_ID, orgId: FIXTURES.KANSAS_ORG },
   { id: FIXTURES.SOUTHPARK_TASK_ID, orgId: FIXTURES.SOUTHPARK_ORG },
+];
+
+// E4.5 — one document per org for the signed-download pair (17/17b). Paths
+// follow the org-bound contract; the mock never signs anything real.
+const DOCUMENTS = [
+  {
+    id: FIXTURES.KANSAS_DOCUMENT_ID,
+    orgId: FIXTURES.KANSAS_ORG,
+    fileName: "license.pdf",
+    filePath: `org/${FIXTURES.KANSAS_ORG}/provider/${FIXTURES.KANSAS_PROVIDER_ID}/fam-1/1/license.pdf`,
+  },
+  {
+    id: FIXTURES.SOUTHPARK_DOCUMENT_ID,
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    fileName: "w9.pdf",
+    filePath: `org/${FIXTURES.SOUTHPARK_ORG}/group/sp-group/fam-2/1/w9.pdf`,
+  },
 ];
 
 function fieldMapRow(id, orgId, portalKey, selector) {
@@ -413,6 +438,50 @@ export async function createMockApiServer(options = {}) {
         null,
         needsFacility ? { needs_facility: true } : null,
       );
+    }
+
+    // --- /api/providers/:id/ssn-release?caseId= (E4.4 fill-only SSN release) ---
+    // Matched before the generic providers route. Writer-only; caseId required;
+    // the case must be this org's AND this provider's (an active fill context) or
+    // it's a 404 — cross-org indistinguishable from missing. Leak "ssnrelease":
+    // the org check is skipped and a cross-org SSN is released. The value is a
+    // FAKE fixture (never a real vault/decrypt) — the gate checks isolation only.
+    const ssnReleaseMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/ssn-release\/?$/);
+    if (ssnReleaseMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot release an SSN for fill");
+      }
+      const providerId = ssnReleaseMatch[1];
+      const caseId = url.searchParams.get("caseId");
+      if (!caseId) {
+        return envelope(res, 422, null, "caseId is required to release an SSN for fill");
+      }
+      const c = CASES.find((row) => row.id === caseId && row.providerId === providerId);
+      const visible = c && (c.orgId === orgId || leak === "ssnrelease");
+      if (!visible) return envelope(res, 404, null, "Case not found for this provider");
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, { ssn: "900000000", ssnLast4: "0000" });
+    }
+
+    // --- /api/documents/:id/download (E4.5 signed document download) ---
+    // Any org member may download (billing included — the TE-2 read rule); the
+    // document must be the caller's org's or it's a 404 — cross-org
+    // indistinguishable from missing. Leak "documentdownload": the org check
+    // is skipped and a cross-org signed URL is served. The URL is a FAKE
+    // fixture value — the gate checks isolation, never real storage.
+    const documentDownloadMatch = url.pathname.match(/^\/api\/documents\/([^/]+)\/download\/?$/);
+    if (documentDownloadMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const d = DOCUMENTS.find((row) => row.id === documentDownloadMatch[1]);
+      const visible = d && (d.orgId === orgId || leak === "documentdownload");
+      if (!visible) return envelope(res, 404, null, "Document not found");
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, {
+        url: `https://example.supabase.co/storage/v1/object/sign/provider-documents/${d.filePath}?token=fake-signed-token`,
+        fileName: d.fileName,
+        expiresIn: 120,
+      });
     }
 
     // --- /api/providers and /api/providers/:id (GET list/by-id, POST create,

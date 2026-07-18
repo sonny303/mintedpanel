@@ -26,6 +26,8 @@ import {
 import { useCanWrite } from "@/lib/permissions";
 import { NewCaseModal } from "@/components/cases/NewCaseModal";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
+import { SsnVaultField } from "@/components/providers/SsnVaultField";
+import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 
 import {
   Dialog,
@@ -189,6 +191,16 @@ function ProviderDetailPage() {
           <CaqhCard provider={provider} />
           <ProviderNotes providerId={provider.id} canEdit={canEdit} />
         </div>
+      </div>
+
+      {/* E4.5 F4.5.1 — the provider document store (kind, dates, current
+          version, uploader; versioned re-upload; audited signed download). */}
+      <div className="mt-6">
+        <DocumentsPanel
+          ownerType="provider"
+          ownerId={provider.id}
+          ownerName={`${provider.firstName} ${provider.lastName}`.trim()}
+        />
       </div>
     </TooltipProvider>
   );
@@ -524,13 +536,15 @@ function IdentityCard({ provider }: { provider: Provider }) {
     [provider.homeStreet, provider.homeCity, provider.homeState, provider.homeZip]
       .filter(Boolean)
       .join(", ") || "—";
-  const ssn = provider.ssnLast4 ? `xxx-xx-${provider.ssnLast4}` : "—";
 
   return (
     <Card title="Identity">
       <DL>
         <DRow label="Date of birth" value={fmtDate(provider.dateOfBirth)} />
-        <DRow label="SSN" value={ssn} mono />
+        {/* E4.4 — the full SSN lives only in the server-only vault; this row
+            renders the mask plus role-gated vault actions (admin reveal, secure
+            store, intake link). */}
+        <DRow label="SSN" value={<SsnVaultField provider={provider} />} mono />
         <DRow label="Email" value={provider.email ?? "—"} />
         <DRow label="Phone" value={provider.phone ?? "—"} mono />
         <DRow label="Address" value={addressLine} />
