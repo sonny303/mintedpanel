@@ -1,11 +1,16 @@
 # Legacy Org-Scoped Payer Cutover — Inventory & Result Record
 
-> **Status: PENDING HUMAN-CONFIRMED CUTOVER. Nothing was deleted, merged, or
-> re-keyed in the E4.2 payer-governance PR that created this record.** Per its
-> guardrails: no automatic legacy payer match or merge, and zero-reference
-> cleanup requires an explicit inventory **and a human-confirmed cutover
-> result**. This document is that inventory; the "Result" column records what
-> actually happened (today: nothing).
+> **Status: CLOSED — SUPERSEDED BY THE PRE-PROD-CUT DATA WIPE (2026-07-18).**
+> The per-row re-keying this record was staged for never ran and never will:
+> the PM-approved full data wipe (2026-07-17, the AGENTS.md carve-out —
+> `docs/ops/full-wipe-all-orgs.sql`, PLAN-full-data-wipe.md) removed every org
+> below along with its payers, cases, and contracts. The pre-wipe database is
+> preserved in the `mintedpanel-backup-july17` Supabase project. Verified live
+> 2026-07-18: `payers` holds 269 rows, ALL global (`org_id IS NULL`, all
+> slugged) — zero org-scoped rows, zero "Pre-Credentialing Setup" sentinels,
+> and no dangling payer references anywhere. See "Final result" at the bottom;
+> the inventory below is retained as the historical record of what the wipe
+> superseded.
 
 Inventoried 2026-07-16 against hosted project `fkvuhfsqcmujywzgczmc` (the
 shared demo/dev database — see the production-data caveat in
@@ -106,3 +111,31 @@ NULL on every legacy row.
   Allegiance (Cigna) and TRICARE East (Humana Military) in the broad sweep;
   the exact-normalized-name candidates listed above are the plausible targets,
   but sign-off is per-row.
+
+## Final result (2026-07-18) — closed as superseded
+
+- **The cutover never ran.** No row above was re-keyed or individually
+  deleted. The PM-approved pre-prod-cut data wipe (2026-07-17) removed the
+  demo orgs wholesale — legacy payers, their referencing cases/contracts/SOPs,
+  and both Pre-Credentialing Setup sentinels went with their orgs. The
+  pre-wipe database survives in the `mintedpanel-backup-july17` project.
+- **The legacy machinery was removed from the codebase the next day** (the
+  legacy-payer deprecation change, 2026-07-18): `src/lib/payerCutover.ts` (+
+  test) deleted; the `source: "legacy"` / `migrate_legacy` paths dropped from
+  `payerSetup.ts` / `PayerSetupList.tsx`; the own-org inclusion shortcut
+  dropped from `ManualCaseModal`; `updatePayer`/`PayerInput`/
+  `GlobalPayerUpdateError`/`useUpdatePayer` deleted (their only reachable
+  subject was a legacy row).
+- **The DB now enforces what the app already assumed:** migration
+  `20260718120000_payers_org_write_lockdown.sql` (repo + hosted) dropped the
+  `payers_insert`/`payers_update` policies and revoked org INSERT/UPDATE
+  grants — the last channel that could have minted an org-scoped payer row
+  (a hand-crafted PostgREST call). `payers` is member-SELECT-only; catalog
+  writes remain service-role (sync script / review RPC).
+- **Deliberately untouched:** the "Pre-Credentialing Setup" sentinel WORKFLOW
+  code (`PRE_CRED_PAYER_NAME` branches in clientProgress/launchReadiness/
+  CreateCasesDialog/work views/payerSetup exclusion) stays — it is a product
+  concept, currently unreachable because no creatable payer carries that name,
+  retired only by an explicit product decision. Local seed fixtures
+  (`seed.sql`, `seed-redesign.sql`) still create org-scoped payer rows for
+  local rebuilds/e2e; they never run on hosted.
