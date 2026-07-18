@@ -3395,6 +3395,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      _ssn_decrypt: { Args: { p_ciphertext: string }; Returns: string };
+      _ssn_digits: { Args: { p_raw: string }; Returns: string };
+      _ssn_encrypt: { Args: { p_plaintext: string }; Returns: string };
+      _ssn_vault_key: { Args: never; Returns: string };
+      _ssn_vault_upsert: {
+        Args: {
+          p_actor: string;
+          p_org_id: string;
+          p_provider_id: string;
+          p_ssn: string;
+        };
+        Returns: string;
+      };
       advance_payer_pipeline: {
         Args: {
           p_case_id: string;
@@ -3473,6 +3486,15 @@ export type Database = {
         };
         Returns: Json;
       };
+      create_ssn_intake_link: {
+        Args: {
+          p_provider_id: string;
+          p_recipient_email: string;
+          p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
+      document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       insert_contact_party: {
         Args: { p: Json; p_uid: string };
@@ -3519,6 +3541,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      release_ssn_for_fill: {
+        Args: { p_case_id: string; p_org_id: string; p_provider_id: string };
+        Returns: Json;
+      };
+      reveal_ssn: {
+        Args: { p_justification: string; p_provider_id: string };
+        Returns: Json;
+      };
       review_payer_catalog_change: {
         Args: { p_accept: boolean; p_change_id: string };
         Returns: undefined;
@@ -3532,15 +3562,24 @@ export type Database = {
         Args: { p_rows: Json; p_run_id: string };
         Returns: undefined;
       };
+      store_ssn: {
+        Args: { p_provider_id: string; p_ssn: string };
+        Returns: Json;
+      };
       submit_capture: {
         Args: { p_payload: Json; p_token: string };
         Returns: Json;
       };
       submit_inbound_lead: { Args: { p_payload: Json }; Returns: Json };
+      submit_ssn_intake: {
+        Args: { p_ssn: string; p_token: string };
+        Returns: Json;
+      };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
+      validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;
@@ -3559,12 +3598,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3584,12 +3623,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3608,12 +3648,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3632,12 +3673,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3648,12 +3690,13 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
