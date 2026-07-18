@@ -1,10 +1,9 @@
 // E4.2 (unified payer setup, TE-19/TE-20) — the per-PAYER setup funnel behind
 // the Payer Setup workspace's Setup tab. Pure derivation, nothing stored: one
 // row per ACTIVE organization payer (a catalog payer with an active
-// org_payer_assignments subscription, or a legacy org-scoped payer awaiting
-// catalog migration), even when it has ZERO credentialing targets — the
-// readiness matrix alone starts from targets and makes a just-selected payer
-// invisible, which is exactly the gap this module closes.
+// org_payer_assignments subscription), even when it has ZERO credentialing
+// targets — the readiness matrix alone starts from targets and makes a
+// just-selected payer invisible, which is exactly the gap this module closes.
 //
 // Each row carries separate, accurately named dimensions (never one collapsed
 // "Ready" badge) and ONE dominant next action in the locked priority order:
@@ -18,9 +17,6 @@
 //   6. run a form dry test               → the F4.2.7 test runner
 //   7. configure the resolution ID       → the e4-2c org_payer_settings dialog
 //   8. review the generation preview
-// A zero-scope LEGACY payer can't take step 1 (payer_network_targets requires
-// an assignment row, which legacy payers never have), so its dominant action
-// is finding its canonical catalog identity instead.
 //
 // Signal reuse (do not re-derive): SOP coverage/blockers arrive as the F4.2.2
 // readiness rows (buildPayerReadiness + gating, via usePayerReadiness); form
@@ -64,8 +60,6 @@ export interface SetupReadinessRow {
 export interface PayerSetupStateRow extends SetupReadinessRow {
   sopTier: SopResolutionTier | null;
 }
-
-export type PayerSetupSource = "catalog" | "legacy";
 
 export interface ScopeDimension {
   /** Active group × state targets under this payer (0 = not configured). */
@@ -114,7 +108,6 @@ export interface GenerationDimension {
 
 export type NextAction =
   | { kind: "configure_scope" }
-  | { kind: "migrate_legacy" }
   | { kind: "create_sop"; matchKey: SetupReadinessRow["matchKey"] }
   | { kind: "resolve_blockers"; count: number }
   | { kind: "register_portal" }
@@ -139,7 +132,6 @@ export function resolutionIdSource(
 
 export interface PayerSetupRow {
   payer: Payer;
-  source: PayerSetupSource;
   assignment: OrgPayerAssignment | null;
   scope: ScopeDimension;
   sop: SopDimension;
@@ -153,7 +145,7 @@ export interface PayerSetupRow {
 }
 
 export interface PayerSetupInputs {
-  /** Org-visible payers (own-org legacy + assigned global catalog rows). */
+  /** Org-visible payers (assigned global catalog rows). */
   payers: readonly Payer[];
   assignments: readonly OrgPayerAssignment[];
   /** F4.2.2 readiness rows, already enriched with blocked counts. */
@@ -225,11 +217,7 @@ function deriveForm(
 }
 
 function deriveNextAction(row: Omit<PayerSetupRow, "nextAction" | "generation">): NextAction {
-  if (row.scope.activeTargets === 0) {
-    // A legacy payer has no assignment row, so the payer_network_targets WITH
-    // CHECK can never pass for it — the real next step is its catalog cutover.
-    return row.source === "legacy" ? { kind: "migrate_legacy" } : { kind: "configure_scope" };
-  }
+  if (row.scope.activeTargets === 0) return { kind: "configure_scope" };
   if (row.sop.kind === "needs_sop") return { kind: "create_sop", matchKey: row.sop.matchKey };
   if (row.blockedCount > 0) return { kind: "resolve_blockers", count: row.blockedCount };
   if (row.form.kind === "unregistered") return { kind: "register_portal" };
@@ -265,15 +253,14 @@ function deriveGeneration(
 export interface ActiveOrgPayer {
   payer: Payer;
   assignment: OrgPayerAssignment | null;
-  source: PayerSetupSource;
 }
 
 /**
  * The "active organization payer" inclusion rule the whole workspace shares:
- * a catalog payer with an ACTIVE org_payer_assignments subscription, or an
- * active legacy org-scoped payer — never derived from targets, so a payer
- * added a minute ago is already included. The Pre-Credentialing Setup sentinel
- * is excluded: it is bookkeeping for pre-cred cases, not a payer to set up.
+ * a catalog payer with an ACTIVE org_payer_assignments subscription — never
+ * derived from targets, so a payer added a minute ago is already included.
+ * The Pre-Credentialing Setup sentinel is excluded: it is bookkeeping for
+ * pre-cred cases, not a payer to set up.
  */
 export function activeOrgPayers(
   payers: readonly Payer[],
@@ -284,10 +271,8 @@ export function activeOrgPayers(
   for (const payer of payers) {
     if (payer.name === PRE_CRED_PAYER_NAME) continue;
     const assignment = assignmentByPayer.get(payer.id) ?? null;
-    const source: PayerSetupSource = payer.orgId === null ? "catalog" : "legacy";
-    if (source === "catalog" && !isActiveAssignment(assignment)) continue;
-    if (source === "legacy" && payer.isActive === false) continue;
-    out.push({ payer, assignment, source });
+    if (!isActiveAssignment(assignment)) continue;
+    out.push({ payer, assignment });
   }
   out.sort((a, b) => a.payer.name.localeCompare(b.payer.name));
   return out;
@@ -306,7 +291,7 @@ export function buildPayerSetupRows(inputs: PayerSetupInputs): PayerSetupRow[] {
   const templateById = new Map(inputs.templates.map((t) => [t.id, t]));
 
   const rows: PayerSetupRow[] = [];
-  for (const { payer, assignment, source } of activeOrgPayers(inputs.payers, inputs.assignments)) {
+  for (const { payer, assignment } of activeOrgPayers(inputs.payers, inputs.assignments)) {
     // F4.2.1 template-tier visibility: resolve each covered state's tier from
     // the SAME template the readiness projection resolved (never a second
     // pickTemplate pass that could diverge).
@@ -342,7 +327,6 @@ export function buildPayerSetupRows(inputs: PayerSetupInputs): PayerSetupRow[] {
 
     const base = {
       payer,
-      source,
       assignment,
       scope,
       sop,

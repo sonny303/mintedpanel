@@ -1,13 +1,13 @@
 // E4.2 unified payer setup (TE-19/TE-20) — the Setup tab: one row per ACTIVE
-// organization payer (from subscriptions/legacy ownership, never from targets,
-// so a zero-target payer is visible), with separate dimensions — scope, SOP
+// organization payer (from catalog subscriptions, never from targets, so a
+// zero-target payer is visible), with separate dimensions — scope, SOP
 // coverage, form coverage, profile blockers, generation — and ONE dominant
 // next action linking straight to the surface that fixes it. Supersedes the
 // payer × state readiness table (that detail now lives in each row's
-// expansion). Preserves the e4-2c governance affordances the legacy
-// /admin/payers route carried: source pills, the starter toggle
-// (org_payer_assignments fact, admin-only), the scorecard link, and the
-// read-only posture over Minted-curated identity facts.
+// expansion). Preserves the e4-2c governance affordances the old
+// /admin/payers route carried: the starter toggle (org_payer_assignments
+// fact, admin-only), the scorecard link, and the read-only posture over
+// Minted-curated identity facts.
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -32,11 +32,6 @@ import type { NextAction, PayerSetupRow } from "@/lib/payerSetup";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
 import { PayerResolutionIdDialog } from "@/components/payer-admin/PayerResolutionIdDialog";
 import type { OrgPayerAssignment, Payer } from "@/types";
-
-function SourcePill({ source }: { source: PayerSetupRow["source"] }) {
-  if (source === "catalog") return <StatusPill status="brand" label="Minted catalog" />;
-  return <StatusPill status="neutral" label="Legacy — catalog migration required" />;
-}
 
 // F4.2.1 template-tier visibility, matching the templates list's wording.
 const SOP_TIER_LABEL: Record<SopResolutionTier, string> = {
@@ -170,14 +165,6 @@ function NextActionCell({
           </Link>
         </Button>
       );
-    case "migrate_legacy":
-      return (
-        <Button variant="outline" size="sm" className={btn} asChild>
-          <Link to="/admin/payer-admin" search={{ tab: "catalog" }}>
-            Find canonical payer
-          </Link>
-        </Button>
-      );
     case "create_sop":
       return (
         <Button variant="outline" size="sm" className={btn} asChild>
@@ -266,8 +253,8 @@ function StarterToggle({
   canEdit: boolean;
 }) {
   const setStarter = useSetStarter();
-  // Legacy payers (no assignment row) are outside the starter pack; non-admins
-  // never see a control they can't complete.
+  // Every included row carries an active assignment by construction; the null
+  // guard is defensive. Non-admins never see a control they can't complete.
   if (!assignment) return <span className="text-[12px] text-muted-foreground">—</span>;
   if (!canEdit) {
     return (
@@ -369,20 +356,6 @@ function SetupDetailRow({ row, canEdit }: { row: PayerSetupRow; canEdit: boolean
               canEdit={canEdit}
             />
           </div>
-          {row.source === "legacy" ? (
-            <p className="max-w-[640px] text-[12px] text-muted-foreground">
-              This payer predates the Minted catalog and is read-only until its cases and contracts
-              are migrated to a canonical identity. Find its canonical equivalent in the{" "}
-              <Link
-                to="/admin/payer-admin"
-                search={{ tab: "catalog" }}
-                className="text-[#1B4D3E] underline underline-offset-2"
-              >
-                payer catalog
-              </Link>
-              .
-            </p>
-          ) : null}
         </div>
       </td>
     </tr>
@@ -441,7 +414,7 @@ export function PayerSetupList() {
             ? `${summary.generationReady} of ${summary.total} payer${summary.total === 1 ? "" : "s"} generation-ready.`
             : null}{" "}
           Payer identities and catalog facts are managed by Minted — add payers from the Catalog
-          tab; legacy payers stay read-only until migrated.
+          tab.
         </p>
       </div>
 
@@ -527,7 +500,6 @@ function SetupRow({
               <Chevron className="h-4 w-4" />
             </button>
             <span className="font-medium">{row.payer.name}</span>
-            <SourcePill source={row.source} />
           </div>
         </td>
         <td className="h-10 px-3 align-middle whitespace-nowrap">

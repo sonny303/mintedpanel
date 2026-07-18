@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
-import { getPayer, listPayers, updatePayer, type PayerInput } from "@/services/payers";
+import { getPayer, listPayers } from "@/services/payers";
 import {
   createMso,
   getMso,
@@ -54,20 +54,11 @@ export function usePayer(id: string | undefined) {
   });
 }
 
-// E4.2 payer governance: there is deliberately NO useCreatePayer — canonical
-// payer identities are selected from the Minted catalog (payer-directory →
-// org_payer_assignments), never typed free-text by an org.
-export function useUpdatePayer(id: string) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (patch: Partial<PayerInput>) => updatePayer(id, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.payers(orgId) });
-      qc.invalidateQueries({ queryKey: queryKeys.payer(orgId, id) });
-    },
-  });
-}
+// E4.2 payer governance: there is deliberately NO useCreatePayer and NO
+// useUpdatePayer — canonical payer identities are selected from the Minted
+// catalog (payer-directory → org_payer_assignments) and Minted-curated facts
+// are org-read-only; org-varying payer configuration lives in
+// org_payer_settings (useOrgPayerSettings).
 
 export function useMsos() {
   const orgId = useActiveOrgId() ?? "no-org";

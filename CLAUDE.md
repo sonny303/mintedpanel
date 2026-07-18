@@ -1298,13 +1298,13 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   and no re-apply of `20260716191000` is needed).
   **App:** `Payer.orgId` is honestly `string | null`; `payers.ts` has NO
   create (free-text "Add payer" is gone — `useCreatePayer` removed); `getPayer`
-  reads own-org OR assigned-global (or-filter); `updatePayer` throws the typed
-  `GlobalPayerUpdateError` BEFORE any write on a global row; `PayerInput` is
-  down to `isActive` (name/avg_decision_days are Minted-curated, org-read-only
-  — avg decision still feeds the SummaryTab report). Admin → Payers is a
+  reads own-org OR assigned-global (or-filter). **Since the 2026-07-18
+  close-out `payers.ts` is fully READ-ONLY** — `updatePayer`/`PayerInput`/
+  `GlobalPayerUpdateError`/`useUpdatePayer` deleted (their only reachable
+  subject was a legacy org row; name/avg_decision_days are Minted-curated —
+  avg decision still feeds the SummaryTab report). Admin → Payers is a
   READ-ONLY governance surface: "Browse payer catalog" CTA (→
-  `/payer-directory`), per-row Source pill ("Minted catalog" vs "Legacy —
-  catalog migration required"), starter toggle kept (org_payer_assignments
+  `/payer-directory`), starter toggle kept (org_payer_assignments
   fact, admin-only render), Scorecard link kept, NO edit modal.
   `PayerCatalogChangesPanel` DELETED (+ its hooks/service fns/query key) —
   the directory renders no review queue. **Resolution-ID config moved to the
@@ -1313,14 +1313,29 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   setting (takes a `setting` prop), and `resolveIdentifierConfig(payer,
 orgSetting?)` is now the three-tier chain org setting → Minted global
   fallback (payers columns) → generic — `PipelineDialogs.ProviderIdFields`
-  reads it via `useOrgPayerSetting`. **Legacy cutover:**
-  `docs/data-model/legacy-payer-cutover.md` records the live inventory (18
-  org-scoped rows, ALL referenced — zero deletions; result = pending
-  human-confirmed re-keying; the Pre-Cred sentinel is never re-keyed/deleted)
-  backed by pure tested `src/lib/payerCutover.ts` (`canDeleteLegacyPayer`,
-  exact-match-only `canonicalMatchCandidates` — no fuzzy auto-match).
+  reads it via `useOrgPayerSetting`. **Legacy cutover: CLOSED as superseded
+  (2026-07-18).** The 18-row re-keying inventory in
+  `docs/data-model/legacy-payer-cutover.md` never ran — the PM-approved
+  pre-prod-cut data wipe (2026-07-17, AGENTS.md carve-out; pre-wipe data in
+  the `mintedpanel-backup-july17` project) removed the demo orgs and every
+  legacy payer/sentinel row with them (live-verified: 269 payers, all global).
+  The legacy-payer deprecation change then deleted the machinery:
+  `src/lib/payerCutover.ts` (+test) gone; `payerSetup.ts` lost
+  `PayerSetupSource`/`migrate_legacy` (inclusion = active assignment only);
+  `PayerSetupList` lost the Source pill / "Legacy — catalog migration
+  required" state; `ManualCaseModal` lost the own-org inclusion shortcut; and
+  migration **`20260718120000_payers_org_write_lockdown.sql`** (repo + hosted)
+  dropped `payers_insert`/`payers_update` + revoked org INSERT/UPDATE grants,
+  so an org-scoped payer row can never be minted again (payers is
+  member-SELECT-only; catalog writes stay service-role). The `.or(own-org,
+global)` READS stay — the shared-catalog pattern, own-org disjunct vestigial
+  but keeps local seed fixtures readable (seeds still create org-scoped
+  payers; they never run on hosted). The Pre-Cred sentinel WORKFLOW code
+  (`PRE_CRED_PAYER_NAME` branches) is deliberately untouched — a product
+  concept, currently unreachable (no creatable payer carries the name).
   Governance is machine-checked in `src/lib/payerGovernance.test.ts` (no
-  catalog-review call paths, no payers INSERT, migration grant shape). Types
+  catalog-review call paths, no payers INSERT/UPDATE, migration grant shape
+  incl. the lockdown migration). Types
   for the new table were HAND-ADDED to `types.ts` (hosted still carries the
   un-applied #169 drop, so a full regen would resurrect dropped columns —
   regen only after the operator applies the superseding drop

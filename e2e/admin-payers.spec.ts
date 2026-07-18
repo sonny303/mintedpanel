@@ -1,18 +1,18 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 payer governance + the unified-payer-setup consolidation (TE-18/TE-19):
+// E4.2 payer governance + the unified-payer-setup consolidation (TE-18/TE-19),
+// post the 2026-07-18 legacy-payer close-out (payers are global-catalog-only;
+// the org-scoped "Legacy — catalog migration required" state is gone with the
+// rows it described):
 // /admin/payers is a REDIRECT SHELL into the Payer Setup workspace, and the
 // governance affordances the old route carried live on the workspace's Setup
 // tab —
-//   - a legacy deep link lands safely in Payer Setup (funnel step 12);
+//   - the old deep link lands safely in Payer Setup (funnel step 12);
 //   - no free-text "Add payer" and no per-row Edit control anywhere; the
 //     canonical path is the workspace's Catalog tab;
-//   - an assigned global row is visibly Minted-managed ("Minted catalog");
-//   - a legacy org-scoped row shows the read-only "Legacy — catalog migration
-//     required" state and its next action points at the catalog;
-//   - the starter toggle (org-owned org_payer_assignments fact) renders only
-//     where an assignment row exists, and only for admins — a control never
-//     renders unless the caller can complete the action;
+//   - the starter toggle (org-owned org_payer_assignments fact) renders in
+//     the row's setup detail, and only for admins — a control never renders
+//     unless the caller can complete the action;
 //   - a specialist following the old URL gets the module's explicit denial
 //     with a read-only catalog pointer (TE-20b — no dead end).
 
@@ -20,7 +20,6 @@ const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const GLOBAL_PAYER_ID = "33333333-3333-4333-8333-333333333331";
-const LEGACY_PAYER_ID = "33333333-3333-4333-8333-333333333332";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -79,19 +78,6 @@ function fixtures(): Record<string, unknown[]> {
         status: "active",
         created_at: "2026-07-12T00:00:00Z",
       },
-      {
-        id: LEGACY_PAYER_ID,
-        org_id: ORG_ID,
-        name: "BCBS of Kansas",
-        is_active: true,
-        avg_decision_days: null,
-        payer_kind: "commercial",
-        payer_slug: null,
-        aliases: null,
-        states: null,
-        status: "active",
-        created_at: "2026-06-30T00:00:00Z",
-      },
     ],
     org_payer_assignments: [
       {
@@ -149,7 +135,7 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("legacy /admin/payers deep link redirects into Payer Setup with the governance affordances intact", async ({
+test("old /admin/payers deep link redirects into Payer Setup with the governance affordances intact", async ({
   page,
 }) => {
   currentRole = "admin";
@@ -161,23 +147,19 @@ test("legacy /admin/payers deep link redirects into Payer Setup with the governa
   await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 
-  // The assigned global row is visibly Minted-managed; the legacy org row
-  // carries the read-only migration-required state and its action points at
-  // the catalog (a legacy payer can't take the configure-scope path).
+  // The assigned catalog payer renders as a setup row; the retired legacy
+  // migration state never appears (payers are global-catalog-only).
   const globalRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
-  await expect(globalRow.getByText("Minted catalog")).toBeVisible();
-  const legacyRow = page.locator("tr", { hasText: "BCBS of Kansas" }).first();
-  await expect(legacyRow.getByText("Legacy — catalog migration required")).toBeVisible();
-  await expect(legacyRow.getByRole("link", { name: "Find canonical payer" })).toBeVisible();
+  await expect(globalRow).toBeVisible();
+  await expect(page.getByText("Legacy — catalog migration required")).toHaveCount(0);
 
-  // Starter toggle: only the assigned global payer has one (in its expanded
-  // setup detail); the legacy row (no assignment) renders none.
+  // Starter toggle: the assigned payer's expanded setup detail carries one,
+  // and it is the only switch on the page.
   await globalRow.getByRole("button", { name: "Show setup detail for Aetna (CVS Health)" }).click();
   await expect(
     page.getByRole("switch", { name: "Toggle starter pack for Aetna (CVS Health)" }),
   ).toBeVisible();
-  await legacyRow.getByRole("button", { name: "Show setup detail for BCBS of Kansas" }).click();
-  await expect(page.getByRole("switch")).toHaveCount(1); // still just Aetna's
+  await expect(page.getByRole("switch")).toHaveCount(1);
 
   // Nothing on this page wrote anywhere.
   expect(writes).toEqual([]);
