@@ -29,6 +29,16 @@ Reference:
   pre-E6 surface, where its job moved, and the redirect that covers old
   links. Derived from the E6.1 retirement ledger/redirect table.
 
+## Static site
+
+These markdown pages are the source of truth. `npm run wiki:build`
+(`scripts/build-wiki-site.mjs`, zero dependencies) renders them into a
+styled static site — committed at `docs/wiki/site/` and mirrored to
+`public/wiki/` so every deploy serves it at `/wiki/`. A build PR that
+changes a wiki page reruns `npm run wiki:build` in the same PR; a page
+added to `docs/wiki/` must also be registered in the script's `PAGE_ORDER`
+(the build fails loudly if it isn't).
+
 ## Update rules
 
 - Each page carries an `Updated for:` line naming the last epic merged into

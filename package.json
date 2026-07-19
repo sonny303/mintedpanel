@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "wiki:build": "node scripts/build-wiki-site.mjs"
   },
   "dependencies": {
     "@fontsource/geist": "^5.2.9",

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cases — Minted Panel Wiki</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body { background:#FAFAF8; color:#1a1a1a; }
+header { background:#1B4D3E; color:#fff; padding:14px 32px; display:flex; align-items:center; gap:12px; }
+header .mark { width:22px; height:22px; border:2px solid #fff; border-radius:4px; }
+header a { color:#fff; text-decoration:none; font-size:16px; font-weight:600; }
+header .crumb { margin-left:auto; font-size:13px; opacity:.8; }
+.layout { display:flex; max-width:1180px; margin:0 auto; }
+nav { width:250px; padding:28px 20px; border-right:1px solid #E8E5E0; min-height:calc(100vh - 52px); flex-shrink:0; }
+nav input { width:100%; padding:8px 10px; border:1px solid #E8E5E0; border-radius:6px; font-size:13px; background:#fff; margin-bottom:20px; }
+nav h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#8a8a86; margin:18px 0 8px; }
+nav a { display:block; padding:6px 10px; font-size:13.5px; color:#3a3a38; text-decoration:none; border-radius:6px; }
+nav a.active { background:#1B4D3E; color:#fff; }
+nav a.filtered-out { display:none; }
+main { flex:1; padding:36px 48px; max-width:780px; min-width:0; }
+main h1 { font-size:24px; font-weight:650; margin-bottom:14px; }
+main h2 { font-size:17px; font-weight:600; margin:24px 0 8px; }
+main h3 { font-size:15px; font-weight:600; margin:18px 0 6px; }
+main p, main li { font-size:14px; line-height:1.65; color:#2c2c2a; margin-bottom:10px; }
+main ul { padding-left:20px; margin-bottom:12px; }
+main li { margin-bottom:4px; }
+main code { background:#F0EFEB; border-radius:4px; padding:1px 5px; font-family:ui-monospace,monospace; font-size:12.5px; }
+main a { color:#1B4D3E; }
+main table { border-collapse:collapse; margin:12px 0 18px; width:100%; }
+main th, main td { border:1px solid #E8E5E0; padding:7px 10px; font-size:13px; text-align:left; vertical-align:top; }
+main th { background:#F5F4F0; font-weight:600; }
+footer.pagefoot { margin-top:34px; padding-top:14px; border-top:1px solid #E8E5E0; display:flex; justify-content:space-between; font-size:13px; }
+footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
+</style>
+</head>
+<body>
+<header><span class="mark"></span><a href="./index.html">Minted Panel Wiki</a><span class="crumb">built from docs/wiki — npm run wiki:build</span></header>
+<div class="layout">
+<nav>
+<input id="wiki-search" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+<h3>Walkthroughs</h3><a href="./cases.html" data-title="cases" class="active">Cases</a>
+<a href="./payer-setup.html" data-title="payer setup">Payer Setup</a>
+<a href="./reporting-center.html" data-title="reporting center">Reporting Center</a>
+<a href="./org-detail.html" data-title="org detail">Org Detail</a>
+<a href="./groups.html" data-title="groups">Groups</a>
+<a href="./providers.html" data-title="providers">Providers</a>
+<h3>Reference</h3><a href="./data-definitions.html" data-title="data definitions">Data definitions</a>
+<a href="./where-did-it-go.html" data-title="where did it go?">Where did it go?</a>
+</nav>
+<main>
+<h1>Cases</h1>
+<p><em>Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p>The home of Journey D (casework).</p>
+<h2>Case status — shipped with E6.0</h2>
+<ul>
+<li>Every case shows exactly ONE status from the fixed eight-word list: Not Started → In Progress → Submitted → In Review → Action Required → Approved | Denied (reason required) | Not Pursuing. The list is code-owned; there is no per-org status configuration (Admin › Statuses is retired and redirects to Cases).</li>
+<li>Statuses move on evidence. The system sets what it witnessed: creating a case (Not Started), the first recorded work — a touch, task completion, or a real fill (In Progress), and an extension-logged submission (Submitted). Humans set what they learned — payer calls, RFIs, letters — from the case header's status control or by accepting the suggestion when logging a touch. Fax/mail submissions are never presumed: you log the touch and accept the Submitted bump.</li>
+<li>Approved asks for the effective date and the payer's provider ID under the payer's own name for it (e.g. "PTAN" for Medicare). Denied requires a reason from the fixed list. Reapply returns the SAME case to In Progress with a fresh task cycle — the prior denial stays visible underneath.</li>
+<li>Admin corrections (any target, note required) APPEND to the history with a Correction marker; the original entry always stands.</li>
+<li>The full status trail lives on the case detail's history panel, with the evidence touch linked on each row.</li>
+</ul>
+<h2>One Cases surface — shipped with E6.1</h2>
+<ul>
+<li>Cases is the app's default landing (post-login and <code>/</code>). <code>/home</code> and <code>/work</code> redirect here; <code>?run=</code> batch links are preserved.</li>
+<li>Three pivots over the SAME open cases, held in the URL (<code>?pivot=</code>): - <strong>To-do</strong> (default) — the ranked queue: overdue/arrived follow-ups → task due dates → provider start dates → the rest; each entry names its reason. The ranking is the fixed shipped order (E6.6 — no org config). - <strong>By provider</strong> and <strong>By payer</strong> — list slices with per-group "x of y approved" rollups, chips, search, tracking-id lookup, and bulk actions. Legacy list links (<code>?chip=</code>, <code>?ids=</code>, <code>?runId=</code>) land on the payer pivot unchanged.</li>
+<li>Case detail (<code>/cases/$id</code>) deep links are unchanged.</li>
+</ul>
+<h2>How cases get created — shipped with E6.3</h2>
+<ul>
+<li><strong>One door</strong>: cases are created through the generation grid (Groups › {Group} › Payer Network › Review &amp; generate) after a human confirm — see the Groups page for the grid itself. Onboarding a provider creates ZERO cases; new candidates surface counted on the group's board instead. Starter cases and the launch-dialog batch creator are retired.</li>
+<li><strong>The documented escape hatch</strong>: the manual "New case" modal (Cases list and the provider record) remains for genuinely untargeted one-offs — same 4-part key discipline, duplicate pre-check with a link to the existing case, no generation run id.</li>
+<li><strong>Reapply is continuation, not creation</strong>: a denied case returns to In Progress on the SAME case with a fresh task cycle.</li>
+<li>A confirmed batch lands here filtered to its run (<code>?run=</code>), with the created cases ranked in the to-do pivot.</li>
+</ul>
+<h2>Target state</h2>
+<ul>
+<li>"Add touch" becomes the one logging action with multi-case select _(lands with E6.6)_.</li>
+</ul>
+<footer class="pagefoot"><span></span><span><a href="./payer-setup.html">Payer Setup →</a></span></footer>
+</main>
+</div>
+<script>
+document.getElementById("wiki-search").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll("nav a[data-title]").forEach((a) => {
+    a.classList.toggle("filtered-out", q !== "" && !a.dataset.title.includes(q));
+  });
+});
+</script>
+</body>
+</html>
