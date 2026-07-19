@@ -52,6 +52,8 @@ export interface FunnelRow {
   formState: FunnelFormState;
   /** First matched portal key (payer-linked or SOP-step-linked), for links. */
   portalKey: string | null;
+  /** First global SOP head id — the editor deep-link every form action opens. */
+  sopTemplateId: string | null;
   driftCount: number;
   nextAction: FunnelNextAction;
   ready: boolean;
@@ -180,6 +182,7 @@ export function buildPayerReadinessFunnel(input: BuildFunnelInput): FunnelRow[] 
       needsPortal,
       formState,
       portalKey: payerPortals[0]?.portalKey ?? null,
+      sopTemplateId: sops[0]?.id ?? null,
       driftCount,
       nextAction,
       ready: nextAction === "ready",

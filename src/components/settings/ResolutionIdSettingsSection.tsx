@@ -16,7 +16,7 @@ import { useOrgPayerSettings } from "@/hooks/useOrgPayerSettings";
 import { useIsAdmin } from "@/lib/permissions";
 import { activeOrgPayers, resolutionIdSource, type ResolutionIdSource } from "@/lib/payerSetup";
 import { resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
-import { PayerResolutionIdDialog } from "@/components/payer-admin/PayerResolutionIdDialog";
+import { PayerResolutionIdDialog } from "@/components/settings/PayerResolutionIdDialog";
 import type { Payer } from "@/types";
 
 const SOURCE_LABEL: Record<ResolutionIdSource, string> = {

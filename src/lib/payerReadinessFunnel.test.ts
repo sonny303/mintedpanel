@@ -149,6 +149,12 @@ describe("buildPayerReadinessFunnel ladder", () => {
     expect(row.nextAction).toBe("run_dry_test");
   });
 
+  it("carries the first global SOP head id for editor deep-links", () => {
+    const row = build({ sops: [sop()] });
+    expect(row.sopTemplateId).toBe("sop-1");
+    expect(build({}).sopTemplateId).toBeNull();
+  });
+
   it("proven with no drift → ready", () => {
     const row = build({
       sops: [sop()],

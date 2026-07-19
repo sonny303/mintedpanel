@@ -1,23 +1,12 @@
-// E6.1 F6.1.6 (2026-07-19) — the standalone Portals registry page retires
-// into the Payer Setup workspace's "Forms & portals" tab (the same shared
-// PortalsRegistry body). The ?payerId= payer-context deep link (the setup
-// funnel's "Register portal" action) is preserved through the redirect.
-// E6.5 folds portal registration/capture/train into the SOP form step.
+// E6.1 F6.1.6 → E6.5: the standalone Portals registry page retired into the
+// Payer Setup workspace; E6.5 folds portal registration/capture/train into the
+// SOP form step, so this now lands on the SOPs tab. The old ?payerId= context
+// (Add-portal preselect) is dropped — registration lives in the editor. This
+// URL stays alive as a redirect (legacy URLs never dead-end).
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-interface PortalsSearch {
-  payerId?: string;
-}
-
 export const Route = createFileRoute("/admin/portals")({
-  validateSearch: (search: Record<string, unknown>): PortalsSearch => ({
-    payerId: typeof search.payerId === "string" ? search.payerId : undefined,
-  }),
-  beforeLoad: ({ search }) => {
-    throw redirect({
-      to: "/admin/payer-admin",
-      search: { tab: "forms", ...(search.payerId ? { payerId: search.payerId } : {}) },
-      replace: true,
-    });
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/payer-admin/sops", replace: true });
   },
 });
