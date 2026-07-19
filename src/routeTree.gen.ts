@@ -24,7 +24,6 @@ import { Route as OrgDetailRouteImport } from './routes/org-detail'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
-import { Route as GroupsRouteImport } from './routes/groups'
 import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as GenerationRouteImport } from './routes/generation'
 import { Route as FixItRouteImport } from './routes/fix-it'
@@ -36,6 +35,7 @@ import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
 import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
+import { Route as GroupsIndexRouteImport } from './routes/groups.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
@@ -47,6 +47,7 @@ import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
+import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
 import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
@@ -62,12 +63,15 @@ import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
+import { Route as GroupsGroupIdIndexRouteImport } from './routes/groups.$groupId.index'
 import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
+import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
 import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
@@ -150,11 +154,6 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
-const GroupsRoute = GroupsRouteImport.update({
-  id: '/groups',
-  path: '/groups',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GetStartedRoute = GetStartedRouteImport.update({
   id: '/get-started',
   path: '/get-started',
@@ -210,6 +209,11 @@ const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LaunchesRoute,
 } as any)
+const GroupsIndexRoute = GroupsIndexRouteImport.update({
+  id: '/groups/',
+  path: '/groups/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CasesIndexRoute = CasesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -264,6 +268,11 @@ const LaunchesIdRoute = LaunchesIdRouteImport.update({
 const ImportRunIdRoute = ImportRunIdRouteImport.update({
   id: '/import/$runId',
   path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerationRunsRoute = GenerationRunsRouteImport.update({
@@ -341,6 +350,11 @@ const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersIdRoute,
 } as any)
+const GroupsGroupIdIndexRoute = GroupsGroupIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GroupsGroupIdRoute,
+} as any)
 const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -370,6 +384,17 @@ const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
   id: '/portals/$portalKey/train',
   path: '/portals/$portalKey/train',
   getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsGroupIdPayerNetworkRoute =
+  GroupsGroupIdPayerNetworkRouteImport.update({
+    id: '/payer-network',
+    path: '/payer-network',
+    getParentRoute: () => GroupsGroupIdRoute,
+  } as any)
+const GroupsGroupIdFacilitiesRoute = GroupsGroupIdFacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
+  getParentRoute: () => GroupsGroupIdRoute,
 } as any)
 const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
   id: '/$runId',
@@ -411,7 +436,6 @@ export interface FileRoutesByFullPath {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
-  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -441,6 +465,7 @@ export interface FileRoutesByFullPath {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation/runs': typeof GenerationRunsRouteWithChildren
+  '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
@@ -452,6 +477,7 @@ export interface FileRoutesByFullPath {
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
@@ -460,12 +486,15 @@ export interface FileRoutesByFullPath {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation/runs/': typeof GenerationRunsIndexRoute
+  '/groups/$groupId/': typeof GroupsGroupIdIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -477,7 +506,6 @@ export interface FileRoutesByTo {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
-  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
   '/org-detail': typeof OrgDetailRoute
@@ -511,6 +539,7 @@ export interface FileRoutesByTo {
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
+  '/groups': typeof GroupsIndexRoute
   '/launches': typeof LaunchesIndexRoute
   '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
@@ -519,12 +548,15 @@ export interface FileRoutesByTo {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin': typeof AdminPayerAdminIndexRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/generation/runs': typeof GenerationRunsIndexRoute
+  '/groups/$groupId': typeof GroupsGroupIdIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -538,7 +570,6 @@ export interface FileRoutesById {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
-  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
@@ -568,6 +599,7 @@ export interface FileRoutesById {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation_/runs': typeof GenerationRunsRouteWithChildren
+  '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
@@ -579,6 +611,7 @@ export interface FileRoutesById {
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
@@ -587,12 +620,15 @@ export interface FileRoutesById {
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation_/runs/': typeof GenerationRunsIndexRoute
+  '/groups/$groupId/': typeof GroupsGroupIdIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -607,7 +643,6 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
-    | '/groups'
     | '/home'
     | '/launches'
     | '/login'
@@ -637,6 +672,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation/runs'
+    | '/groups/$groupId'
     | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
@@ -648,6 +684,7 @@ export interface FileRouteTypes {
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
+    | '/groups/'
     | '/launches/'
     | '/onboarding/'
     | '/providers/'
@@ -656,12 +693,15 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation/runs/'
+    | '/groups/$groupId/'
     | '/providers/$id/'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
@@ -673,7 +713,6 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
-    | '/groups'
     | '/home'
     | '/login'
     | '/org-detail'
@@ -707,6 +746,7 @@ export interface FileRouteTypes {
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases'
+    | '/groups'
     | '/launches'
     | '/onboarding'
     | '/providers'
@@ -715,12 +755,15 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin'
     | '/admin/sops'
     | '/admin/templates'
     | '/generation/runs'
+    | '/groups/$groupId'
     | '/providers/$id'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
@@ -733,7 +776,6 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
-    | '/groups'
     | '/home'
     | '/launches'
     | '/login'
@@ -763,6 +805,7 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation_/runs'
+    | '/groups/$groupId'
     | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
@@ -774,6 +817,7 @@ export interface FileRouteTypes {
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
+    | '/groups/'
     | '/launches/'
     | '/onboarding/'
     | '/providers/'
@@ -782,12 +826,15 @@ export interface FileRouteTypes {
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation_/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation_/runs/'
+    | '/groups/$groupId/'
     | '/providers/$id/'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers_/$id/scorecard'
@@ -801,7 +848,6 @@ export interface RootRouteChildren {
   FixItRoute: typeof FixItRoute
   GenerationRoute: typeof GenerationRoute
   GetStartedRoute: typeof GetStartedRoute
-  GroupsRoute: typeof GroupsRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -830,6 +876,7 @@ export interface RootRouteChildren {
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
+  GroupsGroupIdRoute: typeof GroupsGroupIdRouteWithChildren
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
@@ -837,6 +884,7 @@ export interface RootRouteChildren {
   ShareTokenRoute: typeof ShareTokenRoute
   SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
   TasksIdRoute: typeof TasksIdRoute
+  GroupsIndexRoute: typeof GroupsIndexRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
@@ -950,13 +998,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/groups': {
-      id: '/groups'
-      path: '/groups'
-      fullPath: '/groups'
-      preLoaderRoute: typeof GroupsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/get-started': {
       id: '/get-started'
       path: '/get-started'
@@ -1034,6 +1075,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LaunchesIndexRouteImport
       parentRoute: typeof LaunchesRoute
     }
+    '/groups/': {
+      id: '/groups/'
+      path: '/groups'
+      fullPath: '/groups/'
+      preLoaderRoute: typeof GroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cases/': {
       id: '/cases/'
       path: '/'
@@ -1109,6 +1157,13 @@ declare module '@tanstack/react-router' {
       path: '/import/$runId'
       fullPath: '/import/$runId'
       preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId': {
+      id: '/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof GroupsGroupIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/generation_/runs': {
@@ -1216,6 +1271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdIndexRouteImport
       parentRoute: typeof ProvidersIdRoute
     }
+    '/groups/$groupId/': {
+      id: '/groups/$groupId/'
+      path: '/'
+      fullPath: '/groups/$groupId/'
+      preLoaderRoute: typeof GroupsGroupIdIndexRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
     '/generation_/runs/': {
       id: '/generation_/runs/'
       path: '/'
@@ -1257,6 +1319,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/portals/$portalKey/train'
       preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId/payer-network': {
+      id: '/groups/$groupId/payer-network'
+      path: '/payer-network'
+      fullPath: '/groups/$groupId/payer-network'
+      preLoaderRoute: typeof GroupsGroupIdPayerNetworkRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
+    '/groups/$groupId/facilities': {
+      id: '/groups/$groupId/facilities'
+      path: '/facilities'
+      fullPath: '/groups/$groupId/facilities'
+      preLoaderRoute: typeof GroupsGroupIdFacilitiesRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
     }
     '/generation_/runs/$runId': {
       id: '/generation_/runs/$runId'
@@ -1417,6 +1493,22 @@ const GenerationRunsRouteWithChildren = GenerationRunsRoute._addFileChildren(
   GenerationRunsRouteChildren,
 )
 
+interface GroupsGroupIdRouteChildren {
+  GroupsGroupIdFacilitiesRoute: typeof GroupsGroupIdFacilitiesRoute
+  GroupsGroupIdPayerNetworkRoute: typeof GroupsGroupIdPayerNetworkRoute
+  GroupsGroupIdIndexRoute: typeof GroupsGroupIdIndexRoute
+}
+
+const GroupsGroupIdRouteChildren: GroupsGroupIdRouteChildren = {
+  GroupsGroupIdFacilitiesRoute: GroupsGroupIdFacilitiesRoute,
+  GroupsGroupIdPayerNetworkRoute: GroupsGroupIdPayerNetworkRoute,
+  GroupsGroupIdIndexRoute: GroupsGroupIdIndexRoute,
+}
+
+const GroupsGroupIdRouteWithChildren = GroupsGroupIdRoute._addFileChildren(
+  GroupsGroupIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
@@ -1425,7 +1517,6 @@ const rootRouteChildren: RootRouteChildren = {
   FixItRoute: FixItRoute,
   GenerationRoute: GenerationRoute,
   GetStartedRoute: GetStartedRoute,
-  GroupsRoute: GroupsRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
@@ -1454,6 +1545,7 @@ const rootRouteChildren: RootRouteChildren = {
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
+  GroupsGroupIdRoute: GroupsGroupIdRouteWithChildren,
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
@@ -1461,6 +1553,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShareTokenRoute: ShareTokenRoute,
   SsnIntakeTokenRoute: SsnIntakeTokenRoute,
   TasksIdRoute: TasksIdRoute,
+  GroupsIndexRoute: GroupsIndexRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,

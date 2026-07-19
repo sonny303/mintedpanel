@@ -462,6 +462,34 @@ export async function listDenialReasonCodes(): Promise<DenialReasonCode[]> {
   return camelizeRow<DenialReasonCode[]>(data ?? []);
 }
 
+// E6.2 F6.2.3 — the board drill-down's denial history: one org-scoped narrow
+// read of the E6.0 unified ledger's DENIED entries (case id, reason, date),
+// joined to reason labels client-side via the cached listDenialReasonCodes.
+// Latest-first so "the prior denial beneath a reapply cycle" reads naturally.
+export interface CaseDenialEntry {
+  caseId: string;
+  reasonCodeId: string | null;
+  note: string | null;
+  changedAt: string;
+}
+
+export async function listCaseDenialEntries(): Promise<CaseDenialEntry[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("case_status_history")
+    .select("case_id, reason_code_id, note, changed_at")
+    .eq("org_id", orgId)
+    .eq("to_status", "denied")
+    .order("changed_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    caseId: (row as { case_id: string }).case_id,
+    reasonCodeId: (row as { reason_code_id: string | null }).reason_code_id,
+    note: (row as { note: string | null }).note,
+    changedAt: (row as { changed_at: string }).changed_at,
+  }));
+}
+
 export interface AppendStatusHistoryInput {
   track: "credentialing" | "contracting";
   caseId?: string | null;

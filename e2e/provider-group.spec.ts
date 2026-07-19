@@ -266,16 +266,14 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   // The wizard-level next action advances past the group section.
   await expect(page.getByRole("button", { name: "Next: Facilities" }).first()).toBeVisible();
 
-  // F1.1.3 (re-homed by E6.1 F6.1.4): the read-only summary lives on the
-  // Groups shell, no edit affordances.
+  // F1.1.3 (re-homed by E6.2 F6.2.1): the group facts live on the group hub —
+  // a single-group org auto-lands there from /groups (zero extra clicks).
   await page.goto("/groups");
-  const summary = page
-    .locator("main")
-    .getByRole("heading", { name: "Provider groups" })
-    .locator("..");
-  await expect(summary).toContainText("Tree Hill Sports Therapy LLC", { timeout: 30000 });
-  await expect(summary).toContainText("TIN 12-3456789");
-  await expect(summary.getByRole("button", { name: /Edit|Add/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Tree Hill Sports Therapy LLC" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible();
+  await expect(page.getByText("12-3456789")).toBeVisible();
 });
 
 test("TS-30: second TIN via Add another group — both rows listed, still Complete, no gate", async ({

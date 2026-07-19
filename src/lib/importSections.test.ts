@@ -11,6 +11,7 @@ import {
   COMBINED_TEMPLATE_RETIRED_MESSAGE,
   FACILITY_DESCRIPTOR,
   GROUP_DESCRIPTOR,
+  PAYER_ATTACH_DESCRIPTOR,
   PROVIDER_DESCRIPTOR,
   decodeDelimited,
   encodeDelimited,
@@ -19,6 +20,7 @@ import {
   sectionTemplateCsv,
   uploadLadderGate,
   type SectionDescriptor,
+  type SectionScanContext,
 } from "@/lib/importSections";
 import { ROSTER_TEMPLATE_HEADERS } from "@/lib/rosterImport";
 import type { ScannedRow } from "@/lib/rosterImport";
@@ -302,5 +304,86 @@ describe("upload ladder gate (TE-5)", () => {
       expect(blocked.prerequisite).toBe("provider_group");
       expect(uploadLadderGate(kind, { activeGroupCount: 1 }).allowed).toBe(true);
     }
+  });
+});
+
+/* ----------------------- payer attach descriptor (E6.2) -------------------- */
+
+describe("payer attach descriptor (E6.2 F6.2.4)", () => {
+  const context: SectionScanContext = {
+    payerAttach: {
+      groups: [
+        { id: "g1", name: "Outer Banks Rehab Group", tin: "123456789", states: ["NC", "CO"] },
+      ],
+      payers: [
+        {
+          id: "pay1",
+          name: "Aetna",
+          payerSlug: "aetna",
+          aliases: [],
+          states: ["NC", "SC"],
+          status: "active",
+        },
+      ],
+    },
+  };
+
+  function scanAttachRow(cells: Record<string, string>, ctx = context): ScannedRow {
+    const headerLine = PAYER_ATTACH_DESCRIPTOR.headers.join(",");
+    const dataLine = PAYER_ATTACH_DESCRIPTOR.headers.map((h) => cells[h] ?? "").join(",");
+    const parsed = parseCsv(`${headerLine}\n${dataLine}`);
+    return scanSectionRecord(PAYER_ATTACH_DESCRIPTOR, parsed.records[0], parsed.headers, ctx);
+  }
+
+  it("template is exactly group_name, group_tin, payer, states", () => {
+    expect([...PAYER_ATTACH_DESCRIPTOR.headers]).toEqual([
+      "group_name",
+      "group_tin",
+      "payer",
+      "states",
+    ]);
+    expect(sectionTemplateCsv(PAYER_ATTACH_DESCRIPTOR).trim()).toBe(
+      "group_name,group_tin,payer,states",
+    );
+  });
+
+  it("the template documents eligibility and the ';' states encoding", () => {
+    expect(PAYER_ATTACH_DESCRIPTOR.helperText).toMatch(/one row per group × payer/i);
+    expect(PAYER_ATTACH_DESCRIPTOR.helperText).toMatch(/operating states/i);
+  });
+
+  it("a valid row stages with resolved group_id/payer_id stamped into mapped", () => {
+    const row = scanAttachRow({ group_tin: "12-3456789", payer: "aetna", states: "NC" });
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped).toMatchObject({ group_id: "g1", payer_id: "pay1", states: "NC" });
+  });
+
+  it("eligibility errors are named per row at scan time", () => {
+    const outOfCoverage = scanAttachRow({ group_tin: "123456789", payer: "Aetna", states: "TX" });
+    expect(outOfCoverage.rowState).toBe("error");
+    expect(outOfCoverage.errorReason).toBe("Aetna does not cover TX");
+
+    const outsideGroup = scanAttachRow({ group_tin: "123456789", payer: "Aetna", states: "SC" });
+    expect(outsideGroup.rowState).toBe("error");
+    expect(outsideGroup.errorReason).toMatch(/operating states/);
+
+    const unknownPayer = scanAttachRow({ group_tin: "123456789", payer: "ghost", states: "NC" });
+    expect(unknownPayer.rowState).toBe("error");
+    expect(unknownPayer.errorColumn).toBe("payer");
+  });
+
+  it("states is required and must be 2-letter codes", () => {
+    const missing = scanAttachRow({ group_tin: "123456789", payer: "Aetna" });
+    expect(missing.rowState).toBe("error");
+    expect(missing.errorColumn).toBe("states");
+
+    const bad = scanAttachRow({ group_tin: "123456789", payer: "Aetna", states: "North Carolina" });
+    expect(bad.rowState).toBe("error");
+  });
+
+  it("a missing scan context blocks the row instead of skipping eligibility", () => {
+    const row = scanAttachRow({ group_tin: "123456789", payer: "Aetna", states: "NC" }, {});
+    expect(row.rowState).toBe("error");
+    expect(row.errorReason).toMatch(/catalog unavailable/i);
   });
 });

@@ -18,6 +18,7 @@ import {
   type ProviderGroupInput,
 } from "@/services/orgSettings";
 import { decodeDelimited } from "@/lib/importSections";
+import { attachGroupPayer, listPayerNetworkTargets } from "@/services/payerNetworkTargets";
 import type { ScannedRow } from "@/lib/rosterImport";
 import type {
   BatchAssignmentPlan,
@@ -498,4 +499,114 @@ export async function commitSectionImportRun(input: {
     skipped: input.skippedCount,
     blocked: blockedEntries.length,
   };
+}
+
+/* ------------------- E6.2 — payer-attach commit fan-out -------------------- */
+
+export interface PayerAttachCommitResult {
+  alreadyCommitted: boolean;
+  createdTargets: number;
+  restoredTargets: number;
+  skippedTargets: number;
+}
+
+/**
+ * Commit a `payer_attach` run: each staged row carries the scan-resolved
+ * `group_id`/`payer_id` (the descriptor's contextScan stamp) and its
+ * ';'-delimited states. Idempotent skip-on-match against existing targets —
+ * an already-active target skips, an archived one RESTORES (never a duplicate
+ * insert under the (group, payer, state) unique), and the org-level enablement
+ * rides attachGroupPayer's implicit addAssignment. A mid-loop failure leaves
+ * the run resumable (the same rows skip on retry).
+ */
+export async function commitPayerAttachImportRun(input: {
+  runId: string;
+}): Promise<PayerAttachCommitResult> {
+  const orgId = requireActiveOrg();
+  const run = await getImportRun(input.runId);
+  if (!run) throw new Error("Import run not found");
+  if (run.state === "committed") {
+    return { alreadyCommitted: true, createdTargets: 0, restoredTargets: 0, skippedTargets: 0 };
+  }
+  if (run.state !== "ready_for_review") {
+    throw new Error(`Import run is not ready to commit (state ${run.state})`);
+  }
+
+  const staged = await listStagedImportRows(input.runId);
+  const existing = await listPayerNetworkTargets();
+  const targetByKey = new Map(existing.map((t) => [`${t.groupId}|${t.payerId}|${t.state}`, t]));
+
+  let createdTargets = 0;
+  let restoredTargets = 0;
+  let skippedTargets = 0;
+  const planByPayer = new Map<
+    string,
+    { inserts: Array<{ groupId: string; state: string }>; restoreIds: string[] }
+  >();
+  const planned = new Set<string>();
+
+  for (const row of staged) {
+    const mapped = row.mapped ?? {};
+    const groupId = mapped.group_id;
+    const payerId = mapped.payer_id;
+    if (!groupId || !payerId) continue; // defensive — contextScan stamps both
+    for (const state of decodeDelimited(mapped.states ?? "")) {
+      const key = `${groupId}|${payerId}|${state}`;
+      if (planned.has(key)) continue; // repeated combos in the file plan once
+      planned.add(key);
+      const match = targetByKey.get(key);
+      if (match && match.status === "active") {
+        skippedTargets += 1;
+        continue;
+      }
+      const plan = planByPayer.get(payerId) ?? { inserts: [], restoreIds: [] };
+      if (match) {
+        plan.restoreIds.push(match.id);
+        restoredTargets += 1;
+      } else {
+        plan.inserts.push({ groupId, state });
+        createdTargets += 1;
+      }
+      planByPayer.set(payerId, plan);
+    }
+  }
+
+  for (const [payerId, plan] of planByPayer) {
+    await attachGroupPayer(payerId, plan);
+  }
+
+  const { error } = await supabase
+    .from("import_runs")
+    .update({
+      state: "committed",
+      committed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", orgId)
+    .eq("id", input.runId)
+    .eq("state", "ready_for_review");
+  if (error) throw error;
+
+  const { error: purgeError } = await supabase
+    .from("import_rows")
+    .delete()
+    .eq("org_id", orgId)
+    .eq("run_id", input.runId);
+  if (purgeError) throw purgeError;
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "import_run",
+    entityId: input.runId,
+    after: {
+      id: input.runId,
+      entityKind: "payer_attach",
+      createdTargets,
+      restoredTargets,
+      skippedTargets,
+    },
+    description: `Payer attach import committed (${createdTargets} created, ${restoredTargets} restored, ${skippedTargets} skipped)`,
+  });
+
+  return { alreadyCommitted: false, createdTargets, restoredTargets, skippedTargets };
 }

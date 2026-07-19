@@ -13,6 +13,7 @@ import {
   applyBatchAssignment,
   cancelImportRun,
   commitImportRun,
+  commitPayerAttachImportRun,
   commitSectionImportRun,
   completeImportRun,
   createImportRun,
@@ -40,7 +41,12 @@ import {
   type SectionDedupeResult,
 } from "@/lib/importDedupe";
 import { STAGE_CHUNK_SIZE, chunkRows, collectRowErrors } from "@/lib/rosterImport";
-import { scanSectionRecord, sectionDescriptor, type SectionEntityKind } from "@/lib/importSections";
+import {
+  scanSectionRecord,
+  sectionDescriptor,
+  type SectionEntityKind,
+  type SectionScanContext,
+} from "@/lib/importSections";
 import type { ParsedCsv } from "@/lib/csvImport";
 import type { ImportRunErrorEntry, ImportRunSource } from "@/types";
 
@@ -66,6 +72,7 @@ async function driveRosterScan(
   runId: string,
   parsed: ParsedCsv,
   entityKind: SectionEntityKind,
+  scanContext?: SectionScanContext,
 ) {
   liveScanRunIds.add(runId);
   try {
@@ -73,7 +80,9 @@ async function driveRosterScan(
     const descriptor = sectionDescriptor(entityKind);
     const errors: ImportRunErrorEntry[] = [];
     for (const records of chunkRows(parsed.records, STAGE_CHUNK_SIZE)) {
-      const scanned = records.map((r) => scanSectionRecord(descriptor, r, parsed.headers));
+      const scanned = records.map((r) =>
+        scanSectionRecord(descriptor, r, parsed.headers, scanContext),
+      );
       errors.push(...collectRowErrors(scanned));
       await stageImportRows(runId, scanned);
     }
@@ -122,6 +131,9 @@ export interface StartRosterScanInput {
   entityKind: SectionEntityKind;
   fileName: string;
   parsed: ParsedCsv;
+  /** E6.2 — org-context inputs for descriptors with a contextScan (the
+   * payer-attach eligibility check); other kinds omit it. */
+  scanContext?: SectionScanContext;
 }
 
 /** Create the run row, then detach the chunked scan loop. Resolves with the
@@ -138,7 +150,7 @@ export function useStartRosterScan() {
         fileName: input.fileName,
         totalRows: input.parsed.records.length,
       });
-      void driveRosterScan(qc, orgId, run.id, input.parsed, input.entityKind);
+      void driveRosterScan(qc, orgId, run.id, input.parsed, input.entityKind, input.scanContext);
       return run.id;
     },
     onSuccess: () => {
@@ -325,6 +337,25 @@ export function useCommitSectionImportRun() {
       qc.invalidateQueries({ queryKey: queryKeys.importRunRows(orgId, input.runId) });
       qc.invalidateQueries({ queryKey: queryKeys.providerGroups(orgId) });
       qc.invalidateQueries({ queryKey: ["facilities", orgId] });
+    },
+  });
+}
+
+/** E6.2 F6.2.4 — commit a payer_attach run (idempotent skip-on-match; the
+ * org-level enablement is implicit). Invalidates the attach families the
+ * board + wizard + readiness surfaces compose. */
+export function useCommitPayerAttachImportRun() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: { runId: string }) => commitPayerAttachImportRun(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: queryKeys.importRuns(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.importRun(orgId, input.runId) });
+      qc.invalidateQueries({ queryKey: queryKeys.payerNetworkTargets(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.orgPayerAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.payers(orgId) });
+      qc.invalidateQueries({ queryKey: queryKeys.payerCatalog() });
     },
   });
 }

@@ -30,6 +30,7 @@ import {
   sectionDescriptor,
   sectionTemplateCsv,
   type SectionEntityKind,
+  type SectionScanContext,
 } from "@/lib/importSections";
 import type { ImportRunSource } from "@/types";
 
@@ -43,11 +44,14 @@ export function RosterUploader({
   source,
   variant,
   entityKind,
+  scanContext,
 }: {
   source: ImportRunSource;
   variant: "internal" | "streamlined";
   /** E3.3 TE-4: which per-section template/gate/scan this uploader runs. */
   entityKind: SectionEntityKind;
+  /** E6.2 — org-context for descriptors with a contextScan (payer attach). */
+  scanContext?: SectionScanContext;
 }) {
   const descriptor = sectionDescriptor(entityKind);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -101,7 +105,7 @@ export function RosterUploader({
 
   const startImport = (fileName: string, parsed: ParsedCsv) => {
     startScan.mutate(
-      { source, entityKind, fileName, parsed },
+      { source, entityKind, fileName, parsed, scanContext },
       { onSuccess: (runId) => setPhase({ kind: "run", runId }) },
     );
   };

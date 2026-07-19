@@ -20,6 +20,7 @@ const ENTITY_KIND_LABELS: Record<ImportEntityKind, string> = {
   facility: "Facilities",
   provider: "Providers",
   combined: "Combined (legacy)",
+  payer_attach: "Payer attach",
 };
 
 export function ImportRunList() {
