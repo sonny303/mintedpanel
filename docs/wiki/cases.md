@@ -1,6 +1,6 @@
 # Cases
 
-_Updated for: E6.0 (PR #199, 2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.1 (PR #201, 2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
 
 The home of Journey D (casework).
 
@@ -27,14 +27,21 @@ The home of Journey D (casework).
 - The full status trail lives on the case detail's history panel, with the
   evidence touch linked on each row.
 
-## Today (pre-E6.1 layout)
+## One Cases surface — shipped with E6.1
 
-Work still lives across `/work` (My Cases queue), `/cases` (org case list),
-and per-case detail pages.
+- Cases is the app's default landing (post-login and `/`). `/home` and
+  `/work` redirect here; `?run=` batch links are preserved.
+- Three pivots over the SAME open cases, held in the URL (`?pivot=`):
+  - **To-do** (default) — the ranked queue: overdue/arrived follow-ups →
+    task due dates → provider start dates → the rest; each entry names its
+    reason. Saved org queue configs still override the default ranking.
+  - **By provider** and **By payer** — list slices with per-group
+    "x of y approved" rollups, chips, search, tracking-id lookup, and bulk
+    actions. Legacy list links (`?chip=`, `?ids=`, `?runId=`) land on the
+    payer pivot unchanged.
+- Case detail (`/cases/$id`) deep links are unchanged.
 
-## Target state _(lands with E6.1)_
+## Target state
 
-- One merged Cases route becomes the app's default landing, with a ranked
-  to-do pivot.
 - "Add touch" becomes the one logging action with multi-case select _(lands
   with E6.6)_.

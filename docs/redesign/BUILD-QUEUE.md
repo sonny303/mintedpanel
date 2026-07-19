@@ -44,15 +44,15 @@ outside application code and required register updates). Only epics with
 
 ## Queue
 
-| #   | Epic                               | File                                  | Depends on                                        | Status    | PR   |
-| --- | ---------------------------------- | ------------------------------------- | ------------------------------------------------- | --------- | ---- |
-| 1   | E6.0 Unified case status           | `E6.0-unified-case-status.md`         | —                                                 | merged    | #199 |
-| 2   | E6.1 Sidebar & surface restructure | `E6.1-sidebar-surface-restructure.md` | E6.0                                              | in review | #201 |
-| 3   | E6.2 Groups & Payer Network board  | `E6.2-groups-payer-network.md`        | E6.0, E6.1                                        | queued    | —    |
-| 4   | E6.3 Decoupled generation          | `E6.3-decoupled-generation.md`        | E6.0, E6.2                                        | queued    | —    |
-| 5   | E6.4 Providers area                | `E6.4-providers-area.md`              | E6.0, E6.1, E6.2                                  | queued    | —    |
-| 6   | E6.5 Payer Setup consolidation     | `E6.5-payer-setup-consolidation.md`   | — (sidebar entry coordinated with E6.1 at review) | queued    | —    |
-| 7   | E6.6 Reporting & touch unification | `E6.6-reporting-touch-unification.md` | E6.0, E6.2, E6.5                                  | queued    | —    |
+| #   | Epic                               | File                                  | Depends on                                        | Status | PR   |
+| --- | ---------------------------------- | ------------------------------------- | ------------------------------------------------- | ------ | ---- |
+| 1   | E6.0 Unified case status           | `E6.0-unified-case-status.md`         | —                                                 | merged | #199 |
+| 2   | E6.1 Sidebar & surface restructure | `E6.1-sidebar-surface-restructure.md` | E6.0                                              | merged | #201 |
+| 3   | E6.2 Groups & Payer Network board  | `E6.2-groups-payer-network.md`        | E6.0, E6.1                                        | queued | —    |
+| 4   | E6.3 Decoupled generation          | `E6.3-decoupled-generation.md`        | E6.0, E6.2                                        | queued | —    |
+| 5   | E6.4 Providers area                | `E6.4-providers-area.md`              | E6.0, E6.1, E6.2                                  | queued | —    |
+| 6   | E6.5 Payer Setup consolidation     | `E6.5-payer-setup-consolidation.md`   | — (sidebar entry coordinated with E6.1 at review) | queued | —    |
+| 7   | E6.6 Reporting & touch unification | `E6.6-reporting-touch-unification.md` | E6.0, E6.2, E6.5                                  | queued | —    |
 
 Status values: `queued` → `building` (session claimed) → `in review` (PR
 open) → `merged`. A blocked epic is marked `blocked: <reason>` and its

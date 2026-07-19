@@ -1,13 +1,13 @@
 # Groups
 
-_Updated for: pre-E6 baseline (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.1 (PR #201, 2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journeys B and C — the working entity for payer attach and generation.
 
-## Today (pre-E6)
+## Today (E6.1 interim shell)
 
-No Groups surface; payers were attached at org grain and facilities lived on
-a flat page.
+Groups has its sidebar entry and carries the group/facility/roster summaries
+relocated from the old Account Detail. The full board arrives with E6.2.
 
 ## Target state _(lands with E6.2 + E6.3)_
 
