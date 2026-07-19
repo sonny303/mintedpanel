@@ -21,6 +21,10 @@ oriented per `DECISION-RECORD-2026-07-19-simplification.md`:
 
 Reference:
 
+- [data-definitions.md](./data-definitions.md) — plain-English definitions
+  of the data the app shows and stores: entities, the eight case statuses,
+  derived pills/rollups, enrollment facts, generation dispositions, gap
+  pills, and the append-only ledgers.
 - [where-did-it-go.md](./where-did-it-go.md) — the retirement map: every
   pre-E6 surface, where its job moved, and the redirect that covers old
   links. Derived from the E6.1 retirement ledger/redirect table.
