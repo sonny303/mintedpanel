@@ -9,6 +9,8 @@ import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { isTerminalPipelineState, type PayerPipelineState } from "@/lib/payerPipeline";
+import { isCaseStatus, isTerminalCaseStatus, mapLegacyCaseStatus } from "@/lib/caseStatus";
+import type { CaseStatus } from "@/lib/caseStatus";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type {
   CaseDetail,
@@ -50,8 +52,9 @@ export interface CaseInput {
 // warning) and payer_pipeline_state (the badge rendered on the list/queue,
 // distinct from credentialing_status_id) join the list projection. The
 // resolution provider-IDs are detail-only (getCase select *), not listed here.
+// E6.0: case_status is THE status every list surface renders.
 const CASE_LIST_COLUMNS =
-  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_pipeline_state, created_at, updated_at";
+  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_pipeline_state, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -67,7 +70,19 @@ export async function getCases(filters: CaseFilters = {}): Promise<CredentialCas
   if (filters.assignedTo) query = query.eq("assigned_to", filters.assignedTo);
   const { data, error } = await query;
   if (error) throw error;
-  return camelizeRow<CredentialCase[]>(data ?? []);
+  return camelizeRow<CredentialCase[]>(data ?? []).map(withCaseStatusDefault);
+}
+
+// E6.0 — keep CredentialCase.caseStatus honest at the boundary: the column is
+// NOT NULL DEFAULT 'not_started' in the DB, but a narrow/mock row may omit it;
+// derive from the pipeline mirror (the same deterministic migration rule) so
+// no consumer ever sees undefined. Mirrors the payerPipelineState defaulting.
+function withCaseStatusDefault<T extends CredentialCase>(c: T): T {
+  if (isCaseStatus(c.caseStatus)) return c;
+  return {
+    ...c,
+    caseStatus: mapLegacyCaseStatus(null, (c.payerPipelineState as string | null) ?? null),
+  };
 }
 
 export async function getCase(id: string): Promise<CaseDetail | null> {
@@ -85,7 +100,8 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
        tasks(*),
        touches(*),
        status_history(*),
-       payer_pipeline_history(*)`,
+       payer_pipeline_history(*),
+       case_status_history(*)`,
     )
     .eq("id", id)
     .eq("org_id", orgId)
@@ -102,6 +118,10 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     ((data as Record<string, unknown>).payer_pipeline_history as Array<
       Record<string, unknown>
     > | null) ?? [];
+  const rawCaseStatus =
+    ((data as Record<string, unknown>).case_status_history as Array<
+      Record<string, unknown>
+    > | null) ?? [];
 
   // One profiles fetch covers status-history authors, touchlog note authors,
   // and the case's creation actor (E2.4 F2.4.2 provenance).
@@ -111,6 +131,7 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
         ...rawHistory.map((h) => h.changed_by as string | null),
         ...rawTouches.map((t) => t.coordinator_id as string | null),
         ...rawPipeline.map((p) => p.changed_by as string | null),
+        ...rawCaseStatus.map((h) => h.changed_by as string | null),
         (data as Record<string, unknown>).created_by as string | null,
       ].filter((v): v is string => Boolean(v)),
     ),
@@ -210,11 +231,11 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
       : null,
   }));
 
-  // E4.0 F4.0.1 — resolve each pipeline-history row's reason-code label (global
-  // + own-org catalog) so the visible timeline reads without a second lookup.
+  // E4.0 F4.0.1 / E6.0 — resolve each history row's reason-code label (global
+  // + own-org catalog) so the visible timelines read without a second lookup.
   const reasonIds = Array.from(
     new Set(
-      rawPipeline
+      [...rawPipeline, ...rawCaseStatus]
         .map((p) => p.reason_code_id as string | null)
         .filter((v): v is string => Boolean(v)),
     ),
@@ -234,17 +255,33 @@ export async function getCase(id: string): Promise<CaseDetail | null> {
     reason_label: p.reason_code_id ? (reasonMap.get(p.reason_code_id as string) ?? null) : null,
   }));
 
+  // E6.0 — the unified-status timeline: attributed (system/user), reason- and
+  // author-resolved. The evidencing touch itself rides the same case's touch
+  // embed; the panel resolves evidence_touch_id against it locally.
+  const enrichedCaseStatus = rawCaseStatus.map((h) => ({
+    ...h,
+    changed_by_name: h.changed_by ? (nameMap.get(h.changed_by as string) ?? null) : null,
+    reason_label: h.reason_code_id ? (reasonMap.get(h.reason_code_id as string) ?? null) : null,
+  }));
+
   const createdBy = (data as Record<string, unknown>).created_by as string | null;
+  const rawCaseStatusValue = (data as Record<string, unknown>).case_status as string | null;
+  const rawPipelineValue =
+    ((data as Record<string, unknown>).payer_pipeline_state as string | null) ?? "not_started";
   const merged = {
     ...(data as Record<string, unknown>),
     // E4.0: keep CredentialCase.payerPipelineState honest at the boundary — the
     // column is NOT NULL DEFAULT 'not_started' in prod, but a narrow/mock row
     // may omit it; default it so no consumer sees undefined (mirrors caseContext).
-    payer_pipeline_state:
-      ((data as Record<string, unknown>).payer_pipeline_state as string | null) ?? "not_started",
+    payer_pipeline_state: rawPipelineValue,
+    // E6.0: same boundary honesty for the canonical status.
+    case_status: isCaseStatus(rawCaseStatusValue)
+      ? rawCaseStatusValue
+      : mapLegacyCaseStatus(null, rawPipelineValue),
     touches: enrichedTouches,
     status_history: enrichedHistory,
     payer_pipeline_history: enrichedPipeline,
+    case_status_history: enrichedCaseStatus,
     notes,
     created_by_name: createdBy ? (nameMap.get(createdBy) ?? null) : null,
   };
@@ -305,89 +342,105 @@ export async function setPayerReference(caseId: string, value: string | null): P
   });
 }
 
-// E4.0 TE-5 — a typed error the UI maps to an actionable message. `code` is the
-// RPC's named error (e.g. "pipeline_invalid_transition"); `conflictState` is the
-// case's true current state on a concurrency conflict (refresh prompt).
-export class PipelineTransitionError extends Error {
+// E4.0's advance_payer_pipeline RPC remains in the database (additive rule)
+// but is DORMANT since E6.0: the payer pipeline is no longer a user-facing
+// machine, and its state column is a transition-shim mirror written by
+// set_case_status. The browser transition path is gone.
+
+// E6.0 — a typed error the UI maps to an actionable message. `code` is the
+// set_case_status RPC's named error; `conflictStatus` is the case's true
+// current status on a concurrency conflict (refresh prompt).
+export class CaseStatusError extends Error {
   readonly code: string;
-  readonly conflictState: PayerPipelineState | null;
-  constructor(code: string, message: string, conflictState: PayerPipelineState | null = null) {
+  readonly conflictStatus: CaseStatus | null;
+  constructor(code: string, message: string, conflictStatus: CaseStatus | null = null) {
     super(message);
-    this.name = "PipelineTransitionError";
+    this.name = "CaseStatusError";
     this.code = code;
-    this.conflictState = conflictState;
+    this.conflictStatus = conflictStatus;
   }
 }
 
-const PIPELINE_ERROR_MESSAGES: Record<string, string> = {
-  pipeline_case_not_found: "Case not found.",
-  pipeline_not_authorized: "You don't have permission to change the payer pipeline.",
-  pipeline_admin_only: "Only an admin can make this change.",
-  pipeline_invalid_state: "That is not a valid pipeline state.",
-  pipeline_invalid_transition: "That transition isn't allowed from the current state.",
-  pipeline_correction_needs_justification: "A justification is required for a correction.",
-  pipeline_reason_code_invalid: "That reason code isn't available.",
-  pipeline_denied_needs_reason: "A denial reason code is required.",
-  pipeline_other_needs_context: "Selecting “Other” requires a short context.",
-  pipeline_approved_needs_effective_date: "An effective date is required to approve.",
+const CASE_STATUS_ERROR_MESSAGES: Record<string, string> = {
+  case_status_case_not_found: "Case not found.",
+  case_status_not_authorized: "You don't have permission to change the case status.",
+  case_status_admin_only: "Only an admin can make this correction.",
+  case_status_invalid: "That is not a valid case status.",
+  case_status_invalid_transition: "That move isn't allowed from the current status.",
+  case_status_correction_needs_note: "A note is required for a correction.",
+  case_status_reason_invalid: "That reason isn't available.",
+  case_status_denied_needs_reason: "A denial reason is required.",
+  case_status_other_needs_context: "Selecting “Other” requires a short context.",
+  case_status_not_pursuing_needs_note: "A note is required to mark a case Not Pursuing.",
+  case_status_approved_needs_effective_date: "An effective date is required to approve.",
+  case_status_approved_needs_provider_id: "The payer-issued provider ID is required to approve.",
+  case_status_evidence_invalid: "The evidencing touch doesn't belong to this case.",
 };
 
-function mapPipelineError(error: { message?: string }): Error {
+function mapCaseStatusError(error: { message?: string }): Error {
   const raw = (error.message ?? "").trim();
-  if (raw.startsWith("pipeline_state_conflict")) {
+  if (raw.startsWith("case_status_conflict")) {
     const actual = raw.split(":")[1]?.trim() || null;
-    return new PipelineTransitionError(
-      "pipeline_state_conflict",
+    return new CaseStatusError(
+      "case_status_conflict",
       "This case was updated by someone else — refresh to continue.",
-      (actual as PayerPipelineState | null) ?? null,
+      actual && isCaseStatus(actual) ? actual : null,
     );
   }
-  // The RPC's RAISE message is the leading token; PostgREST may append detail.
-  const key = Object.keys(PIPELINE_ERROR_MESSAGES).find((k) => raw.startsWith(k));
-  if (key) return new PipelineTransitionError(key, PIPELINE_ERROR_MESSAGES[key]);
-  return raw ? new Error(raw) : new Error("Could not update the payer pipeline.");
+  const key = Object.keys(CASE_STATUS_ERROR_MESSAGES).find((k) => raw.startsWith(k));
+  if (key) return new CaseStatusError(key, CASE_STATUS_ERROR_MESSAGES[key]);
+  return raw ? new Error(raw) : new Error("Could not update the case status.");
 }
 
-export interface AdvancePipelineInput {
+export interface SetCaseStatusInput {
   caseId: string;
-  toState: PayerPipelineState;
-  /** The state the client believed the case was in — optimistic concurrency. */
-  expectedState: PayerPipelineState;
+  toStatus: CaseStatus;
+  /** The status the client believed the case was in — optimistic concurrency.
+   * The Add-touch bump passes null (an auto trigger may have just advanced
+   * the case); the header menu always passes the rendered status. */
+  expectedStatus?: CaseStatus | null;
   reasonCodeId?: string | null;
-  /** Correction justification, or the Denied-"Other" single-line context. */
-  justification?: string | null;
+  /** Correction note, the Not Pursuing note, or the Denied-"Other" context. */
+  note?: string | null;
   isCorrection?: boolean;
-  /** Required by the RPC when toState is 'approved'. */
+  /** Required by the RPC when toStatus is 'approved'. */
   effectiveDate?: string | null;
-  /** Approval identifiers (F4.0.3) — Type 1 individual, Type 2/Tax-ID group. */
+  /** Required by the RPC when toStatus is 'approved' — the payer-issued ID,
+   * labeled with the payer's own term client-side. */
   individualProviderId?: string | null;
   groupProviderId?: string | null;
+  contractExecutedDate?: string | null;
+  /** F6.0.3 — the touch evidencing this transition (must be on this case). */
+  evidenceTouchId?: string | null;
 }
 
-// The single atomic transition entry point: state change + append-only history
-// + optional enrollment writes/clears + audit, all-or-nothing (a rejected edge
-// writes nothing). Never a bare UPDATE — that would bypass the edge rules,
-// concurrency guard, admin gate, and history.
-export async function advancePayerPipeline(input: AdvancePipelineInput): Promise<CredentialCase> {
+// E6.0 — the single atomic transition entry point for the unified status:
+// state change + legacy-mirror lockstep + append-only case_status_history +
+// terminal-fact writes/clears + audit, all-or-nothing. Never a bare UPDATE —
+// that would bypass the edge rules, evidence requirements, admin gate, and
+// history.
+export async function setCaseStatus(input: SetCaseStatusInput): Promise<CredentialCase> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
     args: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
-  const { data, error } = await rpc("advance_payer_pipeline", {
+  const { data, error } = await rpc("set_case_status", {
     p_case_id: input.caseId,
-    p_to_state: input.toState,
-    p_expected_state: input.expectedState,
+    p_to_status: input.toStatus,
+    p_expected_status: input.expectedStatus ?? null,
     p_reason_code_id: input.reasonCodeId ?? null,
-    p_justification: input.justification ?? null,
+    p_note: input.note ?? null,
     p_is_correction: input.isCorrection ?? false,
     p_effective_date: input.effectiveDate ?? null,
     p_individual_provider_id: input.individualProviderId ?? null,
     p_group_provider_id: input.groupProviderId ?? null,
+    p_contract_executed_date: input.contractExecutedDate ?? null,
+    p_evidence_touch_id: input.evidenceTouchId ?? null,
   });
-  if (error) throw mapPipelineError(error);
-  if (!data) throw new Error("advance_payer_pipeline returned no data");
-  return camelizeRow<CredentialCase>(data);
+  if (error) throw mapCaseStatusError(error);
+  if (!data) throw new Error("set_case_status returned no data");
+  return withCaseStatusDefault(camelizeRow<CredentialCase>(data));
 }
 
 // E4.0 TE-4 — the active denial/return reason vocabulary: global defaults +
@@ -557,57 +610,12 @@ export async function appendCaseTasks(caseId: string, tasks: CaseTaskPayload[]):
   });
 }
 
-export async function updateCaseStatus(
-  caseId: string,
-  statusId: string,
-  metadata: Record<string, unknown> = {},
-): Promise<CredentialCase> {
-  const orgId = requireActiveOrg();
-
-  const { data: existing, error: readErr } = await supabase
-    .from("credential_cases")
-    .select("*")
-    .eq("id", caseId)
-    .eq("org_id", orgId)
-    .maybeSingle();
-  if (readErr) throw readErr;
-  if (!existing) throw new Error("Case not found");
-  const fromStatusId = (existing.credentialing_status_id as string | null) ?? null;
-
-  const patch: Record<string, unknown> = {
-    credentialing_status_id: statusId,
-    ...snakeizeRow<Record<string, unknown>>(metadata),
-  };
-
-  const { data: updated, error: updErr } = await supabase
-    .from("credential_cases")
-    .update(patch as unknown as CredentialCaseUpdate)
-    .eq("id", caseId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-
-  if (updErr) throw translateDbError(updErr);
-
-  await appendStatusHistory({
-    track: "credentialing",
-    caseId,
-    fromStatusId,
-    toStatusId: statusId,
-    metadata,
-  });
-
-  await writeAudit({
-    actionType: "STATUS_CHANGE",
-    entityType: "credential_case",
-    entityId: caseId,
-    before: { credentialingStatusId: fromStatusId },
-    after: { credentialingStatusId: statusId, ...metadata },
-    description: `Credentialing status changed`,
-  });
-
-  return camelizeRow<CredentialCase>(updated);
-}
+// E6.0 — the legacy updateCaseStatus writer (bare credentialing_status_id
+// UPDATE + status_history append) was DELETED with the internal machine's UI:
+// every status change now goes through set_case_status, which keeps the
+// legacy mirror in lockstep atomically. appendStatusHistory stays for the
+// contracting-track writer in services/contracts.ts (a dormant machine whose
+// UI affordances E6.0 also retired).
 
 export async function getContractFor(
   groupId: string,

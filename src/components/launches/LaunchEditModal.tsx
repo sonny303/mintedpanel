@@ -1,11 +1,9 @@
 // New Launch / edit-launch modal (launch PRD v2.1). Creating a launch creates
-// a facilities row in a location-track status (default Prospect) with an
-// optional effective date and an optional provider assignment. Editing covers
-// the same fields; the date label follows the status (Target early in the
-// pipeline, Starts once fulfillment begins). Transitions are soft: moving to
-// Ready for Launch without a provider or to Live with zero linked cases
-// warns but never blocks, and a first launch in a new state gets an inline
-// payer-contracts note.
+// a facilities row (entering the legacy pipeline at Prospect) with an
+// optional effective date and an optional provider assignment. E6.0 retired
+// the location status machine as user-facing: the status picker is gone —
+// location/go-live is a facility DATE only (the effective date below). The
+// residual read-only pipeline view retires with the Launches page in E6.1.
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,21 +25,14 @@ import {
 } from "@/components/ui/select";
 import {
   useCreateLaunchLocation,
-  useFacilityAssignments,
   useLaunchLocations,
   useUpdateLaunchLocation,
 } from "@/hooks/useLaunches";
-import { useCases } from "@/hooks/useCases";
 import { useProviders } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { US_STATES } from "@/components/providers/providerFormShared";
-import {
-  isNewStateLaunch,
-  launchDateFieldLabel,
-  transitionWarnings,
-  type LocationRow,
-} from "@/lib/launchLocations";
+import { isNewStateLaunch, launchDateFieldLabel, type LocationRow } from "@/lib/launchLocations";
 import { PROSPECT_LABEL } from "@/lib/statusLabels";
 import type { Facility } from "@/types";
 
@@ -59,8 +50,6 @@ export function LaunchEditModal({
   const providersQ = useProviders();
   const statusesQ = useStatusConfigs("location");
   const locationsQ = useLaunchLocations();
-  const assignmentsQ = useFacilityAssignments();
-  const casesQ = useCases();
 
   const statuses = useMemo(
     () => [...(statusesQ.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -79,10 +68,9 @@ export function LaunchEditModal({
   const [groupId, setGroupId] = useState<string>(
     location?.groupId ?? (groupsQ.data?.length === 1 ? groupsQ.data[0].id : NONE),
   );
-  const [statusChoice, setStatusChoice] = useState<string>("");
-  // Status configs may still be loading when the modal mounts; fall back to
-  // the default until the user picks one.
-  const statusId = statusChoice || defaultStatusId;
+  // E6.0 — the status is no longer user-settable: a new launch enters at the
+  // default (Prospect); an existing one keeps whatever status it froze at.
+  const statusId = defaultStatusId;
   const [effectiveDate, setEffectiveDate] = useState(location?.effectiveDate ?? "");
   const [providerId, setProviderId] = useState<string>(NONE);
   const [error, setError] = useState<string | null>(null);
@@ -93,22 +81,6 @@ export function LaunchEditModal({
 
   const selectedStatusLabel = statuses.find((s) => s.id === statusId)?.label ?? "";
   const dateLabel = launchDateFieldLabel(selectedStatusLabel);
-
-  // Soft transition checks (warn, never block) — only when the status moves.
-  const warnings = useMemo(() => {
-    if (!selectedStatusLabel || statusId === location?.statusId) return [];
-    const hasProvider = location
-      ? (assignmentsQ.data ?? []).some((a) => a.facilityId === location.id && a.providerId)
-      : providerId !== NONE;
-    const linkedCaseCount = location
-      ? (casesQ.data ?? []).filter((c) => c.facilityId === location.id).length
-      : 0;
-    return transitionWarnings({
-      toStatusLabel: selectedStatusLabel,
-      hasProvider,
-      linkedCaseCount,
-    });
-  }, [selectedStatusLabel, statusId, location, assignmentsQ.data, casesQ.data, providerId]);
 
   // First location in this state for the group: payer contracts may not exist.
   const newStateNote = useMemo(() => {
@@ -259,31 +231,14 @@ export function LaunchEditModal({
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[12px]">Status</Label>
-              <Select value={statusId} onValueChange={setStatusChoice}>
-                <SelectTrigger className="h-9 w-full">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statuses.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-[12px]">{dateLabel} (optional)</Label>
-              <Input
-                type="date"
-                value={effectiveDate}
-                onChange={(e) => setEffectiveDate(e.target.value)}
-                className="h-9"
-              />
-            </div>
+          <div>
+            <Label className="text-[12px]">{dateLabel} (optional)</Label>
+            <Input
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => setEffectiveDate(e.target.value)}
+              className="h-9"
+            />
           </div>
           {!location ? (
             <div>
@@ -311,14 +266,6 @@ export function LaunchEditModal({
               yet.
             </div>
           ) : null}
-          {warnings.map((w) => (
-            <div
-              key={w}
-              className="text-[12px] text-[#92400E] border border-[#FDE68A] bg-[#FEF3C7] rounded-md px-3 py-2"
-            >
-              {w} You can still save.
-            </div>
-          ))}
           {error ? (
             <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
               {error}

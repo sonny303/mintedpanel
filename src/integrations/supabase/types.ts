@@ -310,6 +310,80 @@ export type Database = {
           },
         ];
       };
+      case_status_history: {
+        Row: {
+          actor_kind: string;
+          case_id: string;
+          changed_at: string;
+          changed_by: string | null;
+          evidence_touch_id: string | null;
+          from_status: string | null;
+          id: string;
+          is_correction: boolean;
+          note: string | null;
+          org_id: string;
+          reason_code_id: string | null;
+          to_status: string;
+        };
+        Insert: {
+          actor_kind?: string;
+          case_id: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          evidence_touch_id?: string | null;
+          from_status?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          note?: string | null;
+          org_id: string;
+          reason_code_id?: string | null;
+          to_status: string;
+        };
+        Update: {
+          actor_kind?: string;
+          case_id?: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          evidence_touch_id?: string | null;
+          from_status?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          note?: string | null;
+          org_id?: string;
+          reason_code_id?: string | null;
+          to_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_status_history_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_evidence_touch_id_fkey";
+            columns: ["evidence_touch_id"];
+            isOneToOne: false;
+            referencedRelation: "touches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_reason_code_id_fkey";
+            columns: ["reason_code_id"];
+            isOneToOne: false;
+            referencedRelation: "denial_reason_codes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       communication_event: {
         Row: {
           channel: string;
@@ -427,7 +501,9 @@ export type Database = {
           approved_date: string | null;
           assigned_to: string | null;
           case_email_token: string;
+          case_status: string;
           confirmed_effective_date: string | null;
+          contract_executed_date: string | null;
           created_at: string | null;
           created_by: string | null;
           credentialing_status_id: string | null;
@@ -454,7 +530,9 @@ export type Database = {
           approved_date?: string | null;
           assigned_to?: string | null;
           case_email_token?: string;
+          case_status?: string;
           confirmed_effective_date?: string | null;
+          contract_executed_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
           credentialing_status_id?: string | null;
@@ -481,7 +559,9 @@ export type Database = {
           approved_date?: string | null;
           assigned_to?: string | null;
           case_email_token?: string;
+          case_status?: string;
           confirmed_effective_date?: string | null;
+          contract_executed_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
           credentialing_status_id?: string | null;
@@ -3554,6 +3634,22 @@ export type Database = {
         Returns: undefined;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
+      set_case_status: {
+        Args: {
+          p_case_id: string;
+          p_contract_executed_date?: string;
+          p_effective_date?: string;
+          p_evidence_touch_id?: string;
+          p_expected_status?: string;
+          p_group_provider_id?: string;
+          p_individual_provider_id?: string;
+          p_is_correction?: boolean;
+          p_note?: string;
+          p_reason_code_id?: string;
+          p_to_status: string;
+        };
+        Returns: Json;
+      };
       set_primary_assignment: {
         Args: { p_assignment_id: string; p_provider_id: string };
         Returns: undefined;

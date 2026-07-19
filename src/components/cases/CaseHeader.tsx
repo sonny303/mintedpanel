@@ -1,30 +1,20 @@
-// Case detail header: provider name, submeta, and both status pills
-// (credentialing + group contract) with a Change button. The forwarding ID
-// lives in the Case Facts card, not here.
+// Case detail header: provider name, submeta, the ONE unified status control
+// (E6.0 — the dual credentialing + payer-pipeline pills and the separate
+// contract pill are gone), and the tracking ID. The forwarding ID lives in
+// the Case Facts card, not here.
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { StatusPill, hexToStatusColor } from "@/components/StatusPill";
-import type { CaseDetail, StatusConfig } from "@/types";
+import type { CaseDetail } from "@/types";
 
 export function CaseHeader({
   c,
-  credStatus,
-  contractStatus,
-  canEdit,
-  onOpenStatus,
-  pipelineControl,
+  statusControl,
   trackingId,
 }: {
   c: CaseDetail;
-  credStatus: StatusConfig | null | undefined;
-  contractStatus: StatusConfig | null | undefined;
-  canEdit: boolean;
-  onOpenStatus: () => void;
-  /** E4.0 — the payer-pipeline control (badge + attribution + transition menu),
-   * rendered by the parent so the header stays presentational. */
-  pipelineControl?: React.ReactNode;
+  /** E6.0 — the unified status control (pill + attribution + legal-moves
+   * menu), rendered by the parent so the header stays presentational. */
+  statusControl?: React.ReactNode;
   /** E4.0 F4.0.2 — the copyable, inline-editable Reference/Tracking ID. */
   trackingId?: React.ReactNode;
 }) {
@@ -61,59 +51,7 @@ export function CaseHeader({
         {trackingId ? <div className="mt-2">{trackingId}</div> : null}
       </div>
 
-      <div className="flex items-center gap-6">
-        {pipelineControl ? (
-          <>
-            {pipelineControl}
-            <Separator orientation="vertical" className="h-8" />
-          </>
-        ) : null}
-        <div className="flex flex-col items-end gap-1.5">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
-            Credentialing
-          </span>
-          <div className="flex items-center gap-2">
-            {credStatus ? (
-              <StatusPill status={hexToStatusColor(credStatus.color)} label={credStatus.label} />
-            ) : (
-              <StatusPill status="gray" label="—" />
-            )}
-            {canEdit && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 text-[11px] px-2"
-                onClick={onOpenStatus}
-              >
-                Change
-              </Button>
-            )}
-          </div>
-        </div>
-        <Separator orientation="vertical" className="h-8" />
-        <div className="flex flex-col items-end gap-1.5">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
-            Group Contract
-          </span>
-          <div className="flex items-center gap-2">
-            {contractStatus ? (
-              <StatusPill
-                status={hexToStatusColor(contractStatus.color)}
-                label={contractStatus.label}
-              />
-            ) : (
-              <StatusPill status="gray" label="No contract" />
-            )}
-            <Link
-              to="/reports"
-              search={{ tab: "contracts" } as never}
-              className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-            >
-              View contract
-            </Link>
-          </div>
-        </div>
-      </div>
+      <div className="flex items-center gap-6">{statusControl}</div>
     </div>
   );
 }

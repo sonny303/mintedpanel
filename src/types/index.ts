@@ -2,6 +2,7 @@
 // converted to/from snake_case by src/lib/case.ts at the service boundary.
 import type { FacilityHours } from "@/lib/facilityHours";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type { CaseStatus } from "@/lib/caseStatus";
 import type { ExecutionType } from "@/lib/executionTypes";
 import type { ReleaseScopeRecord } from "@/lib/releaseScope";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
@@ -687,7 +688,18 @@ export interface CredentialCase {
   payerReferenceId: string | null;
   // E4.0 TE-1: the EXTERNAL payer-pipeline state, parallel to and independent of
   // credentialingStatusId (the internal machine). Defaults to 'not_started'.
+  // Since E6.0 this is a transition-shim MIRROR of caseStatus (kept in
+  // lockstep by set_case_status + the auto triggers) — no longer a
+  // user-facing machine of its own.
   payerPipelineState: PayerPipelineState;
+  // E6.0 F6.0.1 — THE canonical unified case status (the fixed eight-value
+  // list in src/lib/caseStatus.ts). The single user-facing status; the two
+  // legacy fields above survive as read-only mirrors until their readers
+  // retire (E6.1–E6.4).
+  caseStatus: CaseStatus;
+  // E6.0 F6.0.1 — contract execution date as a plain case field (set at
+  // Approved; the contracting status machine is retired as user-facing).
+  contractExecutedDate: string | null;
   // E4.0 TE-6 (ChatPRD round-3): two structured payer-issued enrollment
   // identifiers captured at Approved, never concatenated — Type 1 NPI-linked
   // Individual (rendered under the payer's configured label — E4.2 — else
@@ -971,6 +983,30 @@ export interface PayerPipelineHistoryEntry {
   changedAt: string;
 }
 
+// E6.0 — one append-only unified-status transition (case_status_history).
+// actor_kind 'system' = the action was the proof (creation, first recorded
+// work, extension-logged submission); 'user' = a person set what they
+// learned. evidenceTouchId links the touch that evidenced the transition
+// (F6.0.3); corrections append with a note, never rewrite (F6.0.4).
+export interface CaseStatusHistoryEntry {
+  id: string;
+  orgId: string;
+  caseId: string;
+  fromStatus: CaseStatus | null;
+  toStatus: CaseStatus;
+  actorKind: "system" | "user";
+  reasonCodeId: string | null;
+  evidenceTouchId: string | null;
+  isCorrection: boolean;
+  note: string | null;
+  changedBy: string | null;
+  /** Actor display name, resolved via profiles at read time (not a column). */
+  changedByName?: string | null;
+  /** Reason-code label, resolved from denial_reason_codes at read time. */
+  reasonLabel?: string | null;
+  changedAt: string;
+}
+
 // E4.0 TE-4 — a structured denial/return reason. orgId null = global default
 // (seeded); non-null = org-added (managed in E4.2). Deactivated, never deleted.
 export interface DenialReasonCode {
@@ -1092,6 +1128,10 @@ export interface CaseDetail extends CredentialCase {
   /** E4.0 F4.0.1 — the read-only payer-pipeline timeline (append-only), each
    * row attributed and reason/justification-resolved by getCase. */
   payerPipelineHistory: PayerPipelineHistoryEntry[];
+  /** E6.0 — the unified-status timeline (case_status_history), each row
+   * attributed (system/user), evidence-linked, and reason-resolved by
+   * getCase. Old ledgers above are retained read-only. */
+  caseStatusHistory: CaseStatusHistoryEntry[];
   /** E2.4 F2.4.2 — the creation actor's display name, resolved by getCase via
    * the same profiles fetch that names history/touch authors. */
   createdByName?: string | null;

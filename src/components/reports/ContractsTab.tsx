@@ -22,7 +22,6 @@ import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useCanWrite } from "@/lib/permissions";
 import type { Contract } from "@/types";
-import { StatusChangeContractDialog } from "./StatusChangeContractDialog";
 import { AddContractDialog } from "./AddContractDialog";
 
 const ALL = "__all__";
@@ -39,7 +38,6 @@ export function ContractsTab() {
   const [groupFilter, setGroupFilter] = useState<string>(ALL);
   const [payerFilter, setPayerFilter] = useState<string>(ALL);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
-  const [statusModalContract, setStatusModalContract] = useState<Contract | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   const groupById = useMemo(
@@ -233,18 +231,7 @@ export function ContractsTab() {
                       <td className="px-3 h-10 align-middle max-w-[240px] truncate text-muted-foreground">
                         {c.notes ?? "—"}
                       </td>
-                      <td className="px-3 h-10 align-middle text-right">
-                        {canEdit && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px] px-2"
-                            onClick={() => setStatusModalContract(c)}
-                          >
-                            Change status
-                          </Button>
-                        )}
-                      </td>
+                      <td className="px-3 h-10 align-middle text-right" />
                     </tr>
                   );
                 })
@@ -253,16 +240,7 @@ export function ContractsTab() {
           </table>
         </div>
 
-        <StatusChangeContractDialog
-          contract={statusModalContract}
-          statuses={statusesQ.data ?? []}
-          onClose={() => setStatusModalContract(null)}
-        />
-        <AddContractDialog
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-          statuses={statusesQ.data ?? []}
-        />
+        <AddContractDialog open={addOpen} onClose={() => setAddOpen(false)} />
       </div>
     </TooltipProvider>
   );

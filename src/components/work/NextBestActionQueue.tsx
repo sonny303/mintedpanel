@@ -22,7 +22,7 @@ import {
 import { usePortals } from "@/hooks/usePortals";
 import { DEADLINE_SOURCE_LABELS, filterQueueToRun, type QueueEntry } from "@/lib/nextBestActions";
 import { resolvePortalTargets, type CasePortalTarget } from "@/lib/casePortals";
-import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { fmtDate } from "@/lib/format";
 
@@ -62,10 +62,8 @@ function QueueRow({
       >
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
-          {/* E4.0 TE-7 — payer-pipeline state, kept distinct from the action/task. */}
-          {entry.payerPipelineState ? (
-            <PayerPipelineBadge state={entry.payerPipelineState} />
-          ) : null}
+          {/* E6.0 — THE unified case status on the queue row. */}
+          {entry.caseStatus ? <CaseStatusPill status={entry.caseStatus} /> : null}
           {entry.actionKind === "readiness_gap" ? (
             <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
               Readiness gap

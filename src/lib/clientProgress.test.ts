@@ -39,6 +39,8 @@ function credCase(over: Partial<CredentialCase>): CredentialCase {
     state: "KS",
     specialty: null,
     credentialingStatusId: null,
+    caseStatus: "in_progress",
+    contractExecutedDate: null,
     msoId: null,
     submittedDate: null,
     approvedDate: null,

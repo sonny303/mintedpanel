@@ -19,9 +19,8 @@ import { ProgressBar } from "@/components/triage/ProgressBar";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
-import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import {
   getActionState,
@@ -38,10 +37,11 @@ import {
   matchesChip,
   type ChipId,
 } from "@/lib/workView";
-import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { CASE_STATUS_BUCKETS, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { buildRosterCsv, type RosterRowInput } from "@/lib/rosterExport";
 import { downloadCsvText } from "@/lib/csv";
-import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
+import type { CredentialCase, Provider, Task } from "@/types";
 
 // The selected filter card lives in the URL (?chip=needs|inprog|awaiting; no
 // param = all) so other pages — the Home queue's "view all" — can deep-link a
@@ -57,10 +57,11 @@ export const Route = createFileRoute("/providers/")({
 interface WorkRow {
   case: CredentialCase;
   state: ActionState;
+  /** E6.0 — THE unified case status the row renders (label reused by the
+   * roster CSV export). */
+  caseStatus: CaseStatus;
   statusLabel: string;
-  statusColor: string;
   suffix: string | undefined;
-  contractStatus: StatusConfig | null;
   payerName: string;
   isPreCred: boolean;
   lastTouchLabel: string;
@@ -74,7 +75,7 @@ interface WorkGroup {
   openRows: WorkRow[];
   worst: ActionState;
   worstCount: number;
-  inNetwork: number;
+  approved: number;
   denominator: number;
   oldestDays: number | null;
   /** migrated/onboard-existing provider: listed for reference, never worked (Epic 2e) */
@@ -114,9 +115,7 @@ function ProvidersWorkView() {
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
-  const contractsQ = useContracts();
   const payersQ = usePayers();
-  const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
 
   const { chip: chipParam } = Route.useSearch();
@@ -129,19 +128,13 @@ function ProvidersWorkView() {
     });
 
   const loading =
-    providersQ.isLoading ||
-    casesQ.isLoading ||
-    tasksQ.isLoading ||
-    contractsQ.isLoading ||
-    payersQ.isLoading ||
-    statusConfigsQ.isLoading;
+    providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
 
-  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError;
 
   const groups: WorkGroup[] = useMemo(() => {
     const providers = providersQ.data ?? [];
     const cases = casesQ.data ?? [];
-    const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
     const lastTouchByCase = lastTouchQ.data;
 
@@ -159,23 +152,18 @@ function ProvidersWorkView() {
       );
     }
 
-    const contractByKey = new Map(
-      (contractsQ.data ?? []).map((c) => [`${c.groupId}|${c.payerId}|${c.state}`, c]),
-    );
-
     const now = new Date();
     const rowsByProvider = new Map<string, WorkRow[]>();
 
     for (const c of cases) {
-      const status = c.credentialingStatusId
-        ? (statusById.get(c.credentialingStatusId) ?? null)
-        : null;
       const openTasks = openTasksByCase.get(c.id) ?? [];
       const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
 
+      // E6.0 — the action engine keys off the canonical status's label +
+      // bucket (the same closed ActionBucket domain the legacy configs used).
       const state = getActionState({
-        statusLabel: status?.label ?? null,
-        actionBucket: status?.actionBucket ?? null,
+        statusLabel: caseStatusLabel(c.caseStatus),
+        actionBucket: CASE_STATUS_BUCKETS[c.caseStatus],
         openTaskDueDates: openTasks.map((t) => t.dueDate),
         lastTouchDate,
         createdAt: c.createdAt,
@@ -192,11 +180,6 @@ function ProvidersWorkView() {
             ? `eff ${fmtDate(effective)}`
             : undefined;
 
-      const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);
-      const contractStatus = contract?.contractingStatusId
-        ? (statusById.get(contract.contractingStatusId) ?? null)
-        : null;
-
       const touchDays = lastTouchDate
         ? differenceInCalendarDays(now, parseISO(lastTouchDate))
         : null;
@@ -208,10 +191,9 @@ function ProvidersWorkView() {
       const row: WorkRow = {
         case: c,
         state,
-        statusLabel: status?.label ?? "No status",
-        statusColor: status?.color ?? "var(--mp-neutral)",
+        caseStatus: c.caseStatus,
+        statusLabel: caseStatusLabel(c.caseStatus),
         suffix,
-        contractStatus,
         payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
         isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
         lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
@@ -240,7 +222,7 @@ function ProvidersWorkView() {
         openRows,
         worst,
         worstCount: openRows.filter((r) => r.state === worst).length,
-        inNetwork: nonPreCred.filter((r) => r.statusLabel === IN_NETWORK_LABEL).length,
+        approved: nonPreCred.filter((r) => r.caseStatus === "approved").length,
         denominator: nonPreCred.length,
         oldestDays: openRows.reduce<number | null>(
           (max, r) => (r.days !== null && (max === null || r.days > max) ? r.days : max),
@@ -255,15 +237,7 @@ function ProvidersWorkView() {
         a.provider.lastName.localeCompare(b.provider.lastName),
     );
     return built;
-  }, [
-    providersQ.data,
-    casesQ.data,
-    tasksQ.data,
-    contractsQ.data,
-    payersQ.data,
-    statusConfigsQ.data,
-    lastTouchQ.data,
-  ]);
+  }, [providersQ.data, casesQ.data, tasksQ.data, payersQ.data, lastTouchQ.data]);
 
   // Reference-only providers are listed separately and never counted as work
   // (Epic 2e): the chips, the filtered list, and the totals derive from worked
@@ -320,10 +294,7 @@ function ProvidersWorkView() {
     return {
       id: row.case.id,
       lead,
-      status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
-      contract: row.contractStatus
-        ? { label: row.contractStatus.label, color: row.contractStatus.color }
-        : null,
+      status: { status: row.caseStatus, suffix: row.suffix },
       lastTouch: row.lastTouchLabel,
       days: row.days,
       daysStrong: isAlertState(row.state) || row.state === "stalled",
@@ -376,10 +347,10 @@ function ProvidersWorkView() {
         </div>
         <span className="flex items-center gap-2 md:flex-1 md:min-w-0">
           <span className="w-full max-w-44 md:w-40 md:flex-shrink-0">
-            <ProgressBar value={g.inNetwork} max={g.denominator} />
+            <ProgressBar value={g.approved} max={g.denominator} />
           </span>
           <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-            {g.inNetwork} of {g.denominator} in-network
+            {g.approved} of {g.denominator} approved
           </span>
         </span>
         <span className="flex items-center gap-3">

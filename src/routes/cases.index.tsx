@@ -17,9 +17,8 @@ import { ProgressBar } from "@/components/triage/ProgressBar";
 import { useProviders } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useTasks } from "@/hooks/useTasks";
-import { useContracts } from "@/hooks/useContracts";
 import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useSops, useStatusConfigs } from "@/hooks/useAdmin";
+import { usePayers, useSops } from "@/hooks/useAdmin";
 import {
   getActionState,
   worstActionState,
@@ -37,7 +36,8 @@ import {
   type ChipId,
 } from "@/lib/workView";
 import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
-import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import { CASE_STATUS_BUCKETS, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquarePlus, Phone, Plus, Search, X } from "lucide-react";
@@ -46,7 +46,7 @@ import { useTablePrefs } from "@/hooks/useTablePrefs";
 import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
 import { BulkLogTouchDialog, type BulkCaseCandidate } from "@/components/cases/BulkLogTouchDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
-import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
+import type { CredentialCase, Provider, Task } from "@/types";
 
 // E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the view to the cases a
 // confirmed generation batch created (URL-state, sharable). E2.3 F2.3.2
@@ -86,10 +86,9 @@ export const Route = createFileRoute("/cases/")({
 interface CaseRow {
   case: CredentialCase;
   state: ActionState;
-  statusLabel: string;
-  statusColor: string;
+  /** E6.0 — THE unified case status the row renders. */
+  caseStatus: CaseStatus;
   suffix: string | undefined;
-  contractStatus: StatusConfig | null;
   provider: Provider | null;
   lastTouchLabel: string;
   days: number | null;
@@ -104,7 +103,7 @@ interface PayerGroup {
   openRows: CaseRow[];
   worst: ActionState;
   worstCount: number;
-  inNetwork: number;
+  approved: number;
 }
 
 const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
@@ -115,10 +114,8 @@ function CasesWorkView() {
   const providersQ = useProviders();
   const casesQ = useCases();
   const tasksQ = useTasks();
-  const contractsQ = useContracts();
   const payersQ = usePayers();
   const templatesQ = useSops();
-  const statusConfigsQ = useStatusConfigs();
   const lastTouchQ = useLastTouchDates();
   const canWrite = useCanWrite();
 
@@ -159,20 +156,14 @@ function CasesWorkView() {
   );
 
   const loading =
-    providersQ.isLoading ||
-    casesQ.isLoading ||
-    tasksQ.isLoading ||
-    contractsQ.isLoading ||
-    payersQ.isLoading ||
-    statusConfigsQ.isLoading;
+    providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
 
-  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError;
 
   const groups: PayerGroup[] = useMemo(() => {
     const cases = (casesQ.data ?? []).filter(
       (c) => !runId || (c.generationRunId ?? null) === runId,
     );
-    const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
     const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
     const lastTouchByCase = lastTouchQ.data;
@@ -191,23 +182,18 @@ function CasesWorkView() {
       );
     }
 
-    const contractByKey = new Map(
-      (contractsQ.data ?? []).map((c) => [`${c.groupId}|${c.payerId}|${c.state}`, c]),
-    );
-
     const now = new Date();
     const rowsByPayer = new Map<string, CaseRow[]>();
 
     for (const c of cases) {
-      const status = c.credentialingStatusId
-        ? (statusById.get(c.credentialingStatusId) ?? null)
-        : null;
       const openTasks = openTasksByCase.get(c.id) ?? [];
       const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
 
+      // E6.0 — the action engine keys off the canonical status's label +
+      // bucket (the same closed ActionBucket domain the legacy configs used).
       const state = getActionState({
-        statusLabel: status?.label ?? null,
-        actionBucket: status?.actionBucket ?? null,
+        statusLabel: caseStatusLabel(c.caseStatus),
+        actionBucket: CASE_STATUS_BUCKETS[c.caseStatus],
         openTaskDueDates: openTasks.map((t) => t.dueDate),
         lastTouchDate,
         createdAt: c.createdAt,
@@ -224,11 +210,6 @@ function CasesWorkView() {
             ? `eff ${fmtDate(effective)}`
             : undefined;
 
-      const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);
-      const contractStatus = contract?.contractingStatusId
-        ? (statusById.get(contract.contractingStatusId) ?? null)
-        : null;
-
       const touchDays = lastTouchDate
         ? differenceInCalendarDays(now, parseISO(lastTouchDate))
         : null;
@@ -240,10 +221,8 @@ function CasesWorkView() {
       const row: CaseRow = {
         case: c,
         state,
-        statusLabel: status?.label ?? "No status",
-        statusColor: status?.color ?? "var(--mp-neutral)",
+        caseStatus: c.caseStatus,
         suffix,
-        contractStatus,
         provider: providerById.get(c.providerId) ?? null,
         lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
         days,
@@ -270,7 +249,7 @@ function CasesWorkView() {
         openRows,
         worst: worstActionState(openRows.map((r) => r.state)) ?? "complete",
         worstCount: 0,
-        inNetwork: rows.filter((r) => r.statusLabel === IN_NETWORK_LABEL).length,
+        approved: rows.filter((r) => r.caseStatus === "approved").length,
       });
     }
     for (const g of built) {
@@ -284,16 +263,7 @@ function CasesWorkView() {
       );
     });
     return built;
-  }, [
-    providersQ.data,
-    casesQ.data,
-    tasksQ.data,
-    contractsQ.data,
-    payersQ.data,
-    statusConfigsQ.data,
-    lastTouchQ.data,
-    runId,
-  ]);
+  }, [providersQ.data, casesQ.data, tasksQ.data, payersQ.data, lastTouchQ.data, runId]);
 
   const openRowsAll = useMemo(() => groups.flatMap((g) => g.openRows), [groups]);
   const counts = chipCounts(openRowsAll.map((r) => r.state));
@@ -379,12 +349,8 @@ function CasesWorkView() {
     return {
       id: row.case.id,
       lead,
-      status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
-      pipeline: row.case.payerPipelineState,
+      status: { status: row.caseStatus, suffix: row.suffix },
       trackingId: row.case.payerReferenceId ?? null,
-      contract: row.contractStatus
-        ? { label: row.contractStatus.label, color: row.contractStatus.color }
-        : null,
       lastTouch: row.lastTouchLabel,
       days: row.days,
       daysStrong: isAlertState(row.state) || row.state === "stalled",
@@ -406,10 +372,10 @@ function CasesWorkView() {
         {!g.isPreCred ? (
           <span className="hidden sm:flex items-center gap-2 ml-auto">
             <span className="w-40">
-              <ProgressBar value={g.inNetwork} max={g.rows.length} />
+              <ProgressBar value={g.approved} max={g.rows.length} />
             </span>
             <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-              {g.inNetwork} of {g.rows.length} in-network
+              {g.approved} of {g.rows.length} approved
             </span>
           </span>
         ) : (
@@ -549,7 +515,6 @@ function CasesWorkView() {
               <CaseTable
                 leadLabel="Provider"
                 rows={visibleRows.map(tableRow)}
-                showPipeline
                 showTrackingId={showTrackingId}
               />
             ),

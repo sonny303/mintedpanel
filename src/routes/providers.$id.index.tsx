@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TableSkeletonRows } from "@/components/TableSkeletonRows";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill, hexToStatusColor, type StatusColor } from "@/components/StatusPill";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { fmtDate } from "@/lib/format";
 import { CopyButton } from "@/components/CopyButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -450,31 +451,23 @@ function CasesPanel({
             <tr className="border-b border-border bg-muted/30">
               <Th>Payer</Th>
               <Th>State</Th>
-              <Th>Credentialing</Th>
-              <Th>Group Contract</Th>
+              <Th>Status</Th>
               <Th>Submitted</Th>
               <Th className="text-right">Days open</Th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeletonRows rows={4} cols={6} />
+              <TableSkeletonRows rows={4} cols={5} />
             ) : cases.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-12 text-center">
+                <td colSpan={5} className="px-3 py-12 text-center">
                   <EmptyState message="No cases yet" />
                 </td>
               </tr>
             ) : (
               cases.map((c) => {
                 const payer = payerById.get(c.payerId);
-                const credSc = c.credentialingStatusId
-                  ? statusById.get(c.credentialingStatusId)
-                  : null;
-                const contract = contractByKey.get(contractKey(c.groupId, c.payerId, c.state));
-                const contractSc = contract?.contractingStatusId
-                  ? statusById.get(contract.contractingStatusId)
-                  : null;
                 const mso = c.msoId ? msoById.get(c.msoId) : null;
                 const daysOpen = c.submittedDate
                   ? differenceInDays(new Date(), parseISO(c.submittedDate))
@@ -498,21 +491,7 @@ function CasesPanel({
                     </td>
                     <td className="px-3 text-foreground">{c.state}</td>
                     <td className="px-3 py-1.5">
-                      {credSc ? (
-                        <StatusPill status={hexToStatusColor(credSc.color)} label={credSc.label} />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {contractSc ? (
-                        <StatusPill
-                          status={hexToStatusColor(contractSc.color)}
-                          label={contractSc.label}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <CaseStatusPill status={c.caseStatus} />
                     </td>
                     <td className="px-3 text-foreground tabular-nums">
                       {fmtDate(c.submittedDate)}
