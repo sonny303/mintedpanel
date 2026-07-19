@@ -1,25 +1,12 @@
-// E1.6 F1.6.1 — the standalone Payer Directory page: the browsable global
-// catalog with the E4.2 self-service Add/Reactivate/Remove controls. Since the
-// E4.2 unified-payer-setup consolidation (TE-19) the implementation lives in
-// the shared PayerCatalogBrowser, which the admin Payer Setup workspace's
-// Catalog tab composes too — this URL deliberately keeps its NON-ADMIN browse
-// behavior (read-only catalog access is not gated by the admin workspace).
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { PayerCatalogBrowser } from "@/components/payers/PayerCatalogBrowser";
+// E6.1 F6.1.6 (2026-07-19) — the standalone Payer Directory page retires into
+// the Payer Setup workspace's Catalog tab (the same shared PayerCatalogBrowser
+// body). Payer Setup renders for ALL roles under the interim posture
+// (F6.1.1), so the non-admin read-only browse this URL used to serve is
+// preserved at the destination. This URL stays alive as a redirect.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/payer-directory")({
-  component: PayerDirectoryPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/payer-admin", search: { tab: "catalog" }, replace: true });
+  },
 });
-
-function PayerDirectoryPage() {
-  return (
-    <div>
-      <PageHeader
-        title="Payer Directory"
-        description="The global payer catalog — one canonical identity per payer, with the operational credentialing facts attached. Add the payers your organization works with to build its Payer Network."
-      />
-      <PayerCatalogBrowser />
-    </div>
-  );
-}

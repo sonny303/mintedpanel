@@ -67,10 +67,11 @@ function FixHereLink({ check }: { check: ReadinessCheck }) {
   const target: FixTarget = check.fixTarget;
   if (target === "group_screen") {
     // Document/COI/voided-check gaps: soft link to the owning group screen
-    // until a documents surface lands ([e1.8] Option 3).
+    // (E6.1: Account Detail became Org Detail; the group summaries live on
+    // the Groups shell until E6.2 lands the full hub).
     return (
-      <Link to="/get-started" className="text-[12px] underline underline-offset-2">
-        Fix on Account Detail
+      <Link to="/groups" className="text-[12px] underline underline-offset-2">
+        Fix on Groups
       </Link>
     );
   }

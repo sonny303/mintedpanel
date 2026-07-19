@@ -38,12 +38,16 @@
 // Recredentialing deadlines are a named gap (TE-1): no schema models them in
 // R4; they join the ranking when R9 lands ([r4-review] Q7).
 //
-// DETERMINISTIC ORDERING (the F2.3.1 documented tie order): entries with a
-// deadline sort by date ascending; entries with no signal rank after ALL
-// dated entries (the queue is total — nothing silently drops out). Ties break
-// by case created_at (oldest first), then case id. When one case has two
-// signals on the same date, the reported driving source is the first in
-// DEADLINE_SOURCE_ORDER above.
+// DETERMINISTIC ORDERING (the F2.3.1 documented tie order, default tiers
+// re-stated by E6.1 F6.1.3): with no saved org config the queue ranks
+// arrived/overdue follow-ups → task due dates → provider start dates → the
+// rest (future follow-ups/cadence and location launches — go-live stays a
+// quiet lower-priority signal), each tier by date ascending; entries with no
+// signal rank after ALL dated entries (the queue is total — nothing silently
+// drops out). A saved org config (E4.2 F4.2.5) still overrides with its
+// enabled-group order. Ties break by case created_at (oldest first), then
+// case id. When one case has two signals on the same date, the reported
+// driving source is the first in DEADLINE_SOURCE_ORDER above.
 //
 // ACTION PRECEDENCE (TE-2/TE-5, documented): a red-readiness case surfaces
 // its open gap as the action (advisory only — nothing is gated, E1.8's
@@ -537,11 +541,12 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     });
   }
 
-  // E4.1 F4.1.3 total order. Shipped default (no config): arrived/overdue
-  // follow-ups first, then all remaining dated signals by earliest date, then
-  // undated. A saved config ranks by enabled-group priority (config.order),
-  // then date. Every tier breaks ties by case created_at (oldest first), then
-  // case id — the existing stable order.
+  // E4.1 F4.1.3 total order. Shipped default (no config, E6.1 F6.1.3):
+  // arrived/overdue follow-ups → task due dates → provider start dates → the
+  // rest (future follow-ups/cadence + location launches), each by earliest
+  // date, then undated. A saved config ranks by enabled-group priority
+  // (config.order), then date. Every tier breaks ties by case created_at
+  // (oldest first), then case id — the existing stable order.
   const tierOf = (entry: QueueEntry): number => {
     if (!entry.deadline) return QUEUE_RANKING_GROUPS.length + 1; // undated → last
     const group = SOURCE_GROUP[entry.deadline.source];
@@ -549,8 +554,10 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       const idx = rankingConfig.order.indexOf(group);
       return idx >= 0 ? idx : QUEUE_RANKING_GROUPS.length; // enabled-only by filter
     }
-    // Default: arrived/overdue follow-ups jump the queue; everything else next.
-    return group === "follow_up" && entry.deadline.date <= input.today ? 0 : 1;
+    if (group === "follow_up" && entry.deadline.date <= input.today) return 0;
+    if (group === "task_due") return 1;
+    if (group === "provider_start") return 2;
+    return 3; // launch dates + not-yet-due follow-ups/cadence
   };
   entries.sort((a, b) => {
     const byTier = tierOf(a) - tierOf(b);

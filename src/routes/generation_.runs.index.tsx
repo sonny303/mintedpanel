@@ -1,26 +1,10 @@
-// E2.4 F2.4.1 — the generation-runs list (who, when, disposition counts).
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { RunHistoryContent } from "@/components/generation/RunHistoryContent";
+// E6.1 F6.1.6 (2026-07-19) — retired with the /generation surface; the
+// parent generation_.runs route throws the redirect. Kept as a stub per the
+// no-deleted-route-files rule.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/generation_/runs/")({
-  component: RunHistoryPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/groups", replace: true });
+  },
 });
-
-function RunHistoryPage() {
-  return (
-    <div className="max-w-5xl">
-      <PageHeader
-        title="Generation run history"
-        description="Every confirmed batch, immutable: what was proposed, created, skipped, or excluded — and why."
-        actions={
-          <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/generation">Back to generation</Link>
-          </Button>
-        }
-      />
-      <RunHistoryContent />
-    </div>
-  );
-}

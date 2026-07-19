@@ -28,8 +28,9 @@ import { splitPortfolio } from "@/lib/portfolio";
 import type { PortfolioOrg } from "@/types";
 import { CreateOrganizationModal } from "@/components/org/CreateOrganizationModal";
 
-// The org-scoped journey opens at its first nav slot (F0.0.1, "Get started").
-const WORKSPACE_ENTRY = "/get-started" as const;
+// The org workspace opens on Cases — the login landing and the first journey
+// entry (E6.1 F6.1.2, superseding the E0.0 "Get started" slot).
+const WORKSPACE_ENTRY = "/cases" as const;
 
 function StatTile({
   icon: Icon,

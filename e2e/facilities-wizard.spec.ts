@@ -249,7 +249,7 @@ async function fillRequiredAddress(page: Page, dialog: ReturnType<Page["getByRol
   await dialog.locator("#facility-zip").fill("27514");
 }
 
-test("TS-31: first facility — inherited group contact, group link, Complete, Account Detail", async ({
+test("TS-31: first facility — inherited group contact, group link, Complete, Groups summary", async ({
   context,
   page,
 }) => {
@@ -305,8 +305,9 @@ test("TS-31: first facility — inherited group contact, group link, Complete, A
     page.locator("#wizard-next-action").getByRole("button", { name: "Next: Providers" }),
   ).toBeVisible();
 
-  // F1.2.3: Account Detail read-only summary.
-  await page.goto("/get-started");
+  // F1.2.3 (re-homed by E6.1 F6.1.4): the read-only summary lives on the
+  // Groups shell.
+  await page.goto("/groups");
   await expect(page.getByText("Tree Hill Riverfront Clinic")).toBeVisible({ timeout: 30000 });
 });
 

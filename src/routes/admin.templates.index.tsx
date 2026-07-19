@@ -1,22 +1,13 @@
-// Admin > Templates list. The list body is the shared TemplatesList (E4.2
-// unified payer setup, TE-19 — also composed by the Payer Setup workspace's
-// "SOP templates" tab); row click / "+ New Template" open the wizard routes.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { TemplatesList } from "@/components/templates/TemplatesList";
+// E6.1 F6.1.6 (2026-07-19) — the standalone Templates list page retires into
+// the Payer Setup workspace's "SOP templates" tab (the same shared
+// TemplatesList body). The wizard sub-routes (/admin/templates/new and
+// /admin/templates/$id) KEEP rendering — they are the tab's working
+// authoring flow until E6.5 folds authoring into the module; retiring them
+// now would leave SOP authoring with no home.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/templates/")({
-  component: TemplatesIndex,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/payer-admin", search: { tab: "templates" }, replace: true });
+  },
 });
-
-function TemplatesIndex() {
-  return (
-    <div className="p-6">
-      <PageHeader
-        title="Templates"
-        description="Reusable SOP definitions. A case resolves the most specific match by payer + state + group — an organization SOP overrides a global payer SOP, and the generic fallback applies only when no payer SOP matches."
-      />
-      <TemplatesList />
-    </div>
-  );
-}

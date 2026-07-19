@@ -165,15 +165,17 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
   expect(writes).toEqual([]);
 });
 
-test("specialist following the old URL lands on the explicit denial with a catalog pointer", async ({
+test("specialist following the old URL lands on the workspace — all roles for now (E6.1 F6.1.1), writes still gated", async ({
   page,
 }) => {
   currentRole = "specialist";
   await page.goto("/admin/payers");
   await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
-  await expect(page.getByText("available to administrators only")).toBeVisible({ timeout: 30000 });
-  const catalogLink = page.getByRole("link", { name: "Browse payer catalog" });
-  await expect(catalogLink).toBeVisible();
-  await expect(catalogLink).toHaveAttribute("href", "/payer-directory");
+  // E6.1 interim posture: Payer Setup renders for ALL roles (two trusted
+  // users; revisit at the third hire) — the old admin-only denial is gone.
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
+    timeout: 30000,
+  });
+  // Admin-only write affordances still never render for a specialist.
   await expect(page.getByRole("switch")).toHaveCount(0);
 });

@@ -202,23 +202,22 @@ test("TE-20c — workspace tabs are arrow-key traversable; the nav entry is keyb
   await expect(page.getByLabel("Search payers")).toBeVisible();
 });
 
-test("TS-76 — P2/specialist has NO Payers nav entry and is denied at the route", async ({
+test("P2/specialist sees the Payer Setup entry and reaches the workspace (E6.1 F6.1.1 supersedes the TS-76 admin-only pin)", async ({
   page,
 }) => {
   currentRole = "specialist";
-  await page.goto("/get-started");
+  await page.goto("/org-detail");
   const rail = page.locator("aside").first();
-  // The specialist still has a nav (Workspace zone) — just no Payers entry of
-  // any name (TE-18 pin).
-  await expect(rail.getByRole("link", { name: "My Cases" })).toBeVisible({ timeout: 30000 });
-  await expect(rail.getByRole("link", { name: "Payer Setup" })).toHaveCount(0);
+  // E6.1 interim posture: Payer Setup renders for ALL roles; the superseded
+  // pre-consolidation entries never return.
+  await expect(rail.getByRole("link", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   await expect(rail.getByRole("link", { name: "Payer Management" })).toHaveCount(0);
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
-  await expect(page.getByText("available to administrators only")).toBeVisible({ timeout: 30000 });
-  // The denial still points at the read-only catalog (TE-20b — no dead end).
-  await expect(page.getByRole("link", { name: "Browse payer catalog" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
+    timeout: 30000,
+  });
 });
 
 test("TS-78 — reason codes live under Organization settings: defaults non-deletable, org codes add + deactivate", async ({

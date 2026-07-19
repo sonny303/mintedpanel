@@ -173,7 +173,7 @@ function AdminAuditPage() {
   // Mirrors the useRole() backstops on providers new/edit.
   const isAdmin = useIsAdmin();
   useEffect(() => {
-    if (!isAdmin) navigate({ to: "/home", replace: true });
+    if (!isAdmin) navigate({ to: "/cases", replace: true });
   }, [isAdmin, navigate]);
 
   const [dateFrom, setDateFrom] = useState("");

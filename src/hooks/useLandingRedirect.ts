@@ -32,7 +32,9 @@ export function useLandingRedirect() {
     const decision = resolveLanding(orgs, useAuthStore.getState().activeOrgId);
     if (decision.kind === "workspace") {
       setActiveOrg(decision.orgId);
-      navigate({ to: "/get-started" });
+      // E6.1 F6.1.2 — the login landing is the Cases surface (to-do pivot);
+      // the org-selection logic above is unchanged.
+      navigate({ to: "/cases" });
       return;
     }
     // first-run (memberships === 0 → NoOrgScreen renders from __root) and the

@@ -1,46 +1,13 @@
-// Admin → Settings: three tabs. Organization (name, provider groups,
-// facilities/insurance), Team (memberships), and Profile (the user's own
-// display name). Panels live in src/components/settings/*.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { OrgPanel } from "@/components/settings/OrgPanel";
-import { CreateOrgPanel } from "@/components/settings/CreateOrgPanel";
-import { GroupsPanel } from "@/components/settings/GroupsPanel";
-import { FacilitiesPanel } from "@/components/settings/FacilitiesPanel";
-import { MembersPanel } from "@/components/settings/MembersPanel";
-import { ProfilePanel } from "@/components/settings/ProfilePanel";
+// E6.1 F6.1.4/F6.1.6 (2026-07-19) — the Settings page retires. Member
+// management (invite, role change) and the user's profile section relocate to
+// Org Detail; the Organization tab's group/facility panels are superseded by
+// the wizard sections and the Groups surfaces (E6.2); Add organization lives
+// on /onboarding. This URL stays alive as a redirect (legacy URLs never
+// dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/settings")({
-  component: AdminSettingsPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/org-detail", replace: true });
+  },
 });
-
-function AdminSettingsPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Group & Locations"
-        description="Provider groups, facilities, insurance, team, and your profile."
-      />
-      <Tabs defaultValue="organization" className="w-full">
-        <TabsList className="bg-[#FAFAF9] border border-[#E8E5E0] rounded-md">
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-        </TabsList>
-        <TabsContent value="organization" className="mt-6 space-y-6">
-          <OrgPanel />
-          <GroupsPanel />
-          <FacilitiesPanel />
-          <CreateOrgPanel />
-        </TabsContent>
-        <TabsContent value="team" className="mt-6">
-          <MembersPanel />
-        </TabsContent>
-        <TabsContent value="profile" className="mt-6">
-          <ProfilePanel />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}

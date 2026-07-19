@@ -1,17 +1,15 @@
-// E2.0 — the case-generation preview surface ("Generate applications").
-// Entered from the Scope Review readiness section (the same row universe per
-// TE-4/Q1); URL-reachable like other pre-nav surfaces — Sidebar edits aren't
-// §5-authorized for this epic. The page is readable by any member; exclusion
-// and restore writes are admin-only and the controls mirror the RLS.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { History } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { GenerationPreviewContent } from "@/components/generation/GenerationPreviewContent";
+// E6.1 F6.1.6 (2026-07-19) — the standalone generation surface retires;
+// generation re-homes on the group's Payer Network board (E6.2 board, E6.3
+// decoupled one-door generation reusing the existing machinery). Until those
+// land, the Groups shell (carrying the payer-network pointer) is the interim
+// home. The generation components/services/ledgers are untouched — E6.3
+// re-triggers them. This URL stays alive as a redirect (legacy URLs never
+// dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 interface GenerationSearch {
-  // E4.2 TE-6 — bulk generation entered from a payer's row pre-scopes the
-  // preview to that payer (optionally a specific group). Absent = whole org.
+  // Kept so typed in-app links carrying the E4.2 payer/group scope still
+  // compile; the interim /groups shell has no scoped view to hand them to.
   payerId?: string;
   groupId?: string;
 }
@@ -21,30 +19,7 @@ export const Route = createFileRoute("/generation")({
     payerId: typeof search.payerId === "string" ? search.payerId : undefined,
     groupId: typeof search.groupId === "string" ? search.groupId : undefined,
   }),
-  component: GenerationPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/groups", replace: true });
+  },
 });
-
-function GenerationPage() {
-  const { payerId, groupId } = Route.useSearch();
-  const scoped = Boolean(payerId);
-  return (
-    <div>
-      <PageHeader
-        title="Generate applications"
-        description={
-          scoped
-            ? "Scoped to the selected payer — every eligible provider × group × state combination for it, reviewed before anything is created."
-            : "Every provider × group × payer × state combination the system can derive from your roster, clinic assignments, and payer targets — reviewed here before anything is created."
-        }
-        actions={
-          <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/generation/runs">
-              <History className="mr-1 h-4 w-4" /> Run history
-            </Link>
-          </Button>
-        }
-      />
-      <GenerationPreviewContent scope={payerId ? { payerId, groupId } : undefined} />
-    </div>
-  );
-}

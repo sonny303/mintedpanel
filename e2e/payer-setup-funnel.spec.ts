@@ -448,15 +448,14 @@ test("step 7: a provider failing the SOP's profile gate is a blocker with a dire
   const action = row.getByRole("link", { name: "Resolve blockers (1)" });
   await expect(action).toBeVisible();
 
-  // Step 10 — the payer-scoped generation preview receives the scope.
+  // Step 10 — /generation retired with E6.1 F6.1.6: the blocker link rides
+  // the redirect to the interim Groups shell until E6.3 re-homes generation
+  // on the group's Payer Network board (the scope param resumes then).
   await action.click();
-  await expect(page).toHaveURL(new RegExp(`/generation\\?payerId=${PAYER_ID}`), {
-    timeout: 15000,
-  });
-  await expect(page.getByRole("heading", { name: "Generate applications" })).toBeVisible({
+  await expect(page).toHaveURL(/\/groups\/?$/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Groups", exact: true })).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText("Scoped to the selected payer", { exact: false })).toBeVisible();
 });
 
 test("step 8: extension-fill SOP with no portal → Register portal carries payer context", async ({

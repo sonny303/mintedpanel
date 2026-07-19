@@ -305,13 +305,11 @@ function seedAuth(context: {
   );
 }
 
-// The Providers upload section on /admin/import (one of three per-section
-// uploaders); scope every interaction so the assertions don't collide with the
-// group/facility uploaders.
+// The wizard's Providers section card — the per-section uploader's home since
+// /admin/import retired (E6.1 F6.1.6; E6.4's Providers area carries imports
+// forward). Scoped so assertions don't collide with the other sections.
 function providersSection(page: Page) {
-  return page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Providers", exact: true }) });
+  return page.locator("#wizard-providers");
 }
 
 async function uploadRoster(scope: ReturnType<Page["locator"]>, name: string, content: string) {
@@ -325,6 +323,8 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   page,
 }) => {
   const fixtures = makeFixtures();
+  // A group exists, so the TE-5 ladder lets the Providers upload proceed.
+  fixtures.provider_groups = [activeGroup()];
   const wire: WireLog = { writes: [], stageCalls: [] };
   await context.route(
     /\/(rest|auth)\/v1\//,
@@ -332,8 +332,8 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   );
   await seedAuth(context);
 
-  await page.goto("/admin/import");
-  await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
+  await page.goto("/onboarding/wizard");
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({
     timeout: 30000,
   });
   const section = providersSection(page);
@@ -399,7 +399,7 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
   expect(wire.stageCalls).toHaveLength(1);
   expect(fixtures.import_rows).toHaveLength(2);
   const run = fixtures.import_runs[0];
-  expect(run.source).toBe("internal");
+  expect(run.source).toBe("onboarding");
   expect(run.entity_kind).toBe("provider");
   expect(run.state).toBe("ready_for_review");
   expect(run.staged_rows).toBe(2);
@@ -471,12 +471,13 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   page,
 }) => {
   const fixtures = makeFixtures();
+  fixtures.provider_groups = [activeGroup()];
   const wire: WireLog = { writes: [], stageCalls: [] };
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire, { stageDelayMs: 4000 }));
   await seedAuth(context);
 
-  await page.goto("/admin/import");
-  await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
+  await page.goto("/onboarding/wizard");
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({
     timeout: 30000,
   });
   const section = providersSection(page);
@@ -497,17 +498,16 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   });
 
   // Leave mid-scan via in-app navigation (the SPA keeps the scan driving) —
-  // wait for the destination to COMMIT so the import page really unmounts …
-  await page.getByRole("link", { name: "My Cases" }).click();
-  await expect(page).toHaveURL(/\/work/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "My Cases" })).toBeVisible({ timeout: 15000 });
-  // … and return: progress lives on the run row, not React state.
+  // wait for the destination to COMMIT so the wizard page really unmounts …
+  await page.locator("aside").getByRole("link", { name: "Org Detail" }).click();
+  await expect(page).toHaveURL(/\/org-detail/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 15000 });
+  // … and return: progress lives on the run row, not React state. The
+  // streamlined uploader keeps a ready_for_review run visible on return.
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({
     timeout: 15000,
   });
-  // Once ready_for_review, the internal uploader's inline resume panel (which
-  // tracks uploading/scanning only) drops it — the state shows in Run history.
   await expect(page.getByText("Ready for review", { exact: true }).first()).toBeVisible({
     timeout: 25000,
   });
@@ -520,8 +520,8 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
   expect(fixtures.import_rows).toHaveLength(60);
   expect((run.error_report as Array<{ line: number }>).map((e) => e.line)).toEqual([12, 27, 42]);
 
-  // The run history panel carries the raw detail + downloadable report.
-  await page.getByRole("button", { name: "View" }).click();
+  // The run panel carries the error count + downloadable report (raw detail
+  // stays an internal-variant affordance; the report survives the purge).
   await expect(page.getByText("3 rows could not be staged.")).toBeVisible();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download error report" }).click();

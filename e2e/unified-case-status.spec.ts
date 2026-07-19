@@ -477,9 +477,10 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_DILLON);
 
-  // The cases work list renders the canonical pill — ONE status column, no
-  // pipeline / contract machine columns.
-  await page.goto("/cases");
+  // The cases work list (the merged surface's by-payer pivot since E6.1)
+  // renders the canonical pill — ONE status column, no pipeline / contract
+  // machine columns.
+  await page.goto("/cases?pivot=payer");
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible({
     timeout: 30000,
   });
