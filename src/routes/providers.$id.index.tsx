@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
@@ -123,54 +124,56 @@ function ProviderRecordPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <RecordHeader provider={provider} canWrite={canWrite} />
+    <TooltipProvider>
+      <div className="space-y-4">
+        <RecordHeader provider={provider} canWrite={canWrite} />
 
-      <nav
-        aria-label="Record sections"
-        className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-md border border-[#E8E5E0] bg-white px-2 py-1.5"
-      >
-        {SECTIONS.map((s) => (
-          <a
-            key={s.id}
-            href={`#${s.id}`}
-            className="rounded px-2 py-1 text-[12.5px] text-muted-foreground hover:bg-[#F0EEE9] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgba(27,77,62,.4)]"
-          >
-            {s.label}
-          </a>
-        ))}
-      </nav>
+        <nav
+          aria-label="Record sections"
+          className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-md border border-[#E8E5E0] bg-white px-2 py-1.5"
+        >
+          {SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="rounded px-2 py-1 text-[12.5px] text-muted-foreground hover:bg-[#F0EEE9] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgba(27,77,62,.4)]"
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
 
-      <Section id="identity" title="Identity">
-        <IdentitySection provider={provider} canWrite={canWrite} />
-      </Section>
+        <Section id="identity" title="Identity">
+          <IdentitySection provider={provider} canWrite={canWrite} />
+        </Section>
 
-      <Section id="groups-facilities" title="Groups & facilities">
-        <GroupsFacilitiesPanel providerId={provider.id} canWrite={canWrite} />
-      </Section>
+        <Section id="groups-facilities" title="Groups & facilities">
+          <GroupsFacilitiesPanel providerId={provider.id} canWrite={canWrite} />
+        </Section>
 
-      <Section id="licenses" title="Licenses">
-        <LicensesSection provider={provider} canWrite={canWrite} />
-      </Section>
+        <Section id="licenses" title="Licenses">
+          <LicensesSection provider={provider} canWrite={canWrite} />
+        </Section>
 
-      <Section id="enrollments" title="Enrollments">
-        <EnrollmentsPanel providerId={provider.id} canWrite={canWrite} />
-      </Section>
+        <Section id="enrollments" title="Enrollments">
+          <EnrollmentsPanel providerId={provider.id} canWrite={canWrite} />
+        </Section>
 
-      <Section id="cases" title="Cases">
-        <CasesSection providerId={provider.id} />
-      </Section>
+        <Section id="cases" title="Cases">
+          <CasesSection providerId={provider.id} />
+        </Section>
 
-      <Section id="documents" title="Documents">
-        <DocumentsPanel
-          ownerType="provider"
-          ownerId={provider.id}
-          ownerName={`${provider.firstName} ${provider.lastName}`}
-        />
-      </Section>
+        <Section id="documents" title="Documents">
+          <DocumentsPanel
+            ownerType="provider"
+            ownerId={provider.id}
+            ownerName={`${provider.firstName} ${provider.lastName}`}
+          />
+        </Section>
 
-      <ProviderNotes providerId={provider.id} canEdit={canWrite} />
-    </div>
+        <ProviderNotes providerId={provider.id} canEdit={canWrite} />
+      </div>
+    </TooltipProvider>
   );
 }
 

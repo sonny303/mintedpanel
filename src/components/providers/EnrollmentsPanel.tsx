@@ -205,8 +205,13 @@ export function EnrollmentsPanel({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>State</Label>
-                <StateSelect value={stateDraft} onChange={setStateDraft} allowNone={false} />
+                <Label htmlFor="fact-state">State</Label>
+                <StateSelect
+                  id="fact-state"
+                  value={stateDraft}
+                  onChange={setStateDraft}
+                  allowNone={false}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Effective date (optional)</Label>

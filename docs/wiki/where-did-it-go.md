@@ -1,6 +1,6 @@
 # Where did it go?
 
-_Updated for: E6.3 (2026-07-19)._ The retirement map for the E6
+_Updated for: E6.4 (2026-07-19)._ The retirement map for the E6
 simplification wave: every retired surface, where its job moved, and the
 redirect that keeps old links alive. Derived from the E6.1 retirement
 ledger/redirect table (F6.1.6) — rows flip from _(planned)_ to shipped as
@@ -14,7 +14,7 @@ each owning epic merges. No legacy URL ever dead-ends.
 | `/client-progress`                                                                                                                        | Reporting Center (nearest report)                                                                                                               | Redirect shipped (E6.1, #201); report lands E6.6 |
 | `/launches*` (locations pipeline)                                                                                                         | Reporting Center › Launches report                                                                                                              | E6.6 _(planned)_                                 |
 | Facilities entry                                                                                                                          | Groups › state-grouped facilities                                                                                                               | **Shipped (E6.2)**                               |
-| `/admin/import` (Data Import page)                                                                                                        | Imports live with their data (Providers, Groups › Facilities, Groups › Payer Network)                                                           | E6.4 _(planned)_                                 |
+| `/admin/import` (Data Import page)                                                                                                        | Imports live with their data (Providers, Groups › Facilities, Groups › Payer Network)                                                           | **Shipped (E6.4)**                               |
 | `/admin/statuses` (status CRUD)                                                                                                           | Retired — the eight-status list is fixed and code-owned; the URL redirects to Cases                                                             | **Shipped (E6.0, #199)**                         |
 | `/admin/mso-routing`                                                                                                                      | Payer Setup › Catalog (delegation is a payer fact + SOP content)                                                                                | E6.5 _(planned)_                                 |
 | `/admin/settings`                                                                                                                         | Org Detail (members); denial word-list + queue ranking become fixed defaults                                                                    | **Shipped (E6.1, #201)**                         |

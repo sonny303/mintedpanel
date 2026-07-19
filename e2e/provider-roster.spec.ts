@@ -402,13 +402,16 @@ test("TS-34: two-TIN provider — both groups assigned, first primary; last-assi
   );
   expect(primaries.length).toBe(1);
 
-  // Removing the last assignment is blocked.
-  await card.getByRole("button", { name: "Edit" }).click();
-  const editDialog = page.getByRole("dialog", { name: "Edit provider" });
-  await editDialog.getByLabel("Assign Shelby Sports Rehab LLC").click();
-  await editDialog.getByLabel("Assign Shelby Performance Group LLC").click();
-  await editDialog.getByRole("button", { name: "Save changes" }).click();
-  await expect(editDialog).toContainText("A provider must keep at least one group assignment");
+  // E6.4: ongoing membership edits live on the RECORD (Groups & facilities).
+  // Remove the non-primary group; the remaining PRIMARY chip carries no
+  // remove affordance — the last assignment is structurally unremovable.
+  await card.getByRole("link", { name: "Open record" }).click();
+  await expect(page.getByRole("heading", { name: "Groups & facilities" })).toBeVisible({
+    timeout: 30000,
+  });
+  await page.getByLabel("Remove group Shelby Performance Group LLC").click();
+  await expect.poll(() => fixtures.provider_group_assignments!.length).toBe(1);
+  await expect(page.getByLabel(/Remove group/)).toHaveCount(0);
 });
 
 test("TS-35: PSV verify with board URL, then renewal edit resets to unverified", async ({
@@ -442,21 +445,22 @@ test("TS-35: PSV verify with board URL, then renewal edit resets to unverified",
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
   await seedAuth(context, ORG_OUTER_BANKS);
 
-  await page.goto("/onboarding/wizard");
-  const card = page.locator("#wizard-providers");
-  await expect(card).toContainText("Brooke Ostrander", { timeout: 30000 });
+  // E6.4: license edits live on the RECORD's licenses-only dialog — an empty
+  // provider patch, so identity fields and assignments are untouchable here.
+  await page.goto("/providers/prov-ob");
+  await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
 
   // Verify the NC license against the state board.
-  await card.getByRole("button", { name: "Edit" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit provider" });
+  await page.getByRole("button", { name: "Edit licenses" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit state licenses" });
   await expect(dialog.getByText("Unverified").first()).toBeVisible({ timeout: 15000 });
   await dialog.locator("#lic-0-url").fill("https://www.ncbpte.org/license-verification");
   await dialog.locator("#lic-0-psv").click();
   await page.getByRole("option", { name: "Verified", exact: true }).click();
-  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await dialog.getByRole("button", { name: "Save licenses" }).click();
 
   // The dialog closes only after the service write completes.
-  await expect(page.getByRole("dialog", { name: "Edit provider" })).toHaveCount(0, {
+  await expect(page.getByRole("dialog", { name: "Edit state licenses" })).toHaveCount(0, {
     timeout: 15000,
   });
   const lic = fixtures.state_licenses![0] as Record<string, unknown>;
@@ -465,16 +469,16 @@ test("TS-35: PSV verify with board URL, then renewal edit resets to unverified",
   expect(lic.verification_source_url).toBe("https://www.ncbpte.org/license-verification");
 
   // Renewal: editing the expiration date resets the PSV trail.
-  await card.getByRole("button", { name: "Edit" }).click();
-  const dialog2 = page.getByRole("dialog", { name: "Edit provider" });
+  await page.getByRole("button", { name: "Edit licenses" }).click();
+  const dialog2 = page.getByRole("dialog", { name: "Edit state licenses" });
   await expect(dialog2.getByText("Verified", { exact: true }).first()).toBeVisible({
     timeout: 15000,
   });
   await dialog2.locator("#lic-0-expiration").fill("2029-01-31");
   await expect(dialog2).toContainText("returns to Unverified on save");
-  await dialog2.getByRole("button", { name: "Save changes" }).click();
+  await dialog2.getByRole("button", { name: "Save licenses" }).click();
 
-  await expect(page.getByRole("dialog", { name: "Edit provider" })).toHaveCount(0, {
+  await expect(page.getByRole("dialog", { name: "Edit state licenses" })).toHaveCount(0, {
     timeout: 15000,
   });
   await expect.poll(() => lic.verified_status).toBe("unverified");

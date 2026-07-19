@@ -1680,6 +1680,55 @@ pages are updated in the same PR as the epic that changes them.
   concurrent-duplicate safe skip + honest partial failure, TS-127
   provider-scoped entry); board/legacy-routes/funnel specs retargeted
   (`/generation*` back in RENDERING_ROUTES).
+- **E6.4 — Providers area (the consolidated people record).** NO migration
+  (facts shipped in E6.2). **Roster:** `/providers` rebuilt as the A→Z
+  PHI-safe table (fixed last-name sort stated on screen; group/license-state/
+  has-gaps filters) with ambient gap pills from pure
+  `src/lib/providerGaps.ts` (+suite — reuses `CAQH_CURRENT_DAYS`, license
+  expiry, and the E2.0 no-assignment-not-generatable rule; reference/
+  terminated never gap; pills deep-link `#section` on the record); the old
+  case-grouped work view is gone (casework = /cases). **Record:**
+  `/providers/$id` is the one-page record — section jump-nav (Identity ·
+  Groups & facilities · Licenses · Enrollments · Cases · Documents,
+  hash-focusable), inline per-field editing via
+  `src/components/providers/InlineField.tsx` (ONE audited `updateProvider`
+  patch per field; DOB masked-at-rest/reveal-on-edit; SSN stays
+  `SsnVaultField`), `GroupsFacilitiesPanel` (chips + "+ Add facility" over
+  the EXISTING `setAssignments`/`set_primary_assignment` paths + the new
+  NARROW `providers.ts setGroupAssignments` — planAssignmentSync order,
+  group_id mirror; assignments are unreachable from every other record
+  edit, killing the wipe defect), `EnrollmentsPanel` (fact capture +
+  Expire; `ENROLLMENT_GUARD_TEXT` pins the no-prior-employer rule), the
+  read-only Cases panel (E6.0 pills, prior denials from
+  `useCaseDenialEntries` preserved beneath reapplied cycles, x-of-y header
+  via `providerCaseProgress`), a licenses-only editor dialog
+  (`updateProviderWithLicenses` with an EMPTY patch), and the E4.5
+  `DocumentsPanel` (page wrapped in `TooltipProvider` — the panel's row
+  tooltips need it; the rebuild initially dropped it and the router error
+  boundary ate the page). **Retired:** `/providers/$id/edit` → redirect
+  (legacy-routes row), `EditProviderForm` deleted, provider-detail
+  `NewCaseModal` deleted (oneDoor.test.ts allowlist shrank — ManualCaseModal
+  on /cases is the ONE escape hatch); wizard roster rows link "Open record"
+  (create dialog stays; TD-41 notes the `/providers/new` duplicate create
+  door). **CSV (F6.4.6):** the provider template gained one-row-per-
+  relationship columns (`facility_name`, `enrollment_payer/state/
+effective_date`) resolved to ids AT SCAN TIME via the E6.2
+  `SectionScanContext` seam (`provider` member; unknown names = row errors
+  naming the column); `looksLikeCombinedTemplate` re-keyed on
+  `facility_street` so the extended template never trips the retired-
+  combined rejection; `commitImportRun` snapshots staged rows pre-RPC then
+  runs the idempotent `applyProviderRelationships` pass (dated facility
+  upserts, non-primary group upserts under the unique, facts
+  skip-on-live-match — never a case) returning the unified
+  `relationships` summary; `providerImportReference` = the downloadable
+  real-names reference sheet; the upload card renders on /providers
+  (imports live with their data) AND the wizard section, both threading
+  scanContext + reference. e2e `e2e/providers-area.spec.ts`
+  (TS-112/113/129/130; TS-128's scan grain is pinned in
+  `importSections.test.ts`); retargets: provider-roster TS-34/35 →
+  record flows, roster-import + sectioned-intake header lists extended,
+  unified-case-status record slice → the Cases panel, legacy-routes +
+  `/providers/$id/edit` redirect row.
 
 ## What this is
 
