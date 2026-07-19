@@ -7,7 +7,6 @@ import {
   createNote,
   getCoordinators,
   getFacilities,
-  getMsoRoutingRule,
   getNotesFor,
   getProviderGroups,
   getStateLicensesByProvider,
@@ -52,20 +51,6 @@ export function useStateLicensesByProvider(providerId: string | undefined) {
     queryKey: queryKeys.stateLicenses(orgId, providerId ?? ""),
     queryFn: () => getStateLicensesByProvider(providerId as string),
     enabled: orgId !== "no-org" && Boolean(providerId),
-    staleTime: FIVE_MINUTES,
-  });
-}
-
-export function useMsoRoutingRule(
-  payerId: string | undefined,
-  state: string | undefined,
-  specialty: string | null | undefined,
-) {
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useQuery({
-    queryKey: queryKeys.msoRoutingRule(orgId, payerId ?? "", state ?? "", specialty ?? ""),
-    queryFn: () => getMsoRoutingRule(payerId as string, state as string, specialty ?? null),
-    enabled: orgId !== "no-org" && Boolean(payerId && state),
     staleTime: FIVE_MINUTES,
   });
 }
