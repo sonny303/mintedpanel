@@ -8,7 +8,7 @@
 // via useCreateProviderGroup/useUpdateProviderGroup — org_id and audit are
 // the service's job. Validation is format-level only (v1; registry checks
 // deferred to R5) via the pure src/lib/providerGroup helpers.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -29,7 +29,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatesMultiSelect } from "@/components/onboarding/StatesMultiSelect";
-import { useCreateProviderGroup, useUpdateProviderGroup } from "@/hooks/useOrgSettings";
+import {
+  useCreateProviderGroup,
+  useCreateGroupInsurancePolicy,
+  useGroupInsurancePolicies,
+  useUpdateGroupInsurancePolicy,
+  useUpdateProviderGroup,
+} from "@/hooks/useOrgSettings";
 import {
   EMPTY_GROUP_FORM,
   formatTin,
@@ -203,6 +209,20 @@ function BlockFields({
   );
 }
 
+interface MalpracticeDraft {
+  carrier: string;
+  policyNumber: string;
+  coverageStart: string;
+  coverageEnd: string;
+}
+
+const EMPTY_MALPRACTICE: MalpracticeDraft = {
+  carrier: "",
+  policyNumber: "",
+  coverageStart: "",
+  coverageEnd: "",
+};
+
 export function ProviderGroupForm({
   group,
   onClose,
@@ -220,13 +240,57 @@ export function ProviderGroupForm({
   const [sameCred, setSameCred] = useState(false);
   const [errors, setErrors] = useState<GroupFormErrors>({});
 
+  // Malpractice coverage rolls up to the GROUP (user request 2026-07-19) and
+  // is stored as the group's professional_liability row in
+  // group_insurance_policies — the store the E1.8 readiness checks and the
+  // fill-profile malpractice resolution already read — NOT new flat columns
+  // those readers would ignore. Edit mode prefills from the newest-ending
+  // professional_liability policy (the profile's resolution rule; the list
+  // read is end-date-desc). Clearing the fields never deletes the policy row.
+  const policiesQ = useGroupInsurancePolicies(group?.id ?? "");
+  const existingMalpractice = (policiesQ.data ?? []).find(
+    (p) => p.insuranceType === "professional_liability",
+  );
+  const [malpractice, setMalpractice] = useState<MalpracticeDraft | null>(
+    group ? null : { ...EMPTY_MALPRACTICE },
+  );
+  const [malpracticeError, setMalpracticeError] = useState<string | null>(null);
+  useEffect(() => {
+    if (malpractice !== null || !group) return;
+    if (policiesQ.isError) {
+      setMalpractice({ ...EMPTY_MALPRACTICE });
+      return;
+    }
+    if (!policiesQ.data) return;
+    const p = policiesQ.data.find((x) => x.insuranceType === "professional_liability");
+    setMalpractice(
+      p
+        ? {
+            carrier: p.insurerName,
+            policyNumber: p.policyNumber,
+            coverageStart: p.policyStartDate,
+            coverageEnd: p.policyEndDate,
+          }
+        : { ...EMPTY_MALPRACTICE },
+    );
+  }, [malpractice, group, policiesQ.data, policiesQ.isError]);
+
   const createMut = useCreateProviderGroup();
   const updateMut = useUpdateProviderGroup(group?.id ?? "");
-  const pending = createMut.isPending || updateMut.isPending;
+  const createPolicyMut = useCreateGroupInsurancePolicy(group?.id ?? "");
+  const updatePolicyMut = useUpdateGroupInsurancePolicy(
+    existingMalpractice?.id ?? "",
+    group?.id ?? "",
+  );
+  const pending =
+    createMut.isPending ||
+    updateMut.isPending ||
+    createPolicyMut.isPending ||
+    updatePolicyMut.isPending;
 
   const set = (patch: Partial<GroupFormValue>) => setValue((v) => ({ ...v, ...patch }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const resolved: GroupFormValue = {
       ...value,
       correspondence: sameCorr ? value.billing : value.correspondence,
@@ -234,29 +298,76 @@ export function ProviderGroupForm({
     };
     const errs = groupFormErrors(resolved);
     setErrors(errs);
-    if (hasGroupFormErrors(errs)) return;
+    // The policy store requires all four fields, so the section is
+    // all-or-nothing: blank = no policy write, partial = blocked here.
+    const mpValues = malpractice
+      ? [
+          malpractice.carrier,
+          malpractice.policyNumber,
+          malpractice.coverageStart,
+          malpractice.coverageEnd,
+        ].map((v) => v.trim())
+      : [];
+    const mpFilledCount = mpValues.filter(Boolean).length;
+    const mpPartial = mpFilledCount > 0 && mpFilledCount < 4;
+    setMalpracticeError(
+      mpPartial
+        ? "Enter carrier, policy number, and both coverage dates — or leave all four blank."
+        : null,
+    );
+    if (hasGroupFormErrors(errs) || mpPartial) return;
     const input = formValueToInput(resolved);
-    const onError = (e: unknown) =>
+    let groupId = group?.id ?? "";
+    try {
+      if (group) {
+        await updateMut.mutateAsync(input);
+      } else {
+        const created = await createMut.mutateAsync(input);
+        groupId = created.id;
+      }
+    } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't save the provider group");
-    if (group) {
-      updateMut.mutate(input, {
-        onSuccess: () => {
-          toast.success("Provider group updated");
-          onSaved?.();
-          onClose();
-        },
-        onError,
-      });
-    } else {
-      createMut.mutate(input, {
-        onSuccess: () => {
-          toast.success("Provider group saved");
-          onSaved?.();
-          onClose();
-        },
-        onError,
-      });
+      return;
     }
+    if (malpractice && mpFilledCount === 4) {
+      const draft = {
+        insurerName: malpractice.carrier.trim(),
+        policyNumber: malpractice.policyNumber.trim(),
+        policyStartDate: malpractice.coverageStart,
+        policyEndDate: malpractice.coverageEnd,
+      };
+      const changed =
+        !existingMalpractice ||
+        existingMalpractice.insurerName !== draft.insurerName ||
+        existingMalpractice.policyNumber !== draft.policyNumber ||
+        existingMalpractice.policyStartDate !== draft.policyStartDate ||
+        existingMalpractice.policyEndDate !== draft.policyEndDate;
+      if (changed) {
+        try {
+          if (existingMalpractice) {
+            await updatePolicyMut.mutateAsync(draft);
+          } else {
+            await createPolicyMut.mutateAsync({
+              groupId,
+              insuranceType: "professional_liability",
+              ...draft,
+            });
+          }
+        } catch (e) {
+          toast.error(
+            e instanceof Error
+              ? `The group was saved, but the malpractice policy wasn't: ${e.message}`
+              : "The group was saved, but the malpractice policy wasn't — reopen Edit to retry.",
+          );
+          onSaved?.();
+          onClose();
+          return;
+        }
+      }
+    }
+    toast.success(group ? "Provider group updated" : "Provider group saved");
+    onSaved?.();
+    onClose();
   };
 
   return (
@@ -372,6 +483,73 @@ export function ProviderGroupForm({
               onChange={(credentialing) => set({ credentialing })}
               mirror={sameCred ? value.billing : null}
             />
+          </div>
+
+          <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
+            <h3 className="text-[13px] font-semibold text-foreground">Malpractice coverage</h3>
+            {malpractice === null ? (
+              <p className="text-[12px] text-muted-foreground">Loading current policy…</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="group-mp-carrier" className="text-[12px]">
+                      Carrier
+                    </Label>
+                    <Input
+                      id="group-mp-carrier"
+                      value={malpractice.carrier}
+                      onChange={(e) => setMalpractice({ ...malpractice, carrier: e.target.value })}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="group-mp-policy" className="text-[12px]">
+                      Policy number
+                    </Label>
+                    <Input
+                      id="group-mp-policy"
+                      value={malpractice.policyNumber}
+                      onChange={(e) =>
+                        setMalpractice({ ...malpractice, policyNumber: e.target.value })
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="group-mp-start" className="text-[12px]">
+                      Coverage start
+                    </Label>
+                    <Input
+                      id="group-mp-start"
+                      type="date"
+                      value={malpractice.coverageStart}
+                      onChange={(e) =>
+                        setMalpractice({ ...malpractice, coverageStart: e.target.value })
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="group-mp-end" className="text-[12px]">
+                      Coverage end
+                    </Label>
+                    <Input
+                      id="group-mp-end"
+                      type="date"
+                      value={malpractice.coverageEnd}
+                      onChange={(e) =>
+                        setMalpractice({ ...malpractice, coverageEnd: e.target.value })
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                </div>
+                <FieldError message={malpracticeError ?? undefined} />
+              </>
+            )}
           </div>
         </div>
         <DialogFooter>

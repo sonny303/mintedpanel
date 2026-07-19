@@ -145,6 +145,7 @@ function makeFixtures(over: { provider_groups?: unknown[]; assignments?: unknown
     audit_log: [],
     party_role_assignments: over.assignments ?? [],
     provider_groups: over.provider_groups ?? [],
+    group_insurance_policies: [],
     facilities: [],
     providers: [],
   } as Record<string, unknown[]>;
@@ -173,6 +174,12 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
       const body = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
       const created = groupRow(String(body.org_id), `g-${groupSeq++}`, body);
       fixtures.provider_groups!.push(created);
+      return json(wantsObject ? created : [created], 201);
+    }
+    if (table === "group_insurance_policies" && req.method() === "POST") {
+      const body = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
+      const created = { id: `pol-${groupSeq++}`, notes: null, ...body };
+      fixtures.group_insurance_policies!.push(created);
       return json(wantsObject ? created : [created], 201);
     }
     if (table === "provider_groups" && req.method() === "PATCH") {
@@ -253,6 +260,12 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await dialog.locator("#billing-state").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
   await dialog.locator("#billing-zip").fill("27514");
+  // Malpractice rolls up to the GROUP (user request 2026-07-19): the form's
+  // new section writes the group's professional_liability policy row.
+  await dialog.locator("#group-mp-carrier").fill("State Farm");
+  await dialog.locator("#group-mp-policy").fill("SF-12345");
+  await dialog.locator("#group-mp-start").fill("2026-01-01");
+  await dialog.locator("#group-mp-end").fill("2027-01-01");
   await dialog.getByRole("button", { name: "Save provider group" }).click();
 
   // Derived progress: the section flips to Complete with the saved row listed
@@ -267,6 +280,16 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   // removed by user request (2026-07-19).
   await expect(page.getByRole("button", { name: "Next: Facilities" })).toHaveCount(1);
   await expect(groupCard.getByRole("button", { name: "Next: Facilities" })).toHaveCount(0);
+
+  // The malpractice section landed as the group's professional_liability
+  // policy row (group_insurance_policies), never provider columns.
+  const policy = (fixtures.group_insurance_policies![0] ?? {}) as Record<string, unknown>;
+  expect(policy.insurance_type).toBe("professional_liability");
+  expect(policy.insurer_name).toBe("State Farm");
+  expect(policy.policy_number).toBe("SF-12345");
+  expect(policy.policy_start_date).toBe("2026-01-01");
+  expect(policy.policy_end_date).toBe("2027-01-01");
+  expect(policy.group_id).toBe("g-100");
 
   // F1.1.3 (re-homed by E6.2 F6.2.1): the group facts live on the group hub —
   // a single-group org auto-lands there from /groups (zero extra clicks).

@@ -70,10 +70,6 @@ interface RosterFormState {
   degree: string;
   schoolName: string;
   graduationDate: string;
-  malpracticeCarrier: string;
-  malpracticePolicyNumber: string;
-  malpracticeCoverageStart: string;
-  malpracticeCoverageEnd: string;
   caqhId: string;
   caqhLastAttestedDate: string;
 }
@@ -94,10 +90,6 @@ const EMPTY_FORM: RosterFormState = {
   degree: "",
   schoolName: "",
   graduationDate: "",
-  malpracticeCarrier: "",
-  malpracticePolicyNumber: "",
-  malpracticeCoverageStart: "",
-  malpracticeCoverageEnd: "",
   caqhId: "",
   caqhLastAttestedDate: "",
 };
@@ -128,10 +120,9 @@ function toProviderInput(f: RosterFormState): Omit<ProviderInput, "firstName" | 
     degree: t(f.degree),
     schoolName: t(f.schoolName),
     graduationDate: t(f.graduationDate),
-    malpracticeCarrier: t(f.malpracticeCarrier),
-    malpracticePolicyNumber: t(f.malpracticePolicyNumber),
-    malpracticeCoverageStart: t(f.malpracticeCoverageStart),
-    malpracticeCoverageEnd: t(f.malpracticeCoverageEnd),
+    // Malpractice moved to the GROUP form (group_insurance_policies, user
+    // request 2026-07-19); omitting the keys means saves never touch the
+    // legacy provider malpractice columns.
     caqhId: t(f.caqhId),
     caqhLastAttestedDate: t(f.caqhLastAttestedDate),
   };
@@ -489,58 +480,6 @@ function FormBody({
         </div>
 
         <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
-          <h3 className="text-[13px] font-semibold text-foreground">Malpractice coverage</h3>
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <Label htmlFor="prov-carrier" className="text-[12px]">
-                Carrier
-              </Label>
-              <Input
-                id="prov-carrier"
-                value={form.malpracticeCarrier}
-                onChange={(e) => set({ malpracticeCarrier: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-policy" className="text-[12px]">
-                Policy number
-              </Label>
-              <Input
-                id="prov-policy"
-                value={form.malpracticePolicyNumber}
-                onChange={(e) => set({ malpracticePolicyNumber: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-cov-start" className="text-[12px]">
-                Coverage start
-              </Label>
-              <Input
-                id="prov-cov-start"
-                type="date"
-                value={form.malpracticeCoverageStart}
-                onChange={(e) => set({ malpracticeCoverageStart: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-cov-end" className="text-[12px]">
-                Coverage end
-              </Label>
-              <Input
-                id="prov-cov-end"
-                type="date"
-                value={form.malpracticeCoverageEnd}
-                onChange={(e) => set({ malpracticeCoverageEnd: e.target.value })}
-                className="h-9"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
           <h3 className="text-[13px] font-semibold text-foreground">CAQH</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -702,10 +641,6 @@ function EditLoader({
       degree: p.degree ?? "",
       schoolName: p.schoolName ?? "",
       graduationDate: p.graduationDate ?? "",
-      malpracticeCarrier: p.malpracticeCarrier ?? "",
-      malpracticePolicyNumber: p.malpracticePolicyNumber ?? "",
-      malpracticeCoverageStart: p.malpracticeCoverageStart ?? "",
-      malpracticeCoverageEnd: p.malpracticeCoverageEnd ?? "",
       caqhId: p.caqhId ?? "",
       caqhLastAttestedDate: p.caqhLastAttestedDate ?? "",
     };
