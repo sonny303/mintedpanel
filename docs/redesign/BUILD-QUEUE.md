@@ -46,7 +46,7 @@ outside application code and required register updates). Only epics with
 
 | #   | Epic                               | File                                  | Depends on                                        | Status | PR  |
 | --- | ---------------------------------- | ------------------------------------- | ------------------------------------------------- | ------ | --- |
-| 1   | E6.0 Unified case status           | `E6.0-unified-case-status.md`         | —                                                 | queued | —   |
+| 1   | E6.0 Unified case status           | `E6.0-unified-case-status.md`         | —                                                 | building | —   |
 | 2   | E6.1 Sidebar & surface restructure | `E6.1-sidebar-surface-restructure.md` | E6.0                                              | queued | —   |
 | 3   | E6.2 Groups & Payer Network board  | `E6.2-groups-payer-network.md`        | E6.0, E6.1                                        | queued | —   |
 | 4   | E6.3 Decoupled generation          | `E6.3-decoupled-generation.md`        | E6.0, E6.2                                        | queued | —   |
