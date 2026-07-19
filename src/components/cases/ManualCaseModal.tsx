@@ -87,7 +87,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
       (payerAssignmentsQ.data ?? []).filter(isActiveAssignment).map((a) => a.payerId),
     );
     return (payersQ.data ?? []).filter(
-      (p) => (p.status ?? "active") === "active" && (Boolean(p.orgId) || assigned.has(p.id)),
+      (p) => (p.status ?? "active") === "active" && assigned.has(p.id),
     );
   }, [payersQ.data, payerAssignmentsQ.data]);
 

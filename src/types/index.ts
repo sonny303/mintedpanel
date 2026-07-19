@@ -185,6 +185,64 @@ export interface CaptureTokenView {
   current?: ContactInput;
 }
 
+// E4.4 Sensitive Identifiers Vault. The full SSN lives ONLY in the server-only
+// provider_ssn_vault (encrypted at rest, no client SELECT grant); these types
+// never carry the plaintext except the one-time reveal/release results below,
+// which are held in memory for a brief window and never cached.
+
+// Secure SSN intake link (E0.5 capture-link pattern). Operators read the state;
+// the raw token is never stored (only its hash) and never surfaced except once,
+// in IssuedSsnIntakeLink at issue time.
+export type SsnIntakeLinkState = "active" | "used" | "expired" | "revoked";
+export interface SsnIntakeLink {
+  id: string;
+  orgId: string;
+  providerId: string;
+  recipientEmail: string;
+  state: SsnIntakeLinkState;
+  expiresAt: string;
+  usedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+// The one-time result of issuing an intake link: the raw token (for URL
+// assembly) plus the inputs the copy-able email/instructions need.
+export interface IssuedSsnIntakeLink {
+  token: string;
+  providerId: string;
+  providerName: string;
+  recipientEmail: string;
+  recipientName: string;
+  orgName: string;
+  expiresAt: string;
+}
+
+// What the public /ssn-intake/:token route learns from validate_ssn_intake_token
+// — only the single authorized provider/org, never the SSN (write-only ingress).
+export type SsnIntakeTokenState = SsnIntakeLinkState | "invalid";
+export interface SsnIntakeTokenView {
+  state: SsnIntakeTokenState;
+  orgName?: string;
+  providerName?: string;
+  recipientEmail?: string;
+  expiresAt?: string;
+}
+
+// store_ssn / submit_ssn_intake echo ONLY the mask — never the value.
+export interface SsnStoreResult {
+  ok: boolean;
+  ssnLast4: string;
+  mask: string;
+}
+
+// reveal_ssn returns the plaintext exactly once for a brief auto-rehide window.
+// Never persisted, never cached, never logged.
+export interface SsnRevealResult {
+  ssn: string;
+  ssnLast4: string;
+}
+
 // Inbound "contact us" lead (redesign E0.5 / F0.5.5). NOT an org until a P1
 // converts it — triaged in a shared internal queue.
 export type InboundLeadStatus = "new" | "converted" | "dismissed";
@@ -1187,4 +1245,55 @@ export interface ImportRun {
   updatedProviderIds: string[] | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// E4.5 — Document storage (provider & group documents with expiration
+// tracking). One interface per provider_documents row: immutable version
+// metadata (TE-1) — a replacement INSERTS a new row; "current" is derived as
+// the family row with no successor, never stored.
+// ---------------------------------------------------------------------------
+
+/** The two canonical owner grains (D1). `case_id` may additionally record
+ * usage context but is never the canonical owner for E4.5 uploads. */
+export type DocumentOwnerType = "provider" | "group";
+
+/** The governed document-kind vocabulary — mirrors the DB
+ * provider_documents_doc_type_check exactly (TE-5). Labels, owner grains, and
+ * expiration rules live in ONE shared map: src/lib/documents.ts
+ * DOCUMENT_KIND_META. */
+export type DocumentKind =
+  | "state_license"
+  | "dea"
+  | "coi"
+  | "w9"
+  | "cms_460"
+  | "voided_check"
+  | "cv"
+  | "diploma"
+  | "board_cert"
+  | "filled_form"
+  | "other";
+
+/** Derived at render time from expiration_date + the shared per-kind
+ * thresholds — never a stored flag (TE-6). */
+export type DocumentExpirationStatus = "expired" | "expiring_soon" | "current";
+
+export interface ProviderDocument {
+  id: string;
+  orgId: string;
+  providerId: string | null;
+  groupId: string | null;
+  caseId: string | null;
+  docType: DocumentKind;
+  fileName: string;
+  filePath: string;
+  effectiveDate: string | null;
+  expirationDate: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+  /** Stable lineage id — re-upload versions the family (TE-1). */
+  documentFamilyId: string;
+  versionNumber: number;
+  supersedesDocumentId: string | null;
 }

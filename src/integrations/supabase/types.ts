@@ -2118,6 +2118,7 @@ export type Database = {
           case_id: string | null;
           created_at: string;
           doc_type: string;
+          document_family_id: string;
           effective_date: string | null;
           expiration_date: string | null;
           file_name: string;
@@ -2126,12 +2127,15 @@ export type Database = {
           id: string;
           org_id: string;
           provider_id: string | null;
+          supersedes_document_id: string | null;
           uploaded_by: string | null;
+          version_number: number;
         };
         Insert: {
           case_id?: string | null;
           created_at?: string;
           doc_type: string;
+          document_family_id?: string;
           effective_date?: string | null;
           expiration_date?: string | null;
           file_name: string;
@@ -2140,12 +2144,15 @@ export type Database = {
           id?: string;
           org_id: string;
           provider_id?: string | null;
+          supersedes_document_id?: string | null;
           uploaded_by?: string | null;
+          version_number?: number;
         };
         Update: {
           case_id?: string | null;
           created_at?: string;
           doc_type?: string;
+          document_family_id?: string;
           effective_date?: string | null;
           expiration_date?: string | null;
           file_name?: string;
@@ -2154,7 +2161,9 @@ export type Database = {
           id?: string;
           org_id?: string;
           provider_id?: string | null;
+          supersedes_document_id?: string | null;
           uploaded_by?: string | null;
+          version_number?: number;
         };
         Relationships: [
           {
@@ -2183,6 +2192,13 @@ export type Database = {
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_documents_supersedes_fkey";
+            columns: ["supersedes_document_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_documents";
             referencedColumns: ["id"];
           },
         ];
@@ -2439,6 +2455,111 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_ssn_intake_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          id: string;
+          org_id: string;
+          provider_id: string;
+          recipient_email: string;
+          state: string;
+          token_hash: string;
+          used_at: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          id?: string;
+          org_id: string;
+          provider_id: string;
+          recipient_email: string;
+          state?: string;
+          token_hash: string;
+          used_at?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          id?: string;
+          org_id?: string;
+          provider_id?: string;
+          recipient_email?: string;
+          state?: string;
+          token_hash?: string;
+          used_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_ssn_intake_links_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_ssn_intake_links_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_ssn_vault: {
+        Row: {
+          algo: string;
+          created_at: string;
+          created_by: string | null;
+          key_version: number;
+          org_id: string;
+          provider_id: string;
+          ssn_ciphertext: string;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          algo?: string;
+          created_at?: string;
+          created_by?: string | null;
+          key_version?: number;
+          org_id: string;
+          provider_id: string;
+          ssn_ciphertext: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          algo?: string;
+          created_at?: string;
+          created_by?: string | null;
+          key_version?: number;
+          org_id?: string;
+          provider_id?: string;
+          ssn_ciphertext?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_ssn_vault_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_ssn_vault_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: true;
+            referencedRelation: "providers";
             referencedColumns: ["id"];
           },
         ];
@@ -3274,6 +3395,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      _ssn_decrypt: { Args: { p_ciphertext: string }; Returns: string };
+      _ssn_digits: { Args: { p_raw: string }; Returns: string };
+      _ssn_encrypt: { Args: { p_plaintext: string }; Returns: string };
+      _ssn_vault_key: { Args: never; Returns: string };
+      _ssn_vault_upsert: {
+        Args: {
+          p_actor: string;
+          p_org_id: string;
+          p_provider_id: string;
+          p_ssn: string;
+        };
+        Returns: string;
+      };
       advance_payer_pipeline: {
         Args: {
           p_case_id: string;
@@ -3352,6 +3486,15 @@ export type Database = {
         };
         Returns: Json;
       };
+      create_ssn_intake_link: {
+        Args: {
+          p_provider_id: string;
+          p_recipient_email: string;
+          p_recipient_name?: string;
+        };
+        Returns: Json;
+      };
+      document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       insert_contact_party: {
         Args: { p: Json; p_uid: string };
@@ -3398,6 +3541,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      release_ssn_for_fill: {
+        Args: { p_case_id: string; p_org_id: string; p_provider_id: string };
+        Returns: Json;
+      };
+      reveal_ssn: {
+        Args: { p_justification: string; p_provider_id: string };
+        Returns: Json;
+      };
       review_payer_catalog_change: {
         Args: { p_accept: boolean; p_change_id: string };
         Returns: undefined;
@@ -3411,15 +3562,24 @@ export type Database = {
         Args: { p_rows: Json; p_run_id: string };
         Returns: undefined;
       };
+      store_ssn: {
+        Args: { p_provider_id: string; p_ssn: string };
+        Returns: Json;
+      };
       submit_capture: {
         Args: { p_payload: Json; p_token: string };
         Returns: Json;
       };
       submit_inbound_lead: { Args: { p_payload: Json }; Returns: Json };
+      submit_ssn_intake: {
+        Args: { p_ssn: string; p_token: string };
+        Returns: Json;
+      };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
+      validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;

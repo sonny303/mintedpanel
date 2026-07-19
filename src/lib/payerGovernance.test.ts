@@ -3,11 +3,16 @@
 //      reads payer_catalog_changes or calls review_payer_catalog_change.
 //   2. The revoke migration actually revokes authenticated SELECT/EXECUTE and
 //      keeps the service_role (platform) path, by grant definition.
-//   3. The payers service has no INSERT — free-text payer creation is gone at
-//      the service boundary, not just hidden in the UI.
+//   3. The payers service has no INSERT and (since the 2026-07-18 close-out)
+//      no UPDATE — payer writes are gone at the service boundary, not just
+//      hidden in the UI.
 //   4. The org_payer_settings migration carries the locked shape: unique
 //      (org_id, payer_id), admin-only INSERT/UPDATE policies, no DELETE grant
 //      for authenticated.
+//   5. The payers write-lockdown migration mirrors the same posture at the DB:
+//      the org INSERT/UPDATE policies are dropped and the grants revoked, so
+//      an org-scoped (legacy) payer row can never be minted again — while
+//      member SELECT stays intact.
 // (The live grant/RLS state was additionally verified on hosted via
 // rolled-back simulations — recorded in the PR description.)
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -39,6 +44,10 @@ const settingsMigration = readFileSync(
 );
 const revokeMigration = readFileSync(
   join(ROOT, "supabase/migrations/20260716191000_catalog_review_platform_only.sql"),
+  "utf8",
+);
+const lockdownMigration = readFileSync(
+  join(ROOT, "supabase/migrations/20260718120000_payers_org_write_lockdown.sql"),
   "utf8",
 );
 
@@ -100,12 +109,14 @@ describe("the revoke migration (20260716191000) — grant definitions", () => {
   });
 });
 
-describe("free-text payer creation is gone at the service boundary", () => {
+describe("payer writes are gone at the service boundary", () => {
   const payersService = stripComments(readFileSync(join(SRC, "services/payers.ts"), "utf8"));
 
-  it("the payers service performs no INSERT and exports no createPayer", () => {
+  it("the payers service performs no INSERT or UPDATE and exports no createPayer/updatePayer", () => {
     expect(payersService).not.toContain(".insert(");
+    expect(payersService).not.toContain(".update(");
     expect(payersService).not.toContain("createPayer");
+    expect(payersService).not.toContain("updatePayer");
   });
 
   it("the admin payers route has no Add-payer affordance", () => {
@@ -124,6 +135,25 @@ describe("free-text payer creation is gone at the service boundary", () => {
     expect(setupList).not.toContain("Add payer");
     expect(setupList).not.toContain("useCreatePayer");
     expect(setupList).not.toContain("updatePayer");
+  });
+});
+
+describe("the payers write-lockdown migration (20260718120000) — grant definitions", () => {
+  const sql = lockdownMigration.toLowerCase();
+
+  it("drops both org write policies on payers", () => {
+    expect(sql).toContain("drop policy if exists payers_insert on public.payers");
+    expect(sql).toContain("drop policy if exists payers_update on public.payers");
+  });
+
+  it("revokes INSERT/UPDATE from authenticated and anon", () => {
+    expect(sql).toContain("revoke insert, update on table public.payers from authenticated");
+    expect(sql).toContain("revoke insert, update on table public.payers from anon");
+  });
+
+  it("leaves member reads intact (no SELECT revoke, payers_select untouched)", () => {
+    expect(sql).not.toMatch(/revoke[^;]*select[^;]*on table public\.payers/);
+    expect(sql).not.toContain("drop policy if exists payers_select");
   });
 });
 

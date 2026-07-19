@@ -36,8 +36,10 @@ import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
+import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
+import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
@@ -206,6 +208,11 @@ const TasksIdRoute = TasksIdRouteImport.update({
   path: '/tasks/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SsnIntakeTokenRoute = SsnIntakeTokenRouteImport.update({
+  id: '/ssn-intake/$token',
+  path: '/ssn-intake/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShareTokenRoute = ShareTokenRouteImport.update({
   id: '/share/$token',
   path: '/share/$token',
@@ -216,6 +223,12 @@ const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
   path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingExpiringCredentialsRoute =
+  ReportingExpiringCredentialsRouteImport.update({
+    id: '/reporting/expiring-credentials',
+    path: '/reporting/expiring-credentials',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -419,8 +432,10 @@ export interface FileRoutesByFullPath {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
@@ -474,8 +489,10 @@ export interface FileRoutesByTo {
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
   '/launches': typeof LaunchesIndexRoute
@@ -538,8 +555,10 @@ export interface FileRoutesById {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
+  '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
   '/launches/': typeof LaunchesIndexRoute
@@ -603,8 +622,10 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/expiring-credentials'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
@@ -658,8 +679,10 @@ export interface FileRouteTypes {
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/new'
+    | '/reporting/expiring-credentials'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases'
     | '/launches'
@@ -721,8 +744,10 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/expiring-credentials'
     | '/reporting/portfolio'
     | '/share/$token'
+    | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
     | '/launches/'
@@ -781,8 +806,10 @@ export interface RootRouteChildren {
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
+  ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
+  SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
   TasksIdRoute: typeof TasksIdRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
@@ -981,6 +1008,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TasksIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ssn-intake/$token': {
+      id: '/ssn-intake/$token'
+      path: '/ssn-intake/$token'
+      fullPath: '/ssn-intake/$token'
+      preLoaderRoute: typeof SsnIntakeTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/share/$token': {
       id: '/share/$token'
       path: '/share/$token'
@@ -993,6 +1027,13 @@ declare module '@tanstack/react-router' {
       path: '/reporting/portfolio'
       fullPath: '/reporting/portfolio'
       preLoaderRoute: typeof ReportingPortfolioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/expiring-credentials': {
+      id: '/reporting/expiring-credentials'
+      path: '/reporting/expiring-credentials'
+      fullPath: '/reporting/expiring-credentials'
+      preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/providers/new': {
@@ -1373,8 +1414,10 @@ const rootRouteChildren: RootRouteChildren = {
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
+  ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,
+  SsnIntakeTokenRoute: SsnIntakeTokenRoute,
   TasksIdRoute: TasksIdRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,

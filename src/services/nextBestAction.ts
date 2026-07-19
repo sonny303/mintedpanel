@@ -26,6 +26,7 @@ import {
   type GroupContractInput,
   type ProviderReadinessFacts,
 } from "@/lib/enrollmentReadiness";
+import { currentGroupReadinessDocuments } from "@/lib/documents";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
 
 export interface NextBestActionServiceCtx {
@@ -219,9 +220,13 @@ export async function getNextBestAction(
       .from("state_licenses")
       .select("provider_id, state, expiration_date, verified_status")
       .eq("org_id", orgId),
+    // E4.5: version columns ride along ONLY so the shared reducer can keep
+    // current versions — a superseded document never feeds readiness.
     db
       .from("provider_documents")
-      .select("group_id, doc_type, expiration_date")
+      .select(
+        "id, group_id, doc_type, expiration_date, document_family_id, version_number, supersedes_document_id",
+      )
       .eq("org_id", orgId)
       .not("group_id", "is", null)
       .in("doc_type", ["w9", "coi", "voided_check"]),
@@ -328,13 +333,27 @@ export async function getNextBestAction(
         is_active: boolean | null;
       }>
     ).map((f) => ({ groupId: f.group_id, state: f.state, isActive: f.is_active ?? true })),
-    groupDocuments: (
-      (documentsRes.data ?? []) as Array<{
-        group_id: string | null;
-        doc_type: string;
-        expiration_date: string | null;
-      }>
-    ).map((d) => ({ groupId: d.group_id, docType: d.doc_type, expirationDate: d.expiration_date })),
+    groupDocuments: currentGroupReadinessDocuments(
+      (
+        (documentsRes.data ?? []) as Array<{
+          id: string;
+          group_id: string | null;
+          doc_type: string;
+          expiration_date: string | null;
+          document_family_id: string;
+          version_number: number;
+          supersedes_document_id: string | null;
+        }>
+      ).map((d) => ({
+        id: d.id,
+        groupId: d.group_id,
+        docType: d.doc_type,
+        expirationDate: d.expiration_date,
+        documentFamilyId: d.document_family_id,
+        versionNumber: d.version_number,
+        supersedesDocumentId: d.supersedes_document_id,
+      })),
+    ),
     groupInsurancePolicies: (
       (insuranceRes.data ?? []) as Array<{ group_id: string; policy_end_date: string | null }>
     ).map((p) => ({ groupId: p.group_id, policyEndDate: p.policy_end_date })),

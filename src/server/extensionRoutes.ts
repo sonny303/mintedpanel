@@ -5,6 +5,7 @@
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
+import { releaseSsnForFill } from "@/services/ssnRelease";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
 import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
@@ -144,6 +145,40 @@ export async function handleProviderProfile(
   // the client must ask the user to pick — the server never guesses.
   if (needsFacility) meta.needs_facility = true;
   const response = ok(profile, Object.keys(meta).length ? meta : null);
+  response.headers.set("cache-control", "no-store");
+  return response;
+}
+
+// GET /api/providers/:id/ssn-release?caseId=<uuid> — E4.4 F4.4.2 fill-only SSN
+// release. The extension requests the full SSN for a provider it is ACTIVELY
+// filling; the value goes solely into the portal field (the extension UI shows
+// only the mask). Fill-only boundary: writer roles only (billing 403), and the
+// caseId is REQUIRED — a request outside an active fill context is rejected. The
+// case must be this org's and this provider's (else 404, cross-org
+// indistinguishable from missing). Cache-Control: no-store; the response body is
+// never logged; and every successful release writes ONE READ audit row (actor,
+// provider, case — never the value; a failed audit write fails the request).
+export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot release an SSN for fill");
+  if (!UUID_RE.test(id)) return fail(404, "Provider not found");
+  const caseIdRaw = url.searchParams.get("caseId");
+  if (!caseIdRaw) return fail(422, "caseId is required to release an SSN for fill");
+  if (!UUID_RE.test(caseIdRaw)) return fail(404, "Case not found for this provider");
+
+  const result = await releaseSsnForFill({ db: ctx.db, orgId: ctx.orgId }, id, caseIdRaw);
+  if (result.kind === "rejected") return fail(result.status, result.message);
+
+  // One READ audit row per successful release — actor, provider, case. Never the
+  // value. A failed audit write throws -> 500, so no un-audited release leaves.
+  await ctx.writeAudit({
+    actionType: "READ",
+    entityType: "provider_ssn_vault",
+    entityId: id,
+    after: { route: "/api/providers/:id/ssn-release", caseId: caseIdRaw },
+    description: "Full SSN released for portal fill",
+  });
+
+  const response = ok({ ssn: result.ssn, ssnLast4: result.ssnLast4 });
   response.headers.set("cache-control", "no-store");
   return response;
 }

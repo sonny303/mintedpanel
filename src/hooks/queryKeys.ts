@@ -103,6 +103,9 @@ export const queryKeys = {
   // Secure data capture link (redesign E0.5): the active org's current link
   // state. Inbound leads are CROSS-org (no org until converted) — not scoped.
   captureLink: (orgId: string) => ["capture-link", orgId] as const,
+  // E4.4 SSN intake link state, per provider (operator status surface).
+  ssnIntakeLink: (orgId: string, providerId: string) =>
+    ["ssn-intake-link", orgId, providerId] as const,
   inboundLeads: () => ["inbound-leads"] as const,
   // Reporting Center (redesign E0.6). CROSS-org (renders without an active org):
   // per-org geography for the state breakdown, and the caller's shares per report.
@@ -120,6 +123,15 @@ export const queryKeys = {
   sopTemplateDraft: (orgId: string, id: string) => ["sop-template-draft", orgId, id] as const,
   // F4.2.7 form test runner: an org portal's test fill sessions.
   testFills: (orgId: string, portalKey: string) => ["test-fills", orgId, portalKey] as const,
+  // E4.5 document store: per-owner version lists + the org-wide
+  // expiring-credentials projection input. All prefixed "documents" so one
+  // prefix invalidation re-derives every document surface after an upload.
+  providerDocuments: (orgId: string, providerId: string) =>
+    ["documents", orgId, "provider", providerId] as const,
+  groupDocuments: (orgId: string, groupId: string) =>
+    ["documents", orgId, "group", groupId] as const,
+  orgDocuments: (orgId: string) => ["documents", orgId, "org"] as const,
+  documentUploaders: (orgId: string, ids: string) => ["document-uploaders", orgId, ids] as const,
 } as const;
 
 export const FIVE_MINUTES = 5 * 60 * 1000;

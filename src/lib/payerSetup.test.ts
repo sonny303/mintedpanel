@@ -161,23 +161,18 @@ describe("row inclusion (the setup list starts from assignments, not targets)", 
     expect(rows).toEqual([]);
   });
 
-  it("an active legacy org payer appears as source=legacy; its zero-scope action is migration", () => {
+  it("an unassigned org-scoped row is excluded — inclusion is subscription-only since the legacy cutover close-out", () => {
     const rows = buildPayerSetupRows(
       inputs({ payers: [payer({ orgId: "org-1", payerSlug: null })], assignments: [] }),
     );
-    expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe("legacy");
-    expect(rows[0].nextAction).toEqual({ kind: "migrate_legacy" });
+    expect(rows).toEqual([]);
   });
 
-  it("inactive legacy payers and the Pre-Credentialing sentinel are excluded", () => {
+  it("the Pre-Credentialing sentinel is excluded even when assigned", () => {
     const rows = buildPayerSetupRows(
       inputs({
-        payers: [
-          payer({ orgId: "org-1", isActive: false }),
-          payer({ id: "payer-3", orgId: "org-1", name: PRE_CRED_PAYER_NAME }),
-        ],
-        assignments: [],
+        payers: [payer({ id: "payer-3", name: PRE_CRED_PAYER_NAME })],
+        assignments: [assignment({ payerId: "payer-3" })],
       }),
     );
     expect(rows).toEqual([]);

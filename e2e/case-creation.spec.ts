@@ -856,7 +856,7 @@ test("manual case directs providers without group assignments back to the roster
   await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
 });
 
-test("manual case keeps an active org-owned payer selectable without an assignment", async ({
+test("manual case excludes an org-owned payer without an assignment (subscription-only picker)", async ({
   context,
   page,
 }) => {
@@ -871,9 +871,9 @@ test("manual case keeps an active org-owned payer selectable without an assignme
   await page.getByRole("button", { name: "New case" }).click();
   const dialog = page.getByRole("dialog");
 
-  await dialog.getByRole("combobox", { name: "Payer" }).click();
-  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toBeVisible();
-  await expect(dialog.getByText("Add a payer to this organization")).toHaveCount(0);
+  await expect(dialog.getByText("Add a payer to this organization")).toBeVisible();
+  await expect(dialog.getByRole("combobox", { name: "Payer" })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Legacy Org Payer" })).toHaveCount(0);
 });
 
 test("manual case distinguishes prerequisite query failures from empty data", async ({

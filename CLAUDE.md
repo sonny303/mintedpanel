@@ -1290,18 +1290,21 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   SELECT policy dropped + ALL grants revoked; `review_payer_catalog_change`
   authenticated EXECUTE revoked + body reissued to reject org-user JWTs and
   ACCEPT service-role/direct-SQL callers — the E1.6 body required auth.uid()
-  so service_role could never call it. **OPERATOR ORDERING NOTE:** the #169
-  drop migration `20260716180000` is operator-gated on hosted and its reissue
-  re-grants authenticated EXECUTE — re-apply `20260716191000` after it).
+  so service_role could never call it. **OPERATOR ORDERING NOTE (resolved
+  2026-07-17, Option B):** #169's drop migration `20260716180000` was NEVER
+  applied and is now retired (`.superseded`); the drop ships instead via
+  `20260717221914_payer_dead_column_drop_superseding.sql`, which does NOT
+  reissue `review_payer_catalog_change` — so this platform-only body stands
+  and no re-apply of `20260716191000` is needed).
   **App:** `Payer.orgId` is honestly `string | null`; `payers.ts` has NO
   create (free-text "Add payer" is gone — `useCreatePayer` removed); `getPayer`
-  reads own-org OR assigned-global (or-filter); `updatePayer` throws the typed
-  `GlobalPayerUpdateError` BEFORE any write on a global row; `PayerInput` is
-  down to `isActive` (name/avg_decision_days are Minted-curated, org-read-only
-  — avg decision still feeds the SummaryTab report). Admin → Payers is a
+  reads own-org OR assigned-global (or-filter). **Since the 2026-07-18
+  close-out `payers.ts` is fully READ-ONLY** — `updatePayer`/`PayerInput`/
+  `GlobalPayerUpdateError`/`useUpdatePayer` deleted (their only reachable
+  subject was a legacy org row; name/avg_decision_days are Minted-curated —
+  avg decision still feeds the SummaryTab report). Admin → Payers is a
   READ-ONLY governance surface: "Browse payer catalog" CTA (→
-  `/payer-directory`), per-row Source pill ("Minted catalog" vs "Legacy —
-  catalog migration required"), starter toggle kept (org_payer_assignments
+  `/payer-directory`), starter toggle kept (org_payer_assignments
   fact, admin-only render), Scorecard link kept, NO edit modal.
   `PayerCatalogChangesPanel` DELETED (+ its hooks/service fns/query key) —
   the directory renders no review queue. **Resolution-ID config moved to the
@@ -1310,17 +1313,33 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   setting (takes a `setting` prop), and `resolveIdentifierConfig(payer,
 orgSetting?)` is now the three-tier chain org setting → Minted global
   fallback (payers columns) → generic — `PipelineDialogs.ProviderIdFields`
-  reads it via `useOrgPayerSetting`. **Legacy cutover:**
-  `docs/data-model/legacy-payer-cutover.md` records the live inventory (18
-  org-scoped rows, ALL referenced — zero deletions; result = pending
-  human-confirmed re-keying; the Pre-Cred sentinel is never re-keyed/deleted)
-  backed by pure tested `src/lib/payerCutover.ts` (`canDeleteLegacyPayer`,
-  exact-match-only `canonicalMatchCandidates` — no fuzzy auto-match).
+  reads it via `useOrgPayerSetting`. **Legacy cutover: CLOSED as superseded
+  (2026-07-18).** The 18-row re-keying inventory in
+  `docs/data-model/legacy-payer-cutover.md` never ran — the PM-approved
+  pre-prod-cut data wipe (2026-07-17, AGENTS.md carve-out; pre-wipe data in
+  the `mintedpanel-backup-july17` project) removed the demo orgs and every
+  legacy payer/sentinel row with them (live-verified: 269 payers, all global).
+  The legacy-payer deprecation change then deleted the machinery:
+  `src/lib/payerCutover.ts` (+test) gone; `payerSetup.ts` lost
+  `PayerSetupSource`/`migrate_legacy` (inclusion = active assignment only);
+  `PayerSetupList` lost the Source pill / "Legacy — catalog migration
+  required" state; `ManualCaseModal` lost the own-org inclusion shortcut; and
+  migration **`20260718120000_payers_org_write_lockdown.sql`** (repo + hosted)
+  dropped `payers_insert`/`payers_update` + revoked org INSERT/UPDATE grants,
+  so an org-scoped payer row can never be minted again (payers is
+  member-SELECT-only; catalog writes stay service-role). The `.or(own-org,
+global)` READS stay — the shared-catalog pattern, own-org disjunct vestigial
+  but keeps local seed fixtures readable (seeds still create org-scoped
+  payers; they never run on hosted). The Pre-Cred sentinel WORKFLOW code
+  (`PRE_CRED_PAYER_NAME` branches) is deliberately untouched — a product
+  concept, currently unreachable (no creatable payer carries the name).
   Governance is machine-checked in `src/lib/payerGovernance.test.ts` (no
-  catalog-review call paths, no payers INSERT, migration grant shape). Types
+  catalog-review call paths, no payers INSERT/UPDATE, migration grant shape
+  incl. the lockdown migration). Types
   for the new table were HAND-ADDED to `types.ts` (hosted still carries the
   un-applied #169 drop, so a full regen would resurrect dropped columns —
-  regen only after the operator applies `20260716180000`). e2e:
+  regen only after the operator applies the superseding drop
+  `20260717221914` (#169's `20260716180000` is retired, never applied)). e2e:
   `admin-payers.spec.ts` (new), `payer-directory.spec.ts` (TS-38 replaced by
   the governance no-review-surface test; stale TS-36 Portal assertion from
   #169 fixed), `payer-admin-module.spec.ts` (+F4.2.1 Configure-ID writes
@@ -1421,6 +1440,144 @@ orgSetting?)` is now the three-tier chain org setting → Minted global
   view-prefs, next-best-action, and `?q=` handlers. E2E for TS-100–103 is
   Session 2 (extension mock harness).
 
+- **E4.4 — Sensitive Identifiers Vault: Zero-Trust Full SSN.** The FIRST place
+  the system holds a decryptable secret. TWO additive migrations (repo file
+  ONLY — **hosted apply is an OPERATOR task**, deliberately not applied by the
+  build session since it carries a decrypt secret + needs the master-key GUC):
+  `20260717120000_ssn_vault.sql` + `20260717120100_ssn_intake_links.sql`.
+  **PM security decisions (2026-07-14, do not re-open):** server-only vault
+  (option 1); Option A key management (in-DB pgcrypto, key from a server GUC);
+  `store_ssn` ingress = specialist+admin; reveal admin-only. **Vault (TE-1/TE-2,
+  `provider_ssn_vault`):** `ssn_ciphertext bytea` + `algo`/`key_version`
+  (Option-B-ready), one row per provider; RLS on, `REVOKE ALL` from
+  anon+authenticated, **NO client SELECT grant and NO service_role table grant**
+  — the only access is the SECURITY DEFINER RPCs. Private `_ssn_vault_key`
+  (reads `current_setting('app.settings.ssn_vault_key')`, fails closed) /
+  `_ssn_encrypt` / `_ssn_decrypt` (`extensions.pgp_sym_*`) / `_ssn_digits`
+  (9-digit normalize, never echoes the value) / `_ssn_vault_upsert` (the shared
+  encrypt-and-set-`ssn_last4` write). **RPCs (TE-3/TE-4):** `store_ssn` (authed
+  writer, mask + audit), `reveal_ssn` (admin + non-empty justification; decrypt
+  once + immutable `READ` audit carrying who/when/provider/justification in
+  `after`), `release_ssn_for_fill(provider, org, case)` (**service_role EXECUTE
+  only** — the /api fill path; re-checks the active-fill context then decrypts;
+  the /api handler writes the `READ` audit with the JWT actor since the
+  service-role RPC has no `auth.uid()`), plus the intake trio. **`ssn_last4`
+  stays the ONLY value any ordinary read/list/export/API returns; mask
+  `***--1234`** (`src/lib/ssnMask.ts` `maskSsn`/`formatFullSsn`, +test) applied
+  at the two render sites (provider IdentityCard, ProviderForm review). **App
+  layer:** `src/services/ssnVault.ts` (browser: `storeSsn`/`revealSsn`/
+  `getSsnIntakeLink`/`issueSsnIntakeLink`; anon: `validateSsnIntakeToken`/
+  `submitSsnIntake`) + server-only `src/services/ssnRelease.ts` (the two-wall
+  fill release, mirrors `caseContext.ts`) → `src/hooks/useSsnVault.ts` (reveal is
+  a MUTATION so plaintext never enters the cache). **UI
+  (`src/components/providers/`):** `SsnVaultField` on the provider Identity card
+  (mask + role-gated menu: admin Reveal, writer Store/Send-link) composing
+  `SsnRevealDialog` (justification + auto-rehide ~20s, value in local state only)
+  / `SsnStoreDialog` (F4.4.4 internal modal, encrypt-on-save) /
+  `SsnIntakeLinkDialog` (issue + copy-able link). **Ingress link (TE-4,
+  E0.5 pattern):** `provider_ssn_intake_links` (hashed token, single active per
+  provider, 72h, state machine, E0.8-throttled anon RPCs, uniform invalid
+  responses) → public **`/ssn-intake/$token`** route (chromeless via `__root`
+  `isSsnIntakeRoute`; write-only — never echoes the SSN). **Fill-only /api
+  endpoint (F4.4.2):** `GET /api/providers/:id/ssn-release?caseId=` in
+  `extensionRoutes.ts` (writer-only, caseId required, no-store, one `READ`
+  audit) — wired in `api.ts` (matched before the generic `:id`); the extension
+  consumes it later (no extension-repo change this session). **Gate:** new
+  `ssnrelease` leak mode + assertion 16 (cross-org release → 404, safe on prod
+  because the case-ownership miss short-circuits before any decrypt);
+  mock-api-server + verify-isolation-local updated. Types hand-added to
+  `types.ts` (regen unavailable — hosted migration not applied) + domain types
+  in `types/index.ts`. Tests: `ssnMask.test.ts`, `ssnRelease.di.test.ts`,
+  `extensionRoutes.test.ts` (release handler), e2e `e2e/ssn-vault.spec.ts`
+  (TS-84 masking + no ordinary decrypt + direct-read-returns-nothing; TS-86
+  admin-vs-non-admin reveal; TS-87 both ingress paths + lockdowns; a FAKE
+  `900-55-6789` test value — never a real SSN). Out of scope: vaulting any other
+  identifier, SSN in CSV/exports/reports (the E3.0 reject-never-truncate rule
+  stands), any provider self-service beyond the intake link.
+
+- **E4.5 — Document Storage: Provider & Group Documents with Expiration
+  Tracking.** The dormant `provider_documents` table is ACTIVATED as immutable
+  version metadata and the FIRST Supabase Storage bucket ships. TWO additive
+  migrations (repo file ONLY — **hosted apply + bucket provisioning are an
+  OPERATOR task**, see the PR body): `20260717150000_e45_provider_documents_activation.sql`
+  (TE-1/5/9 — `document_family_id` NOT NULL volatile-default so legacy rows
+  become their own single-row families, `version_number > 0`,
+  `supersedes_document_id` self-FK + partial unique = ONE successor per row,
+  `UNIQUE (org_id, document_family_id, version_number)` = the idempotent
+  finalize key; doc_type CHECK += `cms_460`/`cv`; NOT VALID CHECK
+  state_license|dea|coi require expiration_date; grants cut to SELECT+INSERT +
+  delete policy dropped — replacement INSERTS, never updates/deletes, "current"
+  = the family row with no successor, DERIVED) and
+  `20260717150100_e45_document_storage_bucket.sql` (TE-2 — private
+  `provider-documents` bucket, 25 MiB + PDF/PNG/JPEG backstop limits, path
+  contract `org/{orgId}/{provider|group}/{ownerId}/{familyId}/{version}/{file}`,
+  storage.objects policies validate the path org via
+  `public.document_storage_org_id()`; member read / writer insert / NO
+  update-delete; guarded on the storage schema for repo-only rebuilds).
+  **Pure `src/lib/documents.ts`** (+38-case suite): THE shared kind metadata
+  map (labels, D1 owner grains — coi is dual-grain, expiration-required,
+  expiring-soon thresholds 90 license / 60 DEA / 30 else — a PM change is one
+  edit, TE-6), MIME/size constants, `safeFileName`/`documentObjectPath`,
+  `currentVersions` (runtime-defensive: a row with no family id acts as its
+  own family — the migration's backfill semantic, so pre-E4.5 e2e fixtures
+  stay valid), `classifyExpiration` (boundary-tested 30/60/90),
+  `expiringCredentialRows`, `parseDocumentKind`/`requiredDocumentKinds` (TE-7
+  — SOP `requiredArtifacts` entries that resolve to a MACHINE kind join the
+  store; free-form artifact names never do), `caseDocumentStatus`,
+  `currentGroupReadinessDocuments` (the ONE reducer both readiness services
+  run their group-doc reads through), orphan-sweep halves. **Server boundary
+  (TE-3/TE-4):** `src/services/documentStorage.ts` (server-only ctx —
+  upload-intent validates owner/kind/file + resolves family/next-version +
+  sweeps expired orphans in the family prefix (the bounded TE-4 maintenance
+  job, on the natural retry path) + mints `createSignedUploadUrl`; finalize
+  verifies the object at the SERVER-derived path (size/MIME) before the
+  immutable insert, links supersedes = family head, replays idempotently
+  incl. the 23505 race; download = org-scoped maybeSingle miss → 404 BEFORE
+  any signing, then a 120s `createSignedUrl`) → `src/server/documentRoutes.ts`
+  (writer gate on intent/finalize, member download incl. billing; no-store;
+  ONE audit row per action — intent CREATE on the family, finalize CREATE,
+  download READ; never contents/URLs/tokens; failed audit fails the request)
+  wired in `api.ts` (`/api/documents/upload-intent|finalize|:id/download`).
+  **These are the FIRST /api routes the browser app consumes** — the epic §5
+  supersedes the no-frontend-consumer posture for exactly this narrow signing
+  surface (a signed URL cannot be minted client-side); metadata LIST reads
+  stay browser-RLS (`src/services/documents.ts` + `useDocuments.ts`, keys
+  under the `["documents", orgId]` prefix; upload invalidates documents +
+  readiness families; download is a MUTATION so short-lived URLs never sit in
+  the cache). Upload bytes PUT browser→Storage direct (never through nitro).
+  **UI (`src/components/documents/`):** `DocumentsPanel` (dense per-owner
+  table — current versions, derived expiration pills, vN + history dialog,
+  uploader names via the touchlog author idiom, writer Upload/Replace) on
+  provider detail (below the grid) and per-group Collapsible in the wizard
+  `ProviderGroupSection`; `UploadDocumentDialog` (kind select from the shared
+  map per grain, required-expiration enforcement, MIME/size pre-flight);
+  `CaseRequiredDocuments` on case detail (F4.5.3 — present/missing/expired
+  derived LIVE from current provider+group versions vs the tasks'
+  required kinds, one-click audited download, hidden when no kinds; advisory
+  only, nothing copied onto the case); `ExpiringCredentialsTable` on the new
+  **`/reporting/expiring-credentials`** report (REPORTS entry + route — the
+  E0.6 add-a-report pattern; org-scoped inside the cross-org Center).
+  **Readiness (TE-6):** `ReadinessCheck` gained optional `advisory` —
+  group_coi passes WITH an amber "COI expires …" note when the LATEST
+  covering end date sits inside the 30-day window (dateless COI suppresses
+  it; never flips pass); both `enrollmentReadiness.ts` and
+  `nextBestAction.ts` group-doc reads now reduce to CURRENT versions.
+  **Gate:** `documentdownload` leak mode + assertion pair 17/17b (own
+  download works / cross-org 404s before signing; soft-skipped on prod until
+  the operator seeds + pins `KANSAS_DOCUMENT_ID`/`SOUTHPARK_DOCUMENT_ID`).
+  Types hand-added to `types.ts` (regen unavailable — hosted migration not
+  applied) + domain types (`DocumentKind`/`ProviderDocument`/…) in
+  `types/index.ts`. Seed: TS-89 staggered-expiration fixtures on Dillon
+  (CURRENT_DATE-relative; metadata-only — no storage objects). e2e
+  `e2e/document-storage.spec.ts` (TS-88 two-grain upload + required
+  expiration + re-upload versioning + org-scoped/signed wire; TS-89 sorted
+  derived states + the readiness COI advisory; TS-90 case verification +
+  short-lived download; its harness mocks /rest, the app's own
+  /api/documents/* SAME-ORIGIN with a write-through, and /storage/v1 —
+  generated non-PHI bytes only). D3 stays deferred: NO auto-attach, no
+  extension-repo change — the download endpoint IS the future-auto-attach
+  contract (TE-11: audited links only, never bucket credentials).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -1441,8 +1598,12 @@ Workbench — open cases, submission touches; 2026-07-06 — org discovery
 **bulk of data access is still browser → Supabase PostgREST under RLS**, and
 **no frontend hook calls the API routes** — by locked decision (below), the
 current app UI stays on direct Supabase + RLS; the API's consumer is the Chrome
-extension. See the "Server API layer" section below and `docs/phase-0-audit.md`
-for the framework/deploy detail.
+extension. **The ONE sanctioned exception since E4.5:** the three
+`/api/documents/*` signing endpoints (upload-intent/finalize/download) are
+called by the browser documents service — a signed Storage URL can only be
+minted server-side — while document metadata reads stay on RLS. See the
+"Server API layer" section below and `docs/phase-0-audit.md` for the
+framework/deploy detail.
 
 ## Running and verifying
 
@@ -1607,13 +1768,30 @@ Component (src/routes/*, src/components/[module]/*)
 
 ### Server API layer (`src/server/*` — Chunk 3 pilot PR #19, Chunk 4 extension endpoints)
 
-`/api` routes run on the nitro server. **No frontend hook consumes them** — the
-browser still talks straight to Supabase for everything. That is deliberate
-(locked decisions below): routes get built only when a real consumer pulls
-them. The current surface:
+`/api` routes run on the nitro server. **No frontend hook consumes them** —
+with ONE sanctioned E4.5 exception: the browser documents service calls the
+three `/api/documents/*` signing endpoints (a signed Storage URL cannot be
+minted client-side; metadata reads stay on RLS). Everything else stays
+browser → Supabase. That is deliberate (locked decisions below): routes get
+built only when a real consumer pulls them. The current surface:
 
 - `GET /api/health` (public) · provider CRUD (`GET/POST /api/providers`,
   `GET/PATCH /api/providers/:id`) — Chunk 3.
+- **`POST /api/documents/upload-intent` / `POST /api/documents/finalize` /
+  `GET /api/documents/:id/download`** — the E4.5 document-storage signing
+  boundary (`src/server/documentRoutes.ts` → `src/services/documentStorage.ts`,
+  server-only ctx). Writers mint a short-lived signed upload target for a
+  SERVER-generated org-bound object key, finalize verifies the object
+  (path/size/MIME/owner/family/version) before the immutable metadata insert
+  (idempotent on `(org, family, version)`), and any org member (billing too)
+  gets a 120s signed download for one org-owned version — a cross-org id 404s
+  BEFORE anything is signed (gate assertions 17/17b, `documentdownload` leak
+  mode). All three: `Cache-Control: no-store` + one audit row per action
+  (actor/document/owner/kind — never contents or URLs; a failed audit write
+  fails the request). Consumers: the browser documents service today; the
+  extension consumes the SAME download contract later (TE-11 — audited links
+  only, never bucket credentials or object-list access; the D3
+  future-auto-attach seam).
 - `GET /api/me/orgs` — the caller's own memberships, `{ orgId, orgName, role }`
   rows derived from the JWT user id only (`src/services/orgMemberships.ts`).
   Runs on `authenticateUser` (the guard's JWT-only step, no org resolution):
