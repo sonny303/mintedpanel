@@ -45,6 +45,7 @@ export function RosterUploader({
   variant,
   entityKind,
   scanContext,
+  referenceCsv,
 }: {
   source: ImportRunSource;
   variant: "internal" | "streamlined";
@@ -52,6 +53,10 @@ export function RosterUploader({
   entityKind: SectionEntityKind;
   /** E6.2 — org-context for descriptors with a contextScan (payer attach). */
   scanContext?: SectionScanContext;
+  /** E6.4 F6.4.6 — the prefilled REAL-names reference sheet (groups,
+   * facilities, payers) offered beside the template download, replacing
+   * type-and-hope name matching. */
+  referenceCsv?: { filename: string; text: string };
 }) {
   const descriptor = sectionDescriptor(entityKind);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -124,6 +129,16 @@ export function RosterUploader({
           <Download className="mr-1 h-4 w-4" />
           Download {descriptor.label} template
         </Button>
+        {referenceCsv ? (
+          <Button
+            variant="outline"
+            className="h-8"
+            onClick={() => downloadCsvText(referenceCsv.filename, referenceCsv.text)}
+          >
+            <Download className="mr-1 h-4 w-4" />
+            Download reference (real names)
+          </Button>
+        ) : null}
       </div>
 
       {phase.kind === "idle" || phase.kind === "rejected" ? (

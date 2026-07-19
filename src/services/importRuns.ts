@@ -11,6 +11,7 @@ import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
 import { insertAssignmentRows } from "@/services/providerAssignments";
+import { createEnrollmentFact, listEnrollmentFacts } from "@/services/enrollmentFacts";
 import {
   createFacility,
   createProviderGroup,
@@ -239,6 +240,143 @@ export interface CommitImportRunResult {
   updated: number;
   createdProviderIds: string[];
   updatedProviderIds: string[];
+  /** E6.4 F6.4.6 — the post-commit relationship pass's unified summary. */
+  relationships: ProviderRelationshipSummary;
+}
+
+export interface ProviderRelationshipSummary {
+  facilityAssignments: number;
+  groupAssignments: number;
+  enrollmentFacts: number;
+}
+
+/** E6.4 F6.4.6 — the one-row-per-relationship pass. Staged rows carry ids the
+ * scan already resolved (facility_id, enrollment_payer_id — never re-resolved
+ * names); providers are joined by NPI against the RPC's created+updated ids.
+ * Every write is idempotent (assignment uniques ignoreDuplicates; facts
+ * skip-on-live-match), so a mid-pass failure leaves a resumable state and a
+ * replay adds nothing. Runs AFTER the transactional provider commit — the
+ * provider rows are live by the time relationships attach to them. */
+async function applyProviderRelationships(
+  stagedRows: { mapped: Record<string, string | null> | null }[],
+  providerIds: string[],
+): Promise<ProviderRelationshipSummary> {
+  const summary: ProviderRelationshipSummary = {
+    facilityAssignments: 0,
+    groupAssignments: 0,
+    enrollmentFacts: 0,
+  };
+  const rows = stagedRows
+    .map((r) => r.mapped)
+    .filter((m): m is Record<string, string | null> => m !== null)
+    .filter((m) => m.facility_id || m.enrollment_payer_id || m.group_name || m.group_tin);
+  if (rows.length === 0 || providerIds.length === 0) return summary;
+  const orgId = requireActiveOrg();
+
+  const { data: providerRows, error: pErr } = await supabase
+    .from("providers")
+    .select("id, npi")
+    .eq("org_id", orgId)
+    .in("id", providerIds);
+  if (pErr) throw pErr;
+  const providerByNpi = new Map(
+    (providerRows ?? []).filter((r) => r.npi).map((r) => [String(r.npi), r.id as string]),
+  );
+
+  const { data: groupRows, error: gErr } = await supabase
+    .from("provider_groups")
+    .select("id, name, tin")
+    .eq("org_id", orgId);
+  if (gErr) throw gErr;
+  const groupByTin = new Map(
+    (groupRows ?? []).filter((g) => g.tin).map((g) => [String(g.tin), g.id as string]),
+  );
+  const groupByName = new Map(
+    (groupRows ?? []).map((g) => [String(g.name).trim().toLowerCase(), g.id as string]),
+  );
+  const resolveGroup = (m: Record<string, string | null>): string | null =>
+    (m.group_tin ? groupByTin.get(m.group_tin) : undefined) ??
+    (m.group_name ? groupByName.get(m.group_name.trim().toLowerCase()) : undefined) ??
+    null;
+
+  const existingFacts = await listEnrollmentFacts();
+  const liveFactKeys = new Set(
+    existingFacts
+      .filter((f) => f.expiredAt === null)
+      .map((f) => `${f.providerId}|${f.groupId}|${f.payerId}|${f.state}`),
+  );
+
+  const facilityInserts: { providerId: string; facilityId: string }[] = [];
+  const groupInserts: { providerId: string; groupId: string }[] = [];
+  const seenFacility = new Set<string>();
+  const seenGroup = new Set<string>();
+  for (const m of rows) {
+    const npi = m.npi ? String(m.npi) : null;
+    const providerId = npi ? providerByNpi.get(npi) : undefined;
+    if (!providerId) continue;
+    if (m.facility_id) {
+      const key = `${providerId}|${m.facility_id}`;
+      if (!seenFacility.has(key)) {
+        seenFacility.add(key);
+        facilityInserts.push({ providerId, facilityId: m.facility_id });
+      }
+    }
+    const groupId = resolveGroup(m);
+    if (groupId) {
+      const key = `${providerId}|${groupId}`;
+      if (!seenGroup.has(key)) {
+        seenGroup.add(key);
+        groupInserts.push({ providerId, groupId });
+      }
+    }
+    if (m.enrollment_payer_id && m.enrollment_state) {
+      const factGroup = groupId;
+      if (factGroup) {
+        const key = `${providerId}|${factGroup}|${m.enrollment_payer_id}|${m.enrollment_state}`;
+        if (!liveFactKeys.has(key)) {
+          liveFactKeys.add(key);
+          await createEnrollmentFact({
+            providerId,
+            groupId: factGroup,
+            payerId: m.enrollment_payer_id,
+            state: m.enrollment_state,
+            effectiveDate: m.enrollment_effective_date ?? null,
+          });
+          summary.enrollmentFacts += 1;
+        }
+      }
+    }
+  }
+
+  if (facilityInserts.length > 0) {
+    // The pfa start_date CHECK rejects dateless inserts — relationship rows
+    // from the CSV default to today (the batch-assign precedent).
+    const today = new Date().toISOString().slice(0, 10);
+    await insertAssignmentRows(
+      facilityInserts.map((f) => ({
+        providerId: f.providerId,
+        facilityId: f.facilityId,
+        startDate: today,
+      })),
+    );
+    summary.facilityAssignments = facilityInserts.length;
+  }
+  if (groupInserts.length > 0) {
+    // Idempotent non-primary upserts under UNIQUE (provider_id, group_id) —
+    // the commit plan already set each provider's primary group.
+    const { error } = await supabase.from("provider_group_assignments").upsert(
+      groupInserts.map((g) => ({
+        org_id: orgId,
+        provider_id: g.providerId,
+        group_id: g.groupId,
+        is_primary: false,
+      })),
+      { onConflict: "provider_id,group_id", ignoreDuplicates: true },
+    );
+    if (error) throw error;
+    summary.groupAssignments = groupInserts.length;
+  }
+  return summary;
 }
 
 /** Commit the run through the ONE transactional SECURITY DEFINER RPC (TE-5):
@@ -251,6 +389,9 @@ export async function commitImportRun(
   plan: CommitPlan,
 ): Promise<CommitImportRunResult> {
   requireActiveOrg();
+  // Snapshot the staged rows BEFORE the RPC — commit purges import_rows
+  // (TE-7), and the relationship pass reads the scan-resolved ids off them.
+  const stagedSnapshot = await listStagedImportRows(runId);
   // `supabase.rpc` must be called bound (CLAUDE.md gotcha).
   const rpc = supabase.rpc.bind(supabase) as unknown as (
     fn: string,
@@ -268,13 +409,28 @@ export async function commitImportRun(
     created_provider_ids?: string[] | null;
     updated_provider_ids?: string[] | null;
   };
-  return {
+  const result = {
     alreadyCommitted: Boolean(raw.already_committed),
     created: raw.created ?? 0,
     updated: raw.updated ?? 0,
     createdProviderIds: raw.created_provider_ids ?? [],
     updatedProviderIds: raw.updated_provider_ids ?? [],
   };
+  // E6.4 F6.4.6 — attach the CSV's relationship rows (facilities, extra
+  // groups, enrollment facts) to the now-live providers. A replayed commit
+  // (alreadyCommitted) re-runs nothing; the pass itself is idempotent.
+  let relationships: ProviderRelationshipSummary = {
+    facilityAssignments: 0,
+    groupAssignments: 0,
+    enrollmentFacts: 0,
+  };
+  if (!result.alreadyCommitted) {
+    relationships = await applyProviderRelationships(stagedSnapshot, [
+      ...result.createdProviderIds,
+      ...result.updatedProviderIds,
+    ]);
+  }
+  return { ...result, relationships };
 }
 
 export interface BatchAssignmentResult {

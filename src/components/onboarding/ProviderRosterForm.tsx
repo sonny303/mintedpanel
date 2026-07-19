@@ -32,6 +32,10 @@ import { EMPTY_LICENSE_DRAFT, type LicenseDraft } from "@/components/onboarding/
 import { useProvider, useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useStateLicensesByProvider } from "@/hooks/useLookups";
 import { useCreateProviderWithDetails, useUpdateProviderWithLicenses } from "@/hooks/useProviders";
+import { useCreateEnrollmentFact } from "@/hooks/useEnrollmentFacts";
+import { usePayers } from "@/hooks/useAdmin";
+import { StateSelect } from "@/components/StateSelect";
+import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
 import { isValidNpi } from "@/lib/providerGroup";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
 import { US_STATES } from "@/lib/usStates";
@@ -177,6 +181,14 @@ function FormBody({
   const [assignments, setAssignments] = useState<GroupAssignmentInput[]>(initialAssignments);
   const [errors, setErrors] = useState<RosterFormErrors>({});
   const [licenseErrors, setLicenseErrors] = useState<Record<number, string>>({});
+  // E6.4 F6.4.4 — create-mode capture of migration enrollment FACTS (under
+  // the PRIMARY group's contract; never a case). Edit mode manages facts on
+  // the record's Enrollments panel instead.
+  const [enrollmentDrafts, setEnrollmentDrafts] = useState<
+    { payerId: string; state: string; effectiveDate: string }[]
+  >([]);
+  const payersQ = usePayers();
+  const createFact = useCreateEnrollmentFact();
 
   const createMut = useCreateProviderWithDetails();
   const updateMut = useUpdateProviderWithLicenses(provider?.id ?? "");
@@ -238,9 +250,33 @@ function FormBody({
           groupAssignments: assignments,
         },
         {
-          onSuccess: (result) => {
+          onSuccess: async (result) => {
             toast.success("Provider added to the roster");
             for (const warning of result.warnings) toast.warning(warning);
+            // Record captured enrollment facts under the PRIMARY group's
+            // contract — facts only, zero cases (F6.4.4).
+            const primaryGroup = assignments.find((a) => a.isPrimary)?.groupId;
+            const complete = enrollmentDrafts.filter((d) => d.payerId && d.state);
+            if (primaryGroup && complete.length > 0) {
+              for (const d of complete) {
+                try {
+                  await createFact.mutateAsync({
+                    providerId: result.provider.id,
+                    groupId: primaryGroup,
+                    payerId: d.payerId,
+                    state: d.state,
+                    effectiveDate: d.effectiveDate || null,
+                  });
+                } catch (e) {
+                  toast.error(
+                    e instanceof Error ? e.message : "Could not record an enrollment fact",
+                  );
+                }
+              }
+              toast.success(
+                `${complete.length} enrollment fact${complete.length === 1 ? "" : "s"} recorded — no cases created.`,
+              );
+            }
             onClose();
           },
           onError,
@@ -601,6 +637,82 @@ function FormBody({
           <h3 className="text-[13px] font-semibold text-foreground">State licenses</h3>
           <LicenseListEditor value={licenses} onChange={setLicenses} errors={licenseErrors} />
         </div>
+
+        {/* E6.4 F6.4.4 — migration enrollment capture (create only): facts
+            under the primary group's contract, never auto-cases. */}
+        {!provider ? (
+          <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
+            <h3 className="text-[13px] font-semibold text-foreground">
+              Current enrollments under the group&apos;s contract
+            </h3>
+            <p className="text-[12px] text-muted-foreground">{ENROLLMENT_GUARD_TEXT}</p>
+            {enrollmentDrafts.map((d, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={d.payerId}
+                  onValueChange={(v) =>
+                    setEnrollmentDrafts((rows) =>
+                      rows.map((r, j) => (j === i ? { ...r, payerId: v } : r)),
+                    )
+                  }
+                >
+                  <SelectTrigger className="h-8 w-52 text-[13px]" aria-label="Enrollment payer">
+                    <SelectValue placeholder="Payer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(payersQ.data ?? []).map((py) => (
+                      <SelectItem key={py.id} value={py.id}>
+                        {py.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <StateSelect
+                  value={d.state}
+                  onChange={(v) =>
+                    setEnrollmentDrafts((rows) =>
+                      rows.map((r, j) => (j === i ? { ...r, state: v } : r)),
+                    )
+                  }
+                  allowNone={false}
+                  className="h-8 w-24 text-[13px]"
+                />
+                <Input
+                  type="date"
+                  value={d.effectiveDate}
+                  onChange={(e) =>
+                    setEnrollmentDrafts((rows) =>
+                      rows.map((r, j) => (j === i ? { ...r, effectiveDate: e.target.value } : r)),
+                    )
+                  }
+                  className="h-8 w-40 text-[13px]"
+                  aria-label="Enrollment effective date"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-[12px]"
+                  onClick={() => setEnrollmentDrafts((rows) => rows.filter((_, j) => j !== i))}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[12px]"
+              onClick={() =>
+                setEnrollmentDrafts((rows) => [
+                  ...rows,
+                  { payerId: "", state: "", effectiveDate: "" },
+                ])
+              }
+            >
+              Add enrollment
+            </Button>
+          </div>
+        ) : null}
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose} disabled={pending}>

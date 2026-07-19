@@ -151,6 +151,8 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
   { from: "/admin/statuses", to: /\/cases\/?$/ },
   { from: "/admin/sops/tpl-1", to: /\/admin\/templates\/tpl-1\/?$/ },
+  // E6.4 — the monolithic provider edit form retired to the record.
+  { from: "/providers/prov-1/edit", to: /\/providers\/prov-1\/?$/ },
 ];
 
 // TS-120 — the named param-preservation set, honored at the destination:

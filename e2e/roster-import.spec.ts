@@ -63,6 +63,11 @@ const TEMPLATE_HEADERS = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
+  // E6.4 F6.4.6 — the relationship columns (blank in these scenarios).
+  "facility_name",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
 ];
 const HEADER_LINE = TEMPLATE_HEADERS.join(",");
 
@@ -82,6 +87,10 @@ const VALID_CELLS: Record<string, string> = {
   license_expiration_date: "2027-01-31",
   ssn_last4: "6789",
   date_of_birth: "1990-04-12",
+  facility_name: "",
+  enrollment_payer: "",
+  enrollment_state: "",
+  enrollment_effective_date: "",
 };
 
 function rowLine(over: Record<string, string> = {}): string {

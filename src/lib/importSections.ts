@@ -112,6 +112,15 @@ interface SectionScanSpec {
 // The caller driving the scan supplies it; kinds that don't need it ignore it.
 export interface SectionScanContext {
   payerAttach?: PayerAttachScanContext;
+  /** E6.4 F6.4.6 — reference lists for the provider template's relationship
+   * columns: facility/payer NAMES resolve to ids at scan time (unknown names
+   * are row errors naming the column — never type-and-hope matching). */
+  provider?: ProviderRelationshipScanContext;
+}
+
+export interface ProviderRelationshipScanContext {
+  facilities: { id: string; name: string }[];
+  payers: { id: string; name: string }[];
 }
 
 export interface SectionDescriptor {
@@ -218,6 +227,12 @@ export const PROVIDER_TEMPLATE_HEADERS = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
+  // E6.4 F6.4.6 — one row per RELATIONSHIP: repeat identity columns and vary
+  // these (multi-facility / multi-enrollment; groups vary via group_name/tin).
+  "facility_name",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
 ] as const;
 
 /* ------------------------------- Scan kernel ------------------------------ */
@@ -479,8 +494,13 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
     requireGroupKey: true,
     tinColumns: ["group_tin"],
     npiColumns: ["npi"],
-    stateColumns: ["license_state"],
-    dateColumns: ["license_issue_date", "license_expiration_date", "date_of_birth"],
+    stateColumns: ["license_state", "enrollment_state"],
+    dateColumns: [
+      "license_issue_date",
+      "license_expiration_date",
+      "date_of_birth",
+      "enrollment_effective_date",
+    ],
     ssn4Columns: ["ssn_last4"],
     middleInitialColumns: ["provider_middle_initial"],
     boolColumns: [],
@@ -506,7 +526,60 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
       license_expiration_date: ctx.date("license_expiration_date"),
       ssn_last4: ctx.nullable("ssn_last4"),
       date_of_birth: ctx.date("date_of_birth"),
+      facility_name: ctx.nullable("facility_name"),
+      enrollment_payer: ctx.nullable("enrollment_payer"),
+      enrollment_state: ctx.upper("enrollment_state"),
+      enrollment_effective_date: ctx.date("enrollment_effective_date"),
     };
+  },
+  // E6.4 F6.4.6 — resolve relationship NAMES to ids at scan time (the E6.2
+  // payer-attach seam): unknown facility/payer names are row errors naming
+  // the column, and the resolved ids are stamped so commit never re-resolves.
+  // Rows that use no relationship column pass without context.
+  contextScan(mapped, context) {
+    const patch: Record<string, string | null> = {};
+    const wantsFacility = Boolean(mapped.facility_name);
+    const wantsEnrollment = Boolean(mapped.enrollment_payer || mapped.enrollment_state);
+    if (!wantsFacility && !wantsEnrollment) return { patch };
+    const ctx = context?.provider;
+    if (!ctx) {
+      return { error: { column: null, reason: "Reference data unavailable — retry the upload" } };
+    }
+    if (wantsFacility) {
+      const name = (mapped.facility_name ?? "").trim().toLowerCase();
+      const hit = ctx.facilities.find((f) => f.name.trim().toLowerCase() === name);
+      if (!hit) {
+        return {
+          error: {
+            column: "facility_name",
+            reason: "Unknown facility — copy the exact name from the reference sheet",
+          },
+        };
+      }
+      patch.facility_id = hit.id;
+    }
+    if (wantsEnrollment) {
+      if (!mapped.enrollment_payer || !mapped.enrollment_state) {
+        return {
+          error: {
+            column: mapped.enrollment_payer ? "enrollment_state" : "enrollment_payer",
+            reason: "An enrollment needs both enrollment_payer and enrollment_state",
+          },
+        };
+      }
+      const name = mapped.enrollment_payer.trim().toLowerCase();
+      const hit = ctx.payers.find((py) => py.name.trim().toLowerCase() === name);
+      if (!hit) {
+        return {
+          error: {
+            column: "enrollment_payer",
+            reason: "Unknown payer — copy the exact name from the reference sheet",
+          },
+        };
+      }
+      patch.enrollment_payer_id = hit.id;
+    }
+    return { patch };
   },
 };
 
@@ -581,6 +654,27 @@ export const SECTION_DESCRIPTORS: Record<SectionEntityKind, SectionDescriptor> =
   payer_attach: PAYER_ATTACH_DESCRIPTOR,
 };
 
+/** E6.4 F6.4.6 — the prefilled real-names reference sheet offered beside the
+ * provider template: the org's ACTUAL group names/TINs, facility names, and
+ * payer names, so relationship columns are copied, never guessed. Pure. */
+export function providerImportReference(
+  groups: { name: string; tin?: string | null }[],
+  facilities: { name: string }[],
+  payers: { name: string }[],
+): { filename: string; text: string } {
+  const rows: string[][] = [["kind", "name", "tin"]];
+  for (const g of [...groups].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["group", g.name, g.tin ?? ""]);
+  }
+  for (const f of [...facilities].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["facility", f.name, ""]);
+  }
+  for (const py of [...payers].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["payer", py.name, ""]);
+  }
+  return { filename: "provider-import-reference.csv", text: toCsv(rows) };
+}
+
 export function sectionDescriptor(kind: SectionEntityKind): SectionDescriptor {
   return SECTION_DESCRIPTORS[kind];
 }
@@ -625,7 +719,11 @@ export function scanSectionRecord(
 // list.
 export function looksLikeCombinedTemplate(headers: string[]): boolean {
   const set = new Set(headers.filter((h) => h !== ""));
-  return set.has("provider_first_name") && set.has("facility_name");
+  // The retired E3.0 combined template bundled provider identity with
+  // facility CREATION columns (street/city). E6.4's provider template carries
+  // facility_name as a pure RELATIONSHIP column, so the signature keys on the
+  // address columns only the combined template ever had.
+  return set.has("provider_first_name") && set.has("facility_street");
 }
 
 export const COMBINED_TEMPLATE_RETIRED_MESSAGE =

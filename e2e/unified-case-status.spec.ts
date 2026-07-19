@@ -499,14 +499,13 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await expect(page.getByText("Payer pipeline history")).toBeVisible();
   await expect(page.getByText("Legacy status history")).toBeVisible();
 
-  // Provider record: the case table renders the same canonical value.
+  // Provider record (E6.4 one-page record): the Cases panel renders the same
+  // canonical value through the shared pill.
   await page.goto("/providers/pr-dana");
-  await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.locator("table tbody tr").filter({ hasText: "Anthem" })).toContainText(
-    "Submitted",
-  );
+  await expect(page.locator("li").filter({ hasText: "Anthem" }).first()).toContainText("Submitted");
 
   // The Statuses configuration page is retired — the route redirects.
   await page.goto("/admin/statuses");

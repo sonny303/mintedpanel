@@ -115,6 +115,11 @@ const PROVIDER_HEADER_LINE = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
+  // E6.4 F6.4.6 — the one-row-per-relationship columns.
+  "facility_name",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
 ].join(",");
 
 // The retired E3.0 combined 20-column template (provider identity + facility
