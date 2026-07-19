@@ -3597,6 +3597,7 @@ export type Database = {
           p_id: string;
           p_name: string;
           p_payer_id: string;
+          p_required_profile_attributes?: Json;
           p_state: string;
           p_task_definitions?: Json;
         };

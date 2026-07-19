@@ -174,9 +174,10 @@ GRANT EXECUTE ON FUNCTION public.set_global_portal_flags(uuid, boolean, boolean)
 --    match keys / archived flag.
 --
 --    Contract (mirrors the org-path TE-5 save split): INSERT takes name +
---    task_definitions (the AFTER INSERT trigger seeds version 1); UPDATE
---    changes payer_id/state/group_id/archived ONLY — content and name go
---    through publish_sop_template_version, never here.
+--    task_definitions + required_profile_attributes (the AFTER INSERT trigger
+--    seeds version 1); UPDATE changes payer_id/state/group_id/archived ONLY —
+--    content, name, and attributes go through publish_sop_template_version,
+--    never here.
 --
 --    Grain guard: global rows sit OUTSIDE uq_sop_templates_active_org_match
 --    (its predicate requires org_id IS NOT NULL), so this RPC enforces the
@@ -193,7 +194,8 @@ CREATE OR REPLACE FUNCTION public.author_global_sop(
   p_state text,
   p_group_id uuid,
   p_task_definitions jsonb DEFAULT NULL,
-  p_archived boolean DEFAULT NULL
+  p_archived boolean DEFAULT NULL,
+  p_required_profile_attributes jsonb DEFAULT '[]'::jsonb
 )
 RETURNS public.sop_templates
 LANGUAGE plpgsql
@@ -204,6 +206,7 @@ DECLARE
   v_row public.sop_templates%ROWTYPE;
   v_archived boolean := coalesce(p_archived, false);
   v_defs jsonb := coalesce(p_task_definitions, '[]'::jsonb);
+  v_attrs jsonb := coalesce(p_required_profile_attributes, '[]'::jsonb);
 BEGIN
   IF coalesce(auth.role(), '') = 'anon' THEN
     RAISE EXCEPTION 'Not authorized';
@@ -239,9 +242,12 @@ BEGIN
     IF jsonb_typeof(v_defs) <> 'array' THEN
       RAISE EXCEPTION 'task_definitions must be a json array';
     END IF;
+    IF jsonb_typeof(v_attrs) <> 'array' THEN
+      RAISE EXCEPTION 'required_profile_attributes must be a json array';
+    END IF;
     INSERT INTO public.sop_templates
-      (org_id, name, payer_id, state, group_id, task_definitions, archived)
-    VALUES (NULL, btrim(p_name), p_payer_id, p_state, p_group_id, v_defs, v_archived)
+      (org_id, name, payer_id, state, group_id, task_definitions, archived, required_profile_attributes)
+    VALUES (NULL, btrim(p_name), p_payer_id, p_state, p_group_id, v_defs, v_archived, v_attrs)
     RETURNING * INTO v_row;
     RETURN v_row;
   END IF;
@@ -263,9 +269,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean) FROM anon;
-GRANT EXECUTE ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean, jsonb) FROM anon;
+GRANT EXECUTE ON FUNCTION public.author_global_sop(uuid, text, uuid, text, uuid, jsonb, boolean, jsonb) TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 6. train_global_field_map — the three training shapes (approve / manual /

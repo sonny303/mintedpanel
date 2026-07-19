@@ -242,6 +242,8 @@ export interface GlobalSopInput {
   groupId?: string | null;
   /** Create only — ignored on update (publish owns content). */
   taskDefinitions?: SOPTaskDefinition[];
+  /** Create only — versioned with content thereafter (publish owns it). */
+  requiredProfileAttributes?: string[];
   archived?: boolean;
 }
 
@@ -256,6 +258,7 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
     p_group_id: (input.groupId ?? null) as unknown as string,
     p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
     p_archived: (input.archived ?? false) as boolean,
+    p_required_profile_attributes: (input.requiredProfileAttributes ?? []) as unknown as Json,
   });
   if (error) {
     if (error.message.includes("global_sop_duplicate_match")) {

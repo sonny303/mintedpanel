@@ -32,7 +32,7 @@ export const Route = createFileRoute("/admin/templates/new")({
 });
 
 function NewTemplate() {
-  const { payerId, state, groupId, draftId } = Route.useSearch();
+  const { payerId, state, groupId, draftId, tier } = Route.useSearch();
   const draftQ = useSopTemplateDraft(draftId);
 
   if (draftId && draftQ.isLoading) {
@@ -44,6 +44,7 @@ function NewTemplate() {
       initial={null}
       prefill={payerId || state || groupId ? { payerId, state, groupId } : undefined}
       draft={draftId ? (draftQ.data ?? null) : null}
+      globalTier={tier === "global"}
     />
   );
 }

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
+import { FormStepPanel } from "@/components/templates/FormStepPanel";
 import {
   newEditableRecipient,
   taskPortalKeys,
@@ -98,6 +99,9 @@ export interface TemplateTaskRowProps {
   // online_form step can be linked to a real portal (payer-filtered by default).
   portals: Portal[];
   templatePayerId: string | null;
+  /** E6.5 F6.5.6 — the template is a GLOBAL row: the step's form machinery
+   * registers/trains against the global tier. Primitive (memo-safe). */
+  isGlobalAuthoring: boolean;
   dragTaskId: string | null;
   setDragTaskId: (v: string | null) => void;
   dragStep: DragStep | null;
@@ -128,6 +132,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   canEdit,
   groupedTokens,
   portals,
+  isGlobalAuthoring,
   templatePayerId,
   dragTaskId,
   setDragTaskId,
@@ -393,13 +398,27 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                 ) : (
                   <div className="space-y-3">
                     {step.stepType === "online_form" ? (
-                      <PortalStepSelect
-                        step={step}
-                        portals={portals}
-                        templatePayerId={templatePayerId}
-                        canEdit={canEdit}
-                        onChange={(portalKey) => updateStep(task.id, step.id, { portalKey })}
-                      />
+                      <>
+                        <PortalStepSelect
+                          step={step}
+                          portals={portals}
+                          templatePayerId={templatePayerId}
+                          canEdit={canEdit}
+                          onChange={(portalKey) => updateStep(task.id, step.id, { portalKey })}
+                        />
+                        {/* E6.5 F6.5.2 — register/train/prove without leaving the
+                            editor. Self-contained (own cached hooks); renders
+                            collapsed so Step 3 typing never pays for it. */}
+                        <FormStepPanel
+                          portalKey={normalizePortalKey(step.portalKey)}
+                          templatePayerId={templatePayerId}
+                          canEdit={canEdit}
+                          isGlobalAuthoring={isGlobalAuthoring}
+                          onPortalKeyChange={(portalKey) =>
+                            updateStep(task.id, step.id, { portalKey })
+                          }
+                        />
+                      </>
                     ) : null}
                     <div>
                       <div className="flex items-center justify-between mb-1">
