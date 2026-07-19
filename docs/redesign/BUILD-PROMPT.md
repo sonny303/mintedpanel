@@ -34,6 +34,10 @@ STOP and report instead of building.
   `BUILD-QUEUE.md` (flip Status to `in review` + PR number, in the same PR)
   and any register updates your diff requires (`table-register.md`,
   `SCHEMA.md`, `DESIGN-DEBT.md`, `TECH-DEBT.md`).
+- Wiki: update the `docs/wiki/` pages your epic impacts in the same PR
+  (walkthrough page(s) + flip your rows in `where-did-it-go.md` from
+  _(planned)_ to shipped; bump each page's `Updated for:` line). Devin
+  verifies this at review.
 - Append-only ledgers (`touches`, `status_history`, `audit_log`, and any
   `*_history`) are never updated or deleted, in code or migration.
 - Migrations are additive, repo-only — NEVER apply to hosted; list hosted
