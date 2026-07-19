@@ -76,6 +76,8 @@ import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.ru
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
+import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
+import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
 import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
 
@@ -416,6 +418,16 @@ const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AdminSopsRoute,
 } as any)
+const AdminPayerAdminSopsRoute = AdminPayerAdminSopsRouteImport.update({
+  id: '/sops',
+  path: '/sops',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
+const AdminPayerAdminCatalogRoute = AdminPayerAdminCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
 const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   id: '/admin/payers_/$id/scorecard',
   path: '/admin/payers/$id/scorecard',
@@ -482,6 +494,8 @@ export interface FileRoutesByFullPath {
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -544,6 +558,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/reporting': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -616,6 +632,8 @@ export interface FileRoutesById {
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -689,6 +707,8 @@ export interface FileRouteTypes {
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -751,6 +771,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/providers'
     | '/reporting'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -822,6 +844,8 @@ export interface FileRouteTypes {
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -1362,6 +1386,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSopsIdRouteImport
       parentRoute: typeof AdminSopsRoute
     }
+    '/admin/payer-admin/sops': {
+      id: '/admin/payer-admin/sops'
+      path: '/sops'
+      fullPath: '/admin/payer-admin/sops'
+      preLoaderRoute: typeof AdminPayerAdminSopsRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/admin/payer-admin/catalog': {
+      id: '/admin/payer-admin/catalog'
+      path: '/catalog'
+      fullPath: '/admin/payer-admin/catalog'
+      preLoaderRoute: typeof AdminPayerAdminCatalogRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
     '/admin/payers_/$id/scorecard': {
       id: '/admin/payers_/$id/scorecard'
       path: '/admin/payers/$id/scorecard'
@@ -1436,11 +1474,15 @@ const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
 )
 
 interface AdminPayerAdminRouteChildren {
+  AdminPayerAdminCatalogRoute: typeof AdminPayerAdminCatalogRoute
+  AdminPayerAdminSopsRoute: typeof AdminPayerAdminSopsRoute
   AdminPayerAdminIndexRoute: typeof AdminPayerAdminIndexRoute
   AdminPayerAdminFormsPayerIdRoute: typeof AdminPayerAdminFormsPayerIdRoute
 }
 
 const AdminPayerAdminRouteChildren: AdminPayerAdminRouteChildren = {
+  AdminPayerAdminCatalogRoute: AdminPayerAdminCatalogRoute,
+  AdminPayerAdminSopsRoute: AdminPayerAdminSopsRoute,
   AdminPayerAdminIndexRoute: AdminPayerAdminIndexRoute,
   AdminPayerAdminFormsPayerIdRoute: AdminPayerAdminFormsPayerIdRoute,
 }

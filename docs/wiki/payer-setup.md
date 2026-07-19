@@ -1,21 +1,41 @@
 # Payer Setup
 
-_Updated for: pre-E6 baseline (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.5 (2026-07-19)._
 
 Journey A — payer readiness: catalog + SOPs with embedded form setup.
 Global: authored once, inherited by every org.
 
-## Today (pre-E6)
+## Shipped (E6.5)
 
-Payer administration spans the Payer Setup tabs, Forms & Portals, the
-training deck, the test runner, MSO Routing, and Fix-it.
+- **Two real tabs** at `/admin/payer-admin/catalog` and `/admin/payer-admin/sops`
+  (shareable URLs; every legacy `?tab=` spelling redirects). Open to all
+  signed-in users for now — the module carries a persistent governance note;
+  platform roles arrive with R7.
+- **Ready-for-business funnel** heads the Catalog tab: one row per selected
+  payer with honest, separate dimensions (Global SOP · Form state · Drift) and
+  ONE next step — author SOP → register portal → train → repair drift → mock
+  dry test → ready. A no-online-form SOP is ready with a note.
+- **Portal setup lives inside the SOP editor** (the online_form step's "Form
+  setup" panel): register or pick the portal (global or org tier by the
+  template), train captured mappings in place (broken-on-last-fill rows queue
+  FIRST), and run the mock dry run — register → capture (extension) → train →
+  prove without leaving the editor.
+- **The dry run uses SYNTHETIC mock data** (versioned profile, never a
+  provider row, never PHI), once per payer — a pass means every captured field
+  has a decided auto-fill mapping and stamps the portal **Proven**.
+- **Drift repair (ex-Fix-it)** reopens the same editor: the Sidebar badge is
+  the drift count, the SOPs tab banners deep-link the owning SOP, and a
+  retrained mapping clears the badge (repaired-pending-verification until the
+  next real fill).
+- **MSO routing retired** as an org rules engine — delegation is a curated
+  payer fact on the catalog row (`Delegated: …`) plus SOP content.
+- **Org settings moved out**: reason codes, queue ranking, and resolution-ID
+  labels live on Org Detail (org data stays with the org).
 
-## Target state _(lands with E6.5)_
+## Global authoring
 
-- Two tabs: **Catalog** and **SOPs**; open to everyone for now.
-- Portals fold into the SOP form step: register/pick portal → capture →
-  train → dry run → publish, all in place.
-- The dry run uses masked MOCK data, once per payer, never per org.
-- Drift repair (ex-Fix-it) reopens the same editor.
-- MSO routing retires as an org rules engine — delegation becomes a payer
-  fact (catalog) and SOP content.
+Global SOPs, portals, and field mappings are `org_id NULL` rows written
+through SECURITY DEFINER RPCs (`author_global_sop`, `upsert_global_portal`,
+`set_global_portal_flags`, `train_global_field_map`, and the reissued publish
+RPC). Authored once, inherited by every organization; the generic fallback
+SOP stays platform-managed and read-only.

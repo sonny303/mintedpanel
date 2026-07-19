@@ -1,44 +1,11 @@
-// E4.2 F4.2.7 — form onboarding & test runner for a payer, reached from the
-// payer directory's form-readiness link. Admin-gated at render time.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
-import { FormOnboardingPanel } from "@/components/payer-admin/FormOnboardingPanel";
-import { useIsAdmin } from "@/lib/permissions";
+// E6.5 F6.5.2/F6.5.3 — the standalone form-onboarding runner retires: portal
+// registration, training, and the (now mock-data) dry run live INSIDE the SOP
+// editor's online-form step panel. This URL stays alive as a redirect (legacy
+// URLs never dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/payer-admin/forms/$payerId")({
-  component: FormOnboardingPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/payer-admin/sops", replace: true });
+  },
 });
-
-function FormOnboardingPage() {
-  const { payerId } = Route.useParams();
-  const isAdmin = useIsAdmin();
-
-  if (!isAdmin) {
-    return (
-      <div>
-        <PageHeader title="Form onboarding" description="Test-run a payer's form fill." />
-        <EmptyState message="This admin module is available to administrators only." />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <PageHeader
-        title="Form onboarding & test runner"
-        description="Capture → train → dry-run fill against the test provider → fix & re-run."
-        actions={
-          <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/admin/payer-admin">
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to Payer Setup
-            </Link>
-          </Button>
-        }
-      />
-      <FormOnboardingPanel payerId={payerId} />
-    </div>
-  );
-}

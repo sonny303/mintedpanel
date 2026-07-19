@@ -61,6 +61,7 @@ import {
   type EditableTask,
 } from "@/components/templates/editableTemplate";
 import { useCreateSop, usePayers, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
+import { useAuthorGlobalSop } from "@/hooks/useGlobalAuthoring";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { usePortals } from "@/hooks/usePortals";
@@ -197,21 +198,25 @@ interface TemplateWizardProps {
   prefill?: WizardPrefill;
   // E4.2 F4.2.1 — resume an existing draft (create mode only).
   draft?: SopTemplateDraft | null;
+  // E6.5 F6.5.6 — create-mode GLOBAL authoring (?tier=global): the head is an
+  // org_id NULL row written through author_global_sop, inherited by every org.
+  globalTier?: boolean;
 }
 
-export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps) {
+export function TemplateWizard({ initial, prefill, draft, globalTier }: TemplateWizardProps) {
   const navigate = useNavigate();
   const isEdit = initial !== null;
   const draftPayload = (draft?.payload ?? null) as DraftPayload | null;
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const isAdmin = useIsAdmin();
-  // Global templates (org_id NULL — assigned catalog SOPs and the seeded
-  // fallback) are platform-managed: read-only for every org user, admin or not.
-  const isGlobal = initial
-    ? (initial as SOPTemplate & { orgId: string | null }).orgId === null
-    : false;
+  // E6.5 F6.5.6 — GLOBAL templates (org_id NULL) are now AUTHORABLE from here
+  // ("authored once, inherited by every org"), open to all authenticated users
+  // under the interim governance posture (R7 introduces platform roles). The
+  // seeded generic fallback stays platform-managed and read-only (its RPC
+  // guards reject org-user edits too).
+  const isGlobal = initial ? initial.orgId === null : Boolean(globalTier);
   const isFallback = initial ? isFallbackTemplate(initial) : false;
-  const canEdit = isAdmin && !isGlobal;
+  const canEdit = isFallback ? false : isGlobal ? true : isAdmin;
   // E4.2 SOP hardening — the template tier, matching the deterministic
   // pickTemplate precedence (organization override → global payer SOP → generic
   // fallback). Org templates authored here are always the organization tier.
@@ -226,6 +231,7 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
   const tokensQ = useTokenCatalog();
   const portalsQ = usePortals();
   const createMut = useCreateSop();
+  const authorGlobalMut = useAuthorGlobalSop();
   const updateMut = useUpdateSop(initial?.id ?? "");
   const publishMut = usePublishSop(initial?.id ?? "");
   const saveDraftMut = useSaveSopTemplateDraft();
@@ -651,8 +657,20 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
       : false;
 
   // Match-key-only head update (no version bump). Content changes go through
-  // handlePublish below.
+  // handlePublish below. Global heads route through author_global_sop (no
+  // table policy allows a global write); org heads keep the audited update.
   async function saveMatchKey() {
+    if (isGlobal && initial) {
+      await authorGlobalMut.mutateAsync({
+        id: initial.id,
+        name: payload.name,
+        payerId: payload.payerId,
+        state: payload.state,
+        groupId: payload.groupId,
+        archived: payload.archived,
+      });
+      return;
+    }
     const { name: _name, taskDefinitions: _defs, archived: _archived, ...matchKey } = payload;
     await updateMut.mutateAsync(matchKey);
   }
@@ -670,10 +688,20 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     }
     setSaving(true);
     try {
-      const created = await createMut.mutateAsync(payload);
+      const created = isGlobal
+        ? await authorGlobalMut.mutateAsync({
+            name: payload.name,
+            payerId: payload.payerId,
+            state: payload.state,
+            groupId: payload.groupId,
+            taskDefinitions: payload.taskDefinitions,
+            requiredProfileAttributes: payload.requiredProfileAttributes,
+            archived: false,
+          })
+        : await createMut.mutateAsync(payload);
       await discardDraftIfAny();
       setDirty(false);
-      toast.success("Template created");
+      toast.success(isGlobal ? "Global SOP created" : "Template created");
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
@@ -746,12 +774,14 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     return true;
   }
 
-  // E4.2 SOP hardening — new organization SOPs and routing-key changes must
-  // target a payer AND a state. Existing legacy templates with incomplete keys
-  // may still publish content-only versions under the E1.7b compatibility
-  // contract; changing their routing key requires completing it first.
+  // E4.2 SOP hardening — new SOPs and routing-key changes must target a payer
+  // AND a state; since E6.5 the same rule binds GLOBAL authoring (a payerless
+  // global row would collide with the generic fallback's grain — the
+  // author_global_sop RPC enforces it server-side too). Existing legacy
+  // templates with incomplete keys may still publish content-only versions
+  // under the E1.7b compatibility contract; changing their routing key
+  // requires completing it first.
   function matchKeyIncompleteBlocked(): boolean {
-    if (isGlobal) return false;
     const err = orgSopMatchKeyError({
       payerId: payerId === "none" ? null : payerId,
       state: state === "none" ? null : state,
@@ -791,11 +821,21 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
       // collide with it under the active-org uniqueness rule. Create it ARCHIVED
       // (outside the active grain) so the duplicate always succeeds; the author
       // re-keys it and restores it (validated at the new key).
-      const created = await createMut.mutateAsync({
-        ...payload,
-        name: `${name} (copy)`,
-        archived: true,
-      });
+      const created = isGlobal
+        ? await authorGlobalMut.mutateAsync({
+            name: `${name} (copy)`,
+            payerId: payload.payerId,
+            state: payload.state,
+            groupId: payload.groupId,
+            taskDefinitions: payload.taskDefinitions,
+            requiredProfileAttributes: payload.requiredProfileAttributes,
+            archived: true,
+          })
+        : await createMut.mutateAsync({
+            ...payload,
+            name: `${name} (copy)`,
+            archived: true,
+          });
       toast.success(
         "Duplicated as an archived copy — set a distinct payer/state/group, then restore it.",
       );
@@ -812,7 +852,18 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
     const next = !isArchived;
     setIsArchived(next);
     try {
-      await updateMut.mutateAsync({ archived: next });
+      if (isGlobal) {
+        await authorGlobalMut.mutateAsync({
+          id: initial.id,
+          name: payload.name,
+          payerId: payload.payerId,
+          state: payload.state,
+          groupId: payload.groupId,
+          archived: next,
+        });
+      } else {
+        await updateMut.mutateAsync({ archived: next });
+      }
       toast.success(next ? "Template archived" : "Template restored");
     } catch (err) {
       setIsArchived(!next);
@@ -879,11 +930,16 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
 
       {!canEdit ? (
         <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          {isGlobal
-            ? isFallback
-              ? "Generic fallback SOP — used when a case's payer and state have no authored SOP. Managed by the platform; read-only."
-              : "Global catalog SOP — managed by the platform; read-only."
+          {isFallback
+            ? "Generic fallback SOP — used when a case's payer and state have no authored SOP. Managed by the platform; read-only."
             : "Read-only view. Only admins can create or edit templates."}
+        </div>
+      ) : null}
+      {isGlobal && canEdit ? (
+        <div className="mb-4 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-sm text-[#92400E]">
+          Global SOP — authored once and inherited by every organization without an override.
+          Authoring is open to all signed-in users for now; platform roles arrive in a later
+          release.
         </div>
       ) : null}
 
@@ -1224,6 +1280,7 @@ export function TemplateWizard({ initial, prefill, draft }: TemplateWizardProps)
                 groupedTokens={groupedTokens}
                 portals={portals}
                 templatePayerId={payerId === "none" ? null : payerId}
+                isGlobalAuthoring={isGlobal}
                 dragTaskId={dragTaskId}
                 setDragTaskId={setDragTaskId}
                 dragStep={dragStep}

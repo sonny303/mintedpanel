@@ -128,13 +128,30 @@ describe("payer writes are gone at the service boundary", () => {
     expect(route).toContain("/admin/payer-admin");
   });
 
-  it("the Payer Setup list keeps the read-only posture (no free-text creation, no identity edit)", () => {
-    const setupList = stripComments(
-      readFileSync(join(SRC, "components/payer-admin/PayerSetupList.tsx"), "utf8"),
+  it("the Payer Setup funnel keeps the read-only posture (no free-text creation, no identity edit)", () => {
+    // E6.5: PayerSetupList retired; the module head is PayerReadinessFunnel.
+    const funnel = stripComments(
+      readFileSync(join(SRC, "components/payer-admin/PayerReadinessFunnel.tsx"), "utf8"),
     );
-    expect(setupList).not.toContain("Add payer");
-    expect(setupList).not.toContain("useCreatePayer");
-    expect(setupList).not.toContain("updatePayer");
+    expect(funnel).not.toContain("Add payer");
+    expect(funnel).not.toContain("useCreatePayer");
+    expect(funnel).not.toContain("updatePayer");
+  });
+
+  it("delegation_note has NO app writer (curated platform fact)", () => {
+    // F6.5.5 — delegation is a Minted-curated catalog fact; only the migration
+    // and generated types may name the column, and no snake/camel write path
+    // exists in services.
+    const services = readdirSync(join(SRC, "services")).filter((f) => f.endsWith(".ts"));
+    for (const file of services) {
+      const src = stripComments(readFileSync(join(SRC, "services", file), "utf8"));
+      expect(src, `services/${file} must not write delegation_note`).not.toMatch(
+        /delegation_note\s*:/,
+      );
+      expect(src, `services/${file} must not write delegationNote`).not.toMatch(
+        /delegationNote\s*:/,
+      );
+    }
   });
 });
 

@@ -5,7 +5,14 @@
 // the prod build at 4x CPU throttle). The other half of the contract — the
 // wizard passing referentially stable (useCallback) handlers — is exercised
 // end-to-end by e2e/template-typing-latency.spec.ts.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// TemplateTaskRow's import graph reaches the Supabase client since E6.5 (the
+// FormStepPanel mounts its own org-cached hooks). CI has no VITE_SUPABASE_URL,
+// so stub the client module — this test only inspects the memo wrapper, it
+// never renders or queries.
+vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
+
 import { TemplateTaskRow } from "./TemplateTaskRow";
 
 describe("TemplateTaskRow render contract", () => {

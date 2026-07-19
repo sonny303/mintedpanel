@@ -2010,6 +2010,7 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          delegation_note: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -2027,6 +2028,7 @@ export type Database = {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          delegation_note?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -2044,6 +2046,7 @@ export type Database = {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          delegation_note?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -2197,9 +2200,10 @@ export type Database = {
           is_verified: boolean;
           last_verified_at: string | null;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_id: string | null;
           portal_key: string;
+          proven_at: string | null;
           updated_at: string;
           url_changed_at: string | null;
         };
@@ -2210,9 +2214,10 @@ export type Database = {
           is_verified?: boolean;
           last_verified_at?: string | null;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_id?: string | null;
           portal_key: string;
+          proven_at?: string | null;
           updated_at?: string;
           url_changed_at?: string | null;
         };
@@ -2223,9 +2228,10 @@ export type Database = {
           is_verified?: boolean;
           last_verified_at?: string | null;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_id?: string | null;
           portal_key?: string;
+          proven_at?: string | null;
           updated_at?: string;
           url_changed_at?: string | null;
         };
@@ -3584,6 +3590,33 @@ export type Database = {
         Args: { p: Json; p_label: string };
         Returns: undefined;
       };
+      author_global_sop: {
+        Args: {
+          p_archived?: boolean;
+          p_group_id: string;
+          p_id: string;
+          p_name: string;
+          p_payer_id: string;
+          p_required_profile_attributes?: Json;
+          p_state: string;
+          p_task_definitions?: Json;
+        };
+        Returns: {
+          archived: boolean;
+          created_at: string | null;
+          current_version: number;
+          group_id: string | null;
+          id: string;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          required_profile_attributes: Json;
+          specialty: string | null;
+          state: string | null;
+          task_definitions: Json;
+          updated_at: string | null;
+        };
+      };
       check_rpc_throttle: {
         Args: {
           p_count_all?: boolean;
@@ -3660,6 +3693,7 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          delegation_note: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -3724,6 +3758,23 @@ export type Database = {
         };
         Returns: Json;
       };
+      set_global_portal_flags: {
+        Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };
+        Returns: {
+          created_at: string;
+          form_url: string | null;
+          id: string;
+          is_verified: boolean;
+          last_verified_at: string | null;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          portal_key: string;
+          proven_at: string | null;
+          updated_at: string;
+          url_changed_at: string | null;
+        };
+      };
       set_primary_assignment: {
         Args: { p_assignment_id: string; p_provider_id: string };
         Returns: undefined;
@@ -3745,8 +3796,62 @@ export type Database = {
         Args: { p_ssn: string; p_token: string };
         Returns: Json;
       };
+      train_global_field_map: {
+        Args: {
+          p_field_label?: string;
+          p_id: string;
+          p_source: string;
+          p_status: string;
+          p_token?: string;
+        };
+        Returns: {
+          confidence: number | null;
+          created_at: string;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          selector: string;
+          selector_fallbacks: Json | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        };
+      };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      upsert_global_portal: {
+        Args: {
+          p_form_url?: string;
+          p_id: string;
+          p_name: string;
+          p_payer_id?: string;
+          p_portal_key: string;
+        };
+        Returns: {
+          created_at: string;
+          form_url: string | null;
+          id: string;
+          is_verified: boolean;
+          last_verified_at: string | null;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          portal_key: string;
+          proven_at: string | null;
+          updated_at: string;
+          url_changed_at: string | null;
+        };
+      };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
       validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };

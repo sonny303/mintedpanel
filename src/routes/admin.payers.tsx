@@ -10,6 +10,6 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/payers")({
   beforeLoad: () => {
-    throw redirect({ to: "/admin/payer-admin" });
+    throw redirect({ to: "/admin/payer-admin/catalog" });
   },
 });

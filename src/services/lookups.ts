@@ -1,16 +1,10 @@
 // Read-only lookup queries used by list screens: provider groups for the
-// active org, coordinators, state licenses, mso routing rules, plus notes.
+// active org, coordinators, state licenses, plus notes. (MSO routing rule
+// lookup retired in E6.5 F6.5.5.)
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
-import type {
-  Facility,
-  MsoRoutingRule,
-  Note,
-  NoteEntityType,
-  Profile,
-  ProviderGroup,
-} from "@/types";
+import type { Facility, Note, NoteEntityType, Profile, ProviderGroup } from "@/types";
 
 export interface StateLicense {
   id: string;
@@ -108,44 +102,6 @@ export async function getCoordinators(): Promise<Profile[]> {
     .map((r) => r.profiles)
     .filter((p): p is Record<string, unknown> => Boolean(p));
   return camelizeRow<Profile[]>(rows);
-}
-
-export async function getMsoRoutingRule(
-  payerId: string,
-  state: string,
-  specialty: string | null,
-): Promise<MsoRoutingRule | null> {
-  const orgId = requireActiveOrg();
-  // Pull every rule for this payer in the active org, then filter and rank
-  // in JS using exact, case-sensitive string equality. 'All' is the wildcard
-  // for both state and specialty. Most specific match wins (specialty > state);
-  // ties broken by created_at desc. Never returns early inside the scan.
-  const { data, error } = await supabase
-    .from("mso_routing_rules")
-    .select("*")
-    .eq("org_id", orgId)
-    .eq("payer_id", payerId);
-  if (error) throw error;
-  const rows = camelizeRow<MsoRoutingRule[]>(data ?? []);
-
-  const candidates: Array<{ rule: MsoRoutingRule; score: number; createdMs: number }> = [];
-  for (const rule of rows) {
-    const ruleState = rule.state ?? "";
-    const ruleSpecialty = rule.specialty ?? "";
-    const stateMatches = ruleState === state || ruleState === "All";
-    const specialtyMatches =
-      ruleSpecialty === "All" || (specialty !== null && ruleSpecialty === specialty);
-    if (!stateMatches || !specialtyMatches) continue;
-    let score = 0;
-    if (ruleSpecialty !== "All") score += 2;
-    if (ruleState !== "All") score += 1;
-    const createdMs = rule.createdAt ? new Date(rule.createdAt).getTime() : 0;
-
-    candidates.push({ rule, score, createdMs });
-  }
-
-  candidates.sort((a, b) => b.score - a.score || b.createdMs - a.createdMs);
-  return candidates[0]?.rule ?? null;
 }
 
 export interface CreateNoteInput {

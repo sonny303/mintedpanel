@@ -560,6 +560,11 @@ export interface Payer {
   // payerResolutionIdentifier seam: org setting → these → generic default.
   resolutionIdLabel?: string | null;
   resolutionIdExpected?: boolean | null;
+  // E6.5 F6.5.5 — delegation as a curated catalog fact ("this payer delegates
+  // credentialing to X — submit via Y"). Platform-written ONLY (no app writer;
+  // payers has had no org write path since 20260718120000). Rendered in the
+  // catalog browser; workflow detail belongs in SOP content, not routing rules.
+  delegationNote?: string | null;
 }
 
 // E4.2 payer governance — the org × payer configuration grain. Global payer
@@ -1085,7 +1090,10 @@ export interface SOPTaskDefinition {
 
 export interface SOPTemplate {
   id: string;
-  orgId: string;
+  // null = GLOBAL catalog row (payer SOP or the generic fallback) — honest
+  // since E6.5; consumers previously cast around this (pickTemplate,
+  // TemplateWizard, TemplatesList).
+  orgId: string | null;
   name: string;
   groupId: string | null;
   state: string | null;
@@ -1224,13 +1232,17 @@ export interface FillSession {
 // and the Fix-it queue (Surface 1) confirms.
 export interface Portal {
   id: string;
-  orgId: string;
+  // null = GLOBAL registry row (E6.5) — authored once, inherited by every org.
+  orgId: string | null;
   portalKey: string;
   name: string;
   payerId: string | null;
   formUrl: string | null;
   isVerified: boolean;
   lastVerifiedAt: string | null;
+  // E6.5 dry-run proof stamp: set when a mock dry run fills every mapped
+  // field; cleared with verification on a form-URL change.
+  provenAt?: string | null;
   urlChangedAt: string | null;
   createdAt: string;
   updatedAt: string;

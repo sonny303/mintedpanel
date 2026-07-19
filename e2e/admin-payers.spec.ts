@@ -140,22 +140,22 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
 }) => {
   currentRole = "admin";
   await page.goto("/admin/payers");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
+  // E6.5: the workspace is two REAL segments; the old URL lands on Catalog.
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // No free-text payer creation and no per-row Edit control, anywhere.
   await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 
-  // The assigned catalog payer renders as a setup row; the retired legacy
-  // migration state never appears (payers are global-catalog-only).
-  const globalRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
-  await expect(globalRow).toBeVisible();
+  // The assigned catalog payer renders in the Ready-for-business funnel AND
+  // the catalog browse; the retired legacy migration state never appears.
+  await expect(page.getByRole("heading", { name: "Ready for business" })).toBeVisible();
+  await expect(page.getByText("Aetna (CVS Health)").first()).toBeVisible();
   await expect(page.getByText("Legacy — catalog migration required")).toHaveCount(0);
 
-  // E6.3 F6.3.5: the starter toggle is GONE with starter cases — the expanded
-  // setup detail is read-only and NO switch renders anywhere on the page.
-  await globalRow.getByRole("button", { name: "Show setup detail for Aetna (CVS Health)" }).click();
+  // E6.3 F6.3.5: the starter toggle is GONE with starter cases — NO switch
+  // renders anywhere on the page.
   await expect(page.getByRole("switch")).toHaveCount(0);
 
   // Nothing on this page wrote anywhere.
@@ -167,7 +167,7 @@ test("specialist following the old URL lands on the workspace — all roles for 
 }) => {
   currentRole = "specialist";
   await page.goto("/admin/payers");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   // E6.1 interim posture: Payer Setup renders for ALL roles (two trusted
   // users; revisit at the third hire) — the old admin-only denial is gone.
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({

@@ -32,7 +32,7 @@ import {
 import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/auth-store";
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
-import { useFixitQueue } from "@/hooks/useFixit";
+import { useFormDrift } from "@/hooks/useFormDrift";
 // The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
 // docs/redesign/design-system/design-system-reference/assets/logo-white.png —
 // pinned untouched by E6.1 F6.1.1 (the decision-mock gradient square is a
@@ -151,11 +151,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
   const openCases = useOpenCaseCount();
-  // F6.1.1 needs-attention chip — the fix-it drift deck size, an existing
-  // cached derivation (no new query shape). E6.5's needs-attention derivation
-  // supersedes this count when the module lands.
-  const fixit = useFixitQueue();
-  const needsAttention = fixit.isLoading || fixit.isError ? null : fixit.cards.length;
+  // E6.5 F6.5.4 — the chip is DRIFT-ONLY now: mappings the last real fill
+  // couldn't find on the live page (the one repair signal), derived from two
+  // org caches. The four-kind Fix-it deck count retired with the deck.
+  const drift = useFormDrift();
+  const needsAttention = drift.isLoading || drift.isError ? null : drift.totalCount;
   const [orgQuery, setOrgQuery] = useState("");
 
   const isActive = (to: string) =>
@@ -216,7 +216,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           {renderNavItem(
             { to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard },
             needsAttention !== null && needsAttention > 0 ? (
-              <CountChip count={needsAttention} label={`${needsAttention} items need attention`} />
+              <CountChip count={needsAttention} label={`${needsAttention} broken form mappings`} />
             ) : undefined,
           )}
           {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}

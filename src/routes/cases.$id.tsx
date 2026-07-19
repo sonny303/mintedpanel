@@ -4,7 +4,6 @@
 import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInDays, parseISO } from "date-fns";
-import { AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +25,7 @@ import {
 import { useProviders } from "@/hooks/useProviders";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { usePortals } from "@/hooks/usePortals";
-import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
+import { useCoordinators } from "@/hooks/useLookups";
 import { casePortalTargets } from "@/lib/casePortals";
 import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
@@ -65,7 +64,6 @@ function CaseDetailPage() {
   const coordinatorsQ = useCoordinators();
   const reasonCodesQ = useDenialReasonCodes();
   const c = caseQ.data;
-  const routingRuleQ = useMsoRoutingRule(c?.payerId, c?.state, c?.specialty ?? null);
   // Same org + payer cases feed the F4.0.2 duplicate tracking-ID warning.
   const payerCasesQ = useCases(c?.payerId ? { payerId: c.payerId } : {});
   const providersQ = useProviders();
@@ -201,34 +199,6 @@ function CaseDetailPage() {
         ) : null}
 
         <ReapplyCaseAction c={c} canEdit={canEdit} />
-
-        {c.mso ? (
-          <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-md p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 text-[#D97706]">
-                <AlertTriangle className="w-5 h-5 shrink-0" />
-                <span className="text-[14px] font-medium">
-                  Route through {c.mso.name}, not {c.payer?.name ?? "payer"} directly
-                </span>
-              </div>
-              {c.mso.portalUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 bg-white border-[#FDE68A] text-[#D97706] hover:bg-[#FEF3C7] hover:text-[#D97706]"
-                  asChild
-                >
-                  <a href={c.mso.portalUrl} target="_blank" rel="noreferrer">
-                    Go to Portal <ExternalLink className="w-3 h-3 ml-1.5" />
-                  </a>
-                </Button>
-              )}
-            </div>
-            {routingRuleQ.data?.notes ? (
-              <p className="text-[12px] text-[#92400E] mt-2 ml-8">{routingRuleQ.data.notes}</p>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">

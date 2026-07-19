@@ -27,11 +27,6 @@ export const queryKeys = {
   providerReadinessFacts: (orgId: string) => ["provider-readiness-facts", orgId] as const,
   groupReadinessDocuments: (orgId: string) => ["group-readiness-documents", orgId] as const,
   groupInsurancePolicies: (orgId: string) => ["group-insurance-policies", orgId] as const,
-  msos: (orgId: string) => ["msos", orgId] as const,
-  mso: (orgId: string, id: string) => ["mso", orgId, id] as const,
-  msoRoutingRules: (orgId: string) => ["mso-routing-rules", orgId] as const,
-  msoRoutingRule: (orgId: string, payerId: string, state: string, specialty: string) =>
-    ["mso-routing-rule", orgId, payerId, state, specialty] as const,
   templates: (orgId: string) => ["templates", orgId] as const,
   template: (orgId: string, id: string) => ["template", orgId, id] as const,
   // E1.7b SOP versioning: history list + one immutable version's content.

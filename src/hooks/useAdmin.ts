@@ -1,19 +1,11 @@
-// Payer, MSO, SOP template, status config, and audit-log query hooks.
+// Payer, SOP template, status config, and audit-log query hooks. (MSO routing
+// retired in E6.5 F6.5.5 — delegation is a curated payer-catalog fact + SOP
+// content now; the msos/mso_routing_rules tables stay dormant per the
+// additive rule.)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import { getPayer, listPayers } from "@/services/payers";
-import {
-  createMso,
-  getMso,
-  listMsos,
-  updateMso,
-  listRoutingRules,
-  createRoutingRule,
-  updateRoutingRule,
-  type MsoInput,
-  type RoutingRuleInput,
-} from "@/services/msos";
 import {
   createTemplate,
   getTemplate,
@@ -59,80 +51,6 @@ export function usePayer(id: string | undefined) {
 // catalog (payer-directory → org_payer_assignments) and Minted-curated facts
 // are org-read-only; org-varying payer configuration lives in
 // org_payer_settings (useOrgPayerSettings).
-
-export function useMsos() {
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useQuery({
-    queryKey: queryKeys.msos(orgId),
-    queryFn: listMsos,
-    enabled: orgId !== "no-org",
-    staleTime: FIVE_MINUTES,
-  });
-}
-
-export function useMso(id: string | undefined) {
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useQuery({
-    queryKey: queryKeys.mso(orgId, id ?? ""),
-    queryFn: () => getMso(id as string),
-    enabled: orgId !== "no-org" && Boolean(id),
-  });
-}
-
-export function useCreateMso() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: MsoInput) => createMso(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.msos(orgId) }),
-  });
-}
-
-export function useUpdateMso(id: string) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (patch: Partial<MsoInput>) => updateMso(id, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.msos(orgId) });
-      qc.invalidateQueries({ queryKey: queryKeys.mso(orgId, id) });
-    },
-  });
-}
-
-export function useRoutingRules() {
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useQuery({
-    queryKey: queryKeys.msoRoutingRules(orgId),
-    queryFn: listRoutingRules,
-    enabled: orgId !== "no-org",
-    staleTime: FIVE_MINUTES,
-  });
-}
-
-function invalidateRoutingRuleCaches(qc: ReturnType<typeof useQueryClient>, orgId: string) {
-  qc.invalidateQueries({ queryKey: queryKeys.msoRoutingRules(orgId) });
-  // Resolver key family used by useMsoRoutingRule during case creation.
-  qc.invalidateQueries({ queryKey: ["mso-routing-rule"] });
-}
-
-export function useCreateRoutingRule() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: RoutingRuleInput) => createRoutingRule(input),
-    onSuccess: () => invalidateRoutingRuleCaches(qc, orgId),
-  });
-}
-
-export function useUpdateRoutingRule(id: string) {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: RoutingRuleInput) => updateRoutingRule(id, input),
-    onSuccess: () => invalidateRoutingRuleCaches(qc, orgId),
-  });
-}
 
 export function useSops() {
   const orgId = useActiveOrgId() ?? "no-org";
