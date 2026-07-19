@@ -1,6 +1,5 @@
 // E1.8 TE-1/TE-6/TE-7/TE-10 — enrollment readiness, fully DERIVED and never
-// stored (the launchReadiness/clientProgress pattern; that module stays the
-// separate location-launch readiness — do not merge them). Rows sit at the
+// stored. Rows sit at the
 // E2.x case-key grain: provider × group × payer × state, derived from ACTIVE
 // payer_network_targets (E1.5) × the target group's roster (E1.3). "today" is
 // always passed in — no clock reads here — and every comparison is date-only

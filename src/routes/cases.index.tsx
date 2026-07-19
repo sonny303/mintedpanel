@@ -45,11 +45,10 @@ import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageSquarePlus, Phone, Plus, Search, X } from "lucide-react";
+import { MessageSquarePlus, Plus, Search, X } from "lucide-react";
 import { useCanWrite } from "@/lib/permissions";
 import { useTablePrefs } from "@/hooks/useTablePrefs";
-import { BatchTouchpointDialog } from "@/components/cases/BatchTouchpointDialog";
-import { BulkLogTouchDialog, type BulkCaseCandidate } from "@/components/cases/BulkLogTouchDialog";
+import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
 import type { CredentialCase, Provider, Task } from "@/types";
 
@@ -172,7 +171,6 @@ function CasesWorkView() {
               ...(idsParam ? { ids: idsParam } : {}),
             },
     });
-  const [batchOpen, setBatchOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
 
@@ -339,12 +337,14 @@ function CasesWorkView() {
   // so a card that says N always leaves exactly N case rows on screen. The
   // free-text search (F4.0.2) additionally narrows by provider/payer/state and
   // — the point of the feature — the tracking ID.
-  // Bulk-touch candidates: every open case, labelled provider · state · payer.
-  const bulkCandidates: BulkCaseCandidate[] = useMemo(
+  // Add-touch candidates (F6.6.5): every open case, labelled provider ·
+  // state · payer, carrying its status so the dialog can suggest bumps.
+  const bulkCandidates: TouchCaseCandidate[] = useMemo(
     () =>
       openRowsAll.map((r) => ({
-        caseId: r.case.id,
+        id: r.case.id,
         label: `${providerNameOf(r)} · ${r.case.state} · ${r.payerName}`,
+        currentStatus: r.case.caseStatus,
       })),
     [openRowsAll],
   );
@@ -468,15 +468,7 @@ function CasesWorkView() {
           canWrite ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="h-8" onClick={() => setBulkOpen(true)}>
-                <MessageSquarePlus className="w-4 h-4 mr-1" /> Log touch
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={() => setBatchOpen(true)}
-              >
-                <Phone className="w-4 h-4 mr-1" /> Log payer call
+                <MessageSquarePlus className="w-4 h-4 mr-1" /> Add touch
               </Button>
               <Button
                 size="sm"
@@ -489,11 +481,8 @@ function CasesWorkView() {
           ) : null
         }
       />
-      {batchOpen ? (
-        <BatchTouchpointDialog open={batchOpen} onClose={() => setBatchOpen(false)} />
-      ) : null}
       {bulkOpen ? (
-        <BulkLogTouchDialog
+        <AddTouchDialog
           open={bulkOpen}
           candidates={bulkCandidates}
           onClose={() => setBulkOpen(false)}

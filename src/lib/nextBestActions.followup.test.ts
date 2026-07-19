@@ -1,11 +1,11 @@
-// E4.1 F4.1.3 additions to the E2.3 queue: follow-up carry-forward feeding the
-// ranking, the org ranking-config seam (default / configured / disabled /
-// invalid-fallback), and the overdue-follow-up reason + precedence.
+// E4.1 F4.1.3 additions to the E2.3 queue: follow-up carry-forward feeding
+// the ranking and the overdue-follow-up reason + precedence. The old org
+// ranking-config seam is GONE (E6.6 F6.6.6) — the shipped default order is
+// the only order, pinned below.
 import { describe, expect, it } from "vitest";
 import {
   addDaysIso,
   buildNextBestActions,
-  resolveQueueRankingConfig,
   type NextBestActionsInput,
   type QueueTouchInput,
 } from "./nextBestActions";
@@ -42,24 +42,6 @@ function openCase(id: string, createdAt: string) {
     createdAt,
   };
 }
-
-describe("resolveQueueRankingConfig (F4.1.3 seam)", () => {
-  it("returns null (shipped default) for absent/invalid/incomplete config", () => {
-    expect(resolveQueueRankingConfig(undefined)).toBeNull();
-    expect(resolveQueueRankingConfig(null)).toBeNull();
-    expect(resolveQueueRankingConfig({})).toBeNull();
-    expect(resolveQueueRankingConfig({ order: [] })).toBeNull();
-    expect(resolveQueueRankingConfig({ order: ["bogus"] })).toBeNull();
-    expect(resolveQueueRankingConfig({ order: ["follow_up", "follow_up"] })).toBeNull(); // dupes
-    expect(resolveQueueRankingConfig(42)).toBeNull();
-  });
-
-  it("accepts a valid ordered enabled set", () => {
-    expect(resolveQueueRankingConfig({ order: ["task_due", "follow_up"] })).toEqual({
-      order: ["task_due", "follow_up"],
-    });
-  });
-});
 
 describe("follow-up carry-forward into the queue (F4.1.2/TE-2)", () => {
   it("a date-less latest touch carries the prior follow-up forward", () => {
@@ -119,7 +101,7 @@ describe("follow-up carry-forward into the queue (F4.1.2/TE-2)", () => {
   });
 });
 
-describe("overdue-follow-up precedence + config ranking (F4.1.3/TE-5)", () => {
+describe("overdue-follow-up precedence — the fixed shipped ranking (F6.6.6)", () => {
   // c-task: an overdue task due yesterday. c-fu: an overdue follow-up yesterday.
   const overdueTask = {
     cases: [openCase("c-task", "2026-06-01"), openCase("c-fu", "2026-06-02")],
@@ -146,33 +128,10 @@ describe("overdue-follow-up precedence + config ranking (F4.1.3/TE-5)", () => {
     ],
   };
 
-  it("default: the overdue follow-up outranks an even-earlier overdue task deadline", () => {
+  it("the overdue follow-up outranks an even-earlier overdue task deadline", () => {
     const entries = buildNextBestActions(input(overdueTask));
     // c-fu's follow-up (day -1) is later-dated than c-task's due (day -2), yet
-    // the arrived follow-up jumps the queue by default.
-    expect(entries.map((e) => e.caseId)).toEqual(["c-fu", "c-task"]);
-  });
-
-  it("configured order (task_due first) puts the task deadline above the follow-up", () => {
-    const entries = buildNextBestActions(
-      input({ ...overdueTask, rankingConfig: { order: ["task_due", "follow_up"] } }),
-    );
-    expect(entries.map((e) => e.caseId)).toEqual(["c-task", "c-fu"]);
-  });
-
-  it("a disabled group contributes no signal (case ranks after dated work)", () => {
-    // Disable follow_up: c-fu loses its only signal and drops below the dated task.
-    const entries = buildNextBestActions(
-      input({ ...overdueTask, rankingConfig: { order: ["task_due"] } }),
-    );
-    expect(entries.map((e) => e.caseId)).toEqual(["c-task", "c-fu"]);
-    expect(entries.find((e) => e.caseId === "c-fu")?.deadline).toBeNull();
-  });
-
-  it("invalid config falls back atomically to the shipped default", () => {
-    const entries = buildNextBestActions(
-      input({ ...overdueTask, rankingConfig: resolveQueueRankingConfig({ order: ["nope"] }) }),
-    );
+    // the arrived follow-up jumps the queue — the fixed shipped tier order.
     expect(entries.map((e) => e.caseId)).toEqual(["c-fu", "c-task"]);
   });
 });

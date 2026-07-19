@@ -16,7 +16,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import {
   buildNextBestActions,
-  resolveQueueRankingConfig,
   type QueueEntry,
   type QueueReadinessInput,
   type QueueTouchInput,
@@ -163,7 +162,6 @@ export async function getNextBestAction(
     documentsRes,
     insuranceRes,
     contractsRes,
-    rankingRes,
   ] = await Promise.all([
     db
       .from("credential_cases")
@@ -237,7 +235,6 @@ export async function getNextBestAction(
       .from("contracts")
       .select("group_id, payer_id, state, contracting_status_id")
       .eq("org_id", orgId),
-    db.from("next_best_action_configs").select("ranking").eq("org_id", orgId).maybeSingle(),
   ]);
 
   for (const res of [
@@ -257,7 +254,6 @@ export async function getNextBestAction(
     documentsRes,
     insuranceRes,
     contractsRes,
-    rankingRes,
   ]) {
     if (res.error) throw res.error;
   }
@@ -435,9 +431,6 @@ export async function getNextBestAction(
       name: p.name,
     })),
     readiness,
-    rankingConfig: resolveQueueRankingConfig(
-      (rankingRes.data as { ranking?: unknown } | null)?.ranking ?? null,
-    ),
   });
 
   const top = entries[0];

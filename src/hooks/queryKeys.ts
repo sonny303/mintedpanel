@@ -111,13 +111,9 @@ export const queryKeys = {
   // per-org geography for the state breakdown, and the caller's shares per report.
   orgStates: () => ["org-states"] as const,
   reportShares: (reportKey: string) => ["report-shares", reportKey] as const,
-  // E4.2 Payer & SOP admin module.
-  // Reason-code management reads the full vocabulary (incl. inactive); the
-  // dropdown reader keeps using `denialReasonCodes` above.
-  allDenialReasonCodes: (orgId: string) => ["denial-reason-codes", orgId, "all"] as const,
-  // F4.2.5 org queue ranking config (the read matches useQueueRankingConfig's
-  // inline literal so the settings mutation invalidates the queue derivation).
-  queueRankingConfig: (orgId: string) => ["queue-ranking-config", orgId] as const,
+  // E4.2 Payer & SOP admin module. (The reason-code and queue-ranking editor
+  // keys retired with their editors — E6.6 F6.6.6 fixed defaults; the Denied
+  // dialog's dropdown keeps `denialReasonCodes` above.)
   // F4.2.1 SOP wizard drafts (save-as-draft WIP).
   sopTemplateDrafts: (orgId: string) => ["sop-template-drafts", orgId] as const,
   sopTemplateDraft: (orgId: string, id: string) => ["sop-template-draft", orgId, id] as const,

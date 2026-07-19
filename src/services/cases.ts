@@ -447,9 +447,18 @@ export async function setCaseStatus(input: SetCaseStatusInput): Promise<Credenti
   return withCaseStatusDefault(camelizeRow<CredentialCase>(data));
 }
 
-// E4.0 TE-4 — the active denial/return reason vocabulary: global defaults +
-// this org's added codes (the shared-catalog read pattern). Read-only here;
-// E4.2 owns the management CRUD.
+// E4.0 TE-4 — the active denial/return reason vocabulary (the shared-catalog
+// read pattern: global defaults + any pre-existing org rows).
+//
+// FIXED WORD-LIST (E6.6 F6.6.6): the six global defaults seeded by migration
+// 20260715120200 (Missing Documentation / Network Closed / Demographic
+// Mismatch / Incomplete Application / Credentialing Criteria Not Met / Other)
+// ARE the vocabulary — there is no org editor anywhere; additions or label
+// changes are a PLATFORM change (service-role SQL against
+// `denial_reason_codes`, org_id NULL). Existing org rows on hosted keep
+// resolving here (additive rule — data untouched). This read backs the Denied
+// dialog's required reason, the denial label joins, and the E6.6 denials
+// report.
 export async function listDenialReasonCodes(): Promise<DenialReasonCode[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase

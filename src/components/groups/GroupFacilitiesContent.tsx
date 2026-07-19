@@ -33,7 +33,7 @@ import {
 import { FacilityForm } from "@/components/onboarding/FacilityForm";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
-import { useFacilityAssignments } from "@/hooks/useLaunches";
+import { useProviderAssignments } from "@/hooks/useProviders";
 import { useUpdateFacility } from "@/hooks/useOrgSettings";
 import { fmtDate } from "@/lib/format";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
@@ -47,7 +47,7 @@ type ProviderFilter = "all" | "with" | "without";
 export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
   const facilitiesQ = useFacilities();
   const groupsQ = useProviderGroups();
-  const assignmentsQ = useFacilityAssignments();
+  const assignmentsQ = useProviderAssignments();
   const canWrite = useCanWrite();
   const isAdmin = useIsAdmin();
 

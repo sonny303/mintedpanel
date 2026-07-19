@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
+import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { SsnVaultField } from "@/components/providers/SsnVaultField";
@@ -44,6 +45,7 @@ import {
 } from "@/hooks/useProviders";
 import { useCreateNote, useNotes, useStateLicensesByProvider } from "@/hooks/useLookups";
 import { useCases, useCaseDenialEntries, useDenialReasonCodes } from "@/hooks/useCases";
+import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
 import { providerCaseProgress } from "@/lib/caseRollups";
@@ -541,6 +543,22 @@ function CasesSection({ providerId }: { providerId: string }) {
   const payersQ = usePayers();
   const denialsQ = useCaseDenialEntries();
   const reasonsQ = useDenialReasonCodes();
+  const canWrite = useCanWrite();
+  const [touchOpen, setTouchOpen] = useState(false);
+
+  // F6.6.5 — "Add touch" is THE logging action on the record too: the
+  // provider's open cases feed the same unified dialog the /cases toolbar
+  // uses (one touch per selected case + suggested bumps where implied).
+  const touchCandidates: TouchCaseCandidate[] = useMemo(() => {
+    const payerName = new Map((payersQ.data ?? []).map((p) => [p.id, p.name]));
+    return (casesQ.data ?? [])
+      .filter((c) => c.providerId === providerId && isOpenCaseStatus(c.caseStatus))
+      .map((c) => ({
+        id: c.id,
+        label: `${payerName.get(c.payerId) ?? "—"} · ${c.state}`,
+        currentStatus: c.caseStatus,
+      }));
+  }, [casesQ.data, payersQ.data, providerId]);
 
   const rows = useMemo(() => {
     const payerName = new Map((payersQ.data ?? []).map((p) => [p.id, p.name]));
@@ -576,7 +594,28 @@ function CasesSection({ providerId }: { providerId: string }) {
     );
   }
   return (
-    <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
+    <div className="space-y-2">
+      {canWrite && touchCandidates.length > 0 ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setTouchOpen(true)}
+          >
+            Add touch
+          </Button>
+        </div>
+      ) : null}
+      {touchOpen ? (
+        <AddTouchDialog
+          open={touchOpen}
+          candidates={touchCandidates}
+          onClose={() => setTouchOpen(false)}
+        />
+      ) : null}
+      <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
       {rows.map((r) => (
         <li key={r.id} className="px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -601,7 +640,8 @@ function CasesSection({ providerId }: { providerId: string }) {
           ) : null}
         </li>
       ))}
-    </ul>
+      </ul>
+    </div>
   );
 }
 

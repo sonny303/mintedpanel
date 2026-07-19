@@ -152,18 +152,33 @@ describe("denial rollup", () => {
     ["c1", { reasonLabel: "Panel closed", deniedAt: "2026-07-01T00:00:00Z" }],
   ]);
 
-  it("rolls up only currently-Denied cases, with reason + date where known", () => {
+  it("rolls up currently-Denied cases as standing, with reason + date where known", () => {
     const rows = buildDenialRows(cases, info);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ caseId: "c1", reasonLabel: "Panel closed" });
-    expect(rows[1]).toMatchObject({ caseId: "c3", reasonLabel: null });
+    expect(rows[0]).toMatchObject({
+      caseId: "c1",
+      reasonLabel: "Panel closed",
+      cycleState: "standing",
+    });
+    expect(rows[1]).toMatchObject({ caseId: "c3", reasonLabel: null, cycleState: "standing" });
   });
 
-  it("a reapplied case (back to In Progress) leaves the rollup", () => {
+  it("a reapplied case (back to In Progress) stays with cycleState reapplied (F6.6.3)", () => {
     const reapplied = cases.map((c) =>
       c.id === "c1" ? { ...c, status: "in_progress" as const } : c,
     );
-    expect(buildDenialRows(reapplied, info).map((r) => r.caseId)).toEqual(["c3"]);
+    const rows = buildDenialRows(reapplied, info);
+    expect(rows.map((r) => r.caseId)).toEqual(["c1", "c3"]);
+    expect(rows[0]).toMatchObject({
+      cycleState: "reapplied",
+      currentStatus: "in_progress",
+      reasonLabel: "Panel closed",
+    });
+  });
+
+  it("a never-denied case with no denial history never joins the rollup", () => {
+    // c2 is approved with no denial entry — absent from info, absent from rows.
+    expect(buildDenialRows(cases, info).map((r) => r.caseId)).not.toContain("c2");
   });
 
   it("pivots provider-first and payer-first", () => {
