@@ -87,6 +87,7 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 3. **R7 epic authoring** — platform payer-catalog administration + the platform-role hardening deferred from E6.5, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the E6 wave.
 4. **Main promotion** — #189 (redesign → main plain sync, not the production cut) MERGED by the PM 2026-07-19; next sync after the E6 wave lands.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
+6. **User-facing wiki (Devin)** — PM directive 2026-07-19: stand up a wiki and keep it updated for the content the E6 wave impacts; the app walkthrough (per-sidebar-item, journey-oriented) lives there, plus a "Where did it go?" page derived from the E6.1 retirement ledger. Suggested home is in-repo (`docs/wiki/`) so each E6.x build PR updates its own impacted pages as part of the merge, with a final sweep at E6.6 — but the home and mechanism are Devin's call. Companion artifact: the PM's E6 Training/UAT workbook (per-menu walkthroughs, journey map, automated-vs-manual coverage matrix) is maintained by the review session and can seed the walkthrough pages.
 
 Done since last refresh: hosted operator run complete (all five R6 migrations verified on hosted, types regen #187); full data wipe confirmed complete/verified by the PM — the one-time AGENTS.md ledger carve-out is expired.
 
