@@ -1,6 +1,6 @@
 // E6.1 F6.1.4/F6.1.5 / TS-107 — the slim Org Detail container over the mock
 // harness: exactly the container content (org summary, contacts, People
-// Enroll, relocated member management, capture-link re-issue) plus the
+// Enroll, relocated member management — the capture-link card is gone) plus
 // Finish-setup banner while the one-time wizard is incomplete — and never
 // after it completes. The Organization-data summaries render on the Groups
 // shell instead. No Onboarding nav entry exists; the wizard is entered via
@@ -356,13 +356,15 @@ test("TS-107: Org Detail carries only the container content, member management w
   await page.goto("/org-detail");
   await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  // The container content (F6.1.4): summary + contacts, People Enroll, the
-  // relocated member management, and the capture-link re-issue panel.
+  // The container content (F6.1.4): summary + contacts, People Enroll, and
+  // the relocated member management. The capture-link re-issue card was
+  // removed from MVP by user request (2026-07-19) — /onboarding's share
+  // journey is the remaining operator surface.
   await expect(page.getByRole("heading", { name: "Organization summary" })).toBeVisible();
   await expect(page.getByText("Coach Eric Taylor").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "People Enroll" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Invite member" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Data capture link" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Data capture link" })).toHaveCount(0);
 
   // The Organization-data freight is gone (it lives on the Groups shell).
   await expect(page.getByRole("heading", { name: "Provider groups" })).toHaveCount(0);
