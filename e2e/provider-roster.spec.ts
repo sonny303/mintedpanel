@@ -352,6 +352,16 @@ test("TS-33: first provider — CAQH baseline + group assignment → Complete + 
   await expect(dialog.locator("#prov-email")).toBeVisible();
   await expect(dialog.locator("#prov-phone")).toBeVisible();
 
+  // Malpractice moved to the provider GROUP form (user request 2026-07-19).
+  await expect(dialog.getByRole("heading", { name: "Malpractice coverage" })).toHaveCount(0);
+
+  // License date fields get ≥150px so the native picker icon never clips
+  // (user-reported 2026-07-19 — the old 4-equal-column row starved them).
+  await dialog.getByRole("button", { name: "Add license" }).click();
+  const issued = dialog.locator("#lic-0-issue");
+  await expect(issued).toBeVisible();
+  expect((await issued.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(150);
+
   await dialog.getByLabel("Assign Tree Hill Sports Therapy LLC").click();
   await dialog.locator("#prov-first").fill("Nathan");
   await dialog.locator("#prov-last").fill("Scott");
