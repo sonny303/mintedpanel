@@ -80,9 +80,9 @@ function OnboardingWizardPage() {
       <PageHeader
         title="Onboarding"
         actions={
-          <Link to="/get-started" className={buttonVariants({ variant: "outline" })}>
+          <Link to="/org-detail" className={buttonVariants({ variant: "outline" })}>
             <ArrowLeft className="h-4 w-4" />
-            Account Detail
+            Org Detail
           </Link>
         }
       />

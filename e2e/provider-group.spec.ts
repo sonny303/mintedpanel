@@ -225,7 +225,7 @@ function seedAuth(
   );
 }
 
-test("TS-29: single-group capture — save flips the section, dual-path exits, Account Detail summary", async ({
+test("TS-29: single-group capture — save flips the section, dual-path exits, Groups summary", async ({
   context,
   page,
 }) => {
@@ -266,9 +266,13 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, A
   // The wizard-level next action advances past the group section.
   await expect(page.getByRole("button", { name: "Next: Facilities" }).first()).toBeVisible();
 
-  // F1.1.3: Account Detail shows the read-only summary, no edit affordances.
-  await page.goto("/get-started");
-  const summary = page.locator("main").getByText("Provider groups").locator("..");
+  // F1.1.3 (re-homed by E6.1 F6.1.4): the read-only summary lives on the
+  // Groups shell, no edit affordances.
+  await page.goto("/groups");
+  const summary = page
+    .locator("main")
+    .getByRole("heading", { name: "Provider groups" })
+    .locator("..");
   await expect(summary).toContainText("Tree Hill Sports Therapy LLC", { timeout: 30000 });
   await expect(summary).toContainText("TIN 12-3456789");
   await expect(summary.getByRole("button", { name: /Edit|Add/ })).toHaveCount(0);

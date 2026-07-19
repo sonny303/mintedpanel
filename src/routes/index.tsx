@@ -21,12 +21,12 @@ export const Route = createFileRoute("/")({
       throw redirect({ to: "/reporting/portfolio", replace: true });
     }
     if (decision.kind === "workspace") {
-      // Redesign E0.4 TE-1: land in the last-active (or most-recent) org workspace,
-      // superseding E0.0's flat /portfolio default. first-run / all-inactive fall
-      // through to the Reporting Center's Portfolio report (E0.6 TE-3; NoOrgScreen
-      // renders there when memberships are 0).
+      // Redesign E0.4 TE-1: land in the last-active (or most-recent) org
+      // workspace — since E6.1 F6.1.2 that means the Cases surface. first-run /
+      // all-inactive fall through to the Reporting Center's Portfolio report
+      // (E0.6 TE-3; NoOrgScreen renders there when memberships are 0).
       setActiveOrg(decision.orgId);
-      throw redirect({ to: "/get-started", replace: true });
+      throw redirect({ to: "/cases", replace: true });
     }
     throw redirect({ to: "/reporting/portfolio", replace: true });
   },

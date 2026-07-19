@@ -1,10 +1,12 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E0.9 F0.9.6 / TS-23 — legacy-route sweep over the mock harness. The IA v2
-// restructure (F0.9.3) re-homed /cases, /admin/payers and /admin/settings into
-// the nav; every other flat route that leaves or never had a nav entry must
-// stay URL-reachable (renders) or redirect — no dead ends (E0.0 TD-2 / E0.6
-// TD-1 close-out). This spec pins that behavior so it cannot rot.
+// E6.1 F6.1.6 / TS-106 + TS-120 — the wholesale redirect table over the mock
+// harness. The six-item restructure retires sixteen surfaces; every retired
+// route redirects to its job's new home (interim homes where the final target
+// is a sibling epic's — E6.2/E6.3 generation, E6.5 Payer Setup module, E6.6
+// reports), and no legacy URL dead-ends (the E0.4 rule). Param preservation
+// is pinned for the named set (?section=, the ?payerId/state/groupId match
+// key, ?draftId) per TS-120. Supersedes the E0.9 TS-23 sweep's route sets.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -93,49 +95,79 @@ function seedAuth(context: {
   );
 }
 
-// Routes that must RENDER (a page heading appears, no router dead end).
-// /cases, /admin/payers, /admin/settings are the F0.9.6 re-homed nav routes;
-// the rest are the enumerated legacy set that stays URL-reachable on purpose.
+// Routes that must RENDER (a page heading appears, no router dead end): the
+// six nav destinations + the still-live working sub-surfaces (the templates
+// wizard is the SOP-templates tab's authoring flow until E6.5; /import/$runId
+// reviews in-flight staged runs; /admin/audit re-homes with E6.6).
 const RENDERING_ROUTES = [
   "/cases",
-  "/admin/settings",
-  "/home",
+  "/admin/payer-admin",
+  "/reporting",
+  "/org-detail",
+  "/groups",
   "/providers",
-  "/launches",
   "/reports",
-  "/fix-it",
-  "/client-progress",
   "/admin/audit",
-  "/admin/import",
-  "/admin/mso-routing",
-  "/admin/portals",
-  "/admin/templates",
-  // E2.3 activated the reserved /work slot as the My Cases queue.
-  "/work",
+  "/admin/templates/new",
+  "/onboarding",
+  "/onboarding/wizard",
 ];
 
-// Routes that must REDIRECT (old links live — E0.4 rule).
+// The F6.1.6 redirect table (old → new). Every retired route redirects to its
+// job's new home; interim homes stand in where the final target is a sibling
+// epic's (noted inline). Old links live — never a dead end.
 const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
-  { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
-  { from: "/progress", to: /\/client-progress\/?$/ },
-  { from: "/admin/sops", to: /\/admin\/templates\/?$/ },
-  // E4.2 TE-18/TE-19 — Admin → Payers consolidated into the Payer Setup
-  // workspace (the /admin/sops redirect-shell precedent).
+  // E6.1's own retirements.
+  { from: "/home", to: /\/cases\/?$/ },
+  { from: "/work", to: /\/cases\/?$/ },
+  { from: "/work?run=run-1", to: /\/cases\?run=run-1$/ },
+  { from: "/get-started", to: /\/org-detail\/?$/ },
+  { from: "/admin/settings", to: /\/org-detail\/?$/ },
+  { from: "/scope", to: /\/onboarding\/wizard\/?$/ },
+  { from: "/outcomes", to: /\/reporting\/?$/ },
+  { from: "/soon?title=Facilities", to: /\/reporting\/?$/ },
+  // Deprecated owner views → Reporting Center (E6.6 lands the reports).
+  { from: "/client-progress", to: /\/reporting\/?$/ },
+  { from: "/progress", to: /\/reporting\/?$/ },
+  { from: "/launches", to: /\/reporting\/?$/ },
+  // Imports live with data (E6.4 carries them; wizard uploads meanwhile).
+  { from: "/admin/import", to: /\/providers\/?$/ },
+  // Payer Setup consolidations (E6.5 finalizes the module).
+  { from: "/fix-it", to: /\/admin\/payer-admin\?tab=needs-attention$/ },
+  { from: "/admin/mso-routing", to: /\/admin\/payer-admin\?tab=catalog$/ },
+  { from: "/admin/portals", to: /\/admin\/payer-admin\?tab=forms$/ },
+  { from: "/admin/portals?payerId=pay-77", to: /\/admin\/payer-admin\?.*payerId=pay-77/ },
+  { from: "/admin/templates", to: /\/admin\/payer-admin\?tab=templates$/ },
+  { from: "/admin/sops", to: /\/admin\/payer-admin\?tab=templates$/ },
+  { from: "/payer-directory", to: /\/admin\/payer-admin\?tab=catalog$/ },
+  { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\?tab=forms$/ },
   { from: "/admin/payers", to: /\/admin\/payer-admin\/?$/ },
-  // E6.0 F6.0.1 — the Statuses config page is retired (the case status list
-  // is fixed and code-owned; no per-org status CRUD anywhere).
+  // Generation re-homes on the group's Payer Network (E6.2/E6.3).
+  { from: "/generation", to: /\/groups\/?$/ },
+  { from: "/generation/runs", to: /\/groups\/?$/ },
+  { from: "/generation/runs/run-1", to: /\/groups\/?$/ },
+  // Pre-E6.1 stubs, retargeted or preserved.
+  { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
   { from: "/admin/statuses", to: /\/cases\/?$/ },
+  { from: "/admin/sops/tpl-1", to: /\/admin\/templates\/tpl-1\/?$/ },
 ];
 
-// Reserved destinations render the shared not-yet-available state.
-const RESERVED_ROUTES = [
-  { path: "/soon?title=Facilities", title: "Facilities" },
-  { path: "/soon?title=Providers", title: "Providers" },
-  { path: "/scope", title: "Scope" },
-  { path: "/outcomes", title: "Outcomes" },
+// TS-120 — the named param-preservation set, honored at the destination:
+//   ?section=            a wizard section deep link (via the retired /scope)
+//   ?payerId/state/groupId  the "Needs SOP" match-key trio (templates wizard)
+//   ?draftId             a template draft resume (templates wizard)
+// The wizard sub-routes still render (the SOP-templates tab's authoring flow),
+// so the match-key/draft URLs are pinned as rendering-with-params.
+const PARAM_PRESERVING: Array<{ from: string; to: RegExp }> = [
+  { from: "/scope?section=payer_network", to: /\/onboarding\/wizard\?section=payer_network$/ },
+  {
+    from: "/admin/templates/new?payerId=pay-1&state=NC&groupId=g-1",
+    to: /\/admin\/templates\/new\?.*payerId=pay-1.*state=NC.*groupId=g-1/,
+  },
+  { from: "/admin/templates/new?draftId=draft-1", to: /\/admin\/templates\/new\?draftId=draft-1/ },
 ];
 
-test.describe("legacy-route sweep (F0.9.6 / TS-23)", () => {
+test.describe("legacy-route sweep (E6.1 F6.1.6 / TS-106, TS-120)", () => {
   test.beforeEach(async ({ context }) => {
     await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
     await seedAuth(context);
@@ -156,12 +188,11 @@ test.describe("legacy-route sweep (F0.9.6 / TS-23)", () => {
     });
   }
 
-  for (const { path, title } of RESERVED_ROUTES) {
-    test(`${path} shows the shared not-yet-available state`, async ({ page }) => {
-      await page.goto(path);
-      await expect(page.getByText(`${title} isn't available yet`)).toBeVisible({
-        timeout: 30000,
-      });
+  for (const { from, to } of PARAM_PRESERVING) {
+    test(`${from} preserves its params (TS-120)`, async ({ page }) => {
+      await page.goto(from);
+      await expect(page).toHaveURL(to, { timeout: 30000 });
+      await expect(page.locator("main h1, h1").first()).toBeVisible({ timeout: 30000 });
     });
   }
 });

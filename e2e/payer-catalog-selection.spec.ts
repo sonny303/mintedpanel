@@ -212,7 +212,9 @@ test("admin adds a canonical payer by alias → Added + Configure credentialing 
   await seedAuth(context);
 
   await page.goto("/payer-directory");
-  await expect(page.getByRole("heading", { name: "Payer Directory" })).toBeVisible({
+  // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
+  // Setup workspace's Catalog tab (browse preserved for all roles).
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
 

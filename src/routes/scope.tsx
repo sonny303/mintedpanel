@@ -1,19 +1,26 @@
-// Reserved org-scoped route (redesign E0.0, feature F0.0.1 / F0.0.6). "Scope"
-// is a Stage 1+ journey slot; content is not built yet, so it renders the
-// shared "not yet available" empty state.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { NotYetAvailable } from "@/components/empty/NotYetAvailable";
+// E6.1 F6.1.6 (2026-07-19) — the reserved E0.0 "Scope" journey slot retires;
+// its job (defining the org's scope) lives in the one-time onboarding wizard.
+// A ?section= deep link is preserved so scoped links land focused on their
+// section (TS-120). This URL stays alive as a redirect (legacy URLs never
+// dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { ACTIVE_SECTIONS, type ActiveSectionKey } from "@/lib/onboardingProgress";
+
+interface ScopeSearch {
+  section?: ActiveSectionKey;
+}
 
 export const Route = createFileRoute("/scope")({
-  component: ScopePage,
+  validateSearch: (search: Record<string, unknown>): ScopeSearch => {
+    const raw = typeof search.section === "string" ? search.section : undefined;
+    const match = ACTIVE_SECTIONS.find((s) => s.key === raw);
+    return match ? { section: match.key } : {};
+  },
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      to: "/onboarding/wizard",
+      search: search.section ? { section: search.section } : {},
+      replace: true,
+    });
+  },
 });
-
-function ScopePage() {
-  return (
-    <div>
-      <PageHeader title="Scope" />
-      <NotYetAvailable title="Scope" />
-    </div>
-  );
-}

@@ -1,29 +1,10 @@
-// E2.4 F2.4.1 — one run's detail: every candidate row's disposition and
-// reason exactly as recorded at confirm time. Deep-linked from case detail
-// (F2.4.2) and the run list.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { RunDetailContent } from "@/components/generation/RunDetailContent";
+// E6.1 F6.1.6 (2026-07-19) — retired with the /generation surface; the
+// parent generation_.runs route throws the redirect. Kept as a stub per the
+// no-deleted-route-files rule.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/generation_/runs/$runId")({
-  component: RunDetailPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/groups", replace: true });
+  },
 });
-
-function RunDetailPage() {
-  const { runId } = Route.useParams();
-  return (
-    <div className="max-w-5xl">
-      <PageHeader
-        title="Generation run"
-        description="The immutable record of this batch — dispositions and reasons as decided at confirm time."
-        actions={
-          <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/generation/runs">Run history</Link>
-          </Button>
-        }
-      />
-      <RunDetailContent runId={runId} />
-    </div>
-  );
-}

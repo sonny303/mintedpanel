@@ -20,9 +20,11 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
+import { Route as OrgDetailRouteImport } from './routes/org-detail'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as GroupsRouteImport } from './routes/groups'
 import { Route as GetStartedRouteImport } from './routes/get-started'
 import { Route as GenerationRouteImport } from './routes/generation'
 import { Route as FixItRouteImport } from './routes/fix-it'
@@ -128,6 +130,11 @@ const OutcomesRoute = OutcomesRouteImport.update({
   path: '/outcomes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrgDetailRoute = OrgDetailRouteImport.update({
+  id: '/org-detail',
+  path: '/org-detail',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -141,6 +148,11 @@ const LaunchesRoute = LaunchesRouteImport.update({
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsRoute = GroupsRouteImport.update({
+  id: '/groups',
+  path: '/groups',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GetStartedRoute = GetStartedRouteImport.update({
@@ -399,9 +411,11 @@ export interface FileRoutesByFullPath {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
+  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -463,8 +477,10 @@ export interface FileRoutesByTo {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
+  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -522,9 +538,11 @@ export interface FileRoutesById {
   '/fix-it': typeof FixItRoute
   '/generation': typeof GenerationRoute
   '/get-started': typeof GetStartedRoute
+  '/groups': typeof GroupsRoute
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -589,9 +607,11 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
+    | '/groups'
     | '/home'
     | '/launches'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -653,8 +673,10 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
+    | '/groups'
     | '/home'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -711,9 +733,11 @@ export interface FileRouteTypes {
     | '/fix-it'
     | '/generation'
     | '/get-started'
+    | '/groups'
     | '/home'
     | '/launches'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -777,9 +801,11 @@ export interface RootRouteChildren {
   FixItRoute: typeof FixItRoute
   GenerationRoute: typeof GenerationRoute
   GetStartedRoute: typeof GetStartedRoute
+  GroupsRoute: typeof GroupsRoute
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  OrgDetailRoute: typeof OrgDetailRoute
   OutcomesRoute: typeof OutcomesRoute
   PayerDirectoryRoute: typeof PayerDirectoryRoute
   PortfolioRoute: typeof PortfolioRoute
@@ -896,6 +922,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OutcomesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/org-detail': {
+      id: '/org-detail'
+      path: '/org-detail'
+      fullPath: '/org-detail'
+      preLoaderRoute: typeof OrgDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -915,6 +948,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups': {
+      id: '/groups'
+      path: '/groups'
+      fullPath: '/groups'
+      preLoaderRoute: typeof GroupsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/get-started': {
@@ -1385,9 +1425,11 @@ const rootRouteChildren: RootRouteChildren = {
   FixItRoute: FixItRoute,
   GenerationRoute: GenerationRoute,
   GetStartedRoute: GetStartedRoute,
+  GroupsRoute: GroupsRoute,
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  OrgDetailRoute: OrgDetailRoute,
   OutcomesRoute: OutcomesRoute,
   PayerDirectoryRoute: PayerDirectoryRoute,
   PortfolioRoute: PortfolioRoute,

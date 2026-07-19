@@ -126,7 +126,8 @@ export function NextBestActionQueue({ run }: { run?: string }) {
   }
 
   const entries = filterQueueToRun(queue.entries, run);
-  const showAll = () => navigate({ to: "/work", search: {} });
+  // E6.1 F6.1.3 — the queue lives on the merged Cases surface's to-do pivot.
+  const showAll = () => navigate({ to: "/cases", search: {} });
 
   return (
     <div className="space-y-4">
@@ -172,8 +173,11 @@ export function NextBestActionQueue({ run }: { run?: string }) {
               Show all work
             </Button>
           ) : (
+            // E6.1 F6.1.6 — /generation is retired; generation re-homes on
+            // the group's Payer Network (E6.2/E6.3). Interim: the Groups
+            // shell carries the payer-network pointer.
             <Button asChild size="sm" className="mt-3 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
-              <Link to="/generation">Generate applications</Link>
+              <Link to="/groups">Set up payers &amp; generation</Link>
             </Button>
           )}
         </div>

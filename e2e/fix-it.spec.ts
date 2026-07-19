@@ -1,8 +1,11 @@
-// E4.3a — form-drift repair signal over the mock harness. The last real fill
-// reported two trained selectors as "field not found on this page"; the Fix-it
-// queue surfaces ONE consolidated "Form drift" card, and "Send to training"
-// re-proposes the org's own broken mappings (write-through PATCH) and hands the
-// user to the exact training surface. Non-drift skip reasons never raise a card.
+// E4.3a — form-drift repair signal over the mock harness. Since E6.1 F6.1.6
+// the deck lives on the Payer Setup workspace's "Needs attention" tab
+// (/fix-it redirects there) and the training hand-off lands on the Forms &
+// portals tab (the standalone training deck retired; E6.5 rebuilds training
+// in the SOP step editor). The last real fill reported two trained selectors
+// as "field not found on this page"; the deck surfaces ONE consolidated
+// "Form drift" card, and "Send to training" re-proposes the org's own broken
+// mappings (write-through PATCH). Non-drift skip reasons never raise a card.
 import { test, expect, type Route } from "@playwright/test";
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -247,7 +250,11 @@ test("form-drift repair card sends the org's broken mappings back to training", 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_ID);
 
+  // The retired /fix-it URL redirects into the needs-attention tab.
   await page.goto("/fix-it");
+  await expect(page).toHaveURL(/\/admin\/payer-admin\?tab=needs-attention$/, {
+    timeout: 30000,
+  });
 
   // ONE consolidated "Form drift" card for the portal: exactly the two
   // not-found selectors (the "no value" and "manual" skips do not count).
@@ -261,28 +268,14 @@ test("form-drift repair card sends the org's broken mappings back to training", 
   await page.getByRole("button", { name: "Send to training" }).click();
   await expect(page.getByText("2 fields sent back to training")).toBeVisible({ timeout: 15000 });
 
-  // The card opens the exact training surface for this portal…
-  await expect(page).toHaveURL(new RegExp(`/portals/${PORTAL_KEY}/train`));
+  // The card hands off to the Forms & portals tab (the training deck's
+  // interim home until E6.5's in-editor training)…
+  await expect(page).toHaveURL(/\/admin\/payer-admin\?tab=forms$/);
   // …and both org rows were re-proposed (write-through PATCH), never global.
   const maps = fixtures.portal_field_maps;
   expect(maps.every((m) => m.status === "proposed")).toBe(true);
   expect(maps.every((m) => m.source === "token")).toBe(true);
 });
 
-test("the Home Fix-it preview renders the form-drift row, not a blank row", async ({
-  context,
-  page,
-}) => {
-  const fixtures = makeFixtures();
-  const { handler } = makeHandler(fixtures);
-  await context.route(/\/(rest|auth)\/v1\//, handler);
-  await seedAuth(context, ORG_ID);
-
-  // The Fix-it session summary lands the specialist back on Home; the top-3
-  // preview must render a broken_mapping card with real text, not the empty
-  // "· " row a missing card-kind branch would produce.
-  await page.goto("/home");
-  const row = page.getByRole("link").filter({ hasText: "Form drift" });
-  await expect(row).toBeVisible({ timeout: 30000 });
-  await expect(row).toContainText("BCBS Kansas Enrollment");
-});
+// (The former Home Fix-it preview retired with /home — E6.1 F6.1.2; the
+// drift card's rendering is covered by the deck test above.)

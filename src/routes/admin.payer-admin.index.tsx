@@ -3,22 +3,25 @@
 // which payers are selected, which group/state targets exist, which targets
 // have payer SOP coverage, which providers are blocked, which forms are
 // untrained, the single next action per payer, and whether generation preview
-// is safe to open. Five areas composed over the EXISTING feature components —
-// Setup (the per-payer funnel), Catalog (the shared PayerCatalogBrowser, also
-// served standalone at /payer-directory), SOP templates (the shared
-// TemplatesList; wizard routes unchanged), Forms & portals (the shared
-// PortalsRegistry; registry URL stays /admin/portals), and Organization
-// settings (payer-relevant org settings ONLY, per the PM scope decision:
-// reason codes, queue settings, org_payer_settings resolution IDs — never the
-// general /admin/settings panels). The tab rides the URL (?tab=) so legacy
-// redirects and deep links land on a specific area. Admin/config-role gated;
-// non-admins are denied at the route but keep the standalone catalog browse.
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+// is safe to open. Six areas composed over the EXISTING feature components —
+// Setup (the per-payer funnel), Catalog (the shared PayerCatalogBrowser —
+// since E6.1 the retired /payer-directory redirects here too), SOP templates
+// (the shared TemplatesList; wizard routes unchanged), Forms & portals (the
+// shared PortalsRegistry; the retired /admin/portals redirects here with its
+// ?payerId= context), Needs attention (the Fix-it deck, E6.1 interim home
+// until E6.5's drift-repair-in-the-editor), and Organization settings
+// (payer-relevant org settings ONLY: reason codes, queue settings,
+// org_payer_settings resolution IDs). The tab rides the URL (?tab=) so legacy
+// redirects and deep links land on a specific area.
+//
+// E6.1 F6.1.1: Payer Setup renders for ALL roles for now (two trusted users;
+// revisit at the third hire) — the former admin-only route denial is gone.
+// Write affordances keep their own role gates (useIsAdmin/useCanWrite inside
+// the composed components) and RLS backstops every write.
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState } from "@/components/EmptyState";
 import { PayerSetupList } from "@/components/payer-admin/PayerSetupList";
 import { ReasonCodeManager } from "@/components/payer-admin/ReasonCodeManager";
 import { QueueSettingsPanel } from "@/components/payer-admin/QueueSettingsPanel";
@@ -26,13 +29,23 @@ import { ResolutionIdSettingsSection } from "@/components/payer-admin/Resolution
 import { PayerCatalogBrowser } from "@/components/payers/PayerCatalogBrowser";
 import { PortalsRegistry } from "@/components/portals/PortalsRegistry";
 import { TemplatesList } from "@/components/templates/TemplatesList";
-import { useIsAdmin } from "@/lib/permissions";
+import { FixitDeck } from "@/components/fixit/FixitDeck";
 
-const WORKSPACE_TABS = ["setup", "catalog", "templates", "forms", "org-settings"] as const;
+const WORKSPACE_TABS = [
+  "setup",
+  "catalog",
+  "templates",
+  "forms",
+  "needs-attention",
+  "org-settings",
+] as const;
 type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 interface PayerAdminSearch {
   tab?: WorkspaceTab;
+  /** Payer-context deep link for the Forms & portals tab (the retired
+   * /admin/portals ?payerId= contract — opens Add portal preselected). */
+  payerId?: string;
 }
 
 export const Route = createFileRoute("/admin/payer-admin/")({
@@ -40,32 +53,15 @@ export const Route = createFileRoute("/admin/payer-admin/")({
     tab: WORKSPACE_TABS.includes(search.tab as WorkspaceTab)
       ? (search.tab as WorkspaceTab)
       : undefined,
+    payerId: typeof search.payerId === "string" ? search.payerId : undefined,
   }),
   component: PayerAdminPage,
 });
 
 function PayerAdminPage() {
-  const isAdmin = useIsAdmin();
   const navigate = useNavigate({ from: "/admin/payer-admin" });
-  const { tab } = Route.useSearch();
+  const { tab, payerId } = Route.useSearch();
   const activeTab: WorkspaceTab = tab ?? "setup";
-
-  if (!isAdmin) {
-    return (
-      <div>
-        <PageHeader title="Payer Setup" description="Upstream configuration for payers and SOPs." />
-        <EmptyState
-          message="This admin module is available to administrators only."
-          description="You can still browse the global payer catalog read-only."
-          action={
-            <Button asChild variant="outline" size="sm">
-              <Link to="/payer-directory">Browse payer catalog</Link>
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -88,6 +84,7 @@ function PayerAdminPage() {
           <TabsTrigger value="catalog">Catalog</TabsTrigger>
           <TabsTrigger value="templates">SOP templates</TabsTrigger>
           <TabsTrigger value="forms">Forms &amp; portals</TabsTrigger>
+          <TabsTrigger value="needs-attention">Needs attention</TabsTrigger>
           <TabsTrigger value="org-settings">Organization settings</TabsTrigger>
         </TabsList>
         <TabsContent value="setup" className="pt-4">
@@ -100,7 +97,12 @@ function PayerAdminPage() {
           <TemplatesList />
         </TabsContent>
         <TabsContent value="forms" className="pt-4">
-          <PortalsRegistry />
+          <PortalsRegistry initialAddPayerId={payerId ?? null} />
+        </TabsContent>
+        <TabsContent value="needs-attention" className="pt-4">
+          {/* E6.1 F6.1.6 — the Fix-it deck's interim home (/fix-it redirects
+              here); E6.5 supersedes it with drift repair inside the editor. */}
+          <FixitDeck />
         </TabsContent>
         <TabsContent value="org-settings" className="pt-4">
           {/* Payer-relevant organization settings only (PM decision) — each

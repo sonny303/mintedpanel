@@ -1,13 +1,9 @@
-// Admin → Portals (Surface 3). The registry body is the shared PortalsRegistry
-// (E4.2 unified payer setup, TE-19 — also composed by the Payer Setup
-// workspace's "Forms & portals" tab). `?payerId=` is the payer-context deep
-// link the setup funnel's "Register portal" action uses: it opens the Add
-// dialog with that payer preselected (admins only — the dialog control never
-// renders for other roles). The portal registry URL stays semantically
-// separate from the payer catalog.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { PortalsRegistry } from "@/components/portals/PortalsRegistry";
+// E6.1 F6.1.6 (2026-07-19) — the standalone Portals registry page retires
+// into the Payer Setup workspace's "Forms & portals" tab (the same shared
+// PortalsRegistry body). The ?payerId= payer-context deep link (the setup
+// funnel's "Register portal" action) is preserved through the redirect.
+// E6.5 folds portal registration/capture/train into the SOP form step.
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 interface PortalsSearch {
   payerId?: string;
@@ -17,18 +13,11 @@ export const Route = createFileRoute("/admin/portals")({
   validateSearch: (search: Record<string, unknown>): PortalsSearch => ({
     payerId: typeof search.payerId === "string" ? search.payerId : undefined,
   }),
-  component: AdminPortalsPage,
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      to: "/admin/payer-admin",
+      search: { tab: "forms", ...(search.payerId ? { payerId: search.payerId } : {}) },
+      replace: true,
+    });
+  },
 });
-
-function AdminPortalsPage() {
-  const { payerId } = Route.useSearch();
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Portals"
-        description="Payer portals the extension can fill — URLs, field maps, and verification."
-      />
-      <PortalsRegistry initialAddPayerId={payerId ?? null} />
-    </div>
-  );
-}

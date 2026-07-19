@@ -31,7 +31,8 @@ export const QUEUE_RANKING_GROUP_HINTS: Record<QueueRankingGroup, string> = {
 
 /** The shipped default order, made explicit for the settings UI's initial
  * state and the "Reset to default" preview. Mirrors the comparator inside
- * `buildNextBestActions` (follow-ups first, then the rest by earliest date). */
+ * `buildNextBestActions` (E6.1 F6.1.3 default tiers: arrived follow-ups →
+ * task due dates → provider start dates → launch dates/the rest by date). */
 export const DEFAULT_QUEUE_RANKING_ORDER: QueueRankingGroup[] = [
   "follow_up",
   "task_due",
