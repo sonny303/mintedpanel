@@ -26,7 +26,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { usePayerSetup } from "@/hooks/usePayerSetup";
 import { useOrgPayerSetting } from "@/hooks/useOrgPayerSettings";
-import { useSetStarter } from "@/hooks/useOrgPayerAssignments";
 import { useRole } from "@/lib/auth-store";
 import type { NextAction, PayerSetupRow } from "@/lib/payerSetup";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
@@ -243,44 +242,6 @@ function NextActionCell({
   }
 }
 
-function StarterToggle({
-  assignment,
-  payerName,
-  canEdit,
-}: {
-  assignment: OrgPayerAssignment | null;
-  payerName: string;
-  canEdit: boolean;
-}) {
-  const setStarter = useSetStarter();
-  // Every included row carries an active assignment by construction; the null
-  // guard is defensive. Non-admins never see a control they can't complete.
-  if (!assignment) return <span className="text-[12px] text-muted-foreground">—</span>;
-  if (!canEdit) {
-    return (
-      <span className="text-[12px] text-muted-foreground">
-        {assignment.starter ? "Starter" : "—"}
-      </span>
-    );
-  }
-  return (
-    <Switch
-      checked={assignment.starter}
-      disabled={setStarter.isPending}
-      aria-label={`Toggle starter pack for ${payerName}`}
-      onCheckedChange={(v) =>
-        setStarter.mutate(
-          { payerId: assignment.payerId, starter: v },
-          {
-            onSuccess: () =>
-              toast.success(v ? "Added to starter pack" : "Removed from starter pack"),
-            onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
-          },
-        )
-      }
-    />
-  );
-}
 
 // Per-state readiness detail (the former payer × state matrix, scoped to one
 // payer) + the org-owned governance flags.
@@ -348,14 +309,6 @@ function SetupDetailRow({ row, canEdit }: { row: PayerSetupRow; canEdit: boolean
               configured.
             </p>
           )}
-          <div className="flex items-center gap-2 text-[12.5px]">
-            <span className="text-muted-foreground">Starter pack:</span>
-            <StarterToggle
-              assignment={row.assignment}
-              payerName={row.payer.name}
-              canEdit={canEdit}
-            />
-          </div>
         </div>
       </td>
     </tr>

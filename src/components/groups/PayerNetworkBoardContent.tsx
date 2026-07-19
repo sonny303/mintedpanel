@@ -111,7 +111,13 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
             ? "No payers targeted yet."
             : `${board.targetedPayerCount} of ${board.targetedPayerCount} targeted ${
                 board.targetedPayerCount === 1 ? "payer" : "payers"
-              } accounted for.`}
+              } accounted for.`}{" "}
+          <Link
+            to="/generation/runs"
+            className="font-medium text-[#1B4D3E] underline underline-offset-2"
+          >
+            Run history
+          </Link>
         </p>
         {isAdmin ? (
           <Button
@@ -142,14 +148,11 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
                 </>
               ) : null}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              disabled
-              title="The generation grid arrives with the next epic (E6.3)."
-            >
-              Review &amp; generate
+            {/* E6.3 — the one door: the grid opens scoped to this group. */}
+            <Button asChild variant="outline" size="sm" className="h-8">
+              <Link to="/generation" search={{ group: group.id }}>
+                Review &amp; generate
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -175,6 +178,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
             <BoardRowCard
               key={row.payerId}
               row={row}
+              groupId={group.id}
               isAdmin={isAdmin}
               onRemove={() => setRemoving(row)}
             />
@@ -219,10 +223,12 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
 
 function BoardRowCard({
   row,
+  groupId,
   isAdmin,
   onRemove,
 }: {
   row: PayerBoardRow;
+  groupId: string;
   isAdmin: boolean;
   onRemove: () => void;
 }) {
@@ -261,6 +267,14 @@ function BoardRowCard({
             </span>
           </div>
           <div className="flex flex-none items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="h-8">
+              <Link
+                to="/generation"
+                search={{ group: groupId, payer: row.payerId, pivot: "payer" }}
+              >
+                Review &amp; generate
+              </Link>
+            </Button>
             {isAdmin ? (
               <Button variant="outline" size="sm" className="h-8" onClick={onRemove}>
                 Remove payer

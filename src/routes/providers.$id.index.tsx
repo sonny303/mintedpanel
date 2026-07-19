@@ -1,7 +1,7 @@
 // Provider detail at /providers/$id. Shows the provider header, cases table
 // on the left, and identity/licenses/employment/CAQH cards on the right.
 import React, { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInDays, format, parseISO } from "date-fns";
 import { Pencil, Plus, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -296,6 +296,15 @@ function Header({
               Edit provider
             </Button>
 
+            {/* E6.3 TS-127 — the record's entry into the ONE generation door:
+                the shared grid pre-filtered to this provider. */}
+            {!isTerminated ? (
+              <Button asChild variant="outline" size="sm" className="gap-2">
+                <Link to="/generation" search={{ provider: provider.id }}>
+                  Review &amp; generate
+                </Link>
+              </Button>
+            ) : null}
             <Button size="sm" className="gap-2" onClick={onNewCase} disabled={isTerminated}>
               <Plus className="h-4 w-4" />
               New case

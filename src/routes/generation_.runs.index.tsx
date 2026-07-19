@@ -1,10 +1,27 @@
-// E6.1 F6.1.6 (2026-07-19) — retired with the /generation surface; the
-// parent generation_.runs route throws the redirect. Kept as a stub per the
-// no-deleted-route-files rule.
-import { createFileRoute, redirect } from "@tanstack/react-router";
+// E2.4 F2.4.1 — the generation run history list, RESTORED by E6.3 (reachable
+// from the grid + the group board; no nav item, per [r4-review] Q10).
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { RunHistoryContent } from "@/components/generation/RunHistoryContent";
 
 export const Route = createFileRoute("/generation_/runs/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/groups", replace: true });
-  },
+  component: RunHistoryPage,
 });
+
+function RunHistoryPage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Generation run history"
+        description="Every confirmed run with its immutable per-candidate disposition ledger."
+        actions={
+          <Button asChild variant="outline" size="sm" className="h-8">
+            <Link to="/generation">Back to Review &amp; generate</Link>
+          </Button>
+        }
+      />
+      <RunHistoryContent />
+    </div>
+  );
+}

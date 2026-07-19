@@ -1,10 +1,28 @@
-// E6.1 F6.1.6 (2026-07-19) — retired with the /generation surface; the
-// parent generation_.runs route throws the redirect. Kept as a stub per the
-// no-deleted-route-files rule.
-import { createFileRoute, redirect } from "@tanstack/react-router";
+// E2.4 F2.4.1 — one run's detail (every candidate's disposition + confirm-time
+// reason), RESTORED by E6.3.
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import { RunDetailContent } from "@/components/generation/RunDetailContent";
 
 export const Route = createFileRoute("/generation_/runs/$runId")({
-  beforeLoad: () => {
-    throw redirect({ to: "/groups", replace: true });
-  },
+  component: RunDetailPage,
 });
+
+function RunDetailPage() {
+  const { runId } = Route.useParams();
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Generation run"
+        description="The immutable per-candidate record of one confirm."
+        actions={
+          <Button asChild variant="outline" size="sm" className="h-8">
+            <Link to="/generation/runs">All runs</Link>
+          </Button>
+        }
+      />
+      <RunDetailContent runId={runId} />
+    </div>
+  );
+}

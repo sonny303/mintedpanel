@@ -8,12 +8,10 @@ import { listFacilities } from "@/services/orgSettings";
 import {
   assignProviderToFacility,
   createLaunchLocation,
-  generateLaunchCases,
   getLaunchLocation,
   listFacilityAssignments,
   updateLaunchLocation,
   type CreateLaunchInput,
-  type GenerationEntry,
   type UpdateLaunchInput,
 } from "@/services/launches";
 import type { Facility } from "@/types";
@@ -87,16 +85,3 @@ export function useAssignProviderToFacility() {
   });
 }
 
-export function useGenerateLaunchCases() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: ({ location, entries }: { location: Facility; entries: GenerationEntry[] }) =>
-      generateLaunchCases(location, entries),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["cases", orgId] });
-      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
-  });
-}

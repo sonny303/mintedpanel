@@ -758,7 +758,16 @@ export interface CaseGenerationRun {
 // or grant). `reason` is the confirm-time snapshot; `caseId` links created AND
 // skipped_existing rows (the blocking case); `exclusionId` links excluded rows
 // (SET NULL belt-and-braces — the reason snapshot survives a dangling link).
-export type GenerationRowDisposition = "created" | "skipped_existing" | "excluded" | "failed";
+// E6.3 adds 'skipped' (skip-for-now — stays in the buffer, no reason demanded
+// of the user) and 'enrolled' (covered by a live enrollment fact) so the run
+// ledger accounts for EVERY candidate (migration 20260719160000).
+export type GenerationRowDisposition =
+  | "created"
+  | "skipped_existing"
+  | "excluded"
+  | "failed"
+  | "skipped"
+  | "enrolled";
 
 export interface CaseGenerationRunRow {
   id: string;
