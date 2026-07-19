@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import type { AttachmentSavePlan } from "@/lib/payerExpansion";
+import { addAssignment, archiveAssignment } from "@/services/orgPayerAssignments";
 import type { PayerNetworkTarget } from "@/types";
 
 export async function listPayerNetworkTargets(): Promise<PayerNetworkTarget[]> {
@@ -63,6 +64,63 @@ export async function archiveTarget(id: string): Promise<void> {
 /** Flip one archived target back to active — the one-click re-attach. */
 export async function restoreTarget(id: string): Promise<void> {
   await setTargetStatus(id, "active");
+}
+
+// ---------------------------------------------------------------------------
+// E6.2 F6.2.4 — group-basis attach/remove with IMPLICIT org enablement. The
+// org_payer_assignments subscription row is created/archived as a side effect
+// and never user-managed: attach ensures it exists (idempotent
+// add/reactivate) BEFORE the target insert (the targets RLS WITH CHECK
+// requires it); removal archives ONLY this group's targets, then archives the
+// org enablement IFF no other group still holds an active target for the
+// payer (multi-group honesty, TS-122/TS-124).
+// ---------------------------------------------------------------------------
+
+/** Attach a payer to a group: implicit enablement, then the reviewed plan. */
+export async function attachGroupPayer(payerId: string, plan: AttachmentSavePlan): Promise<void> {
+  await addAssignment(payerId);
+  await attachPayerTargets(payerId, plan);
+}
+
+/** Archive one GROUP's active targets for a payer (never a DELETE). */
+export async function archiveGroupPayerTargets(groupId: string, payerId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("payer_network_targets")
+    .update({ status: "archived" })
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .eq("payer_id", payerId)
+    .eq("status", "active")
+    .select("*");
+  if (error) throw error;
+  const archived = camelizeRow<PayerNetworkTarget[]>(data ?? []);
+  for (const target of archived) {
+    await writeAudit({
+      actionType: "UPDATE",
+      entityType: "payer_network_target",
+      entityId: target.id,
+      after: target,
+      description: `Archived payer network target (${target.state})`,
+    });
+  }
+}
+
+/** Remove a payer FROM ONE GROUP: archive that group's targets, then archive
+ * the org-level enablement only when no other group still works the payer. */
+export async function removeGroupPayer(groupId: string, payerId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+  await archiveGroupPayerTargets(groupId, payerId);
+  const { count, error } = await supabase
+    .from("payer_network_targets")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("payer_id", payerId)
+    .eq("status", "active");
+  if (error) throw error;
+  if ((count ?? 0) === 0) {
+    await archiveAssignment(payerId);
+  }
 }
 
 /** Archive every ACTIVE target for a payer — the payer-level archive

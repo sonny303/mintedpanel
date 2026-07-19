@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/DatePicker";
 import { HoursEditor } from "@/components/onboarding/HoursEditor";
 import { TagListInput } from "@/components/onboarding/TagListInput";
 import { useCreateFacility, useUpdateFacility } from "@/hooks/useOrgSettings";
@@ -66,16 +67,21 @@ const BLOCK_LABELS = {
 export function FacilityForm({
   facility,
   groups,
+  defaultGroupId,
   onClose,
 }: {
   /** null = create; a row = edit (mount-when-editing pattern). */
   facility: Facility | null;
   /** The org's groups (picker offers active ones). */
   groups: ProviderGroup[];
+  /** E6.2 — preselect the owning group (the group-page create path). */
+  defaultGroupId?: string;
   onClose: () => void;
 }) {
   const [name, setName] = useState(facility?.name ?? "");
-  const [groupId, setGroupId] = useState<string>(facility?.groupId ?? "__none__");
+  const [groupId, setGroupId] = useState<string>(
+    facility?.groupId ?? defaultGroupId ?? "__none__",
+  );
   const [street, setStreet] = useState(facility?.street ?? "");
   const [suite, setSuite] = useState(facility?.suite ?? "");
   const [city, setCity] = useState(facility?.city ?? "");
@@ -99,6 +105,8 @@ export function FacilityForm({
   );
   const [adaNotes, setAdaNotes] = useState(facility?.adaCompliance?.notes ?? "");
   const [hoursDraft, setHoursDraft] = useState<HoursDraft>(decodeHours(facility?.hours));
+  // E6.2 F6.2.2 — the go-live date is a plain optional date (no status machine).
+  const [goLive, setGoLive] = useState(facility?.effectiveDate ?? "");
   const [errors, setErrors] = useState<FacilityFormErrors>({});
   const [hoursErrors, setHoursErrors] = useState<Partial<Record<DayKey, string>>>({});
 
@@ -147,6 +155,7 @@ export function FacilityForm({
       appointmentPhone: appointmentPhone.trim() || null,
       contactName: contactName.trim() || null,
       acceptingNewPatients: accepting,
+      effectiveDate: goLive || null,
       languagesOffered: languages,
       interpreterLanguages: interpreters,
       // Locked contract: encode only through the pure module. All-closed
@@ -308,6 +317,20 @@ export function FacilityForm({
                   onChange={(e) => setCounty(e.target.value)}
                   className="h-9"
                 />
+              </div>
+              <div>
+                <Label htmlFor="facility-go-live" className="text-[12px]">
+                  Go-live date (optional)
+                </Label>
+                <DatePicker
+                  id="facility-go-live"
+                  value={goLive}
+                  onChange={setGoLive}
+                  ariaLabel="Go-live date"
+                />
+                <p className="mt-1 text-[11.5px] text-muted-foreground">
+                  A plain date — feeds the Launches report. There is no location status machine.
+                </p>
               </div>
             </div>
           </div>

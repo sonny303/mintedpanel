@@ -29,6 +29,10 @@
 import type { CsvRecord } from "@/lib/csvImport";
 import { coerceBool, coerceDate } from "@/lib/csvImport";
 import { toCsv } from "@/lib/csv";
+import {
+  validatePayerAttachRow,
+  type PayerAttachScanContext,
+} from "@/lib/groupPayerAttach";
 import type { ImportEntityKind } from "@/types";
 import {
   DEFAULT_TIN_COLUMNS,
@@ -106,6 +110,13 @@ interface SectionScanSpec {
   requiredMultiValue: readonly string[];
 }
 
+// E6.2 F6.2.4 — org-context inputs some descriptors need at scan time (the
+// payer-attach eligibility check resolves groups + catalog payers per row).
+// The caller driving the scan supplies it; kinds that don't need it ignore it.
+export interface SectionScanContext {
+  payerAttach?: PayerAttachScanContext;
+}
+
 export interface SectionDescriptor {
   entityKind: SectionEntityKind;
   /** business label used in UI (Sidebar IA vocabulary) */
@@ -117,6 +128,13 @@ export interface SectionDescriptor {
   helperText: string;
   spec: SectionScanSpec;
   buildMapped(ctx: MapCtx): Record<string, string | null>;
+  /** E6.2 — optional org-context validation AFTER the format scan: return an
+   * error to block the row, or a patch of resolved columns merged into
+   * `mapped` (e.g. resolved group_id/payer_id ready for commit). */
+  contextScan?(
+    mapped: Record<string, string | null>,
+    context: SectionScanContext | undefined,
+  ): { error: { column: string | null; reason: string } } | { patch: Record<string, string | null> };
 }
 
 /* ------------------------------ Header lists ------------------------------ */
@@ -411,7 +429,7 @@ export const FACILITY_DESCRIPTOR: SectionDescriptor = {
   headers: FACILITY_TEMPLATE_HEADERS,
   templateFilename: "facility-import-template.csv",
   helperText:
-    "One row per location. The parent group is matched by group_tin then group_name. Languages use ';'. Hours are set in the facility form after import.",
+    "One row per location. The parent group is matched by group_tin then group_name — each facility belongs to exactly ONE group, so a street address shared by two groups is entered once per group (payers see per-TIN service locations). Languages use ';'. Hours are set in the facility form after import.",
   spec: {
     required: ["facility_name", "street", "city", "state", "zip"],
     requireGroupKey: true,
@@ -494,10 +512,75 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
   },
 };
 
+// E6.2 F6.2.4 — the group×payer attach CSV: one row per group × payer with
+// ';'-delimited states, riding the SAME staging machine. The payer column
+// accepts the catalog slug, name, or an alias (case-insensitive); eligibility
+// (states ⊆ payer states ∩ group operating states) is enforced at scan time by
+// the context scan, which delegates to the SAME validatePayerAttachRow rule
+// the attach dialog derives from — the two paths cannot drift.
+export const PAYER_ATTACH_TEMPLATE_HEADERS = [
+  "group_name",
+  "group_tin",
+  "payer",
+  "states",
+] as const;
+
+export const PAYER_ATTACH_DESCRIPTOR: SectionDescriptor = {
+  entityKind: "payer_attach",
+  label: "Payer attach",
+  headers: PAYER_ATTACH_TEMPLATE_HEADERS,
+  templateFilename: "payer-attach-import-template.csv",
+  helperText:
+    "One row per group × payer. States use ';' (e.g. NC;SC) and must sit inside both the payer's coverage and the group's operating states. The payer column takes the catalog name, slug, or an alias. The group is matched by group_tin then group_name.",
+  spec: {
+    required: ["payer"],
+    requireGroupKey: true,
+    tinColumns: ["group_tin"],
+    npiColumns: [],
+    stateColumns: [],
+    dateColumns: [],
+    ssn4Columns: [],
+    middleInitialColumns: [],
+    boolColumns: [],
+    multiValueColumns: ["states"],
+    multiValueStateColumns: ["states"],
+    requiredMultiValue: ["states"],
+  },
+  buildMapped(ctx) {
+    return {
+      group_name: ctx.nullable("group_name"),
+      group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
+      payer: ctx.nullable("payer"),
+      states: encodeDelimited(ctx.multi("states")),
+    };
+  },
+  contextScan(mapped, context) {
+    const ctx = context?.payerAttach;
+    if (!ctx) {
+      return { error: { column: null, reason: "Payer catalog unavailable — retry the upload" } };
+    }
+    const result = validatePayerAttachRow(
+      {
+        groupName: mapped.group_name,
+        groupTin: mapped.group_tin,
+        payer: mapped.payer ?? "",
+        states: decodeDelimited(mapped.states ?? ""),
+      },
+      ctx,
+    );
+    if ("error" in result) return result;
+    // Stamp the resolved ids so the commit path never re-resolves.
+    return {
+      patch: { group_id: result.ok.groupId, payer_id: result.ok.payerId },
+    };
+  },
+};
+
 export const SECTION_DESCRIPTORS: Record<SectionEntityKind, SectionDescriptor> = {
   provider_group: GROUP_DESCRIPTOR,
   facility: FACILITY_DESCRIPTOR,
   provider: PROVIDER_DESCRIPTOR,
+  payer_attach: PAYER_ATTACH_DESCRIPTOR,
 };
 
 export function sectionDescriptor(kind: SectionEntityKind): SectionDescriptor {
@@ -516,8 +599,23 @@ export function scanSectionRecord(
   descriptor: SectionDescriptor,
   record: CsvRecord,
   headers: string[],
+  context?: SectionScanContext,
 ): ScannedRow {
-  return scanWith(descriptor, record, headers);
+  const scanned = scanWith(descriptor, record, headers);
+  if (scanned.rowState !== "staged" || !descriptor.contextScan || scanned.mapped === null) {
+    return scanned;
+  }
+  const result = descriptor.contextScan(scanned.mapped, context);
+  if ("error" in result) {
+    return {
+      ...scanned,
+      mapped: null,
+      rowState: "error",
+      errorColumn: result.error.column,
+      errorReason: result.error.reason,
+    };
+  }
+  return { ...scanned, mapped: { ...scanned.mapped, ...result.patch } };
 }
 
 /* --------------------- TE-7 combined-template detection -------------------- */

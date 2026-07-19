@@ -9,6 +9,7 @@ import {
   getCase,
   getCases,
   getContractFor,
+  listCaseDenialEntries,
   listDenialReasonCodes,
   setCaseStatus,
   setPayerReference,
@@ -151,5 +152,18 @@ export function useDenialReasonCodes() {
     queryFn: () => listDenialReasonCodes(),
     enabled: orgId !== "no-org",
     staleTime: FIVE_MINUTES,
+  });
+}
+
+// E6.2 F6.2.3 — the board drill-down's denial history. Rides the "cases"
+// prefix (queryKeys.caseDenialEntries) so every set_case_status invalidation
+// re-derives it alongside the list pills.
+export function useCaseDenialEntries() {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.caseDenialEntries(orgId),
+    queryFn: () => listCaseDenialEntries(),
+    enabled: orgId !== "no-org",
+    staleTime: THIRTY_SECONDS,
   });
 }

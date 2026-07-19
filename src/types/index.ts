@@ -629,6 +629,29 @@ export interface PayerNetworkTarget {
   createdAt: string;
 }
 
+// E6.2 F6.2.5 — enrollment facts: "already enrolled with this payer UNDER THIS
+// GROUP'S CONTRACT", recorded at the case key's grain. Facts count a payer row
+// toward Active on the group board, suppress generation candidates (E6.3 math)
+// and NEVER create cases. Expiry is a flip (expiredAt/expiredBy), never a
+// delete — an expired fact is history and the combination re-opens as a
+// candidate immediately.
+export type EnrollmentFactSource = "migration";
+
+export interface EnrollmentFact {
+  id: string;
+  orgId: string;
+  providerId: string;
+  groupId: string;
+  payerId: string;
+  state: string;
+  effectiveDate: string | null;
+  source: EnrollmentFactSource;
+  expiredAt: string | null;
+  expiredBy: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export interface Mso {
   id: string;
   orgId: string;
@@ -1256,7 +1279,14 @@ export type ImportRunState =
 // three per-section uploads. 'combined' is the legacy E3.0 default (in-flight
 // combined runs stay reviewable, F3.3.3) — new per-section uploads write one of
 // the three real kinds.
-export type ImportEntityKind = "provider_group" | "facility" | "provider" | "combined";
+// E6.2 F6.2.4 adds 'payer_attach' — the group×payer attach CSV rides the same
+// staging machine (one row per group × payer, ';'-delimited states).
+export type ImportEntityKind =
+  | "provider_group"
+  | "facility"
+  | "provider"
+  | "combined"
+  | "payer_attach";
 
 export interface ImportRunErrorEntry {
   line: number;

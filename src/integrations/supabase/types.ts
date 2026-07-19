@@ -692,6 +692,80 @@ export type Database = {
           },
         ];
       };
+      enrollment_facts: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          effective_date: string | null;
+          expired_at: string | null;
+          expired_by: string | null;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          source: string;
+          state: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_date?: string | null;
+          expired_at?: string | null;
+          expired_by?: string | null;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          source?: string;
+          state: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_date?: string | null;
+          expired_at?: string | null;
+          expired_by?: string | null;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          source?: string;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_facts_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       facilities: {
         Row: {
           accepting_new_patients: boolean | null;
