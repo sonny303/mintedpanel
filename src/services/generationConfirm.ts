@@ -109,6 +109,21 @@ export async function confirmGenerationBatch(
         exclusionId: row.exclusion?.exclusionId ?? null,
       }),
     ),
+    // E6.3 — the grid's two extra buckets, so the ledger accounts for EVERY
+    // candidate: skip-for-now (stays in the buffer, no user reason demanded)
+    // and enrolled-by-fact (never casework).
+    ...(plan.skipped ?? []).map((row) =>
+      runRowInput(run.id, row, {
+        disposition: "skipped",
+        reason: "Skipped for now — remains a candidate",
+      }),
+    ),
+    ...(plan.enrolled ?? []).map((row) =>
+      runRowInput(run.id, row, {
+        disposition: "enrolled",
+        reason: "Already enrolled — covered by an enrollment fact",
+      }),
+    ),
   ]);
 
   const outcomes: GenerationRowOutcome[] = [];
@@ -170,6 +185,9 @@ export async function confirmGenerationBatch(
       skippedExisting: plan.plannedCounts.skippedExistingCount + summary.skippedExisting,
       excluded: plan.plannedCounts.excludedCount,
       failed: summary.failed,
+      // E6.3 buckets (zero on pre-grid confirms).
+      skipped: (plan.skipped ?? []).length,
+      enrolled: (plan.enrolled ?? []).length,
     },
     description: `Confirmed case generation run: ${summary.created} created, ${
       plan.plannedCounts.skippedExistingCount + summary.skippedExisting

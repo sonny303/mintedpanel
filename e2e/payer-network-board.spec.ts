@@ -542,8 +542,12 @@ test("TS-109/TS-113: facts flip rows Active with zero cases, the expired fact re
     page.getByText(/2 candidates awaiting generation — Cigna enrollment fact expired/),
   ).toBeVisible();
 
-  // Review & generate is the E6.3 action — present, not yet live.
-  await expect(page.getByRole("button", { name: "Review & generate" })).toBeDisabled();
+  // E6.3 — Review & generate is LIVE: the banner enters the ONE shared grid
+  // scoped to this group.
+  await expect(page.getByRole("link", { name: "Review & generate" }).first()).toHaveAttribute(
+    "href",
+    /\/generation\?group=g-ob/,
+  );
 
   // Drill-down cells: enrolled-by-fact and awaiting-generation are explicit.
   await aetna.getByRole("button", { name: /Show providers for Aetna/ }).click();

@@ -1645,6 +1645,41 @@ pages are updated in the same PR as the epic that changes them.
   (TS-108/109/110/113/122/123/124). The E6.1 groups shell +
   GroupSummaryCard/FacilitySummaryCard were deleted; TD-39 (wizard/group
   duplicate intake doors), TD-40 (disabled Review & generate until E6.3).
+- **E6.3 — Decoupled generation (the ONE door).** `/generation` is ALIVE
+  again as the full-screen preview grid (supersedes the E6.1 interim
+  redirect; legacy `?payerId/groupId` spellings still scope it), entered
+  pre-filtered from the board banner (`?group=`), a payer row
+  (`?group&payer&pivot=payer`), a facility row (`?group&facility`), and the
+  provider record (`?provider=`); `/generation/runs*` restored. ONE additive
+  migration (repo-only, `20260719160000_e63_run_row_dispositions.sql`,
+  hosted probe rollback-verified): the run-row disposition CHECK gains
+  `skipped` (skip-for-now) + `enrolled` (fact-covered), both
+  reason-required — a confirm's immutable ledger now accounts for EVERY
+  candidate. **Pure `src/lib/generationGrid.ts`** (+suite): `bucketGridRows`
+  (candidate/enrolled/existing/excluded — facts overlay wins only over
+  proposed), `filterGridRows` (scope), `groupGridRows` (pivots, key-stable
+  selection), `reconcileGrid` (the sum-invariant confirm-bar line "Create 4
+  · 1 excluded · 2 enrolled — 7 of 7 accounted for"), `splitGridSelection`.
+  `GenerationGrid.tsx` replaces + deletes `GenerationPreviewContent.tsx`:
+  pivot Tabs, per-group check-alls, skip-for-now = SELECTION state only
+  (nothing stored, reappears checked), Exclude…/Undo = the E2.0 reasoned
+  store, E4.2 release cap + gating + fallback warning ride unchanged;
+  confirm threads `skippedRows`/`enrolledRows` through
+  `useConfirmGeneration` → `generationConfirm.ts` records them as ledger
+  rows (capped-out rows record as skipped); landing is **`/cases?run=`**.
+  **F6.3.5 one door:** starter cases retired outright (`starterCases.ts` +
+  test + PayerSetupList toggle deleted; `providers.new.tsx` creates ZERO
+  cases; `org_payer_assignments.starter` dormant per the additive rule);
+  launch `CreateCasesDialog` + `generateLaunchCases`/`useGenerateLaunchCases`
+  deleted. **`src/lib/oneDoor.test.ts`** greps the comment-stripped src tree:
+  createCase/`create_case_with_tasks`/useCreateCase callers ⊆ {cases.ts,
+  generationConfirm.ts, useCases.ts, ManualCaseModal, NewCaseModal (E6.4
+  retires), generated types} and pins the two retired creators dead. e2e
+  `e2e/decoupled-generation.spec.ts` (TS-111 buckets/pivots/skip-vs-exclude/
+  ledger/landing, TS-125 payer-scoped entry over a 4-provider roster, TS-126
+  concurrent-duplicate safe skip + honest partial failure, TS-127
+  provider-scoped entry); board/legacy-routes/funnel specs retargeted
+  (`/generation*` back in RENDERING_ROUTES).
 
 ## What this is
 

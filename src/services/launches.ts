@@ -10,7 +10,6 @@ import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import { insertAssignmentRows } from "@/services/providerAssignments";
-import { createCase, type CaseInput, type CaseTaskPayload } from "@/services/cases";
 import type { Facility, FacilityAssignment } from "@/types";
 
 export async function getLaunchLocation(id: string): Promise<Facility | null> {
@@ -144,52 +143,4 @@ export async function assignProviderToFacility(
     after: { providerId, facilityId },
     description: "Linked provider to launch location",
   });
-}
-
-export interface GenerationEntry {
-  input: CaseInput;
-  tasks: CaseTaskPayload[];
-  /** for result reporting */
-  providerName: string;
-  payerName: string;
-}
-
-export interface GenerationResult {
-  created: { providerName: string; payerName: string; caseId: string }[];
-  failed: { providerName: string; payerName: string; reason: string }[];
-}
-
-/** Executes a confirmed generation plan case-by-case through createCase. */
-export async function generateLaunchCases(
-  location: Facility,
-  entries: GenerationEntry[],
-): Promise<GenerationResult> {
-  const result: GenerationResult = { created: [], failed: [] };
-  for (const entry of entries) {
-    try {
-      const row = await createCase(entry.input, entry.tasks);
-      result.created.push({
-        providerName: entry.providerName,
-        payerName: entry.payerName,
-        caseId: row.id,
-      });
-    } catch (err) {
-      result.failed.push({
-        providerName: entry.providerName,
-        payerName: entry.payerName,
-        reason: err instanceof Error ? err.message : "Create failed",
-      });
-    }
-  }
-  await writeAudit({
-    actionType: "CREATE",
-    entityType: "launch",
-    entityId: location.id,
-    after: {
-      created: result.created.length,
-      failed: result.failed.length,
-    },
-    description: `Generated ${result.created.length} cases for launch ${location.name}`,
-  });
-  return result;
 }

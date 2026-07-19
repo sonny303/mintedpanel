@@ -33,6 +33,11 @@ export interface GenerationConfirmPlan {
   skippedExisting: GenerationPreviewRow[];
   /** Actively excluded rows, never attempted. */
   excluded: GenerationPreviewRow[];
+  /** E6.3 — skip-for-now rows (unchecked candidates): recorded on the run
+   * ledger, never attempted, and the candidate STAYS in the buffer. */
+  skipped?: GenerationPreviewRow[];
+  /** E6.3 — enrollment-fact-covered rows: recorded, never attempted. */
+  enrolled?: GenerationPreviewRow[];
   /** The confirm-time counts stored on the immutable case_generation_runs
    * row (inserted BEFORE the loop so created cases can FK it; no UPDATE
    * policy exists, so these are the plan — createdCount is the expected

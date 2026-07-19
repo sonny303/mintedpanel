@@ -14,6 +14,9 @@ export const DISPOSITION_LABELS: Record<GenerationRowDisposition, string> = {
   skipped_existing: "Skipped — already exists",
   excluded: "Excluded",
   failed: "Failed",
+  // E6.3 — the decoupled grid's two extra ledger buckets.
+  skipped: "Skipped for now",
+  enrolled: "Enrolled — fact",
 };
 
 // E4.2 SOP hardening — the dimensions generic-fallback usage is reportable by.
@@ -40,6 +43,10 @@ export interface RunCounts {
   skippedExisting: number;
   excluded: number;
   failed: number;
+  /** E6.3 — skip-for-now rows (stay in the buffer; zero on pre-E6.3 runs). */
+  skipped: number;
+  /** E6.3 — enrollment-fact-covered rows (zero on pre-E6.3 runs). */
+  enrolled: number;
   recorded: number;
   /** true when no child rows exist and the counts are the run's stored
    * confirm-time PLAN (a pre-E2.4 run, or a run that died before recording
@@ -62,6 +69,8 @@ export function deriveRunCounts(
       skippedExisting: run.skippedExistingCount,
       excluded: run.excludedCount,
       failed: run.failedCount,
+      skipped: 0,
+      enrolled: 0,
       recorded: 0,
       fromPlan: true,
     };
@@ -72,6 +81,8 @@ export function deriveRunCounts(
     skippedExisting: count("skipped_existing"),
     excluded: count("excluded"),
     failed: count("failed"),
+    skipped: count("skipped"),
+    enrolled: count("enrolled"),
     recorded: rows.length,
     fromPlan: false,
   };

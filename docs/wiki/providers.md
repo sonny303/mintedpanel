@@ -1,6 +1,6 @@
 # Providers
 
-_Updated for: pre-E6 baseline (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journey B — the consolidated people record.
 
@@ -9,6 +9,14 @@ Journey B — the consolidated people record.
 Provider roster + a monolithic edit form (with a known defect: saving it
 could drop facility assignments); imports live on a separate Data Import
 page.
+
+## Shipped with E6.3
+
+- **Creating a provider creates ZERO cases** — starter cases are retired.
+  New payer candidates surface counted on the group's Payer Network board;
+  generation stays a human confirm.
+- The provider record carries **Review & generate**, opening the shared
+  generation grid scoped to that provider's own candidate slice.
 
 ## Target state _(lands with E6.4)_
 

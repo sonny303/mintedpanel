@@ -9,6 +9,7 @@
 // entered once per group (payers see per-TIN service locations) — the rule
 // is stated here and documented on the CSV template.
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -206,6 +207,16 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
                         </div>
                         {canWrite ? (
                           <div className="flex flex-none items-center gap-2">
+                            {count > 0 ? (
+                              // E6.3 — the launch-context entry: opens the ONE
+                              // shared grid pre-filtered to this location's
+                              // providers (the retired launch dialog's job).
+                              <Button asChild variant="outline" size="sm" className="h-8">
+                                <Link to="/generation" search={{ group: group.id, facility: f.id }}>
+                                  Review &amp; generate
+                                </Link>
+                              </Button>
+                            ) : null}
                             <Button
                               variant="outline"
                               size="sm"
