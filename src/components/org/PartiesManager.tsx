@@ -111,6 +111,12 @@ function PartyCard({
   const unassignRole = useUnassignRole();
   const address = formatAddress(party);
 
+  // Chip labels resolve from the LIVE governed list first (a role added to
+  // party_role_types later renders correctly with zero UI change), then the
+  // static E0.2 map, then the raw key — never undefined.
+  const roleLabel = (rk: PartyRoleKey): string =>
+    roleTypes.find((t) => t.roleKey === rk)?.label ?? PARTY_ROLE_LABELS[rk] ?? rk;
+
   const doAssign = (roleKey: PartyRoleKey) =>
     assignRole.mutate(
       { partyId: party.id, roleKey },
@@ -149,10 +155,10 @@ function PartyCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {roleKeys.map((rk) => (
           <span key={rk} className={chipClass}>
-            {PARTY_ROLE_LABELS[rk]}
+            {roleLabel(rk)}
             <button
               type="button"
-              aria-label={`Remove ${PARTY_ROLE_LABELS[rk]} role`}
+              aria-label={`Remove ${roleLabel(rk)} role`}
               onClick={() => doUnassign(rk)}
               className="text-muted-foreground hover:text-foreground"
             >

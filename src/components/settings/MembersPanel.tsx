@@ -1,10 +1,13 @@
-// Team members table: role changes, invites (pending list), and removal.
+// Team members table: role changes and removal. The "Invite member" flow was
+// removed from MVP by user request (2026-07-19) — UI only: the pending_invites
+// table, claim_invites() login RPC, and the invites service/hooks stay intact
+// so the capability can return post-MVP. The Pending invites table renders
+// ONLY when legacy rows exist (they stay revocable and claimable at login);
+// with none, the section disappears instead of showing a dead empty state.
 // Admin-only mutations; every mutation surfaces success/error via toast.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -27,155 +30,14 @@ import { fmtDate } from "@/lib/format";
 import { useAuthStore, useActiveMembership, type AppRole } from "@/lib/auth-store";
 import { useIsAdmin } from "@/lib/permissions";
 import { useMemberships, useUpdateMembershipRole } from "@/hooks/useOrgSettings";
-import {
-  useCreatePendingInvite,
-  usePendingInvites,
-  useRemoveMembership,
-  useRevokePendingInvite,
-} from "@/hooks/useInvites";
-import { DuplicateInviteError, inviteMember, type PendingInvite } from "@/services/invites";
+import { usePendingInvites, useRemoveMembership, useRevokePendingInvite } from "@/hooks/useInvites";
+import type { PendingInvite } from "@/services/invites";
 import type { MembershipRow } from "@/services/orgSettings";
 
 function roleBadge(role: AppRole) {
   if (role === "specialist") return <StatusPill status="green" label="Specialist" />;
   if (role === "billing") return <StatusPill status="neutral" label="Billing" />;
   return <StatusPill status="brand" label="Admin" />;
-}
-
-function InviteDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const activeOrgId = useAuthStore((s) => s.activeOrgId);
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<AppRole>("specialist");
-  const [fullName, setFullName] = useState("");
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const createInvite = useCreatePendingInvite();
-
-  const reset = () => {
-    setEmail("");
-    setRole("specialist");
-    setFullName("");
-    setEmailError(null);
-  };
-
-  const handleSubmit = async () => {
-    const trimmed = email.trim();
-    if (!trimmed || !/.+@.+\..+/.test(trimmed)) {
-      setEmailError("Enter a valid email address");
-      return;
-    }
-    setEmailError(null);
-    setSubmitting(true);
-    try {
-      await createInvite.mutateAsync({
-        email: trimmed,
-        role,
-        fullName: fullName.trim() || null,
-      });
-      const { data: inviteResp, error: fnError } = await inviteMember({
-        email: trimmed,
-        orgId: activeOrgId,
-        fullName: fullName.trim() || null,
-      });
-      if (fnError) {
-        toast.warning(
-          `Invite saved but email failed to send: ${fnError.message}. Ask the user to sign in and they'll be added automatically.`,
-        );
-      } else if (inviteResp?.alreadyExists) {
-        toast.success("Already has an account — they'll get access next time they sign in.");
-      } else {
-        toast.success(`Invite sent to ${trimmed}`);
-      }
-      reset();
-      onOpenChange(false);
-    } catch (e) {
-      if (e instanceof DuplicateInviteError) {
-        setEmailError("An invite for that email is already pending.");
-      } else {
-        const msg = e instanceof Error ? e.message : "Failed to create invite";
-        toast.error(msg);
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!submitting) {
-          if (!v) reset();
-          onOpenChange(v);
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite team member</DialogTitle>
-          <DialogDescription>
-            They'll get an email to set a password and join this organization.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="invite-email">Email</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="teammate@example.com"
-              className="mt-1"
-            />
-            {emailError ? <p className="mt-1 text-[12px] text-[#B91C1C]">{emailError}</p> : null}
-          </div>
-          <div>
-            <Label htmlFor="invite-name">Full name (optional)</Label>
-            <Input
-              id="invite-name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Jane Doe"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="invite-role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as AppRole)}>
-              <SelectTrigger id="invite-role" className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="specialist">Specialist</SelectItem>
-                <SelectItem value="billing">Billing</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={submitting}
-            style={{ backgroundColor: "#1B4D3E" }}
-            className="text-white hover:opacity-90"
-          >
-            {submitting ? "Sending…" : "Send invite"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function RemoveMemberDialog({
@@ -243,7 +105,6 @@ export function MembersPanel() {
   const updateRole = useUpdateMembershipRole();
   const revokeInvite = useRevokePendingInvite();
 
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<MembershipRow | null>(null);
 
   const handleRoleChange = (id: string, newRole: AppRole) => {
@@ -270,19 +131,8 @@ export function MembersPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="text-[13px] text-muted-foreground">
-          Manage who has access to this organization.
-        </div>
-        {canEdit ? (
-          <Button
-            onClick={() => setInviteOpen(true)}
-            style={{ backgroundColor: "#1B4D3E" }}
-            className="text-white hover:opacity-90"
-          >
-            Invite member
-          </Button>
-        ) : null}
+      <div className="text-[13px] text-muted-foreground">
+        Manage who has access to this organization.
       </div>
 
       <div className="border border-[#E8E5E0] rounded-md bg-white">
@@ -374,46 +224,25 @@ export function MembersPanel() {
         </table>
       </div>
 
-      <div>
-        <h3 className="text-[13px] font-medium text-[#1B4D3E] mb-2">Pending invites</h3>
-        <div className="border border-[#E8E5E0] rounded-md bg-white">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
-                {["Email", "Role", "Invited", ""].map((h, i) => (
-                  <th
-                    key={i}
-                    className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {invitesQ.isLoading ? (
-                <TableSkeletonRows rows={2} cols={4} />
-              ) : invitesQ.isError ? (
-                <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center">
-                    <EmptyState
-                      message="Failed to load pending invites"
-                      action={
-                        <Button variant="outline" size="sm" onClick={() => invitesQ.refetch()}>
-                          Retry
-                        </Button>
-                      }
-                    />
-                  </td>
+      {(invitesQ.data ?? []).length > 0 ? (
+        <div>
+          <h3 className="text-[13px] font-medium text-[#1B4D3E] mb-2">Pending invites</h3>
+          <div className="border border-[#E8E5E0] rounded-md bg-white">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#FAFAF9] border-b border-[#E8E5E0]">
+                  {["Email", "Role", "Invited", ""].map((h, i) => (
+                    <th
+                      key={i}
+                      className="text-left text-xs uppercase tracking-wider text-muted-foreground px-3 h-10 font-medium"
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ) : (invitesQ.data ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-3 py-8">
-                    <EmptyState message="No pending invites" />
-                  </td>
-                </tr>
-              ) : (
-                (invitesQ.data ?? []).map((invite) => (
+              </thead>
+              <tbody>
+                {(invitesQ.data ?? []).map((invite) => (
                   <tr
                     key={invite.id}
                     className="border-b border-[#E8E5E0] last:border-b-0 hover:bg-[#FAFAF9]"
@@ -436,14 +265,13 @@ export function MembersPanel() {
                       ) : null}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
       <RemoveMemberDialog member={removeTarget} onClose={() => setRemoveTarget(null)} />
     </div>
   );
