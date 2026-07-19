@@ -5,9 +5,15 @@ You are a BUILD session for `sonny303/mintedpanel` on the `redesign` branch.
 ## Your assignment
 
 Open `docs/redesign/BUILD-QUEUE.md`. Your epic is the FIRST row whose Status
-is `queued`. Build exactly that epic — nothing from any later row. If no row
-is `queued`, or the first queued epic's file has `reviewed: true` missing or
-false, STOP and report instead of building.
+is `queued` AND whose **Depends on** entries are all past `queued`
+(`building`/`in review`/`merged`). Claim it by flipping its Status to
+`building` in your first commit — parallel sessions may be running; the
+queue file is the lock. Build exactly that epic — nothing from any other
+row. If a dependency is only `in review` (unmerged PR), branch from that
+dependency's PR branch instead of `redesign`, note `Depends on #NNN` in your
+PR body, and open your PR as a **DRAFT** until the dependency merges. If no
+row is claimable, or your epic's file has `reviewed: true` missing or false,
+STOP and report instead of building.
 
 ## Read first, in this order
 
@@ -55,6 +61,7 @@ The PR body MUST start with:
 
 > @devin-ai-integration please review and merge
 
-then map each FR/TE to the diff. That mention triggers Devin's independent
+then list `Depends on #NNN` for any stacked dependency (open as DRAFT if
+unmerged), then map each FR/TE to the diff. That mention triggers Devin's independent
 review automatically — do not wait for a human. If review comments come back,
 push fixes to the SAME branch. Never self-merge.
