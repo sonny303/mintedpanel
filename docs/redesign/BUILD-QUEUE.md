@@ -52,7 +52,7 @@ outside application code and required register updates). Only epics with
 | 4   | E6.3 Decoupled generation          | `E6.3-decoupled-generation.md`        | E6.0, E6.2                                        | merged    | #205 |
 | 5   | E6.4 Providers area                | `E6.4-providers-area.md`              | E6.0, E6.1, E6.2                                  | merged    | #207 |
 | 6   | E6.5 Payer Setup consolidation     | `E6.5-payer-setup-consolidation.md`   | — (sidebar entry coordinated with E6.1 at review) | in review | #210 |
-| 7   | E6.6 Reporting & touch unification | `E6.6-reporting-touch-unification.md` | E6.0, E6.2, E6.5                                  | queued    | —    |
+| 7   | E6.6 Reporting & touch unification | `E6.6-reporting-touch-unification.md` | E6.0, E6.2, E6.5                                  | building  | —    |
 
 Status values: `queued` → `building` (session claimed) → `in review` (PR
 open) → `merged`. A blocked epic is marked `blocked: <reason>` and its
