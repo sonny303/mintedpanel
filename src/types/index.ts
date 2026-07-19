@@ -1090,7 +1090,10 @@ export interface SOPTaskDefinition {
 
 export interface SOPTemplate {
   id: string;
-  orgId: string;
+  // null = GLOBAL catalog row (payer SOP or the generic fallback) — honest
+  // since E6.5; consumers previously cast around this (pickTemplate,
+  // TemplateWizard, TemplatesList).
+  orgId: string | null;
   name: string;
   groupId: string | null;
   state: string | null;
