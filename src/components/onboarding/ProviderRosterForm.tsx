@@ -38,7 +38,6 @@ import { StateSelect } from "@/components/StateSelect";
 import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
 import { isValidNpi } from "@/lib/providerGroup";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
-import { US_STATES } from "@/lib/usStates";
 import type { LicenseInput, ProviderInput } from "@/services/providers";
 import type { Provider, ProviderGroup } from "@/types";
 
@@ -64,10 +63,6 @@ interface RosterFormState {
   ssnLast4: string;
   email: string;
   phone: string;
-  homeStreet: string;
-  homeCity: string;
-  homeState: string;
-  homeZip: string;
   npi: string;
   taxonomyCode: string;
   specialty: string;
@@ -75,10 +70,6 @@ interface RosterFormState {
   degree: string;
   schoolName: string;
   graduationDate: string;
-  malpracticeCarrier: string;
-  malpracticePolicyNumber: string;
-  malpracticeCoverageStart: string;
-  malpracticeCoverageEnd: string;
   caqhId: string;
   caqhLastAttestedDate: string;
 }
@@ -92,10 +83,6 @@ const EMPTY_FORM: RosterFormState = {
   ssnLast4: "",
   email: "",
   phone: "",
-  homeStreet: "",
-  homeCity: "",
-  homeState: "__none__",
-  homeZip: "",
   npi: "",
   taxonomyCode: "",
   specialty: "",
@@ -103,10 +90,6 @@ const EMPTY_FORM: RosterFormState = {
   degree: "",
   schoolName: "",
   graduationDate: "",
-  malpracticeCarrier: "",
-  malpracticePolicyNumber: "",
-  malpracticeCoverageStart: "",
-  malpracticeCoverageEnd: "",
   caqhId: "",
   caqhLastAttestedDate: "",
 };
@@ -126,10 +109,10 @@ function toProviderInput(f: RosterFormState): Omit<ProviderInput, "firstName" | 
     ssnLast4: t(f.ssnLast4),
     email: t(f.email),
     phone: t(f.phone),
-    homeStreet: t(f.homeStreet),
-    homeCity: t(f.homeCity),
-    homeState: f.homeState === "__none__" ? null : f.homeState,
-    homeZip: t(f.homeZip),
+    // Home address is deliberately absent (user request 2026-07-19): the
+    // dialog no longer captures it, and omitting the keys means an edit-mode
+    // save never touches the columns — the provider record's inline fields
+    // and the CSV import remain the address writers.
     npi: f.npi.replace(/\D/g, "") || null,
     taxonomyCode: t(f.taxonomyCode),
     specialty: t(f.specialty),
@@ -137,10 +120,9 @@ function toProviderInput(f: RosterFormState): Omit<ProviderInput, "firstName" | 
     degree: t(f.degree),
     schoolName: t(f.schoolName),
     graduationDate: t(f.graduationDate),
-    malpracticeCarrier: t(f.malpracticeCarrier),
-    malpracticePolicyNumber: t(f.malpracticePolicyNumber),
-    malpracticeCoverageStart: t(f.malpracticeCoverageStart),
-    malpracticeCoverageEnd: t(f.malpracticeCoverageEnd),
+    // Malpractice moved to the GROUP form (group_insurance_policies, user
+    // request 2026-07-19); omitting the keys means saves never touch the
+    // legacy provider malpractice columns.
     caqhId: t(f.caqhId),
     caqhLastAttestedDate: t(f.caqhLastAttestedDate),
   };
@@ -381,7 +363,7 @@ function FormBody({
         </div>
 
         <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
-          <h3 className="text-[13px] font-semibold text-foreground">Contact & home address</h3>
+          <h3 className="text-[13px] font-semibold text-foreground">Contact</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="prov-email" className="text-[12px]">
@@ -404,61 +386,6 @@ function FormBody({
                 onChange={(e) => set({ phone: e.target.value })}
                 className="h-9"
               />
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <Label htmlFor="prov-home-street" className="text-[12px]">
-                Street
-              </Label>
-              <Input
-                id="prov-home-street"
-                value={form.homeStreet}
-                onChange={(e) => set({ homeStreet: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-home-city" className="text-[12px]">
-                City
-              </Label>
-              <Input
-                id="prov-home-city"
-                value={form.homeCity}
-                onChange={(e) => set({ homeCity: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="prov-home-state" className="text-[12px]">
-                  State
-                </Label>
-                <Select value={form.homeState} onValueChange={(v) => set({ homeState: v })}>
-                  <SelectTrigger id="prov-home-state" className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">—</SelectItem>
-                    {US_STATES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="prov-home-zip" className="text-[12px]">
-                  ZIP
-                </Label>
-                <Input
-                  id="prov-home-zip"
-                  value={form.homeZip}
-                  onChange={(e) => set({ homeZip: e.target.value })}
-                  className="h-9"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -546,58 +473,6 @@ function FormBody({
                 type="date"
                 value={form.graduationDate}
                 onChange={(e) => set({ graduationDate: e.target.value })}
-                className="h-9"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">
-          <h3 className="text-[13px] font-semibold text-foreground">Malpractice coverage</h3>
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <Label htmlFor="prov-carrier" className="text-[12px]">
-                Carrier
-              </Label>
-              <Input
-                id="prov-carrier"
-                value={form.malpracticeCarrier}
-                onChange={(e) => set({ malpracticeCarrier: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-policy" className="text-[12px]">
-                Policy number
-              </Label>
-              <Input
-                id="prov-policy"
-                value={form.malpracticePolicyNumber}
-                onChange={(e) => set({ malpracticePolicyNumber: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-cov-start" className="text-[12px]">
-                Coverage start
-              </Label>
-              <Input
-                id="prov-cov-start"
-                type="date"
-                value={form.malpracticeCoverageStart}
-                onChange={(e) => set({ malpracticeCoverageStart: e.target.value })}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <Label htmlFor="prov-cov-end" className="text-[12px]">
-                Coverage end
-              </Label>
-              <Input
-                id="prov-cov-end"
-                type="date"
-                value={form.malpracticeCoverageEnd}
-                onChange={(e) => set({ malpracticeCoverageEnd: e.target.value })}
                 className="h-9"
               />
             </div>
@@ -759,10 +634,6 @@ function EditLoader({
       ssnLast4: p.ssnLast4 ?? "",
       email: p.email ?? "",
       phone: p.phone ?? "",
-      homeStreet: p.homeStreet ?? "",
-      homeCity: p.homeCity ?? "",
-      homeState: p.homeState ?? "__none__",
-      homeZip: p.homeZip ?? "",
       npi: p.npi ?? "",
       taxonomyCode: p.taxonomyCode ?? "",
       specialty: p.specialty ?? "",
@@ -770,10 +641,6 @@ function EditLoader({
       degree: p.degree ?? "",
       schoolName: p.schoolName ?? "",
       graduationDate: p.graduationDate ?? "",
-      malpracticeCarrier: p.malpracticeCarrier ?? "",
-      malpracticePolicyNumber: p.malpracticePolicyNumber ?? "",
-      malpracticeCoverageStart: p.malpracticeCoverageStart ?? "",
-      malpracticeCoverageEnd: p.malpracticeCoverageEnd ?? "",
       caqhId: p.caqhId ?? "",
       caqhLastAttestedDate: p.caqhLastAttestedDate ?? "",
     };
