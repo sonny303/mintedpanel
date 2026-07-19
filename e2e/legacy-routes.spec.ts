@@ -100,6 +100,10 @@ function seedAuth(context: {
 // wizard is the SOP-templates tab's authoring flow until E6.5; /import/$runId
 // reviews in-flight staged runs; /admin/audit re-homes with E6.6).
 const RENDERING_ROUTES = [
+  // E6.3 — the generation door + run history are ALIVE again.
+  "/generation",
+  "/generation/runs",
+  "/generation/runs/run-1",
   "/cases",
   "/admin/payer-admin",
   "/reporting",
@@ -143,9 +147,6 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\?tab=forms$/ },
   { from: "/admin/payers", to: /\/admin\/payer-admin\/?$/ },
   // Generation re-homes on the group's Payer Network (E6.2/E6.3).
-  { from: "/generation", to: /\/groups\/?$/ },
-  { from: "/generation/runs", to: /\/groups\/?$/ },
-  { from: "/generation/runs/run-1", to: /\/groups\/?$/ },
   // Pre-E6.1 stubs, retargeted or preserved.
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
   { from: "/admin/statuses", to: /\/cases\/?$/ },

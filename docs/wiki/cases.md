@@ -1,6 +1,6 @@
 # Cases
 
-_Updated for: E6.1 (PR #201, 2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
 
 The home of Journey D (casework).
 
@@ -40,6 +40,22 @@ The home of Journey D (casework).
     actions. Legacy list links (`?chip=`, `?ids=`, `?runId=`) land on the
     payer pivot unchanged.
 - Case detail (`/cases/$id`) deep links are unchanged.
+
+## How cases get created — shipped with E6.3
+
+- **One door**: cases are created through the generation grid (Groups ›
+  {Group} › Payer Network › Review & generate) after a human confirm — see
+  the Groups page for the grid itself. Onboarding a provider creates ZERO
+  cases; new candidates surface counted on the group's board instead.
+  Starter cases and the launch-dialog batch creator are retired.
+- **The documented escape hatch**: the manual "New case" modal (Cases list
+  and the provider record) remains for genuinely untargeted one-offs — same
+  4-part key discipline, duplicate pre-check with a link to the existing
+  case, no generation run id.
+- **Reapply is continuation, not creation**: a denied case returns to In
+  Progress on the SAME case with a fresh task cycle.
+- A confirmed batch lands here filtered to its run (`?run=`), with the
+  created cases ranked in the to-do pivot.
 
 ## Target state
 

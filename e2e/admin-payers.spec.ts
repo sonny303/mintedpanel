@@ -10,9 +10,9 @@ import { test, expect, type Route } from "@playwright/test";
 //   - the old deep link lands safely in Payer Setup (funnel step 12);
 //   - no free-text "Add payer" and no per-row Edit control anywhere; the
 //     canonical path is the workspace's Catalog tab;
-//   - the starter toggle (org-owned org_payer_assignments fact) renders in
-//     the row's setup detail, and only for admins — a control never renders
-//     unless the caller can complete the action;
+//   - NO starter toggle anywhere (E6.3 F6.3.5 retired starter cases; the
+//     org_payer_assignments.starter column stays dormant per the additive
+//     rule) — the setup detail is read-only per-state readiness;
 //   - a specialist following the old URL gets the module's explicit denial
 //     with a read-only catalog pointer (TE-20b — no dead end).
 
@@ -153,13 +153,10 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
   await expect(globalRow).toBeVisible();
   await expect(page.getByText("Legacy — catalog migration required")).toHaveCount(0);
 
-  // Starter toggle: the assigned payer's expanded setup detail carries one,
-  // and it is the only switch on the page.
+  // E6.3 F6.3.5: the starter toggle is GONE with starter cases — the expanded
+  // setup detail is read-only and NO switch renders anywhere on the page.
   await globalRow.getByRole("button", { name: "Show setup detail for Aetna (CVS Health)" }).click();
-  await expect(
-    page.getByRole("switch", { name: "Toggle starter pack for Aetna (CVS Health)" }),
-  ).toBeVisible();
-  await expect(page.getByRole("switch")).toHaveCount(1);
+  await expect(page.getByRole("switch")).toHaveCount(0);
 
   // Nothing on this page wrote anywhere.
   expect(writes).toEqual([]);

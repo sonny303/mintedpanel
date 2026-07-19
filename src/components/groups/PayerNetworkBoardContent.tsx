@@ -131,7 +131,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       </div>
 
       {/* F6.2.3 — the candidates-awaiting-generation banner: count = the E6.3
-          candidate math, cause named; Review & generate arrives with E6.3. */}
+          candidate math, cause named; Review & generate opens the shared grid. */}
       {candidates.length > 0 ? (
         <Card className="border-[#FDE68A] bg-[#FEF3C7]">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">

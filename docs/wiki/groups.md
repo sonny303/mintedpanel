@@ -1,6 +1,6 @@
 # Groups
 
-_Updated for: E6.2 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journeys B and C — the working entity for payer attach and generation.
 
@@ -48,8 +48,10 @@ Journeys B and C — the working entity for payer attach and generation.
   one-click Restore), or an awaiting-generation candidate.
 - **The candidates banner** counts the buffer (targets − enrollment facts −
   existing cases − standing exclusions, per eligible provider — the same
-  math E6.3's grid consumes) and names its most recent cause ("Dr. Chen
-  joined Sep 3"). The Review & generate action arrives with E6.3.
+  math the grid consumes) and names its most recent cause ("Dr. Chen
+  joined Sep 3"). **Review & generate** (on the banner, and per payer row)
+  opens the shared generation grid pre-scoped to this group — the payer-row
+  entry additionally scopes to that payer and opens grouped by payer.
 - **Attach payers to the group**: the picker offers only catalog payers
   whose covered states intersect the group's operating states (zero-overlap
   payers are named in an explainer, never offered); proposed states = payer
@@ -70,8 +72,30 @@ Active, suppress generation candidates, and **never create cases**. Expiry
 is a flip, never a delete — expiring immediately re-opens the candidate.
 Capture UI lands with E6.4 (provider record + onboarding).
 
-## Target state _(lands with E6.3)_
+## Review & generate — shipped with E6.3
 
-- Generation is the ONLY door cases come through: the board's Review &
-  generate opens the preview grid (provider×payer, pivotable), Skip-for-now
-  vs Exclude, and the reconciling confirm bar. A human always confirms.
+Generation is the ONLY door cases come through (the manual one-off case
+modal remains as the documented escape hatch; reapply continues the SAME
+case). The board's banner, each payer row, a facility row, and the provider
+record all open the ONE shared preview grid, pre-scoped to their slice:
+
+- **Every provider × payer target lands in exactly one bucket** — candidate
+  (checked by default), enrolled (live fact, grayed, never casework),
+  existing case (grayed with its reason), or excluded (reasoned, with a
+  one-click Undo). The confirm bar's reconciliation line always sums:
+  "Create 4 · 1 excluded · 2 enrolled — 7 of 7 accounted for". A missing
+  expected case is never gone — it is in another bucket with a named reason.
+- **Pivot by provider or by payer** — same rows, two groupings, per-header
+  check-alls; the entry point picks the default (a payer-row entry opens
+  grouped by payer).
+- **Skip-for-now vs Exclude are different intents**: unchecking a row skips
+  it with no reason and no ceremony — it stays in the buffer and reappears
+  checked next time. Exclude… records the reasoned, persistent opt-out
+  (restorable in one click, on the grid and on the board).
+- **Confirm** runs the per-row transactional creation: cases are born Not
+  Started with SOP version stamps (generic-fallback usage is flagged before
+  confirm and recorded on the run), one immutable run + per-candidate
+  ledger row for EVERY bucket (created / skipped / excluded / enrolled /
+  already-existing / failed), concurrent duplicates degrade to safe skips,
+  and partial failure names the failed rows and stays on the grid. Full
+  success lands on Cases filtered to the run.

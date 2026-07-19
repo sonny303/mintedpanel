@@ -448,13 +448,11 @@ test("step 7: a provider failing the SOP's profile gate is a blocker with a dire
   const action = row.getByRole("link", { name: "Resolve blockers (1)" });
   await expect(action).toBeVisible();
 
-  // Step 10 — /generation retired with E6.1 F6.1.6: the blocker link rides
-  // the redirect to Groups until E6.3 re-homes generation on the group's
-  // Payer Network board (the scope param resumes then). This single-group
-  // org auto-lands on its group hub (E6.2 F6.2.1).
+  // E6.3 — /generation is ALIVE again: the blocker link opens the shared
+  // grid payer-scoped (the legacy ?payerId spelling stays honored).
   await action.click();
-  await expect(page).toHaveURL(/\/groups(\/[^/]+)?\/?$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible({
+  await expect(page).toHaveURL(/\/generation\?.*payerId=/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Review & generate" })).toBeVisible({
     timeout: 30000,
   });
 });
