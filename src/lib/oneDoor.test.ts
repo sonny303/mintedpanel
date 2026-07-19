@@ -1,11 +1,12 @@
-// E6.3 F6.3.5 — the one-door invariant pinned at the code level: cases are
-// created ONLY through the generation confirm path, the manual one-off modals
-// (the documented escape hatch — /cases "New case" and the provider-detail
-// modal until E6.4 makes the record read-only), and the reapply APPEND (which
-// re-opens the SAME case, never creates one). The two retired side-effect
-// creators — starter cases on provider create and the launch dialog — must
-// never come back: this suite greps the comment-stripped source tree for
-// case-creating call sites and fails on any new door.
+// E6.3 F6.3.5 / E6.4 — the one-door invariant pinned at the code level: cases
+// are created ONLY through the generation confirm path, the ONE manual
+// escape-hatch modal (/cases "New case" — the provider-record NewCaseModal
+// retired with the E6.4 record rebuild), and the reapply APPEND (which
+// re-opens the SAME case, never creates one). The retired side-effect
+// creators — starter cases on provider create, the launch dialog, and the
+// provider-detail modal — must never come back: this suite greps the
+// comment-stripped source tree for case-creating call sites and fails on any
+// new door.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,7 +19,6 @@ const ALLOWED_CASE_WRITERS = new Set([
   "src/services/generationConfirm.ts", // THE door — the confirm loop
   "src/hooks/useCases.ts", // useCreateCase wrapper + reapply append
   "src/components/cases/ManualCaseModal.tsx", // the documented escape hatch
-  "src/components/cases/NewCaseModal.tsx", // provider-detail manual door (E6.4 retires)
   "src/integrations/supabase/types.ts", // generated RPC TYPES, not a call site
 ]);
 
@@ -66,6 +66,9 @@ describe("F6.3.5 — one door for case creation (code-level pin)", () => {
       );
       expect(code, `${rel} must not resurrect the launch case dialog`).not.toMatch(
         /CreateCasesDialog/,
+      );
+      expect(code, `${rel} must not resurrect the provider-detail case modal`).not.toMatch(
+        /NewCaseModal/,
       );
     }
   });

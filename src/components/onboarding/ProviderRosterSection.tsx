@@ -11,6 +11,7 @@
 // admin of their own org per [r5-review]). Same parse/stage pipeline as the
 // internal tool at /admin/import; simplified error handling, no power tooling.
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -223,13 +224,13 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
                       Verify
                     </Button>
                   ) : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => setModal({ provider: p })}
-                  >
-                    Edit
+                  {/* E6.4 F6.1.5 — ongoing edits live on the provider RECORD
+                      (inline fields, in-place assignments); the wizard keeps
+                      only the create door. */}
+                  <Button asChild variant="outline" size="sm" className="h-7 px-2 text-[11px]">
+                    <Link to="/providers/$id" params={{ id: p.id }}>
+                      Open record
+                    </Link>
                   </Button>
                   <Button
                     variant="outline"

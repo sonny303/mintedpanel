@@ -8,6 +8,7 @@ import {
   getProvider,
   getProviders,
   listProviderGroupAssignments,
+  setGroupAssignments,
   terminateProvider,
   updateProvider,
   verifyProviders,
@@ -163,6 +164,24 @@ export function useSetPrimaryAssignment() {
       setPrimaryAssignment(vars.providerId, vars.assignmentId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+/** E6.4 F6.4.3 — the record's in-place group-membership editor. A narrow
+ * write to provider_group_assignments only (same invariants/RPC-free order as
+ * the roster form path); the frozen providers.group_id mirror follows the
+ * primary, so the providers cache invalidates too. */
+export function useSetGroupAssignments(providerId: string) {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (assignments: { groupId: string; isPrimary: boolean }[]) =>
+      setGroupAssignments(providerId, assignments),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
+      qc.invalidateQueries({ queryKey: ["providers", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });
