@@ -2,7 +2,7 @@ import { test, expect, type Route } from "@playwright/test";
 
 // E1.1 TE-10 — Provider Group entity coverage over the mock harness:
 //   TS-29 Tree Hill single-group capture: form save → section Complete →
-//         "Next: Facilities" dual-path → Account Detail read-only summary
+//         wizard-level "Next: Facilities" → Account Detail read-only summary
 //   TS-30 Shelby second TIN via "Add another group": two active rows, the
 //         section stays Complete, and there is no confirmation gate
 // Soft-delete coverage: deactivating the only active group returns the
@@ -256,15 +256,17 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await dialog.getByRole("button", { name: "Save provider group" }).click();
 
   // Derived progress: the section flips to Complete with the saved row listed
-  // (TIN formatted XX-XXXXXXX), and the dual-path exit renders.
+  // (TIN formatted XX-XXXXXXX) and "Add another group" available.
   await expect(groupCard).toContainText("Complete", { timeout: 15000 });
   await expect(groupCard).toContainText("Tree Hill Sports Therapy LLC");
   await expect(groupCard).toContainText("TIN 12-3456789");
-  await expect(groupCard.getByRole("button", { name: "Next: Facilities" })).toBeVisible();
   await expect(groupCard.getByRole("button", { name: "Add another group" })).toBeVisible();
 
-  // The wizard-level next action advances past the group section.
-  await expect(page.getByRole("button", { name: "Next: Facilities" }).first()).toBeVisible();
+  // The wizard-level next action advances past the group section — and it is
+  // the ONLY "Next: Facilities" CTA: the E1.1 inline section-body exit was
+  // removed by user request (2026-07-19).
+  await expect(page.getByRole("button", { name: "Next: Facilities" })).toHaveCount(1);
+  await expect(groupCard.getByRole("button", { name: "Next: Facilities" })).toHaveCount(0);
 
   // F1.1.3 (re-homed by E6.2 F6.2.1): the group facts live on the group hub —
   // a single-group org auto-lands there from /groups (zero extra clicks).
@@ -316,13 +318,13 @@ test("TS-30: second TIN via Add another group — both rows listed, still Comple
   await dialog.locator("#billing-zip").fill("37160");
   await dialog.getByRole("button", { name: "Save provider group" }).click();
 
-  // Both active groups listed; section stays Complete; dual-path persists
-  // (no "no more groups" confirmation gate anywhere).
+  // Both active groups listed; section stays Complete; "Add another group"
+  // persists (no "no more groups" confirmation gate anywhere).
   await expect(groupCard).toContainText("Shelby Performance Group LLC", { timeout: 15000 });
   await expect(groupCard).toContainText("Shelby Sports Rehab LLC");
   await expect(groupCard).toContainText("TIN 11-2233445");
   await expect(groupCard).toContainText("Complete");
-  await expect(groupCard.getByRole("button", { name: "Next: Facilities" })).toBeVisible();
+  await expect(groupCard.getByRole("button", { name: "Add another group" })).toBeVisible();
 });
 
 test("soft delete: deactivating the only active group returns the section to Not started", async ({
@@ -358,4 +360,55 @@ test("soft delete: deactivating the only active group returns the section to Not
   await expect(groupCard.getByRole("button", { name: "Add provider group" })).toBeVisible();
   const row = fixtures.provider_groups![0] as { is_active: boolean };
   expect(row.is_active).toBe(false);
+});
+
+// Bugfix regression (2026-07-19, user-reported): the Operating states menu is
+// portaled outside the Add-provider-group Dialog while modal={false}, so the
+// Dialog's scroll lock (react-remove-scroll) swallowed wheel events over it —
+// the menu was geometrically scrollable but the wheel never moved it, leaving
+// every state below the fold unreachable. StatesMultiSelect now owns the wheel
+// event on the menu content; this pins that a wheel gesture really scrolls the
+// internal region and the bottom of the list is reachable and clickable.
+test("operating-states menu wheel-scrolls inside the dialog", async ({ context, page }) => {
+  const fixtures = makeFixtures({
+    assignments: contactAssignments(ORG_TREE_HILL, "tree-hill"),
+  });
+  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
+  await seedAuth(context, ORG_TREE_HILL);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/onboarding/wizard");
+  const groupCard = page.locator("#wizard-provider-group");
+  await groupCard.getByRole("button", { name: "Add provider group" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add provider group" });
+  await dialog.getByRole("button", { name: "Operating states" }).click();
+  const menu = page.getByRole("menu");
+  await expect(page.getByRole("menuitemcheckbox", { name: "AL", exact: true })).toBeVisible();
+
+  // A real wheel gesture over the menu must move its internal scroll region
+  // (Playwright's auto scroll-into-view on click would mask the defect, so the
+  // scrollTop assertion is the honest pin).
+  const box = await menu.boundingBox();
+  if (!box) throw new Error("menu not measurable");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 1600);
+  await expect.poll(() => menu.evaluate((el) => el.scrollTop)).toBeGreaterThan(1000);
+
+  // The bottom of the list is genuinely inside the visible menu box now.
+  const wy = page.getByRole("menuitemcheckbox", { name: "WY", exact: true });
+  await expect
+    .poll(async () => {
+      const r = await wy.boundingBox();
+      const m = await menu.boundingBox();
+      return r && m && r.y >= m.y && r.y + r.height <= m.y + m.height + 1 ? "inside" : "outside";
+    })
+    .toBe("inside");
+  await wy.click();
+  await expect(dialog.getByRole("button", { name: "Operating states" })).toContainText("WY");
+
+  // Toggling the menu closed from its trigger leaves the dialog standing —
+  // the modal={false} contract StatesMultiSelect documents.
+  await dialog.getByRole("button", { name: "Operating states" }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "WY", exact: true })).toBeHidden();
+  await expect(dialog).toBeVisible();
 });
