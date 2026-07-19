@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Groups — Minted Panel Wiki</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body { background:#FAFAF8; color:#1a1a1a; }
+header { background:#1B4D3E; color:#fff; padding:14px 32px; display:flex; align-items:center; gap:12px; }
+header .mark { width:22px; height:22px; border:2px solid #fff; border-radius:4px; }
+header a { color:#fff; text-decoration:none; font-size:16px; font-weight:600; }
+header .crumb { margin-left:auto; font-size:13px; opacity:.8; }
+.layout { display:flex; max-width:1180px; margin:0 auto; }
+nav { width:250px; padding:28px 20px; border-right:1px solid #E8E5E0; min-height:calc(100vh - 52px); flex-shrink:0; }
+nav input { width:100%; padding:8px 10px; border:1px solid #E8E5E0; border-radius:6px; font-size:13px; background:#fff; margin-bottom:20px; }
+nav h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#8a8a86; margin:18px 0 8px; }
+nav a { display:block; padding:6px 10px; font-size:13.5px; color:#3a3a38; text-decoration:none; border-radius:6px; }
+nav a.active { background:#1B4D3E; color:#fff; }
+nav a.filtered-out { display:none; }
+main { flex:1; padding:36px 48px; max-width:780px; min-width:0; }
+main h1 { font-size:24px; font-weight:650; margin-bottom:14px; }
+main h2 { font-size:17px; font-weight:600; margin:24px 0 8px; }
+main h3 { font-size:15px; font-weight:600; margin:18px 0 6px; }
+main p, main li { font-size:14px; line-height:1.65; color:#2c2c2a; margin-bottom:10px; }
+main ul { padding-left:20px; margin-bottom:12px; }
+main li { margin-bottom:4px; }
+main code { background:#F0EFEB; border-radius:4px; padding:1px 5px; font-family:ui-monospace,monospace; font-size:12.5px; }
+main a { color:#1B4D3E; }
+main table { border-collapse:collapse; margin:12px 0 18px; width:100%; }
+main th, main td { border:1px solid #E8E5E0; padding:7px 10px; font-size:13px; text-align:left; vertical-align:top; }
+main th { background:#F5F4F0; font-weight:600; }
+footer.pagefoot { margin-top:34px; padding-top:14px; border-top:1px solid #E8E5E0; display:flex; justify-content:space-between; font-size:13px; }
+footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
+</style>
+</head>
+<body>
+<header><span class="mark"></span><a href="./index.html">Minted Panel Wiki</a><span class="crumb">built from docs/wiki — npm run wiki:build</span></header>
+<div class="layout">
+<nav>
+<input id="wiki-search" type="search" placeholder="Filter pages…" aria-label="Filter pages">
+<h3>Walkthroughs</h3><a href="./cases.html" data-title="cases">Cases</a>
+<a href="./payer-setup.html" data-title="payer setup">Payer Setup</a>
+<a href="./reporting-center.html" data-title="reporting center">Reporting Center</a>
+<a href="./org-detail.html" data-title="org detail">Org Detail</a>
+<a href="./groups.html" data-title="groups" class="active">Groups</a>
+<a href="./providers.html" data-title="providers">Providers</a>
+<h3>Reference</h3><a href="./data-definitions.html" data-title="data definitions">Data definitions</a>
+<a href="./where-did-it-go.html" data-title="where did it go?">Where did it go?</a>
+</nav>
+<main>
+<h1>Groups</h1>
+<p><em>Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p>Journeys B and C — the working entity for payer attach and generation.</p>
+<h2>The Groups front door</h2>
+<ul>
+<li><strong>Groups</strong> (org zone of the sidebar) opens the A→Z group list; a single-group org auto-lands on its only group's hub with zero extra clicks. Zero groups points at the setup wizard's Provider Group section.</li>
+<li>Every nested page carries the breadcrumb <code>Groups › {Group} › {Area}</code>; every crumb navigates.</li>
+</ul>
+<h2>The group hub</h2>
+<ul>
+<li><strong>Group facts</strong> — legal name, TIN (shown XX-XXXXXXX), operating states — editable inline by admins (audited through the same group update the wizard uses). Address/contact blocks stay in the wizard's full group form.</li>
+<li>Two area doors with live counts: <strong>Facilities</strong> and <strong>Payer Network</strong>.</li>
+</ul>
+<h2>Facilities (<code>Groups › {Group} › Facilities</code>)</h2>
+<ul>
+<li>Search on top; <strong>state-grouped, A→Z within state</strong>; filters for state and has-providers; per-row provider counts with an informational zero-provider flag (a location without providers cannot generate cases).</li>
+<li>Facility CRUD lives here (create/edit through the shared facility form; deactivate is a soft delete — never a row delete). <strong>Go-live date is a plain date field</strong> — it feeds the Launches report; there is NO location status machine.</li>
+<li>Each facility belongs to exactly ONE group: a street address shared by two groups is entered once per group (payers see per-TIN service locations). The facility CSV import lives on this page and its template documents the rule.</li>
+</ul>
+<h2>Payer Network (<code>Groups › {Group} › Payer Network</code>)</h2>
+<ul>
+<li><strong>The fulfillment board</strong> — the contract's promise-vs-reality screen, alive from day 1 with zero providers. One row per targeted payer with a DERIVED pill: <code>Targeted</code> (target exists, no case, no fact) · <code>In Progress</code> (≥1 open case, with the count) · <code>Active</code> (≥1 Approved case OR a live enrollment fact, with "since" when dated). Nobody can set any value on the board — approving a case or recording/expiring a fact flips the row on the next render with no board-side write.</li>
+<li>Drill a payer row to see each provider's per-state evidence: the case (its unified status, with denial history preserved beneath reapply cycles), an enrollment fact ("Active with zero cases"), a standing exclusion (reason + one-click Restore), or an awaiting-generation candidate.</li>
+<li><strong>The candidates banner</strong> counts the buffer (targets − enrollment facts − existing cases − standing exclusions, per eligible provider — the same math the grid consumes) and names its most recent cause ("Dr. Chen joined Sep 3"). <strong>Review &amp; generate</strong> (on the banner, and per payer row) opens the shared generation grid pre-scoped to this group — the payer-row entry additionally scopes to that payer and opens grouped by payer.</li>
+<li><strong>Attach payers to the group</strong>: the picker offers only catalog payers whose covered states intersect the group's operating states (zero-overlap payers are named in an explainer, never offered); proposed states = payer coverage ∩ group operating states, reviewed before save. The org-level enablement is created implicitly — no screen manages it. A CSV alternative (one row per group × payer, <code>;</code>-delimited states) rides the staged-import engine with the same eligibility checks at scan time and an idempotent skip-on-match commit.</li>
+<li><strong>Removing a payer archives</strong> the group's targets (never deletes); the org-level enablement archives only when no other group still works the payer. Re-attaching restores the archived targets without duplicates.</li>
+</ul>
+<h2>Enrollment facts (the migration model)</h2>
+<p>A fact records "already enrolled with this payer UNDER THIS GROUP'S CONTRACT" at provider × group × payer × state. Facts count a payer toward Active, suppress generation candidates, and <strong>never create cases</strong>. Expiry is a flip, never a delete — expiring immediately re-opens the candidate. Capture UI lands with E6.4 (provider record + onboarding).</p>
+<h2>Review &amp; generate — shipped with E6.3</h2>
+<p>Generation is the ONLY door cases come through (the manual one-off case modal remains as the documented escape hatch; reapply continues the SAME case). The board's banner, each payer row, a facility row, and the provider record all open the ONE shared preview grid, pre-scoped to their slice:</p>
+<ul>
+<li><strong>Every provider × payer target lands in exactly one bucket</strong> — candidate (checked by default), enrolled (live fact, grayed, never casework), existing case (grayed with its reason), or excluded (reasoned, with a one-click Undo). The confirm bar's reconciliation line always sums: "Create 4 · 1 excluded · 2 enrolled — 7 of 7 accounted for". A missing expected case is never gone — it is in another bucket with a named reason.</li>
+<li><strong>Pivot by provider or by payer</strong> — same rows, two groupings, per-header check-alls; the entry point picks the default (a payer-row entry opens grouped by payer).</li>
+<li><strong>Skip-for-now vs Exclude are different intents</strong>: unchecking a row skips it with no reason and no ceremony — it stays in the buffer and reappears checked next time. Exclude… records the reasoned, persistent opt-out (restorable in one click, on the grid and on the board).</li>
+<li><strong>Confirm</strong> runs the per-row transactional creation: cases are born Not Started with SOP version stamps (generic-fallback usage is flagged before confirm and recorded on the run), one immutable run + per-candidate ledger row for EVERY bucket (created / skipped / excluded / enrolled / already-existing / failed), concurrent duplicates degrade to safe skips, and partial failure names the failed rows and stays on the grid. Full success lands on Cases filtered to the run.</li>
+</ul>
+<footer class="pagefoot"><span><a href="./org-detail.html">← Org Detail</a></span><span><a href="./providers.html">Providers →</a></span></footer>
+</main>
+</div>
+<script>
+document.getElementById("wiki-search").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll("nav a[data-title]").forEach((a) => {
+    a.classList.toggle("filtered-out", q !== "" && !a.dataset.title.includes(q));
+  });
+});
+</script>
+</body>
+</html>
