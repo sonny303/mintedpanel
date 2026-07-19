@@ -1,0 +1,345 @@
+<title>Payer Network + Generation — E2E screen mocks</title>
+<style>
+  :root {
+    --bg: #FAF8F3; --raised: #FFFFFF; --ink: #1F2937; --ink-soft: #6B7280; --ink-faint: #9CA3AF;
+    --border: #E8E5E0; --border-soft: #F0EEEA; --accent: #1B4D3E; --accent-strong: #0C2A1D;
+    --accent-soft: #E7F0EC; --shadow: 0 1px 2px rgba(20,30,25,0.04);
+    --amber-bg: #FBF0E1; --amber-fg: #B45309; --blue-bg: #E8EEFD; --blue-fg: #1D4ED8;
+    --green-bg: #E7F5EF; --green-fg: #047857; --red-bg: #FBEAEA; --red-fg: #B91C1C;
+    --teal-bg: #E4F3F7; --teal-fg: #0E7490; --idle-bg: #F1F1EF; --idle-fg: #6B7280;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12161A; --raised: #191F1D; --ink: #EDEAE3; --ink-soft: #A9B0AC; --ink-faint: #77807C;
+      --border: #2A322D; --border-soft: #232B27; --accent: #5FBE9A; --accent-strong: #0C2A1D;
+      --accent-soft: #1B3229; --shadow: 0 1px 2px rgba(0,0,0,0.35);
+      --amber-bg: #33270F; --amber-fg: #E0AF6B; --blue-bg: #17222E; --blue-fg: #7FAAF0;
+      --green-bg: #14291F; --green-fg: #6CCFA5; --red-bg: #2E1717; --red-fg: #E58A8A;
+      --teal-bg: #10262B; --teal-fg: #6FC4D8; --idle-bg: #232B27; --idle-fg: #A9B0AC; }
+  }
+  :root[data-theme="dark"] { --bg: #12161A; --raised: #191F1D; --ink: #EDEAE3; --ink-soft: #A9B0AC;
+    --ink-faint: #77807C; --border: #2A322D; --border-soft: #232B27; --accent: #5FBE9A;
+    --accent-strong: #0C2A1D; --accent-soft: #1B3229; --shadow: 0 1px 2px rgba(0,0,0,0.35);
+    --amber-bg: #33270F; --amber-fg: #E0AF6B; --blue-bg: #17222E; --blue-fg: #7FAAF0;
+    --green-bg: #14291F; --green-fg: #6CCFA5; --red-bg: #2E1717; --red-fg: #E58A8A;
+    --teal-bg: #10262B; --teal-fg: #6FC4D8; --idle-bg: #232B27; --idle-fg: #A9B0AC; }
+  :root[data-theme="light"] { --bg: #FAF8F3; --raised: #FFFFFF; --ink: #1F2937; --ink-soft: #6B7280;
+    --ink-faint: #9CA3AF; --border: #E8E5E0; --border-soft: #F0EEEA; --accent: #1B4D3E;
+    --accent-strong: #0C2A1D; --accent-soft: #E7F0EC; --shadow: 0 1px 2px rgba(20,30,25,0.04);
+    --amber-bg: #FBF0E1; --amber-fg: #B45309; --blue-bg: #E8EEFD; --blue-fg: #1D4ED8;
+    --green-bg: #E7F5EF; --green-fg: #047857; --red-bg: #FBEAEA; --red-fg: #B91C1C;
+    --teal-bg: #E4F3F7; --teal-fg: #0E7490; --idle-bg: #F1F1EF; --idle-fg: #6B7280; }
+
+  /* Product surface — always light, mirrors the shipped app tokens */
+  .app {
+    --mp-white: #FFFFFF; --mp-off: #FDFDFC; --mp-muted: #F5F4F1; --mp-hover: #FAFAF8;
+    --mp-border: #E8E5E0; --mp-border-subtle: #F0EEEA;
+    --mp-900: #1F2937; --mp-500: #6B7280; --mp-400: #9CA3AF;
+    --mp-forest: #1B4D3E;
+    --mp-green-bg: #E7F5EF; --mp-green-fg: #047857;
+    --mp-blue-bg: #E8EEFD; --mp-blue-fg: #1D4ED8;
+    --mp-teal-bg: #E4F3F7; --mp-teal-fg: #0E7490;
+    --mp-amber-bg: #FBF0E1; --mp-amber-fg: #B45309;
+    --mp-red-bg: #FBEAEA; --mp-red-fg: #B91C1C;
+    --mp-idle-bg: #F1F1EF; --mp-idle-fg: #6B7280;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 40px 26px 90px; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: 25px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; margin: 8px 0 10px; text-wrap: balance; }
+  .dek { font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); max-width: 70ch; margin: 0 0 40px; }
+  .dek b { color: var(--ink); }
+
+  .shot { margin-bottom: 56px; }
+  .shot-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .shot-head .when { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--raised); background: var(--amber-fg); padding: 3px 10px; border-radius: 999px; }
+  .shot-head h2 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: -0.005em; }
+  .shot-sub { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 14px; line-height: 1.6; max-width: 70ch; }
+  .shot-sub b { color: var(--ink); }
+
+  /* Screen frame */
+  .screen { background: var(--raised); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden; }
+  .browser-bar { display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+    border-bottom: 1px solid var(--border); background: var(--bg); }
+  .browser-bar .dots { display: flex; gap: 5px; }
+  .browser-bar .dots i { width: 9px; height: 9px; border-radius: 999px; background: var(--border); display: block; }
+  .browser-bar .loc { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-soft);
+    background: var(--raised); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; flex: 1;
+    overflow-x: auto; white-space: nowrap; }
+
+  .app { background: var(--mp-off); padding: 20px 22px; }
+  .app .crumb { font-size: 11.5px; color: var(--mp-500); margin-bottom: 12px; }
+  .app .crumb b { color: var(--mp-900); font-weight: 500; }
+  .app .crumb .sep { color: var(--mp-400); padding: 0 4px; }
+  .app h3 { font-size: 16px; font-weight: 650; color: var(--mp-900); margin: 0 0 2px; letter-spacing: -0.01em; }
+  .app .h-sub { font-size: 12px; color: var(--mp-500); margin: 0 0 16px; }
+
+  .app .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--mp-border); margin-bottom: 16px; }
+  .app .tab { font-size: 12.5px; padding: 7px 14px; color: var(--mp-500); border-bottom: 2px solid transparent; }
+  .app .tab.on { color: var(--mp-forest); border-bottom-color: var(--mp-forest); font-weight: 600; }
+
+  .app .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
+    padding: 2px 9px; border-radius: 4px; white-space: nowrap; }
+  .app .pill.idle { background: var(--mp-idle-bg); color: var(--mp-idle-fg); }
+  .app .pill.blue { background: var(--mp-blue-bg); color: var(--mp-blue-fg); }
+  .app .pill.teal { background: var(--mp-teal-bg); color: var(--mp-teal-fg); }
+  .app .pill.amber { background: var(--mp-amber-bg); color: var(--mp-amber-fg); }
+  .app .pill.green { background: var(--mp-green-bg); color: var(--mp-green-fg); }
+  .app .pill.red { background: var(--mp-red-bg); color: var(--mp-red-fg); }
+
+  .app .banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 11px 15px;
+    border: 1px solid #CDE3D9; background: #EFF7F3; border-radius: 8px; margin-bottom: 14px; }
+  .app .banner .b-txt { font-size: 12.5px; color: #163F33; flex: 1; min-width: 200px; }
+  .app .banner .b-txt b { font-weight: 700; }
+  .app .btn { display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 500;
+    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--mp-border); background: var(--mp-white);
+    color: var(--mp-900); white-space: nowrap; }
+  .app .btn.primary { background: var(--mp-forest); border-color: var(--mp-forest); color: #fff; }
+  .app .btn.sm { font-size: 11.5px; padding: 4px 10px; }
+
+  .app table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .app th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--mp-400); padding: 8px 12px; border-bottom: 1px solid var(--mp-border); white-space: nowrap; }
+  .app td { padding: 10px 12px; border-bottom: 1px solid var(--mp-border-subtle); vertical-align: middle; color: var(--mp-500); }
+  .app tr:last-child td { border-bottom: none; }
+  .app td .p-name { font-weight: 600; color: var(--mp-900); }
+  .app td .p-kind { font-size: 10.5px; color: var(--mp-400); display: block; }
+  .app td .meta { font-size: 11px; color: var(--mp-400); display: block; margin-top: 1px; }
+  .app .chev { color: var(--mp-400); font-size: 11px; padding-right: 4px; }
+
+  .app .drill { background: var(--mp-hover); border-top: 1px solid var(--mp-border-subtle); }
+  .app .drill td { padding: 8px 12px 8px 34px; font-size: 12px; }
+  .app .drill .prov { color: var(--mp-900); font-weight: 500; }
+
+  .app .tbl-scroll { overflow-x: auto; border: 1px solid var(--mp-border); border-radius: 8px; background: var(--mp-white); }
+  .app table { min-width: 640px; }
+
+  /* generation grid */
+  .app .pivot-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .app .pivot-chip { font-size: 11.5px; font-weight: 500; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid var(--mp-border); color: var(--mp-500); background: var(--mp-white); }
+  .app .pivot-chip.on { background: var(--mp-forest); border-color: var(--mp-forest); color: #fff; font-weight: 600; }
+  .app .scope-note { font-size: 11.5px; color: var(--mp-400); margin-left: auto; }
+  .app .group-hd td { background: var(--mp-muted); font-weight: 600; color: var(--mp-900); font-size: 12px; }
+  .app .cb { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--mp-400);
+    background: var(--mp-white); vertical-align: -2px; margin-right: 8px; position: relative; }
+  .app .cb.ck { background: var(--mp-forest); border-color: var(--mp-forest); }
+  .app .cb.ck::after { content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .app tr.grayed td { opacity: 0.55; }
+  .app .rd { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600;
+    padding: 1px 7px; border-radius: 4px; margin-right: 4px; }
+  .app .rd.ok { background: var(--mp-green-bg); color: var(--mp-green-fg); }
+  .app .rd.warn { background: var(--mp-amber-bg); color: var(--mp-amber-fg); }
+  .app .row-act { font-size: 11px; color: var(--mp-400); white-space: nowrap; }
+  .app .row-act u { text-decoration: none; color: var(--mp-forest); font-weight: 500; }
+
+  .app .confirm-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px;
+    padding: 12px 15px; border: 1px solid var(--mp-border); border-radius: 8px; background: var(--mp-white); }
+  .app .confirm-bar .sum { font-size: 12.5px; color: var(--mp-900); flex: 1; min-width: 240px; line-height: 1.55; }
+  .app .confirm-bar .sum .warn-line { font-size: 11.5px; color: var(--mp-amber-fg); display: block; }
+
+  /* annotations */
+  .ann { counter-reset: none; }
+  .marker { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px;
+    border-radius: 999px; background: var(--amber-fg); color: #fff; font-size: 10.5px; font-weight: 700;
+    vertical-align: 1px; margin-left: 6px; flex: none; }
+  .legend { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .legend .lg { display: flex; gap: 9px; font-size: 12px; line-height: 1.55; color: var(--ink-soft); }
+  .legend .lg .marker { margin: 1px 0 0; }
+  .legend .lg b { color: var(--ink); font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Minted Panel · E2E screen mocks · decision record companion</div>
+  <h1>Payer Network and Generation — the four moments that matter</h1>
+  <p class="dek">
+    The E2E example (BEST Physical Therapy, 7 promised payers, Dr. Chen hired day 50)
+    rendered as the actual screens, in timeline order. Amber-numbered markers call out
+    the elements we aligned on. <b>Reconciliation note:</b> the honest math is
+    7 targets = 4 generated + 1 excluded + 2 arrived enrolled — screen 3 shows the
+    exclusion happening.
+  </p>
+
+  <!-- ============ SCREEN 1 ============ -->
+  <div class="shot">
+    <div class="shot-head"><span class="when">Jul 15 · Day 1</span><h2>Payer Network — the contract's promise, before any provider exists</h2></div>
+    <p class="shot-sub">Zeb finished the wizard and attached the 7 eligible payers to the group. This board is the target state the team steers by for the next 108 days.</p>
+    <div class="screen">
+      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/payer-network</span></div>
+      <div class="app">
+        <div class="crumb">Org Detail<span class="sep">›</span><b>Payer Network</b></div>
+        <h3>BEST Physical Therapy</h3>
+        <p class="h-sub">1 group · 1 facility (NC) · 0 providers</p>
+        <div class="tabs"><span class="tab">Overview</span><span class="tab">Organization data</span><span class="tab on">Payer Network</span></div>
+
+        <div class="banner">
+          <span class="b-txt"><b>0 candidates awaiting generation</b> — add providers to the group to create casework.<span class="marker">1</span></span>
+          <span class="btn sm">Attach payers</span>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th>Payer</th><th>Status</th><th>Cases</th><th>Providers</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><span class="p-name">Aetna</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span><span class="marker">2</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">Anthem BCBS NC</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">Cigna</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">Medicare</span><span class="p-kind">Government · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">NC Medicaid</span><span class="p-kind">Government · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">TRICARE</span><span class="p-kind">Government · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td><span class="p-name">UnitedHealthcare</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span> <span class="pill amber">no SOP yet</span><span class="marker">3</span></td><td>0</td><td>—</td><td class="row-act"><u>Generate</u></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><span class="marker">1</span><span>The buffer banner is always present and always honest — day 1 it explains <b>why</b> it's zero (no providers), instead of hiding.</span></div>
+      <div class="lg"><span class="marker">2</span><span><b>Targeted</b> = derived "target exists, no case yet." Nobody set it; nobody can set it.</span></div>
+      <div class="lg"><span class="marker">3</span><span>Journey A status shows through: UHC has no payer SOP yet — visible here months before it matters, so ops can fix it before generation day.</span></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 2 ============ -->
+  <div class="shot">
+    <div class="shot-head"><span class="when">Sept 3 · Day 50</span><h2>Payer Network — the hire lands, the buffer lights up</h2></div>
+    <p class="shot-sub">Zeb onboarded Dr. Chen on the Providers surface: group + facility + migration enrollments (Aetna, Medicare under this group's contract). Onboarding created zero work — but the board now shows exactly what's waiting.</p>
+    <div class="screen">
+      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/payer-network</span></div>
+      <div class="app">
+        <div class="crumb">Org Detail<span class="sep">›</span><b>Payer Network</b></div>
+        <h3>BEST Physical Therapy</h3>
+        <p class="h-sub">1 group · 1 facility (NC) · 1 provider</p>
+        <div class="tabs"><span class="tab">Overview</span><span class="tab">Organization data</span><span class="tab on">Payer Network</span></div>
+
+        <div class="banner">
+          <span class="b-txt"><b>5 candidates awaiting generation</b> — Dr. Riley Chen joined BEST PT Group on Sept 3.<span class="marker">1</span></span>
+          <span class="btn primary">Review &amp; generate</span>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th></th><th>Payer</th><th>Status</th><th>Cases</th><th>Providers</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="chev">▾</td><td><span class="p-name">Aetna</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill green">Active</span><span class="marker">2</span></td><td>0</td><td>1 enrolled</td><td class="row-act"></td></tr>
+              <tr class="drill"><td></td><td colspan="5"><span class="prov">Dr. Riley Chen</span> — <span class="pill green">Enrolled</span> <span class="meta" style="display:inline;">enrollment fact (migration) · effective on record · no case, no queue noise<span class="marker">3</span></span></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">Anthem BCBS NC</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>1 candidate</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">Cigna</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>1 candidate</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">Medicare</span><span class="p-kind">Government · NC</span></td><td><span class="pill green">Active</span></td><td>0</td><td>1 enrolled</td><td class="row-act"></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">NC Medicaid</span><span class="p-kind">Government · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>1 candidate</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">TRICARE</span><span class="p-kind">Government · NC</span></td><td><span class="pill idle">Targeted</span></td><td>0</td><td>1 candidate</td><td class="row-act"><u>Generate</u></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">UnitedHealthcare</span><span class="p-kind">Commercial · NC</span></td><td><span class="pill idle">Targeted</span> <span class="pill amber">no SOP yet</span></td><td>0</td><td>1 candidate</td><td class="row-act"><u>Generate</u></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><span class="marker">1</span><span>The buffer explains <b>where the candidates came from</b> — the hire — and offers the one action. This is the decoupling made visible: the system counted, a human decides when.</span></div>
+      <div class="lg"><span class="marker">2</span><span>Aetna flipped <b>Active</b> with zero casework — derived from the <b>enrollment fact</b> (Active = at least one approved case OR one enrollment fact). No auto-case was created; the Cases queue carries nothing for Aetna.</span></div>
+      <div class="lg"><span class="marker">3</span><span><b>Your question answered:</b> providers appear here, inside an expanded payer row — each payer drills down to its providers with either their case status or their enrollment fact. Generation selection happens on the next screen, not on this board.</span></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 3 ============ -->
+  <div class="shot">
+    <div class="shot-head"><span class="when">Sept 4</span><h2>Generation preview — the selectable grid, every target accounted for</h2></div>
+    <p class="shot-sub">Opened from the banner's <b>Review &amp; generate</b>. Grouped by provider (Zeb came from the hire); the pivot flips to by-payer for the new-payer-attached scenario. Zeb excludes TRICARE ("not pursuing" — the customer's call) and confirms the rest.</p>
+    <div class="screen">
+      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/payer-network/generate</span></div>
+      <div class="app">
+        <div class="crumb">Org Detail<span class="sep">›</span>Payer Network<span class="sep">›</span><b>Review &amp; generate</b></div>
+        <h3>Review &amp; generate</h3>
+        <p class="h-sub">Every provider × payer combination, in exactly one bucket. Nothing is created until you confirm.</p>
+
+        <div class="pivot-row">
+          <span class="pivot-chip on">By provider</span><span class="pivot-chip">By payer</span><span class="marker">1</span>
+          <span class="scope-note">Scope: all awaiting candidates</span>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th></th><th>Payer · state</th><th>Readiness</th><th>SOP</th><th></th></tr></thead>
+            <tbody>
+              <tr class="group-hd"><td colspan="5"><span class="cb ck"></span>Dr. Riley Chen — 5 candidates · 2 already enrolled<span class="marker">2</span></td></tr>
+              <tr><td><span class="cb ck"></span></td><td><span class="p-name">Anthem BCBS NC</span> · NC</td><td><span class="rd ok">License NC</span><span class="rd ok">CAQH current</span></td><td>Anthem NC SOP v3 · fill-ready</td><td class="row-act"><u>Skip for now</u> · <u>Exclude…</u><span class="marker">3</span></td></tr>
+              <tr><td><span class="cb ck"></span></td><td><span class="p-name">Cigna</span> · NC</td><td><span class="rd ok">License NC</span><span class="rd ok">CAQH current</span></td><td>Cigna SOP v1 · fill-ready</td><td class="row-act"><u>Skip for now</u> · <u>Exclude…</u></td></tr>
+              <tr><td><span class="cb ck"></span></td><td><span class="p-name">NC Medicaid</span> · NC</td><td><span class="rd ok">License NC</span><span class="rd warn">W-9 missing</span><span class="marker">4</span></td><td>NC Medicaid SOP v2 · fill-ready</td><td class="row-act"><u>Skip for now</u> · <u>Exclude…</u></td></tr>
+              <tr><td><span class="cb ck"></span></td><td><span class="p-name">UnitedHealthcare</span> · NC</td><td><span class="rd ok">License NC</span><span class="rd ok">CAQH current</span></td><td><span class="pill amber">Generic checklist — no SOP yet</span></td><td class="row-act"><u>Skip for now</u> · <u>Exclude…</u></td></tr>
+              <tr><td><span class="cb"></span></td><td><span class="p-name">TRICARE</span> · NC</td><td><span class="rd ok">License NC</span></td><td>TRICARE SOP v1</td><td class="row-act"><span class="pill amber">Excluded: not pursuing</span> <u>Undo</u><span class="marker">5</span></td></tr>
+              <tr class="grayed"><td></td><td><span class="p-name">Aetna</span> · NC</td><td colspan="2">Already enrolled under BEST PT Group (migration) — no case needed</td><td class="row-act"></td></tr>
+              <tr class="grayed"><td></td><td><span class="p-name">Medicare</span> · NC</td><td colspan="2">Already enrolled under BEST PT Group (migration)</td><td class="row-act"></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="confirm-bar">
+          <span class="sum"><b>Create 4 cases</b> for 1 provider across 4 payers · 1 excluded · 2 already enrolled — <b>7 of 7 targets accounted for</b>.<span class="marker">6</span>
+            <span class="warn-line">1 case will use the generic checklist (UnitedHealthcare — no payer SOP yet).</span></span>
+          <span class="btn">Cancel</span>
+          <span class="btn primary">Confirm &amp; create 4 cases</span>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><span class="marker">1</span><span>The pivot: <b>by provider</b> after a hire, <b>by payer</b> after attaching a new payer. Same grid, same rules; group headers carry check-alls.</span></div>
+      <div class="lg"><span class="marker">2</span><span><b>Yes — a selectable checklist</b>: selection at the provider × payer row grain, with whole-provider / whole-payer check-alls.</span></div>
+      <div class="lg"><span class="marker">3</span><span>The two deselect intents: <b>Skip for now</b> = stays in the awaiting buffer, no ceremony. <b>Exclude…</b> = reasoned, persistent, leaves the buffer, restorable.</span></div>
+      <div class="lg"><span class="marker">4</span><span>Readiness chips <b>warn, never block</b> — the W-9 gap is visible, the row is still generatable, and the gap follows the case into the queue.</span></div>
+      <div class="lg"><span class="marker">5</span><span>TRICARE excluded live, with the reason. It will show on the board as excluded — never silently gone.</span></div>
+      <div class="lg"><span class="marker">6</span><span>The reconciliation line is always present: buckets sum to the target count. This is the trust mechanism.</span></div>
+    </div>
+  </div>
+
+  <!-- ============ SCREEN 4 ============ -->
+  <div class="shot">
+    <div class="shot-head"><span class="when">Nov 1 · Go-live</span><h2>Payer Network — the promise vs. the reality, all derived</h2></div>
+    <p class="shot-sub">Eight weeks of casework later. Every status on this board is math over case statuses — nobody has ever edited a payer row directly.</p>
+    <div class="screen">
+      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/payer-network</span></div>
+      <div class="app">
+        <div class="crumb">Org Detail<span class="sep">›</span><b>Payer Network</b></div>
+        <h3>BEST Physical Therapy</h3>
+        <p class="h-sub">1 group · 1 facility (NC) · 1 provider · <b>3 of 6 pursued payers active</b></p>
+        <div class="tabs"><span class="tab">Overview</span><span class="tab">Organization data</span><span class="tab on">Payer Network</span></div>
+
+        <div class="banner">
+          <span class="b-txt"><b>0 candidates awaiting generation</b> — all current providers are covered.</span>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th></th><th>Payer</th><th>Status</th><th>Cases</th><th>Providers</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="chev">▸</td><td><span class="p-name">Aetna</span></td><td><span class="pill green">Active</span></td><td>0</td><td>1 enrolled</td><td class="row-act"></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">Anthem BCBS NC</span></td><td><span class="pill green">Active</span><span class="marker">1</span></td><td>1</td><td>1 of 1 approved · eff. Oct 15</td><td class="row-act"></td></tr>
+              <tr><td class="chev">▾</td><td><span class="p-name">Cigna</span></td><td><span class="pill blue">In Progress</span><span class="marker">2</span></td><td>1</td><td>0 of 1 approved</td><td class="row-act"></td></tr>
+              <tr class="drill"><td></td><td colspan="5"><span class="prov">Dr. Riley Chen</span> — <span class="pill blue">In Progress</span> <span class="meta" style="display:inline;">cycle 2, reapplied Oct 20 · prior: <span class="pill red">Denied</span> panel closed, Oct 10</span></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">Medicare</span></td><td><span class="pill green">Active</span></td><td>0</td><td>1 enrolled</td><td class="row-act"></td></tr>
+              <tr><td class="chev">▾</td><td><span class="p-name">NC Medicaid</span></td><td><span class="pill blue">In Progress</span></td><td>1</td><td>0 of 1 approved</td><td class="row-act"></td></tr>
+              <tr class="drill"><td></td><td colspan="5"><span class="prov">Dr. Riley Chen</span> — <span class="pill teal">Submitted</span> <span class="meta" style="display:inline;">faxed Sept 12 · last touch Sept 30</span></td></tr>
+              <tr><td class="chev">▸</td><td><span class="p-name">TRICARE</span></td><td><span class="pill amber">Excluded — not pursuing</span><span class="marker">3</span></td><td>0</td><td>—</td><td class="row-act"><u>Restore</u></td></tr>
+              <tr><td class="chev">▾</td><td><span class="p-name">UnitedHealthcare</span></td><td><span class="pill blue">In Progress</span></td><td>1</td><td>0 of 1 approved</td><td class="row-act"></td></tr>
+              <tr class="drill"><td></td><td colspan="5"><span class="prov">Dr. Riley Chen</span> — <span class="pill teal">In Review</span> <span class="meta" style="display:inline;">RFI answered Oct 4 · generic checklist<span class="marker">4</span></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg"><span class="marker">1</span><span>Anthem went Active the instant its case was set Approved (Oct 12, with effective date + the payer's "Provider ID") — derived, immediate.</span></div>
+      <div class="lg"><span class="marker">2</span><span>The denial story is fully legible in one drill-down: cycle 2 in progress, prior denial with reason and date preserved underneath. The same facts feed the Denials report.</span></div>
+      <div class="lg"><span class="marker">3</span><span>The day-one promise never erodes: TRICARE still occupies its row, honestly excluded, restorable — 7 of 7 forever accounted for.</span></div>
+      <div class="lg"><span class="marker">4</span><span>UHC still wears its generic-checklist marker at the case level — the nudge to finish Journey A survives until ops does.</span></div>
+    </div>
+  </div>
+</div>
