@@ -73,6 +73,52 @@ level is derived math.
    page retires (members → Org Detail; denial word-list + queue ranking ship
    as fixed defaults). → E6.6
 
+## The driving business scenarios (from the alignment; each is a named TS)
+
+These are the concrete situations that forced the decisions — every one maps
+to seed-universe scenarios (TS-104–TS-137) and to acceptance criteria in the
+epics:
+
+1. **The Nov-1 contract** — org + one group + one NC facility onboarded day
+   1, seven payers promised (4 commercial, 3 government), zero providers
+   until a day-50 hire. Drove: day-1 target-state recording, the fulfillment
+   board, the awaiting-generation buffer, provider-start-date ranking.
+   (TS-109, TS-111)
+2. **The day-50 hire** — provider added → group → facility → instantly a
+   candidate for all seven targets with nobody assigning payers by hand.
+   Drove: derived provider↔payer tying, the buffer banner naming its cause,
+   the provider-record generation entry. (TS-109, TS-127, TS-129)
+3. **The migration variant** — an established practice arrives already
+   enrolled with two payers UNDER THIS GROUP'S CONTRACT; a new hire's
+   prior-employer status never carries over. Drove: enrollment facts (never
+   auto-cases — "auto cases are noise"), the guard label, expire-reopens-
+   candidate. (TS-113, TS-128)
+4. **The denial story** — Cigna denies (panel closed), the panel reopens,
+   reapply continues the SAME case; denials roll up to the provider for
+   reporting and pivot payer-first for patterns. Drove: required reasons,
+   the reapply cycle, the denials report. (TS-116, TS-136)
+5. **The fax payer** — NC Medicaid submits by fax; the system never
+   witnessed it, so it never presumes. Drove: auto-vs-human transition
+   rules and the Add-touch bump. (TS-105, TS-137)
+6. **Portfolio parallelism / no chokeholds** — two people, interchangeable
+   hats, working different orgs and payers the same week; exactly ONE
+   deliberate gate (generation confirm) in the whole system; a missing SOP
+   warns and falls back, never blocks. Drove: standalone Journey A,
+   authored-once, the gate audit. (TS-114, TS-126, TS-132)
+7. **Drift mid-flight** — a payer changes its form while cases are open;
+   work continues manually, repair happens in the authoring editor. Drove:
+   the Fix-it dissolution and in-editor repair. (TS-132)
+8. **The long unsorted lists** — the live facilities page and provider
+   roster. Drove: A→Z defaults, state grouping, search/filters, and
+   counts-as-reports. (TS-108, TS-112, TS-135)
+9. **The grain mismatch** — payers were being "assigned to orgs" in the UI
+   while every real fact is group-grain. Drove: the Groups menu item,
+   group-scoped boards, eligibility-filtered attach, implicit org
+   enablement. (TS-110, TS-122)
+10. **The two status machines on one case** — internal track vs payer
+    pipeline disagreeing. Drove: the eight-word unified list and
+    evidence-based setting. (TS-104, TS-105, TS-118)
+
 ## Cross-cutting rules
 
 - **No chokeholds:** exactly one deliberate gate (generation confirm, any
