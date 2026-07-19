@@ -1,178 +1,677 @@
 <title>Screens — providers, facilities, sample case</title>
 <style>
   :root {
-    --bg: #FAF8F3; --raised: #FFFFFF; --ink: #1F2937; --ink-soft: #6B7280; --ink-faint: #9CA3AF;
-    --border: #E8E5E0; --border-soft: #F0EEEA; --accent: #1B4D3E; --accent-strong: #0C2A1D;
-    --accent-soft: #E7F0EC; --shadow: 0 1px 2px rgba(20,30,25,0.04);
-    --amber-bg: #FBF0E1; --amber-fg: #B45309; --blue-bg: #E8EEFD; --blue-fg: #1D4ED8;
-    --green-bg: #E7F5EF; --green-fg: #047857; --red-bg: #FBEAEA; --red-fg: #B91C1C;
-    --teal-bg: #E4F3F7; --teal-fg: #0E7490; --idle-bg: #F1F1EF; --idle-fg: #6B7280;
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #12161A; --raised: #191F1D; --ink: #EDEAE3; --ink-soft: #A9B0AC; --ink-faint: #77807C;
-      --border: #2A322D; --border-soft: #232B27; --accent: #5FBE9A; --accent-strong: #0C2A1D;
-      --accent-soft: #1B3229; --shadow: 0 1px 2px rgba(0,0,0,0.35);
-      --amber-bg: #33270F; --amber-fg: #E0AF6B; --blue-bg: #17222E; --blue-fg: #7FAAF0;
-      --green-bg: #14291F; --green-fg: #6CCFA5; --red-bg: #2E1717; --red-fg: #E58A8A;
-      --teal-bg: #10262B; --teal-fg: #6FC4D8; --idle-bg: #232B27; --idle-fg: #A9B0AC; }
+    :root {
+      --bg: #12161a;
+      --raised: #191f1d;
+      --ink: #edeae3;
+      --ink-soft: #a9b0ac;
+      --ink-faint: #77807c;
+      --border: #2a322d;
+      --border-soft: #232b27;
+      --accent: #5fbe9a;
+      --accent-strong: #0c2a1d;
+      --accent-soft: #1b3229;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      --amber-bg: #33270f;
+      --amber-fg: #e0af6b;
+      --blue-bg: #17222e;
+      --blue-fg: #7faaf0;
+      --green-bg: #14291f;
+      --green-fg: #6ccfa5;
+      --red-bg: #2e1717;
+      --red-fg: #e58a8a;
+      --teal-bg: #10262b;
+      --teal-fg: #6fc4d8;
+      --idle-bg: #232b27;
+      --idle-fg: #a9b0ac;
+    }
   }
-  :root[data-theme="dark"] { --bg: #12161A; --raised: #191F1D; --ink: #EDEAE3; --ink-soft: #A9B0AC;
-    --ink-faint: #77807C; --border: #2A322D; --border-soft: #232B27; --accent: #5FBE9A;
-    --accent-strong: #0C2A1D; --accent-soft: #1B3229; --shadow: 0 1px 2px rgba(0,0,0,0.35);
-    --amber-bg: #33270F; --amber-fg: #E0AF6B; --blue-bg: #17222E; --blue-fg: #7FAAF0;
-    --green-bg: #14291F; --green-fg: #6CCFA5; --red-bg: #2E1717; --red-fg: #E58A8A;
-    --teal-bg: #10262B; --teal-fg: #6FC4D8; --idle-bg: #232B27; --idle-fg: #A9B0AC; }
-  :root[data-theme="light"] { --bg: #FAF8F3; --raised: #FFFFFF; --ink: #1F2937; --ink-soft: #6B7280;
-    --ink-faint: #9CA3AF; --border: #E8E5E0; --border-soft: #F0EEEA; --accent: #1B4D3E;
-    --accent-strong: #0C2A1D; --accent-soft: #E7F0EC; --shadow: 0 1px 2px rgba(20,30,25,0.04);
-    --amber-bg: #FBF0E1; --amber-fg: #B45309; --blue-bg: #E8EEFD; --blue-fg: #1D4ED8;
-    --green-bg: #E7F5EF; --green-fg: #047857; --red-bg: #FBEAEA; --red-fg: #B91C1C;
-    --teal-bg: #E4F3F7; --teal-fg: #0E7490; --idle-bg: #F1F1EF; --idle-fg: #6B7280; }
+  :root[data-theme="dark"] {
+    --bg: #12161a;
+    --raised: #191f1d;
+    --ink: #edeae3;
+    --ink-soft: #a9b0ac;
+    --ink-faint: #77807c;
+    --border: #2a322d;
+    --border-soft: #232b27;
+    --accent: #5fbe9a;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #1b3229;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --amber-bg: #33270f;
+    --amber-fg: #e0af6b;
+    --blue-bg: #17222e;
+    --blue-fg: #7faaf0;
+    --green-bg: #14291f;
+    --green-fg: #6ccfa5;
+    --red-bg: #2e1717;
+    --red-fg: #e58a8a;
+    --teal-bg: #10262b;
+    --teal-fg: #6fc4d8;
+    --idle-bg: #232b27;
+    --idle-fg: #a9b0ac;
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+  }
 
   .app {
-    --mp-white: #FFFFFF; --mp-off: #FDFDFC; --mp-muted: #F5F4F1; --mp-hover: #FAFAF8;
-    --mp-border: #E8E5E0; --mp-border-subtle: #F0EEEA;
-    --mp-900: #1F2937; --mp-500: #6B7280; --mp-400: #9CA3AF; --mp-forest: #1B4D3E;
-    --mp-green-bg: #E7F5EF; --mp-green-fg: #047857; --mp-blue-bg: #E8EEFD; --mp-blue-fg: #1D4ED8;
-    --mp-teal-bg: #E4F3F7; --mp-teal-fg: #0E7490; --mp-amber-bg: #FBF0E1; --mp-amber-fg: #B45309;
-    --mp-red-bg: #FBEAEA; --mp-red-fg: #B91C1C; --mp-idle-bg: #F1F1EF; --mp-idle-fg: #6B7280;
+    --mp-white: #ffffff;
+    --mp-off: #fdfdfc;
+    --mp-muted: #f5f4f1;
+    --mp-hover: #fafaf8;
+    --mp-border: #e8e5e0;
+    --mp-border-subtle: #f0eeea;
+    --mp-900: #1f2937;
+    --mp-500: #6b7280;
+    --mp-400: #9ca3af;
+    --mp-forest: #1b4d3e;
+    --mp-green-bg: #e7f5ef;
+    --mp-green-fg: #047857;
+    --mp-blue-bg: #e8eefd;
+    --mp-blue-fg: #1d4ed8;
+    --mp-teal-bg: #e4f3f7;
+    --mp-teal-fg: #0e7490;
+    --mp-amber-bg: #fbf0e1;
+    --mp-amber-fg: #b45309;
+    --mp-red-bg: #fbeaea;
+    --mp-red-fg: #b91c1c;
+    --mp-idle-bg: #f1f1ef;
+    --mp-idle-fg: #6b7280;
     color-scheme: light;
   }
 
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
-  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
-  .wrap { max-width: 1020px; margin: 0 auto; padding: 40px 26px 90px; }
-  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
-  h1 { font-size: 25px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; margin: 8px 0 10px; text-wrap: balance; }
-  .dek { font-size: 13.5px; line-height: 1.65; color: var(--ink-soft); max-width: 70ch; margin: 0 0 40px; }
-  .dek b { color: var(--ink); }
+  .wrap {
+    max-width: 1020px;
+    margin: 0 auto;
+    padding: 40px 26px 90px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 25px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 8px 0 10px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 70ch;
+    margin: 0 0 40px;
+  }
+  .dek b {
+    color: var(--ink);
+  }
 
-  .shot { margin-bottom: 56px; }
-  .shot-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
-  .shot-head .tagn { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--raised); background: var(--amber-fg); padding: 3px 10px; border-radius: 999px; }
-  .shot-head h2 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: -0.005em; }
-  .shot-sub { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 14px; line-height: 1.6; max-width: 70ch; }
-  .shot-sub b { color: var(--ink); }
+  .shot {
+    margin-bottom: 56px;
+  }
+  .shot-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .shot-head .tagn {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--raised);
+    background: var(--amber-fg);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .shot-head h2 {
+    font-size: 17px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .shot-sub {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 0 0 14px;
+    line-height: 1.6;
+    max-width: 70ch;
+  }
+  .shot-sub b {
+    color: var(--ink);
+  }
 
-  .screen { background: var(--raised); border: 1px solid var(--border); border-radius: 12px;
-    box-shadow: var(--shadow); overflow: hidden; }
-  .browser-bar { display: flex; align-items: center; gap: 10px; padding: 9px 14px;
-    border-bottom: 1px solid var(--border); background: var(--bg); }
-  .browser-bar .dots { display: flex; gap: 5px; }
-  .browser-bar .dots i { width: 9px; height: 9px; border-radius: 999px; background: var(--border); display: block; }
-  .browser-bar .loc { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-soft);
-    background: var(--raised); border: 1px solid var(--border); border-radius: 6px; padding: 4px 12px; flex: 1;
-    overflow-x: auto; white-space: nowrap; }
+  .screen {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .browser-bar .dots {
+    display: flex;
+    gap: 5px;
+  }
+  .browser-bar .dots i {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--border);
+    display: block;
+  }
+  .browser-bar .loc {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    flex: 1;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 
-  .app { background: var(--mp-off); padding: 20px 22px; }
-  .app .crumb { font-size: 11.5px; color: var(--mp-500); margin-bottom: 12px; }
-  .app .crumb b { color: var(--mp-900); font-weight: 500; }
-  .app .crumb .sep { color: var(--mp-400); padding: 0 4px; }
-  .app .head-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .app h3 { font-size: 16px; font-weight: 650; color: var(--mp-900); margin: 0; letter-spacing: -0.01em; flex: 1; }
-  .app .btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500;
-    padding: 7px 14px; border-radius: 4px; border: 1px solid var(--mp-border); background: var(--mp-white); color: var(--mp-900); white-space: nowrap; }
-  .app .btn.primary { background: var(--mp-forest); border-color: var(--mp-forest); color: #fff; }
-  .app .btn.sm { font-size: 11.5px; padding: 4px 10px; }
+  .app {
+    background: var(--mp-off);
+    padding: 20px 22px;
+  }
+  .app .crumb {
+    font-size: 11.5px;
+    color: var(--mp-500);
+    margin-bottom: 12px;
+  }
+  .app .crumb b {
+    color: var(--mp-900);
+    font-weight: 500;
+  }
+  .app .crumb .sep {
+    color: var(--mp-400);
+    padding: 0 4px;
+  }
+  .app .head-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .app h3 {
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--mp-900);
+    margin: 0;
+    letter-spacing: -0.01em;
+    flex: 1;
+  }
+  .app .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 7px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--mp-border);
+    background: var(--mp-white);
+    color: var(--mp-900);
+    white-space: nowrap;
+  }
+  .app .btn.primary {
+    background: var(--mp-forest);
+    border-color: var(--mp-forest);
+    color: #fff;
+  }
+  .app .btn.sm {
+    font-size: 11.5px;
+    padding: 4px 10px;
+  }
 
-  .app .filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-  .app .search { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; height: 32px;
-    padding: 0 11px; background: var(--mp-white); border: 1px solid var(--mp-border); border-radius: 4px;
-    font-size: 12px; color: var(--mp-400); }
-  .app .sel { height: 32px; display: inline-flex; align-items: center; padding: 0 11px; font-size: 12px;
-    color: var(--mp-500); background: var(--mp-white); border: 1px solid var(--mp-border); border-radius: 4px; }
-  .app .sort-note { font-size: 11px; color: var(--mp-400); margin-left: auto; }
+  .app .filter-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .app .search {
+    flex: 1;
+    min-width: 180px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 11px;
+    background: var(--mp-white);
+    border: 1px solid var(--mp-border);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--mp-400);
+  }
+  .app .sel {
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 11px;
+    font-size: 12px;
+    color: var(--mp-500);
+    background: var(--mp-white);
+    border: 1px solid var(--mp-border);
+    border-radius: 4px;
+  }
+  .app .sort-note {
+    font-size: 11px;
+    color: var(--mp-400);
+    margin-left: auto;
+  }
 
-  .app .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
-    padding: 2px 9px; border-radius: 4px; white-space: nowrap; }
-  .app .pill.idle { background: var(--mp-idle-bg); color: var(--mp-idle-fg); }
-  .app .pill.blue { background: var(--mp-blue-bg); color: var(--mp-blue-fg); }
-  .app .pill.teal { background: var(--mp-teal-bg); color: var(--mp-teal-fg); }
-  .app .pill.amber { background: var(--mp-amber-bg); color: var(--mp-amber-fg); }
-  .app .pill.green { background: var(--mp-green-bg); color: var(--mp-green-fg); }
-  .app .pill.red { background: var(--mp-red-bg); color: var(--mp-red-fg); }
+  .app .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .app .pill.idle {
+    background: var(--mp-idle-bg);
+    color: var(--mp-idle-fg);
+  }
+  .app .pill.blue {
+    background: var(--mp-blue-bg);
+    color: var(--mp-blue-fg);
+  }
+  .app .pill.teal {
+    background: var(--mp-teal-bg);
+    color: var(--mp-teal-fg);
+  }
+  .app .pill.amber {
+    background: var(--mp-amber-bg);
+    color: var(--mp-amber-fg);
+  }
+  .app .pill.green {
+    background: var(--mp-green-bg);
+    color: var(--mp-green-fg);
+  }
+  .app .pill.red {
+    background: var(--mp-red-bg);
+    color: var(--mp-red-fg);
+  }
 
-  .app .tbl-scroll { overflow-x: auto; border: 1px solid var(--mp-border); border-radius: 8px; background: var(--mp-white); }
-  .app table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 680px; }
-  .app th { text-align: left; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--mp-400); padding: 8px 12px; border-bottom: 1px solid var(--mp-border); white-space: nowrap; }
-  .app td { padding: 10px 12px; border-bottom: 1px solid var(--mp-border-subtle); vertical-align: middle; color: var(--mp-500); }
-  .app tr:last-child td { border-bottom: none; }
-  .app td .nm { font-weight: 600; color: var(--mp-900); }
-  .app td .sub { font-size: 11px; color: var(--mp-400); display: block; }
+  .app .tbl-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--mp-border);
+    border-radius: 8px;
+    background: var(--mp-white);
+  }
+  .app table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    min-width: 680px;
+  }
+  .app th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mp-400);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mp-border);
+    white-space: nowrap;
+  }
+  .app td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--mp-border-subtle);
+    vertical-align: middle;
+    color: var(--mp-500);
+  }
+  .app tr:last-child td {
+    border-bottom: none;
+  }
+  .app td .nm {
+    font-weight: 600;
+    color: var(--mp-900);
+  }
+  .app td .sub {
+    font-size: 11px;
+    color: var(--mp-400);
+    display: block;
+  }
 
   /* record layout */
-  .app .rec-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-  .app .rec-head .who { flex: 1; min-width: 220px; }
-  .app .rec-head h3 { font-size: 18px; }
-  .app .rec-head .who .ids { font-size: 12px; color: var(--mp-500); margin-top: 3px; }
-  .app .rec-head .who .ids code { background: var(--mp-muted); padding: 1px 6px; border-radius: 3px; font-size: 11px; }
-  .app .sec-nav { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--mp-border); margin-bottom: 16px; }
-  .app .sec-nav span { font-size: 12px; padding: 6px 12px; color: var(--mp-500); border-bottom: 2px solid transparent; }
-  .app .sec-nav span.on { color: var(--mp-forest); border-bottom-color: var(--mp-forest); font-weight: 600; }
+  .app .rec-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .app .rec-head .who {
+    flex: 1;
+    min-width: 220px;
+  }
+  .app .rec-head h3 {
+    font-size: 18px;
+  }
+  .app .rec-head .who .ids {
+    font-size: 12px;
+    color: var(--mp-500);
+    margin-top: 3px;
+  }
+  .app .rec-head .who .ids code {
+    background: var(--mp-muted);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .app .sec-nav {
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--mp-border);
+    margin-bottom: 16px;
+  }
+  .app .sec-nav span {
+    font-size: 12px;
+    padding: 6px 12px;
+    color: var(--mp-500);
+    border-bottom: 2px solid transparent;
+  }
+  .app .sec-nav span.on {
+    color: var(--mp-forest);
+    border-bottom-color: var(--mp-forest);
+    font-weight: 600;
+  }
 
-  .app .panel { border: 1px solid var(--mp-border); border-radius: 8px; background: var(--mp-white); margin-bottom: 14px; overflow: hidden; }
-  .app .panel .p-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--mp-border-subtle); }
-  .app .panel .p-hd .t { font-size: 12.5px; font-weight: 650; color: var(--mp-900); flex: 1; }
-  .app .panel .p-bd { padding: 12px 14px; }
+  .app .panel {
+    border: 1px solid var(--mp-border);
+    border-radius: 8px;
+    background: var(--mp-white);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .app .panel .p-hd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--mp-border-subtle);
+  }
+  .app .panel .p-hd .t {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--mp-900);
+    flex: 1;
+  }
+  .app .panel .p-bd {
+    padding: 12px 14px;
+  }
 
-  .app .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 18px; }
-  .app .mf { font-size: 12px; }
-  .app .mf .k { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mp-400); display: block; margin-bottom: 1px; }
-  .app .mf .v { color: var(--mp-900); display: inline-flex; align-items: center; gap: 6px; }
-  .app .mf .pen { color: var(--mp-400); font-size: 10px; border: 1px solid var(--mp-border); border-radius: 3px; padding: 0 4px; }
+  .app .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px 18px;
+  }
+  .app .mf {
+    font-size: 12px;
+  }
+  .app .mf .k {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--mp-400);
+    display: block;
+    margin-bottom: 1px;
+  }
+  .app .mf .v {
+    color: var(--mp-900);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .app .mf .pen {
+    color: var(--mp-400);
+    font-size: 10px;
+    border: 1px solid var(--mp-border);
+    border-radius: 3px;
+    padding: 0 4px;
+  }
 
-  .app .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500;
-    padding: 3px 10px; border-radius: 999px; background: var(--mp-muted); color: var(--mp-900); }
-  .app .chip .x { color: var(--mp-400); }
-  .app .chip .star { color: var(--mp-amber-fg); }
-  .app .chip-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .app .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--mp-muted);
+    color: var(--mp-900);
+  }
+  .app .chip .x {
+    color: var(--mp-400);
+  }
+  .app .chip .star {
+    color: var(--mp-amber-fg);
+  }
+  .app .chip-row {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
 
-  .app .fac-line { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--mp-border-subtle); font-size: 12px; }
-  .app .fac-line:last-child { border-bottom: none; }
-  .app .fac-line .fn { color: var(--mp-900); font-weight: 500; flex: 1; }
-  .app .fac-line .meta { color: var(--mp-400); font-size: 11px; }
+  .app .fac-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--mp-border-subtle);
+    font-size: 12px;
+  }
+  .app .fac-line:last-child {
+    border-bottom: none;
+  }
+  .app .fac-line .fn {
+    color: var(--mp-900);
+    font-weight: 500;
+    flex: 1;
+  }
+  .app .fac-line .meta {
+    color: var(--mp-400);
+    font-size: 11px;
+  }
 
-  .app .row-line { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--mp-border-subtle); font-size: 12px; color: var(--mp-500); }
-  .app .row-line:last-child { border-bottom: none; }
-  .app .row-line .l { color: var(--mp-900); font-weight: 500; }
-  .app .row-line .sp { flex: 1; }
+  .app .row-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--mp-border-subtle);
+    font-size: 12px;
+    color: var(--mp-500);
+  }
+  .app .row-line:last-child {
+    border-bottom: none;
+  }
+  .app .row-line .l {
+    color: var(--mp-900);
+    font-weight: 500;
+  }
+  .app .row-line .sp {
+    flex: 1;
+  }
 
-  .app .gap-strip { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid #F3E2C0;
-    background: #FDF6E9; border-radius: 8px; margin-bottom: 14px; font-size: 12px; color: #8A5A17; }
+  .app .gap-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 13px;
+    border: 1px solid #f3e2c0;
+    background: #fdf6e9;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    font-size: 12px;
+    color: #8a5a17;
+  }
 
-  .marker { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px;
-    border-radius: 999px; background: var(--amber-fg); color: #fff; font-size: 10.5px; font-weight: 700;
-    vertical-align: 1px; margin-left: 6px; flex: none; }
-  .legend { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
-  .legend .lg { display: flex; gap: 9px; font-size: 12px; line-height: 1.55; color: var(--ink-soft); }
-  .legend .lg .marker { margin: 1px 0 0; }
-  .legend .lg b { color: var(--ink); font-weight: 600; }
+  .marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 999px;
+    background: var(--amber-fg);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    vertical-align: 1px;
+    margin-left: 6px;
+    flex: none;
+  }
+  .legend {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .legend .lg {
+    display: flex;
+    gap: 9px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .legend .lg .marker {
+    margin: 1px 0 0;
+  }
+  .legend .lg b {
+    color: var(--ink);
+    font-weight: 600;
+  }
 </style>
 
 <div class="wrap">
   <div class="eyebrow">Minted Panel · area screens · decision record companion</div>
   <h1>Providers, facilities, and a sample case</h1>
   <p class="dek">
-    Four screens. Design rules: <b>A→Z by default</b> on every list, everything about a
-    provider on one page, <b>inline field editing</b> (no monolithic edit form),
-    facilities added right on the record — fixing a real defect in today's app, where
-    saving the provider edit form silently <b>drops</b> facility assignments — and the
-    same search/sort/filter treatment on the facilities list. Screen 4 is one case,
-    mid-story.
+    Four screens. Design rules: <b>A→Z by default</b> on every list, everything about a provider on
+    one page, <b>inline field editing</b> (no monolithic edit form), facilities added right on the
+    record — fixing a real defect in today's app, where saving the provider edit form silently
+    <b>drops</b> facility assignments — and the same search/sort/filter treatment on the facilities
+    list. Screen 4 is one case, mid-story.
   </p>
 
   <!-- SCREEN 1: roster -->
   <div class="shot">
-    <div class="shot-head"><span class="tagn">Screen 1</span><h2>The roster — PHI-safe list, gaps visible, A→Z</h2></div>
-    <p class="shot-sub">Everything a coordinator needs to pick the right person fast. No DOB, no SSN, no home address in the list — identity details live on the record.</p>
+    <div class="shot-head">
+      <span class="tagn">Screen 1</span>
+      <h2>The roster — PHI-safe list, gaps visible, A→Z</h2>
+    </div>
+    <p class="shot-sub">
+      Everything a coordinator needs to pick the right person fast. No DOB, no SSN, no home address
+      in the list — identity details live on the record.
+    </p>
     <div class="screen">
-      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/providers</span></div>
+      <div class="browser-bar">
+        <span class="dots"><i></i><i></i><i></i></span
+        ><span class="loc">app.mintedpanel.com/org/best-pt/providers</span>
+      </div>
       <div class="app">
         <div class="crumb"><b>Providers</b></div>
         <div class="head-row">
@@ -189,110 +688,317 @@
         </div>
         <div class="tbl-scroll">
           <table>
-            <thead><tr><th>Provider</th><th>NPI</th><th>Groups</th><th>Facilities</th><th>Licenses</th><th>CAQH</th><th>Cases</th><th>Gaps</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>NPI</th>
+                <th>Groups</th>
+                <th>Facilities</th>
+                <th>Licenses</th>
+                <th>CAQH</th>
+                <th>Cases</th>
+                <th>Gaps</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td><span class="nm">Chen, Riley PT DPT</span><span class="sub">riley.chen@bestptnc.com</span></td><td>1234567890</td><td>BEST PT Group</td><td>1</td><td>NC · exp 2027</td><td>attested Jun 12</td><td>4 open · 1 approved</td><td><span class="pill amber">W-9</span><span class="marker">3</span></td></tr>
-              <tr><td><span class="nm">Douek, Sarah PT</span><span class="sub">sarah.d@bestptnc.com</span></td><td>2345678901</td><td>BEST PT Group</td><td>2</td><td>NC, SC · exp 2026</td><td>attested May 2</td><td>6 open</td><td>—</td></tr>
-              <tr><td><span class="nm">Nguyen, Alex PTA</span><span class="sub">alex.n@bestptnc.com</span></td><td>3456789012</td><td>BEST PT Group</td><td>1</td><td>NC · <span class="pill amber">exp 34d</span></td><td><span class="pill amber">stale 130d</span></td><td>3 open</td><td><span class="pill amber">2</span></td></tr>
-              <tr><td><span class="nm">Ostrander, Brooke PT</span><span class="sub">brooke.o@bestptnc.com</span></td><td>4567890123</td><td>BEST PT Group</td><td><span class="pill amber">0</span></td><td>NC · exp 2027</td><td>attested Jul 1</td><td>—</td><td><span class="pill amber">no facility</span><span class="marker">4</span></td></tr>
+              <tr>
+                <td>
+                  <span class="nm">Chen, Riley PT DPT</span
+                  ><span class="sub">riley.chen@bestptnc.com</span>
+                </td>
+                <td>1234567890</td>
+                <td>BEST PT Group</td>
+                <td>1</td>
+                <td>NC · exp 2027</td>
+                <td>attested Jun 12</td>
+                <td>4 open · 1 approved</td>
+                <td><span class="pill amber">W-9</span><span class="marker">3</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="nm">Douek, Sarah PT</span
+                  ><span class="sub">sarah.d@bestptnc.com</span>
+                </td>
+                <td>2345678901</td>
+                <td>BEST PT Group</td>
+                <td>2</td>
+                <td>NC, SC · exp 2026</td>
+                <td>attested May 2</td>
+                <td>6 open</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="nm">Nguyen, Alex PTA</span
+                  ><span class="sub">alex.n@bestptnc.com</span>
+                </td>
+                <td>3456789012</td>
+                <td>BEST PT Group</td>
+                <td>1</td>
+                <td>NC · <span class="pill amber">exp 34d</span></td>
+                <td><span class="pill amber">stale 130d</span></td>
+                <td>3 open</td>
+                <td><span class="pill amber">2</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="nm">Ostrander, Brooke PT</span
+                  ><span class="sub">brooke.o@bestptnc.com</span>
+                </td>
+                <td>4567890123</td>
+                <td>BEST PT Group</td>
+                <td><span class="pill amber">0</span></td>
+                <td>NC · exp 2027</td>
+                <td>attested Jul 1</td>
+                <td>—</td>
+                <td><span class="pill amber">no facility</span><span class="marker">4</span></td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
     <div class="legend">
-      <div class="lg"><span class="marker">1</span><span><b>Import lives here</b>, with the data it feeds — one row per relationship for multi-group/facility; template pre-filled with the org's real group and facility names.</span></div>
-      <div class="lg"><span class="marker">2</span><span><b>A→Z by last name is the default</b>, always stated on screen; search and filters never change the underlying sort.</span></div>
-      <div class="lg"><span class="marker">3</span><span>Gaps surface as pills in the list — the ex-Fix-it provider-data-gap job, now ambient. Clicking one lands on the record with that section focused.</span></div>
-      <div class="lg"><span class="marker">4</span><span>A provider with <b>no facility assignment</b> is flagged here (they can't generate cases) — the fix is one click away on their record.</span></div>
+      <div class="lg">
+        <span class="marker">1</span
+        ><span
+          ><b>Import lives here</b>, with the data it feeds — one row per relationship for
+          multi-group/facility; template pre-filled with the org's real group and facility
+          names.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">2</span
+        ><span
+          ><b>A→Z by last name is the default</b>, always stated on screen; search and filters never
+          change the underlying sort.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">3</span
+        ><span
+          >Gaps surface as pills in the list — the ex-Fix-it provider-data-gap job, now ambient.
+          Clicking one lands on the record with that section focused.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">4</span
+        ><span
+          >A provider with <b>no facility assignment</b> is flagged here (they can't generate cases)
+          — the fix is one click away on their record.</span
+        >
+      </div>
     </div>
   </div>
 
   <!-- SCREEN 2: record -->
   <div class="shot">
-    <div class="shot-head"><span class="tagn">Screen 2</span><h2>The record — one page, inline edits, facilities added in place</h2></div>
-    <p class="shot-sub">Dr. Chen mid-story (October). Section nav jumps within one page — no tabs hiding data, no separate edit screen.</p>
+    <div class="shot-head">
+      <span class="tagn">Screen 2</span>
+      <h2>The record — one page, inline edits, facilities added in place</h2>
+    </div>
+    <p class="shot-sub">
+      Dr. Chen mid-story (October). Section nav jumps within one page — no tabs hiding data, no
+      separate edit screen.
+    </p>
     <div class="screen">
-      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/providers/riley-chen</span></div>
+      <div class="browser-bar">
+        <span class="dots"><i></i><i></i><i></i></span
+        ><span class="loc">app.mintedpanel.com/org/best-pt/providers/riley-chen</span>
+      </div>
       <div class="app">
         <div class="crumb">Providers<span class="sep">›</span><b>Riley Chen</b></div>
         <div class="rec-head">
           <div class="who">
             <h3>Riley Chen, PT DPT</h3>
-            <div class="ids">NPI <code>1234567890</code> · CAQH <code>14829series</code> · SSN <code>***--6789</code> · started Sept 3, 2026</div>
+            <div class="ids">
+              NPI <code>1234567890</code> · CAQH <code>14829series</code> · SSN
+              <code>***--6789</code> · started Sept 3, 2026
+            </div>
           </div>
           <span class="btn sm">Add touch</span>
           <span class="btn sm">Documents</span>
         </div>
 
-        <div class="gap-strip">1 gap: W-9 missing — blocks nothing, flagged on the NC Medicaid case checklist.<span class="marker">1</span></div>
+        <div class="gap-strip">
+          1 gap: W-9 missing — blocks nothing, flagged on the NC Medicaid case checklist.<span
+            class="marker"
+            >1</span
+          >
+        </div>
 
         <div class="sec-nav">
-          <span class="on">Identity</span><span>Groups &amp; facilities</span><span>Licenses</span><span>Enrollments</span><span>Cases</span><span>Documents</span>
+          <span class="on">Identity</span><span>Groups &amp; facilities</span><span>Licenses</span
+          ><span>Enrollments</span><span>Cases</span><span>Documents</span>
         </div>
 
         <div class="panel">
           <div class="p-hd"><span class="t">Identity &amp; contact</span></div>
           <div class="p-bd">
             <div class="meta-grid">
-              <div class="mf"><span class="k">Email</span><span class="v">riley.chen@bestptnc.com <span class="pen">edit</span><span class="marker">2</span></span></div>
-              <div class="mf"><span class="k">Phone</span><span class="v">919-555-0142 <span class="pen">edit</span></span></div>
-              <div class="mf"><span class="k">Specialty</span><span class="v">Physical Therapy <span class="pen">edit</span></span></div>
-              <div class="mf"><span class="k">Home state</span><span class="v">NC <span class="pen">edit</span></span></div>
-              <div class="mf"><span class="k">Date of birth</span><span class="v">•• /•• /1991 <span class="pen">edit</span></span></div>
-              <div class="mf"><span class="k">Start date</span><span class="v">Sept 3, 2026 <span class="pen">edit</span></span></div>
+              <div class="mf">
+                <span class="k">Email</span
+                ><span class="v"
+                  >riley.chen@bestptnc.com <span class="pen">edit</span
+                  ><span class="marker">2</span></span
+                >
+              </div>
+              <div class="mf">
+                <span class="k">Phone</span
+                ><span class="v">919-555-0142 <span class="pen">edit</span></span>
+              </div>
+              <div class="mf">
+                <span class="k">Specialty</span
+                ><span class="v">Physical Therapy <span class="pen">edit</span></span>
+              </div>
+              <div class="mf">
+                <span class="k">Home state</span
+                ><span class="v">NC <span class="pen">edit</span></span>
+              </div>
+              <div class="mf">
+                <span class="k">Date of birth</span
+                ><span class="v">•• /•• /1991 <span class="pen">edit</span></span>
+              </div>
+              <div class="mf">
+                <span class="k">Start date</span
+                ><span class="v">Sept 3, 2026 <span class="pen">edit</span></span>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="p-hd"><span class="t">Groups &amp; facilities</span><span class="btn sm">+ Add facility<span class="marker">3</span></span></div>
+          <div class="p-hd">
+            <span class="t">Groups &amp; facilities</span
+            ><span class="btn sm">+ Add facility<span class="marker">3</span></span>
+          </div>
           <div class="p-bd">
-            <div class="chip-row" style="margin-bottom: 8px;">
-              <span class="chip"><span class="star">★</span> BEST PT Group <span class="x">· primary</span></span>
+            <div class="chip-row" style="margin-bottom: 8px">
+              <span class="chip"
+                ><span class="star">★</span> BEST PT Group <span class="x">· primary</span></span
+              >
               <span class="btn sm">+ Add group</span>
             </div>
-            <div class="fac-line"><span class="fn">Harborview Clinic</span><span class="meta">Raleigh, NC · start Sept 3, 2026</span><span class="btn sm">Remove</span></div>
-            <div class="fac-line"><span class="fn">Oakwood Rehab</span><span class="meta">Durham, NC · start Nov 1, 2026</span><span class="btn sm">Remove</span></div>
+            <div class="fac-line">
+              <span class="fn">Harborview Clinic</span
+              ><span class="meta">Raleigh, NC · start Sept 3, 2026</span
+              ><span class="btn sm">Remove</span>
+            </div>
+            <div class="fac-line">
+              <span class="fn">Oakwood Rehab</span
+              ><span class="meta">Durham, NC · start Nov 1, 2026</span
+              ><span class="btn sm">Remove</span>
+            </div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="p-hd"><span class="t">Enrollment facts</span><span class="btn sm">+ Add enrollment</span></div>
+          <div class="p-hd">
+            <span class="t">Enrollment facts</span><span class="btn sm">+ Add enrollment</span>
+          </div>
           <div class="p-bd">
-            <div class="row-line"><span class="l">Aetna · NC</span><span>effective Mar 2024 · migration</span><span class="sp"></span><span class="pill green">Enrolled</span><span class="btn sm">Expire<span class="marker">4</span></span></div>
-            <div class="row-line"><span class="l">Medicare · NC</span><span>PTAN on file · migration</span><span class="sp"></span><span class="pill green">Enrolled</span><span class="btn sm">Expire</span></div>
+            <div class="row-line">
+              <span class="l">Aetna · NC</span><span>effective Mar 2024 · migration</span
+              ><span class="sp"></span><span class="pill green">Enrolled</span
+              ><span class="btn sm">Expire<span class="marker">4</span></span>
+            </div>
+            <div class="row-line">
+              <span class="l">Medicare · NC</span><span>PTAN on file · migration</span
+              ><span class="sp"></span><span class="pill green">Enrolled</span
+              ><span class="btn sm">Expire</span>
+            </div>
           </div>
         </div>
 
         <div class="panel">
           <div class="p-hd"><span class="t">Cases</span></div>
           <div class="p-bd">
-            <div class="row-line"><span class="l">Anthem BCBS NC</span><span class="sp"></span><span class="pill green">Approved · eff Oct 15</span></div>
-            <div class="row-line"><span class="l">UnitedHealthcare</span><span class="sp"></span><span class="pill teal">In Review</span></div>
-            <div class="row-line"><span class="l">NC Medicaid</span><span class="sp"></span><span class="pill teal">Submitted</span></div>
-            <div class="row-line"><span class="l">Cigna</span><span>cycle 2 · prior: <span class="pill red">Denied — panel closed</span></span><span class="sp"></span><span class="pill blue">In Progress</span><span class="marker">5</span></div>
+            <div class="row-line">
+              <span class="l">Anthem BCBS NC</span><span class="sp"></span
+              ><span class="pill green">Approved · eff Oct 15</span>
+            </div>
+            <div class="row-line">
+              <span class="l">UnitedHealthcare</span><span class="sp"></span
+              ><span class="pill teal">In Review</span>
+            </div>
+            <div class="row-line">
+              <span class="l">NC Medicaid</span><span class="sp"></span
+              ><span class="pill teal">Submitted</span>
+            </div>
+            <div class="row-line">
+              <span class="l">Cigna</span
+              ><span>cycle 2 · prior: <span class="pill red">Denied — panel closed</span></span
+              ><span class="sp"></span><span class="pill blue">In Progress</span
+              ><span class="marker">5</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="legend">
-      <div class="lg"><span class="marker">1</span><span>Gaps live at the top of the record, advisory — the same fact the generation preview and case checklist show, one source.</span></div>
-      <div class="lg"><span class="marker">2</span><span><b>Inline editing per field</b> — click the pencil, change, save. The monolithic edit form is gone, and with it the defect where saving it wiped facility assignments.</span></div>
-      <div class="lg"><span class="marker">3</span><span><b>+ Add facility, in place</b>: opens a picker of the group's facilities (with a start date). Assignments become ordinary, editable data — today they're effectively write-once at creation. Adding Oakwood here is what makes Chen generatable for any future Oakwood-dependent work.</span></div>
-      <div class="lg"><span class="marker">4</span><span><b>Expire</b> ends an enrollment fact — the payer combo instantly reappears as a candidate in the group's awaiting-generation buffer. No case is ever auto-created.</span></div>
-      <div class="lg"><span class="marker">5</span><span>The full case story per payer — including the denial with its reason and the reapply cycle — readable without leaving the record; rows link into Cases.</span></div>
+      <div class="lg">
+        <span class="marker">1</span
+        ><span
+          >Gaps live at the top of the record, advisory — the same fact the generation preview and
+          case checklist show, one source.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">2</span
+        ><span
+          ><b>Inline editing per field</b> — click the pencil, change, save. The monolithic edit
+          form is gone, and with it the defect where saving it wiped facility assignments.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">3</span
+        ><span
+          ><b>+ Add facility, in place</b>: opens a picker of the group's facilities (with a start
+          date). Assignments become ordinary, editable data — today they're effectively write-once
+          at creation. Adding Oakwood here is what makes Chen generatable for any future
+          Oakwood-dependent work.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">4</span
+        ><span
+          ><b>Expire</b> ends an enrollment fact — the payer combo instantly reappears as a
+          candidate in the group's awaiting-generation buffer. No case is ever auto-created.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">5</span
+        ><span
+          >The full case story per payer — including the denial with its reason and the reapply
+          cycle — readable without leaving the record; rows link into Cases.</span
+        >
+      </div>
     </div>
   </div>
 
   <!-- SCREEN 3: facilities list, same treatment -->
   <div class="shot">
-    <div class="shot-head"><span class="tagn">Screen 3</span><h2>Same treatment for facilities — Groups › Facilities</h2></div>
-    <p class="shot-sub">The same list discipline applied to locations: search on top, A→Z within state, state filter, provider counts inline. Shown for a bigger org (Shelby Sports Rehab, 2 states) so the sorting earns its keep.</p>
+    <div class="shot-head">
+      <span class="tagn">Screen 3</span>
+      <h2>Same treatment for facilities — Groups › Facilities</h2>
+    </div>
+    <p class="shot-sub">
+      The same list discipline applied to locations: search on top, A→Z within state, state filter,
+      provider counts inline. Shown for a bigger org (Shelby Sports Rehab, 2 states) so the sorting
+      earns its keep.
+    </p>
     <div class="screen">
-      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/shelby-sports/groups/shelby-rehab-group/facilities</span></div>
+      <div class="browser-bar">
+        <span class="dots"><i></i><i></i><i></i></span
+        ><span class="loc"
+          >app.mintedpanel.com/org/shelby-sports/groups/shelby-rehab-group/facilities</span
+        >
+      </div>
       <div class="app">
-        <div class="crumb">Groups<span class="sep">›</span>Shelby Rehab Group<span class="sep">›</span><b>Facilities</b></div>
+        <div class="crumb">
+          Groups<span class="sep">›</span>Shelby Rehab Group<span class="sep">›</span
+          ><b>Facilities</b>
+        </div>
         <div class="head-row">
           <h3>Facilities</h3>
           <span class="btn">Import CSV</span>
@@ -306,39 +1012,128 @@
         </div>
         <div class="tbl-scroll">
           <table>
-            <thead><tr><th>Facility</th><th>City</th><th>Go-live</th><th>Providers</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Facility</th>
+                <th>City</th>
+                <th>Go-live</th>
+                <th>Providers</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr><td colspan="4" style="background: var(--mp-muted); font-weight: 600; color: var(--mp-900); font-size: 11px; padding: 6px 12px;">NORTH CAROLINA (3)<span class="marker">2</span></td></tr>
-              <tr><td><span class="nm">Ashebrook Clinic</span></td><td>Asheville</td><td>Live</td><td>4</td></tr>
-              <tr><td><span class="nm">Harborview North</span></td><td>Raleigh</td><td>Live</td><td>2</td></tr>
-              <tr><td><span class="nm">Oakwood Rehab</span></td><td>Durham</td><td>Nov 1, 2026</td><td><span class="pill amber">0</span><span class="marker">3</span></td></tr>
-              <tr><td colspan="4" style="background: var(--mp-muted); font-weight: 600; color: var(--mp-900); font-size: 11px; padding: 6px 12px;">SOUTH CAROLINA (2)</td></tr>
-              <tr><td><span class="nm">Lowcountry PT</span></td><td>Charleston</td><td>Live</td><td>3</td></tr>
-              <tr><td><span class="nm">Palmetto Rehab</span></td><td>Columbia</td><td>Live</td><td>1</td></tr>
+              <tr>
+                <td
+                  colspan="4"
+                  style="
+                    background: var(--mp-muted);
+                    font-weight: 600;
+                    color: var(--mp-900);
+                    font-size: 11px;
+                    padding: 6px 12px;
+                  "
+                >
+                  NORTH CAROLINA (3)<span class="marker">2</span>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="nm">Ashebrook Clinic</span></td>
+                <td>Asheville</td>
+                <td>Live</td>
+                <td>4</td>
+              </tr>
+              <tr>
+                <td><span class="nm">Harborview North</span></td>
+                <td>Raleigh</td>
+                <td>Live</td>
+                <td>2</td>
+              </tr>
+              <tr>
+                <td><span class="nm">Oakwood Rehab</span></td>
+                <td>Durham</td>
+                <td>Nov 1, 2026</td>
+                <td><span class="pill amber">0</span><span class="marker">3</span></td>
+              </tr>
+              <tr>
+                <td
+                  colspan="4"
+                  style="
+                    background: var(--mp-muted);
+                    font-weight: 600;
+                    color: var(--mp-900);
+                    font-size: 11px;
+                    padding: 6px 12px;
+                  "
+                >
+                  SOUTH CAROLINA (2)
+                </td>
+              </tr>
+              <tr>
+                <td><span class="nm">Lowcountry PT</span></td>
+                <td>Charleston</td>
+                <td>Live</td>
+                <td>3</td>
+              </tr>
+              <tr>
+                <td><span class="nm">Palmetto Rehab</span></td>
+                <td>Columbia</td>
+                <td>Live</td>
+                <td>1</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
     <div class="legend">
-      <div class="lg"><span class="marker">1</span><span>Same rules as the roster: <b>state-grouped, A→Z within state</b>, search and filters on top — no more one long unsorted page.</span></div>
-      <div class="lg"><span class="marker">2</span><span>State headers with counts double as the geography summary; collapsed by default on orgs with many locations.</span></div>
-      <div class="lg"><span class="marker">3</span><span>The zero-provider flag rides the row (informational); the full "facilities without providers" question across groups is a <b>Reporting Center report</b>, per the counts-as-reports decision.</span></div>
+      <div class="lg">
+        <span class="marker">1</span
+        ><span
+          >Same rules as the roster: <b>state-grouped, A→Z within state</b>, search and filters on
+          top — no more one long unsorted page.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">2</span
+        ><span
+          >State headers with counts double as the geography summary; collapsed by default on orgs
+          with many locations.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">3</span
+        ><span
+          >The zero-provider flag rides the row (informational); the full "facilities without
+          providers" question across groups is a <b>Reporting Center report</b>, per the
+          counts-as-reports decision.</span
+        >
+      </div>
     </div>
   </div>
 
   <!-- SCREEN 4: sample case -->
   <div class="shot">
-    <div class="shot-head"><span class="tagn">Screen 4</span><h2>A sample case — Chen × Anthem BCBS NC, Sept 18</h2></div>
-    <p class="shot-sub">Mid-story: the extension logged the submission on Sept 12 (status flipped itself), and today's call moves it to In Review through Add touch. One status, evidence attached to every change.</p>
+    <div class="shot-head">
+      <span class="tagn">Screen 4</span>
+      <h2>A sample case — Chen × Anthem BCBS NC, Sept 18</h2>
+    </div>
+    <p class="shot-sub">
+      Mid-story: the extension logged the submission on Sept 12 (status flipped itself), and today's
+      call moves it to In Review through Add touch. One status, evidence attached to every change.
+    </p>
     <div class="screen">
-      <div class="browser-bar"><span class="dots"><i></i><i></i><i></i></span><span class="loc">app.mintedpanel.com/org/best-pt/cases/chen-anthem-nc</span></div>
+      <div class="browser-bar">
+        <span class="dots"><i></i><i></i><i></i></span
+        ><span class="loc">app.mintedpanel.com/org/best-pt/cases/chen-anthem-nc</span>
+      </div>
       <div class="app">
         <div class="crumb">Cases<span class="sep">›</span><b>Riley Chen × Anthem BCBS NC</b></div>
         <div class="rec-head">
           <div class="who">
             <h3>Riley Chen × Anthem BCBS NC</h3>
-            <div class="ids">BEST PT Group · NC · tracking <code>A-4471</code> copy<span class="marker">1</span> · created from run #14 · Anthem NC SOP v3<span class="marker">2</span></div>
+            <div class="ids">
+              BEST PT Group · NC · tracking <code>A-4471</code> copy<span class="marker">1</span> ·
+              created from run #14 · Anthem NC SOP v3<span class="marker">2</span>
+            </div>
           </div>
           <span class="pill teal">In Review</span>
           <span class="btn sm primary">Add touch<span class="marker">3</span></span>
@@ -346,21 +1141,59 @@
         </div>
 
         <div class="panel">
-          <div class="p-hd"><span class="t">Checklist — from Anthem NC SOP v3</span><span style="font-size: 11px; color: var(--mp-400);">3 of 4 done</span></div>
+          <div class="p-hd">
+            <span class="t">Checklist — from Anthem NC SOP v3</span
+            ><span style="font-size: 11px; color: var(--mp-400)">3 of 4 done</span>
+          </div>
           <div class="p-bd">
-            <div class="row-line"><span class="pill green">Done</span><span class="l">Verify CAQH attestation is current</span><span class="sp"></span><span style="font-size:11px;color:var(--mp-400);">Sept 8</span></div>
-            <div class="row-line"><span class="pill green">Done</span><span class="l">Complete Availity enrollment form</span><span style="font-size:11px;color:var(--mp-400);">filled via extension · human submitted<span class="marker">4</span></span><span class="sp"></span><span style="font-size:11px;color:var(--mp-400);">Sept 12</span></div>
-            <div class="row-line"><span class="pill green">Done</span><span class="l">Submit and record the tracking ID</span><span class="sp"></span><span style="font-size:11px;color:var(--mp-400);">Sept 12 · A-4471</span></div>
-            <div class="row-line"><span class="pill idle">Open</span><span class="l">Follow up every 14 days until determination</span><span class="sp"></span><span style="font-size:11px;color:var(--mp-400);">next due Oct 2</span></div>
+            <div class="row-line">
+              <span class="pill green">Done</span
+              ><span class="l">Verify CAQH attestation is current</span><span class="sp"></span
+              ><span style="font-size: 11px; color: var(--mp-400)">Sept 8</span>
+            </div>
+            <div class="row-line">
+              <span class="pill green">Done</span
+              ><span class="l">Complete Availity enrollment form</span
+              ><span style="font-size: 11px; color: var(--mp-400)"
+                >filled via extension · human submitted<span class="marker">4</span></span
+              ><span class="sp"></span
+              ><span style="font-size: 11px; color: var(--mp-400)">Sept 12</span>
+            </div>
+            <div class="row-line">
+              <span class="pill green">Done</span
+              ><span class="l">Submit and record the tracking ID</span><span class="sp"></span
+              ><span style="font-size: 11px; color: var(--mp-400)">Sept 12 · A-4471</span>
+            </div>
+            <div class="row-line">
+              <span class="pill idle">Open</span
+              ><span class="l">Follow up every 14 days until determination</span
+              ><span class="sp"></span
+              ><span style="font-size: 11px; color: var(--mp-400)">next due Oct 2</span>
+            </div>
           </div>
         </div>
 
         <div class="panel">
           <div class="p-hd"><span class="t">Touch log</span></div>
           <div class="p-bd">
-            <div class="row-line"><span style="font-size:11px;color:var(--mp-400);white-space:nowrap;">Sept 18</span><span class="l">Call — spoke with provider relations; application confirmed in review</span><span class="sp"></span><span class="pill teal">→ In Review</span><span class="marker">5</span></div>
-            <div class="row-line"><span style="font-size:11px;color:var(--mp-400);white-space:nowrap;">Sept 12</span><span class="l">Portal — application submitted via Availity</span><span style="font-size:11px;color:var(--mp-400);">logged by extension</span><span class="sp"></span><span class="pill teal">→ Submitted</span></div>
-            <div class="row-line"><span style="font-size:11px;color:var(--mp-400);white-space:nowrap;">Sept 8</span><span class="l">Note — CAQH re-attested before submission</span><span class="sp"></span><span></span></div>
+            <div class="row-line">
+              <span style="font-size: 11px; color: var(--mp-400); white-space: nowrap">Sept 18</span
+              ><span class="l"
+                >Call — spoke with provider relations; application confirmed in review</span
+              ><span class="sp"></span><span class="pill teal">→ In Review</span
+              ><span class="marker">5</span>
+            </div>
+            <div class="row-line">
+              <span style="font-size: 11px; color: var(--mp-400); white-space: nowrap">Sept 12</span
+              ><span class="l">Portal — application submitted via Availity</span
+              ><span style="font-size: 11px; color: var(--mp-400)">logged by extension</span
+              ><span class="sp"></span><span class="pill teal">→ Submitted</span>
+            </div>
+            <div class="row-line">
+              <span style="font-size: 11px; color: var(--mp-400); white-space: nowrap">Sept 8</span
+              ><span class="l">Note — CAQH re-attested before submission</span
+              ><span class="sp"></span><span></span>
+            </div>
           </div>
         </div>
 
@@ -368,20 +1201,68 @@
           <div class="p-hd"><span class="t">On approval, this case will ask for</span></div>
           <div class="p-bd">
             <div class="meta-grid">
-              <div class="mf"><span class="k">Effective date</span><span class="v" style="color: var(--mp-400);">— set at Approved</span></div>
-              <div class="mf"><span class="k">Provider ID <span style="text-transform:none;letter-spacing:0;">(Anthem's label)</span></span><span class="v" style="color: var(--mp-400);">— set at Approved<span class="marker">6</span></span></div>
+              <div class="mf">
+                <span class="k">Effective date</span
+                ><span class="v" style="color: var(--mp-400)">— set at Approved</span>
+              </div>
+              <div class="mf">
+                <span class="k"
+                  >Provider ID
+                  <span style="text-transform: none; letter-spacing: 0"
+                    >(Anthem's label)</span
+                  ></span
+                ><span class="v" style="color: var(--mp-400)"
+                  >— set at Approved<span class="marker">6</span></span
+                >
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
     <div class="legend">
-      <div class="lg"><span class="marker">1</span><span>Tracking ID lives in the header, copyable — captured automatically at submission, editable if the payer issues a new one.</span></div>
-      <div class="lg"><span class="marker">2</span><span><b>Provenance</b>: which run created this case and which SOP version its checklist came from — answerable months later.</span></div>
-      <div class="lg"><span class="marker">3</span><span><b>Add touch</b> is the primary action — the one global logging function; status bumps ride along when the touch is the evidence.</span></div>
-      <div class="lg"><span class="marker">4</span><span>The extension filled the form; <b>the human submitted</b> — locked rule, visible in the record. The submission touch is what auto-flipped the status.</span></div>
-      <div class="lg"><span class="marker">5</span><span>The touch log shows each status change beside its evidence — Sept 12 auto (witnessed), Sept 18 human (learned on a call). One list, no parallel machines.</span></div>
-      <div class="lg"><span class="marker">6</span><span>The approval dialog will ask for the ID by <b>the payer's own name for it</b> (from the catalog) — Anthem says "Provider ID," Medicare would say "PTAN."</span></div>
+      <div class="lg">
+        <span class="marker">1</span
+        ><span
+          >Tracking ID lives in the header, copyable — captured automatically at submission,
+          editable if the payer issues a new one.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">2</span
+        ><span
+          ><b>Provenance</b>: which run created this case and which SOP version its checklist came
+          from — answerable months later.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">3</span
+        ><span
+          ><b>Add touch</b> is the primary action — the one global logging function; status bumps
+          ride along when the touch is the evidence.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">4</span
+        ><span
+          >The extension filled the form; <b>the human submitted</b> — locked rule, visible in the
+          record. The submission touch is what auto-flipped the status.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">5</span
+        ><span
+          >The touch log shows each status change beside its evidence — Sept 12 auto (witnessed),
+          Sept 18 human (learned on a call). One list, no parallel machines.</span
+        >
+      </div>
+      <div class="lg">
+        <span class="marker">6</span
+        ><span
+          >The approval dialog will ask for the ID by <b>the payer's own name for it</b> (from the
+          catalog) — Anthem says "Provider ID," Medicare would say "PTAN."</span
+        >
+      </div>
     </div>
   </div>
 </div>
