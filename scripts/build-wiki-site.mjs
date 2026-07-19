@@ -57,11 +57,17 @@ const renderMarkdown = (md) => {
   let list = false;
   let table = null;
   let para = [];
+  let item = [];
   const closePara = () => {
     if (para.length > 0) out.push(`<p>${inline(para.join(" "))}</p>`);
     para = [];
   };
+  const closeItem = () => {
+    if (item.length > 0) out.push(`<li>${inline(item.join(" "))}</li>`);
+    item = [];
+  };
   const closeList = () => {
+    closeItem();
     if (list) out.push("</ul>");
     list = false;
   };
@@ -101,15 +107,16 @@ const renderMarkdown = (md) => {
     const li = /^- (.*)$/.exec(line);
     if (li) {
       closePara();
+      closeItem();
       if (!list) {
         out.push("<ul>");
         list = true;
       }
-      out.push(`<li>${inline(li[1])}</li>`);
+      item.push(li[1]);
       continue;
     }
     if (list && /^ {2,}\S/.test(raw)) {
-      out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ` ${inline(line.trim())}</li>`);
+      item.push(line.trim());
       continue;
     }
     closeList();
