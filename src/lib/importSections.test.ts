@@ -16,6 +16,7 @@ import {
   decodeDelimited,
   encodeDelimited,
   looksLikeCombinedTemplate,
+  providerImportReference,
   scanSectionRecord,
   sectionTemplateCsv,
   uploadLadderGate,
@@ -26,11 +27,15 @@ import { ROSTER_TEMPLATE_HEADERS } from "@/lib/rosterImport";
 import type { ScannedRow } from "@/lib/rosterImport";
 
 // Build one data record from a header→cell map (template order) and scan it.
-function scanRow(descriptor: SectionDescriptor, cells: Record<string, string>): ScannedRow {
+function scanRow(
+  descriptor: SectionDescriptor,
+  cells: Record<string, string>,
+  context?: SectionScanContext,
+): ScannedRow {
   const headerLine = descriptor.headers.join(",");
   const dataLine = descriptor.headers.map((h) => cells[h] ?? "").join(",");
   const parsed = parseCsv(`${headerLine}\n${dataLine}`);
-  return scanSectionRecord(descriptor, parsed.records[0], parsed.headers);
+  return scanSectionRecord(descriptor, parsed.records[0], parsed.headers, context);
 }
 
 /* ------------------------- delimited encode/decode ------------------------- */
@@ -217,9 +222,12 @@ describe("provider scan (TE-2/TE-6)", () => {
     expect(row.mapped?.npi).toBe("1234567893");
     expect(row.mapped?.license_state).toBe("NC");
     expect(row.mapped?.license_expiration_date).toBe("2026-12-31");
-    // the provider template carries NO facility-creation columns (TE-2)
-    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("facility_name");
-    expect(PROVIDER_DESCRIPTOR.headers.some((h) => h.startsWith("facility_"))).toBe(false);
+    // E6.4 superseded the E3.3 TE-2 posture: facility_name is a pure
+    // RELATIONSHIP column (resolved to an id at scan time); facility
+    // CREATION columns (street/city/…) still never appear here.
+    expect(PROVIDER_DESCRIPTOR.headers).toContain("facility_name");
+    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("facility_street");
+    expect(PROVIDER_DESCRIPTOR.headers).not.toContain("facility_city");
   });
 
   it("license columns repeat per row — each row is one (provider, license) line", () => {
@@ -385,5 +393,80 @@ describe("payer attach descriptor (E6.2 F6.2.4)", () => {
     const row = scanAttachRow({ group_tin: "123456789", payer: "Aetna", states: "NC" }, {});
     expect(row.rowState).toBe("error");
     expect(row.errorReason).toMatch(/catalog unavailable/i);
+  });
+});
+
+/* ---------------- E6.4 F6.4.6 — relationship columns + reference ---------------- */
+
+const REL_CONTEXT: SectionScanContext = {
+  provider: {
+    facilities: [{ id: "f-1", name: "Kill Devil Hills Clinic" }],
+    payers: [{ id: "p-1", name: "Aetna" }],
+  },
+};
+
+describe("provider relationship columns (E6.4 F6.4.6)", () => {
+  it("resolves facility and enrollment names to ids at scan time", () => {
+    const row = scanRow(
+      PROVIDER_DESCRIPTOR,
+      {
+        ...PROVIDER_ROW,
+        facility_name: "kill devil hills clinic",
+        enrollment_payer: "AETNA",
+        enrollment_state: "nc",
+        enrollment_effective_date: "3/1/2025",
+      },
+      REL_CONTEXT,
+    );
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped?.facility_id).toBe("f-1");
+    expect(row.mapped?.enrollment_payer_id).toBe("p-1");
+    expect(row.mapped?.enrollment_state).toBe("NC");
+    expect(row.mapped?.enrollment_effective_date).toBe("2025-03-01");
+  });
+
+  it("an unknown facility or payer name is a row error naming the column", () => {
+    const badFacility = scanRow(
+      PROVIDER_DESCRIPTOR,
+      { ...PROVIDER_ROW, facility_name: "Nope Clinic" },
+      REL_CONTEXT,
+    );
+    expect(badFacility.rowState).toBe("error");
+    expect(badFacility.errorColumn).toBe("facility_name");
+    const badPayer = scanRow(
+      PROVIDER_DESCRIPTOR,
+      { ...PROVIDER_ROW, enrollment_payer: "Nope Health", enrollment_state: "NC" },
+      REL_CONTEXT,
+    );
+    expect(badPayer.rowState).toBe("error");
+    expect(badPayer.errorColumn).toBe("enrollment_payer");
+  });
+
+  it("an enrollment needs both payer and state; plain rows pass without context", () => {
+    const half = scanRow(
+      PROVIDER_DESCRIPTOR,
+      { ...PROVIDER_ROW, enrollment_payer: "Aetna" },
+      REL_CONTEXT,
+    );
+    expect(half.rowState).toBe("error");
+    expect(half.errorColumn).toBe("enrollment_state");
+    const plain = scanRow(PROVIDER_DESCRIPTOR, PROVIDER_ROW);
+    expect(plain.rowState).toBe("staged");
+  });
+
+  it("the extended template never trips the combined-template rejection", () => {
+    expect(looksLikeCombinedTemplate([...PROVIDER_DESCRIPTOR.headers])).toBe(false);
+  });
+
+  it("providerImportReference lists real names A→Z by kind", () => {
+    const ref = providerImportReference(
+      [{ name: "Outer Banks Rehab Group LLC", tin: "123456789" }],
+      [{ name: "Kill Devil Hills Clinic" }],
+      [{ name: "Aetna" }],
+    );
+    expect(ref.filename).toBe("provider-import-reference.csv");
+    expect(ref.text).toContain("group,Outer Banks Rehab Group LLC,123456789");
+    expect(ref.text).toContain("facility,Kill Devil Hills Clinic,");
+    expect(ref.text).toContain("payer,Aetna,");
   });
 });

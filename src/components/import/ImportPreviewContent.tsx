@@ -276,8 +276,15 @@ export function ImportPreviewContent({ runId }: { runId: string }) {
             toast.info("This run was already committed.");
             return;
           }
+          // E6.4 F6.4.6 — the unified relationship summary: what the commit
+          // resolved across providers, groups, facilities, and enrollments.
+          const rel = result.relationships;
+          const relText =
+            rel.facilityAssignments + rel.groupAssignments + rel.enrollmentFacts > 0
+              ? ` Relationships attached: ${rel.facilityAssignments} facility, ${rel.groupAssignments} group, ${rel.enrollmentFacts} enrollment fact${rel.enrollmentFacts === 1 ? "" : "s"}.`
+              : "";
           toast.success(
-            `${result.created} provider${result.created === 1 ? "" : "s"} created · ${result.updated} updated. Imported providers are Pending Verification.`,
+            `${result.created} provider${result.created === 1 ? "" : "s"} created · ${result.updated} updated. Imported providers are Pending Verification.${relText}`,
           );
         },
         onError: (e) =>

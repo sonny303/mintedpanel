@@ -13,7 +13,12 @@ import { RosterUploader } from "@/components/import/RosterUploader";
 import { openSection } from "@/components/onboarding/openSection";
 import { useIsAdmin } from "@/lib/permissions";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
-import { sectionDescriptor, uploadLadderGate, type SectionEntityKind } from "@/lib/importSections";
+import {
+  sectionDescriptor,
+  uploadLadderGate,
+  type SectionEntityKind,
+  type SectionScanContext,
+} from "@/lib/importSections";
 
 const GROUP_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "provider_group");
 
@@ -21,12 +26,18 @@ export function SectionUploadCard({
   entityKind,
   activeGroupCount,
   showPrerequisiteButton = true,
+  scanContext,
+  referenceCsv,
 }: {
   entityKind: SectionEntityKind;
   /** number of ACTIVE provider groups — the TE-5 ladder input */
   activeGroupCount: number;
   /** hide the card's own "Go to Provider Group" button when the parent already shows one */
   showPrerequisiteButton?: boolean;
+  /** E6.4 — scan-time name→id resolution context (provider relationship columns) */
+  scanContext?: SectionScanContext;
+  /** E6.4 — the prefilled real-names reference sheet download */
+  referenceCsv?: { filename: string; text: string };
 }) {
   const isAdmin = useIsAdmin();
   if (!isAdmin) return null;
@@ -46,7 +57,13 @@ export function SectionUploadCard({
         </p>
       </div>
       {gate.allowed ? (
-        <RosterUploader source="onboarding" variant="streamlined" entityKind={entityKind} />
+        <RosterUploader
+          source="onboarding"
+          variant="streamlined"
+          entityKind={entityKind}
+          scanContext={scanContext}
+          referenceCsv={referenceCsv}
+        />
       ) : (
         <div className="space-y-2">
           <div

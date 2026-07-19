@@ -29,7 +29,10 @@ import {
   useProviderGroupAssignments,
   useProviderAssignments,
 } from "@/hooks/useProviders";
-import { useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
+import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
+import { usePayers } from "@/hooks/useAdmin";
+import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
+import { providerImportReference, type SectionScanContext } from "@/lib/importSections";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
 import { providerCaseProgress } from "@/lib/caseRollups";
 import { deriveProviderGaps, sortRosterAz, type ProviderGap } from "@/lib/providerGaps";
@@ -179,6 +182,20 @@ function ProvidersRoster() {
     for (const r of rows ?? []) for (const s of r.licenseStates) set.add(s);
     return [...set].sort();
   }, [rows]);
+
+  const facilitiesQ = useFacilities();
+  const payersQ = usePayers();
+  const uploadScanContext: SectionScanContext = {
+    provider: {
+      facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
+      payers: (payersQ.data ?? []).map((py) => ({ id: py.id, name: py.name })),
+    },
+  };
+  const uploadReference = providerImportReference(
+    (groupsQ.data ?? []).map((g) => ({ name: g.name, tin: g.tin })),
+    facilitiesQ.data ?? [],
+    payersQ.data ?? [],
+  );
 
   function handleExportRoster() {
     const exportRows: RosterRowInput[] = (filtered ?? []).map((r) => ({
@@ -350,6 +367,16 @@ function ProvidersRoster() {
           {gapsOnly ? "Showing gaps only" : "Has gaps"}
         </Button>
       </div>
+
+      {/* E6.4 — imports live with their data: the provider CSV (one row per
+          relationship) uploads from THIS page, with scan-time name resolution
+          and the real-names reference sheet. Admin-gated inside the card. */}
+      <SectionUploadCard
+        entityKind="provider"
+        activeGroupCount={(groupsQ.data ?? []).filter((g) => g.isActive).length}
+        scanContext={uploadScanContext}
+        referenceCsv={uploadReference}
+      />
 
       {filtered === undefined ? (
         <div className="h-40 animate-pulse rounded-md bg-mp-muted" />
