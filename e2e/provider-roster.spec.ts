@@ -341,6 +341,17 @@ test("TS-33: first provider — CAQH baseline + group assignment → Complete + 
 
   await card.getByRole("button", { name: "Add provider" }).click();
   const dialog = page.getByRole("dialog", { name: "Add provider" });
+
+  // Home address was removed from this dialog by user request (2026-07-19):
+  // the section reads "Contact" (Email + Phone only); the address lives on
+  // the provider record's inline fields and in the CSV import instead.
+  await expect(dialog.getByRole("heading", { name: "Contact", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Contact & home address" })).toHaveCount(0);
+  await expect(dialog.locator("#prov-home-street")).toHaveCount(0);
+  await expect(dialog.getByLabel("ZIP")).toHaveCount(0);
+  await expect(dialog.locator("#prov-email")).toBeVisible();
+  await expect(dialog.locator("#prov-phone")).toBeVisible();
+
   await dialog.getByLabel("Assign Tree Hill Sports Therapy LLC").click();
   await dialog.locator("#prov-first").fill("Nathan");
   await dialog.locator("#prov-last").fill("Scott");
