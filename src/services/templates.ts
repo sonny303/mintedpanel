@@ -224,6 +224,57 @@ export async function getTemplateVersion(
   return data ? versionFromRow(data as Record<string, unknown>) : null;
 }
 
+// ---------------------------------------------------------------------------
+// E6.5 F6.5.6 — GLOBAL SOP authoring via the author_global_sop RPC ("authored
+// once, inherited by every org"). Create takes name + task definitions (the
+// AFTER INSERT trigger seeds version 1); update edits the match key / archived
+// flag ONLY — content changes go through publishTemplate, mirroring the org
+// path's TE-5 save split. NO writeAudit: audit_log requires an org_id and
+// global rows are cross-org; the immutable version rows + published_by are the
+// trail (interim posture, R7 hardens platform governance).
+// ---------------------------------------------------------------------------
+export interface GlobalSopInput {
+  /** Existing global head id to update; null/undefined creates. */
+  id?: string | null;
+  name: string;
+  payerId: string | null;
+  state: string | null;
+  groupId?: string | null;
+  /** Create only — ignored on update (publish owns content). */
+  taskDefinitions?: SOPTaskDefinition[];
+  archived?: boolean;
+}
+
+export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplate> {
+  requireActiveOrg();
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc("author_global_sop", {
+    p_id: (input.id ?? null) as unknown as string,
+    p_name: input.name.trim(),
+    p_payer_id: input.payerId as unknown as string,
+    p_state: input.state as unknown as string,
+    p_group_id: (input.groupId ?? null) as unknown as string,
+    p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
+    p_archived: (input.archived ?? false) as boolean,
+  });
+  if (error) {
+    if (error.message.includes("global_sop_duplicate_match")) {
+      throw new Error(
+        "An active global SOP already exists for this payer, state, and group. " +
+          "Edit that SOP instead of creating a duplicate.",
+      );
+    }
+    if (error.message.includes("global_sop_match_key_incomplete")) {
+      throw new Error("A global SOP requires a payer and a state.");
+    }
+    if (error.message.includes("fallback_sop_locked")) {
+      throw new Error("The generic fallback SOP is platform-managed and cannot be edited here.");
+    }
+    throw error;
+  }
+  return normalizeTemplate(camelizeRow<SOPTemplate>(data));
+}
+
 export async function createTemplate(input: TemplateInput): Promise<SOPTemplate> {
   const orgId = requireActiveOrg();
   const archived = Boolean(input.archived ?? input.isArchived ?? false);
