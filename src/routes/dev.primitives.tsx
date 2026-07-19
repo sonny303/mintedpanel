@@ -45,7 +45,6 @@ function demoRow(
   id: string,
   payer: string,
   status: CaseTableRow["status"],
-  contract: CaseTableRow["contract"],
   days: number,
   cta: string | null,
   alert = false,
@@ -58,7 +57,6 @@ function demoRow(
       </span>
     ),
     status,
-    contract,
     lastTouch: "2d ago",
     days,
     daysStrong: alert,
@@ -84,7 +82,7 @@ function PrimitivesPage() {
               <ProgressBar value={2} max={3} />
             </span>
             <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-              2 of 3 in-network
+              2 of 3 approved
             </span>
           </span>
           <ActionBadge tone="danger" text="1 needs action" />
@@ -97,28 +95,13 @@ function PrimitivesPage() {
             demoRow(
               "r1",
               "Cigna",
-              { label: "Denied", color: DEMO_RED, suffix: "appeal filed" },
-              null,
+              { status: "denied", suffix: "appeal filed" },
               21,
               "Start appeal",
               true,
             ),
-            demoRow(
-              "r2",
-              "Aetna",
-              { label: "In Progress", color: DEMO_BLUE },
-              { label: "In-Network", color: DEMO_GREEN },
-              6,
-              "Request docs",
-            ),
-            demoRow(
-              "r3",
-              "UHC",
-              { label: "Submitted", color: DEMO_TEAL },
-              { label: "Not Started", color: DEMO_GRAY },
-              11,
-              null,
-            ),
+            demoRow("r2", "Aetna", { status: "in_progress" }, 6, "Request docs"),
+            demoRow("r3", "UHC", { status: "submitted" }, 11, null),
           ]}
         />
       ),
@@ -136,16 +119,7 @@ function PrimitivesPage() {
       children: (
         <CaseTable
           leadLabel="Payer"
-          rows={[
-            demoRow(
-              "r4",
-              "BCBS",
-              { label: "In-Network", color: DEMO_GREEN },
-              { label: "In-Network", color: DEMO_GREEN },
-              3,
-              "View case",
-            ),
-          ]}
+          rows={[demoRow("r4", "BCBS", { status: "approved" }, 3, "View case")]}
         />
       ),
     },

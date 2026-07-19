@@ -28,6 +28,7 @@ import {
 } from "@/lib/enrollmentReadiness";
 import { currentGroupReadinessDocuments } from "@/lib/documents";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import { isCaseStatus } from "@/lib/caseStatus";
 
 export interface NextBestActionServiceCtx {
   db: SupabaseClient<Database>;
@@ -79,6 +80,7 @@ interface CaseRow {
   payer_id: string;
   state: string;
   credentialing_status_id: string | null;
+  case_status?: string | null;
   facility_id: string | null;
   generation_run_id: string | null;
   payer_pipeline_state: string | null;
@@ -166,7 +168,7 @@ export async function getNextBestAction(
     db
       .from("credential_cases")
       .select(
-        "id, provider_id, group_id, payer_id, state, credentialing_status_id, facility_id, generation_run_id, payer_pipeline_state, created_at",
+        "id, provider_id, group_id, payer_id, state, credentialing_status_id, case_status, facility_id, generation_run_id, payer_pipeline_state, created_at",
       )
       .eq("org_id", orgId),
     db.from("status_configs").select("id, label, action_bucket").eq("org_id", orgId),
@@ -388,6 +390,7 @@ export async function getNextBestAction(
       facilityId: c.facility_id,
       generationRunId: c.generation_run_id,
       payerPipelineState: (c.payer_pipeline_state ?? undefined) as PayerPipelineState | undefined,
+      caseStatus: isCaseStatus(c.case_status) ? c.case_status : undefined,
       createdAt: c.created_at,
     })),
     statusConfigs: statusRows.map((s) => ({ id: s.id, actionBucket: s.action_bucket })),

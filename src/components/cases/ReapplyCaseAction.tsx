@@ -1,11 +1,11 @@
-// E2.1 F2.1.3 — the "reapply" affordance on a DENIED case. Reapplying is a
-// status transition + new tasks ON THE SAME CASE — never a second case at the
-// 4-part key — so the payer/provider history (touches, status_history) stays
-// continuous across cycles. Destination is Denied → In Progress ([r4-review]
-// Q6), written through the existing updateCaseStatus path (status_history +
-// audit); the task set is regenerated from the CURRENT SOP version (Model A:
-// new work gets latest) via the same pickTemplate/resolveTemplate tier every
-// creation surface uses, appended after the case's existing tasks.
+// E2.1 F2.1.3 / E6.0 — the "reapply" affordance on a DENIED case. Reapplying
+// is the denied → in_progress reapply edge + new tasks ON THE SAME CASE —
+// never a second case at the 4-part key — so the payer/provider history
+// (touches, status history, the prior denial) stays continuous across cycles.
+// The transition rides set_case_status (unified history + audit, atomic); the
+// task set is regenerated from the CURRENT SOP version (Model A: new work
+// gets latest) via the same pickTemplate/resolveTemplate tier every creation
+// surface uses, appended after the case's existing tasks.
 import { useState } from "react";
 import { toast } from "sonner";
 import { RotateCcw } from "lucide-react";
@@ -20,33 +20,23 @@ import { Button } from "@/components/ui/button";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
 import { stampTasks } from "@/lib/sopStamp";
-import { canonicalLabel } from "@/lib/canonicalStatuses";
-import { DENIED_LABEL, IN_PROGRESS_LABEL } from "@/lib/statusLabels";
 import { useReapplyCase } from "@/hooks/useCases";
-import { useSops, useStatusConfigs } from "@/hooks/useAdmin";
+import { useSops } from "@/hooks/useAdmin";
 import type { CaseDetail } from "@/types";
 
 interface ReapplyCaseActionProps {
   c: CaseDetail;
-  credStatusLabel: string | null;
   canEdit: boolean;
 }
 
-export function ReapplyCaseAction({ c, credStatusLabel, canEdit }: ReapplyCaseActionProps) {
-  const statusesQ = useStatusConfigs();
+export function ReapplyCaseAction({ c, canEdit }: ReapplyCaseActionProps) {
   const templatesQ = useSops();
   const reapply = useReapplyCase();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const denied = credStatusLabel !== null && canonicalLabel(credStatusLabel) === DENIED_LABEL;
-  if (!denied || !canEdit) return null;
-
-  const inProgress = (statusesQ.data ?? []).find(
-    (s) => s.track === "credentialing" && canonicalLabel(s.label) === IN_PROGRESS_LABEL,
-  );
+  if (c.caseStatus !== "denied" || !canEdit) return null;
 
   const run = () => {
-    if (!inProgress) return;
     const template = pickTemplate(templatesQ.data ?? [], c.payerId, c.state, c.groupId);
     const resolved =
       template && c.provider ? resolveTemplate(template, c.provider, c.group, null, null) : [];
@@ -62,7 +52,7 @@ export function ReapplyCaseAction({ c, credStatusLabel, canEdit }: ReapplyCaseAc
     );
 
     reapply.mutate(
-      { caseId: c.id, statusId: inProgress.id, tasks },
+      { caseId: c.id, tasks },
       {
         onSuccess: () => {
           setConfirmOpen(false);
@@ -89,7 +79,7 @@ export function ReapplyCaseAction({ c, credStatusLabel, canEdit }: ReapplyCaseAc
         size="sm"
         className="ml-auto h-8"
         onClick={() => setConfirmOpen(true)}
-        disabled={statusesQ.isLoading || templatesQ.isLoading}
+        disabled={templatesQ.isLoading}
       >
         <RotateCcw className="w-4 h-4 mr-1" /> Reapply
       </Button>
@@ -102,20 +92,16 @@ export function ReapplyCaseAction({ c, credStatusLabel, canEdit }: ReapplyCaseAc
             </DialogHeader>
             <p className="text-[13px] text-muted-foreground">
               The case moves Denied → In Progress (recorded in status history) and its checklist is
-              regenerated from the current SOP. Existing tasks, touches, and history are kept.
+              regenerated from the current SOP. Existing tasks, touches, and the prior denial are
+              kept.
             </p>
-            {!inProgress && !statusesQ.isLoading ? (
-              <p className="text-[13px] text-[#B91C1C]">
-                No In Progress credentialing status is configured for this organization.
-              </p>
-            ) : null}
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmOpen(false)}>
                 Cancel
               </Button>
               <Button
                 className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-                disabled={!inProgress || reapply.isPending}
+                disabled={reapply.isPending}
                 onClick={run}
               >
                 {reapply.isPending ? "Reapplying…" : "Reapply"}

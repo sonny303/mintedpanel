@@ -55,6 +55,7 @@
 
 import { fmtDate } from "@/lib/format";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type { CaseStatus } from "@/lib/caseStatus";
 import { resolveActiveFollowUp, type FollowUpTouch } from "@/lib/followUps";
 
 export type DeadlineSource =
@@ -140,6 +141,9 @@ export interface QueueCaseInput {
   /** E4.0 TE-7 — the payer-pipeline state, rendered as a badge on the queue
    * distinct from internal task progress. Optional (older callers omit it). */
   payerPipelineState?: PayerPipelineState;
+  /** E6.0 — THE unified case status the queue row renders (the pipeline badge
+   * is retired as a user-facing machine). Optional for older callers. */
+  caseStatus?: CaseStatus;
   createdAt: string;
 }
 
@@ -249,8 +253,11 @@ export interface QueueEntry {
   payerName: string;
   state: string;
   generationRunId: string | null;
-  /** E4.0 TE-7 — the payer-pipeline state for the queue badge (may be absent). */
+  /** E4.0 TE-7 — the payer-pipeline state (kept for the /api queue-top wire
+   * shape; may be absent). */
   payerPipelineState?: PayerPipelineState;
+  /** E6.0 — the unified status rendered on the queue row (may be absent). */
+  caseStatus?: CaseStatus;
   actionKind: QueueActionKind;
   action: string;
   /** null = no deadline signal at all; the entry ranks after dated work. */
@@ -519,6 +526,7 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       state: c.state,
       generationRunId: c.generationRunId ?? null,
       payerPipelineState: c.payerPipelineState,
+      caseStatus: c.caseStatus,
       actionKind,
       action,
       deadline: driving

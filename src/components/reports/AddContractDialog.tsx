@@ -1,5 +1,7 @@
 // Dialog for creating a new contract for a group + payer + state pair.
-// Used from the Contracts tab of the Reports page.
+// Used from the Contracts tab of the Reports page. E6.0 retired the
+// contracting status machine as user-facing — a contract records the
+// relationship + dates/notes; no status is picked here.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,17 +26,8 @@ import {
 import { useCreateContract } from "@/hooks/useContracts";
 import { usePayers } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
-import type { StatusConfig } from "@/types";
 
-export function AddContractDialog({
-  open,
-  onClose,
-  statuses,
-}: {
-  open: boolean;
-  onClose: () => void;
-  statuses: StatusConfig[];
-}) {
+export function AddContractDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createM = useCreateContract();
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
@@ -42,7 +35,6 @@ export function AddContractDialog({
   const [groupId, setGroupId] = useState<string>("");
   const [payerId, setPayerId] = useState<string>("");
   const [state, setState] = useState<string>("");
-  const [statusId, setStatusId] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
   function handleOpenChange(next: boolean) {
@@ -50,7 +42,6 @@ export function AddContractDialog({
       setGroupId("");
       setPayerId("");
       setState("");
-      setStatusId("");
       setNotes("");
       onClose();
     }
@@ -66,7 +57,6 @@ export function AddContractDialog({
         groupId,
         payerId,
         state: state.trim().toUpperCase(),
-        contractingStatusId: statusId || null,
         notes: notes.trim() || null,
       });
       toast.success("Contract created.");
@@ -123,21 +113,6 @@ export function AddContractDialog({
               State <span className="text-[#DC2626]">*</span>
             </Label>
             <StateSelect value={state} onChange={setState} allowNone={false} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Initial status</Label>
-            <Select value={statusId} onValueChange={setStatusId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                {statuses.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Notes</Label>

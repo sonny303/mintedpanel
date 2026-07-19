@@ -191,6 +191,7 @@ export function useNextBestActions(): NextBestActionsData {
         facilityId: c.facilityId ?? null,
         generationRunId: c.generationRunId ?? null,
         payerPipelineState: c.payerPipelineState,
+        caseStatus: c.caseStatus,
         createdAt: c.createdAt,
       })),
       statusConfigs: (statusConfigsQ.data ?? []).map((s) => ({

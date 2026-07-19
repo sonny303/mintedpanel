@@ -33,6 +33,7 @@ import {
 import { followUpStatus } from "@/lib/followUps";
 import { buildTouchesCsv } from "@/lib/touchesExport";
 import { downloadCsvText } from "@/lib/csv";
+import { caseStatusLabel, suggestStatusBump, type CaseStatus } from "@/lib/caseStatus";
 import type { TouchInput } from "@/services/touches";
 import {
   Calendar,
@@ -81,6 +82,8 @@ export function CaseTouchesPanel({
   onSaveTouch,
   onSaveNote,
   onCorrectTouch,
+  currentStatus,
+  onStatusBump,
   today = format(new Date(), "yyyy-MM-dd"),
 }: {
   touches: Touch[];
@@ -88,9 +91,17 @@ export function CaseTouchesPanel({
   canEdit: boolean;
   savingTouch: boolean;
   savingNote: boolean;
-  onSaveTouch: (input: TouchInput) => Promise<void> | void;
+  /** Returns the logged touch so an accepted status bump (F6.0.3) can link
+   * it as the transition's evidence; null when the log failed. */
+  onSaveTouch: (input: TouchInput) => Promise<Touch | null> | void;
   onSaveNote: (content: string) => Promise<void> | void;
   onCorrectTouch: (originalTouchId: string, input: TouchInput) => Promise<void> | void;
+  /** E6.0 F6.0.3 — the case's unified status; when set, the Add-touch form
+   * offers the implied status bump alongside the touch. */
+  currentStatus?: CaseStatus;
+  /** Accepting the bump records touch + transition together, the touch
+   * linked as evidence. Declining logs the touch alone. */
+  onStatusBump?: (toStatus: CaseStatus, evidenceTouchId: string) => Promise<void> | void;
   today?: string;
 }) {
   const [openForm, setOpenForm] = useState<"none" | "touch" | "note">("none");
@@ -279,9 +290,16 @@ export function CaseTouchesPanel({
             key="new-touch"
             correctionOf={null}
             saving={savingTouch}
+            currentStatus={currentStatus}
             onCancel={() => setOpenForm("none")}
-            onSave={async (input) => {
-              await onSaveTouch(input);
+            onSave={async (input, acceptedBump) => {
+              const touch = await onSaveTouch(input);
+              // F6.0.3 — the same gesture writes both: the touch, then the
+              // transition with the touch linked as its evidence. Declining
+              // (acceptedBump null) logs the touch alone.
+              if (acceptedBump && touch && onStatusBump) {
+                await onStatusBump(acceptedBump, touch.id);
+              }
               setOpenForm("none");
             }}
           />
@@ -634,13 +652,17 @@ function EntryBadge({ icon: Icon, label }: { icon: typeof Phone; label: string }
 function AddTouchForm({
   correctionOf,
   saving,
+  currentStatus,
   onCancel,
   onSave,
 }: {
   correctionOf: Touch | null;
   saving: boolean;
+  /** E6.0 F6.0.3 — when set (never for corrections), a touch whose
+   * type/outcome implies a status offers the bump in the same gesture. */
+  currentStatus?: CaseStatus;
   onCancel: () => void;
-  onSave: (input: TouchInput) => void;
+  onSave: (input: TouchInput, acceptedBump: CaseStatus | null) => void;
 }) {
   const today = format(new Date(), "yyyy-MM-dd");
   const [touchDate, setTouchDate] = useState(correctionOf?.touchDate ?? today);
@@ -653,22 +675,37 @@ function AddTouchForm({
   const [notes, setNotes] = useState("");
   const [nextFollowUpDate, setNextFollowUpDate] = useState("");
   const [clearFollowUp, setClearFollowUp] = useState(false);
+  const [acceptBump, setAcceptBump] = useState(false);
 
   const requiresContext = dispositionRequiresContext(outcome as TouchOutcome);
   const contextMissing = requiresContext && !notes.trim();
   const disableSave = saving || contextMissing;
 
+  // The closed F6.0.3 rule table: a suggestion appears ONLY when the touch
+  // type/outcome implies one; corrections never suggest.
+  const suggestion =
+    !correctionOf && currentStatus
+      ? suggestStatusBump({
+          touchType,
+          outcome: outcome === NO_OUTCOME ? null : outcome,
+          currentStatus,
+        })
+      : null;
+
   const submit = () => {
-    onSave({
-      touchDate,
-      touchType,
-      outcome: outcome === NO_OUTCOME ? null : (outcome as TouchOutcome),
-      recipientName: recipientName.trim() ? recipientName.trim() : null,
-      recipientContact: recipientContact.trim() ? recipientContact.trim() : null,
-      notes: notes.trim() ? notes.trim() : null,
-      nextFollowUpDate: clearFollowUp ? null : nextFollowUpDate || null,
-      clearsFollowUp: clearFollowUp,
-    });
+    onSave(
+      {
+        touchDate,
+        touchType,
+        outcome: outcome === NO_OUTCOME ? null : (outcome as TouchOutcome),
+        recipientName: recipientName.trim() ? recipientName.trim() : null,
+        recipientContact: recipientContact.trim() ? recipientContact.trim() : null,
+        notes: notes.trim() ? notes.trim() : null,
+        nextFollowUpDate: clearFollowUp ? null : nextFollowUpDate || null,
+        clearsFollowUp: clearFollowUp,
+      },
+      suggestion && acceptBump ? suggestion : null,
+    );
   };
 
   return (
@@ -792,6 +829,16 @@ function AddTouchForm({
         <p className="-mt-2 text-[11px] text-muted-foreground">
           Leaving this blank keeps any existing follow-up (it carries forward).
         </p>
+      ) : null}
+
+      {suggestion ? (
+        <label className="flex items-center gap-2 rounded-md border border-[#E8E5E0] bg-background px-3 py-2 cursor-pointer">
+          <Checkbox checked={acceptBump} onCheckedChange={(v) => setAcceptBump(Boolean(v))} />
+          <span className="text-[12px] text-foreground leading-tight">
+            Also move the case to <span className="font-medium">{caseStatusLabel(suggestion)}</span>{" "}
+            — this touch is the evidence.
+          </span>
+        </label>
       ) : null}
 
       <div className="flex justify-end gap-2 pt-2">

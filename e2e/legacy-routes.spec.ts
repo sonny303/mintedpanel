@@ -109,7 +109,6 @@ const RENDERING_ROUTES = [
   "/admin/import",
   "/admin/mso-routing",
   "/admin/portals",
-  "/admin/statuses",
   "/admin/templates",
   // E2.3 activated the reserved /work slot as the My Cases queue.
   "/work",
@@ -123,6 +122,9 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   // E4.2 TE-18/TE-19 — Admin → Payers consolidated into the Payer Setup
   // workspace (the /admin/sops redirect-shell precedent).
   { from: "/admin/payers", to: /\/admin\/payer-admin\/?$/ },
+  // E6.0 F6.0.1 — the Statuses config page is retired (the case status list
+  // is fixed and code-owned; no per-org status CRUD anywhere).
+  { from: "/admin/statuses", to: /\/cases\/?$/ },
 ];
 
 // Reserved destinations render the shared not-yet-available state.
