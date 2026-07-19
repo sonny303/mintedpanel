@@ -60,19 +60,21 @@ export interface DriftFill {
   portalKey: string;
   // The stored fill_sessions.fields_skipped jsonb, verbatim — parsed defensively.
   fieldsSkipped: unknown;
+  /** When the reporting fill started — the repaired-since boundary below. */
+  startedAt?: string | null;
 }
 
 /** Reduce a newest-first fill list to one DriftFill per portal, excluding
  * dry-run rows. Input order is trusted (the service orders started_at desc). */
 export function latestRealFillPerPortal(
-  fills: readonly Pick<FillSession, "portalKey" | "fieldsSkipped" | "isTest">[],
+  fills: readonly Pick<FillSession, "portalKey" | "fieldsSkipped" | "isTest" | "startedAt">[],
 ): DriftFill[] {
   const seen = new Set<string>();
   const out: DriftFill[] = [];
   for (const f of fills) {
     if (f.isTest || seen.has(f.portalKey)) continue;
     seen.add(f.portalKey);
-    out.push({ portalKey: f.portalKey, fieldsSkipped: f.fieldsSkipped });
+    out.push({ portalKey: f.portalKey, fieldsSkipped: f.fieldsSkipped, startedAt: f.startedAt });
   }
   return out;
 }
@@ -81,7 +83,13 @@ export function latestRealFillPerPortal(
  * Join by the reported map id first (exact); fall back to the report-label
  * join ONLY for older telemetry that predates mapId — a reported-but-unmatched
  * id (the mapping was retired/removed) raises nothing. Duplicate reports
- * collapse to one mapping. */
+ * collapse to one mapping.
+ *
+ * Repaired-since rule (E6.5): a mapping EDITED after the reporting fill
+ * started (updatedAt > startedAt — retrained in the editor) is treated as
+ * repaired-pending-verification and drops out of drift; the next real fill
+ * either confirms the repair or re-raises it. Without this, a repair could
+ * never clear the badge until someone happened to fill the form again. */
 export function brokenMapsForFill(
   fill: DriftFill,
   fieldMaps: readonly PortalFieldMap[],
@@ -92,7 +100,10 @@ export function brokenMapsForFill(
   if (notFound.length === 0) return [];
 
   const liveMaps = fieldMaps.filter(
-    (m) => m.portalKey === fill.portalKey && m.status !== "retired",
+    (m) =>
+      m.portalKey === fill.portalKey &&
+      m.status !== "retired" &&
+      !(fill.startedAt && m.updatedAt > fill.startedAt),
   );
   const byId = new Map(liveMaps.map((m) => [m.id, m]));
   const byReportLabel = new Map(liveMaps.map((m) => [reportLabelOf(m), m]));

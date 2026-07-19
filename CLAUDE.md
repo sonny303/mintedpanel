@@ -1729,6 +1729,68 @@ effective_date`) resolved to ids AT SCAN TIME via the E6.2
   record flows, roster-import + sectioned-intake header lists extended,
   unified-case-status record slice → the Cases panel, legacy-routes +
   `/providers/$id/edit` redirect row.
+- **E6.5 — Payer Setup consolidation (Catalog | SOPs + global authoring).**
+  ONE repo-only migration (`20260719170000_e65_global_authoring.sql`, hosted
+  apply = operator step; all probes ran rollback-wrapped on hosted):
+  **portals gained a GLOBAL tier** (`org_id` nullable + partial unique
+  `uq_portals_global_key` + global SELECT disjunct + `proven_at` dry-run
+  stamp), **`payers.delegation_note`** (curated fact, NO app writer), and
+  FIVE SECURITY DEFINER RPCs — `author_global_sop` (create seeds v1 via the
+  trigger; update = match-key/archive only; in-body NULLS-NOT-DISTINCT grain
+  guard + payer+state required + fallback locked), `upsert_global_portal`
+  (key immutable; URL change clears verified+proven), `set_global_portal_flags`,
+  `train_global_field_map` (approve/manual/repropose on `org_id NULL` maps),
+  and the reissued `publish_sop_template_version` (global branch open to
+  authenticated — the INTERIM F6.5.6 posture, TD-42; anon rejected in-body
+  via `auth.role()`, explicit grant floor closing the `20260715140300`
+  default-grant hole). Global publishes/writes have NO audit rows
+  (`audit_log.org_id` NOT NULL — version rows/timestamps are the trail).
+  **Module:** `/admin/payer-admin/catalog` + `/admin/payer-admin/sops` are
+  REAL segments (index = redirect mapper for every legacy `?tab=`;
+  org-settings → `/org-detail`, where ReasonCodeManager/QueueSettingsPanel/
+  ResolutionIdSettingsSection + PayerResolutionIdDialog now live under
+  `components/settings/`). Catalog tab = **`PayerReadinessFunnel`**
+  (pure `src/lib/payerReadinessFunnel.ts` + `usePayerReadinessFunnel` over
+  `activeOrgPayers`: per-payer sopPublished/formState(none|registered|
+  trained|proven)/driftCount + ONE next action author_sop→register_portal→
+  train_mappings/repair_drift→run_dry_test→ready; no-online-form SOP =
+  ready-with-note) over `PayerCatalogBrowser` (+delegation fact). SOPs tab =
+  drift banners (deep-link the owning SOP) + `TemplatesList` (+"New global
+  SOP" → `/admin/templates/new?tier=global`). **In-editor form machinery
+  (`src/components/templates/FormStepPanel.tsx`):** mounted under every
+  online_form step (collapsed by default — the TemplateTaskRow memo/latency
+  contract holds; ONE new primitive prop `isGlobalAuthoring`): register/pick
+  portal (tier by template), inline trainer (broken-first; org rows via the
+  audited RLS mutations + dictionary learning, global rows via the RPC),
+  and the **mock-data dry run** — `src/lib/mockFillProfile.ts` (versioned
+  synthetic token map, never PHI/provider reads; supersedes
+  `resolveTestProviderTokens`, deleted) through `computeTestRun` →
+  `recordTestFillFromApp` (`providerId` now nullable) → pass = zero
+  unmatched → proven flip. **Wizard global authoring:** `TemplateWizard`
+  gained `globalTier`; global rows are editable (fallback stays read-only —
+  sop-versioning TS-47 narrowed), create/duplicate/match-key/archive route
+  through `authorGlobalSop`, content publishes through the RPC (blast-radius
+  ack), payer+state required for global keys. **Drift (F6.5.4):**
+  `src/lib/formDrift.ts` (+suite) carries the E4.3a contract standalone
+  (parseSkippedEntries/FIELD_NOT_FOUND_REASON/mapId-then-label join,
+  latest-REAL-fill reduction, buildDriftByPortal, **repaired-since rule** —
+  a map edited after the reporting fill drops out until the next real fill)
+  → `useFormDrift` (2 caches) feeds the Sidebar badge (drift-only now),
+  funnel column, and editor queue. **Retired outright:** FixitDeck/
+  `useFixit`/`fixitQueue.ts`/`fixitFields`/`goodCatches`, `PayerSetupList`/
+  `usePayerSetup` (payerSetup.ts slims to `activeOrgPayers`/
+  `resolutionIdSource`), `FormOnboardingPanel` + its route (redirect), and
+  the **MSO routing engine app-side** (`getMsoRoutingRule`/`useMsoRoutingRule`/
+  msos service+hooks/keys + the case-detail callout; tables stay dormant —
+  live-verified 0 rows; delegation renders from the catalog fact).
+  Legacy redirects retargeted (fix-it/admin-portals/payer-directory/
+  portals-train/mso-routing/admin-payers/admin-templates → the segments).
+  e2e: NEW `e2e/payer-setup-module.spec.ts` (TS-114/131/132/133/134,
+  stateful RPC write-through harness) supersedes `fix-it.spec.ts` +
+  `payer-setup-funnel.spec.ts` (deleted); payer-admin-module/admin-payers/
+  legacy-routes retargeted; template-typing-latency stays green.
+  `payerGovernance.test.ts` re-anchored (funnel posture + delegation_note
+  no-app-writer pin).
 
 ## What this is
 
@@ -2216,8 +2278,8 @@ x-org-id`.
 `providers` (PHI-minimized: `ssn_last4` only) · `provider_facility_assignments`
 (provider↔location, unique `(provider_id, facility_id)`) · `state_licenses` ·
 `payers` (+ sentinel payer **"Pre-Credentialing Setup"**, matched by name) ·
-`msos` + `mso_routing_rules` (payer+state+specialty → direct/mso; `'All'`
-wildcards; scored client-side in `getMsoRoutingRule`) · `credential_cases`
+`msos` + `mso_routing_rules` (DORMANT since E6.5 — the routing engine is
+deleted app-side; delegation is the curated `payers.delegation_note` fact) · `credential_cases`
 (**`UNIQUE NULLS NOT DISTINCT (provider_id, group_id, payer_id, state)`**
 since E2.1 — the 4-part case key; legacy NULL-group rows keep the 3-part rule
 because NULL = NULL, see AGENTS.md; credentialing status only;
@@ -2455,8 +2517,10 @@ location-track status.** The Launches page is a filtered view of locations.
 
 ## Case creation flow (manual + launch)
 
-`NewCaseModal` (provider detail) and `CreateCasesDialog` (launch) both:
-resolve the MSO routing rule per payer/state/specialty, pick a SOP template
+(E6.3/E6.4 made generation confirm the ONE door — `ManualCaseModal` is the
+escape hatch; `NewCaseModal`/`CreateCasesDialog` are deleted, and E6.5
+deleted the MSO routing lookup outright.) The historical flow: both modals
+resolved the MSO routing rule per payer/state/specialty, picked a SOP template
 (the shared `src/lib/pickTemplate.ts` — the **E4.2-hardened deterministic
 ranking**: org exact-group → org any-group → global-payer exact-group →
 global-payer any-group → generic fallback → null; order-independent, and
@@ -2671,7 +2735,15 @@ corrections are appends, never edits.
   with owners out-of-band), and `src/lib/ownerWording.ts` + its test were
   deleted with the page they served.
 
-## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06)
+## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06 — SUPERSEDED by E6.5)
+
+**E6.5 (2026-07-19) retired all three surfaces**: drift repair, mapping
+training, and portal registration live inside the SOP editor's
+`FormStepPanel`; the Sidebar badge is drift-only (`useFormDrift` →
+`src/lib/formDrift.ts`); `/fix-it`, `/portals/$key/train`, and
+`/admin/portals` are redirects. `useMappingReview`'s mutations +
+`mappingConfidence`'s suggestion logic survive as the trainer's plumbing.
+Historical shape below, for context:
 
 Three connected browser surfaces where users **find and kick off** fill-coverage
 cleanup — the Chrome extension is where they _do_ the fills. Product law

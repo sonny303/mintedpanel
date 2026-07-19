@@ -7,7 +7,7 @@
 //
 // Read-only posture (payer governance): payers are SELECTED from the catalog,
 // never created or renamed here — no free-text creation, no identity edit.
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -123,21 +123,20 @@ function FunnelTable({ rows }: { rows: FunnelRow[] }) {
 
 export function PayerReadinessFunnel() {
   const { rows, isLoading, isError } = usePayerReadinessFunnel();
-  const [showNotStarted, setShowNotStarted] = useState(false);
 
-  const { started, notStarted } = useMemo(() => {
+  // The funnel only carries the org's SELECTED payers (activeOrgPayers), so
+  // every row renders — a payer with nothing authored yet is the most
+  // actionable row on the page, not noise to collapse.
+  const sorted = useMemo(() => {
     const all = rows ?? [];
-    return {
-      started: all.filter((r) => r.started),
-      notStarted: all.filter((r) => !r.started),
-    };
+    return [...all.filter((r) => r.started), ...all.filter((r) => !r.started)];
   }, [rows]);
 
   if (isLoading) return <p className="text-[13px] text-gray-500">Loading payer readiness…</p>;
   if (isError) {
     return <p className="text-[13px] text-[#B91C1C]">Couldn't load payer readiness.</p>;
   }
-  if ((rows ?? []).length === 0) {
+  if (sorted.length === 0) {
     return (
       <EmptyState message="No payers selected yet. Select payers from the catalog below — readiness tracking starts the moment one is selected." />
     );
@@ -145,35 +144,16 @@ export function PayerReadinessFunnel() {
 
   return (
     <section aria-labelledby="payer-funnel-heading" className="space-y-3">
-      <div className="flex items-end justify-between">
-        <div>
-          <h2 id="payer-funnel-heading" className="text-[15px] font-semibold">
-            Ready for business
-          </h2>
-          <p className="text-[12.5px] text-muted-foreground">
-            Per-payer platform readiness: a published global SOP plus a registered, trained, and
-            dry-run-proven form when the SOP fills one.
-          </p>
-        </div>
-        {notStarted.length > 0 ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-[12.5px]"
-            onClick={() => setShowNotStarted((v) => !v)}
-          >
-            {showNotStarted ? "Hide" : "Show"} not started ({notStarted.length})
-          </Button>
-        ) : null}
-      </div>
-      {started.length > 0 ? (
-        <FunnelTable rows={started} />
-      ) : (
-        <p className="text-[13px] text-gray-500">
-          Nothing in motion yet — author a global SOP for a payer to start its funnel.
+      <div>
+        <h2 id="payer-funnel-heading" className="text-[15px] font-semibold">
+          Ready for business
+        </h2>
+        <p className="text-[12.5px] text-muted-foreground">
+          Per-payer platform readiness: a published global SOP plus a registered, trained, and
+          dry-run-proven form when the SOP fills one.
         </p>
-      )}
-      {showNotStarted && notStarted.length > 0 ? <FunnelTable rows={notStarted} /> : null}
+      </div>
+      <FunnelTable rows={sorted} />
     </section>
   );
 }

@@ -75,14 +75,19 @@ describe("latestRealFillPerPortal", () => {
   it("keeps the first (newest) fill per portal and skips dry runs", () => {
     const skip = (label: string) => [{ selector: "#f", label, reason: "unmapped" as const }];
     const fills = [
-      { portalKey: "a", fieldsSkipped: skip("test-run"), isTest: true },
-      { portalKey: "a", fieldsSkipped: skip("newest-real"), isTest: false },
-      { portalKey: "a", fieldsSkipped: skip("older-real"), isTest: false },
-      { portalKey: "b", fieldsSkipped: null, isTest: false },
+      { portalKey: "a", fieldsSkipped: skip("test-run"), isTest: true, startedAt: "2026-07-19" },
+      {
+        portalKey: "a",
+        fieldsSkipped: skip("newest-real"),
+        isTest: false,
+        startedAt: "2026-07-18",
+      },
+      { portalKey: "a", fieldsSkipped: skip("older-real"), isTest: false, startedAt: "2026-07-17" },
+      { portalKey: "b", fieldsSkipped: null, isTest: false, startedAt: "2026-07-16" },
     ];
     expect(latestRealFillPerPortal(fills)).toEqual([
-      { portalKey: "a", fieldsSkipped: skip("newest-real") },
-      { portalKey: "b", fieldsSkipped: null },
+      { portalKey: "a", fieldsSkipped: skip("newest-real"), startedAt: "2026-07-18" },
+      { portalKey: "b", fieldsSkipped: null, startedAt: "2026-07-16" },
     ]);
   });
 });
@@ -139,6 +144,29 @@ describe("brokenMapsForFill", () => {
       [m1, m2],
     );
     expect(broken).toEqual([]);
+  });
+
+  it("a mapping edited AFTER the reporting fill is repaired-pending-verification (drops out)", () => {
+    const repaired = map({ id: "m1", selector: "label:NPI", updatedAt: "2026-07-19T12:00:00Z" });
+    const broken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [notFound("NPI", "m1")],
+        startedAt: "2026-07-19T09:00:00Z",
+      },
+      [repaired],
+    );
+    expect(broken).toEqual([]);
+    // Untouched since the fill → still drifted.
+    const stillBroken = brokenMapsForFill(
+      {
+        portalKey: "bcbs_ks_enrollment",
+        fieldsSkipped: [notFound("NPI", "m1")],
+        startedAt: "2026-07-19T09:00:00Z",
+      },
+      [map({ id: "m1", selector: "label:NPI", updatedAt: "2026-07-01T00:00:00Z" })],
+    );
+    expect(stillBroken.map((m) => m.id)).toEqual(["m1"]);
   });
 
   it("only maps on the fill's portal join", () => {

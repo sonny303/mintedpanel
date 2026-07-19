@@ -137,15 +137,17 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   // Imports live with data (E6.4 carries them; wizard uploads meanwhile).
   { from: "/admin/import", to: /\/providers\/?$/ },
   // Payer Setup consolidations (E6.5 finalizes the module).
-  { from: "/fix-it", to: /\/admin\/payer-admin\?tab=needs-attention$/ },
-  { from: "/admin/mso-routing", to: /\/admin\/payer-admin\?tab=catalog$/ },
-  { from: "/admin/portals", to: /\/admin\/payer-admin\?tab=forms$/ },
-  { from: "/admin/portals?payerId=pay-77", to: /\/admin\/payer-admin\?.*payerId=pay-77/ },
-  { from: "/admin/templates", to: /\/admin\/payer-admin\?tab=templates$/ },
-  { from: "/admin/sops", to: /\/admin\/payer-admin\?tab=templates$/ },
-  { from: "/payer-directory", to: /\/admin\/payer-admin\?tab=catalog$/ },
-  { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\?tab=forms$/ },
-  { from: "/admin/payers", to: /\/admin\/payer-admin\/?$/ },
+  { from: "/fix-it", to: /\/admin\/payer-admin\/sops$/ },
+  { from: "/admin/mso-routing", to: /\/admin\/payer-admin\/catalog$/ },
+  { from: "/admin/portals", to: /\/admin\/payer-admin\/sops$/ },
+  // E6.5: the Forms-tab payer context retired with the tab — registration
+  // lives in the SOP editor, so the param is deliberately dropped.
+  { from: "/admin/portals?payerId=pay-77", to: /\/admin\/payer-admin\/sops$/ },
+  { from: "/admin/templates", to: /\/admin\/payer-admin\/sops$/ },
+  { from: "/admin/sops", to: /\/admin\/payer-admin\/sops$/ },
+  { from: "/payer-directory", to: /\/admin\/payer-admin\/catalog$/ },
+  { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\/sops$/ },
+  { from: "/admin/payers", to: /\/admin\/payer-admin\/catalog$/ },
   // Generation re-homes on the group's Payer Network (E6.2/E6.3).
   // Pre-E6.1 stubs, retargeted or preserved.
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },

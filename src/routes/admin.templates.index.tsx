@@ -8,6 +8,6 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/templates/")({
   beforeLoad: () => {
-    throw redirect({ to: "/admin/payer-admin", search: { tab: "templates" }, replace: true });
+    throw redirect({ to: "/admin/payer-admin/sops", replace: true });
   },
 });
