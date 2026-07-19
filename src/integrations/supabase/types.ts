@@ -3555,6 +3555,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      _apply_case_status_auto: {
+        Args: {
+          p_case_id: string;
+          p_evidence_touch_id?: string;
+          p_to_status: string;
+        };
+        Returns: undefined;
+      };
       _ssn_decrypt: { Args: { p_ciphertext: string }; Returns: string };
       _ssn_digits: { Args: { p_raw: string }; Returns: string };
       _ssn_encrypt: { Args: { p_plaintext: string }; Returns: string };
