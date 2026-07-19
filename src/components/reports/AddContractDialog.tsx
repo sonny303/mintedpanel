@@ -27,13 +27,7 @@ import { useCreateContract } from "@/hooks/useContracts";
 import { usePayers } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 
-export function AddContractDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function AddContractDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const createM = useCreateContract();
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();

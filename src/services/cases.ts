@@ -387,7 +387,11 @@ function mapCaseStatusError(error: { message?: string }): Error {
       actual && isCaseStatus(actual) ? actual : null,
     );
   }
-  const key = Object.keys(CASE_STATUS_ERROR_MESSAGES).find((k) => raw.startsWith(k));
+  // Longest match first: case_status_invalid is a prefix of
+  // case_status_invalid_transition — a naive first-match picks the wrong code.
+  const key = Object.keys(CASE_STATUS_ERROR_MESSAGES)
+    .sort((a, b) => b.length - a.length)
+    .find((k) => raw.startsWith(k));
   if (key) return new CaseStatusError(key, CASE_STATUS_ERROR_MESSAGES[key]);
   return raw ? new Error(raw) : new Error("Could not update the case status.");
 }

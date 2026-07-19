@@ -349,9 +349,7 @@ function CaseDetailPage() {
                   />
                   <Row
                     label="Contract executed"
-                    value={
-                      <span className="tabular-nums">{fmtDate(c.contractExecutedDate)}</span>
-                    }
+                    value={<span className="tabular-nums">{fmtDate(c.contractExecutedDate)}</span>}
                   />
                   <Row
                     label="Days open"

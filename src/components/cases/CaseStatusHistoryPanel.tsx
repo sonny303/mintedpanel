@@ -70,7 +70,9 @@ export function CaseStatusHistoryPanel({
                       </div>
                     ) : null}
                     <div className="text-[11px] text-muted-foreground">
-                      {h.actorKind === "system" ? "by system" : `by ${h.changedByName ?? "someone"}`}
+                      {h.actorKind === "system"
+                        ? "by system"
+                        : `by ${h.changedByName ?? "someone"}`}
                     </div>
                   </div>
                   <div className="text-[11px] text-muted-foreground text-right shrink-0 tabular-nums">

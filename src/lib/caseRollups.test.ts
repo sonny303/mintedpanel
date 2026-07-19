@@ -36,10 +36,7 @@ describe("groupPayerFulfillment", () => {
   });
 
   it("an open case moves the pair to In Progress", () => {
-    const rows = groupPayerFulfillment(
-      [target("g1", "p1")],
-      [caseRow("g1", "p1", "submitted")],
-    );
+    const rows = groupPayerFulfillment([target("g1", "p1")], [caseRow("g1", "p1", "submitted")]);
     expect(rows[0].fulfillment).toBe("in_progress");
     expect(rows[0].openCount).toBe(1);
   });
@@ -71,10 +68,7 @@ describe("groupPayerFulfillment", () => {
 
   it("reapply clears the marker: a reopened case makes the pair In Progress (TS-116)", () => {
     // The denied case went back to in_progress (the SAME case, reapplied).
-    const rows = groupPayerFulfillment(
-      [target("g1", "p1")],
-      [caseRow("g1", "p1", "in_progress")],
-    );
+    const rows = groupPayerFulfillment([target("g1", "p1")], [caseRow("g1", "p1", "in_progress")]);
     expect(rows[0].fulfillment).toBe("in_progress");
     expect(rows[0].hasDenial).toBe(false);
   });
@@ -119,11 +113,7 @@ describe("groupPayerFulfillment", () => {
       [target("g2", "p1"), target("g1", "p2"), target("g1", "p1")],
       [],
     );
-    expect(rows.map((r) => `${r.groupId}|${r.payerId}`)).toEqual([
-      "g1|p1",
-      "g1|p2",
-      "g2|p1",
-    ]);
+    expect(rows.map((r) => `${r.groupId}|${r.payerId}`)).toEqual(["g1|p1", "g1|p2", "g2|p1"]);
   });
 });
 
@@ -170,7 +160,9 @@ describe("denial rollup", () => {
   });
 
   it("a reapplied case (back to In Progress) leaves the rollup", () => {
-    const reapplied = cases.map((c) => (c.id === "c1" ? { ...c, status: "in_progress" as const } : c));
+    const reapplied = cases.map((c) =>
+      c.id === "c1" ? { ...c, status: "in_progress" as const } : c,
+    );
     expect(buildDenialRows(reapplied, info).map((r) => r.caseId)).toEqual(["c3"]);
   });
 

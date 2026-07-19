@@ -155,8 +155,7 @@ function CasesWorkView() {
     [tasksQ.data, templatesQ.data],
   );
 
-  const loading =
-    providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
+  const loading = providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
 
   const failed = providersQ.isError || casesQ.isError || payersQ.isError;
 

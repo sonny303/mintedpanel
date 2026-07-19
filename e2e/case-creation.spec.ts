@@ -205,6 +205,7 @@ function makeFixtures() {
     audit_log: [],
     party_role_assignments: [],
     touches: [],
+    case_status_history: [] as Record<string, unknown>[],
     tasks: [] as Record<string, unknown>[],
     status_history: [] as Record<string, unknown>[],
     mso_routing_rules: [],
@@ -319,6 +320,8 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
     tasks: fixtures.tasks.filter((t) => t.case_id === row.id),
     touches: [],
     status_history: fixtures.status_history.filter((h) => h.case_id === row.id),
+    payer_pipeline_history: [],
+    case_status_history: fixtures.case_status_history.filter((h) => h.case_id === row.id),
   });
 
   const handler = async (route: Route) => {
@@ -361,6 +364,9 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
         mso_id: input.mso_id ?? null,
         assigned_to: input.assigned_to ?? null,
         credentialing_status_id: input.credentialing_status_id ?? "st-notstarted",
+        case_status: "not_started",
+        payer_pipeline_state: "not_started",
+        contract_executed_date: null,
         submitted_date: null,
         approved_date: null,
         confirmed_effective_date: null,
@@ -404,6 +410,63 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
           updated_at: "2026-07-13T00:00:00Z",
         });
       }
+      return json(row);
+    }
+    if (url.pathname.endsWith("/rpc/set_case_status") && req.method() === "POST") {
+      // E6.0 write-through: mirrors the RPC — canonical flip + legacy-mirror
+      // lockstep + an appended case_status_history row.
+      const body = req.postDataJSON() as Record<string, unknown>;
+      writes.push({ table: "rpc/set_case_status", method: "POST", body });
+      const row = fixtures.credential_cases.find((c) => c.id === body.p_case_id);
+      if (!row) return json({ message: "case_status_case_not_found" }, 400);
+      const from = (row.case_status as string | undefined) ?? "not_started";
+      if (body.p_expected_status && body.p_expected_status !== from) {
+        return json({ message: `case_status_conflict:${from}` }, 400);
+      }
+      const to = body.p_to_status as string;
+      const mirrorLabel = (
+        {
+          not_started: "Not Started",
+          in_progress: "In Progress",
+          submitted: "Submitted",
+          in_review: "Submitted",
+          action_required: "Waiting on Provider",
+          approved: "Approved",
+          denied: "Denied",
+          not_pursuing: "Not Required",
+        } as Record<string, string>
+      )[to];
+      const mirror = STATUS_CONFIGS.find(
+        (s) => s.track === "credentialing" && s.label === mirrorLabel,
+      );
+      row.case_status = to;
+      if (mirror) row.credentialing_status_id = mirror.id;
+      row.payer_pipeline_state = (
+        {
+          not_started: "not_started",
+          in_progress: "drafting",
+          submitted: "submitted",
+          in_review: "in_review",
+          action_required: "action_required",
+          approved: "approved",
+          denied: "denied",
+          not_pursuing: "oon",
+        } as Record<string, string>
+      )[to];
+      fixtures.case_status_history.push({
+        id: `csh-${nextId++}`,
+        org_id: row.org_id,
+        case_id: row.id,
+        from_status: from,
+        to_status: to,
+        actor_kind: "user",
+        reason_code_id: body.p_reason_code_id ?? null,
+        evidence_touch_id: body.p_evidence_touch_id ?? null,
+        is_correction: body.p_is_correction ?? false,
+        note: body.p_note ?? null,
+        changed_by: USER_ID,
+        changed_at: "2026-07-19T00:00:00Z",
+      });
       return json(row);
     }
     if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
@@ -644,6 +707,7 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
     mso_id: null,
     assigned_to: null,
     credentialing_status_id: "st-denied",
+    case_status: "denied",
     submitted_date: "2026-05-01",
     approved_date: null,
     confirmed_effective_date: null,
@@ -709,15 +773,17 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
     timeout: 30000,
   });
 
-  // Status transition on the SAME case, recorded in status_history.
-  const patch = writes.find((w) => w.table === "credential_cases" && w.method === "PATCH");
-  expect(patch?.body).toMatchObject({ credentialing_status_id: "st-inprog" });
-  const historyPost = writes.find((w) => w.table === "status_history" && w.method === "POST");
-  expect(historyPost?.body).toMatchObject({
-    case_id: "case-denied",
-    from_status_id: "st-denied",
-    to_status_id: "st-inprog",
+  // E6.0: the reapply edge rides the atomic set_case_status RPC (unified
+  // history + legacy-mirror lockstep) — never a bare PATCH.
+  const statusRpc = writes.find((w) => w.table === "rpc/set_case_status");
+  expect(statusRpc?.body).toMatchObject({
+    p_case_id: "case-denied",
+    p_to_status: "in_progress",
+    p_expected_status: "denied",
   });
+  expect(
+    writes.find((w) => w.table === "credential_cases" && w.method === "PATCH"),
+  ).toBeUndefined();
 
   // Tasks regenerated from the CURRENT SOP (Model A), appended AFTER the
   // existing task — resolved title proves the current template was used.

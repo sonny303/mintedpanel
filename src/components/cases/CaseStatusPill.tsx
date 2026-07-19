@@ -20,13 +20,7 @@ export function caseStatusTone(status: CaseStatus): StatusColor {
   return CASE_STATUS_TONE[status];
 }
 
-export function CaseStatusPill({
-  status,
-  className,
-}: {
-  status: CaseStatus;
-  className?: string;
-}) {
+export function CaseStatusPill({ status, className }: { status: CaseStatus; className?: string }) {
   return (
     <StatusPill
       status={CASE_STATUS_TONE[status]}

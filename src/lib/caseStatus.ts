@@ -72,11 +72,7 @@ export const OPEN_CASE_STATUSES: readonly CaseStatus[] = [
 
 /** The three closes. Denied is re-openable via reapply (denied → in_progress);
  * Approved and Not Pursuing move only by admin correction. */
-export const TERMINAL_CASE_STATUSES: readonly CaseStatus[] = [
-  "approved",
-  "denied",
-  "not_pursuing",
-];
+export const TERMINAL_CASE_STATUSES: readonly CaseStatus[] = ["approved", "denied", "not_pursuing"];
 
 // Spine position for the forward-jump rule. Terminals carry no rank.
 const SPINE_RANK: Partial<Record<CaseStatus, number>> = {

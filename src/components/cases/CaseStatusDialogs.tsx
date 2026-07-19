@@ -202,7 +202,11 @@ export function ApprovedDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className={FIELD_LABEL}>Effective date (required)</Label>
-            <DatePicker value={effectiveDate} onChange={(v) => setEffectiveDate(v ?? "")} />
+            <DatePicker
+              value={effectiveDate}
+              onChange={(v) => setEffectiveDate(v ?? "")}
+              ariaLabel="Effective date"
+            />
           </div>
           <ProviderIdFields
             payer={payer}
@@ -216,6 +220,7 @@ export function ApprovedDialog({
             <DatePicker
               value={contractExecutedDate}
               onChange={(v) => setContractExecutedDate(v ?? "")}
+              ariaLabel="Contract executed date"
             />
           </div>
         </div>
@@ -445,7 +450,11 @@ export function StatusCorrectionDialog({
             <>
               <div className="space-y-1.5">
                 <Label className={FIELD_LABEL}>Effective date</Label>
-                <DatePicker value={effectiveDate} onChange={(v) => setEffectiveDate(v ?? "")} />
+                <DatePicker
+                  value={effectiveDate}
+                  onChange={(v) => setEffectiveDate(v ?? "")}
+                  ariaLabel="Corrected effective date"
+                />
               </div>
               <ProviderIdFields
                 payer={payer}

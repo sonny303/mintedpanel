@@ -119,9 +119,7 @@ function PrimitivesPage() {
       children: (
         <CaseTable
           leadLabel="Payer"
-          rows={[
-            demoRow("r4", "BCBS", { status: "approved" }, 3, "View case"),
-          ]}
+          rows={[demoRow("r4", "BCBS", { status: "approved" }, 3, "View case")]}
         />
       ),
     },

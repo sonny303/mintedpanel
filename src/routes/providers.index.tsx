@@ -127,8 +127,7 @@ function ProvidersWorkView() {
       replace: true,
     });
 
-  const loading =
-    providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
+  const loading = providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
 
   const failed = providersQ.isError || casesQ.isError || payersQ.isError;
 
