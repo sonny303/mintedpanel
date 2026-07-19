@@ -242,7 +242,6 @@ function NextActionCell({
   }
 }
 
-
 // Per-state readiness detail (the former payer × state matrix, scoped to one
 // payer) + the org-owned governance flags.
 function SetupDetailRow({ row, canEdit }: { row: PayerSetupRow; canEdit: boolean }) {

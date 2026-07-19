@@ -144,6 +144,3 @@ export async function assignProviderToFacility(
     description: "Linked provider to launch location",
   });
 }
-
-
-

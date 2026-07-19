@@ -81,9 +81,7 @@ describe("bucketGridRows", () => {
 describe("reconcileGrid — the sum invariant", () => {
   it("matches the epic's gherkin line with one skip", () => {
     const rows = gherkinRows();
-    const selected = new Set(
-      rows.filter((r) => r.bucket === "candidate").map((r) => r.key),
-    );
+    const selected = new Set(rows.filter((r) => r.bucket === "candidate").map((r) => r.key));
     const all = reconcileGrid(rows, selected);
     expect(all.line).toBe("Create 4 · 1 excluded · 2 enrolled — 7 of 7 accounted for");
     expect(all.create + all.skipped + all.excluded + all.enrolled + all.existing).toBe(all.total);
@@ -96,7 +94,11 @@ describe("reconcileGrid — the sum invariant", () => {
       "Create 3 · 1 skipped · 1 excluded · 2 enrolled — 7 of 7 accounted for",
     );
     expect(
-      withSkip.create + withSkip.skipped + withSkip.excluded + withSkip.enrolled + withSkip.existing,
+      withSkip.create +
+        withSkip.skipped +
+        withSkip.excluded +
+        withSkip.enrolled +
+        withSkip.existing,
     ).toBe(withSkip.total);
   });
 });

@@ -212,10 +212,7 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
                               // shared grid pre-filtered to this location's
                               // providers (the retired launch dialog's job).
                               <Button asChild variant="outline" size="sm" className="h-8">
-                                <Link
-                                  to="/generation"
-                                  search={{ group: group.id, facility: f.id }}
-                                >
+                                <Link to="/generation" search={{ group: group.id, facility: f.id }}>
                                   Review &amp; generate
                                 </Link>
                               </Button>

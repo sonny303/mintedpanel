@@ -762,12 +762,7 @@ export interface CaseGenerationRun {
 // of the user) and 'enrolled' (covered by a live enrollment fact) so the run
 // ledger accounts for EVERY candidate (migration 20260719160000).
 export type GenerationRowDisposition =
-  | "created"
-  | "skipped_existing"
-  | "excluded"
-  | "failed"
-  | "skipped"
-  | "enrolled";
+  "created" | "skipped_existing" | "excluded" | "failed" | "skipped" | "enrolled";
 
 export interface CaseGenerationRunRow {
   id: string;

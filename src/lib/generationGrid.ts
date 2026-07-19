@@ -159,8 +159,7 @@ export function splitGridSelection(
   rows: readonly GridRow[],
   selectedKeys: ReadonlySet<string>,
 ): GridSelectionSplit {
-  const pick = (bucket: GridBucket) =>
-    rows.filter((r) => r.bucket === bucket).map((r) => r.row);
+  const pick = (bucket: GridBucket) => rows.filter((r) => r.bucket === bucket).map((r) => r.row);
   const candidates = rows.filter((r) => r.bucket === "candidate");
   return {
     selectedRows: candidates.filter((r) => selectedKeys.has(r.key)).map((r) => r.row),

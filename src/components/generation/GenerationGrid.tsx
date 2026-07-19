@@ -304,7 +304,9 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                         )
                       }
                     >
-                      {spawned.has(row.providerId) ? "Outreach task created" : "Create outreach task"}
+                      {spawned.has(row.providerId)
+                        ? "Outreach task created"
+                        : "Create outreach task"}
                     </Button>
                   ) : null}
                 </li>
@@ -322,8 +324,8 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
             fallback SOP.
           </p>
           <p className="mt-1 text-[13px] text-[#92400E]">
-            No payer-specific SOP matches their payer, state, and group — author one to replace
-            the generic checklist; fallback usage is recorded on the run.
+            No payer-specific SOP matches their payer, state, and group — author one to replace the
+            generic checklist; fallback usage is recorded on the run.
           </p>
         </div>
       ) : null}
@@ -406,7 +408,8 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                         ) : bucket === "excluded" ? (
                           <span className="inline-flex flex-wrap items-center gap-2">
                             <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
-                              Excluded — {row.exclusion ? EXCLUSION_REASON_LABELS[row.exclusion.reason] : ""}
+                              Excluded —{" "}
+                              {row.exclusion ? EXCLUSION_REASON_LABELS[row.exclusion.reason] : ""}
                             </Badge>
                             {row.exclusion?.note ? <span>{row.exclusion.note}</span> : null}
                           </span>
