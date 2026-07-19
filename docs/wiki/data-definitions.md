@@ -64,7 +64,7 @@ Every case shows exactly ONE status; the list is fixed and code-owned:
   creation/reapply time, with the SOP version recorded.
 - **To-do pivot (Cases)** — the ranked queue: overdue/arrived follow-ups →
   task due dates → provider start dates → the rest; each entry names its
-  reason. Saved org queue settings override the default order.
+  reason. The order is the fixed shipped default (E6.6 — no org config).
 - **"x of y approved"** — a derived rollup: approved cases over all cases in
   the slice (per provider, per payer, or per group × payer). Always
   computed live from case statuses, never stored.

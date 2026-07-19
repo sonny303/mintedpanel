@@ -34,7 +34,7 @@ The home of Journey D (casework).
 - Three pivots over the SAME open cases, held in the URL (`?pivot=`):
   - **To-do** (default) — the ranked queue: overdue/arrived follow-ups →
     task due dates → provider start dates → the rest; each entry names its
-    reason. Saved org queue configs still override the default ranking.
+    reason. The ranking is the fixed shipped order (E6.6 — no org config).
   - **By provider** and **By payer** — list slices with per-group
     "x of y approved" rollups, chips, search, tracking-id lookup, and bulk
     actions. Legacy list links (`?chip=`, `?ids=`, `?runId=`) land on the

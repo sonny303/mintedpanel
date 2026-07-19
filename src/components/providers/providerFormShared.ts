@@ -3,8 +3,7 @@
 import { isPtTaxonomyCode } from "@/lib/ptTaxonomy";
 
 // Re-export the single mastered state list (src/lib/usStates.ts) rather than
-// keep a second copy in sync — the provider Add/Edit forms and LaunchEditModal
-// import US_STATES from here.
+// keep a second copy in sync — the provider forms import US_STATES from here.
 export { US_STATES } from "@/lib/usStates";
 
 export const SSN_LAST4_RE = /^\d{4}$/;

@@ -5,7 +5,7 @@
 //
 // PHI posture: PROVIDER_LIST_COLUMNS deliberately lacks start_date, so the
 // queue selects its own explicit, PHI-safe provider projection (the
-// clientProgress precedent) — id, name, start_date; never select("*"), no
+// narrow-projection idiom) — id, name, start_date; never select("*"), no
 // DOB/SSN/home-address columns in any queue payload. The tasks read carries
 // sop_content ONLY to reduce it to a cadence number at this boundary — the
 // jsonb never enters the query cache.

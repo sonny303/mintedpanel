@@ -149,6 +149,11 @@ export interface DenialInfo {
   deniedAt: string | null;
 }
 
+/** standing = the case is still Denied; reapplied = a later cycle moved it on
+ * (the F6.6.3 cycle-state vocabulary — the prior denial stays visible here
+ * AND in the case's own history). */
+export type DenialCycleState = "standing" | "reapplied";
+
 export interface DenialRow {
   caseId: string;
   providerId: string;
@@ -156,28 +161,36 @@ export interface DenialRow {
   state: string;
   reasonLabel: string | null;
   deniedAt: string | null;
+  cycleState: DenialCycleState;
+  /** The case's current canonical status — lets the report say
+   * "Reapplied — now Approved" instead of just the binary. */
+  currentStatus: CaseStatus;
 }
 
 /**
- * E6.6's denial report rows: one per currently-Denied case, carrying the
- * reason + date from the case's status history (the caller resolves the
- * latest denial history entry per case into `denialInfoByCase`). A reapplied
- * case (back to In Progress) leaves the rollup — the prior denial stays
- * visible in the case's own history, not here.
+ * E6.6's denial report rows (F6.6.3): one per case that carries a denial —
+ * currently Denied (`standing`) OR denied at some point and since moved on
+ * (`reapplied`; detected by the presence of a denial history entry in
+ * `denialInfoByCase`, which the caller resolves from `case_status_history`
+ * `to_status='denied'` entries — latest entry wins for reason + date). Same
+ * source as the provider record's Cases panel, so the two agree by
+ * construction.
  */
 export function buildDenialRows(
   cases: readonly DenialRollupCaseRow[],
   denialInfoByCase: ReadonlyMap<string, DenialInfo> = new Map(),
 ): DenialRow[] {
   return cases
-    .filter((c) => c.status === "denied")
-    .map((c) => ({
+    .filter((c) => c.status === "denied" || denialInfoByCase.has(c.id))
+    .map((c): DenialRow => ({
       caseId: c.id,
       providerId: c.providerId,
       payerId: c.payerId,
       state: c.state,
       reasonLabel: denialInfoByCase.get(c.id)?.reasonLabel ?? null,
       deniedAt: denialInfoByCase.get(c.id)?.deniedAt ?? null,
+      cycleState: c.status === "denied" ? "standing" : "reapplied",
+      currentStatus: c.status,
     }))
     .sort(
       (a, b) =>
@@ -187,9 +200,12 @@ export function buildDenialRows(
     );
 }
 
-/** Provider-first grouping (the report's default pivot). */
-export function groupDenialsByProvider(rows: readonly DenialRow[]): Map<string, DenialRow[]> {
-  const byProvider = new Map<string, DenialRow[]>();
+/** Provider-first grouping (the report's default pivot). Generic so display
+ * decorations of DenialRow group without re-deriving. */
+export function groupDenialsByProvider<T extends { providerId: string }>(
+  rows: readonly T[],
+): Map<string, T[]> {
+  const byProvider = new Map<string, T[]>();
   for (const row of rows) {
     const list = byProvider.get(row.providerId) ?? [];
     list.push(row);
@@ -199,8 +215,10 @@ export function groupDenialsByProvider(rows: readonly DenialRow[]): Map<string, 
 }
 
 /** Payer-first pivot (pattern spotting: the same payer denying everywhere). */
-export function groupDenialsByPayer(rows: readonly DenialRow[]): Map<string, DenialRow[]> {
-  const byPayer = new Map<string, DenialRow[]>();
+export function groupDenialsByPayer<T extends { payerId: string }>(
+  rows: readonly T[],
+): Map<string, T[]> {
+  const byPayer = new Map<string, T[]>();
   for (const row of rows) {
     const list = byPayer.get(row.payerId) ?? [];
     list.push(row);

@@ -41,7 +41,13 @@ import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
+import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
+import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
+import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
+import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
+import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
+import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
@@ -241,12 +247,44 @@ const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
   path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingLocationsPerGroupRoute =
+  ReportingLocationsPerGroupRouteImport.update({
+    id: '/reporting/locations-per-group',
+    path: '/reporting/locations-per-group',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingLeadsRoute = ReportingLeadsRouteImport.update({
+  id: '/reporting/leads',
+  path: '/reporting/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingLaunchesRoute = ReportingLaunchesRouteImport.update({
+  id: '/reporting/launches',
+  path: '/reporting/launches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingFacilitiesWithoutProvidersRoute =
+  ReportingFacilitiesWithoutProvidersRouteImport.update({
+    id: '/reporting/facilities-without-providers',
+    path: '/reporting/facilities-without-providers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ReportingExpiringCredentialsRoute =
   ReportingExpiringCredentialsRouteImport.update({
     id: '/reporting/expiring-credentials',
     path: '/reporting/expiring-credentials',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
+  id: '/reporting/denials',
+  path: '/reporting/denials',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
+  id: '/reporting/audit-log',
+  path: '/reporting/audit-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -483,7 +521,13 @@ export interface FileRoutesByFullPath {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
@@ -547,7 +591,13 @@ export interface FileRoutesByTo {
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
@@ -621,7 +671,13 @@ export interface FileRoutesById {
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
@@ -696,7 +752,13 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
@@ -760,7 +822,13 @@ export interface FileRouteTypes {
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
@@ -833,7 +901,13 @@ export interface FileRouteTypes {
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
@@ -903,7 +977,13 @@ export interface RootRouteChildren {
   GroupsGroupIdRoute: typeof GroupsGroupIdRouteWithChildren
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
+  ReportingAuditLogRoute: typeof ReportingAuditLogRoute
+  ReportingDenialsRoute: typeof ReportingDenialsRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
+  ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
+  ReportingLaunchesRoute: typeof ReportingLaunchesRoute
+  ReportingLeadsRoute: typeof ReportingLeadsRoute
+  ReportingLocationsPerGroupRoute: typeof ReportingLocationsPerGroupRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
   SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
@@ -1141,11 +1221,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingPortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/locations-per-group': {
+      id: '/reporting/locations-per-group'
+      path: '/reporting/locations-per-group'
+      fullPath: '/reporting/locations-per-group'
+      preLoaderRoute: typeof ReportingLocationsPerGroupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/leads': {
+      id: '/reporting/leads'
+      path: '/reporting/leads'
+      fullPath: '/reporting/leads'
+      preLoaderRoute: typeof ReportingLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/launches': {
+      id: '/reporting/launches'
+      path: '/reporting/launches'
+      fullPath: '/reporting/launches'
+      preLoaderRoute: typeof ReportingLaunchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/facilities-without-providers': {
+      id: '/reporting/facilities-without-providers'
+      path: '/reporting/facilities-without-providers'
+      fullPath: '/reporting/facilities-without-providers'
+      preLoaderRoute: typeof ReportingFacilitiesWithoutProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reporting/expiring-credentials': {
       id: '/reporting/expiring-credentials'
       path: '/reporting/expiring-credentials'
       fullPath: '/reporting/expiring-credentials'
       preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/denials': {
+      id: '/reporting/denials'
+      path: '/reporting/denials'
+      fullPath: '/reporting/denials'
+      preLoaderRoute: typeof ReportingDenialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/audit-log': {
+      id: '/reporting/audit-log'
+      path: '/reporting/audit-log'
+      fullPath: '/reporting/audit-log'
+      preLoaderRoute: typeof ReportingAuditLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/providers/new': {
@@ -1590,7 +1712,14 @@ const rootRouteChildren: RootRouteChildren = {
   GroupsGroupIdRoute: GroupsGroupIdRouteWithChildren,
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
+  ReportingAuditLogRoute: ReportingAuditLogRoute,
+  ReportingDenialsRoute: ReportingDenialsRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
+  ReportingFacilitiesWithoutProvidersRoute:
+    ReportingFacilitiesWithoutProvidersRoute,
+  ReportingLaunchesRoute: ReportingLaunchesRoute,
+  ReportingLeadsRoute: ReportingLeadsRoute,
+  ReportingLocationsPerGroupRoute: ReportingLocationsPerGroupRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,
   SsnIntakeTokenRoute: SsnIntakeTokenRoute,
