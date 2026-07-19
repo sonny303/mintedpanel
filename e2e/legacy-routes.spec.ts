@@ -97,8 +97,8 @@ function seedAuth(context: {
 
 // Routes that must RENDER (a page heading appears, no router dead end): the
 // six nav destinations + the still-live working sub-surfaces (the templates
-// wizard is the SOP-templates tab's authoring flow until E6.5; /import/$runId
-// reviews in-flight staged runs; /admin/audit re-homes with E6.6).
+// wizard is the SOP-templates tab's authoring flow; /import/$runId reviews
+// in-flight staged runs; the E6.6 reports render under /reporting/*).
 const RENDERING_ROUTES = [
   // E6.3 — the generation door + run history are ALIVE again.
   "/generation",
@@ -107,11 +107,16 @@ const RENDERING_ROUTES = [
   "/cases",
   "/admin/payer-admin",
   "/reporting",
+  "/reporting/launches",
+  "/reporting/denials",
+  "/reporting/audit-log",
+  "/reporting/leads",
+  "/reporting/facilities-without-providers",
+  "/reporting/locations-per-group",
   "/org-detail",
   "/groups",
   "/providers",
   "/reports",
-  "/admin/audit",
   "/admin/templates/new",
   "/onboarding",
   "/onboarding/wizard",
@@ -130,10 +135,13 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/scope", to: /\/onboarding\/wizard\/?$/ },
   { from: "/outcomes", to: /\/reporting\/?$/ },
   { from: "/soon?title=Facilities", to: /\/reporting\/?$/ },
-  // Deprecated owner views → Reporting Center (E6.6 lands the reports).
-  { from: "/client-progress", to: /\/reporting\/?$/ },
-  { from: "/progress", to: /\/reporting\/?$/ },
-  { from: "/launches", to: /\/reporting\/?$/ },
+  // Deprecated owner views → their E6.6 reports (F6.6.2/F6.6.3).
+  { from: "/client-progress", to: /\/reporting\/denials\/?$/ },
+  { from: "/progress", to: /\/reporting\/denials\/?$/ },
+  { from: "/launches", to: /\/reporting\/launches\/?$/ },
+  { from: "/launches/loc-1", to: /\/reporting\/launches\/?$/ },
+  // E6.6 F6.6.4 — the Audit Log admin page re-homed into the Center.
+  { from: "/admin/audit", to: /\/reporting\/audit-log\/?$/ },
   // Imports live with data (E6.4 carries them; wizard uploads meanwhile).
   { from: "/admin/import", to: /\/providers\/?$/ },
   // Payer Setup consolidations (E6.5 finalizes the module).

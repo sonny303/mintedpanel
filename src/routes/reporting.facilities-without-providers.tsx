@@ -18,7 +18,10 @@ function ReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Facilities Without Providers" description="Active locations with no providers assigned." />
+      <PageHeader
+        title="Facilities Without Providers"
+        description="Active locations with no providers assigned."
+      />
       <FacilitiesWithoutProvidersReport />
     </div>
   );

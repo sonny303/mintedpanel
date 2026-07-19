@@ -10,12 +10,7 @@
 // "Log Payer Call" BatchTouchpointDialog (both retired).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useBulkLogTouch } from "@/hooks/useTouches";
@@ -47,9 +42,7 @@ export function AddTouchDialog({
 }) {
   const bulkM = useBulkLogTouch();
   const statusM = useSetCaseStatus();
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(defaultSelectedIds ?? []),
-  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(defaultSelectedIds ?? []));
   const [saving, setSaving] = useState(false);
 
   const closeAndReset = () => {

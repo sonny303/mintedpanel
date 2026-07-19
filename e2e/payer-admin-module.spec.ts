@@ -1,15 +1,16 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1 — the "Payer Setup"
-// workspace is now TWO REAL URL segments (/admin/payer-admin/catalog +
-// /admin/payer-admin/sops; the old ?tab= spellings redirect via the index
-// mapper). Covers: the single nav entry (all roles under the E6.1 interim
-// posture); the two shareable segments with keyboard-operable tab links
-// (TE-20c successor); the Ready-for-business funnel head; and the ORG
-// settings that moved to /org-detail with the module consolidation — reason
-// codes (TS-78), queue settings (TS-91), and the F4.2.1 resolution-identifier
-// dialog, which still writes org_payer_settings (the org × payer grain),
-// never the Minted-managed payers row.
+// E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1 and E6.6 F6.6.6 — the
+// "Payer Setup" workspace is TWO REAL URL segments (/admin/payer-admin/
+// catalog + /admin/payer-admin/sops; the old ?tab= spellings redirect via the
+// index mapper). Covers: the single nav entry (all roles under the E6.1
+// interim posture); the two shareable segments with keyboard-operable tab
+// links (TE-20c successor); the Ready-for-business funnel head; the E6.6
+// fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code or
+// queue-ranking editors render anywhere — TS-115); and the F4.2.1
+// resolution-identifier dialog, which survives on /org-detail and still
+// writes org_payer_settings (the org × payer grain), never the
+// Minted-managed payers row.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -228,7 +229,7 @@ test("P2/specialist sees the Payer Setup entry and reaches the workspace (E6.1 F
   });
 });
 
-test("TS-78 — reason codes moved to Org Detail (E6.5): defaults non-deletable, org codes add + deactivate; the legacy tab URL redirects", async ({
+test("TS-78/TS-115 — fixed defaults (E6.6 F6.6.6): no reason-code editor renders anywhere; the legacy tab URL still redirects", async ({
   page,
 }) => {
   currentRole = "admin";
@@ -236,41 +237,31 @@ test("TS-78 — reason codes moved to Org Detail (E6.5): defaults non-deletable,
   // the module with the E6.5 consolidation).
   await page.goto("/admin/payer-admin?tab=org-settings");
   await expect(page).toHaveURL(/\/org-detail$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  // A seeded global default renders "Managed centrally" (non-deletable).
-  const defaultRow = page.locator("tr", { hasText: "Missing Documentation" });
-  await expect(defaultRow).toBeVisible({ timeout: 30000 });
-  await expect(defaultRow.getByText("Managed centrally")).toBeVisible();
-
-  // An org code carries a Deactivate control.
-  const orgRow = page.locator("tr", { hasText: "Roster mismatch" });
-  await expect(orgRow.getByRole("button", { name: "Deactivate" })).toBeVisible();
-
-  // Adding an org code succeeds (toast).
-  await page.getByLabel("Add an organization reason code").fill("Panel full");
-  await page.getByRole("button", { name: "Add code" }).click();
-  await expect(page.getByText("Reason code added.")).toBeVisible({ timeout: 15000 });
+  // The denial word-list ships as the fixed default set — the org editor is
+  // GONE (no add input, no Add code, no Deactivate, no Reason codes section).
+  await expect(page.getByRole("heading", { name: "Reason codes" })).toHaveCount(0);
+  await expect(page.getByLabel("Add an organization reason code")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add code" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Deactivate" })).toHaveCount(0);
 });
 
-test("TS-91 — queue settings live on Org Detail (E6.5): four inputs, reorder, reset", async ({
+test("TS-91/TS-115 — fixed defaults (E6.6 F6.6.6): no queue-ranking editor renders anywhere", async ({
   page,
 }) => {
   currentRole = "admin";
   await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  await expect(page.getByText("Overdue follow-ups", { exact: true })).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page.getByText("Task due dates")).toBeVisible();
-  await expect(page.getByText("Provider start dates")).toBeVisible();
-  await expect(page.getByText("Location launch dates")).toBeVisible();
+  // Queue ranking runs the shipped default order — the config UI is GONE.
+  await expect(page.getByRole("heading", { name: "Queue settings" })).toHaveCount(0);
+  await expect(page.getByText("Overdue follow-ups", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save ranking" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reset to default" })).toHaveCount(0);
 
-  // Accessible move-down on the first input (TE-10, no drag needed).
-  await page.getByRole("button", { name: "Move Overdue follow-ups down" }).click();
-  await expect(page.getByRole("button", { name: "Save ranking" })).toBeEnabled();
-
-  // Reset is present (disabled on the shipped default until a config is saved).
-  await expect(page.getByRole("button", { name: "Reset to default" })).toBeVisible();
+  // The surviving payer-relevant org setting (resolution identifiers) stays.
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toBeVisible();
 });
 
 test("F4.2.1 governance — Configure ID writes org_payer_settings, never the payers row", async ({

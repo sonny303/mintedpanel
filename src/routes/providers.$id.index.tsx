@@ -616,30 +616,30 @@ function CasesSection({ providerId }: { providerId: string }) {
         />
       ) : null}
       <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
-      {rows.map((r) => (
-        <li key={r.id} className="px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
-            <Link
-              to="/cases/$id"
-              params={{ id: r.id }}
-              className="font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
-            >
-              {r.payerName} — {r.state}
-            </Link>
-            <CaseStatusPill status={r.status} />
-            {r.submittedDate ? (
-              <span className="text-muted-foreground">submitted {fmtDate(r.submittedDate)}</span>
-            ) : null}
-          </div>
-          {/* The prior denial stays visible beneath the current cycle —
+        {rows.map((r) => (
+          <li key={r.id} className="px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              <Link
+                to="/cases/$id"
+                params={{ id: r.id }}
+                className="font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+              >
+                {r.payerName} — {r.state}
+              </Link>
+              <CaseStatusPill status={r.status} />
+              {r.submittedDate ? (
+                <span className="text-muted-foreground">submitted {fmtDate(r.submittedDate)}</span>
+              ) : null}
+            </div>
+            {/* The prior denial stays visible beneath the current cycle —
               reapply continues the SAME case (E6.0), history is preserved. */}
-          {r.denials.length > 0 && r.status !== "denied" ? (
-            <p className="mt-1 text-[12.5px] text-muted-foreground">
-              Previously denied — {r.denials[0].label}, {fmtDate(r.denials[0].at)}
-            </p>
-          ) : null}
-        </li>
-      ))}
+            {r.denials.length > 0 && r.status !== "denied" ? (
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
+                Previously denied — {r.denials[0].label}, {fmtDate(r.denials[0].at)}
+              </p>
+            ) : null}
+          </li>
+        ))}
       </ul>
     </div>
   );

@@ -18,7 +18,10 @@ function ReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Denials" description="Who has been denied, by whom, and why — provider-first, payer-pivotable, exportable." />
+      <PageHeader
+        title="Denials"
+        description="Who has been denied, by whom, and why — provider-first, payer-pivotable, exportable."
+      />
       <DenialsReport />
     </div>
   );

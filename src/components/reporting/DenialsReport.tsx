@@ -115,9 +115,7 @@ export function DenialsReport() {
     );
     return decorateDenialRows(
       denialRows,
-      new Map(
-        (providersQ.data ?? []).map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()]),
-      ),
+      new Map((providersQ.data ?? []).map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()])),
       new Map((payersQ.data ?? []).map((p) => [p.id, p.name])),
     );
   }, [casesQ.data, denialsQ.data, reasonsQ.data, providersQ.data, payersQ.data]);

@@ -162,7 +162,10 @@ export function buildLaunchReportRows(
     });
   }
   return rows.sort(
-    (a, b) => a.daysUntil - b.daysUntil || a.name.localeCompare(b.name) || a.facilityId.localeCompare(b.facilityId),
+    (a, b) =>
+      a.daysUntil - b.daysUntil ||
+      a.name.localeCompare(b.name) ||
+      a.facilityId.localeCompare(b.facilityId),
   );
 }
 

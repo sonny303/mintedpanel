@@ -584,6 +584,11 @@ test("TS-56: a 14-day cadence surfaces an overdue touch-due entry (notes never r
   // the queue has no write affordance).
   await row.getByRole("link").click();
   await expect(page).toHaveURL(/\/cases\/case-jane/, { timeout: 15000 });
+  // E6.6: the /cases toolbar now ALSO carries an "Add touch" button, so wait
+  // for the destination page to COMMIT before clicking (the documented
+  // TanStack-transition harness rule — the source route can linger briefly
+  // after the URL flips, and its toolbar button would swallow the click).
+  await expect(page.getByText("Touchlog")).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: "Add touch" }).click();
   await page.getByRole("button", { name: "Save touch" }).click();
   await expect(page.getByText("Touch logged")).toBeVisible({ timeout: 15000 });

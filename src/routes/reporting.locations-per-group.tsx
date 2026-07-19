@@ -18,7 +18,10 @@ function ReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Locations per Group" description="Active location counts by provider group." />
+      <PageHeader
+        title="Locations per Group"
+        description="Active location counts by provider group."
+      />
       <LocationsPerGroupReport />
     </div>
   );

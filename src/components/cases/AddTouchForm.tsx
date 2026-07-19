@@ -268,14 +268,14 @@ export function AddTouchForm({
           {bumpTargets.length === 1 ? (
             <span className="text-[12px] text-foreground leading-tight">
               Also move the case to{" "}
-              <span className="font-medium">{caseStatusLabel(g.toStatus)}</span> — this touch is
-              the evidence.
+              <span className="font-medium">{caseStatusLabel(g.toStatus)}</span> — this touch is the
+              evidence.
             </span>
           ) : (
             <span className="text-[12px] text-foreground leading-tight">
               Also move {g.targets.length} case{g.targets.length === 1 ? "" : "s"} to{" "}
-              <span className="font-medium">{caseStatusLabel(g.toStatus)}</span> — these touches
-              are the evidence.
+              <span className="font-medium">{caseStatusLabel(g.toStatus)}</span> — these touches are
+              the evidence.
             </span>
           )}
         </label>

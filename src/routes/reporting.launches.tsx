@@ -18,7 +18,10 @@ function ReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Launches" description="What's opening when — go-live dates, providers, open cases, and at-risk flags." />
+      <PageHeader
+        title="Launches"
+        description="What's opening when — go-live dates, providers, open cases, and at-risk flags."
+      />
       <LaunchesReport />
     </div>
   );

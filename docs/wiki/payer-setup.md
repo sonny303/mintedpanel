@@ -29,8 +29,9 @@ Global: authored once, inherited by every org.
   next real fill).
 - **MSO routing retired** as an org rules engine — delegation is a curated
   payer fact on the catalog row (`Delegated: …`) plus SOP content.
-- **Org settings moved out**: reason codes, queue ranking, and resolution-ID
-  labels live on Org Detail (org data stays with the org).
+- **Org settings moved out**: resolution-ID labels live on Org Detail (org
+  data stays with the org). The denial word-list and queue ranking are FIXED
+  defaults since E6.6 — no editors anywhere; changes are a platform change.
 
 ## Global authoring
 

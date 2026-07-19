@@ -1747,9 +1747,10 @@ effective_date`) resolved to ids AT SCAN TIME via the E6.2
   (`audit_log.org_id` NOT NULL — version rows/timestamps are the trail).
   **Module:** `/admin/payer-admin/catalog` + `/admin/payer-admin/sops` are
   REAL segments (index = redirect mapper for every legacy `?tab=`;
-  org-settings → `/org-detail`, where ReasonCodeManager/QueueSettingsPanel/
-  ResolutionIdSettingsSection + PayerResolutionIdDialog now live under
-  `components/settings/`). Catalog tab = **`PayerReadinessFunnel`**
+  org-settings → `/org-detail`; since E6.6 only
+  ResolutionIdSettingsSection + PayerResolutionIdDialog remain under
+  `components/settings/` — the reason-code and queue-ranking editors are
+  deleted, F6.6.6). Catalog tab = **`PayerReadinessFunnel`**
   (pure `src/lib/payerReadinessFunnel.ts` + `usePayerReadinessFunnel` over
   `activeOrgPayers`: per-payer sopPublished/formState(none|registered|
   trained|proven)/driftCount + ONE next action author_sop→register_portal→
@@ -1791,6 +1792,80 @@ effective_date`) resolved to ids AT SCAN TIME via the E6.2
   legacy-routes retargeted; template-typing-latency stays green.
   `payerGovernance.test.ts` re-anchored (funnel posture + delegation_note
   no-app-writer pin).
+- **E6.6 — Reporting Center Organization & Touch Unification (CLOSES the E6
+  wave).** NO migration — pure derivations + a presentation/verb
+  consolidation. **Grouped index (F6.6.1):** `src/lib/reports.ts` gained
+  `ReportGroup`/`REPORT_GROUPS`/`reportsInGroup` and per-report `group`;
+  `reporting.index.tsx` renders the four groups (Performance: Portfolio ·
+  Launches · Facilities Without Providers · Locations per Group /
+  Credentialing: Denials · Expiring Credentials / Compliance: Audit Log /
+  Intake: Inbound Leads with a new-lead count badge only when leads await).
+  Leads triage moved OFF Org Detail entirely → `/reporting/leads`
+  (`InboundLeadsPanel` gained `alwaysRender` for the honest empty state).
+  **Launches report (F6.6.2, `/reporting/launches`):** pure
+  `src/lib/launchReport.ts` (+suite) — DATE-ONLY (no location statuses):
+  active non-reference facilities with a go-live in the future or ≤30 days
+  past, grouped by group / date-sorted; open-case counts use the E2.3 union
+  (case.facility_id ∪ the provider's assignments — generation cases carry no
+  facility_id); at-risk = go-live within 30 days AND (open cases OR zero
+  providers), rule text single-sourced (`LAUNCH_AT_RISK_RULE_TEXT`) and
+  rendered inline. `/launches*` redirects here. The orphaned
+  LaunchEditModal/AssignProviderDialog + `launchReadiness.ts` are deleted;
+  launches service/hooks slimmed to `getLaunchLocation`/`useLaunchLocation`
+  (providers.new `?locationId`) + `useLaunchLocations`;
+  GroupFacilitiesContent repointed to `useProviderAssignments` (same key).
+  **Denials report (F6.6.3, `/reporting/denials`):** caseRollups
+  `buildDenialRows` FINALIZED to the epic contract — a row per case
+  CARRYING a denial (`cycleState standing|reapplied` + `currentStatus`;
+  reapplied cases stay visible), groupers genericized; display assembly +
+  CSV in pure `src/lib/denialsReport.ts` (+suite; "Reapplied — now X"
+  labels). The report joins useCases + useCaseDenialEntries +
+  useDenialReasonCodes exactly like the provider record's Cases panel
+  (parity by construction); provider-first default, payer pivot, CSV via
+  csv.ts. The clientProgress chain (lib+test+service+hook+components) is
+  DELETED; `/client-progress` + `/progress` redirect to the report.
+  **Audit + counts (F6.6.4):** `admin.audit.tsx` content moved WHOLESALE to
+  `src/components/reporting/AuditLogReport.tsx` (same filters/diff viewer;
+  the admin gate moved WITH it — non-admins get an EmptyState and the fetch
+  stays disabled) at `/reporting/audit-log`; `/admin/audit` is a redirect
+  shell. Two counts reports over pure `src/lib/countsReports.ts` (+suite):
+  `/reporting/facilities-without-providers` + `/reporting/locations-per-group`.
+  **Add touch unification (F6.6.5):** the single-case structured form was
+  EXTRACTED from CaseTouchesPanel into the shared
+  `src/components/cases/AddTouchForm.tsx` (selector/string contract
+  preserved — TS-105/TS-56 stay green; generalized `bumpTargets` → per-case
+  F6.0.3 suggestions grouped by target status, single-case renders the
+  exact legacy string). NEW `AddTouchDialog.tsx` = case checkbox list +
+  the shared form: `bulkLogTouch` batch semantics (one touch per case +
+  per-touch audit + batch summary), then one `set_case_status` per ACCEPTED
+  bump with THAT case's touch as evidence (`expectedStatus` null); a failed
+  bump never unwinds the touches. Entry points: the /cases toolbar's ONE
+  "Add touch" (replacing "Log touch" + "Log payer call"; keeps the
+  `?pivot=payer&ids=` landing) and the provider record's Cases panel.
+  RETIRED: BatchTouchpointDialog + BulkLogTouchDialog +
+  `communicationEvents.ts`/`useCommunicationEvents.ts` (write path only —
+  getCase's "Part of {payer} call" batch display still reads
+  `communication_event` directly). NB the /cases toolbar rename created a
+  TanStack-transition trap: a test clicking "Add touch" right after a
+  row-link navigation can hit the still-mounted source route's toolbar —
+  wait for the destination content to COMMIT first (TS-56 carries the
+  fix + comment). **Fixed defaults (F6.6.6):** ReasonCodeManager +
+  QueueSettingsPanel and their whole chains deleted
+  (useReasonCodes/denialReasonCodes.ts service/queueSettings.ts +
+  queryKeys); the denial word-list IS the six seeded global codes
+  (documented at `listDenialReasonCodes` in cases.ts — platform change =
+  service-role SQL; every read path untouched); queue ranking runs the
+  FIXED shipped order — the `rankingConfig` input/validator were REMOVED
+  from `buildNextBestActions` and BOTH config reads dropped (browser
+  useNextBestActions + server nextBestAction.ts — no /api wire change);
+  `next_best_action_configs` is dormant (TD-44). Org Detail keeps
+  ResolutionIdSettingsSection only. e2e: touch-log.spec.ts REWRITTEN
+  (TS-115 multi-case + TS-137 suggestion rules, stateful RPC/touches
+  write-through); reporting-center.spec.ts extended (four groups, badge,
+  TS-135, TS-136 incl. CSV download, counts, audit relocation);
+  legacy-routes rows moved (/admin/audit → REDIRECTING; launches/progress
+  retargets); payer-admin-module TS-78/TS-91 flipped to negative pins;
+  contact-inbound operator half → /reporting/leads.
 
 ## What this is
 
@@ -2695,13 +2770,10 @@ corrections are appends, never edits.
   the E2.3 queue). `useTouches.ts` adds `useCorrectTouch`/`useBulkLogTouch`.
 - **F4.1.3 — E2.3 queue:** `buildNextBestActions` (`src/lib/nextBestActions.ts`)
   extended: the `follow_up` signal uses the carry-forward reducer with the TE-2
-  tie-break; a new optional `rankingConfig` (E4.2 F4.2.5) input +
-  `resolveQueueRankingConfig` (validated, atomic default fallback) rank overdue
-  follow-ups first by default / by enabled-group order when configured; overdue
-  gets a "Follow-up overdue" reason. Config read seam
-  `src/services/queueRankingConfig.ts` + `src/hooks/useQueueRankingConfig.ts`
-  (returns the shipped default until E4.2 F4.2.5 persists a row), wired through
-  `useNextBestActions`.
+  tie-break; overdue follow-ups
+  rank first and get a "Follow-up overdue" reason. (The E4.2 F4.2.5 org
+  ranking-config seam that once rode here was REMOVED by E6.6 F6.6.6 — the
+  shipped order is fixed; `next_best_action_configs` is dormant, TD-44.)
 - **F4.1.8 — Action Bridge:** every generic pipeline transition dialog
   (`PipelineDialogs.tsx` `TransitionConfirmDialog`, incl. Action Required/RFI)
   gains an off-by-default `PipelineTouchSection`; `PayerPipelineControl.confirmTransition`
@@ -2716,24 +2788,15 @@ corrections are appends, never edits.
   work-view links to `/cases?ids=…` (new `ids` search param). Seeds:
   `supabase/seed-redesign.sql` E4.1 touches on the Dillon cases (TS-73..75).
 
-## Owner-facing view (one, consolidated Jul 2026)
+## Owner-facing view (RETIRED to the Denials report, E6.6)
 
-- `/client-progress` (Client Progress v1) is **the** owner view: nav entry
-  "Client Progress", page + entry gated to **admin and billing** roles. One card per
-  non-terminated provider; x-of-y in-network `ProgressBar` whose denominator
-  is the org's active payer set (pre-cred sentinel excluded; a payer whose
-  only case for the provider is "Not Required"/"OON" drops out); one line per
-  payer-with-case showing a locked owner wording (In progress / Submitted /
-  With payer / Approved / Active — mapped by label, unknown labels fall back
-  to `action_bucket`) via `src/lib/clientProgress.ts` (tested). Multi-state
-  payers are represented by their most advanced case. Read-only. Pieces:
-  `src/routes/client-progress.tsx`, `src/components/client-progress/`,
-  `src/hooks/useClientProgress.ts`, `src/services/clientProgress.ts` (own
-  narrow projection because `PROVIDER_LIST_COLUMNS` lacks `start_date`).
-- The older M5.5 owner view at `/progress` was folded into it: the route file
-  remains only as a redirect to `/client-progress` (the URL had been shared
-  with owners out-of-band), and `src/lib/ownerWording.ts` + its test were
-  deleted with the page they served.
+- The Client Progress owner view is GONE: E6.6 F6.6.3 replaced its story
+  with the Reporting Center Denials report, and the whole chain
+  (`src/lib/clientProgress.ts` + test, `src/services/clientProgress.ts`,
+  `src/hooks/useClientProgress.ts`, `src/components/client-progress/`) was
+  deleted. `/client-progress` and `/progress` are redirect shells →
+  `/reporting/denials` (both URLs had been shared with owners out-of-band —
+  they never dead-end).
 
 ## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06 — SUPERSEDED by E6.5)
 

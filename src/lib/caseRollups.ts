@@ -182,18 +182,16 @@ export function buildDenialRows(
 ): DenialRow[] {
   return cases
     .filter((c) => c.status === "denied" || denialInfoByCase.has(c.id))
-    .map(
-      (c): DenialRow => ({
-        caseId: c.id,
-        providerId: c.providerId,
-        payerId: c.payerId,
-        state: c.state,
-        reasonLabel: denialInfoByCase.get(c.id)?.reasonLabel ?? null,
-        deniedAt: denialInfoByCase.get(c.id)?.deniedAt ?? null,
-        cycleState: c.status === "denied" ? "standing" : "reapplied",
-        currentStatus: c.status,
-      }),
-    )
+    .map((c): DenialRow => ({
+      caseId: c.id,
+      providerId: c.providerId,
+      payerId: c.payerId,
+      state: c.state,
+      reasonLabel: denialInfoByCase.get(c.id)?.reasonLabel ?? null,
+      deniedAt: denialInfoByCase.get(c.id)?.deniedAt ?? null,
+      cycleState: c.status === "denied" ? "standing" : "reapplied",
+      currentStatus: c.status,
+    }))
     .sort(
       (a, b) =>
         a.providerId.localeCompare(b.providerId) ||

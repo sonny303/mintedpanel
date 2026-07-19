@@ -18,7 +18,10 @@ function ReportPage() {
         <ChevronLeft className="h-3.5 w-3.5" />
         Reporting Center
       </Link>
-      <PageHeader title="Audit Log" description="Read-only history of organization activity. Entries can never be edited or deleted." />
+      <PageHeader
+        title="Audit Log"
+        description="Read-only history of organization activity. Entries can never be edited or deleted."
+      />
       <AuditLogReport />
     </div>
   );
