@@ -85,8 +85,7 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
     const matchesState = stateFilter === "__all__" || (f.state ?? "—") === stateFilter;
     const count = providerCount(f.id);
     const matchesProviders =
-      providerFilter === "all" ||
-      (providerFilter === "with" ? count > 0 : count === 0);
+      providerFilter === "all" || (providerFilter === "with" ? count > 0 : count === 0);
     return matchesSearch && matchesState && matchesProviders;
   });
 
@@ -129,7 +128,10 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={providerFilter} onValueChange={(v) => setProviderFilter(v as ProviderFilter)}>
+        <Select
+          value={providerFilter}
+          onValueChange={(v) => setProviderFilter(v as ProviderFilter)}
+        >
           <SelectTrigger className="h-9 w-44" aria-label="Filter by providers">
             <SelectValue />
           </SelectTrigger>

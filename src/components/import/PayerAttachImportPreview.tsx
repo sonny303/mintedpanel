@@ -185,8 +185,8 @@ export function PayerAttachImportPreview({ runId }: { runId: string }) {
             </DialogHeader>
             <p className="text-[13px] text-muted-foreground">
               {counts.create} new {counts.create === 1 ? "target" : "targets"} will be attached
-              {counts.restore > 0 ? ` and ${counts.restore} archived restored` : ""}. The
-              org-level payer enablement is handled automatically.
+              {counts.restore > 0 ? ` and ${counts.restore} archived restored` : ""}. The org-level
+              payer enablement is handled automatically.
             </p>
             <DialogFooter>
               <Button
@@ -207,8 +207,7 @@ export function PayerAttachImportPreview({ runId }: { runId: string }) {
                         toast.success("Payer attachments committed");
                         setConfirming(false);
                       },
-                      onError: (e) =>
-                        toast.error(e instanceof Error ? e.message : "Commit failed"),
+                      onError: (e) => toast.error(e instanceof Error ? e.message : "Commit failed"),
                     },
                   )
                 }

@@ -449,11 +449,12 @@ test("step 7: a provider failing the SOP's profile gate is a blocker with a dire
   await expect(action).toBeVisible();
 
   // Step 10 — /generation retired with E6.1 F6.1.6: the blocker link rides
-  // the redirect to the interim Groups shell until E6.3 re-homes generation
-  // on the group's Payer Network board (the scope param resumes then).
+  // the redirect to Groups until E6.3 re-homes generation on the group's
+  // Payer Network board (the scope param resumes then). This single-group
+  // org auto-lands on its group hub (E6.2 F6.2.1).
   await action.click();
-  await expect(page).toHaveURL(/\/groups\/?$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Groups", exact: true })).toBeVisible({
+  await expect(page).toHaveURL(/\/groups(\/[^/]+)?\/?$/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible({
     timeout: 30000,
   });
 });

@@ -305,9 +305,11 @@ test("TS-31: first facility — inherited group contact, group link, Complete, G
     page.locator("#wizard-next-action").getByRole("button", { name: "Next: Providers" }),
   ).toBeVisible();
 
-  // F1.2.3 (re-homed by E6.1 F6.1.4): the read-only summary lives on the
-  // Groups shell.
+  // F1.2.3 (re-homed by E6.2 F6.2.2): facilities live on the group's
+  // Facilities area — /groups auto-lands the single group's hub.
   await page.goto("/groups");
+  await expect(page.getByRole("link", { name: /Facilities/ })).toBeVisible({ timeout: 30000 });
+  await page.getByRole("link", { name: /Facilities/ }).click();
   await expect(page.getByText("Tree Hill Riverfront Clinic")).toBeVisible({ timeout: 30000 });
 });
 

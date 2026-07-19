@@ -4,7 +4,11 @@
 // counting, and cross-group cases never leak into another group's board
 // (TS-122 multi-group honesty).
 import { describe, expect, it } from "vitest";
-import { buildPayerBoard, type BoardCaseInput, type PayerBoardInput } from "@/lib/payerNetworkBoard";
+import {
+  buildPayerBoard,
+  type BoardCaseInput,
+  type PayerBoardInput,
+} from "@/lib/payerNetworkBoard";
 import type { GenerationPreviewRow } from "@/lib/generationPreview";
 import type { CaseGenerationExclusion, EnrollmentFact, PayerNetworkTarget } from "@/types";
 

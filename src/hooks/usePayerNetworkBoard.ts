@@ -8,14 +8,16 @@
 import { useMemo } from "react";
 import { useCaseDenialEntries, useCases, useDenialReasonCodes } from "@/hooks/useCases";
 import { useEnrollmentFacts } from "@/hooks/useEnrollmentFacts";
-import {
-  useCaseGenerationExclusions,
-  useGenerationPreview,
-} from "@/hooks/useGenerationPreview";
+import { useCaseGenerationExclusions, useGenerationPreview } from "@/hooks/useGenerationPreview";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { usePayers } from "@/hooks/useAdmin";
 import { useProviderGroupAssignments, useProviders } from "@/hooks/useProviders";
-import { groupCandidates, subtractLiveFacts, bufferCause, type BufferCause } from "@/lib/generationBuffer";
+import {
+  groupCandidates,
+  subtractLiveFacts,
+  bufferCause,
+  type BufferCause,
+} from "@/lib/generationBuffer";
 import { buildPayerBoard, type BoardDenialEntry, type PayerBoard } from "@/lib/payerNetworkBoard";
 import type { GenerationPreviewRow } from "@/lib/generationPreview";
 import type { EnrollmentFact } from "@/types";

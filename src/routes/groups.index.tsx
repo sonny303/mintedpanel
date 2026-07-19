@@ -50,8 +50,7 @@ function GroupsIndexPage() {
           <CardContent className="space-y-2 p-6">
             <p className="text-[14px] font-medium text-foreground">No provider groups yet</p>
             <p className="text-[13px] text-muted-foreground">
-              Add the group's legal entity in the setup wizard — facilities and payers attach to
-              it.
+              Add the group's legal entity in the setup wizard — facilities and payers attach to it.
             </p>
             <Link
               to="/onboarding/wizard"
@@ -79,7 +78,9 @@ function GroupsIndexPage() {
                 <div className="mt-1 text-[12.5px] text-muted-foreground">
                   {[
                     g.tin ? `TIN ${formatTin(g.tin)}` : null,
-                    (g.states ?? []).length > 0 ? `Operating in ${(g.states ?? []).join(", ")}` : null,
+                    (g.states ?? []).length > 0
+                      ? `Operating in ${(g.states ?? []).join(", ")}`
+                      : null,
                     `${facilityCount(g.id)} ${facilityCount(g.id) === 1 ? "facility" : "facilities"}`,
                   ]
                     .filter(Boolean)

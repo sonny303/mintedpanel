@@ -85,8 +85,7 @@ function GroupFactsDialog({ group, onClose }: { group: ProviderGroup; onClose: (
           toast.success("Group facts updated");
           onClose();
         },
-        onError: (e) =>
-          toast.error(e instanceof Error ? e.message : "Couldn't update the group"),
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't update the group"),
       },
     );
   };
@@ -108,9 +107,7 @@ function GroupFactsDialog({ group, onClose }: { group: ProviderGroup; onClose: (
               onChange={(e) => setName(e.target.value)}
               className="h-9"
             />
-            {errors.name ? (
-              <p className="mt-1 text-[12px] text-[#B91C1C]">{errors.name}</p>
-            ) : null}
+            {errors.name ? <p className="mt-1 text-[12px] text-[#B91C1C]">{errors.name}</p> : null}
           </div>
           <div>
             <Label htmlFor="group-facts-tin" className="text-[12px]">

@@ -312,9 +312,18 @@ describe("upload ladder gate (TE-5)", () => {
 describe("payer attach descriptor (E6.2 F6.2.4)", () => {
   const context: SectionScanContext = {
     payerAttach: {
-      groups: [{ id: "g1", name: "Outer Banks Rehab Group", tin: "123456789", states: ["NC", "CO"] }],
+      groups: [
+        { id: "g1", name: "Outer Banks Rehab Group", tin: "123456789", states: ["NC", "CO"] },
+      ],
       payers: [
-        { id: "pay1", name: "Aetna", payerSlug: "aetna", aliases: [], states: ["NC", "SC"], status: "active" },
+        {
+          id: "pay1",
+          name: "Aetna",
+          payerSlug: "aetna",
+          aliases: [],
+          states: ["NC", "SC"],
+          status: "active",
+        },
       ],
     },
   };
@@ -333,7 +342,9 @@ describe("payer attach descriptor (E6.2 F6.2.4)", () => {
       "payer",
       "states",
     ]);
-    expect(sectionTemplateCsv(PAYER_ATTACH_DESCRIPTOR).trim()).toBe("group_name,group_tin,payer,states");
+    expect(sectionTemplateCsv(PAYER_ATTACH_DESCRIPTOR).trim()).toBe(
+      "group_name,group_tin,payer,states",
+    );
   });
 
   it("the template documents eligibility and the ';' states encoding", () => {

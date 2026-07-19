@@ -1578,6 +1578,74 @@ global)` READS stay — the shared-catalog pattern, own-org disjunct vestigial
   extension-repo change — the download endpoint IS the future-auto-attach
   contract (TE-11: audited links only, never bucket credentials).
 
+### Stage 6 (Simplification Wave) built so far
+
+The E6 wave builds from `docs/redesign/BUILD-QUEUE.md` (the multi-session
+lock) + `docs/redesign/DECISION-RECORD-2026-07-19-simplification.md`; E6
+migrations are REPO-ONLY (hosted apply is an operator step listed in each PR
+body; rollback-wrapped hosted probes via MCP are the dry-run). `docs/wiki/`
+pages are updated in the same PR as the epic that changes them.
+
+- **E6.0 — Unified case status (#199).** ONE canonical, code-owned 8-status
+  `credential_cases.case_status` (`src/lib/caseStatus.ts` — list, spine
+  edges, evidence-bump rules, legacy mapping; migrations `20260719120000`–
+  `120200`): every transition through the `set_case_status` RPC (evidence
+  rules, admin corrections, optimistic concurrency, append-only
+  `case_status_history` with `reason_code_id` for denials) or the
+  auto-transition triggers; the legacy `credentialing_status_id` /
+  `payer_pipeline_state` survive as READ-ONLY dual-write mirrors (TD-35;
+  `advance_payer_pipeline` dormant). **`src/lib/caseRollups.ts`** is the
+  derived layer above cases: `groupPayerFulfillment` (Targeted → In
+  Progress → Active, most-advanced-wins, Active = approved case OR
+  enrollment fact), `providerCaseProgress`, `buildDenialRows` — E6.2/E6.4/
+  E6.6 render them, nobody sets them.
+- **E6.1 — Sidebar & surface restructure (#201).** Six-item sidebar (Cases ·
+  Payer Setup · Reporting Center | Org Detail · Groups · Providers); Cases
+  is the login landing with three pivots on ONE route (`/cases` — to-do
+  default = the NBA queue, `?pivot=provider|payer`; legacy `chip/ids/runId`
+  imply the payer pivot; `/work` redirects preserving `run`); `/org-detail`
+  (slim container + members + the live Finish-setup banner); the 16-surface
+  redirect table in `legacy-routes.spec.ts` (REDIRECTING_ROUTES +
+  PARAM_PRESERVING — old links never dead-end); FixitDeck rides payer-admin
+  `?tab=needs-attention`; queue default ranking = grouped tiers (overdue
+  follow-ups → task dues → provider starts → rest). Interim dark surfaces
+  are TD-36 with named restoring epics.
+- **E6.2 — Groups & the Payer Network board.** The group gets the surface:
+  `/groups` (A→Z list; single-group orgs auto-land the hub) →
+  `/groups/$groupId` (layout + route-derived breadcrumb) → hub (editable
+  group facts: name/TIN/operating states, admin, audited) + **Facilities**
+  (state-grouped A→Z list treatment, search/filters, provider counts +
+  zero-provider flag, go-live = plain `effective_date` on `FacilityForm` —
+  NO location status machine; facility CRUD + CSV import live here) +
+  **Payer Network** (the fulfillment board over `caseRollups` — derived
+  pills, drill-down with per-state evidence + denial history from
+  `case_status_history`, excluded rows w/ one-click Restore, the candidate
+  buffer banner). **`enrollment_facts`** (migration `20260719150000`,
+  repo-only): provider×group×payer×state, live = `expired_at IS NULL`
+  (partial unique), expiry is a FLIP that re-opens the candidate; service
+  `enrollmentFacts.ts` + hooks (capture UI is E6.4). **Buffer math
+  `src/lib/generationBuffer.ts`** = the E6.3 contract: candidates =
+  buildGenerationPreview proposed rows − live facts (`subtractLiveFacts`),
+  cause = newest of join/attach/fact-expiry among candidates. **Group-basis
+  attach** (`src/lib/groupPayerAttach.ts` + `GroupAttachPayerDialog`):
+  eligibility = catalog ∩ GROUP OPERATING STATES (not facility states);
+  `attachGroupPayer` creates the org enablement implicitly
+  (addAssignment → targets, RLS order); `removeGroupPayer` archives the
+  group's targets then the enablement iff no other group holds the payer
+  (TS-122/124). **Payer-attach CSV** rides the E3.3 machine: entity_kind
+  `payer_attach` (`20260719150100`), descriptor `contextScan` seam
+  (`SectionScanContext` threaded through `useStartRosterScan`/
+  `RosterUploader.scanContext`) stamps resolved ids at scan time;
+  `commitPayerAttachImportRun` is idempotent skip-on-match;
+  `/import/$runId` branches to `PayerAttachImportPreview`. Board reads
+  compose in `usePayerNetworkBoard` (uses `useGenerationPreview` + facts +
+  `listCaseDenialEntries` — key `["cases", orgId, "denial-entries"]` so
+  set_case_status invalidations re-derive it). e2e: `groups-hub.spec.ts`,
+  `payer-network-board.spec.ts`, `group-payer-attach.spec.ts`
+  (TS-108/109/110/113/122/123/124). The E6.1 groups shell +
+  GroupSummaryCard/FacilitySummaryCard were deleted; TD-39 (wizard/group
+  duplicate intake doors), TD-40 (disabled Review & generate until E6.3).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

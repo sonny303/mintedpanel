@@ -224,7 +224,9 @@ export function buildPayerBoard(input: PayerBoardInput): PayerBoard {
         reason: x.reason,
         note: x.note,
       }))
-      .sort((a, b) => a.providerName.localeCompare(b.providerName) || a.state.localeCompare(b.state));
+      .sort(
+        (a, b) => a.providerName.localeCompare(b.providerName) || a.state.localeCompare(b.state),
+      );
 
     return {
       payerId: r.payerId,

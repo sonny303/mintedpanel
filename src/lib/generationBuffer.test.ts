@@ -167,7 +167,13 @@ describe("bufferCause", () => {
 
   it("an expired fact at a candidate key can be the newest cause (re-opened candidate)", () => {
     const facts: BufferFactInput[] = [
-      { providerId: "prov1", groupId: "g1", payerId: "pay1", state: "NC", expiredAt: "2026-07-18T09:00:00Z" },
+      {
+        providerId: "prov1",
+        groupId: "g1",
+        payerId: "pay1",
+        state: "NC",
+        expiredAt: "2026-07-18T09:00:00Z",
+      },
     ];
     const cause = bufferCause(generationCandidates(baseInput(), facts), {
       ...causeBase,

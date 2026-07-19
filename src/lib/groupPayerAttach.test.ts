@@ -121,7 +121,10 @@ describe("CSV row resolution + eligibility", () => {
 
   it("names per-row eligibility errors: unknown group/payer, retired payer, out-of-coverage and out-of-operating states", () => {
     expect(
-      validatePayerAttachRow({ groupName: "nope", groupTin: null, payer: "Aetna", states: ["NC"] }, ctx),
+      validatePayerAttachRow(
+        { groupName: "nope", groupTin: null, payer: "Aetna", states: ["NC"] },
+        ctx,
+      ),
     ).toMatchObject({ error: { column: "group_name" } });
     expect(
       validatePayerAttachRow(
@@ -131,7 +134,12 @@ describe("CSV row resolution + eligibility", () => {
     ).toMatchObject({ error: { column: "payer", reason: 'No catalog payer matches "ghost"' } });
     expect(
       validatePayerAttachRow(
-        { groupName: "Outer Banks Rehab Group", groupTin: null, payer: "Old Payer", states: ["NC"] },
+        {
+          groupName: "Outer Banks Rehab Group",
+          groupTin: null,
+          payer: "Old Payer",
+          states: ["NC"],
+        },
         ctx,
       ),
     ).toMatchObject({ error: { column: "payer" } });

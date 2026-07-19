@@ -79,9 +79,7 @@ export function FacilityForm({
   onClose: () => void;
 }) {
   const [name, setName] = useState(facility?.name ?? "");
-  const [groupId, setGroupId] = useState<string>(
-    facility?.groupId ?? defaultGroupId ?? "__none__",
-  );
+  const [groupId, setGroupId] = useState<string>(facility?.groupId ?? defaultGroupId ?? "__none__");
   const [street, setStreet] = useState(facility?.street ?? "");
   const [suite, setSuite] = useState(facility?.suite ?? "");
   const [city, setCity] = useState(facility?.city ?? "");

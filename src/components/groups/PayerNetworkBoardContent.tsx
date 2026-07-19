@@ -29,10 +29,7 @@ import { RosterUploader } from "@/components/import/RosterUploader";
 import { GroupAttachPayerDialog } from "@/components/groups/GroupAttachPayerDialog";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { usePayerNetworkBoard } from "@/hooks/usePayerNetworkBoard";
-import {
-  usePayerNetworkTargets,
-  useRemoveGroupPayer,
-} from "@/hooks/usePayerNetworkTargets";
+import { usePayerNetworkTargets, useRemoveGroupPayer } from "@/hooks/usePayerNetworkTargets";
 import { useVoidCaseGenerationExclusion } from "@/hooks/useGenerationPreview";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
@@ -44,12 +41,14 @@ import type { PayerBoardRow } from "@/lib/payerNetworkBoard";
 import type { PayerFulfillment } from "@/lib/caseRollups";
 import type { ProviderGroup } from "@/types";
 
-const FULFILLMENT_PILL: Record<PayerFulfillment, { tone: "gray" | "blue" | "green"; label: string }> =
-  {
-    targeted: { tone: "gray", label: "Targeted" },
-    in_progress: { tone: "blue", label: "In Progress" },
-    active: { tone: "green", label: "Active" },
-  };
+const FULFILLMENT_PILL: Record<
+  PayerFulfillment,
+  { tone: "gray" | "blue" | "green"; label: string }
+> = {
+  targeted: { tone: "gray", label: "Targeted" },
+  in_progress: { tone: "blue", label: "In Progress" },
+  active: { tone: "green", label: "Active" },
+};
 
 export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
   const isAdmin = useIsAdmin();
@@ -90,9 +89,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
     return new Set(
       (assignmentsQ.data ?? [])
         .filter(
-          (a) =>
-            a.groupId === group.id &&
-            (a.endDate == null || a.endDate.slice(0, 10) >= today),
+          (a) => a.groupId === group.id && (a.endDate == null || a.endDate.slice(0, 10) >= today),
         )
         .map((a) => a.providerId),
     ).size;
@@ -403,7 +400,9 @@ function RemovePayerDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>Remove {row.payerName} from {group.name}?</DialogTitle>
+          <DialogTitle>
+            Remove {row.payerName} from {group.name}?
+          </DialogTitle>
         </DialogHeader>
         <p className="text-[13px] text-muted-foreground">
           The group&apos;s targets for this payer are archived — never deleted — so history stays

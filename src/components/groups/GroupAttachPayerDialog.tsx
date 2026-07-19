@@ -31,11 +31,7 @@ import {
 } from "@/components/ui/table";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { useAttachGroupPayer } from "@/hooks/usePayerNetworkTargets";
-import {
-  expansionRowKey,
-  planAttachmentSave,
-  reviewExpansion,
-} from "@/lib/payerExpansion";
+import { expansionRowKey, planAttachmentSave, reviewExpansion } from "@/lib/payerExpansion";
 import { groupAttachExpansion, splitAttachPicker } from "@/lib/groupPayerAttach";
 import { PAYER_KIND_LABELS } from "@/lib/payerDirectory";
 import type { Facility, Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
@@ -203,8 +199,8 @@ function GroupAttachReview({
     return (
       <div className="space-y-3 py-2">
         <p className="text-[13px] text-muted-foreground">
-          {payer.name} doesn&apos;t cover any of {group.name}&apos;s operating states, so there
-          are no state targets to create.
+          {payer.name} doesn&apos;t cover any of {group.name}&apos;s operating states, so there are
+          no state targets to create.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

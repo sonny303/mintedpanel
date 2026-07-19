@@ -29,10 +29,7 @@
 import type { CsvRecord } from "@/lib/csvImport";
 import { coerceBool, coerceDate } from "@/lib/csvImport";
 import { toCsv } from "@/lib/csv";
-import {
-  validatePayerAttachRow,
-  type PayerAttachScanContext,
-} from "@/lib/groupPayerAttach";
+import { validatePayerAttachRow, type PayerAttachScanContext } from "@/lib/groupPayerAttach";
 import type { ImportEntityKind } from "@/types";
 import {
   DEFAULT_TIN_COLUMNS,
@@ -134,7 +131,8 @@ export interface SectionDescriptor {
   contextScan?(
     mapped: Record<string, string | null>,
     context: SectionScanContext | undefined,
-  ): { error: { column: string | null; reason: string } } | { patch: Record<string, string | null> };
+  ):
+    { error: { column: string | null; reason: string } } | { patch: Record<string, string | null> };
 }
 
 /* ------------------------------ Header lists ------------------------------ */

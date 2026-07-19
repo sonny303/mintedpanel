@@ -1282,11 +1282,7 @@ export type ImportRunState =
 // E6.2 F6.2.4 adds 'payer_attach' — the group×payer attach CSV rides the same
 // staging machine (one row per group × payer, ';'-delimited states).
 export type ImportEntityKind =
-  | "provider_group"
-  | "facility"
-  | "provider"
-  | "combined"
-  | "payer_attach";
+  "provider_group" | "facility" | "provider" | "combined" | "payer_attach";
 
 export interface ImportRunErrorEntry {
   line: number;

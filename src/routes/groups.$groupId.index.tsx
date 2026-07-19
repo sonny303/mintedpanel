@@ -47,16 +47,14 @@ function GroupHubPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={group.name} description="The group's facts, locations, and payer network." />
+      <PageHeader
+        title={group.name}
+        description="The group's facts, locations, and payer network."
+      />
       <GroupFactsCard group={group} />
       <div className="grid gap-3 sm:grid-cols-2">
         {areas.map((a) => (
-          <Link
-            key={a.label}
-            to={a.to}
-            params={{ groupId }}
-            className="group"
-          >
+          <Link key={a.label} to={a.to} params={{ groupId }} className="group">
             <Card className="h-full border-[#E8E5E0] transition-colors group-hover:border-[#1B4D3E]">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">

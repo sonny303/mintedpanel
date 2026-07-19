@@ -404,12 +404,13 @@ test("TS-107: the banner never renders once every wizard section is complete; th
   // Every section resolves complete → the banner is gone for good.
   await expect(page.getByText(/Finish setting up/)).toHaveCount(0);
 
-  // The relocated Organization-data summaries live on the Groups shell.
+  // The organization data lives under Groups (E6.2): a single-group org
+  // auto-lands on its group hub with the facts card + the two area doors.
   await page.goto("/groups");
-  await expect(page.getByRole("heading", { name: "Groups", exact: true })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Point Place Group" })).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByRole("heading", { name: "Provider groups" })).toBeVisible();
-  await expect(page.getByText("Point Place Group", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/groups\/g-1\/?$/);
+  await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Payer Network/ })).toBeVisible();
 });
