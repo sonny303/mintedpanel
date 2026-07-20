@@ -196,15 +196,16 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(page.getByText("UnitedHealthcare", { exact: true })).toBeVisible();
   await expect(page.getByText("Superior HealthPlan (Centene)")).not.toBeVisible();
 
-  // Alias search finds BCBS-NC with its states, catalog key, and Minted-curated
-  // avg decision days (read-only display).
+  // Alias search finds BCBS-NC with its states. Catalog key + avg decision
+  // moved OFF the list to the per-payer detail drill-in (2026-07-20 catalog
+  // UX pass) — the list keeps browse columns only.
   await page.getByLabel("Search payers").fill("Blue Cross NC");
   const row = page.locator("tbody tr");
   await expect(row).toHaveCount(1);
   await expect(row.first()).toContainText("Blue Cross and Blue Shield of North Carolina");
   await expect(row.first()).toContainText("NC");
-  await expect(row.first()).toContainText("bcbs-nc");
-  await expect(row.first()).toContainText("45 days");
+  await expect(row.first()).not.toContainText("bcbs-nc");
+  await expect(row.first()).not.toContainText("45 days");
 
   // Widen kind to all → the Medicaid MCO appears; state filter narrows to TX.
   await page.getByLabel("Search payers").fill("");
@@ -215,6 +216,116 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await page.getByRole("option", { name: "TX", exact: true }).click();
   await expect(page.locator("tbody tr")).toHaveCount(2);
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).not.toBeVisible();
+});
+
+test("catalog detail drill-in, In-my-network filter, and in-place states expansion", async ({
+  context,
+  page,
+}) => {
+  // 2026-07-20 catalog UX pass: the list keeps browse columns; identity facts
+  // (catalog key, avg decision), full state coverage, and the payer's SOPs +
+  // portals live on the read-only detail page behind the payer-name link. The
+  // network filter narrows to ACTIVE org_payer_assignments client-side.
+  const fixtures = makeFixtures({
+    global_payers: [
+      globalPayer({
+        id: "gp-bcbsnc",
+        name: "Blue Cross and Blue Shield of North Carolina",
+        aliases: ["BCBSNC", "Blue Cross NC"],
+        states: ["NC"],
+        payer_slug: "bcbs-nc",
+        avg_decision_days: 45,
+      }),
+      globalPayer({
+        id: "gp-national",
+        name: "National Health Plan",
+        states: ["NC", "SC", "TX", "CO", "WI", "OR", "GA", "FL"],
+        payer_slug: "national-health",
+      }),
+    ],
+    org_payer_assignments: [
+      {
+        id: "opa-1",
+        org_id: ORG_TREE_HILL,
+        payer_id: "gp-bcbsnc",
+        starter: false,
+        status: "active",
+        archived_at: null,
+        created_at: "2026-07-14T00:00:00Z",
+      },
+    ],
+    sop_templates: [
+      {
+        id: "sop-1",
+        org_id: null,
+        name: "BCBS NC — Standard Enrollment",
+        group_id: null,
+        state: "NC",
+        specialty: null,
+        payer_id: "gp-bcbsnc",
+        task_definitions: [],
+        archived: false,
+        current_version: 1,
+        created_at: "2026-07-13T00:00:00Z",
+        updated_at: "2026-07-13T00:00:00Z",
+      },
+    ],
+    portals: [
+      {
+        id: "portal-1",
+        org_id: null,
+        portal_key: "bcbs_nc_enrollment",
+        name: "BCBS NC Enrollment Portal",
+        payer_id: "gp-bcbsnc",
+        form_url: "https://portal.example.test/enroll",
+        is_verified: false,
+        last_verified_at: null,
+        proven_at: null,
+        url_changed_at: null,
+        created_at: "2026-07-13T00:00:00Z",
+        updated_at: "2026-07-13T00:00:00Z",
+      },
+    ],
+  });
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/payer-directory");
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
+    timeout: 30000,
+  });
+
+  // Item 3: a long state list expands in place instead of truncating.
+  const national = page.locator("tbody tr", { hasText: "National Health Plan" });
+  await expect(national).toContainText("NC, SC, TX, CO");
+  await national.getByRole("button", { name: "+4 more" }).click();
+  await expect(page.getByText("8 states")).toBeVisible();
+  await expect(page.getByText("FL", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Item 7: the adopted-payers filter narrows to active subscriptions only.
+  await page.getByLabel("Filter by network").click();
+  await page.getByRole("option", { name: "In my network" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByText("National Health Plan")).not.toBeVisible();
+
+  // Item 8: the payer name is the drill-in.
+  await page.getByRole("link", { name: "Blue Cross and Blue Shield of North Carolina" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
+  ).toBeVisible();
+  await expect(page.getByText("In my network")).toBeVisible();
+  await expect(page.getByText("bcbs-nc")).toBeVisible(); // catalog key (item 4 relocation)
+  await expect(page.getByText("45 days")).toBeVisible(); // curated avg decision (item 2 relocation)
+  await expect(page.getByText("State coverage (1)")).toBeVisible();
+  await expect(page.getByRole("link", { name: "BCBS NC — Standard Enrollment" })).toBeVisible();
+  await expect(page.getByText("BCBS NC Enrollment Portal")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove from my network" })).toBeVisible();
+
+  // Back to the catalog list from the detail.
+  await page.getByRole("link", { name: "← Back to catalog" }).click();
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible();
 });
 
 test("governance: catalog diff review is not exposed to org users", async ({ context, page }) => {
