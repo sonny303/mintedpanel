@@ -3,8 +3,8 @@ import { test, expect, type Route } from "@playwright/test";
 // E4.2 hardening — canonical payer selection & org assignment, over the mock
 // harness (extends the E1.6 payer-directory rig with stateful
 // org_payer_assignments / payer_network_targets and the archive RPC):
-//   - An admin adds a catalog payer (alias search → Add to organization); the
-//     row flips to "Added to organization" + "Configure credentialing scope",
+//   - An admin adds a catalog payer (alias search → Add to my network); the
+//     row flips to "In my network" + "Configure credentialing scope",
 //     and the subscription row is written.
 //   - Retired/merged payers cannot be newly added; the row explains why and
 //     names the canonical successor.
@@ -218,15 +218,15 @@ test("admin adds a canonical payer by alias → Added + Configure credentialing 
     timeout: 30000,
   });
 
-  // Alias search narrows to BCBS-NC, which offers "Add to organization".
+  // Alias search narrows to BCBS-NC, which offers "Add to my network".
   await page.getByLabel("Search payers").fill("Anthem NC");
   const row = page.locator("tbody tr");
   await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: "Add to organization" }).click();
+  await row.getByRole("button", { name: "Add to my network" }).click();
 
   // The row flips to Added + a clear "Configure credentialing scope" hand-off,
   // and the subscription row was written for this org.
-  await expect(row.getByText("Added to organization")).toBeVisible({ timeout: 15000 });
+  await expect(row.getByText("In my network")).toBeVisible({ timeout: 15000 });
   await expect(row.getByRole("link", { name: "Configure credentialing scope" })).toBeVisible();
   const assigns = fixtures.org_payer_assignments as Array<Record<string, unknown>>;
   expect(assigns).toHaveLength(1);
@@ -277,11 +277,11 @@ test("retired and merged payers cannot be newly added; the successor is named", 
   const merged = page.locator("tbody tr", { hasText: "Old BCBS of NC" });
   await expect(merged).toContainText("Merged");
   await expect(merged).toContainText("BCBS-NC (new entity)"); // canonical successor
-  await expect(merged.getByRole("button", { name: "Add to organization" })).toHaveCount(0);
+  await expect(merged.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
   const retired = page.locator("tbody tr", { hasText: "Defunct Health Plan" });
   await expect(retired).toContainText("Retired");
-  await expect(retired.getByRole("button", { name: "Add to organization" })).toHaveCount(0);
+  await expect(retired.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 });
 
 test("a non-admin browses the catalog but sees no mutation controls", async ({ context, page }) => {
@@ -295,7 +295,7 @@ test("a non-admin browses the catalog but sees no mutation controls", async ({ c
     timeout: 30000,
   });
   // Browsing is allowed; adding is not.
-  await expect(page.getByRole("button", { name: "Add to organization" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 });
 
 test("Remove archives the subscription + active targets; Reactivate never recreates scope", async ({
@@ -332,7 +332,7 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
 
   await page.goto("/payer-directory");
   const row = page.locator("tbody tr", { hasText: "Blue Cross and Blue Shield of North Carolina" });
-  await expect(row.getByText("Added to organization")).toBeVisible({ timeout: 30000 });
+  await expect(row.getByText("In my network")).toBeVisible({ timeout: 30000 });
 
   // Remove → confirm → the subscription AND its active target archive (cascade),
   // and NOTHING is deleted (status flips only).
@@ -351,7 +351,7 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
   // Reactivate flips the subscription back on WITHOUT recreating the archived
   // scope (the target stays archived for the existing restore/review flow).
   await row.getByRole("button", { name: "Reactivate" }).click();
-  await expect(row.getByText("Added to organization")).toBeVisible({ timeout: 15000 });
+  await expect(row.getByText("In my network")).toBeVisible({ timeout: 15000 });
   expect(assigns[0].status).toBe("active");
   expect(targets[0].status).toBe("archived");
   expect(deletes).toHaveLength(0);
