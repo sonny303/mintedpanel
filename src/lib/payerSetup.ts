@@ -1,27 +1,13 @@
-// E4.2 unified payer setup → E6.5 slim-down. The org-grain setup-funnel
-// derivation (buildPayerSetupRows and its dimension model) retired with the
-// PayerSetupList: org-scoped dimensions live on the group Payer Network board
-// and the generation grid, and the module's funnel is the GLOBAL-tier
-// payerReadinessFunnel.ts. What survives here is the shared inclusion rule
-// (which payers count as "the organization's payers") and the resolution-ID
-// source chain the org-settings table renders.
+// E4.2 unified payer setup → E6.5 slim-down → 2026-07-20 re-scope. The
+// org-grain setup-funnel derivation (buildPayerSetupRows and its dimension
+// model) retired with the PayerSetupList, and the resolution-ID source chain
+// retired with the Org Detail settings table (the identifier label is a
+// Minted-curated payer fact now; issued VALUES live on enrollment facts and
+// payer network targets). What survives here is the shared inclusion rule:
+// which payers count as "the organization's payers".
 import { isActiveAssignment } from "./payerCatalogActions";
 import { PRE_CRED_PAYER_NAME } from "./statusLabels";
-import type { OrgPayerAssignment, OrgPayerSetting, Payer } from "@/types";
-
-/** Which tier the E4.0 approval step would resolve the payer-issued ID from
- * (mirrors resolveIdentifierConfig's label chain — org setting → Minted global
- * → generic — WITHOUT changing that resolver, which stays the runtime seam). */
-export type ResolutionIdSource = "org" | "minted" | "generic";
-
-export function resolutionIdSource(
-  payer: Pick<Payer, "resolutionIdLabel">,
-  setting: Pick<OrgPayerSetting, "resolutionIdLabel"> | null | undefined,
-): ResolutionIdSource {
-  if (setting?.resolutionIdLabel?.trim()) return "org";
-  if (payer.resolutionIdLabel?.trim()) return "minted";
-  return "generic";
-}
+import type { OrgPayerAssignment, Payer } from "@/types";
 
 export interface ActiveOrgPayer {
   payer: Payer;

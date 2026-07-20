@@ -5,6 +5,10 @@
 // here: a new hire gets the full path regardless (the guard text below is the
 // epic's labeling requirement). Expire is a FLIP (audited) that immediately
 // re-opens the candidate in the group's buffer.
+// 2026-07-20 re-scope: the payer-issued enrollment ID (PIN) is captured HERE,
+// on the enrollment it belongs to — optional at capture, editable after (the
+// approval letter often arrives later). The field label is the payer's own
+// Minted-curated term via the resolveIdentifierConfig seam.
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -31,11 +36,14 @@ import {
   useCreateEnrollmentFact,
   useEnrollmentFacts,
   useExpireEnrollmentFact,
+  useSetEnrollmentFactIdentifier,
 } from "@/hooks/useEnrollmentFacts";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { usePayers } from "@/hooks/useAdmin";
 import { fmtDate } from "@/lib/format";
+import { resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
+import type { EnrollmentFact } from "@/types";
 
 export const ENROLLMENT_GUARD_TEXT =
   "Enrollments recorded here are under this group's contract only. Prior-employer status does NOT belong here — a new hire gets the full credentialing path regardless.";
@@ -59,8 +67,15 @@ export function EnrollmentsPanel({
   const [payerDraft, setPayerDraft] = useState("");
   const [stateDraft, setStateDraft] = useState("");
   const [dateDraft, setDateDraft] = useState("");
+  const [pinDraft, setPinDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [expiring, setExpiring] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<EnrollmentFact | null>(null);
+
+  // The PIN field is labeled with the selected payer's own Minted-curated
+  // term ("Provider ID", "PTAN", …) — generic "Payer-issued ID" otherwise.
+  const draftPayer = (payersQ.data ?? []).find((p) => p.id === payerDraft) ?? null;
+  const draftPinLabel = resolveIdentifierConfig(draftPayer).individualLabel;
 
   const myGroups = useMemo(
     () =>
@@ -77,11 +92,15 @@ export function EnrollmentsPanel({
     () =>
       (factsQ.data ?? [])
         .filter((f) => f.providerId === providerId)
-        .map((f) => ({
-          ...f,
-          payerName: (payersQ.data ?? []).find((p) => p.id === f.payerId)?.name ?? "—",
-          groupName: (groupsQ.data ?? []).find((g) => g.id === f.groupId)?.name ?? "—",
-        }))
+        .map((f) => {
+          const factPayer = (payersQ.data ?? []).find((p) => p.id === f.payerId) ?? null;
+          return {
+            ...f,
+            payerName: factPayer?.name ?? "—",
+            pinLabel: resolveIdentifierConfig(factPayer).individualLabel,
+            groupName: (groupsQ.data ?? []).find((g) => g.id === f.groupId)?.name ?? "—",
+          };
+        })
         .sort((a, b) => a.payerName.localeCompare(b.payerName) || a.state.localeCompare(b.state)),
     [factsQ.data, payersQ.data, groupsQ.data, providerId],
   );
@@ -98,6 +117,7 @@ export function EnrollmentsPanel({
         payerId: payerDraft,
         state: stateDraft,
         effectiveDate: dateDraft || null,
+        payerIssuedId: pinDraft.trim() || null,
       },
       {
         onSuccess: () => {
@@ -107,6 +127,7 @@ export function EnrollmentsPanel({
           setPayerDraft("");
           setStateDraft("");
           setDateDraft("");
+          setPinDraft("");
           setError(null);
         },
         onError: (e) =>
@@ -145,20 +166,36 @@ export function EnrollmentsPanel({
                 {f.effectiveDate ? (
                   <span className="text-muted-foreground">since {fmtDate(f.effectiveDate)}</span>
                 ) : null}
+                {f.payerIssuedId ? (
+                  <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
+                    {f.pinLabel}: {f.payerIssuedId}
+                  </span>
+                ) : null}
                 {live ? (
                   <StatusPill status="green" label="Live" />
                 ) : (
                   <StatusPill status="neutral" label={`Expired ${fmtDate(f.expiredAt ?? "")}`} />
                 )}
-                {canWrite && live ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto h-7 text-[12px]"
-                    onClick={() => setExpiring(f.id)}
-                  >
-                    Expire
-                  </Button>
+                {canWrite ? (
+                  <span className="ml-auto flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      onClick={() => setEditingId(f)}
+                    >
+                      {f.payerIssuedId ? "Edit ID" : "Add ID"}
+                    </button>
+                    {live ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[12px]"
+                        onClick={() => setExpiring(f.id)}
+                      >
+                        Expire
+                      </Button>
+                    ) : null}
+                  </span>
                 ) : null}
               </li>
             );
@@ -217,6 +254,16 @@ export function EnrollmentsPanel({
                 <Label>Effective date (optional)</Label>
                 <DatePicker value={dateDraft} onChange={setDateDraft} ariaLabel="Effective date" />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fact-pin">{draftPinLabel} (optional)</Label>
+                <Input
+                  id="fact-pin"
+                  value={pinDraft}
+                  onChange={(e) => setPinDraft(e.target.value)}
+                  placeholder="As issued by the payer for this enrollment"
+                  className="h-9"
+                />
+              </div>
               {error ? (
                 <p role="alert" className="text-[12px] text-[#B91C1C]">
                   {error}
@@ -237,6 +284,14 @@ export function EnrollmentsPanel({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      ) : null}
+
+      {editingId ? (
+        <FactIdentifierDialog
+          fact={editingId}
+          label={myFacts.find((f) => f.id === editingId.id)?.pinLabel ?? "Payer-issued ID"}
+          onClose={() => setEditingId(null)}
+        />
       ) : null}
 
       {expiring ? (
@@ -274,5 +329,68 @@ export function EnrollmentsPanel({
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+// Set/clear the payer-issued ID on an existing fact — approval letters often
+// arrive after the fact was recorded, and expired rows stay correctable
+// (history should be accurate). Audited via the service.
+function FactIdentifierDialog({
+  fact,
+  label,
+  onClose,
+}: {
+  fact: EnrollmentFact;
+  label: string;
+  onClose: () => void;
+}) {
+  const setIdMut = useSetEnrollmentFactIdentifier();
+  const [value, setValue] = useState(fact.payerIssuedId ?? "");
+  const save = () => {
+    setIdMut.mutate(
+      { id: fact.id, payerIssuedId: value.trim() || null },
+      {
+        onSuccess: () => {
+          toast.success(value.trim() ? `${label} saved` : `${label} cleared`);
+          onClose();
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save the ID"),
+      },
+    );
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{label}</DialogTitle>
+          <DialogDescription>
+            The identifier the payer issued for this enrollment ({fact.state}). Leave blank to clear
+            it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor="fact-pin-edit">{label}</Label>
+          <Input
+            id="fact-pin-edit"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="As issued by the payer"
+            className="h-9"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={setIdMut.isPending}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-[#1B4D3E] hover:bg-[#163F33]"
+            disabled={setIdMut.isPending}
+            onClick={save}
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

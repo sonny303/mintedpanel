@@ -572,6 +572,10 @@ export interface Payer {
 // configures about a payer lives here. Starts with the one setting that has a
 // confirmed consumer (the E4.0 approval step's resolution-identifier label /
 // expectedness); nothing else moves here without a product-approved consumer.
+// DORMANT since 2026-07-20 (resolution-identifier re-scope): the app no longer
+// reads or writes org_payer_settings — the identifier LABEL is the
+// Minted-curated payers fact and issued VALUES live on enrollment facts /
+// payer network targets. Type + table kept per the additive rule.
 export interface OrgPayerSetting {
   id: string;
   orgId: string;
@@ -631,6 +635,10 @@ export interface PayerNetworkTarget {
   groupId: string;
   state: string;
   status: "active" | "archived";
+  /** Payer-issued GROUP enrollment identifier (group PIN) for this
+   * group x payer x state attachment (2026-07-20 re-scope). Optional so
+   * pre-migration cached rows/fixtures stay valid. */
+  payerIssuedId?: string | null;
   createdAt: string;
 }
 
@@ -650,6 +658,9 @@ export interface EnrollmentFact {
   payerId: string;
   state: string;
   effectiveDate: string | null;
+  /** Payer-issued enrollment identifier (PIN) for this provider enrollment,
+   * as issued under the group's contract (2026-07-20 re-scope). */
+  payerIssuedId?: string | null;
   source: EnrollmentFactSource;
   expiredAt: string | null;
   expiredBy: string | null;
