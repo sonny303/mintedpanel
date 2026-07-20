@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { FacilityForm } from "@/components/onboarding/FacilityForm";
 import { CsvImportPanel } from "@/components/import/CsvImportPanel";
+import { useResumableImportRun } from "@/hooks/useImportRuns";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderAssignments } from "@/hooks/useProviders";
@@ -51,6 +52,7 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
   const assignmentsQ = useProviderAssignments();
   const canWrite = useCanWrite();
   const isAdmin = useIsAdmin();
+  const facilityRun = useResumableImportRun("internal", "facility", "internal");
 
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("__all__");
@@ -250,6 +252,7 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
         <CsvImportPanel
           label="Facility CSV import"
           description="Rows are validated and staged for review; nothing changes until the import is committed."
+          defaultOpen={facilityRun !== undefined}
         >
           <RosterUploader source="internal" variant="internal" entityKind="facility" />
         </CsvImportPanel>

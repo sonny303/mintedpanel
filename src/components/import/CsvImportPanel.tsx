@@ -5,9 +5,9 @@
 // Payer Network board established — the import is a power-user tool that
 // should never crowd out a page's primary content. Composition over
 // duplication: children are the existing import content (RosterUploader or a
-// gated variant); this wrapper owns ONLY the disclosure. Deliberately
-// collapsed even when a run is resumable — matching the reference surface;
-// expanding shows the in-flight/ready-for-review run exactly as before.
+// gated variant); this wrapper owns ONLY the disclosure. Collapsed by
+// default — but a surface with a resumable/finished run passes `defaultOpen`
+// so the run's status and error report stay visible on return (F3.0.4).
 // Stock shadcn Collapsible, token-styled (DESIGN-DEBT logged).
 import { ChevronDown, Upload } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -15,6 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export function CsvImportPanel({
   label,
   description,
+  defaultOpen = false,
   children,
 }: {
   /** The trigger text — also the panel's identity in tests ("Bulk provider
@@ -22,10 +23,12 @@ export function CsvImportPanel({
   label: string;
   /** Optional first line inside the expanded box. */
   description?: string;
+  /** Start expanded — set when a run is waiting so its outcome isn't hidden. */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <Collapsible>
+    <Collapsible defaultOpen={defaultOpen}>
       <CollapsibleTrigger className="flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground">
         <Upload className="h-3.5 w-3.5" aria-hidden />
         {label}

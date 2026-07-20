@@ -13,6 +13,7 @@ import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
+import { useResumableImportRun } from "@/hooks/useImportRuns";
 import { openSection } from "@/components/onboarding/openSection";
 import { useIsAdmin } from "@/lib/permissions";
 import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
@@ -43,6 +44,7 @@ export function SectionUploadCard({
   referenceCsv?: { filename: string; text: string };
 }) {
   const isAdmin = useIsAdmin();
+  const resumableRun = useResumableImportRun("onboarding", entityKind, "streamlined");
   if (!isAdmin) return null;
 
   const descriptor = sectionDescriptor(entityKind);
@@ -52,6 +54,7 @@ export function SectionUploadCard({
     <CsvImportPanel
       label={`Bulk ${descriptor.label.toLowerCase()} import`}
       description="Upload a CSV — rows are validated and staged for review, and nothing changes in your workspace until the import is committed."
+      defaultOpen={resumableRun !== undefined}
     >
       {gate.allowed ? (
         <RosterUploader
