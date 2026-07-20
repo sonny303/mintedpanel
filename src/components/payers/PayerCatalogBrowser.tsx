@@ -312,6 +312,17 @@ export function PayerCatalogBrowser() {
   // An admin in an active org may mutate; everyone else browses read-only.
   const canManage = isAdmin && assignmentsQ.data !== undefined;
 
+  // "In my network" means EVERY adopted payer — auto-widen the kind filter
+  // (whose default is commercial-only) when it's selected, or an adopted
+  // Medicaid MCO / MA payer would be silently dropped before the network
+  // narrowing ever sees it (Devin review, PR #221). The widening is visible in
+  // the Kind select and the user can still re-narrow afterward.
+  const handleNetworkChange = (v: string) => {
+    const next = v as "all" | "mine";
+    setNetwork(next);
+    if (next === "mine") setKind("all");
+  };
+
   const handleAdd = (payer: Payer) => {
     addMut.mutate(payer.id, {
       onSuccess: () =>
@@ -366,7 +377,7 @@ export function PayerCatalogBrowser() {
             <SelectItem value="all">All kinds</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={network} onValueChange={(v) => setNetwork(v as "all" | "mine")}>
+        <Select value={network} onValueChange={handleNetworkChange}>
           <SelectTrigger className="h-9 w-44" aria-label="Filter by network">
             <SelectValue placeholder="Network" />
           </SelectTrigger>

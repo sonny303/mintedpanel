@@ -242,12 +242,30 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
         states: ["NC", "SC", "TX", "CO", "WI", "OR", "GA", "FL"],
         payer_slug: "national-health",
       }),
+      // A NON-commercial adopted payer: hidden by the commercial default kind
+      // filter, but "In my network" must still surface it (Devin review, #221).
+      globalPayer({
+        id: "gp-mco",
+        name: "Sunshine Medicaid MCO",
+        payer_kind: "medicaid_mco",
+        states: ["TX"],
+        payer_slug: "sunshine-mco",
+      }),
     ],
     org_payer_assignments: [
       {
         id: "opa-1",
         org_id: ORG_TREE_HILL,
         payer_id: "gp-bcbsnc",
+        starter: false,
+        status: "active",
+        archived_at: null,
+        created_at: "2026-07-14T00:00:00Z",
+      },
+      {
+        id: "opa-2",
+        org_id: ORG_TREE_HILL,
+        payer_id: "gp-mco",
         starter: false,
         status: "active",
         archived_at: null,
@@ -304,11 +322,16 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
   await expect(page.getByText("FL", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Item 7: the adopted-payers filter narrows to active subscriptions only.
+  // Item 7: the adopted-payers filter narrows to active subscriptions only —
+  // and selecting it WIDENS the commercial-default kind filter, so an adopted
+  // non-commercial payer is never silently hidden (Devin review, PR #221).
+  await expect(page.getByText("Sunshine Medicaid MCO")).not.toBeVisible();
   await page.getByLabel("Filter by network").click();
   await page.getByRole("option", { name: "In my network" }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(page.getByText("Sunshine Medicaid MCO")).toBeVisible();
   await expect(page.getByText("National Health Plan")).not.toBeVisible();
+  await expect(page.getByLabel("Filter by payer kind")).toContainText("All kinds");
 
   // Item 8: the payer name is the drill-in.
   await page.getByRole("link", { name: "Blue Cross and Blue Shield of North Carolina" }).click();
