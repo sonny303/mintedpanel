@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FacilityForm } from "@/components/onboarding/FacilityForm";
+import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderAssignments } from "@/hooks/useProviders";
@@ -246,16 +247,12 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
       )}
 
       {isAdmin ? (
-        <div className="space-y-3 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
-          <div>
-            <div className="text-[13px] font-medium text-foreground">Facility CSV import</div>
-            <p className="text-[12px] text-muted-foreground">
-              Rows are validated and staged for review; nothing changes until the import is
-              committed.
-            </p>
-          </div>
+        <CsvImportPanel
+          label="Facility CSV import"
+          description="Rows are validated and staged for review; nothing changes until the import is committed."
+        >
           <RosterUploader source="internal" variant="internal" entityKind="facility" />
-        </div>
+        </CsvImportPanel>
       ) : null}
 
       {modal ? (

@@ -11,7 +11,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ChevronDown, Plus, Upload } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
+import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { GroupAttachPayerDialog } from "@/components/groups/GroupAttachPayerDialog";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
@@ -197,23 +198,16 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       )}
 
       {isAdmin ? (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground">
-            <Upload className="h-3.5 w-3.5" aria-hidden />
-            Attach payers from a CSV
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="mt-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
-              <RosterUploader
-                source="internal"
-                variant="internal"
-                entityKind="payer_attach"
-                scanContext={scanContext}
-              />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        // The pattern this panel standardized site-wide (2026-07-20) started
+        // here — now rendered through the ONE shared disclosure.
+        <CsvImportPanel label="Attach payers from a CSV">
+          <RosterUploader
+            source="internal"
+            variant="internal"
+            entityKind="payer_attach"
+            scanContext={scanContext}
+          />
+        </CsvImportPanel>
       ) : null}
 
       {attachOpen ? (

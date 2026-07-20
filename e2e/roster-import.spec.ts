@@ -346,6 +346,8 @@ test("TS-58: internal front gate — template, rejects, preview, Uploading→Sca
     timeout: 30000,
   });
   const section = providersSection(page);
+  // 2026-07-20: the uploader sits behind the shared collapsed disclosure.
+  await section.getByText("Bulk provider import").click();
 
   // The per-section provider template downloads from the Providers uploader.
   const downloadPromise = page.waitForEvent("download");
@@ -439,9 +441,13 @@ test("TS-59: org-rep streamlined wizard upload stages identically beside the man
   await expect(card).toBeVisible({ timeout: 30000 });
 
   // The streamlined per-section uploader renders BESIDE the manual "Add
-  // provider" form: template + drop zone, no internal power-user run history.
+  // provider" form, behind the shared collapsed disclosure (2026-07-20):
+  // the labeled trigger shows collapsed; template + drop zone appear on
+  // expand, no internal power-user run history.
   await expect(card.getByText("Bulk provider import")).toBeVisible();
   await expect(card.getByRole("button", { name: "Add provider" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Download Provider template" })).toHaveCount(0);
+  await card.getByText("Bulk provider import").click();
   await expect(card.getByRole("button", { name: "Download Provider template" })).toBeVisible();
   await expect(card.getByRole("button", { name: /Upload roster CSV/ })).toBeVisible();
   await expect(page.getByText("Run history")).toHaveCount(0);
@@ -490,6 +496,8 @@ test("TS-60: async scan survives navigation; good rows stage, error report lists
     timeout: 30000,
   });
   const section = providersSection(page);
+  // 2026-07-20: expand the collapsed import disclosure first.
+  await section.getByText("Bulk provider import").click();
 
   // 60 rows, 3 with malformed NPIs.
   const badIndexes = [10, 25, 40];
