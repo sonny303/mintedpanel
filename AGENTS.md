@@ -50,23 +50,11 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 
 ## Database rules
 
-- **Schema change policy (pre-GA window).** Until the production cutover PR
-  lands, destructive DDL (DROP COLUMN, DROP TABLE, column renames) is permitted
-  when: (1) the PR description names the PM approval and links the audit or
-  decision doc, (2) the PR includes a pre-drop data inventory (row count,
-  non-null count) pasted into the description, and (3) all code references are
-  removed in the same PR. Append-only ledgers (`audit_log`, `*_history`,
-  `touches`) remain protected: never drop or rewrite. _(The one-time
-  carve-out for the PM-approved pre-prod-cut full data wipe — PM SS,
-  2026-07-17, `docs/ops/full-wipe-all-orgs.sql` per PLAN-full-data-wipe.md —
-  is EXPIRED: the wipe was executed and verified, confirmed by the PM
-  2026-07-18. No further ledger deletions are authorized under it.)_
-  The broader pre-GA DDL window closes at production cut. The cutover PR must revert this section to additive-only
-  (retain, hide, stop-write, deprecate in place; no renames, restructures, or
-  drops).
-  - _Post-GA version — restore this verbatim at the cutover PR; swapping the
-    pre-GA block above for this one line re-locks the schema:_ **NEVER rename,
-    restructure, or delete tables or columns. Migrations are additive.**
+- **NEVER rename, restructure, or delete tables or columns. Migrations are
+  additive** (retain, hide, stop-write, deprecate in place). _The pre-GA
+  destructive-DDL window closed at the production cut (2026-07-19); any
+  future exception requires an explicit PM-approved carve-out written into
+  this section._
 - `touches`, `status_history`, and `audit_log` are append-only — no UPDATE, no DELETE, in code or policy.
 - Providers store `ssn_last4` only in ordinary tables. The full SSN exists ONLY inside the E4.4 server-only Sensitive Identifiers Vault (PM security decision 2026-07-14): a separated, RLS-locked table with no PostgREST/client SELECT grant, encrypted at rest, accessed exclusively through the narrowly scoped audited SECURITY DEFINER RPCs the epic defines (fill-only release with `no-store`, admin reveal with justification, audited ingress). Outside those vault paths the last-4-only rule still binds absolutely: never accept, store, log, export, or render a full SSN anywhere else.
 - One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
