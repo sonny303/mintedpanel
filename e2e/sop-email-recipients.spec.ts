@@ -361,12 +361,17 @@ test.describe("E1.7b draft-email recipients (TS-46)", () => {
     expect(emailStep?.followUpEveryDays).toBe(14);
   });
 
-  test("Case Wizard: renders resolved To/CC, threads them into the Gmail hand-off, and shows the unresolved gap", async ({
+  test("TaskDrawer step body: renders resolved To/CC, threads them into the Gmail hand-off, and shows the unresolved gap", async ({
     page,
   }) => {
+    // 2026-07-20: the step-at-a-time Wizard tab is retired — the List
+    // checklist is the ONE task view, and the draft-email step body (this
+    // locked F1.7b.5 feature) renders in the TaskDrawer a row click opens.
     await page.goto(`/cases/${CASE_ID}`);
-    await expect(page.getByRole("tab", { name: "Wizard" })).toBeVisible({ timeout: 30000 });
-    await page.getByRole("tab", { name: "Wizard" }).click();
+    await expect(page.getByText("Apply to Optum").first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("tab", { name: "Wizard" })).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "List" })).toHaveCount(0);
+    await page.getByText("Apply to Optum").first().click();
 
     // Resolved To recipients render with provenance; the unresolved Cc token is
     // a visible fill-before-send gap (never silently dropped).

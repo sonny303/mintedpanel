@@ -1,5 +1,5 @@
 // The portal link rendered on a resolved SOP online_form step (TaskDrawer,
-// CaseWizard, /tasks/$id). Resolves the step's portal_key against the org's
+// the TaskDrawer step bodies (StepDetails), /tasks/$id). Resolves the step's portal_key against the org's
 // portal registry and shows the portal name, an "Open portal" external link,
 // and its verification state. If the key resolves to no portal in the active
 // org, a neutral note points at Admin > Portals. Callers guard on
