@@ -231,6 +231,18 @@ export function PayerDetailContent({ payerId }: { payerId: string }) {
             label="Avg decision"
             value={payer.avgDecisionDays != null ? `${payer.avgDecisionDays} days` : "—"}
           />
+          {/* 2026-07-20 re-scope: what this payer calls its payer-issued
+              enrollment ID — a Minted-curated payer-definition fact (the
+              per-org override table is retired). Issued VALUES are captured
+              on provider enrollment facts and group Payer Network entries. */}
+          <Fact
+            label="Identifier label"
+            value={
+              payer.resolutionIdLabel?.trim()
+                ? payer.resolutionIdLabel
+                : "Payer-issued ID (generic)"
+            }
+          />
           <Fact
             label="Aliases"
             value={(payer.aliases ?? []).length > 0 ? (payer.aliases ?? []).join(" · ") : "—"}

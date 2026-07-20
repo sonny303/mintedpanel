@@ -1,4 +1,6 @@
-// Pure helpers for the case detail Wizard view (CaseWizard).
+// Pure helpers for rendering resolved SOP step text (StepDetails — formerly
+// the CaseWizard, whose step-at-a-time tab was removed 2026-07-20; the step
+// bodies live on in the TaskDrawer).
 //
 // A task's draft-email steps carry an emailTemplate whose {{tokens}} were
 // interpolated at task-creation time by sopResolver. When the underlying data
@@ -6,8 +8,6 @@
 // [a-zA-Z0-9_.] tokens, so any malformed or catalog-unknown placeholder can
 // survive into the resolved text. The wizard surfaces those remaining
 // {{token}} markers as gaps the user must fill before sending.
-import type { Task } from "@/types";
-
 // Matches a single {{ ... }} placeholder. Non-greedy inner match with no braces
 // so adjacent placeholders never merge into one span.
 const TOKEN_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g;
@@ -63,13 +63,4 @@ export function splitOnUnresolvedTokens(text: string): TextSegment[] {
     segments.push({ value: text.slice(lastIndex), isToken: false });
   }
   return segments;
-}
-
-/**
- * The step the wizard should open on: the first task that is not yet completed.
- * Returns 0 for an empty list or when every task is already completed.
- */
-export function firstIncompleteTaskIndex(tasks: Pick<Task, "status">[]): number {
-  const idx = tasks.findIndex((t) => t.status !== "completed");
-  return idx === -1 ? 0 : idx;
 }

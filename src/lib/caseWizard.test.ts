@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  findUnresolvedTokens,
-  splitOnUnresolvedTokens,
-  firstIncompleteTaskIndex,
-} from "./caseWizard";
-import type { TaskStatus } from "@/types";
+import { findUnresolvedTokens, splitOnUnresolvedTokens } from "./caseWizard";
 
 describe("findUnresolvedTokens", () => {
   it("returns the bare token names inside {{ ... }}", () => {
@@ -61,32 +56,5 @@ describe("splitOnUnresolvedTokens", () => {
       { value: "{{a}}", isToken: true },
       { value: "{{b}}", isToken: true },
     ]);
-  });
-});
-
-describe("firstIncompleteTaskIndex", () => {
-  const t = (status: TaskStatus) => ({ status });
-
-  it("returns the index of the first non-completed task", () => {
-    expect(
-      firstIncompleteTaskIndex([
-        t("completed"),
-        t("completed"),
-        t("in_progress"),
-        t("not_started"),
-      ]),
-    ).toBe(2);
-  });
-
-  it("returns 0 when the first task is incomplete", () => {
-    expect(firstIncompleteTaskIndex([t("not_started"), t("completed")])).toBe(0);
-  });
-
-  it("returns 0 when every task is completed", () => {
-    expect(firstIncompleteTaskIndex([t("completed"), t("completed")])).toBe(0);
-  });
-
-  it("returns 0 for an empty list", () => {
-    expect(firstIncompleteTaskIndex([])).toBe(0);
   });
 });

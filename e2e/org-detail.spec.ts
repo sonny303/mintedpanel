@@ -378,6 +378,13 @@ test("TS-107: Org Detail carries only the container content, members render with
   await expect(page.getByRole("heading", { name: "Provider groups" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Provider roster" })).toHaveCount(0);
 
+  // 2026-07-20 re-scope: the Resolution identifiers table is GONE from Org
+  // Detail — a payer-issued enrollment ID is not an org-wide value. The
+  // issued VALUE is captured on the provider's enrollment fact / the group's
+  // Payer Network entry; the LABEL is a Minted-curated payer fact.
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Configure ID" })).toHaveCount(0);
+
   // The Finish-setup banner: shown while the wizard is incomplete, entering
   // the wizard flow (F6.1.5 re-entry).
   await expect(page.getByText(/Finish setting up/)).toBeVisible();

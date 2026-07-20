@@ -1,11 +1,11 @@
-// E6.5 slim-down: the org-grain funnel derivation retired with PayerSetupList
-// (the module funnel is payerReadinessFunnel.ts). What stays pinned here is
-// the shared inclusion rule (assignment-driven, sentinel excluded, name sort)
-// and the resolution-ID source chain the org-settings table renders.
+// E6.5 slim-down → 2026-07-20 re-scope: the org-grain funnel derivation
+// retired with PayerSetupList, and the resolution-ID source chain retired
+// with the Org Detail settings table. What stays pinned here is the shared
+// inclusion rule (assignment-driven, sentinel excluded, name sort).
 import { describe, expect, it } from "vitest";
-import { activeOrgPayers, resolutionIdSource } from "./payerSetup";
+import { activeOrgPayers } from "./payerSetup";
 import { PRE_CRED_PAYER_NAME } from "./statusLabels";
-import type { OrgPayerAssignment, OrgPayerSetting, Payer } from "@/types";
+import type { OrgPayerAssignment, Payer } from "@/types";
 
 function payer(over: Partial<Payer> = {}): Payer {
   return {
@@ -29,18 +29,6 @@ function assignment(over: Partial<OrgPayerAssignment> = {}): OrgPayerAssignment 
     ...over,
   };
 }
-
-const orgSetting = (over: Partial<OrgPayerSetting> = {}): OrgPayerSetting => ({
-  id: "set-1",
-  orgId: "org-1",
-  payerId: "payer-1",
-  resolutionIdLabel: "Provider PIN",
-  resolutionIdExpected: true,
-  updatedBy: null,
-  createdAt: "2026-07-01T00:00:00Z",
-  updatedAt: "2026-07-01T00:00:00Z",
-  ...over,
-});
 
 describe("activeOrgPayers (inclusion is subscription-driven, never targets)", () => {
   it("a just-selected catalog payer appears with its assignment", () => {
@@ -77,17 +65,5 @@ describe("activeOrgPayers (inclusion is subscription-driven, never targets)", ()
       [assignment({ payerId: "a" }), assignment({ id: "x", payerId: "b" })],
     );
     expect(rows.map((r) => r.payer.name)).toEqual(["Alpha", "Zeta"]);
-  });
-});
-
-describe("resolutionIdSource", () => {
-  it("walks org setting → Minted label → generic", () => {
-    expect(resolutionIdSource(payer(), orgSetting())).toBe("org");
-    expect(resolutionIdSource(payer({ resolutionIdLabel: "Medicare PTAN" }), null)).toBe("minted");
-    expect(resolutionIdSource(payer({ resolutionIdLabel: "Medicare PTAN" }), orgSetting())).toBe(
-      "org",
-    );
-    expect(resolutionIdSource(payer(), orgSetting({ resolutionIdLabel: "  " }))).toBe("generic");
-    expect(resolutionIdSource(payer(), null)).toBe("generic");
   });
 });

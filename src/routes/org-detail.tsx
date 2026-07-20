@@ -21,7 +21,6 @@ import { FinishSetupBanner } from "@/components/org/FinishSetupBanner";
 import { PartiesManager } from "@/components/org/PartiesManager";
 import { MembersPanel } from "@/components/settings/MembersPanel";
 import { ProfilePanel } from "@/components/settings/ProfilePanel";
-import { ResolutionIdSettingsSection } from "@/components/settings/ResolutionIdSettingsSection";
 
 export const Route = createFileRoute("/org-detail")({
   component: OrgDetailPage,
@@ -41,24 +40,11 @@ function OrgDetailPage() {
       {/* F6.1.4: member management (invite, role change) relocated from the
           retired Settings page. */}
       <MembersPanel />
-      {/* E6.5/E6.6: of the payer-relevant org settings that moved here from
-          the Payer Setup module, only resolution identifiers remain — the
-          denial word-list and queue ranking are fixed defaults with no
-          editors anywhere (F6.6.6). */}
-      <Separator />
-      <section aria-labelledby="resolution-ids-heading" className="space-y-3">
-        <div>
-          <h2 id="resolution-ids-heading" className="text-[15px] font-semibold">
-            Resolution identifiers
-          </h2>
-          <p className="text-[12.5px] text-muted-foreground">
-            What each payer calls its payer-issued enrollment ID at approval. Configured per
-            organization; unconfigured payers fall back to the Minted default, then the generic
-            “Payer-issued ID”.
-          </p>
-        </div>
-        <ResolutionIdSettingsSection />
-      </section>
+      {/* 2026-07-20 re-scope: the Resolution identifiers table is GONE from
+          Org Detail — a payer-issued enrollment ID is not an org-wide value.
+          The issued VALUE is captured where it is issued (the provider's
+          enrollment fact; the group's Payer Network entry) and the per-payer
+          LABEL is a Minted-curated payer fact shown in Payer Setup. */}
       <Separator />
       {/* User-scoped: your display name ({{user.name}} on payer forms). */}
       <ProfilePanel />

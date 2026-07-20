@@ -512,6 +512,9 @@ test("TS-113: enrollment-fact capture on the record; Expire flips the fact at th
   await page.getByRole("option", { name: "Aetna" }).click();
   await dialog.getByLabel("State", { exact: true }).click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
+  // 2026-07-20 re-scope: the payer-issued ID (PIN) is captured WITH the
+  // enrollment it belongs to — optional, payer-labeled field.
+  await dialog.getByLabel(/Payer-issued ID \(optional\)/).fill("PIN-12345");
   await dialog.getByRole("button", { name: "Record fact" }).click();
 
   await expect(page.getByText("Live", { exact: true })).toBeVisible({ timeout: 15000 });
@@ -524,12 +527,21 @@ test("TS-113: enrollment-fact capture on the record; Expire flips the fact at th
   expect(factBody.provider_id).toBe("pr-brooke");
   expect(factBody.payer_id).toBe("p1");
   expect(factBody.source).toBe("migration");
+  expect(factBody.payer_issued_id).toBe("PIN-12345");
+
+  // The PIN renders on the fact row with its payer-labeled chip.
+  await expect(page.getByText("Payer-issued ID: PIN-12345")).toBeVisible({ timeout: 15000 });
 
   // Expire: a status FLIP (PATCH sets expired_at), never a delete.
   await page.getByRole("button", { name: "Expire", exact: true }).click();
   await page.getByRole("button", { name: "Expire enrollment" }).click();
   await expect(page.getByText(/Expired/)).toBeVisible({ timeout: 15000 });
-  const factPatch = requests.find((r) => r.method === "PATCH" && r.path === "enrollment_facts");
+  const factPatch = requests.find(
+    (r) =>
+      r.method === "PATCH" &&
+      r.path === "enrollment_facts" &&
+      (r.body as Record<string, unknown>).expired_at,
+  );
   expect(factPatch).toBeTruthy();
   expect((factPatch!.body as Record<string, unknown>).expired_at).toBeTruthy();
   expect(requests.filter((r) => r.method === "DELETE")).toHaveLength(0);

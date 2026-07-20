@@ -89,7 +89,7 @@ describe("planGmailHandoff", () => {
 // tab for the human to review and send — no Gmail send API, no OAuth/mail
 // credential handling, no BCC anywhere.
 describe("no auto-send path exists (E1.7b F1.7b.5 / TE-17, TE-20)", () => {
-  const emailSurfaces = ["src/lib/gmailCompose.ts", "src/components/cases/CaseWizard.tsx"];
+  const emailSurfaces = ["src/lib/gmailCompose.ts", "src/components/cases/StepDetails.tsx"];
 
   function code(file: string): string {
     const src = readFileSync(join(process.cwd(), file), "utf8");

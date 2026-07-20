@@ -1,49 +1,26 @@
-// Step-by-step Wizard presentation of a case's tasks. One tab per task, in the
-// same sortOrder the List panel uses. The primary action completes the current
-// task (via the shared useUpdateTaskStatus mutation — its cache invalidation
-// updates the case's task/bucket state) and advances; Back steps to the prior
-// task. Steps render by stepType: online_form (label + resolved data fields),
-// draft_email (resolved subject/body with copy-to-clipboard and unresolved
-// {{token}} highlighting), and pdf (upload a fillable AcroForm → map its field
-// names to catalog tokens via the org's confirmed field_dictionary → fill from
-// the case's provider data → download locally; human-in-loop, never submitted).
+// The per-step detail bodies for a case's SOP tasks, extracted from the
+// retired CaseWizard (2026-07-20 handoff: the step-at-a-time Wizard tab was
+// removed from case detail — the List view is the only checklist). The step
+// CONTENT was the valuable part and lives on here, rendered inside the
+// TaskDrawer: online_form (portal link + resolved data fields with copy),
+// draft_email (resolved subject/body/To/CC with unresolved-{{token}}
+// highlighting and the human-in-loop Gmail hand-off — F1.7b.5, never
+// auto-sent), pdf (upload a fillable AcroForm -> field_dictionary mapping ->
+// fill from the case's provider data -> local download), and the E1.7b plain
+// channels (fax/phone/mail). StepBody renders one step's body by stepType —
+// label/checkbox chrome belongs to the caller (the drawer's rows).
 import { useEffect, useMemo, useState } from "react";
-import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
-import {
-  Calendar,
-  Check,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Download,
-  FileText,
-  Loader2,
-  Mail,
-  Mailbox,
-  Phone,
-  Printer,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Check, Copy, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EmptyState } from "@/components/EmptyState";
-import { StatusPill } from "@/components/StatusPill";
 import { PortalStepLink } from "@/components/portals/PortalStepLink";
-import { fmtDate } from "@/lib/format";
 import { planGmailHandoff } from "@/lib/gmailCompose";
-import {
-  splitOnUnresolvedTokens,
-  findUnresolvedTokens,
-  firstIncompleteTaskIndex,
-} from "@/lib/caseWizard";
+import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
 import { pdfFillFileStem } from "@/lib/pdfFill";
 import { analyzePdfForm, fillAndDownloadPdf, type PdfAnalysis } from "@/lib/pdfFillClient";
-import { useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useFieldDictionary } from "@/hooks/useMappingReview";
-import { useCanWrite } from "@/lib/permissions";
-import type { ResolvedSOPEmailRecipient, SOPStep, Task } from "@/types";
+import type { ResolvedSOPEmailRecipient, SOPStep } from "@/types";
 
 async function copyText(text: string, what: string) {
   try {
@@ -476,192 +453,18 @@ function StepCadenceMeta({ step }: { step: SOPStep }) {
   );
 }
 
-function StepBlock({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
-  const stepType = step.stepType ?? "online_form";
-  const icon =
-    stepType === "draft_email" ? (
-      <Mail className="h-4 w-4 text-[#1B4D3E]" />
-    ) : stepType === "pdf" ? (
-      <FileText className="h-4 w-4 text-[#1B4D3E]" />
-    ) : stepType === "phone" ? (
-      <Phone className="h-4 w-4 text-[#1B4D3E]" />
-    ) : stepType === "fax" ? (
-      <Printer className="h-4 w-4 text-[#1B4D3E]" />
-    ) : stepType === "mail" ? (
-      <Mailbox className="h-4 w-4 text-[#1B4D3E]" />
-    ) : null;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span
-          className={`text-[13px] font-medium ${
-            step.isCompleted ? "text-muted-foreground line-through" : "text-foreground"
-          }`}
-        >
-          {step.label}
-        </span>
-        {step.isCompleted ? <CheckCircle2 className="h-4 w-4 text-[#059669]" /> : null}
-      </div>
-      {stepType === "draft_email" ? (
-        <DraftEmailStep step={step} />
-      ) : stepType === "pdf" ? (
-        <PdfStep step={step} tokenValues={tokenValues} />
-      ) : stepType === "fax" || stepType === "phone" || stepType === "mail" ? (
-        <PlainChannelStep step={step} />
-      ) : (
-        <OnlineFormStep step={step} />
-      )}
-    </div>
-  );
-}
-
-export function CaseWizard({
-  tasks,
+export function StepBody({
+  step,
   tokenValues = {},
 }: {
-  tasks: Task[];
-  // token -> value map (bare catalog tokens) built from the case's provider data
-  // for the pdf-step form filler; defaults to empty for tasks with no pdf step.
+  step: SOPStep;
   tokenValues?: Record<string, string>;
 }) {
-  const canEdit = useCanWrite();
-  const updateStatusM = useUpdateTaskStatus();
-  // Seed on the first task still needing work; the deck remounts (and re-seeds)
-  // each time the Wizard tab is selected.
-  const [index, setIndex] = useState(() => firstIncompleteTaskIndex(tasks));
-
-  const total = tasks.length;
-  const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
-  const current = tasks[safeIndex];
-
-  const steps = useMemo<SOPStep[]>(
-    () =>
-      Array.isArray(current?.sopContent)
-        ? current.sopContent.slice().sort((a, b) => a.order - b.order)
-        : [],
-    [current?.sopContent],
-  );
-
-  if (total === 0) {
-    return (
-      <Card className="shadow-none border-border">
-        <CardHeader className="p-4 pb-2 border-b border-border">
-          <CardTitle className="text-[14px] font-semibold">Wizard</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          <EmptyState message="No tasks yet" />
-        </CardContent>
-      </Card>
-    );
+  const stepType = step.stepType ?? "online_form";
+  if (stepType === "draft_email") return <DraftEmailStep step={step} />;
+  if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
+  if (stepType === "fax" || stepType === "phone" || stepType === "mail") {
+    return <PlainChannelStep step={step} />;
   }
-
-  const isCompleted = current.status === "completed";
-  const isLast = safeIndex === total - 1;
-  const isFirst = safeIndex === 0;
-  const overdue =
-    !isCompleted && current.dueDate && differenceInDays(new Date(), parseISO(current.dueDate)) > 0;
-
-  const goNext = () => setIndex((i) => Math.min(i + 1, total - 1));
-  const goBack = () => setIndex((i) => Math.max(i - 1, 0));
-
-  const handleComplete = () => {
-    if (!canEdit || isCompleted) return;
-    updateStatusM.mutate(
-      { id: current.id, status: "completed" },
-      {
-        onSuccess: () => {
-          toast.success(`Completed "${current.title}"`);
-          if (!isLast) goNext();
-        },
-        onError: (err: unknown) =>
-          toast.error(err instanceof Error ? err.message : "Could not complete task"),
-      },
-    );
-  };
-
-  const canComplete = canEdit && !isCompleted;
-
-  return (
-    <Card className="shadow-none border-border">
-      <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between">
-        <CardTitle className="text-[14px] font-semibold">Wizard</CardTitle>
-        <span className="text-[12px] text-muted-foreground tabular-nums">
-          Step {safeIndex + 1} of {total}
-        </span>
-      </CardHeader>
-      <CardContent className="p-4 space-y-4">
-        {/* Current task heading */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <h3 className="text-[15px] font-semibold text-foreground">{current.title}</h3>
-            <div className="flex flex-wrap items-center gap-2 text-[12px]">
-              <span
-                className={`inline-flex items-center gap-1 tabular-nums ${
-                  overdue ? "text-[#DC2626] font-semibold" : "text-muted-foreground"
-                }`}
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Due {fmtDate(current.dueDate)}
-              </span>
-              {isCompleted ? <StatusPill status="green" label="Completed" /> : null}
-            </div>
-          </div>
-        </div>
-
-        {current.description ? (
-          <p className="text-[13px] text-muted-foreground">{current.description}</p>
-        ) : null}
-
-        {/* Steps */}
-        <div className="space-y-4">
-          {steps.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">No SOP steps defined for this task.</p>
-          ) : (
-            steps.map((step) => <StepBlock key={step.id} step={step} tokenValues={tokenValues} />)
-          )}
-        </div>
-
-        {/* Nav */}
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={goBack}
-            disabled={isFirst}
-            className="gap-1.5"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </Button>
-
-          {canComplete ? (
-            <Button
-              type="button"
-              className="gap-1.5 bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
-              onClick={handleComplete}
-              disabled={updateStatusM.isPending}
-            >
-              {updateStatusM.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              {isLast ? "Complete step" : "Complete & next"}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              className="gap-1.5 bg-[#1B4D3E] hover:bg-[#1B4D3E]/90 text-white"
-              onClick={goNext}
-              disabled={isLast}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+  return <OnlineFormStep step={step} />;
 }

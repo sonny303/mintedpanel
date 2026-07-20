@@ -49,8 +49,8 @@ export function usePayer(id: string | undefined) {
 // E4.2 payer governance: there is deliberately NO useCreatePayer and NO
 // useUpdatePayer — canonical payer identities are selected from the Minted
 // catalog (payer-directory → org_payer_assignments) and Minted-curated facts
-// are org-read-only; org-varying payer configuration lives in
-// org_payer_settings (useOrgPayerSettings).
+// are org-read-only. (The org_payer_settings override tier retired
+// 2026-07-20 — the table stays dormant with no app reader.)
 
 export function useSops() {
   const orgId = useActiveOrgId() ?? "no-org";

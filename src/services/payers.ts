@@ -7,8 +7,8 @@
 // the same posture (migration `20260718120000_payers_org_write_lockdown.sql`
 // revoked the org INSERT/UPDATE grants and dropped the write policies), and
 // the legacy org-scoped rows the old write path served were removed by the
-// 2026-07-17 pre-prod-cut wipe. Org-varying payer configuration lives in
-// org_payer_settings (orgPayerSettings.ts), not on the payers row.
+// 2026-07-17 pre-prod-cut wipe. (The org_payer_settings override tier retired
+// 2026-07-20; identifier labels are the Minted-curated payers columns.)
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";

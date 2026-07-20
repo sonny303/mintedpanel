@@ -26,7 +26,6 @@ import {
 import { DatePicker } from "@/components/DatePicker";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
 import { GROUP_PROVIDER_ID_LABEL, resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
-import { useOrgPayerSetting } from "@/hooks/useOrgPayerSettings";
 import type { DenialReasonCode, Payer } from "@/types";
 
 const FIELD_LABEL = "text-[11px] uppercase tracking-wide text-muted-foreground";
@@ -60,10 +59,10 @@ function ReasonCodeSelect({
 }
 
 // ---- Payer-labeled provider-ID fields (Approved / correction-to-Approved).
-// The org's own setting (org_payer_settings) wins, then the Minted-curated
-// global label on the payers row, then the generic default — so the input is
-// labeled with the payer's OWN term ("Provider ID" for Anthem, "PTAN" for
-// Medicare). F6.0.2. ----
+// The Minted-curated label on the payers row wins, then the generic default —
+// so the input is labeled with the payer's OWN term ("Provider ID" for
+// Anthem, "PTAN" for Medicare). F6.0.2; the per-org override tier retired
+// 2026-07-20 (the label is a payer-definition fact, not org config). ----
 function ProviderIdFields({
   payer,
   individualId,
@@ -77,8 +76,7 @@ function ProviderIdFields({
   onIndividual: (v: string) => void;
   onGroup: (v: string) => void;
 }) {
-  const orgSetting = useOrgPayerSetting(payer?.id);
-  const config = resolveIdentifierConfig(payer, orgSetting);
+  const config = resolveIdentifierConfig(payer);
   return (
     <>
       <div className="space-y-1.5">

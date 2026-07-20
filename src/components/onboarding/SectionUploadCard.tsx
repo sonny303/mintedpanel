@@ -7,8 +7,11 @@
 // missing, a DISABLED drop zone with a pointer to the Provider Group section is
 // rendered instead of accepting a file (never a silent failure). The Provider
 // Group upload has no prerequisite.
+// 2026-07-20: rendered inside the shared CsvImportPanel disclosure —
+// collapsed by default site-wide, matching the Payer Network board pattern.
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { openSection } from "@/components/onboarding/openSection";
 import { useIsAdmin } from "@/lib/permissions";
@@ -46,16 +49,10 @@ export function SectionUploadCard({
   const gate = uploadLadderGate(entityKind, { activeGroupCount });
 
   return (
-    <div className="space-y-3 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
-      <div>
-        <div className="text-[13px] font-medium text-foreground">
-          Bulk {descriptor.label.toLowerCase()} import
-        </div>
-        <p className="text-[12px] text-muted-foreground">
-          Upload a CSV — rows are validated and staged for review, and nothing changes in your
-          workspace until the import is committed.
-        </p>
-      </div>
+    <CsvImportPanel
+      label={`Bulk ${descriptor.label.toLowerCase()} import`}
+      description="Upload a CSV — rows are validated and staged for review, and nothing changes in your workspace until the import is committed."
+    >
       {gate.allowed ? (
         <RosterUploader
           source="onboarding"
@@ -80,6 +77,6 @@ export function SectionUploadCard({
           ) : null}
         </div>
       )}
-    </div>
+    </CsvImportPanel>
   );
 }

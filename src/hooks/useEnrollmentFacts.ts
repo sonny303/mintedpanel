@@ -9,6 +9,7 @@ import {
   createEnrollmentFact,
   expireEnrollmentFact,
   listEnrollmentFacts,
+  setEnrollmentFactIdentifier,
   type EnrollmentFactInput,
 } from "@/services/enrollmentFacts";
 
@@ -42,6 +43,17 @@ export function useExpireEnrollmentFact() {
   const invalidate = useInvalidateFacts();
   return useMutation({
     mutationFn: (id: string) => expireEnrollmentFact(id),
+    onSuccess: invalidate,
+  });
+}
+
+/** Set/clear the payer-issued ID (PIN) on an existing fact — the 2026-07-20
+ * re-scope's provider-level identifier edit. */
+export function useSetEnrollmentFactIdentifier() {
+  const invalidate = useInvalidateFacts();
+  return useMutation({
+    mutationFn: ({ id, payerIssuedId }: { id: string; payerIssuedId: string | null }) =>
+      setEnrollmentFactIdentifier(id, payerIssuedId),
     onSuccess: invalidate,
   });
 }
