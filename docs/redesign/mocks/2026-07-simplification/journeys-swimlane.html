@@ -1,0 +1,847 @@
+<title>All journeys, both actors — handoffs and the chokehold audit</title>
+<style>
+  :root {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161a;
+      --raised: #191f1d;
+      --ink: #edeae3;
+      --ink-soft: #a9b0ac;
+      --ink-faint: #77807c;
+      --border: #2a322d;
+      --border-soft: #232b27;
+      --accent: #5fbe9a;
+      --accent-strong: #0c2a1d;
+      --accent-soft: #1b3229;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      --amber-bg: #33270f;
+      --amber-fg: #e0af6b;
+      --blue-bg: #17222e;
+      --blue-fg: #7faaf0;
+      --green-bg: #14291f;
+      --green-fg: #6ccfa5;
+      --red-bg: #2e1717;
+      --red-fg: #e58a8a;
+      --teal-bg: #10262b;
+      --teal-fg: #6fc4d8;
+      --idle-bg: #232b27;
+      --idle-fg: #a9b0ac;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161a;
+    --raised: #191f1d;
+    --ink: #edeae3;
+    --ink-soft: #a9b0ac;
+    --ink-faint: #77807c;
+    --border: #2a322d;
+    --border-soft: #232b27;
+    --accent: #5fbe9a;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #1b3229;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --amber-bg: #33270f;
+    --amber-fg: #e0af6b;
+    --blue-bg: #17222e;
+    --blue-fg: #7faaf0;
+    --green-bg: #14291f;
+    --green-fg: #6ccfa5;
+    --red-bg: #2e1717;
+    --red-fg: #e58a8a;
+    --teal-bg: #10262b;
+    --teal-fg: #6fc4d8;
+    --idle-bg: #232b27;
+    --idle-fg: #a9b0ac;
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 40px 26px 90px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 25px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 8px 0 10px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 70ch;
+    margin: 0 0 22px;
+  }
+  .dek b {
+    color: var(--ink);
+  }
+
+  .legend-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 36px;
+  }
+  .jtag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .jtag::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+  .jtag.a {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .jtag.b {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+  .jtag.c {
+    background: var(--amber-bg);
+    color: var(--amber-fg);
+  }
+  .jtag.d {
+    background: var(--teal-bg);
+    color: var(--teal-fg);
+  }
+  .jtag.sys {
+    background: var(--idle-bg);
+    color: var(--idle-fg);
+  }
+
+  /* Swimlane */
+  .lane-headers {
+    display: grid;
+    grid-template-columns: 92px 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 10px 0 8px;
+    z-index: 5;
+  }
+  .lane-headers .lh {
+    text-align: center;
+    font-size: 12.5px;
+    font-weight: 650;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--accent-strong);
+    color: #f0efe9;
+  }
+  .lane-headers .lh span {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 500;
+    opacity: 0.65;
+  }
+  .lane-headers .spacer {
+  }
+
+  .phase {
+    display: grid;
+    grid-template-columns: 92px 1fr 1fr;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid var(--border-soft);
+  }
+  .phase .when {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-top: 4px;
+    line-height: 1.5;
+  }
+  .phase .when b {
+    display: block;
+    color: var(--amber-fg);
+    font-size: 11.5px;
+  }
+  .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 13px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--border);
+  }
+  .card.a {
+    border-left-color: #1d4ed8;
+  }
+  .card.b {
+    border-left-color: #047857;
+  }
+  .card.c {
+    border-left-color: #b45309;
+  }
+  .card.d {
+    border-left-color: #0e7490;
+  }
+  .card .c-t {
+    font-size: 12px;
+    font-weight: 650;
+    margin-bottom: 2px;
+  }
+  .card .c-b {
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .card .c-b b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .idle-card {
+    border: 1px dashed var(--border);
+    border-radius: 9px;
+    padding: 10px 13px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    line-height: 1.5;
+  }
+
+  .sys-strip {
+    grid-column: 2 / 4;
+    background: var(--accent-strong);
+    border-radius: 9px;
+    padding: 9px 14px;
+    color: #f0efe9;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .sys-strip b {
+    font-weight: 700;
+  }
+  .sys-strip .st {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .noblock {
+    grid-column: 2 / 4;
+    display: flex;
+    justify-content: center;
+  }
+  .noblock span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--green-fg);
+    background: var(--green-bg);
+    border-radius: 999px;
+    padding: 4px 13px;
+  }
+  .handoff {
+    grid-column: 2 / 4;
+    display: flex;
+    justify-content: center;
+  }
+  .handoff span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--amber-fg);
+    border-radius: 999px;
+    padding: 4px 14px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Gate audit */
+  section.audit {
+    margin-top: 54px;
+  }
+  .blk-head {
+    margin-bottom: 14px;
+  }
+  .blk-head .sec-tag {
+    display: inline-flex;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 9px;
+    border-radius: 5px;
+    margin-bottom: 8px;
+  }
+  .blk-head h2 {
+    font-size: 18px;
+    font-weight: 650;
+    margin: 0 0 6px;
+    letter-spacing: -0.008em;
+  }
+  .blk-head p {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 72ch;
+    margin: 0;
+  }
+  .blk-head p b {
+    color: var(--ink);
+  }
+
+  .tbl-card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .tbl-scroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    min-width: 660px;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 9px 13px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 13px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .verdict {
+    display: inline-flex;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .verdict.gate {
+    background: var(--amber-bg);
+    color: var(--amber-fg);
+  }
+  .verdict.free {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+
+  .conclusion {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    background: var(--raised);
+    padding: 15px 18px;
+    box-shadow: var(--shadow);
+  }
+  .conclusion .co-t {
+    font-size: 13px;
+    font-weight: 650;
+    margin-bottom: 5px;
+  }
+  .conclusion p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 74ch;
+  }
+  .conclusion p b {
+    color: var(--ink);
+  }
+
+  @media (max-width: 720px) {
+    .lane-headers,
+    .phase {
+      grid-template-columns: 64px 1fr;
+    }
+    .phase .cell.zeb {
+      grid-column: 2;
+    }
+    .sys-strip,
+    .noblock,
+    .handoff {
+      grid-column: 2;
+    }
+    .lane-headers .lh.zeb-h {
+      display: none;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Minted Panel · all journeys, both actors · chokehold audit</div>
+  <h1>The whole system in motion — and where it could jam, but doesn't</h1>
+  <p class="dek">
+    Every journey (A payer · B org · C generation · D casework), both actors, July to go-live. Amber
+    pills mark <b>handoffs</b> — note that every one is <b>system-mediated and asynchronous</b>:
+    work is left in a visible state for whoever picks it up next, never handed person-to-person.
+    Green pills mark the places a chokehold <b>could</b> exist and deliberately doesn't. The gate
+    audit at the bottom lists every gate in the system.
+  </p>
+  <div class="legend-row">
+    <span class="jtag a">Journey A — payer readiness</span>
+    <span class="jtag b">Journey B — org reality</span>
+    <span class="jtag c">Journey C — generation</span>
+    <span class="jtag d">Journey D — casework</span>
+    <span class="jtag sys">System — derived, automatic</span>
+  </div>
+
+  <div class="lane-headers">
+    <div class="spacer"></div>
+    <div class="lh">Sowmya<span>ops hat + analyst hat</span></div>
+    <div class="lh zeb-h">Zeb<span>org onboarding + admin</span></div>
+  </div>
+
+  <!-- JULY -->
+  <div class="phase">
+    <div class="when"><b>July</b>parallel setup</div>
+    <div class="cell">
+      <div class="card a">
+        <div class="c-t">Payer Setup: 6 of 7 SOPs authored</div>
+        <div class="c-b">
+          Catalog confirmed for all 7 · SOPs published for 6 (UHC deliberately deferred) · each form
+          step: portal → capture → train → <b>mock-data dry run</b> — proven with no org involved.
+        </div>
+      </div>
+    </div>
+    <div class="cell zeb">
+      <div class="card b">
+        <div class="c-t">Onboards a different client org</div>
+        <div class="c-b">
+          Journey B for another org in the portfolio — same week, zero coordination with Sowmya's
+          payer work.
+        </div>
+      </div>
+    </div>
+    <div class="noblock">
+      <span
+        >NO CHOKEHOLD — A and B never wait on each other; either can start first, in any order</span
+      >
+    </div>
+  </div>
+
+  <!-- DAY 1 -->
+  <div class="phase">
+    <div class="when"><b>Jul 15</b>day 1</div>
+    <div class="cell">
+      <div class="idle-card">Elsewhere — nothing about BEST PT needs her today.</div>
+    </div>
+    <div class="cell zeb">
+      <div class="card b">
+        <div class="c-t">Creates BEST PT + attaches 7 payers</div>
+        <div class="c-b">
+          One-time wizard: group + facility (Nov 1) · <b>Org Detail › Payer Network › Attach</b> —
+          eligibility-filtered list, all 7 attached at the group grain.
+          <b>UHC attaches fine with no SOP</b> — Journey A being unfinished never blocks attach.
+        </div>
+      </div>
+    </div>
+    <div class="sys-strip">
+      <span class="st">System</span>Fulfillment board born: <b>7 × Targeted</b> · buffer honestly at
+      0 ("no providers yet"). The contract's promise is on record with zero casework.
+    </div>
+    <div class="noblock">
+      <span
+        >NO CHOKEHOLD — attach needs only org facts (operating states); no ops sign-off, no SOP
+        prerequisite</span
+      >
+    </div>
+  </div>
+
+  <!-- DAY 50 -->
+  <div class="phase">
+    <div class="when"><b>Sept 3</b>day 50</div>
+    <div class="cell">
+      <div class="idle-card">Still not needed — the hire is entirely Zeb's lane.</div>
+    </div>
+    <div class="cell zeb">
+      <div class="card b">
+        <div class="c-t">Onboards Dr. Chen</div>
+        <div class="c-b">
+          <b>Providers</b> surface: identity, NC license, CAQH, group, facility + migration
+          enrollments (Aetna, Medicare under this group) recorded as
+          <b>enrollment facts — not cases</b>. <b>Zero cases created by onboarding.</b>
+        </div>
+      </div>
+    </div>
+    <div class="sys-strip">
+      <span class="st">System</span>2 enrollment facts logged → Aetna + Medicare flip
+      <b>Active</b> (derived: approved case OR enrollment fact) —
+      <b>no auto-cases, no queue noise</b> · candidate math runs → banner:
+      <b>"5 candidates awaiting generation — Dr. Chen joined Sept 3."</b>
+    </div>
+    <div class="handoff">
+      <span
+        >HANDOFF · B → C — left in the buffer, visible to both; whoever generates next,
+        generates</span
+      >
+    </div>
+  </div>
+
+  <!-- SEPT 4 -->
+  <div class="phase">
+    <div class="when"><b>Sept 4</b>generation</div>
+    <div class="cell">
+      <div class="idle-card">
+        Could equally run this — both are admins; the gate is a role capability, not a person.
+      </div>
+    </div>
+    <div class="cell zeb">
+      <div class="card c">
+        <div class="c-t">Review &amp; generate</div>
+        <div class="c-b">
+          The grid: 5 proposed (UHC on generic checklist — <b>warned, not blocked</b>), 2 grayed
+          enrolled · excludes TRICARE ("not pursuing") · <b>Confirm: 4 cases</b> · 7 of 7 accounted
+          for.
+        </div>
+      </div>
+    </div>
+    <div class="sys-strip">
+      <span class="st">System</span>4 cases <b>Not Started [AUTO]</b> · SOP lookup resolves each
+      payer's checklist with Chen's data · run #14 recorded · fulfillment: 4 × <b>In Progress</b> ·
+      cases land ranked on the Cases queue.
+    </div>
+    <div class="handoff">
+      <span
+        >HANDOFF · C → D — cases sit ranked in the shared queue; no assignment step, no routing
+        approval</span
+      >
+    </div>
+  </div>
+
+  <!-- SEPT-OCT -->
+  <div class="phase">
+    <div class="when"><b>Sept 5–Oct 10</b>parallel again</div>
+    <div class="cell">
+      <div class="card d">
+        <div class="c-t">Works the queue (analyst hat)</div>
+        <div class="c-b">
+          Anthem: extension fill → <b>Submitted [AUTO]</b> → call → In Review [HUMAN] · NC Medicaid
+          faxed → Submitted [HUMAN] · UHC on the generic checklist —
+          <b>casework proceeds without the SOP</b> · Cigna denied Oct 10 (reason: panel closed)
+          [HUMAN].
+        </div>
+      </div>
+      <div class="card a">
+        <div class="c-t">Finishes UHC's SOP mid-flight (ops hat)</div>
+        <div class="c-b">
+          Authors + publishes UHC v1 in Payer Setup. The open UHC case continues as-is;
+          <b>future cases resolve the real SOP</b>. A mid-Sept Anthem form drift raises a
+          needs-attention badge — repaired in the same editor, cases never pause.
+        </div>
+      </div>
+    </div>
+    <div class="cell zeb">
+      <div class="card b">
+        <div class="c-t">Onboarding org #3 meanwhile</div>
+        <div class="c-b">
+          Portfolio parallelism: Zeb's next client runs its own Journey B against the same global
+          payer library — which just got better (UHC SOP) without him doing anything.
+        </div>
+      </div>
+    </div>
+    <div class="noblock">
+      <span
+        >NO CHOKEHOLD — a missing SOP, a drifted form, an unfinished journey: everything warns and
+        continues; nothing queues behind a person</span
+      >
+    </div>
+  </div>
+
+  <!-- OCT -->
+  <div class="phase">
+    <div class="when"><b>Oct 12–20</b>outcomes</div>
+    <div class="cell">
+      <div class="card d">
+        <div class="c-t">Approval + reapply</div>
+        <div class="c-b">
+          Anthem approval letter → <b>Approved [HUMAN]</b> (effective date + "Provider ID" — the
+          dialog knew what to ask from the catalog) · Cigna panel reopens → <b>Reapply</b>: same
+          case, cycle 2, In Progress [HUMAN].
+        </div>
+      </div>
+    </div>
+    <div class="cell zeb">
+      <div class="idle-card">Watches the board — no action required from him for any of this.</div>
+    </div>
+    <div class="sys-strip">
+      <span class="st">System</span>Anthem flips <b>Active</b> the instant Approved saves · the
+      denial + reason lands in Chen's record and the Denials report · fulfillment recomputes —
+      nobody edits it.
+    </div>
+    <div class="handoff">
+      <span
+        >HANDOFF · D → the board — status evidence in, derived truth out; both actors read the same
+        screen</span
+      >
+    </div>
+  </div>
+
+  <!-- NOV 1 -->
+  <div class="phase">
+    <div class="when"><b>Nov 1</b>go-live</div>
+    <div class="cell">
+      <div class="card d">
+        <div class="c-t">Keeps working the two open cases</div>
+        <div class="c-b">
+          UHC In Review · Cigna cycle 2 · both ranked in the queue like any other day.
+        </div>
+      </div>
+    </div>
+    <div class="cell zeb">
+      <div class="card b">
+        <div class="c-t">Reads the board to the customer</div>
+        <div class="c-b">
+          <b>Org Detail › Payer Network</b>: 3 Active · 3 In Progress · TRICARE excluded
+          (restorable) — 7 of 7 accounted for, since day 1.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GATE AUDIT -->
+  <section class="audit">
+    <div class="blk-head">
+      <span class="sec-tag">Gate audit</span>
+      <h2>Every gate in the system — and whether it can jam</h2>
+      <p>
+        A <b>chokehold</b> = work queuing behind one person or one approval. Verdict per gate: is it
+        a real gate, who can pass it, and what happens if it's ignored.
+      </p>
+    </div>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Moment</th>
+              <th>Verdict</th>
+              <th>Who can pass</th>
+              <th>If delayed / ignored</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Generation confirm</b></td>
+              <td><span class="verdict gate">THE ONE GATE</span></td>
+              <td>Any admin — Sowmya or Zeb, interchangeably</td>
+              <td>
+                Candidates sit visibly in the buffer with a count — never lost, never auto-created.
+                Deliberate by design: onboarding records reality; only a human creates work.
+              </td>
+            </tr>
+            <tr>
+              <td>Payer missing from catalog</td>
+              <td><span class="verdict gate">rare gate</span></td>
+              <td>Platform request (either can file)</td>
+              <td>
+                The one true external dependency; everything else about the org proceeds. Worth
+                watching, not worth designing around today.
+              </td>
+            </tr>
+            <tr>
+              <td>SOP not authored yet</td>
+              <td><span class="verdict free">never blocks</span></td>
+              <td>—</td>
+              <td>
+                Generation proceeds on the generic checklist, visibly flagged; ops finishes Journey
+                A whenever, future cases pick it up.
+              </td>
+            </tr>
+            <tr>
+              <td>Form not captured/trained</td>
+              <td><span class="verdict free">never blocks</span></td>
+              <td>—</td>
+              <td>Cases are worked manually; the funnel shows the gap until ops closes it.</td>
+            </tr>
+            <tr>
+              <td>Form drift after launch</td>
+              <td><span class="verdict free">never blocks</span></td>
+              <td>Anyone repairs, in the SOP editor</td>
+              <td>Fill degrades to manual for affected fields; badge persists until repaired.</td>
+            </tr>
+            <tr>
+              <td>Readiness gaps (W-9, CAQH…)</td>
+              <td><span class="verdict free">warns only</span></td>
+              <td>—</td>
+              <td>Row still generatable; the gap rides the case into the queue as work.</td>
+            </tr>
+            <tr>
+              <td>Payer attach</td>
+              <td><span class="verdict free">no approval</span></td>
+              <td>Any admin</td>
+              <td>Data-driven (operating states); instant; org layer implicit.</td>
+            </tr>
+            <tr>
+              <td>Migration enrollments</td>
+              <td><span class="verdict free">no approval</span></td>
+              <td>Whoever onboards the provider</td>
+              <td>
+                A plain enrollment fact (payer, state, effective date) — never an auto-case.
+                Expiring the fact makes the combo a candidate again.
+              </td>
+            </tr>
+            <tr>
+              <td>Status changes</td>
+              <td><span class="verdict free">evidence, not approval</span></td>
+              <td>Any writer; admin can correct backward</td>
+              <td>
+                No sign-off chains anywhere; the audit log is the accountability, not a
+                pre-approval.
+              </td>
+            </tr>
+            <tr>
+              <td>Reapply after denial</td>
+              <td><span class="verdict free">one click</span></td>
+              <td>Any writer</td>
+              <td>Same case, new cycle; no one authorizes it.</td>
+            </tr>
+            <tr>
+              <td>Exclusion / restore</td>
+              <td><span class="verdict free">reasoned, reversible</span></td>
+              <td>Any admin</td>
+              <td>Never deletes; the board keeps it accounted for.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="conclusion">
+      <div class="co-t">The verdict</div>
+      <p>
+        One deliberate gate (generation confirm) that <b>both</b> actors can operate; one rare
+        external dependency (a payer absent from the catalog); everything else warns and flows. No
+        handoff in the system is person-to-person — every one deposits work into a visible, counted
+        state (the buffer, the queue, the board) that whoever's available picks up. The two of you
+        can work fully in parallel, swap hats mid-day, and nothing queues behind either of you.
+      </p>
+    </div>
+  </section>
+</div>

@@ -154,6 +154,14 @@ function PayerRow(props: RowProps) {
             {(payer.aliases ?? []).join(" · ")}
           </div>
         ) : null}
+        {/* E6.5 F6.5.5 — delegation as a curated catalog fact (Minted-written;
+            no app writer). Replaces the retired MSO routing engine: workflow
+            detail belongs in the payer's SOP, this line says who to go through. */}
+        {payer.delegationNote?.trim() ? (
+          <div className="mt-1 max-w-[420px] rounded-[4px] border border-[#FDE68A] bg-[#FEF3C7] px-2 py-1 text-[11px] text-[#92400E]">
+            Delegated: {payer.delegationNote}
+          </div>
+        ) : null}
       </td>
       <td className="px-3 py-2.5 align-top">
         <StatusPill status={KIND_PILL[kind]} label={PAYER_KIND_LABELS[kind]} />

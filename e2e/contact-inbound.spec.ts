@@ -155,7 +155,8 @@ test("operator converts an inbound lead into a prospect org and the queue clears
     [AUTH_KEY, SESSION, ORG_ID] as const,
   );
 
-  await page.goto("/get-started");
+  // E6.6 F6.6.1 — leads triage lives on the Reporting Center's Intake report.
+  await page.goto("/reporting/leads");
 
   // The shared triage inbox renders the NEW lead with its captured contact.
   await expect(page.getByText("New inbound inquiries")).toBeVisible({ timeout: 30000 });
@@ -181,6 +182,10 @@ test("operator converts an inbound lead into a prospect org and the queue clears
   const patch = writes.find((w) => w.kind === "patch/inbound_leads");
   expect(patch?.body).toMatchObject({ status: "converted", converted_org_id: NEW_ORG_ID });
 
-  // A converted lead leaves the NEW queue; with nothing to triage the panel hides.
-  await expect(page.getByText("New inbound inquiries")).toHaveCount(0);
+  // A converted lead leaves the NEW queue; the report renders an honest
+  // empty state (the inline panel used to hide — the report never does).
+  await expect(page.getByText("No inbound leads awaiting triage.")).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(page.getByText("Capeside Physical Therapy")).toHaveCount(0);
 });

@@ -1,19 +1,10 @@
-// Reserved org-scoped route (redesign E0.0, feature F0.0.1 / F0.0.6).
-// "Outcomes" is the final Stage 1+ journey slot; content is not built yet, so it
-// renders the shared "not yet available" empty state.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { NotYetAvailable } from "@/components/empty/NotYetAvailable";
+// E6.1 F6.1.6 (2026-07-19) — the reserved E0.0 "Outcomes" journey slot
+// retires; outcome views live in the Reporting Center (E6.6 grows the report
+// set). This URL stays alive as a redirect (legacy URLs never dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/outcomes")({
-  component: OutcomesPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/reporting", replace: true });
+  },
 });
-
-function OutcomesPage() {
-  return (
-    <div>
-      <PageHeader title="Outcomes" />
-      <NotYetAvailable title="Outcomes" />
-    </div>
-  );
-}

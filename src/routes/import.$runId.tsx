@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImportPreviewContent } from "@/components/import/ImportPreviewContent";
+import { PayerAttachImportPreview } from "@/components/import/PayerAttachImportPreview";
 import { SectionImportPreview } from "@/components/import/SectionImportPreview";
 import { useImportRun } from "@/hooks/useImportRuns";
 import { useIsAdmin } from "@/lib/permissions";
@@ -26,6 +27,11 @@ function PreviewForRun({ runId }: { runId: string }) {
   const kind = runQ.data?.entityKind;
   if (kind === "provider_group" || kind === "facility") {
     return <SectionImportPreview runId={runId} entityKind={kind} />;
+  }
+  // E6.2 — the group×payer attach CSV rides the same machine with its own
+  // simpler create/restore/skip preview.
+  if (kind === "payer_attach") {
+    return <PayerAttachImportPreview runId={runId} />;
   }
   return <ImportPreviewContent runId={runId} />;
 }

@@ -1,33 +1,22 @@
-// Sidebar IA v2 (redesign E0.9 F0.9.3, per the approved spec
-// docs/redesign/design-system/design-system-reference/Sidebar Nav.dc.html +
-// the NAVIGATION section of the reference readme). Supersedes the E0.6
-// segmented nav and the E0.8 "Org space" label. The org-zone "Providers" item
-// is the one exception to F0.9.3's reserved mapping: E1.3 TE-11 (§5 amendment,
-// 2026-07-15) authorizes this src/components/layout/* edit and supersedes only
-// the Providers half of F0.9.3 (reserved → /soon), pointing it at the E1.3
-// roster wizard section (/onboarding/wizard?section=providers). Facilities
-// stays reserved and the flat /providers route stays direct-URL-only (F0.9.6).
+// Six-item sidebar (redesign E6.1 F6.1.1 — the epic's authorized
+// src/components/layout/* edit, superseding the E0.9/E4.2 IA v2 nav).
 //
-// IA top-to-bottom: Workspace (Home, My Cases — the E2.3 queue, its one
-// authorized shell edit —, Cases + open-case CountBadge) · Payer Setup
-// (ADMIN-ONLY, standalone — E4.2 TE-18: the single consolidated Payers
-// destination at /admin/payer-admin, replacing the former two-item Payers
-// section "Payer Management" → /admin/payers + "Payer & SOP Setup"; with one
-// destination, F0.9.3's "section labels only over 2+ item groups" rule makes
-// it render standalone like Reporting Center; non-admins get NO Payers entry
-// per the TS-76 pin, while /admin/payers and /payer-directory stay
-// URL-reachable) · Reporting Center (standalone) · generous break + divider ·
-// org zone (the switcher IS the header: a contained tile with an ORGANIZATION
-// eyebrow; children Account Detail / Facilities (reserved) / Providers setup;
-// dashed prompt tile when no org) · user footer (menu opens upward: identity,
-// Settings, Sign out).
+// Exactly six primary items, mirroring the four journeys:
+//   Workspace zone (cross-org): Cases (the merged F6.1.3 surface + open-case
+//   count chip) · Payer Setup (→ /admin/payer-admin, visible to ALL roles per
+//   the interim two-trusted-users posture; needs-attention chip = the drift
+//   deck size until E6.5's derivation supersedes it) · Reporting Center.
+//   Org zone (below the org switcher tile): Org Detail · Groups · Providers.
+// NO Admin section exists for any role — MSO Routing, Statuses, Data Import,
+// and Settings are retired per their owning epics (F6.1.6 redirect table);
+// Audit Log re-homes into the Reporting Center in E6.6.
 //
-// Switcher menu groups orgs by lifecycle (Active / Prospects / Inactive —
-// group headings ONLY, never a per-org status label, E0.0 locked decision);
-// search appears above 10 orgs, recents-only at 100+; footer = Add
-// organization (→ /onboarding, the E0.8 entry point) + View all organizations
-// (→ /reporting/portfolio). Org switch keeps the E0.0 TE-4 semantics
-// (<Outlet key={activeOrgId}> remount + setActiveOrg → removeQueries).
+// Branding is untouched (F6.1.1 AC): the white layered-jack mark + wordmark
+// stay exactly as shipped. The switcher menu keeps the E0.9 behavior
+// (lifecycle group headings ONLY, never a per-org status label; search above
+// 10 orgs; footer Add organization → /onboarding + View all organizations).
+// User footer unchanged; its Settings item lands on Org Detail (member
+// management's F6.1.4 home — /admin/settings itself is a redirect stub).
 //
 // Focus on the dark rail uses a white-alpha ring — the app's soft green ring
 // is invisible on forest. Renders in both the desktop rail and mobile drawer.
@@ -43,21 +32,19 @@ import {
 import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/auth-store";
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
-import { useIsAdmin } from "@/lib/permissions";
+import { useFormDrift } from "@/hooks/useFormDrift";
 // The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
 // docs/redesign/design-system/design-system-reference/assets/logo-white.png —
-// replaces the wrong minted-mark asset. Paired with the Geist 600 wordmark on
-// the #0C2A1D rail; never recolored or given effects (brand guideline).
+// pinned untouched by E6.1 F6.1.1 (the decision-mock gradient square is a
+// placeholder, not a proposal). Never recolored or given effects.
 import logoWhite from "@/assets/logo-white.png";
 import {
-  Home,
   FolderKanban,
-  ListChecks,
   CreditCard,
   BarChart3,
   Contact,
-  Building,
   Users,
+  UserCog,
   ChevronDown,
   Check,
   Plus,
@@ -67,14 +54,9 @@ import {
   LogOut,
 } from "lucide-react";
 
-type Icon = typeof Home;
+type Icon = typeof FolderKanban;
 
-// A real route the operator can open now.
 type NavLink = { to: string; label: string; icon: Icon };
-// A reserved slot — routes to the shared /soon state carrying its title.
-type ReservedLink = { title: string; label: string; icon: Icon };
-
-const orgReserved: ReservedLink[] = [{ title: "Facilities", label: "Facilities", icon: Building }];
 
 // Switcher scale rules (reference readme NAVIGATION): ≤10 orgs plain grouped
 // list; above 10 a search field + scroll; at 100+ recents only (the active org
@@ -95,7 +77,7 @@ const roleLabel: Record<string, string> = {
 };
 
 // Nav focus uses a white-alpha ring — the global soft green ring is invisible
-// on the forest rail (F0.9.3).
+// on the forest rail (F0.9.3, preserved by E6.1).
 const navFocus =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgba(255,255,255,0.35)]";
 
@@ -109,9 +91,9 @@ const navItemClass = (activeItem: boolean) =>
 const sectionLabelClass =
   "px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/35";
 
-// Open cases = credentialing status not in the 'complete' action bucket;
-// status-less cases count as open (the same open-case rule the extension's
-// case list uses). Shares the /cases page cache keys — no polling (E0.9 TD-2).
+// Open cases = case_status outside the terminal bucket (E6.0's unified field
+// still riding the legacy mirror for status-config consumers); status-less
+// cases count as open. Shares the /cases page cache keys — no polling.
 function useOpenCaseCount(): number | null {
   const casesQ = useCases();
   const statusQ = useStatusConfigs("credentialing");
@@ -124,6 +106,17 @@ function useOpenCaseCount(): number | null {
       (c) => !c.credentialingStatusId || !completeIds.has(c.credentialingStatusId),
     ).length;
   }, [casesQ.data, statusQ.data]);
+}
+
+function CountChip({ count, label }: { count: number; label: string }) {
+  return (
+    <span
+      aria-label={label}
+      className="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-white/[0.14] px-[5px] text-[11px] font-semibold tabular-nums text-white"
+    >
+      {count}
+    </span>
+  );
 }
 
 // Lifecycle-grouped switcher entries. Group headings only — never a per-org
@@ -158,14 +151,13 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const fullName = useAuthStore((s) => s.fullName);
   const active = useActiveMembership();
   const openCases = useOpenCaseCount();
-  // E4.2 TE-18 — the admin-only "Payer Setup" entry (the consolidation's one
-  // authorized shell edit, superseding TE-1's added link; non-admins never
-  // see a Payers entry).
-  const isAdmin = useIsAdmin();
+  // E6.5 F6.5.4 — the chip is DRIFT-ONLY now: mappings the last real fill
+  // couldn't find on the live page (the one repair signal), derived from two
+  // org caches. The four-kind Fix-it deck count retired with the deck.
+  const drift = useFormDrift();
+  const needsAttention = drift.isLoading || drift.isError ? null : drift.totalCount;
   const [orgQuery, setOrgQuery] = useState("");
 
-  // "/" is Home = the E0.4 landing resolver; highlight it only on the root,
-  // never as a prefix of every route.
   const isActive = (to: string) =>
     to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(to + "/");
 
@@ -192,22 +184,6 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     );
   }
 
-  function renderReserved(item: ReservedLink) {
-    const ItemIcon = item.icon;
-    return (
-      <Link
-        key={item.title}
-        to="/soon"
-        search={{ title: item.title }}
-        className={navItemClass(false)}
-        onClick={onNavigate}
-      >
-        <ItemIcon className="w-4 h-4 flex-none" />
-        {item.label}
-      </Link>
-    );
-  }
-
   const showSearch = memberships.length > SEARCH_ABOVE;
   const recentsOnly = memberships.length >= RECENTS_AT && orgQuery.trim() === "";
   const visibleGroups = recentsOnly
@@ -219,53 +195,39 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
   return (
     <aside className="w-full md:w-[232px] flex-shrink-0 bg-mp-sidebar flex flex-col h-full">
-      {/* Logo */}
+      {/* Logo — untouched branding (F6.1.1 AC) */}
       <div className="px-5 pt-4 pb-2.5 flex items-center gap-2">
         <img src={logoWhite} alt="Minted Panel" className="w-6 h-6 object-contain" />
         <span className="text-[14px] font-semibold text-white">Minted Panel</span>
       </div>
 
-      {/* Workspace — cross-org work */}
+      {/* Workspace — the three cross-org journey entries (F6.1.1) */}
       <div className="px-3 pt-1.5">
         <div className={sectionLabelClass}>Workspace</div>
         <nav className="space-y-0.5" aria-label="Workspace">
-          {renderNavItem({ to: "/", label: "Home", icon: Home })}
-          {/* E2.3 TE-8 (the epic's one authorized shell edit): the
-              next-best-action queue's Workspace entry — label "My Cases"
-              per the PM decision ([r4-review] Q9); the route keeps the
-              reserved /work path. */}
-          {renderNavItem({ to: "/work", label: "My Cases", icon: ListChecks })}
           {renderNavItem(
             { to: "/cases", label: "Cases", icon: FolderKanban },
             openCases !== null ? (
-              <span
-                aria-label={`${openCases} open cases`}
-                className="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-white/[0.14] px-[5px] text-[11px] font-semibold tabular-nums text-white"
-              >
-                {openCases}
-              </span>
+              <CountChip count={openCases} label={`${openCases} open cases`} />
             ) : undefined,
           )}
+          {/* Payer Setup renders for ALL roles for now (two trusted users;
+              revisit at the third hire) — F6.1.1. */}
+          {renderNavItem(
+            { to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard },
+            needsAttention !== null && needsAttention > 0 ? (
+              <CountChip count={needsAttention} label={`${needsAttention} broken form mappings`} />
+            ) : undefined,
+          )}
+          {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}
         </nav>
       </div>
-
-      {/* Payer Setup — the ONE Payers destination (E4.2 TE-18), admin-only.
-          Standalone per F0.9.3 (section labels only over 2+ item groups). */}
-      {isAdmin ? (
-        <nav className="px-3 pt-3.5 space-y-0.5" aria-label="Payers">
-          {renderNavItem({ to: "/admin/payer-admin", label: "Payer Setup", icon: CreditCard })}
-        </nav>
-      ) : null}
-
-      {/* Reporting Center — standalone (labels only over 2+ item groups) */}
-      <nav className="px-3 pt-3.5 space-y-0.5" aria-label="Reporting">
-        {renderNavItem({ to: "/reporting", label: "Reporting Center", icon: BarChart3 })}
-      </nav>
 
       {/* Generous break + divider before the org zone */}
       <div className="mx-3 mt-10 border-t border-white/10" />
 
-      {/* Org zone — the switcher tile IS the header (no "Org space" label). */}
+      {/* Org zone — the switcher tile IS the header; children are the three
+          org-scoped journey entries (F6.1.1). */}
       <div className="flex-1 overflow-y-auto px-3 pt-6 pb-1">
         {active ? (
           <>
@@ -360,21 +322,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               </DropdownMenuContent>
             </DropdownMenu>
             <nav className="space-y-0.5" aria-label={`${active.orgName} navigation`}>
-              {renderNavItem({ to: "/get-started", label: "Account Detail", icon: Contact })}
-              {orgReserved.map(renderReserved)}
-              {/* Providers → the E1.3 Provider Roster wizard section. E1.3 TE-11
-                  (§5 amendment) authorizes this shell edit and supersedes the
-                  Providers half of E0.9 F0.9.3's reserved /soon mapping. */}
-              <Link
-                to="/onboarding/wizard"
-                search={{ section: "providers" }}
-                aria-current={isActive("/onboarding/wizard") ? "page" : undefined}
-                className={navItemClass(isActive("/onboarding/wizard"))}
-                onClick={onNavigate}
-              >
-                <Users className="w-4 h-4 flex-none" />
-                <span className="flex-1">Providers</span>
-              </Link>
+              {/* Org Detail keeps the existing contact-card icon (epic
+                  component constraint); Groups uses the stock user-cog. */}
+              {renderNavItem({ to: "/org-detail", label: "Org Detail", icon: Contact })}
+              {renderNavItem({ to: "/groups", label: "Groups", icon: UserCog })}
+              {renderNavItem({ to: "/providers", label: "Providers", icon: Users })}
             </nav>
           </>
         ) : (
@@ -385,7 +337,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         )}
       </div>
 
-      {/* User footer */}
+      {/* User footer — unchanged (F6.1.1); Settings lands on Org Detail, the
+          F6.1.4 home of member management (the /admin/settings page retired). */}
       <div className="border-t border-white/10 p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -419,7 +372,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             <DropdownMenuItem
               onSelect={() => {
                 onNavigate?.();
-                navigate({ to: "/admin/settings" });
+                navigate({ to: "/org-detail" });
               }}
               className="gap-2.5"
             >

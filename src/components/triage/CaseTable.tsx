@@ -1,25 +1,22 @@
 // Triage CaseTable (M1/M2 fix): the one table for case rows inside an
-// expanded work-view group. Real table layout on md+ — PAYER/PROVIDER,
-// CREDENTIALING, GROUP CONTRACT, LAST TOUCH, DAYS, and a fixed unlabeled
-// action column. Max one StatusPill per cell; sub-status hints render as the
-// pill's muted suffix, never a second pill. Below md the header row hides and
-// each case stacks as a card.
+// expanded work-view group. Real table layout on md+ — PAYER/PROVIDER, the
+// E6.0 unified STATUS (the dual credentialing/pipeline/contract columns are
+// gone — one machine, one column), LAST TOUCH, DAYS, and a fixed unlabeled
+// action column. Max one StatusPill per cell; sub-status hints render as a
+// muted suffix, never a second pill. Below md the header row hides and each
+// case stacks as a card.
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { StatusPill } from "./StatusPill";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { RowCta } from "./RowCta";
-import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
-import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type { CaseStatus } from "@/lib/caseStatus";
 
 export interface CaseTableRow {
   id: string;
   /** First-column content: payer (Providers view) or provider (Cases view). */
   lead: ReactNode;
-  status: { label: string; color: string; suffix?: string };
-  /** Derived group-contract status; null renders a muted dash. */
-  contract: { label: string; color: string } | null;
-  /** E4.0 — the payer-pipeline state, rendered as its own column (distinct from
-   * the internal credentialing status) when the parent passes showPipeline. */
-  pipeline?: PayerPipelineState | null;
+  /** E6.0 — THE case status; the muted suffix carries derived hints
+   * ("45d silent", "eff Jul 1"). */
+  status: { status: CaseStatus; suffix?: string };
   /** E4.0 F4.0.2 — the payer Reference/Tracking ID, shown when showTrackingId. */
   trackingId?: string | null;
   lastTouch: string;
@@ -36,8 +33,6 @@ interface CaseTableProps {
   /** Header for the first column: "Payer" or "Provider". */
   leadLabel: string;
   rows: CaseTableRow[];
-  /** E4.0 — opt-in extra columns (Cases view only; Providers view omits them). */
-  showPipeline?: boolean;
   showTrackingId?: boolean;
 }
 
@@ -67,15 +62,20 @@ function daysCell(row: CaseTableRow) {
   );
 }
 
-function contractCell(row: CaseTableRow) {
-  return row.contract ? (
-    <StatusPill label={row.contract.label} color={row.contract.color} />
-  ) : (
-    <span className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-faint)]">–</span>
+function statusCell(row: CaseTableRow) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <CaseStatusPill status={row.status.status} />
+      {row.status.suffix ? (
+        <span className="text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
+          {row.status.suffix}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
-export function CaseTable({ leadLabel, rows, showPipeline, showTrackingId }: CaseTableProps) {
+export function CaseTable({ leadLabel, rows, showTrackingId }: CaseTableProps) {
   return (
     <div className="border-t border-mp-border">
       {/* Desktop table */}
@@ -83,9 +83,7 @@ export function CaseTable({ leadLabel, rows, showPipeline, showTrackingId }: Cas
         <thead>
           <tr className="border-b border-mp-border">
             <th className={`${HEAD_CELL} w-full pl-4 pr-3`}>{leadLabel}</th>
-            {showPipeline ? <th className={`${HEAD_CELL} px-3`}>Payer Pipeline</th> : null}
-            <th className={`${HEAD_CELL} px-3`}>Credentialing</th>
-            <th className={`${HEAD_CELL} px-3`}>Group Contract</th>
+            <th className={`${HEAD_CELL} px-3`}>Status</th>
             {showTrackingId ? <th className={`${HEAD_CELL} px-3`}>Tracking ID</th> : null}
             <th className={`${HEAD_CELL} px-3`}>Last Touch</th>
             <th className={`${HEAD_CELL} px-3`}>Days</th>
@@ -105,19 +103,7 @@ export function CaseTable({ leadLabel, rows, showPipeline, showTrackingId }: Cas
               className={`cursor-pointer ${row.alert ? "bg-mp-danger/5" : "hover:bg-mp-muted/40"}`}
             >
               <td className="w-full max-w-0 truncate py-3 pl-4 pr-3">{row.lead}</td>
-              {showPipeline ? (
-                <td className="whitespace-nowrap px-3 py-3">
-                  {row.pipeline ? <PayerPipelineBadge state={row.pipeline} /> : null}
-                </td>
-              ) : null}
-              <td className="whitespace-nowrap px-3 py-3">
-                <StatusPill
-                  label={row.status.label}
-                  color={row.status.color}
-                  suffix={row.status.suffix}
-                />
-              </td>
-              <td className="whitespace-nowrap px-3 py-3">{contractCell(row)}</td>
+              <td className="whitespace-nowrap px-3 py-3">{statusCell(row)}</td>
               {showTrackingId ? (
                 <td className="whitespace-nowrap px-3 py-3 text-[length:var(--mp-text-sm)] tabular-nums text-[color:var(--mp-ink-secondary)]">
                   {row.trackingId ?? "—"}
@@ -152,15 +138,9 @@ export function CaseTable({ leadLabel, rows, showPipeline, showTrackingId }: Cas
           >
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate">{row.lead}</span>
-              <StatusPill
-                label={row.status.label}
-                color={row.status.color}
-                suffix={row.status.suffix}
-              />
+              {statusCell(row)}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              {showPipeline && row.pipeline ? <PayerPipelineBadge state={row.pipeline} /> : null}
-              {contractCell(row)}
               {showTrackingId && row.trackingId ? (
                 <span className="text-[length:var(--mp-text-xs)] tabular-nums text-[color:var(--mp-ink-faint)]">
                   #{row.trackingId}

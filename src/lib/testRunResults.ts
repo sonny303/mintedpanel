@@ -1,11 +1,11 @@
 // E4.2 F4.2.7 / TE-17 — the pure per-field result model for the form test
 // runner's dry run, plus a lenient parser for the stored fill-session jsonb.
-// A dry run compares a portal's field maps against the designated test
-// provider's resolved token values and reports, per field: filled /
-// skipped-unmapped / empty-token. Nothing submits; the results ride the
-// existing fill-event payload (fields_filled + structured fields_skipped).
+// Since E6.5 the dry run fills from the versioned SYNTHETIC mock profile
+// (mockFillProfile.ts) — the designated-test-provider token seam retired with
+// it. Nothing submits; the results ride the existing fill-event payload
+// (fields_filled + structured fields_skipped).
 
-import type { FillSkippedField, Provider } from "@/types";
+import type { FillSkippedField } from "@/types";
 
 export type TestFieldReason = "filled" | "unmapped" | "empty_token";
 
@@ -82,25 +82,6 @@ export interface TestFillSummary {
   filled: number;
   unmapped: FillSkippedField[];
   emptyToken: FillSkippedField[];
-}
-
-/** Resolve the designated test provider's directly-held `provider.*` token
- * values for a dry run. Mirrors sopResolver's provider token map (which is
- * protected and not exported), so a dry run reports empty-token honestly for
- * fields the provider hasn't filled in. A field mapped to a token outside this
- * set resolves empty → empty_token, which is the correct "can't fill" signal. */
-export function resolveTestProviderTokens(provider: Provider): Record<string, string> {
-  return {
-    "provider.npi": provider.npi ?? "",
-    "provider.caqhId": provider.caqhId ?? "",
-    "provider.caqhLastAttestedDate": provider.caqhLastAttestedDate ?? "",
-    "provider.taxonomyCode": provider.taxonomyCode ?? "",
-    "provider.firstName": provider.firstName ?? "",
-    "provider.lastName": provider.lastName ?? "",
-    "provider.email": provider.email ?? "",
-    "provider.licenseNumber": provider.licenseNumber ?? "",
-    "license.licenseNumber": provider.licenseNumber ?? "",
-  };
 }
 
 /** Reduce a fill session's counts + skipped list into the runner's display

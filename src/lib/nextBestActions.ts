@@ -38,12 +38,16 @@
 // Recredentialing deadlines are a named gap (TE-1): no schema models them in
 // R4; they join the ranking when R9 lands ([r4-review] Q7).
 //
-// DETERMINISTIC ORDERING (the F2.3.1 documented tie order): entries with a
-// deadline sort by date ascending; entries with no signal rank after ALL
-// dated entries (the queue is total — nothing silently drops out). Ties break
-// by case created_at (oldest first), then case id. When one case has two
-// signals on the same date, the reported driving source is the first in
-// DEADLINE_SOURCE_ORDER above.
+// DETERMINISTIC ORDERING (the F2.3.1 documented tie order, default tiers
+// re-stated by E6.1 F6.1.3): with no saved org config the queue ranks
+// arrived/overdue follow-ups → task due dates → provider start dates → the
+// rest (future follow-ups/cadence and location launches — go-live stays a
+// quiet lower-priority signal), each tier by date ascending; entries with no
+// signal rank after ALL dated entries (the queue is total — nothing silently
+// drops out). A saved org config (E4.2 F4.2.5) still overrides with its
+// enabled-group order. Ties break by case created_at (oldest first), then
+// case id. When one case has two signals on the same date, the reported
+// driving source is the first in DEADLINE_SOURCE_ORDER above.
 //
 // ACTION PRECEDENCE (TE-2/TE-5, documented): a red-readiness case surfaces
 // its open gap as the action (advisory only — nothing is gated, E1.8's
@@ -55,15 +59,22 @@
 
 import { fmtDate } from "@/lib/format";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import type { CaseStatus } from "@/lib/caseStatus";
 import { resolveActiveFollowUp, type FollowUpTouch } from "@/lib/followUps";
 
 export type DeadlineSource =
   "provider_start" | "launch_date" | "task_due" | "follow_up" | "cadence";
 
-// E4.1 F4.1.3 / E4.2 F4.2.5 — the org-level ranking config. The queue ranks by
-// "source groups"; the follow_up group covers both the explicit next-follow-up
-// and the SOP cadence deadline (TE-5). The admin surface that persists this
-// lives in E4.2 F4.2.5; this reducer only CONSUMES a validated value.
+// The queue ranks by "source groups"; the follow_up group covers both the
+// explicit next-follow-up and the SOP cadence deadline (E4.1 TE-5).
+//
+// FIXED RANKING (E6.6 F6.6.6): queue ranking runs the SHIPPED default order —
+// arrived/overdue follow-ups → task due dates → provider start dates → the
+// rest — and there is no per-org configuration. The old E4.2 F4.2.5 org
+// config (next_best_action_configs, its editor, and the rankingConfig input
+// this reducer used to take) is retired; the table stays dormant per the
+// additive rule and nothing reads it. Changing the order is a platform
+// change: edit `tierOf` in buildNextBestActions below.
 export type QueueRankingGroup = "follow_up" | "task_due" | "provider_start" | "launch_date";
 
 export const QUEUE_RANKING_GROUPS: readonly QueueRankingGroup[] = [
@@ -80,34 +91,6 @@ const SOURCE_GROUP: Record<DeadlineSource, QueueRankingGroup> = {
   provider_start: "provider_start",
   launch_date: "launch_date",
 };
-
-export interface QueueRankingConfig {
-  // Enabled groups in priority order. A group omitted here is DISABLED — its
-  // signals contribute nothing to the queue. A null resolved config means the
-  // shipped default (arrived/overdue follow-ups first, then all by date).
-  order: QueueRankingGroup[];
-}
-
-// Validate a raw org config (E4.2 F4.2.5) into a QueueRankingConfig, or null for
-// the shipped default. Invalid or incomplete input falls back ATOMICALLY to the
-// default (null) — never a partial order, so a malformed config can't produce a
-// half-ranked queue.
-export function resolveQueueRankingConfig(raw: unknown): QueueRankingConfig | null {
-  if (!raw || typeof raw !== "object") return null;
-  const order = (raw as { order?: unknown }).order;
-  if (!Array.isArray(order) || order.length === 0) return null;
-  const seen = new Set<string>();
-  const valid: QueueRankingGroup[] = [];
-  for (const g of order) {
-    if (typeof g !== "string" || !QUEUE_RANKING_GROUPS.includes(g as QueueRankingGroup)) {
-      return null;
-    }
-    if (seen.has(g)) return null;
-    seen.add(g);
-    valid.push(g as QueueRankingGroup);
-  }
-  return { order: valid };
-}
 
 /** Same-date tie order for the reported driving source (documented above). */
 export const DEADLINE_SOURCE_ORDER: readonly DeadlineSource[] = [
@@ -140,6 +123,9 @@ export interface QueueCaseInput {
   /** E4.0 TE-7 — the payer-pipeline state, rendered as a badge on the queue
    * distinct from internal task progress. Optional (older callers omit it). */
   payerPipelineState?: PayerPipelineState;
+  /** E6.0 — THE unified case status the queue row renders (the pipeline badge
+   * is retired as a user-facing machine). Optional for older callers. */
+  caseStatus?: CaseStatus;
   createdAt: string;
 }
 
@@ -224,10 +210,6 @@ export interface NextBestActionsInput {
   groups: readonly QueueLookupInput[];
   payers: readonly QueueLookupInput[];
   readiness: readonly QueueReadinessInput[];
-  /** E4.1 F4.1.3 — the org's resolved ranking config (E4.2 F4.2.5). null/absent
-   * = shipped default (overdue follow-ups first). Never read config inside the
-   * reducer beyond this validated input; nothing here is persisted. */
-  rankingConfig?: QueueRankingConfig | null;
 }
 
 // ---------- output ----------
@@ -249,8 +231,11 @@ export interface QueueEntry {
   payerName: string;
   state: string;
   generationRunId: string | null;
-  /** E4.0 TE-7 — the payer-pipeline state for the queue badge (may be absent). */
+  /** E4.0 TE-7 — the payer-pipeline state (kept for the /api queue-top wire
+   * shape; may be absent). */
   payerPipelineState?: PayerPipelineState;
+  /** E6.0 — the unified status rendered on the queue row (may be absent). */
+  caseStatus?: CaseStatus;
   actionKind: QueueActionKind;
   action: string;
   /** null = no deadline signal at all; the entry ranks after dated work. */
@@ -340,10 +325,6 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     const active = resolveActiveFollowUp(tps);
     if (active) activeFollowUpByCase.set(caseId, active.date);
   }
-
-  // The resolved ranking config (E4.2 F4.2.5); null = shipped default.
-  const rankingConfig = input.rankingConfig ?? null;
-  const enabledGroups = rankingConfig ? new Set(rankingConfig.order) : null;
 
   // Provider-start signal (TE-1): start_date when set; the earliest future
   // assignment start date stands in ONLY where the provider-level date is
@@ -471,18 +452,11 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       });
     }
 
-    // E4.1 F4.1.3 — a saved org config disables the groups it omits: their
-    // signals contribute nothing (the case ranks on its remaining signals, or
-    // after dated work if none). The shipped default (no config) keeps them all.
-    const activeSignals = enabledGroups
-      ? signals.filter((s) => enabledGroups.has(SOURCE_GROUP[s.source]))
-      : signals;
-
     // Driving signal: earliest date; same-date ties by DEADLINE_SOURCE_ORDER.
-    activeSignals.sort(
+    signals.sort(
       (a, b) => a.date.localeCompare(b.date) || sourceRank(a.source) - sourceRank(b.source),
     );
-    const driving = activeSignals[0] ?? null;
+    const driving = signals[0] ?? null;
 
     // Action precedence (documented above): readiness gap → touch due → next
     // actionable task → honest review fallback.
@@ -519,6 +493,7 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
       state: c.state,
       generationRunId: c.generationRunId ?? null,
       payerPipelineState: c.payerPipelineState,
+      caseStatus: c.caseStatus,
       actionKind,
       action,
       deadline: driving
@@ -529,20 +504,19 @@ export function buildNextBestActions(input: NextBestActionsInput): QueueEntry[] 
     });
   }
 
-  // E4.1 F4.1.3 total order. Shipped default (no config): arrived/overdue
-  // follow-ups first, then all remaining dated signals by earliest date, then
-  // undated. A saved config ranks by enabled-group priority (config.order),
-  // then date. Every tier breaks ties by case created_at (oldest first), then
-  // case id — the existing stable order.
+  // E4.1 F4.1.3 total order — the FIXED shipped ranking (E6.1 F6.1.3 tiers,
+  // locked as the only order by E6.6 F6.6.6): arrived/overdue follow-ups →
+  // task due dates → provider start dates → the rest (future follow-ups/
+  // cadence + location launches), each by earliest date, then undated. Every
+  // tier breaks ties by case created_at (oldest first), then case id — the
+  // existing stable order.
   const tierOf = (entry: QueueEntry): number => {
     if (!entry.deadline) return QUEUE_RANKING_GROUPS.length + 1; // undated → last
     const group = SOURCE_GROUP[entry.deadline.source];
-    if (rankingConfig) {
-      const idx = rankingConfig.order.indexOf(group);
-      return idx >= 0 ? idx : QUEUE_RANKING_GROUPS.length; // enabled-only by filter
-    }
-    // Default: arrived/overdue follow-ups jump the queue; everything else next.
-    return group === "follow_up" && entry.deadline.date <= input.today ? 0 : 1;
+    if (group === "follow_up" && entry.deadline.date <= input.today) return 0;
+    if (group === "task_due") return 1;
+    if (group === "provider_start") return 2;
+    return 3; // launch dates + not-yet-due follow-ups/cadence
   };
   entries.sort((a, b) => {
     const byTier = tierOf(a) - tierOf(b);

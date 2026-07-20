@@ -15,6 +15,9 @@ interface NewTemplateSearch {
   state?: string;
   groupId?: string;
   draftId?: string;
+  /** E6.5 F6.5.6 — author a GLOBAL SOP (org_id NULL head via author_global_sop).
+   * Entered from the Payer Setup funnel's "Author global SOP" action. */
+  tier?: "global";
 }
 
 export const Route = createFileRoute("/admin/templates/new")({
@@ -23,12 +26,13 @@ export const Route = createFileRoute("/admin/templates/new")({
     state: typeof search.state === "string" ? search.state : undefined,
     groupId: typeof search.groupId === "string" ? search.groupId : undefined,
     draftId: typeof search.draftId === "string" ? search.draftId : undefined,
+    tier: search.tier === "global" ? "global" : undefined,
   }),
   component: NewTemplate,
 });
 
 function NewTemplate() {
-  const { payerId, state, groupId, draftId } = Route.useSearch();
+  const { payerId, state, groupId, draftId, tier } = Route.useSearch();
   const draftQ = useSopTemplateDraft(draftId);
 
   if (draftId && draftQ.isLoading) {
@@ -40,6 +44,7 @@ function NewTemplate() {
       initial={null}
       prefill={payerId || state || groupId ? { payerId, state, groupId } : undefined}
       draft={draftId ? (draftQ.data ?? null) : null}
+      globalTier={tier === "global"}
     />
   );
 }

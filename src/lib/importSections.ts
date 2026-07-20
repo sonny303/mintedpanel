@@ -29,6 +29,7 @@
 import type { CsvRecord } from "@/lib/csvImport";
 import { coerceBool, coerceDate } from "@/lib/csvImport";
 import { toCsv } from "@/lib/csv";
+import { validatePayerAttachRow, type PayerAttachScanContext } from "@/lib/groupPayerAttach";
 import type { ImportEntityKind } from "@/types";
 import {
   DEFAULT_TIN_COLUMNS,
@@ -106,6 +107,22 @@ interface SectionScanSpec {
   requiredMultiValue: readonly string[];
 }
 
+// E6.2 F6.2.4 — org-context inputs some descriptors need at scan time (the
+// payer-attach eligibility check resolves groups + catalog payers per row).
+// The caller driving the scan supplies it; kinds that don't need it ignore it.
+export interface SectionScanContext {
+  payerAttach?: PayerAttachScanContext;
+  /** E6.4 F6.4.6 — reference lists for the provider template's relationship
+   * columns: facility/payer NAMES resolve to ids at scan time (unknown names
+   * are row errors naming the column — never type-and-hope matching). */
+  provider?: ProviderRelationshipScanContext;
+}
+
+export interface ProviderRelationshipScanContext {
+  facilities: { id: string; name: string }[];
+  payers: { id: string; name: string }[];
+}
+
 export interface SectionDescriptor {
   entityKind: SectionEntityKind;
   /** business label used in UI (Sidebar IA vocabulary) */
@@ -117,6 +134,14 @@ export interface SectionDescriptor {
   helperText: string;
   spec: SectionScanSpec;
   buildMapped(ctx: MapCtx): Record<string, string | null>;
+  /** E6.2 — optional org-context validation AFTER the format scan: return an
+   * error to block the row, or a patch of resolved columns merged into
+   * `mapped` (e.g. resolved group_id/payer_id ready for commit). */
+  contextScan?(
+    mapped: Record<string, string | null>,
+    context: SectionScanContext | undefined,
+  ):
+    { error: { column: string | null; reason: string } } | { patch: Record<string, string | null> };
 }
 
 /* ------------------------------ Header lists ------------------------------ */
@@ -202,6 +227,12 @@ export const PROVIDER_TEMPLATE_HEADERS = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
+  // E6.4 F6.4.6 — one row per RELATIONSHIP: repeat identity columns and vary
+  // these (multi-facility / multi-enrollment; groups vary via group_name/tin).
+  "facility_name",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
 ] as const;
 
 /* ------------------------------- Scan kernel ------------------------------ */
@@ -411,7 +442,7 @@ export const FACILITY_DESCRIPTOR: SectionDescriptor = {
   headers: FACILITY_TEMPLATE_HEADERS,
   templateFilename: "facility-import-template.csv",
   helperText:
-    "One row per location. The parent group is matched by group_tin then group_name. Languages use ';'. Hours are set in the facility form after import.",
+    "One row per location. The parent group is matched by group_tin then group_name — each facility belongs to exactly ONE group, so a street address shared by two groups is entered once per group (payers see per-TIN service locations). Languages use ';'. Hours are set in the facility form after import.",
   spec: {
     required: ["facility_name", "street", "city", "state", "zip"],
     requireGroupKey: true,
@@ -463,8 +494,13 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
     requireGroupKey: true,
     tinColumns: ["group_tin"],
     npiColumns: ["npi"],
-    stateColumns: ["license_state"],
-    dateColumns: ["license_issue_date", "license_expiration_date", "date_of_birth"],
+    stateColumns: ["license_state", "enrollment_state"],
+    dateColumns: [
+      "license_issue_date",
+      "license_expiration_date",
+      "date_of_birth",
+      "enrollment_effective_date",
+    ],
     ssn4Columns: ["ssn_last4"],
     middleInitialColumns: ["provider_middle_initial"],
     boolColumns: [],
@@ -490,6 +526,123 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
       license_expiration_date: ctx.date("license_expiration_date"),
       ssn_last4: ctx.nullable("ssn_last4"),
       date_of_birth: ctx.date("date_of_birth"),
+      facility_name: ctx.nullable("facility_name"),
+      enrollment_payer: ctx.nullable("enrollment_payer"),
+      enrollment_state: ctx.upper("enrollment_state"),
+      enrollment_effective_date: ctx.date("enrollment_effective_date"),
+    };
+  },
+  // E6.4 F6.4.6 — resolve relationship NAMES to ids at scan time (the E6.2
+  // payer-attach seam): unknown facility/payer names are row errors naming
+  // the column, and the resolved ids are stamped so commit never re-resolves.
+  // Rows that use no relationship column pass without context.
+  contextScan(mapped, context) {
+    const patch: Record<string, string | null> = {};
+    const wantsFacility = Boolean(mapped.facility_name);
+    const wantsEnrollment = Boolean(mapped.enrollment_payer || mapped.enrollment_state);
+    if (!wantsFacility && !wantsEnrollment) return { patch };
+    const ctx = context?.provider;
+    if (!ctx) {
+      return { error: { column: null, reason: "Reference data unavailable — retry the upload" } };
+    }
+    if (wantsFacility) {
+      const name = (mapped.facility_name ?? "").trim().toLowerCase();
+      const hit = ctx.facilities.find((f) => f.name.trim().toLowerCase() === name);
+      if (!hit) {
+        return {
+          error: {
+            column: "facility_name",
+            reason: "Unknown facility — copy the exact name from the reference sheet",
+          },
+        };
+      }
+      patch.facility_id = hit.id;
+    }
+    if (wantsEnrollment) {
+      if (!mapped.enrollment_payer || !mapped.enrollment_state) {
+        return {
+          error: {
+            column: mapped.enrollment_payer ? "enrollment_state" : "enrollment_payer",
+            reason: "An enrollment needs both enrollment_payer and enrollment_state",
+          },
+        };
+      }
+      const name = mapped.enrollment_payer.trim().toLowerCase();
+      const hit = ctx.payers.find((py) => py.name.trim().toLowerCase() === name);
+      if (!hit) {
+        return {
+          error: {
+            column: "enrollment_payer",
+            reason: "Unknown payer — copy the exact name from the reference sheet",
+          },
+        };
+      }
+      patch.enrollment_payer_id = hit.id;
+    }
+    return { patch };
+  },
+};
+
+// E6.2 F6.2.4 — the group×payer attach CSV: one row per group × payer with
+// ';'-delimited states, riding the SAME staging machine. The payer column
+// accepts the catalog slug, name, or an alias (case-insensitive); eligibility
+// (states ⊆ payer states ∩ group operating states) is enforced at scan time by
+// the context scan, which delegates to the SAME validatePayerAttachRow rule
+// the attach dialog derives from — the two paths cannot drift.
+export const PAYER_ATTACH_TEMPLATE_HEADERS = [
+  "group_name",
+  "group_tin",
+  "payer",
+  "states",
+] as const;
+
+export const PAYER_ATTACH_DESCRIPTOR: SectionDescriptor = {
+  entityKind: "payer_attach",
+  label: "Payer attach",
+  headers: PAYER_ATTACH_TEMPLATE_HEADERS,
+  templateFilename: "payer-attach-import-template.csv",
+  helperText:
+    "One row per group × payer. States use ';' (e.g. NC;SC) and must sit inside both the payer's coverage and the group's operating states. The payer column takes the catalog name, slug, or an alias. The group is matched by group_tin then group_name.",
+  spec: {
+    required: ["payer"],
+    requireGroupKey: true,
+    tinColumns: ["group_tin"],
+    npiColumns: [],
+    stateColumns: [],
+    dateColumns: [],
+    ssn4Columns: [],
+    middleInitialColumns: [],
+    boolColumns: [],
+    multiValueColumns: ["states"],
+    multiValueStateColumns: ["states"],
+    requiredMultiValue: ["states"],
+  },
+  buildMapped(ctx) {
+    return {
+      group_name: ctx.nullable("group_name"),
+      group_tin: ctx.cell("group_tin") ? ctx.cell("group_tin").replace("-", "") : null,
+      payer: ctx.nullable("payer"),
+      states: encodeDelimited(ctx.multi("states")),
+    };
+  },
+  contextScan(mapped, context) {
+    const ctx = context?.payerAttach;
+    if (!ctx) {
+      return { error: { column: null, reason: "Payer catalog unavailable — retry the upload" } };
+    }
+    const result = validatePayerAttachRow(
+      {
+        groupName: mapped.group_name,
+        groupTin: mapped.group_tin,
+        payer: mapped.payer ?? "",
+        states: decodeDelimited(mapped.states ?? ""),
+      },
+      ctx,
+    );
+    if ("error" in result) return result;
+    // Stamp the resolved ids so the commit path never re-resolves.
+    return {
+      patch: { group_id: result.ok.groupId, payer_id: result.ok.payerId },
     };
   },
 };
@@ -498,7 +651,29 @@ export const SECTION_DESCRIPTORS: Record<SectionEntityKind, SectionDescriptor> =
   provider_group: GROUP_DESCRIPTOR,
   facility: FACILITY_DESCRIPTOR,
   provider: PROVIDER_DESCRIPTOR,
+  payer_attach: PAYER_ATTACH_DESCRIPTOR,
 };
+
+/** E6.4 F6.4.6 — the prefilled real-names reference sheet offered beside the
+ * provider template: the org's ACTUAL group names/TINs, facility names, and
+ * payer names, so relationship columns are copied, never guessed. Pure. */
+export function providerImportReference(
+  groups: { name: string; tin?: string | null }[],
+  facilities: { name: string }[],
+  payers: { name: string }[],
+): { filename: string; text: string } {
+  const rows: string[][] = [["kind", "name", "tin"]];
+  for (const g of [...groups].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["group", g.name, g.tin ?? ""]);
+  }
+  for (const f of [...facilities].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["facility", f.name, ""]);
+  }
+  for (const py of [...payers].sort((a, b) => a.name.localeCompare(b.name))) {
+    rows.push(["payer", py.name, ""]);
+  }
+  return { filename: "provider-import-reference.csv", text: toCsv(rows) };
+}
 
 export function sectionDescriptor(kind: SectionEntityKind): SectionDescriptor {
   return SECTION_DESCRIPTORS[kind];
@@ -516,8 +691,23 @@ export function scanSectionRecord(
   descriptor: SectionDescriptor,
   record: CsvRecord,
   headers: string[],
+  context?: SectionScanContext,
 ): ScannedRow {
-  return scanWith(descriptor, record, headers);
+  const scanned = scanWith(descriptor, record, headers);
+  if (scanned.rowState !== "staged" || !descriptor.contextScan || scanned.mapped === null) {
+    return scanned;
+  }
+  const result = descriptor.contextScan(scanned.mapped, context);
+  if ("error" in result) {
+    return {
+      ...scanned,
+      mapped: null,
+      rowState: "error",
+      errorColumn: result.error.column,
+      errorReason: result.error.reason,
+    };
+  }
+  return { ...scanned, mapped: { ...scanned.mapped, ...result.patch } };
 }
 
 /* --------------------- TE-7 combined-template detection -------------------- */
@@ -529,7 +719,11 @@ export function scanSectionRecord(
 // list.
 export function looksLikeCombinedTemplate(headers: string[]): boolean {
   const set = new Set(headers.filter((h) => h !== ""));
-  return set.has("provider_first_name") && set.has("facility_name");
+  // The retired E3.0 combined template bundled provider identity with
+  // facility CREATION columns (street/city). E6.4's provider template carries
+  // facility_name as a pure RELATIONSHIP column, so the signature keys on the
+  // address columns only the combined template ever had.
+  return set.has("provider_first_name") && set.has("facility_street");
 }
 
 export const COMBINED_TEMPLATE_RETIRED_MESSAGE =

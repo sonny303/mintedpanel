@@ -37,6 +37,8 @@ describe("deriveRunCounts", () => {
       skippedExisting: 2,
       excluded: 1,
       failed: 1,
+      skipped: 0,
+      enrolled: 0,
       recorded: 6,
       fromPlan: false,
     });
@@ -49,6 +51,8 @@ describe("deriveRunCounts", () => {
       skippedExisting: 2,
       excluded: 1,
       failed: 0,
+      skipped: 0,
+      enrolled: 0,
       recorded: 0,
       fromPlan: true,
     });

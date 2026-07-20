@@ -65,13 +65,28 @@ function LeadRow({ lead }: { lead: InboundLead }) {
   );
 }
 
-export function InboundLeadsPanel() {
+export function InboundLeadsPanel({ alwaysRender = false }: { alwaysRender?: boolean }) {
   const { data, isLoading } = useInboundLeads();
   const leads = (data ?? []).filter((l) => l.status === "new");
 
-  // Hide the panel entirely when there's nothing to triage — it's not part of the
-  // org's own setup, just a shared inbox that appears when leads arrive.
-  if (isLoading || leads.length === 0) return null;
+  // As an inline panel the inbox hides when there's nothing to triage; the
+  // E6.6 Intake report mounts it with alwaysRender for an honest empty state.
+  if (isLoading || leads.length === 0) {
+    if (!alwaysRender) return null;
+    return (
+      <Card>
+        <CardContent className="space-y-2 p-5">
+          <div className="flex items-center gap-2">
+            <Inbox className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-[15px] font-semibold text-foreground">New inbound inquiries</h2>
+          </div>
+          <p className="text-[13px] text-muted-foreground">
+            {isLoading ? "Loading…" : "No inbound leads awaiting triage."}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

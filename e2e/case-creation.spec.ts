@@ -1,15 +1,12 @@
 // E2.1 TE-9 — case-creation coverage over the mock harness (L1/L3 per
-// seed-universe; no new baseline fixtures):
-//   TS-50  4-part key: confirming the preview creates one case per checked
-//          row — the same provider/payer/state coexists under two groups,
-//          every case carries the generation-run id, the interim landing is
-//          the cases work view filtered to the batch, and a re-run proposes
-//          neither key again. A concurrent duplicate (23505 on the swapped
-//          constraint) degrades to a skipped-existing disposition.
-//   TS-51  Denial → reapply on the SAME case: the preview links the denied
-//          key to its case; reapply flips Denied → In Progress (recorded in
-//          status_history) and appends tasks restamped from the current SOP —
-//          no second case is ever created.
+// seed-universe; no new baseline fixtures). The TS-50 generation-confirm UI
+// flows are PARKED with the /generation surface E6.1 F6.1.6 retired — E6.3
+// (decoupled generation) re-homes the door and re-covers them; the 4-part-key
+// write-through machinery stays exercised by TS-51/TS-52 and the
+// unified-case-status suite:
+//   TS-51  Denial → reapply on the SAME case: reapply flips Denied → In
+//          Progress (recorded in the unified history) and appends tasks
+//          restamped from the current SOP — no second case is ever created.
 //   TS-52  Manual one-off case against a non-attached payer: same key and
 //          dedupe, generation_run_id stays NULL, and a repeat attempt at the
 //          key blocks with a link to the existing case.
@@ -205,6 +202,7 @@ function makeFixtures() {
     audit_log: [],
     party_role_assignments: [],
     touches: [],
+    case_status_history: [] as Record<string, unknown>[],
     tasks: [] as Record<string, unknown>[],
     status_history: [] as Record<string, unknown>[],
     mso_routing_rules: [],
@@ -319,6 +317,8 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
     tasks: fixtures.tasks.filter((t) => t.case_id === row.id),
     touches: [],
     status_history: fixtures.status_history.filter((h) => h.case_id === row.id),
+    payer_pipeline_history: [],
+    case_status_history: fixtures.case_status_history.filter((h) => h.case_id === row.id),
   });
 
   const handler = async (route: Route) => {
@@ -361,6 +361,9 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
         mso_id: input.mso_id ?? null,
         assigned_to: input.assigned_to ?? null,
         credentialing_status_id: input.credentialing_status_id ?? "st-notstarted",
+        case_status: "not_started",
+        payer_pipeline_state: "not_started",
+        contract_executed_date: null,
         submitted_date: null,
         approved_date: null,
         confirmed_effective_date: null,
@@ -404,6 +407,63 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
           updated_at: "2026-07-13T00:00:00Z",
         });
       }
+      return json(row);
+    }
+    if (url.pathname.endsWith("/rpc/set_case_status") && req.method() === "POST") {
+      // E6.0 write-through: mirrors the RPC — canonical flip + legacy-mirror
+      // lockstep + an appended case_status_history row.
+      const body = req.postDataJSON() as Record<string, unknown>;
+      writes.push({ table: "rpc/set_case_status", method: "POST", body });
+      const row = fixtures.credential_cases.find((c) => c.id === body.p_case_id);
+      if (!row) return json({ message: "case_status_case_not_found" }, 400);
+      const from = (row.case_status as string | undefined) ?? "not_started";
+      if (body.p_expected_status && body.p_expected_status !== from) {
+        return json({ message: `case_status_conflict:${from}` }, 400);
+      }
+      const to = body.p_to_status as string;
+      const mirrorLabel = (
+        {
+          not_started: "Not Started",
+          in_progress: "In Progress",
+          submitted: "Submitted",
+          in_review: "Submitted",
+          action_required: "Waiting on Provider",
+          approved: "Approved",
+          denied: "Denied",
+          not_pursuing: "Not Required",
+        } as Record<string, string>
+      )[to];
+      const mirror = STATUS_CONFIGS.find(
+        (s) => s.track === "credentialing" && s.label === mirrorLabel,
+      );
+      row.case_status = to;
+      if (mirror) row.credentialing_status_id = mirror.id;
+      row.payer_pipeline_state = (
+        {
+          not_started: "not_started",
+          in_progress: "drafting",
+          submitted: "submitted",
+          in_review: "in_review",
+          action_required: "action_required",
+          approved: "approved",
+          denied: "denied",
+          not_pursuing: "oon",
+        } as Record<string, string>
+      )[to];
+      fixtures.case_status_history.push({
+        id: `csh-${nextId++}`,
+        org_id: row.org_id,
+        case_id: row.id,
+        from_status: from,
+        to_status: to,
+        actor_kind: "user",
+        reason_code_id: body.p_reason_code_id ?? null,
+        evidence_touch_id: body.p_evidence_touch_id ?? null,
+        is_correction: body.p_is_correction ?? false,
+        note: body.p_note ?? null,
+        changed_by: USER_ID,
+        changed_at: "2026-07-19T00:00:00Z",
+      });
       return json(row);
     }
     if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
@@ -517,113 +577,8 @@ function seedAuth(
   );
 }
 
-test("TS-50: confirm creates one case per checked row across two groups, lands on the filtered work view, and a re-run proposes neither", async ({
-  context,
-  page,
-}) => {
-  const fixtures = makeFixtures();
-  const { handler, writes } = makeHandler(fixtures);
-  await context.route(/\/(rest|auth)\/v1\//, handler);
-  await seedAuth(context, ORG_SHELBY);
-
-  await page.goto("/generation");
-  await expect(
-    page.getByText("2 combinations: 2 proposed · 0 already exist · 0 excluded", { exact: false }),
-  ).toBeVisible({ timeout: 30000 });
-
-  await page.getByRole("button", { name: "Confirm & create 2 cases" }).click();
-
-  // Post-generation landing (F2.1.2, superseded by E2.3 F2.3.2): the My Cases
-  // queue filtered to the batch, with the created/skipped banner.
-  await expect(page).toHaveURL(/\/work\?run=run-1/, { timeout: 30000 });
-  await expect(page.getByText("2 created · 0 skipped (existing) · 0 excluded")).toBeVisible({
-    timeout: 30000,
-  });
-
-  // The immutable run row was written FIRST, with the confirm-time plan.
-  const runPost = writes.find((w) => w.table === "case_generation_runs" && w.method === "POST");
-  expect(runPost?.body).toMatchObject({
-    org_id: ORG_SHELBY,
-    created_by: USER_ID,
-    proposed_count: 2,
-    created_count: 2,
-    skipped_existing_count: 0,
-    excluded_count: 0,
-    failed_count: 0,
-  });
-
-  // One RPC call per checked row; both carry the run id and their OWN group —
-  // the same provider/payer/state coexists under two groups (the 4-part key).
-  const rpcCalls = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
-  expect(rpcCalls).toHaveLength(2);
-  expect(new Set(rpcCalls.map((w) => w.body?.group_id))).toEqual(new Set(["g-1", "g-2"]));
-  for (const call of rpcCalls) {
-    expect(call.body).toMatchObject({
-      org_id: ORG_SHELBY,
-      provider_id: "pr-jane",
-      payer_id: "pay-bcbsnc",
-      state: "NC",
-      generation_run_id: "run-1",
-    });
-  }
-  expect(fixtures.credential_cases).toHaveLength(2);
-
-  // The confirm is audited with the ACTUAL outcome counts.
-  const runAudit = writes.find(
-    (w) => w.table === "audit_log" && w.body?.entity_type === "case_generation_run",
-  );
-  expect(runAudit?.body).toMatchObject({ action_type: "CREATE", entity_id: "run-1" });
-
-  // Re-running generation proposes neither key again (idempotent re-confirm:
-  // existing keys skip, and with zero proposed the confirm is disabled).
-  await page.goto("/generation");
-  await expect(
-    page.getByText("2 combinations: 0 proposed · 2 already exist · 0 excluded", { exact: false }),
-  ).toBeVisible({ timeout: 30000 });
-  await expect(page.getByRole("button", { name: /Confirm & create/ })).toBeDisabled();
-  expect(writes.filter((w) => w.table === "rpc/create_case_with_tasks")).toHaveLength(2);
-});
-
-test("TS-50: a concurrent duplicate confirm degrades to a skip (23505 on the 4-part constraint), never a failure", async ({
-  context,
-  page,
-}) => {
-  const fixtures = makeFixtures();
-  const { handler, writes } = makeHandler(fixtures);
-  await context.route(/\/(rest|auth)\/v1\//, handler);
-  await seedAuth(context, ORG_SHELBY);
-
-  await page.goto("/generation");
-  await expect(page.getByText("2 combinations: 2 proposed", { exact: false })).toBeVisible({
-    timeout: 30000,
-  });
-
-  // Simulate another session confirming Jane × Group 1 AFTER this preview
-  // was computed: the row lands in the database behind this page's back.
-  fixtures.credential_cases.push({
-    id: "case-raced",
-    org_id: ORG_SHELBY,
-    provider_id: "pr-jane",
-    payer_id: "pay-bcbsnc",
-    state: "NC",
-    group_id: "g-1",
-    credentialing_status_id: "st-inprog",
-    created_at: "2026-07-13T00:00:00Z",
-  });
-
-  await page.getByRole("button", { name: "Confirm & create 2 cases" }).click();
-
-  // The raced row skipped, the other created; failed = 0 so the landing
-  // still happens and the counts report the truth.
-  await expect(page.getByText("1 case created · 1 skipped (existing) · 0 excluded")).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page).toHaveURL(/\/work\?run=run-1/, { timeout: 30000 });
-  const rpcCalls = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
-  expect(rpcCalls).toHaveLength(2);
-  // Exactly one NEW case (the raced key was rejected by the constraint).
-  expect(fixtures.credential_cases.filter((c) => c.generation_run_id === "run-1")).toHaveLength(1);
-});
+// (TS-50's two generation-confirm tests were parked with the retired
+// /generation surface — see the header note.)
 
 test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress in status_history, tasks restamped from the current SOP, no second case", async ({
   context,
@@ -644,6 +599,7 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
     mso_id: null,
     assigned_to: null,
     credentialing_status_id: "st-denied",
+    case_status: "denied",
     submitted_date: "2026-05-01",
     approved_date: null,
     confirmed_effective_date: null,
@@ -686,16 +642,9 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
 
-  // The preview never proposes the denied key again — the grayed row carries
-  // the status-aware label and links to the case (F2.1.3).
-  await page.goto("/generation");
-  await expect(page.getByText("2 combinations: 1 proposed", { exact: false })).toBeVisible({
-    timeout: 30000,
-  });
-  const deniedRow = page.locator("table tbody tr").filter({ hasText: "Group 1" });
-  await expect(deniedRow).toContainText("already exists — Denied");
-  await expect(deniedRow.getByRole("checkbox")).toHaveCount(0);
-  await deniedRow.getByRole("link", { name: "reapply from the case" }).click();
+  // The preview's grayed reapply link retired with /generation (E6.1); the
+  // case itself remains the reapply door.
+  await page.goto("/cases/case-denied");
 
   // On the case: the reapply affordance, gated to the denied status.
   await expect(page.getByText("This application was denied.", { exact: false })).toBeVisible({
@@ -709,15 +658,17 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
     timeout: 30000,
   });
 
-  // Status transition on the SAME case, recorded in status_history.
-  const patch = writes.find((w) => w.table === "credential_cases" && w.method === "PATCH");
-  expect(patch?.body).toMatchObject({ credentialing_status_id: "st-inprog" });
-  const historyPost = writes.find((w) => w.table === "status_history" && w.method === "POST");
-  expect(historyPost?.body).toMatchObject({
-    case_id: "case-denied",
-    from_status_id: "st-denied",
-    to_status_id: "st-inprog",
+  // E6.0: the reapply edge rides the atomic set_case_status RPC (unified
+  // history + legacy-mirror lockstep) — never a bare PATCH.
+  const statusRpc = writes.find((w) => w.table === "rpc/set_case_status");
+  expect(statusRpc?.body).toMatchObject({
+    p_case_id: "case-denied",
+    p_to_status: "in_progress",
+    p_expected_status: "denied",
   });
+  expect(
+    writes.find((w) => w.table === "credential_cases" && w.method === "PATCH"),
+  ).toBeUndefined();
 
   // Tasks regenerated from the CURRENT SOP (Model A), appended AFTER the
   // existing task — resolved title proves the current template was used.

@@ -10,9 +10,9 @@ import { test, expect, type Route } from "@playwright/test";
 //   - the old deep link lands safely in Payer Setup (funnel step 12);
 //   - no free-text "Add payer" and no per-row Edit control anywhere; the
 //     canonical path is the workspace's Catalog tab;
-//   - the starter toggle (org-owned org_payer_assignments fact) renders in
-//     the row's setup detail, and only for admins — a control never renders
-//     unless the caller can complete the action;
+//   - NO starter toggle anywhere (E6.3 F6.3.5 retired starter cases; the
+//     org_payer_assignments.starter column stays dormant per the additive
+//     rule) — the setup detail is read-only per-state readiness;
 //   - a specialist following the old URL gets the module's explicit denial
 //     with a read-only catalog pointer (TE-20b — no dead end).
 
@@ -140,40 +140,39 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
 }) => {
   currentRole = "admin";
   await page.goto("/admin/payers");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
+  // E6.5: the workspace is two REAL segments; the old URL lands on Catalog.
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // No free-text payer creation and no per-row Edit control, anywhere.
   await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 
-  // The assigned catalog payer renders as a setup row; the retired legacy
-  // migration state never appears (payers are global-catalog-only).
-  const globalRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
-  await expect(globalRow).toBeVisible();
+  // The assigned catalog payer renders in the Ready-for-business funnel AND
+  // the catalog browse; the retired legacy migration state never appears.
+  await expect(page.getByRole("heading", { name: "Ready for business" })).toBeVisible();
+  await expect(page.getByText("Aetna (CVS Health)").first()).toBeVisible();
   await expect(page.getByText("Legacy — catalog migration required")).toHaveCount(0);
 
-  // Starter toggle: the assigned payer's expanded setup detail carries one,
-  // and it is the only switch on the page.
-  await globalRow.getByRole("button", { name: "Show setup detail for Aetna (CVS Health)" }).click();
-  await expect(
-    page.getByRole("switch", { name: "Toggle starter pack for Aetna (CVS Health)" }),
-  ).toBeVisible();
-  await expect(page.getByRole("switch")).toHaveCount(1);
+  // E6.3 F6.3.5: the starter toggle is GONE with starter cases — NO switch
+  // renders anywhere on the page.
+  await expect(page.getByRole("switch")).toHaveCount(0);
 
   // Nothing on this page wrote anywhere.
   expect(writes).toEqual([]);
 });
 
-test("specialist following the old URL lands on the explicit denial with a catalog pointer", async ({
+test("specialist following the old URL lands on the workspace — all roles for now (E6.1 F6.1.1), writes still gated", async ({
   page,
 }) => {
   currentRole = "specialist";
   await page.goto("/admin/payers");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 30000 });
-  await expect(page.getByText("available to administrators only")).toBeVisible({ timeout: 30000 });
-  const catalogLink = page.getByRole("link", { name: "Browse payer catalog" });
-  await expect(catalogLink).toBeVisible();
-  await expect(catalogLink).toHaveAttribute("href", "/payer-directory");
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  // E6.1 interim posture: Payer Setup renders for ALL roles (two trusted
+  // users; revisit at the third hire) — the old admin-only denial is gone.
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
+    timeout: 30000,
+  });
+  // Admin-only write affordances still never render for a specialist.
   await expect(page.getByRole("switch")).toHaveCount(0);
 });

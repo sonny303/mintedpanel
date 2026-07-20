@@ -115,6 +115,11 @@ const PROVIDER_HEADER_LINE = [
   "license_expiration_date",
   "ssn_last4",
   "date_of_birth",
+  // E6.4 F6.4.6 — the one-row-per-relationship columns.
+  "facility_name",
+  "enrollment_payer",
+  "enrollment_state",
+  "enrollment_effective_date",
 ].join(",");
 
 // The retired E3.0 combined 20-column template (provider identity + facility
@@ -525,34 +530,43 @@ test("TS-67: combined template retired — rejected with guidance; three uploads
       created_at: NOW,
     },
   ];
+  fixtures.provider_groups = [activeGroup()]; // ladder: allow all three uploads
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, []));
   await seedAuth(context);
 
-  await page.goto("/admin/import");
-  await expect(page.getByRole("heading", { name: "Roster Import" })).toBeVisible({
+  // /admin/import retired (E6.1 F6.1.6) — the three per-section uploads live
+  // beside the manual forms in the wizard sections (E3.3), which is where the
+  // combined-template gate now meets users.
+  await page.goto("/onboarding/wizard");
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({
     timeout: 30000,
   });
 
-  // Three per-section uploads, no combined uploader.
-  await expect(page.getByRole("heading", { name: "Provider groups", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Facilities", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Providers", exact: true })).toBeVisible();
+  // Three per-section uploads, no combined uploader anywhere.
+  const groupCard = page.locator("#wizard-provider-group");
+  const facilityCard = page.locator("#wizard-facilities");
+  const providerCard = page.locator("#wizard-providers");
+  await expect(
+    groupCard.getByRole("button", { name: "Download Provider group template" }),
+  ).toBeVisible();
+  await expect(
+    facilityCard.getByRole("button", { name: "Download Facility template" }),
+  ).toBeVisible();
+  await expect(
+    providerCard.getByRole("button", { name: "Download Provider template" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Download CSV template" })).toHaveCount(0);
 
   // The legacy combined file is rejected at the gate naming the replacements.
-  const section = page
-    .locator("section")
-    .filter({ has: page.getByRole("heading", { name: "Providers", exact: true }) });
   const combinedRow = "Tree Hill,12-3456789,Nathan,R,Scott,1234567893,,,,,,,,,,,,,,";
-  await section
+  await providerCard
     .locator('input[type="file"]')
     .setInputFiles(csvFile("combined.csv", [COMBINED_HEADER_LINE, combinedRow].join("\n")));
-  const alert = section.getByRole("alert");
+  const alert = providerCard.getByRole("alert");
   await expect(alert).toContainText("retired combined roster template");
   await expect(alert).toContainText("per-section");
 
-  // The in-flight combined run is listed (labeled) and stays reviewable.
-  await expect(page.getByText("Combined (legacy)")).toBeVisible();
+  // The in-flight combined run stays reviewable at its review URL.
   await page.goto(`/import/${RUN_ID}`);
   await expect(page.getByRole("heading", { name: "Review import" })).toBeVisible({
     timeout: 15000,

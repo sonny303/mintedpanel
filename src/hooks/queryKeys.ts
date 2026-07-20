@@ -19,14 +19,14 @@ export const queryKeys = {
   orgPayerAssignments: (orgId: string) => ["org-payer-assignments", orgId] as const,
   orgPayerSettings: (orgId: string) => ["org-payer-settings", orgId] as const,
   payerNetworkTargets: (orgId: string) => ["payer-network-targets", orgId] as const,
+  // E6.2 — enrollment facts (F6.2.5). The denial-entries read deliberately
+  // rides the "cases" prefix so every set_case_status invalidation re-derives
+  // the board's denial history.
+  enrollmentFacts: (orgId: string) => ["enrollment-facts", orgId] as const,
+  caseDenialEntries: (orgId: string) => ["cases", orgId, "denial-entries"] as const,
   providerReadinessFacts: (orgId: string) => ["provider-readiness-facts", orgId] as const,
   groupReadinessDocuments: (orgId: string) => ["group-readiness-documents", orgId] as const,
   groupInsurancePolicies: (orgId: string) => ["group-insurance-policies", orgId] as const,
-  msos: (orgId: string) => ["msos", orgId] as const,
-  mso: (orgId: string, id: string) => ["mso", orgId, id] as const,
-  msoRoutingRules: (orgId: string) => ["mso-routing-rules", orgId] as const,
-  msoRoutingRule: (orgId: string, payerId: string, state: string, specialty: string) =>
-    ["mso-routing-rule", orgId, payerId, state, specialty] as const,
   templates: (orgId: string) => ["templates", orgId] as const,
   template: (orgId: string, id: string) => ["template", orgId, id] as const,
   // E1.7b SOP versioning: history list + one immutable version's content.
@@ -111,13 +111,9 @@ export const queryKeys = {
   // per-org geography for the state breakdown, and the caller's shares per report.
   orgStates: () => ["org-states"] as const,
   reportShares: (reportKey: string) => ["report-shares", reportKey] as const,
-  // E4.2 Payer & SOP admin module.
-  // Reason-code management reads the full vocabulary (incl. inactive); the
-  // dropdown reader keeps using `denialReasonCodes` above.
-  allDenialReasonCodes: (orgId: string) => ["denial-reason-codes", orgId, "all"] as const,
-  // F4.2.5 org queue ranking config (the read matches useQueueRankingConfig's
-  // inline literal so the settings mutation invalidates the queue derivation).
-  queueRankingConfig: (orgId: string) => ["queue-ranking-config", orgId] as const,
+  // E4.2 Payer & SOP admin module. (The reason-code and queue-ranking editor
+  // keys retired with their editors — E6.6 F6.6.6 fixed defaults; the Denied
+  // dialog's dropdown keeps `denialReasonCodes` above.)
   // F4.2.1 SOP wizard drafts (save-as-draft WIP).
   sopTemplateDrafts: (orgId: string) => ["sop-template-drafts", orgId] as const,
   sopTemplateDraft: (orgId: string, id: string) => ["sop-template-draft", orgId, id] as const,

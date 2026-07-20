@@ -1578,6 +1578,295 @@ global)` READS stay — the shared-catalog pattern, own-org disjunct vestigial
   extension-repo change — the download endpoint IS the future-auto-attach
   contract (TE-11: audited links only, never bucket credentials).
 
+### Stage 6 (Simplification Wave) built so far
+
+The E6 wave builds from `docs/redesign/BUILD-QUEUE.md` (the multi-session
+lock) + `docs/redesign/DECISION-RECORD-2026-07-19-simplification.md`; E6
+migrations are REPO-ONLY (hosted apply is an operator step listed in each PR
+body; rollback-wrapped hosted probes via MCP are the dry-run). `docs/wiki/`
+pages are updated in the same PR as the epic that changes them.
+
+- **E6.0 — Unified case status (#199).** ONE canonical, code-owned 8-status
+  `credential_cases.case_status` (`src/lib/caseStatus.ts` — list, spine
+  edges, evidence-bump rules, legacy mapping; migrations `20260719120000`–
+  `120200`): every transition through the `set_case_status` RPC (evidence
+  rules, admin corrections, optimistic concurrency, append-only
+  `case_status_history` with `reason_code_id` for denials) or the
+  auto-transition triggers; the legacy `credentialing_status_id` /
+  `payer_pipeline_state` survive as READ-ONLY dual-write mirrors (TD-35;
+  `advance_payer_pipeline` dormant). **`src/lib/caseRollups.ts`** is the
+  derived layer above cases: `groupPayerFulfillment` (Targeted → In
+  Progress → Active, most-advanced-wins, Active = approved case OR
+  enrollment fact), `providerCaseProgress`, `buildDenialRows` — E6.2/E6.4/
+  E6.6 render them, nobody sets them.
+- **E6.1 — Sidebar & surface restructure (#201).** Six-item sidebar (Cases ·
+  Payer Setup · Reporting Center | Org Detail · Groups · Providers); Cases
+  is the login landing with three pivots on ONE route (`/cases` — to-do
+  default = the NBA queue, `?pivot=provider|payer`; legacy `chip/ids/runId`
+  imply the payer pivot; `/work` redirects preserving `run`); `/org-detail`
+  (slim container + members + the live Finish-setup banner); the 16-surface
+  redirect table in `legacy-routes.spec.ts` (REDIRECTING_ROUTES +
+  PARAM_PRESERVING — old links never dead-end); FixitDeck rides payer-admin
+  `?tab=needs-attention`; queue default ranking = grouped tiers (overdue
+  follow-ups → task dues → provider starts → rest). Interim dark surfaces
+  are TD-36 with named restoring epics.
+- **E6.2 — Groups & the Payer Network board.** The group gets the surface:
+  `/groups` (A→Z list; single-group orgs auto-land the hub) →
+  `/groups/$groupId` (layout + route-derived breadcrumb) → hub (editable
+  group facts: name/TIN/operating states, admin, audited) + **Facilities**
+  (state-grouped A→Z list treatment, search/filters, provider counts +
+  zero-provider flag, go-live = plain `effective_date` on `FacilityForm` —
+  NO location status machine; facility CRUD + CSV import live here) +
+  **Payer Network** (the fulfillment board over `caseRollups` — derived
+  pills, drill-down with per-state evidence + denial history from
+  `case_status_history`, excluded rows w/ one-click Restore, the candidate
+  buffer banner). **`enrollment_facts`** (migration `20260719150000`,
+  repo-only): provider×group×payer×state, live = `expired_at IS NULL`
+  (partial unique), expiry is a FLIP that re-opens the candidate; service
+  `enrollmentFacts.ts` + hooks (capture UI is E6.4). **Buffer math
+  `src/lib/generationBuffer.ts`** = the E6.3 contract: candidates =
+  buildGenerationPreview proposed rows − live facts (`subtractLiveFacts`),
+  cause = newest of join/attach/fact-expiry among candidates. **Group-basis
+  attach** (`src/lib/groupPayerAttach.ts` + `GroupAttachPayerDialog`):
+  eligibility = catalog ∩ GROUP OPERATING STATES (not facility states);
+  `attachGroupPayer` creates the org enablement implicitly
+  (addAssignment → targets, RLS order); `removeGroupPayer` archives the
+  group's targets then the enablement iff no other group holds the payer
+  (TS-122/124). **Payer-attach CSV** rides the E3.3 machine: entity_kind
+  `payer_attach` (`20260719150100`), descriptor `contextScan` seam
+  (`SectionScanContext` threaded through `useStartRosterScan`/
+  `RosterUploader.scanContext`) stamps resolved ids at scan time;
+  `commitPayerAttachImportRun` is idempotent skip-on-match;
+  `/import/$runId` branches to `PayerAttachImportPreview`. Board reads
+  compose in `usePayerNetworkBoard` (uses `useGenerationPreview` + facts +
+  `listCaseDenialEntries` — key `["cases", orgId, "denial-entries"]` so
+  set_case_status invalidations re-derive it). e2e: `groups-hub.spec.ts`,
+  `payer-network-board.spec.ts`, `group-payer-attach.spec.ts`
+  (TS-108/109/110/113/122/123/124). The E6.1 groups shell +
+  GroupSummaryCard/FacilitySummaryCard were deleted; TD-39 (wizard/group
+  duplicate intake doors), TD-40 (disabled Review & generate until E6.3).
+- **E6.3 — Decoupled generation (the ONE door).** `/generation` is ALIVE
+  again as the full-screen preview grid (supersedes the E6.1 interim
+  redirect; legacy `?payerId/groupId` spellings still scope it), entered
+  pre-filtered from the board banner (`?group=`), a payer row
+  (`?group&payer&pivot=payer`), a facility row (`?group&facility`), and the
+  provider record (`?provider=`); `/generation/runs*` restored. ONE additive
+  migration (repo-only, `20260719160000_e63_run_row_dispositions.sql`,
+  hosted probe rollback-verified): the run-row disposition CHECK gains
+  `skipped` (skip-for-now) + `enrolled` (fact-covered), both
+  reason-required — a confirm's immutable ledger now accounts for EVERY
+  candidate. **Pure `src/lib/generationGrid.ts`** (+suite): `bucketGridRows`
+  (candidate/enrolled/existing/excluded — facts overlay wins only over
+  proposed), `filterGridRows` (scope), `groupGridRows` (pivots, key-stable
+  selection), `reconcileGrid` (the sum-invariant confirm-bar line "Create 4
+  · 1 excluded · 2 enrolled — 7 of 7 accounted for"), `splitGridSelection`.
+  `GenerationGrid.tsx` replaces + deletes `GenerationPreviewContent.tsx`:
+  pivot Tabs, per-group check-alls, skip-for-now = SELECTION state only
+  (nothing stored, reappears checked), Exclude…/Undo = the E2.0 reasoned
+  store, E4.2 release cap + gating + fallback warning ride unchanged;
+  confirm threads `skippedRows`/`enrolledRows` through
+  `useConfirmGeneration` → `generationConfirm.ts` records them as ledger
+  rows (capped-out rows record as skipped); landing is **`/cases?run=`**.
+  **F6.3.5 one door:** starter cases retired outright (`starterCases.ts` +
+  test + PayerSetupList toggle deleted; `providers.new.tsx` creates ZERO
+  cases; `org_payer_assignments.starter` dormant per the additive rule);
+  launch `CreateCasesDialog` + `generateLaunchCases`/`useGenerateLaunchCases`
+  deleted. **`src/lib/oneDoor.test.ts`** greps the comment-stripped src tree:
+  createCase/`create_case_with_tasks`/useCreateCase callers ⊆ {cases.ts,
+  generationConfirm.ts, useCases.ts, ManualCaseModal, NewCaseModal (E6.4
+  retires), generated types} and pins the two retired creators dead. e2e
+  `e2e/decoupled-generation.spec.ts` (TS-111 buckets/pivots/skip-vs-exclude/
+  ledger/landing, TS-125 payer-scoped entry over a 4-provider roster, TS-126
+  concurrent-duplicate safe skip + honest partial failure, TS-127
+  provider-scoped entry); board/legacy-routes/funnel specs retargeted
+  (`/generation*` back in RENDERING_ROUTES).
+- **E6.4 — Providers area (the consolidated people record).** NO migration
+  (facts shipped in E6.2). **Roster:** `/providers` rebuilt as the A→Z
+  PHI-safe table (fixed last-name sort stated on screen; group/license-state/
+  has-gaps filters) with ambient gap pills from pure
+  `src/lib/providerGaps.ts` (+suite — reuses `CAQH_CURRENT_DAYS`, license
+  expiry, and the E2.0 no-assignment-not-generatable rule; reference/
+  terminated never gap; pills deep-link `#section` on the record); the old
+  case-grouped work view is gone (casework = /cases). **Record:**
+  `/providers/$id` is the one-page record — section jump-nav (Identity ·
+  Groups & facilities · Licenses · Enrollments · Cases · Documents,
+  hash-focusable), inline per-field editing via
+  `src/components/providers/InlineField.tsx` (ONE audited `updateProvider`
+  patch per field; DOB masked-at-rest/reveal-on-edit; SSN stays
+  `SsnVaultField`), `GroupsFacilitiesPanel` (chips + "+ Add facility" over
+  the EXISTING `setAssignments`/`set_primary_assignment` paths + the new
+  NARROW `providers.ts setGroupAssignments` — planAssignmentSync order,
+  group_id mirror; assignments are unreachable from every other record
+  edit, killing the wipe defect), `EnrollmentsPanel` (fact capture +
+  Expire; `ENROLLMENT_GUARD_TEXT` pins the no-prior-employer rule), the
+  read-only Cases panel (E6.0 pills, prior denials from
+  `useCaseDenialEntries` preserved beneath reapplied cycles, x-of-y header
+  via `providerCaseProgress`), a licenses-only editor dialog
+  (`updateProviderWithLicenses` with an EMPTY patch), and the E4.5
+  `DocumentsPanel` (page wrapped in `TooltipProvider` — the panel's row
+  tooltips need it; the rebuild initially dropped it and the router error
+  boundary ate the page). **Retired:** `/providers/$id/edit` → redirect
+  (legacy-routes row), `EditProviderForm` deleted, provider-detail
+  `NewCaseModal` deleted (oneDoor.test.ts allowlist shrank — ManualCaseModal
+  on /cases is the ONE escape hatch); wizard roster rows link "Open record"
+  (create dialog stays; TD-41 notes the `/providers/new` duplicate create
+  door). **CSV (F6.4.6):** the provider template gained one-row-per-
+  relationship columns (`facility_name`, `enrollment_payer/state/
+effective_date`) resolved to ids AT SCAN TIME via the E6.2
+  `SectionScanContext` seam (`provider` member; unknown names = row errors
+  naming the column); `looksLikeCombinedTemplate` re-keyed on
+  `facility_street` so the extended template never trips the retired-
+  combined rejection; `commitImportRun` snapshots staged rows pre-RPC then
+  runs the idempotent `applyProviderRelationships` pass (dated facility
+  upserts, non-primary group upserts under the unique, facts
+  skip-on-live-match — never a case) returning the unified
+  `relationships` summary; `providerImportReference` = the downloadable
+  real-names reference sheet; the upload card renders on /providers
+  (imports live with their data) AND the wizard section, both threading
+  scanContext + reference. e2e `e2e/providers-area.spec.ts`
+  (TS-112/113/129/130; TS-128's scan grain is pinned in
+  `importSections.test.ts`); retargets: provider-roster TS-34/35 →
+  record flows, roster-import + sectioned-intake header lists extended,
+  unified-case-status record slice → the Cases panel, legacy-routes +
+  `/providers/$id/edit` redirect row.
+- **E6.5 — Payer Setup consolidation (Catalog | SOPs + global authoring).**
+  ONE repo-only migration (`20260719170000_e65_global_authoring.sql`, hosted
+  apply = operator step; all probes ran rollback-wrapped on hosted):
+  **portals gained a GLOBAL tier** (`org_id` nullable + partial unique
+  `uq_portals_global_key` + global SELECT disjunct + `proven_at` dry-run
+  stamp), **`payers.delegation_note`** (curated fact, NO app writer), and
+  FIVE SECURITY DEFINER RPCs — `author_global_sop` (create seeds v1 via the
+  trigger; update = match-key/archive only; in-body NULLS-NOT-DISTINCT grain
+  guard + payer+state required + fallback locked), `upsert_global_portal`
+  (key immutable; URL change clears verified+proven), `set_global_portal_flags`,
+  `train_global_field_map` (approve/manual/repropose on `org_id NULL` maps),
+  and the reissued `publish_sop_template_version` (global branch open to
+  authenticated — the INTERIM F6.5.6 posture, TD-42; anon rejected in-body
+  via `auth.role()`, explicit grant floor closing the `20260715140300`
+  default-grant hole). Global publishes/writes have NO audit rows
+  (`audit_log.org_id` NOT NULL — version rows/timestamps are the trail).
+  **Module:** `/admin/payer-admin/catalog` + `/admin/payer-admin/sops` are
+  REAL segments (index = redirect mapper for every legacy `?tab=`;
+  org-settings → `/org-detail`; since E6.6 only
+  ResolutionIdSettingsSection + PayerResolutionIdDialog remain under
+  `components/settings/` — the reason-code and queue-ranking editors are
+  deleted, F6.6.6). Catalog tab = **`PayerReadinessFunnel`**
+  (pure `src/lib/payerReadinessFunnel.ts` + `usePayerReadinessFunnel` over
+  `activeOrgPayers`: per-payer sopPublished/formState(none|registered|
+  trained|proven)/driftCount + ONE next action author_sop→register_portal→
+  train_mappings/repair_drift→run_dry_test→ready; no-online-form SOP =
+  ready-with-note) over `PayerCatalogBrowser` (+delegation fact). SOPs tab =
+  drift banners (deep-link the owning SOP) + `TemplatesList` (+"New global
+  SOP" → `/admin/templates/new?tier=global`). **In-editor form machinery
+  (`src/components/templates/FormStepPanel.tsx`):** mounted under every
+  online_form step (collapsed by default — the TemplateTaskRow memo/latency
+  contract holds; ONE new primitive prop `isGlobalAuthoring`): register/pick
+  portal (tier by template), inline trainer (broken-first; org rows via the
+  audited RLS mutations + dictionary learning, global rows via the RPC),
+  and the **mock-data dry run** — `src/lib/mockFillProfile.ts` (versioned
+  synthetic token map, never PHI/provider reads; supersedes
+  `resolveTestProviderTokens`, deleted) through `computeTestRun` →
+  `recordTestFillFromApp` (`providerId` now nullable) → pass = zero
+  unmatched → proven flip. **Wizard global authoring:** `TemplateWizard`
+  gained `globalTier`; global rows are editable (fallback stays read-only —
+  sop-versioning TS-47 narrowed), create/duplicate/match-key/archive route
+  through `authorGlobalSop`, content publishes through the RPC (blast-radius
+  ack), payer+state required for global keys. **Drift (F6.5.4):**
+  `src/lib/formDrift.ts` (+suite) carries the E4.3a contract standalone
+  (parseSkippedEntries/FIELD_NOT_FOUND_REASON/mapId-then-label join,
+  latest-REAL-fill reduction, buildDriftByPortal, **repaired-since rule** —
+  a map edited after the reporting fill drops out until the next real fill)
+  → `useFormDrift` (2 caches) feeds the Sidebar badge (drift-only now),
+  funnel column, and editor queue. **Retired outright:** FixitDeck/
+  `useFixit`/`fixitQueue.ts`/`fixitFields`/`goodCatches`, `PayerSetupList`/
+  `usePayerSetup` (payerSetup.ts slims to `activeOrgPayers`/
+  `resolutionIdSource`), `FormOnboardingPanel` + its route (redirect), and
+  the **MSO routing engine app-side** (`getMsoRoutingRule`/`useMsoRoutingRule`/
+  msos service+hooks/keys + the case-detail callout; tables stay dormant —
+  live-verified 0 rows; delegation renders from the catalog fact).
+  Legacy redirects retargeted (fix-it/admin-portals/payer-directory/
+  portals-train/mso-routing/admin-payers/admin-templates → the segments).
+  e2e: NEW `e2e/payer-setup-module.spec.ts` (TS-114/131/132/133/134,
+  stateful RPC write-through harness) supersedes `fix-it.spec.ts` +
+  `payer-setup-funnel.spec.ts` (deleted); payer-admin-module/admin-payers/
+  legacy-routes retargeted; template-typing-latency stays green.
+  `payerGovernance.test.ts` re-anchored (funnel posture + delegation_note
+  no-app-writer pin).
+- **E6.6 — Reporting Center Organization & Touch Unification (CLOSES the E6
+  wave).** NO migration — pure derivations + a presentation/verb
+  consolidation. **Grouped index (F6.6.1):** `src/lib/reports.ts` gained
+  `ReportGroup`/`REPORT_GROUPS`/`reportsInGroup` and per-report `group`;
+  `reporting.index.tsx` renders the four groups (Performance: Portfolio ·
+  Launches · Facilities Without Providers · Locations per Group /
+  Credentialing: Denials · Expiring Credentials / Compliance: Audit Log /
+  Intake: Inbound Leads with a new-lead count badge only when leads await).
+  Leads triage moved OFF Org Detail entirely → `/reporting/leads`
+  (`InboundLeadsPanel` gained `alwaysRender` for the honest empty state).
+  **Launches report (F6.6.2, `/reporting/launches`):** pure
+  `src/lib/launchReport.ts` (+suite) — DATE-ONLY (no location statuses):
+  active non-reference facilities with a go-live in the future or ≤30 days
+  past, grouped by group / date-sorted; open-case counts use the E2.3 union
+  (case.facility_id ∪ the provider's assignments — generation cases carry no
+  facility_id); at-risk = go-live within 30 days AND (open cases OR zero
+  providers), rule text single-sourced (`LAUNCH_AT_RISK_RULE_TEXT`) and
+  rendered inline. `/launches*` redirects here. The orphaned
+  LaunchEditModal/AssignProviderDialog + `launchReadiness.ts` are deleted;
+  launches service/hooks slimmed to `getLaunchLocation`/`useLaunchLocation`
+  (providers.new `?locationId`) + `useLaunchLocations`;
+  GroupFacilitiesContent repointed to `useProviderAssignments` (same key).
+  **Denials report (F6.6.3, `/reporting/denials`):** caseRollups
+  `buildDenialRows` FINALIZED to the epic contract — a row per case
+  CARRYING a denial (`cycleState standing|reapplied` + `currentStatus`;
+  reapplied cases stay visible), groupers genericized; display assembly +
+  CSV in pure `src/lib/denialsReport.ts` (+suite; "Reapplied — now X"
+  labels). The report joins useCases + useCaseDenialEntries +
+  useDenialReasonCodes exactly like the provider record's Cases panel
+  (parity by construction); provider-first default, payer pivot, CSV via
+  csv.ts. The clientProgress chain (lib+test+service+hook+components) is
+  DELETED; `/client-progress` + `/progress` redirect to the report.
+  **Audit + counts (F6.6.4):** `admin.audit.tsx` content moved WHOLESALE to
+  `src/components/reporting/AuditLogReport.tsx` (same filters/diff viewer;
+  the admin gate moved WITH it — non-admins get an EmptyState and the fetch
+  stays disabled) at `/reporting/audit-log`; `/admin/audit` is a redirect
+  shell. Two counts reports over pure `src/lib/countsReports.ts` (+suite):
+  `/reporting/facilities-without-providers` + `/reporting/locations-per-group`.
+  **Add touch unification (F6.6.5):** the single-case structured form was
+  EXTRACTED from CaseTouchesPanel into the shared
+  `src/components/cases/AddTouchForm.tsx` (selector/string contract
+  preserved — TS-105/TS-56 stay green; generalized `bumpTargets` → per-case
+  F6.0.3 suggestions grouped by target status, single-case renders the
+  exact legacy string). NEW `AddTouchDialog.tsx` = case checkbox list +
+  the shared form: `bulkLogTouch` batch semantics (one touch per case +
+  per-touch audit + batch summary), then one `set_case_status` per ACCEPTED
+  bump with THAT case's touch as evidence (`expectedStatus` null); a failed
+  bump never unwinds the touches. Entry points: the /cases toolbar's ONE
+  "Add touch" (replacing "Log touch" + "Log payer call"; keeps the
+  `?pivot=payer&ids=` landing) and the provider record's Cases panel.
+  RETIRED: BatchTouchpointDialog + BulkLogTouchDialog +
+  `communicationEvents.ts`/`useCommunicationEvents.ts` (write path only —
+  getCase's "Part of {payer} call" batch display still reads
+  `communication_event` directly). NB the /cases toolbar rename created a
+  TanStack-transition trap: a test clicking "Add touch" right after a
+  row-link navigation can hit the still-mounted source route's toolbar —
+  wait for the destination content to COMMIT first (TS-56 carries the
+  fix + comment). **Fixed defaults (F6.6.6):** ReasonCodeManager +
+  QueueSettingsPanel and their whole chains deleted
+  (useReasonCodes/denialReasonCodes.ts service/queueSettings.ts +
+  queryKeys); the denial word-list IS the six seeded global codes
+  (documented at `listDenialReasonCodes` in cases.ts — platform change =
+  service-role SQL; every read path untouched); queue ranking runs the
+  FIXED shipped order — the `rankingConfig` input/validator were REMOVED
+  from `buildNextBestActions` and BOTH config reads dropped (browser
+  useNextBestActions + server nextBestAction.ts — no /api wire change);
+  `next_best_action_configs` is dormant (TD-44). Org Detail keeps
+  ResolutionIdSettingsSection only. e2e: touch-log.spec.ts REWRITTEN
+  (TS-115 multi-case + TS-137 suggestion rules, stateful RPC/touches
+  write-through); reporting-center.spec.ts extended (four groups, badge,
+  TS-135, TS-136 incl. CSV download, counts, audit relocation);
+  legacy-routes rows moved (/admin/audit → REDIRECTING; launches/progress
+  retargets); payer-admin-module TS-78/TS-91 flipped to negative pins;
+  contact-inbound operator half → /reporting/leads.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -2064,8 +2353,8 @@ x-org-id`.
 `providers` (PHI-minimized: `ssn_last4` only) · `provider_facility_assignments`
 (provider↔location, unique `(provider_id, facility_id)`) · `state_licenses` ·
 `payers` (+ sentinel payer **"Pre-Credentialing Setup"**, matched by name) ·
-`msos` + `mso_routing_rules` (payer+state+specialty → direct/mso; `'All'`
-wildcards; scored client-side in `getMsoRoutingRule`) · `credential_cases`
+`msos` + `mso_routing_rules` (DORMANT since E6.5 — the routing engine is
+deleted app-side; delegation is the curated `payers.delegation_note` fact) · `credential_cases`
 (**`UNIQUE NULLS NOT DISTINCT (provider_id, group_id, payer_id, state)`**
 since E2.1 — the 4-part case key; legacy NULL-group rows keep the 3-part rule
 because NULL = NULL, see AGENTS.md; credentialing status only;
@@ -2303,8 +2592,10 @@ location-track status.** The Launches page is a filtered view of locations.
 
 ## Case creation flow (manual + launch)
 
-`NewCaseModal` (provider detail) and `CreateCasesDialog` (launch) both:
-resolve the MSO routing rule per payer/state/specialty, pick a SOP template
+(E6.3/E6.4 made generation confirm the ONE door — `ManualCaseModal` is the
+escape hatch; `NewCaseModal`/`CreateCasesDialog` are deleted, and E6.5
+deleted the MSO routing lookup outright.) The historical flow: both modals
+resolved the MSO routing rule per payer/state/specialty, picked a SOP template
 (the shared `src/lib/pickTemplate.ts` — the **E4.2-hardened deterministic
 ranking**: org exact-group → org any-group → global-payer exact-group →
 global-payer any-group → generic fallback → null; order-independent, and
@@ -2479,13 +2770,10 @@ corrections are appends, never edits.
   the E2.3 queue). `useTouches.ts` adds `useCorrectTouch`/`useBulkLogTouch`.
 - **F4.1.3 — E2.3 queue:** `buildNextBestActions` (`src/lib/nextBestActions.ts`)
   extended: the `follow_up` signal uses the carry-forward reducer with the TE-2
-  tie-break; a new optional `rankingConfig` (E4.2 F4.2.5) input +
-  `resolveQueueRankingConfig` (validated, atomic default fallback) rank overdue
-  follow-ups first by default / by enabled-group order when configured; overdue
-  gets a "Follow-up overdue" reason. Config read seam
-  `src/services/queueRankingConfig.ts` + `src/hooks/useQueueRankingConfig.ts`
-  (returns the shipped default until E4.2 F4.2.5 persists a row), wired through
-  `useNextBestActions`.
+  tie-break; overdue follow-ups
+  rank first and get a "Follow-up overdue" reason. (The E4.2 F4.2.5 org
+  ranking-config seam that once rode here was REMOVED by E6.6 F6.6.6 — the
+  shipped order is fixed; `next_best_action_configs` is dormant, TD-44.)
 - **F4.1.8 — Action Bridge:** every generic pipeline transition dialog
   (`PipelineDialogs.tsx` `TransitionConfirmDialog`, incl. Action Required/RFI)
   gains an off-by-default `PipelineTouchSection`; `PayerPipelineControl.confirmTransition`
@@ -2500,26 +2788,25 @@ corrections are appends, never edits.
   work-view links to `/cases?ids=…` (new `ids` search param). Seeds:
   `supabase/seed-redesign.sql` E4.1 touches on the Dillon cases (TS-73..75).
 
-## Owner-facing view (one, consolidated Jul 2026)
+## Owner-facing view (RETIRED to the Denials report, E6.6)
 
-- `/client-progress` (Client Progress v1) is **the** owner view: nav entry
-  "Client Progress", page + entry gated to **admin and billing** roles. One card per
-  non-terminated provider; x-of-y in-network `ProgressBar` whose denominator
-  is the org's active payer set (pre-cred sentinel excluded; a payer whose
-  only case for the provider is "Not Required"/"OON" drops out); one line per
-  payer-with-case showing a locked owner wording (In progress / Submitted /
-  With payer / Approved / Active — mapped by label, unknown labels fall back
-  to `action_bucket`) via `src/lib/clientProgress.ts` (tested). Multi-state
-  payers are represented by their most advanced case. Read-only. Pieces:
-  `src/routes/client-progress.tsx`, `src/components/client-progress/`,
-  `src/hooks/useClientProgress.ts`, `src/services/clientProgress.ts` (own
-  narrow projection because `PROVIDER_LIST_COLUMNS` lacks `start_date`).
-- The older M5.5 owner view at `/progress` was folded into it: the route file
-  remains only as a redirect to `/client-progress` (the URL had been shared
-  with owners out-of-band), and `src/lib/ownerWording.ts` + its test were
-  deleted with the page they served.
+- The Client Progress owner view is GONE: E6.6 F6.6.3 replaced its story
+  with the Reporting Center Denials report, and the whole chain
+  (`src/lib/clientProgress.ts` + test, `src/services/clientProgress.ts`,
+  `src/hooks/useClientProgress.ts`, `src/components/client-progress/`) was
+  deleted. `/client-progress` and `/progress` are redirect shells →
+  `/reporting/denials` (both URLs had been shared with owners out-of-band —
+  they never dead-end).
 
-## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06)
+## Cleanup surfaces (Fix-it queue / Mapping review / Portals admin, built 2026-07-06 — SUPERSEDED by E6.5)
+
+**E6.5 (2026-07-19) retired all three surfaces**: drift repair, mapping
+training, and portal registration live inside the SOP editor's
+`FormStepPanel`; the Sidebar badge is drift-only (`useFormDrift` →
+`src/lib/formDrift.ts`); `/fix-it`, `/portals/$key/train`, and
+`/admin/portals` are redirects. `useMappingReview`'s mutations +
+`mappingConfidence`'s suggestion logic survive as the trainer's plumbing.
+Historical shape below, for context:
 
 Three connected browser surfaces where users **find and kick off** fill-coverage
 cleanup — the Chrome extension is where they _do_ the fills. Product law

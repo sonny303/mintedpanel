@@ -1,22 +1,14 @@
-// Launch-location hooks (launch PRD v2.1). Launch rows ARE facilities rows, so
-// the list shares the facilities cache key; launch-specific state (provider
-// assignments, case generation) lives under its own keys.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// Launch-location hooks — slimmed by E6.6 F6.6.2 to the two surviving reads.
+// The Launches pages retired (E6.1) and the launch view is now the Reporting
+// Center Launches report (date-only, over the shared facilities/assignments/
+// cases caches); the launch-specific write hooks and their orphaned modals
+// are gone. Launch rows ARE facilities rows, so the list shares the
+// facilities cache key.
+import { useQuery } from "@tanstack/react-query";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { listFacilities } from "@/services/orgSettings";
-import {
-  assignProviderToFacility,
-  createLaunchLocation,
-  generateLaunchCases,
-  getLaunchLocation,
-  listFacilityAssignments,
-  updateLaunchLocation,
-  type CreateLaunchInput,
-  type GenerationEntry,
-  type UpdateLaunchInput,
-} from "@/services/launches";
-import type { Facility } from "@/types";
+import { getLaunchLocation } from "@/services/launches";
 
 export function useLaunchLocations() {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -28,75 +20,12 @@ export function useLaunchLocations() {
   });
 }
 
+/** Single-location read — providers.new's ?locationId prefill. */
 export function useLaunchLocation(id: string | undefined) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
     queryKey: queryKeys.facility(orgId, id ?? "none"),
     queryFn: () => getLaunchLocation(id as string),
     enabled: orgId !== "no-org" && !!id,
-  });
-}
-
-export function useFacilityAssignments() {
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useQuery({
-    queryKey: queryKeys.facilityAssignments(orgId),
-    queryFn: listFacilityAssignments,
-    enabled: orgId !== "no-org",
-    staleTime: FIVE_MINUTES,
-  });
-}
-
-export function useCreateLaunchLocation() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: CreateLaunchInput) => createLaunchLocation(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
-  });
-}
-
-export function useUpdateLaunchLocation() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: UpdateLaunchInput }) =>
-      updateLaunchLocation(id, patch),
-    onSuccess: (_data, { id }) => {
-      qc.invalidateQueries({ queryKey: ["facilities", orgId] });
-      qc.invalidateQueries({ queryKey: ["facility", orgId, id] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
-  });
-}
-
-export function useAssignProviderToFacility() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: ({ providerId, facilityId }: { providerId: string; facilityId: string }) =>
-      assignProviderToFacility(providerId, facilityId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
-  });
-}
-
-export function useGenerateLaunchCases() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: ({ location, entries }: { location: Facility; entries: GenerationEntry[] }) =>
-      generateLaunchCases(location, entries),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["cases", orgId] });
-      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
   });
 }

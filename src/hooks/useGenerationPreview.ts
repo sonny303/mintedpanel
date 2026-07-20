@@ -313,6 +313,11 @@ export interface ConfirmGenerationVars {
   releaseScope?: ReleaseScope;
   /** provider → facility ids, required for a location-based release scope. */
   providerFacilities?: Map<string, Set<string>>;
+  /** E6.3 — skip-for-now candidates (unchecked in the grid): ledger-recorded,
+   * never attempted, stay in the buffer. */
+  skippedRows?: GenerationPreviewRow[];
+  /** E6.3 — enrollment-fact-covered rows: ledger-recorded, never attempted. */
+  enrolledRows?: GenerationPreviewRow[];
 }
 
 export function useConfirmGeneration() {
@@ -343,6 +348,9 @@ export function useConfirmGeneration() {
       const plan = {
         ...basePlan,
         toCreate: released,
+        // E6.3 — the grid's extra ledger buckets ride the plan verbatim.
+        skipped: vars.skippedRows ?? [],
+        enrolled: vars.enrolledRows ?? [],
         plannedCounts: {
           ...basePlan.plannedCounts,
           proposedCount: released.length,

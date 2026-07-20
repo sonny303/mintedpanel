@@ -162,6 +162,38 @@ export async function reproposeFieldMap(
   return row;
 }
 
+// ---------------------------------------------------------------------------
+// E6.5 F6.5.6 — the three training shapes applied to a GLOBAL (org_id NULL)
+// row via the train_global_field_map RPC. Org rows keep the browser-RLS UPDATE
+// path above; global rows were previously platform/MCP-only. NO writeAudit
+// (audit_log requires an org_id; the row's updated_at is the trail — interim
+// posture, R7 hardens platform governance).
+// ---------------------------------------------------------------------------
+export interface GlobalTrainPatch {
+  status: "proposed" | "approved";
+  source: PortalFieldMap["source"];
+  token?: string | null;
+  fieldLabel?: string | null;
+}
+
+export async function trainGlobalFieldMap(
+  id: string,
+  patch: GlobalTrainPatch,
+): Promise<PortalFieldMap> {
+  requireActiveOrg();
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc("train_global_field_map", {
+    p_id: id,
+    p_status: patch.status,
+    p_source: patch.source,
+    p_token: (patch.token ? normalizeTokenKey(patch.token) : null) as unknown as string,
+    p_field_label: (patch.fieldLabel ?? null) as unknown as string,
+  });
+  if (error) throw error;
+  const row = camelizeRow<PortalFieldMap>(data);
+  return { ...row, token: normalizeTokenKey(row.token) };
+}
+
 export interface BatchApproveItem {
   id: string;
   token: string;

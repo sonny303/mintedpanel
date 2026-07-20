@@ -19,9 +19,9 @@ export function useCreateOrganization() {
       // an org the caller is a member of, so this must precede the switch.
       await loadMemberships();
       setActiveOrg(orgId);
-      // E0.1 F0.1.5 / TE-4: land inside the new org's workspace at the first
-      // journey step (Get started), NOT back at the cross-org Portfolio.
-      navigate({ to: "/get-started" });
+      // E6.1 F6.1.5 (supersedes E0.1 F0.1.5's Get-started landing): post-create
+      // lands IN the one-time wizard flow, NOT back at the cross-org Portfolio.
+      navigate({ to: "/onboarding/wizard" });
     },
   });
 }

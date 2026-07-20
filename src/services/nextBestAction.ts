@@ -16,7 +16,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import {
   buildNextBestActions,
-  resolveQueueRankingConfig,
   type QueueEntry,
   type QueueReadinessInput,
   type QueueTouchInput,
@@ -28,6 +27,7 @@ import {
 } from "@/lib/enrollmentReadiness";
 import { currentGroupReadinessDocuments } from "@/lib/documents";
 import type { PayerPipelineState } from "@/lib/payerPipeline";
+import { isCaseStatus } from "@/lib/caseStatus";
 
 export interface NextBestActionServiceCtx {
   db: SupabaseClient<Database>;
@@ -79,6 +79,7 @@ interface CaseRow {
   payer_id: string;
   state: string;
   credentialing_status_id: string | null;
+  case_status?: string | null;
   facility_id: string | null;
   generation_run_id: string | null;
   payer_pipeline_state: string | null;
@@ -161,12 +162,11 @@ export async function getNextBestAction(
     documentsRes,
     insuranceRes,
     contractsRes,
-    rankingRes,
   ] = await Promise.all([
     db
       .from("credential_cases")
       .select(
-        "id, provider_id, group_id, payer_id, state, credentialing_status_id, facility_id, generation_run_id, payer_pipeline_state, created_at",
+        "id, provider_id, group_id, payer_id, state, credentialing_status_id, case_status, facility_id, generation_run_id, payer_pipeline_state, created_at",
       )
       .eq("org_id", orgId),
     db.from("status_configs").select("id, label, action_bucket").eq("org_id", orgId),
@@ -235,7 +235,6 @@ export async function getNextBestAction(
       .from("contracts")
       .select("group_id, payer_id, state, contracting_status_id")
       .eq("org_id", orgId),
-    db.from("next_best_action_configs").select("ranking").eq("org_id", orgId).maybeSingle(),
   ]);
 
   for (const res of [
@@ -255,7 +254,6 @@ export async function getNextBestAction(
     documentsRes,
     insuranceRes,
     contractsRes,
-    rankingRes,
   ]) {
     if (res.error) throw res.error;
   }
@@ -388,6 +386,7 @@ export async function getNextBestAction(
       facilityId: c.facility_id,
       generationRunId: c.generation_run_id,
       payerPipelineState: (c.payer_pipeline_state ?? undefined) as PayerPipelineState | undefined,
+      caseStatus: isCaseStatus(c.case_status) ? c.case_status : undefined,
       createdAt: c.created_at,
     })),
     statusConfigs: statusRows.map((s) => ({ id: s.id, actionBucket: s.action_bucket })),
@@ -432,9 +431,6 @@ export async function getNextBestAction(
       name: p.name,
     })),
     readiness,
-    rankingConfig: resolveQueueRankingConfig(
-      (rankingRes.data as { ranking?: unknown } | null)?.ranking ?? null,
-    ),
   });
 
   const top = entries[0];

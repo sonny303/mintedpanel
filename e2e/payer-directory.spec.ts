@@ -185,7 +185,9 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await seedAuth(context);
 
   await page.goto("/payer-directory");
-  await expect(page.getByRole("heading", { name: "Payer Directory" })).toBeVisible({
+  // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
+  // Setup workspace's Catalog tab (browse preserved for all roles).
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
 
@@ -241,7 +243,9 @@ test("governance: catalog diff review is not exposed to org users", async ({ con
   await seedAuth(context);
 
   await page.goto("/payer-directory");
-  await expect(page.getByRole("heading", { name: "Payer Directory" })).toBeVisible({
+  // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
+  // Setup workspace's Catalog tab (browse preserved for all roles).
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).toBeVisible();

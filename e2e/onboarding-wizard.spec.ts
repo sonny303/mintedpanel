@@ -357,14 +357,13 @@ test("TS-26: a facility added through the admin surface flips the wizard chip â€
     timeout: 30000,
   });
 
-  // Outside edit: the EXISTING admin facilities surface, not the wizard.
-  await page.goto("/admin/settings");
-  await page.getByRole("button", { name: "Add facility" }).click();
-  const dialog = page.getByRole("dialog", { name: "Add facility" });
-  // The Name field is the dialog's first input (its Label isn't htmlFor-linked).
-  await dialog.locator("input").first().fill("Kill Devil Hills Clinic");
-  await dialog.getByRole("button", { name: "Create facility" }).click();
-  await expect(page.getByText("Facility created")).toBeVisible({ timeout: 15000 });
+  // Outside edit: simulated at the data layer â€” the legacy admin facilities
+  // surface retired with /admin/settings (E6.1 F6.1.6); the chip must still
+  // re-derive from row presence on the next load, with zero wizard writes.
+  fixtures.facilities!.push({
+    ...facilityRow(ORG_OUTER_BANKS, "fac-kdh", "Kill Devil Hills Clinic"),
+    group_id: "g-ob",
+  });
 
   // Reopen the wizard: the chip is derived from row presence (F1.0.2).
   await page.goto("/onboarding/wizard");
@@ -391,9 +390,9 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await seedAuth(context, ORG_LONE_STAR);
 
   await page.goto("/onboarding/wizard");
-  // .first(): E1.1's dual-path exit adds a second "Next: Facilities" inside
-  // the Provider Group section; the top next-action card stays the resume CTA.
-  await expect(page.getByRole("button", { name: "Next: Facilities" }).first()).toBeVisible({
+  // The top next-action card is the ONE "Next: Facilities" CTA (the E1.1
+  // inline section-body exit was removed by user request, 2026-07-19).
+  await expect(page.getByRole("button", { name: "Next: Facilities" })).toBeVisible({
     timeout: 30000,
   });
 
@@ -407,7 +406,7 @@ test("TS-27: resume survives an org switch; the CTA moves focus to the section h
   await page.getByRole("menuitem", { name: "Lone Star Rehab Group" }).click();
 
   // Derived resume: still Facilities, no per-user storage involved (F1.0.3).
-  const nextCta = page.getByRole("button", { name: "Next: Facilities" }).first();
+  const nextCta = page.getByRole("button", { name: "Next: Facilities" });
   await expect(nextCta).toBeVisible({ timeout: 30000 });
 
   // One click opens the section and moves keyboard focus to its heading (TE-4).
@@ -556,7 +555,7 @@ test("F1.0.4: sidebar shows the approved white mark and conformed rail text alph
   // white channel and the exact alpha.
   const sectionLabel = page.locator("aside").getByText("Workspace", { exact: true }).first();
   await expect(sectionLabel).toHaveCSS("color", /^oklab\(0\.99\d* [\d.e-]+ [\d.e-]+ \/ 0\.35\)$/);
-  const inactiveNav = page.locator("aside").getByRole("link", { name: "My Cases" }).first();
+  const inactiveNav = page.locator("aside").getByRole("link", { name: "Reporting Center" }).first();
   await expect(inactiveNav).toHaveCSS("color", /^oklab\(0\.99\d* [\d.e-]+ [\d.e-]+ \/ 0\.6\)$/);
 
   // E0.9 TS-24 focus-ring conformance not regressed: white-alpha outline on

@@ -72,7 +72,10 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            {/* 3-per-row, not 4: native date inputs need ~160px for
+                mm/dd/yyyy + the picker icon, and four equal columns in this
+                dialog clip the icon (user-reported 2026-07-19). */}
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label htmlFor={`lic-${i}-state`} className="text-[12px]">
                   State
@@ -122,6 +125,8 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label htmlFor={`lic-${i}-issue`} className="text-[12px]">
                   Issued
@@ -134,8 +139,6 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
                   className="h-9"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-4 gap-3">
               <div>
                 <Label htmlFor={`lic-${i}-expiration`} className="text-[12px]">
                   Expires
@@ -166,17 +169,17 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2">
-                <Label htmlFor={`lic-${i}-url`} className="text-[12px]">
-                  State-board lookup URL
-                </Label>
-                <Input
-                  id={`lic-${i}-url`}
-                  value={row.verificationSourceUrl}
-                  onChange={(e) => setRow(i, { verificationSourceUrl: e.target.value })}
-                  className="h-9"
-                />
-              </div>
+            </div>
+            <div>
+              <Label htmlFor={`lic-${i}-url`} className="text-[12px]">
+                State-board lookup URL
+              </Label>
+              <Input
+                id={`lic-${i}-url`}
+                value={row.verificationSourceUrl}
+                onChange={(e) => setRow(i, { verificationSourceUrl: e.target.value })}
+                className="h-9"
+              />
             </div>
             {willReset ? (
               <p className="rounded-md bg-muted px-3 py-2 text-[12px] text-muted-foreground">

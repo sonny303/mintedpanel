@@ -182,6 +182,10 @@ export interface FacilityInput {
   state?: string | null;
   zip?: string | null;
   isActive?: boolean;
+  // E6.2 F6.2.2 — the go-live date is a PLAIN date field on the facility
+  // (feeds the Launches report + quiet queue ranking; NO location status
+  // machine). Rides snakeizeRow → effective_date, the existing column.
+  effectiveDate?: string | null;
   // Onboarding-import flag (Epic 2e). Optional; omitted → DB default (false)
   // so existing panel callers are unchanged. The CSV import sets it from the
   // per-import toggle. Rides through snakeizeRow → reference_only.

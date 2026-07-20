@@ -20,6 +20,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PayerDirectoryRouteImport } from './routes/payer-directory'
 import { Route as OutcomesRouteImport } from './routes/outcomes'
+import { Route as OrgDetailRouteImport } from './routes/org-detail'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LaunchesRouteImport } from './routes/launches'
 import { Route as HomeRouteImport } from './routes/home'
@@ -34,17 +35,25 @@ import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
 import { Route as OnboardingIndexRouteImport } from './routes/onboarding.index'
 import { Route as LaunchesIndexRouteImport } from './routes/launches.index'
+import { Route as GroupsIndexRouteImport } from './routes/groups.index'
 import { Route as CasesIndexRouteImport } from './routes/cases.index'
 import { Route as TasksIdRouteImport } from './routes/tasks.$id'
 import { Route as SsnIntakeTokenRouteImport } from './routes/ssn-intake.$token'
 import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as ReportingPortfolioRouteImport } from './routes/reporting.portfolio'
+import { Route as ReportingLocationsPerGroupRouteImport } from './routes/reporting.locations-per-group'
+import { Route as ReportingLeadsRouteImport } from './routes/reporting.leads'
+import { Route as ReportingLaunchesRouteImport } from './routes/reporting.launches'
+import { Route as ReportingFacilitiesWithoutProvidersRouteImport } from './routes/reporting.facilities-without-providers'
 import { Route as ReportingExpiringCredentialsRouteImport } from './routes/reporting.expiring-credentials'
+import { Route as ReportingDenialsRouteImport } from './routes/reporting.denials'
+import { Route as ReportingAuditLogRouteImport } from './routes/reporting.audit-log'
 import { Route as ProvidersNewRouteImport } from './routes/providers.new'
 import { Route as ProvidersIdRouteImport } from './routes/providers.$id'
 import { Route as OnboardingWizardRouteImport } from './routes/onboarding.wizard'
 import { Route as LaunchesIdRouteImport } from './routes/launches.$id'
 import { Route as ImportRunIdRouteImport } from './routes/import.$runId'
+import { Route as GroupsGroupIdRouteImport } from './routes/groups.$groupId'
 import { Route as GenerationRunsRouteImport } from './routes/generation_.runs'
 import { Route as DevPrimitivesRouteImport } from './routes/dev.primitives'
 import { Route as CasesIdRouteImport } from './routes/cases.$id'
@@ -60,16 +69,21 @@ import { Route as AdminMsoRoutingRouteImport } from './routes/admin.mso-routing'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminAuditRouteImport } from './routes/admin.audit'
 import { Route as ProvidersIdIndexRouteImport } from './routes/providers.$id.index'
+import { Route as GroupsGroupIdIndexRouteImport } from './routes/groups.$groupId.index'
 import { Route as GenerationRunsIndexRouteImport } from './routes/generation_.runs.index'
 import { Route as AdminTemplatesIndexRouteImport } from './routes/admin.templates.index'
 import { Route as AdminSopsIndexRouteImport } from './routes/admin.sops.index'
 import { Route as AdminPayerAdminIndexRouteImport } from './routes/admin.payer-admin.index'
 import { Route as ProvidersIdEditRouteImport } from './routes/providers.$id.edit'
 import { Route as PortalsPortalKeyTrainRouteImport } from './routes/portals.$portalKey.train'
+import { Route as GroupsGroupIdPayerNetworkRouteImport } from './routes/groups.$groupId.payer-network'
+import { Route as GroupsGroupIdFacilitiesRouteImport } from './routes/groups.$groupId.facilities'
 import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.runs.$runId'
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
+import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
+import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
 import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
 
@@ -126,6 +140,11 @@ const PayerDirectoryRoute = PayerDirectoryRouteImport.update({
 const OutcomesRoute = OutcomesRouteImport.update({
   id: '/outcomes',
   path: '/outcomes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgDetailRoute = OrgDetailRouteImport.update({
+  id: '/org-detail',
+  path: '/org-detail',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -198,6 +217,11 @@ const LaunchesIndexRoute = LaunchesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => LaunchesRoute,
 } as any)
+const GroupsIndexRoute = GroupsIndexRouteImport.update({
+  id: '/groups/',
+  path: '/groups/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CasesIndexRoute = CasesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -223,12 +247,44 @@ const ReportingPortfolioRoute = ReportingPortfolioRouteImport.update({
   path: '/reporting/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportingLocationsPerGroupRoute =
+  ReportingLocationsPerGroupRouteImport.update({
+    id: '/reporting/locations-per-group',
+    path: '/reporting/locations-per-group',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ReportingLeadsRoute = ReportingLeadsRouteImport.update({
+  id: '/reporting/leads',
+  path: '/reporting/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingLaunchesRoute = ReportingLaunchesRouteImport.update({
+  id: '/reporting/launches',
+  path: '/reporting/launches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingFacilitiesWithoutProvidersRoute =
+  ReportingFacilitiesWithoutProvidersRouteImport.update({
+    id: '/reporting/facilities-without-providers',
+    path: '/reporting/facilities-without-providers',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ReportingExpiringCredentialsRoute =
   ReportingExpiringCredentialsRouteImport.update({
     id: '/reporting/expiring-credentials',
     path: '/reporting/expiring-credentials',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ReportingDenialsRoute = ReportingDenialsRouteImport.update({
+  id: '/reporting/denials',
+  path: '/reporting/denials',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportingAuditLogRoute = ReportingAuditLogRouteImport.update({
+  id: '/reporting/audit-log',
+  path: '/reporting/audit-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProvidersNewRoute = ProvidersNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -252,6 +308,11 @@ const LaunchesIdRoute = LaunchesIdRouteImport.update({
 const ImportRunIdRoute = ImportRunIdRouteImport.update({
   id: '/import/$runId',
   path: '/import/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenerationRunsRoute = GenerationRunsRouteImport.update({
@@ -329,6 +390,11 @@ const ProvidersIdIndexRoute = ProvidersIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProvidersIdRoute,
 } as any)
+const GroupsGroupIdIndexRoute = GroupsGroupIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GroupsGroupIdRoute,
+} as any)
 const GenerationRunsIndexRoute = GenerationRunsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -359,6 +425,17 @@ const PortalsPortalKeyTrainRoute = PortalsPortalKeyTrainRouteImport.update({
   path: '/portals/$portalKey/train',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GroupsGroupIdPayerNetworkRoute =
+  GroupsGroupIdPayerNetworkRouteImport.update({
+    id: '/payer-network',
+    path: '/payer-network',
+    getParentRoute: () => GroupsGroupIdRoute,
+  } as any)
+const GroupsGroupIdFacilitiesRoute = GroupsGroupIdFacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
+  getParentRoute: () => GroupsGroupIdRoute,
+} as any)
 const GenerationRunsRunIdRoute = GenerationRunsRunIdRouteImport.update({
   id: '/$runId',
   path: '/$runId',
@@ -378,6 +455,16 @@ const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AdminSopsRoute,
+} as any)
+const AdminPayerAdminSopsRoute = AdminPayerAdminSopsRouteImport.update({
+  id: '/sops',
+  path: '/sops',
+  getParentRoute: () => AdminPayerAdminRoute,
+} as any)
+const AdminPayerAdminCatalogRoute = AdminPayerAdminCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => AdminPayerAdminRoute,
 } as any)
 const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   id: '/admin/payers_/$id/scorecard',
@@ -402,6 +489,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -427,31 +515,44 @@ export interface FileRoutesByFullPath {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation/runs': typeof GenerationRunsRouteWithChildren
+  '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation/runs/': typeof GenerationRunsIndexRoute
+  '/groups/$groupId/': typeof GroupsGroupIdIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -465,6 +566,7 @@ export interface FileRoutesByTo {
   '/get-started': typeof GetStartedRoute
   '/home': typeof HomeRoute
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -489,26 +591,38 @@ export interface FileRoutesByTo {
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases': typeof CasesIndexRoute
+  '/groups': typeof GroupsIndexRoute
   '/launches': typeof LaunchesIndexRoute
   '/onboarding': typeof OnboardingIndexRoute
   '/providers': typeof ProvidersIndexRoute
   '/reporting': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin': typeof AdminPayerAdminIndexRoute
   '/admin/sops': typeof AdminSopsIndexRoute
   '/admin/templates': typeof AdminTemplatesIndexRoute
   '/generation/runs': typeof GenerationRunsIndexRoute
+  '/groups/$groupId': typeof GroupsGroupIdIndexRoute
   '/providers/$id': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -525,6 +639,7 @@ export interface FileRoutesById {
   '/home': typeof HomeRoute
   '/launches': typeof LaunchesRouteWithChildren
   '/login': typeof LoginRoute
+  '/org-detail': typeof OrgDetailRoute
   '/outcomes': typeof OutcomesRoute
   '/payer-directory': typeof PayerDirectoryRoute
   '/portfolio': typeof PortfolioRoute
@@ -550,31 +665,44 @@ export interface FileRoutesById {
   '/cases/$id': typeof CasesIdRoute
   '/dev/primitives': typeof DevPrimitivesRoute
   '/generation_/runs': typeof GenerationRunsRouteWithChildren
+  '/groups/$groupId': typeof GroupsGroupIdRouteWithChildren
   '/import/$runId': typeof ImportRunIdRoute
   '/launches/$id': typeof LaunchesIdRoute
   '/onboarding/wizard': typeof OnboardingWizardRoute
   '/providers/$id': typeof ProvidersIdRouteWithChildren
   '/providers/new': typeof ProvidersNewRoute
+  '/reporting/audit-log': typeof ReportingAuditLogRoute
+  '/reporting/denials': typeof ReportingDenialsRoute
   '/reporting/expiring-credentials': typeof ReportingExpiringCredentialsRoute
+  '/reporting/facilities-without-providers': typeof ReportingFacilitiesWithoutProvidersRoute
+  '/reporting/launches': typeof ReportingLaunchesRoute
+  '/reporting/leads': typeof ReportingLeadsRoute
+  '/reporting/locations-per-group': typeof ReportingLocationsPerGroupRoute
   '/reporting/portfolio': typeof ReportingPortfolioRoute
   '/share/$token': typeof ShareTokenRoute
   '/ssn-intake/$token': typeof SsnIntakeTokenRoute
   '/tasks/$id': typeof TasksIdRoute
   '/cases/': typeof CasesIndexRoute
+  '/groups/': typeof GroupsIndexRoute
   '/launches/': typeof LaunchesIndexRoute
   '/onboarding/': typeof OnboardingIndexRoute
   '/providers/': typeof ProvidersIndexRoute
   '/reporting/': typeof ReportingIndexRoute
+  '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
+  '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
   '/generation_/runs/$runId': typeof GenerationRunsRunIdRoute
+  '/groups/$groupId/facilities': typeof GroupsGroupIdFacilitiesRoute
+  '/groups/$groupId/payer-network': typeof GroupsGroupIdPayerNetworkRoute
   '/portals/$portalKey/train': typeof PortalsPortalKeyTrainRoute
   '/providers/$id/edit': typeof ProvidersIdEditRoute
   '/admin/payer-admin/': typeof AdminPayerAdminIndexRoute
   '/admin/sops/': typeof AdminSopsIndexRoute
   '/admin/templates/': typeof AdminTemplatesIndexRoute
   '/generation_/runs/': typeof GenerationRunsIndexRoute
+  '/groups/$groupId/': typeof GroupsGroupIdIndexRoute
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
@@ -592,6 +720,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -617,31 +746,44 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation/runs'
+    | '/groups/$groupId'
     | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
+    | '/groups/'
     | '/launches/'
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation/runs/'
+    | '/groups/$groupId/'
     | '/providers/$id/'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
@@ -655,6 +797,7 @@ export interface FileRouteTypes {
     | '/get-started'
     | '/home'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -679,26 +822,38 @@ export interface FileRouteTypes {
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases'
+    | '/groups'
     | '/launches'
     | '/onboarding'
     | '/providers'
     | '/reporting'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin'
     | '/admin/sops'
     | '/admin/templates'
     | '/generation/runs'
+    | '/groups/$groupId'
     | '/providers/$id'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers/$id/scorecard'
@@ -714,6 +869,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/launches'
     | '/login'
+    | '/org-detail'
     | '/outcomes'
     | '/payer-directory'
     | '/portfolio'
@@ -739,31 +895,44 @@ export interface FileRouteTypes {
     | '/cases/$id'
     | '/dev/primitives'
     | '/generation_/runs'
+    | '/groups/$groupId'
     | '/import/$runId'
     | '/launches/$id'
     | '/onboarding/wizard'
     | '/providers/$id'
     | '/providers/new'
+    | '/reporting/audit-log'
+    | '/reporting/denials'
     | '/reporting/expiring-credentials'
+    | '/reporting/facilities-without-providers'
+    | '/reporting/launches'
+    | '/reporting/leads'
+    | '/reporting/locations-per-group'
     | '/reporting/portfolio'
     | '/share/$token'
     | '/ssn-intake/$token'
     | '/tasks/$id'
     | '/cases/'
+    | '/groups/'
     | '/launches/'
     | '/onboarding/'
     | '/providers/'
     | '/reporting/'
+    | '/admin/payer-admin/catalog'
+    | '/admin/payer-admin/sops'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
     | '/generation_/runs/$runId'
+    | '/groups/$groupId/facilities'
+    | '/groups/$groupId/payer-network'
     | '/portals/$portalKey/train'
     | '/providers/$id/edit'
     | '/admin/payer-admin/'
     | '/admin/sops/'
     | '/admin/templates/'
     | '/generation_/runs/'
+    | '/groups/$groupId/'
     | '/providers/$id/'
     | '/admin/payer-admin/forms/$payerId'
     | '/admin/payers_/$id/scorecard'
@@ -780,6 +949,7 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   LaunchesRoute: typeof LaunchesRouteWithChildren
   LoginRoute: typeof LoginRoute
+  OrgDetailRoute: typeof OrgDetailRoute
   OutcomesRoute: typeof OutcomesRoute
   PayerDirectoryRoute: typeof PayerDirectoryRoute
   PortfolioRoute: typeof PortfolioRoute
@@ -804,13 +974,21 @@ export interface RootRouteChildren {
   CaptureTokenRoute: typeof CaptureTokenRoute
   DevPrimitivesRoute: typeof DevPrimitivesRoute
   GenerationRunsRoute: typeof GenerationRunsRouteWithChildren
+  GroupsGroupIdRoute: typeof GroupsGroupIdRouteWithChildren
   ImportRunIdRoute: typeof ImportRunIdRoute
   OnboardingWizardRoute: typeof OnboardingWizardRoute
+  ReportingAuditLogRoute: typeof ReportingAuditLogRoute
+  ReportingDenialsRoute: typeof ReportingDenialsRoute
   ReportingExpiringCredentialsRoute: typeof ReportingExpiringCredentialsRoute
+  ReportingFacilitiesWithoutProvidersRoute: typeof ReportingFacilitiesWithoutProvidersRoute
+  ReportingLaunchesRoute: typeof ReportingLaunchesRoute
+  ReportingLeadsRoute: typeof ReportingLeadsRoute
+  ReportingLocationsPerGroupRoute: typeof ReportingLocationsPerGroupRoute
   ReportingPortfolioRoute: typeof ReportingPortfolioRoute
   ShareTokenRoute: typeof ShareTokenRoute
   SsnIntakeTokenRoute: typeof SsnIntakeTokenRoute
   TasksIdRoute: typeof TasksIdRoute
+  GroupsIndexRoute: typeof GroupsIndexRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
@@ -894,6 +1072,13 @@ declare module '@tanstack/react-router' {
       path: '/outcomes'
       fullPath: '/outcomes'
       preLoaderRoute: typeof OutcomesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/org-detail': {
+      id: '/org-detail'
+      path: '/org-detail'
+      fullPath: '/org-detail'
+      preLoaderRoute: typeof OrgDetailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -994,6 +1179,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LaunchesIndexRouteImport
       parentRoute: typeof LaunchesRoute
     }
+    '/groups/': {
+      id: '/groups/'
+      path: '/groups'
+      fullPath: '/groups/'
+      preLoaderRoute: typeof GroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cases/': {
       id: '/cases/'
       path: '/'
@@ -1029,11 +1221,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportingPortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reporting/locations-per-group': {
+      id: '/reporting/locations-per-group'
+      path: '/reporting/locations-per-group'
+      fullPath: '/reporting/locations-per-group'
+      preLoaderRoute: typeof ReportingLocationsPerGroupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/leads': {
+      id: '/reporting/leads'
+      path: '/reporting/leads'
+      fullPath: '/reporting/leads'
+      preLoaderRoute: typeof ReportingLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/launches': {
+      id: '/reporting/launches'
+      path: '/reporting/launches'
+      fullPath: '/reporting/launches'
+      preLoaderRoute: typeof ReportingLaunchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/facilities-without-providers': {
+      id: '/reporting/facilities-without-providers'
+      path: '/reporting/facilities-without-providers'
+      fullPath: '/reporting/facilities-without-providers'
+      preLoaderRoute: typeof ReportingFacilitiesWithoutProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reporting/expiring-credentials': {
       id: '/reporting/expiring-credentials'
       path: '/reporting/expiring-credentials'
       fullPath: '/reporting/expiring-credentials'
       preLoaderRoute: typeof ReportingExpiringCredentialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/denials': {
+      id: '/reporting/denials'
+      path: '/reporting/denials'
+      fullPath: '/reporting/denials'
+      preLoaderRoute: typeof ReportingDenialsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reporting/audit-log': {
+      id: '/reporting/audit-log'
+      path: '/reporting/audit-log'
+      fullPath: '/reporting/audit-log'
+      preLoaderRoute: typeof ReportingAuditLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/providers/new': {
@@ -1069,6 +1303,13 @@ declare module '@tanstack/react-router' {
       path: '/import/$runId'
       fullPath: '/import/$runId'
       preLoaderRoute: typeof ImportRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId': {
+      id: '/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof GroupsGroupIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/generation_/runs': {
@@ -1176,6 +1417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProvidersIdIndexRouteImport
       parentRoute: typeof ProvidersIdRoute
     }
+    '/groups/$groupId/': {
+      id: '/groups/$groupId/'
+      path: '/'
+      fullPath: '/groups/$groupId/'
+      preLoaderRoute: typeof GroupsGroupIdIndexRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
     '/generation_/runs/': {
       id: '/generation_/runs/'
       path: '/'
@@ -1218,6 +1466,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalsPortalKeyTrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/groups/$groupId/payer-network': {
+      id: '/groups/$groupId/payer-network'
+      path: '/payer-network'
+      fullPath: '/groups/$groupId/payer-network'
+      preLoaderRoute: typeof GroupsGroupIdPayerNetworkRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
+    '/groups/$groupId/facilities': {
+      id: '/groups/$groupId/facilities'
+      path: '/facilities'
+      fullPath: '/groups/$groupId/facilities'
+      preLoaderRoute: typeof GroupsGroupIdFacilitiesRouteImport
+      parentRoute: typeof GroupsGroupIdRoute
+    }
     '/generation_/runs/$runId': {
       id: '/generation_/runs/$runId'
       path: '/$runId'
@@ -1245,6 +1507,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/sops/$id'
       preLoaderRoute: typeof AdminSopsIdRouteImport
       parentRoute: typeof AdminSopsRoute
+    }
+    '/admin/payer-admin/sops': {
+      id: '/admin/payer-admin/sops'
+      path: '/sops'
+      fullPath: '/admin/payer-admin/sops'
+      preLoaderRoute: typeof AdminPayerAdminSopsRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
+    }
+    '/admin/payer-admin/catalog': {
+      id: '/admin/payer-admin/catalog'
+      path: '/catalog'
+      fullPath: '/admin/payer-admin/catalog'
+      preLoaderRoute: typeof AdminPayerAdminCatalogRouteImport
+      parentRoute: typeof AdminPayerAdminRoute
     }
     '/admin/payers_/$id/scorecard': {
       id: '/admin/payers_/$id/scorecard'
@@ -1320,11 +1596,15 @@ const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
 )
 
 interface AdminPayerAdminRouteChildren {
+  AdminPayerAdminCatalogRoute: typeof AdminPayerAdminCatalogRoute
+  AdminPayerAdminSopsRoute: typeof AdminPayerAdminSopsRoute
   AdminPayerAdminIndexRoute: typeof AdminPayerAdminIndexRoute
   AdminPayerAdminFormsPayerIdRoute: typeof AdminPayerAdminFormsPayerIdRoute
 }
 
 const AdminPayerAdminRouteChildren: AdminPayerAdminRouteChildren = {
+  AdminPayerAdminCatalogRoute: AdminPayerAdminCatalogRoute,
+  AdminPayerAdminSopsRoute: AdminPayerAdminSopsRoute,
   AdminPayerAdminIndexRoute: AdminPayerAdminIndexRoute,
   AdminPayerAdminFormsPayerIdRoute: AdminPayerAdminFormsPayerIdRoute,
 }
@@ -1377,6 +1657,22 @@ const GenerationRunsRouteWithChildren = GenerationRunsRoute._addFileChildren(
   GenerationRunsRouteChildren,
 )
 
+interface GroupsGroupIdRouteChildren {
+  GroupsGroupIdFacilitiesRoute: typeof GroupsGroupIdFacilitiesRoute
+  GroupsGroupIdPayerNetworkRoute: typeof GroupsGroupIdPayerNetworkRoute
+  GroupsGroupIdIndexRoute: typeof GroupsGroupIdIndexRoute
+}
+
+const GroupsGroupIdRouteChildren: GroupsGroupIdRouteChildren = {
+  GroupsGroupIdFacilitiesRoute: GroupsGroupIdFacilitiesRoute,
+  GroupsGroupIdPayerNetworkRoute: GroupsGroupIdPayerNetworkRoute,
+  GroupsGroupIdIndexRoute: GroupsGroupIdIndexRoute,
+}
+
+const GroupsGroupIdRouteWithChildren = GroupsGroupIdRoute._addFileChildren(
+  GroupsGroupIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CasesRoute: CasesRouteWithChildren,
@@ -1388,6 +1684,7 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   LaunchesRoute: LaunchesRouteWithChildren,
   LoginRoute: LoginRoute,
+  OrgDetailRoute: OrgDetailRoute,
   OutcomesRoute: OutcomesRoute,
   PayerDirectoryRoute: PayerDirectoryRoute,
   PortfolioRoute: PortfolioRoute,
@@ -1412,13 +1709,22 @@ const rootRouteChildren: RootRouteChildren = {
   CaptureTokenRoute: CaptureTokenRoute,
   DevPrimitivesRoute: DevPrimitivesRoute,
   GenerationRunsRoute: GenerationRunsRouteWithChildren,
+  GroupsGroupIdRoute: GroupsGroupIdRouteWithChildren,
   ImportRunIdRoute: ImportRunIdRoute,
   OnboardingWizardRoute: OnboardingWizardRoute,
+  ReportingAuditLogRoute: ReportingAuditLogRoute,
+  ReportingDenialsRoute: ReportingDenialsRoute,
   ReportingExpiringCredentialsRoute: ReportingExpiringCredentialsRoute,
+  ReportingFacilitiesWithoutProvidersRoute:
+    ReportingFacilitiesWithoutProvidersRoute,
+  ReportingLaunchesRoute: ReportingLaunchesRoute,
+  ReportingLeadsRoute: ReportingLeadsRoute,
+  ReportingLocationsPerGroupRoute: ReportingLocationsPerGroupRoute,
   ReportingPortfolioRoute: ReportingPortfolioRoute,
   ShareTokenRoute: ShareTokenRoute,
   SsnIntakeTokenRoute: SsnIntakeTokenRoute,
   TasksIdRoute: TasksIdRoute,
+  GroupsIndexRoute: GroupsIndexRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,

@@ -1,22 +1,22 @@
 // Cases query hooks including the joined detail view, contract lookup, and
-// credentialing-track status mutation.
+// the E6.0 unified-status mutation (the ONE user-facing status machine).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
-  advancePayerPipeline,
   appendCaseTasks,
   createCase,
   getCase,
   getCases,
   getContractFor,
+  listCaseDenialEntries,
   listDenialReasonCodes,
+  setCaseStatus,
   setPayerReference,
-  updateCaseStatus,
-  type AdvancePipelineInput,
   type CaseFilters,
   type CaseInput,
   type CaseTaskPayload,
+  type SetCaseStatusInput,
 } from "@/services/cases";
 
 const THIRTY_SECONDS = 30_000;
@@ -93,14 +93,30 @@ export function useSetPayerReference() {
   });
 }
 
-// E2.1 F2.1.3 — reapplication after a denial: a status transition (Denied →
-// In Progress, recorded in status_history by the existing updateCaseStatus
-// path) plus the restamped task set appended to the SAME case. Never a second
-// case at the key; the case keeps its full touches/status history.
+// E6.0 — the single unified-status transition entry point (set_case_status).
+// Invalidates the case detail (status + timeline), the cases list (pill), the
+// touch log (evidence links), and the audit log.
+export function useSetCaseStatus() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (input: SetCaseStatusInput) => setCaseStatus(input),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// E2.1 F2.1.3 / E6.0 — reapplication after a denial: the SAME case returns to
+// In Progress (the denied → in_progress reapply edge through set_case_status —
+// unified history + audit in one transaction) plus the restamped task set
+// appended. Never a second case at the key; the prior denial stays visible in
+// the case's history.
 export interface ReapplyCaseVars {
   caseId: string;
-  /** The org's In Progress credentialing status id ([r4-review] Q6). */
-  statusId: string;
   /** Tasks resolved from the CURRENT SOP version (Model A: new work gets
    * latest), sort-ordered after the case's existing tasks. */
   tasks: CaseTaskPayload[];
@@ -111,10 +127,11 @@ export function useReapplyCase() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: async (vars: ReapplyCaseVars) => {
-      // Metadata keys become UPDATE columns in updateCaseStatus — pass none.
-      // The reapplication trace is the appendCaseTasks audit row plus the
-      // Denied → In Progress status_history entry this call writes.
-      await updateCaseStatus(vars.caseId, vars.statusId, {});
+      await setCaseStatus({
+        caseId: vars.caseId,
+        toStatus: "in_progress",
+        expectedStatus: "denied",
+      });
       await appendCaseTasks(vars.caseId, vars.tasks);
     },
     onSuccess: (_data, vars) => {
@@ -126,22 +143,8 @@ export function useReapplyCase() {
   });
 }
 
-// E4.0 F4.0.1 — advance the payer pipeline through the atomic RPC. Invalidates
-// the case detail (state + timeline), the cases list (badge), and the audit log.
-export function useAdvancePayerPipeline() {
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (input: AdvancePipelineInput) => advancePayerPipeline(input),
-    onSuccess: (_data, input) => {
-      qc.invalidateQueries({ queryKey: ["cases", orgId] });
-      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, input.caseId) });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
-  });
-}
-
-// E4.0 TE-4 — global + own-org active reason codes; long-lived (governance data).
+// E4.0 TE-4 — global + own-org active reason codes; long-lived (governance
+// data). Since E6.0 these back the unified Denied dialog's required reason.
 export function useDenialReasonCodes() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useQuery({
@@ -152,22 +155,15 @@ export function useDenialReasonCodes() {
   });
 }
 
-export interface UpdateCaseStatusVars {
-  caseId: string;
-  statusId: string;
-  metadata?: Record<string, unknown>;
-}
-
-export function useUpdateCaseStatus() {
-  const qc = useQueryClient();
+// E6.2 F6.2.3 — the board drill-down's denial history. Rides the "cases"
+// prefix (queryKeys.caseDenialEntries) so every set_case_status invalidation
+// re-derives it alongside the list pills.
+export function useCaseDenialEntries() {
   const orgId = useActiveOrgId() ?? "no-org";
-  return useMutation({
-    mutationFn: (vars: UpdateCaseStatusVars) =>
-      updateCaseStatus(vars.caseId, vars.statusId, vars.metadata ?? {}),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["cases", orgId] });
-      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
-    },
+  return useQuery({
+    queryKey: queryKeys.caseDenialEntries(orgId),
+    queryFn: () => listCaseDenialEntries(),
+    enabled: orgId !== "no-org",
+    staleTime: THIRTY_SECONDS,
   });
 }

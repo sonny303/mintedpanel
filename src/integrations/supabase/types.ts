@@ -310,6 +310,80 @@ export type Database = {
           },
         ];
       };
+      case_status_history: {
+        Row: {
+          actor_kind: string;
+          case_id: string;
+          changed_at: string;
+          changed_by: string | null;
+          evidence_touch_id: string | null;
+          from_status: string | null;
+          id: string;
+          is_correction: boolean;
+          note: string | null;
+          org_id: string;
+          reason_code_id: string | null;
+          to_status: string;
+        };
+        Insert: {
+          actor_kind?: string;
+          case_id: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          evidence_touch_id?: string | null;
+          from_status?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          note?: string | null;
+          org_id: string;
+          reason_code_id?: string | null;
+          to_status: string;
+        };
+        Update: {
+          actor_kind?: string;
+          case_id?: string;
+          changed_at?: string;
+          changed_by?: string | null;
+          evidence_touch_id?: string | null;
+          from_status?: string | null;
+          id?: string;
+          is_correction?: boolean;
+          note?: string | null;
+          org_id?: string;
+          reason_code_id?: string | null;
+          to_status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_status_history_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_evidence_touch_id_fkey";
+            columns: ["evidence_touch_id"];
+            isOneToOne: false;
+            referencedRelation: "touches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_status_history_reason_code_id_fkey";
+            columns: ["reason_code_id"];
+            isOneToOne: false;
+            referencedRelation: "denial_reason_codes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       communication_event: {
         Row: {
           channel: string;
@@ -427,7 +501,9 @@ export type Database = {
           approved_date: string | null;
           assigned_to: string | null;
           case_email_token: string;
+          case_status: string;
           confirmed_effective_date: string | null;
+          contract_executed_date: string | null;
           created_at: string | null;
           created_by: string | null;
           credentialing_status_id: string | null;
@@ -454,7 +530,9 @@ export type Database = {
           approved_date?: string | null;
           assigned_to?: string | null;
           case_email_token?: string;
+          case_status?: string;
           confirmed_effective_date?: string | null;
+          contract_executed_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
           credentialing_status_id?: string | null;
@@ -481,7 +559,9 @@ export type Database = {
           approved_date?: string | null;
           assigned_to?: string | null;
           case_email_token?: string;
+          case_status?: string;
           confirmed_effective_date?: string | null;
+          contract_executed_date?: string | null;
           created_at?: string | null;
           created_by?: string | null;
           credentialing_status_id?: string | null;
@@ -608,6 +688,80 @@ export type Database = {
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      enrollment_facts: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          effective_date: string | null;
+          expired_at: string | null;
+          expired_by: string | null;
+          group_id: string;
+          id: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          source: string;
+          state: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_date?: string | null;
+          expired_at?: string | null;
+          expired_by?: string | null;
+          group_id: string;
+          id?: string;
+          org_id: string;
+          payer_id: string;
+          provider_id: string;
+          source?: string;
+          state: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          effective_date?: string | null;
+          expired_at?: string | null;
+          expired_by?: string | null;
+          group_id?: string;
+          id?: string;
+          org_id?: string;
+          payer_id?: string;
+          provider_id?: string;
+          source?: string;
+          state?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_facts_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "provider_groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "enrollment_facts_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
             referencedColumns: ["id"];
           },
         ];
@@ -1856,6 +2010,7 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          delegation_note: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -1873,6 +2028,7 @@ export type Database = {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          delegation_note?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -1890,6 +2046,7 @@ export type Database = {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          delegation_note?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -2043,9 +2200,10 @@ export type Database = {
           is_verified: boolean;
           last_verified_at: string | null;
           name: string;
-          org_id: string;
+          org_id: string | null;
           payer_id: string | null;
           portal_key: string;
+          proven_at: string | null;
           updated_at: string;
           url_changed_at: string | null;
         };
@@ -2056,9 +2214,10 @@ export type Database = {
           is_verified?: boolean;
           last_verified_at?: string | null;
           name: string;
-          org_id: string;
+          org_id?: string | null;
           payer_id?: string | null;
           portal_key: string;
+          proven_at?: string | null;
           updated_at?: string;
           url_changed_at?: string | null;
         };
@@ -2069,9 +2228,10 @@ export type Database = {
           is_verified?: boolean;
           last_verified_at?: string | null;
           name?: string;
-          org_id?: string;
+          org_id?: string | null;
           payer_id?: string | null;
           portal_key?: string;
+          proven_at?: string | null;
           updated_at?: string;
           url_changed_at?: string | null;
         };
@@ -3395,6 +3555,14 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      _apply_case_status_auto: {
+        Args: {
+          p_case_id: string;
+          p_evidence_touch_id?: string;
+          p_to_status: string;
+        };
+        Returns: undefined;
+      };
       _ssn_decrypt: { Args: { p_ciphertext: string }; Returns: string };
       _ssn_digits: { Args: { p_raw: string }; Returns: string };
       _ssn_encrypt: { Args: { p_plaintext: string }; Returns: string };
@@ -3429,6 +3597,33 @@ export type Database = {
       assert_contact_valid: {
         Args: { p: Json; p_label: string };
         Returns: undefined;
+      };
+      author_global_sop: {
+        Args: {
+          p_archived?: boolean;
+          p_group_id: string;
+          p_id: string;
+          p_name: string;
+          p_payer_id: string;
+          p_required_profile_attributes?: Json;
+          p_state: string;
+          p_task_definitions?: Json;
+        };
+        Returns: {
+          archived: boolean;
+          created_at: string | null;
+          current_version: number;
+          group_id: string | null;
+          id: string;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          required_profile_attributes: Json;
+          specialty: string | null;
+          state: string | null;
+          task_definitions: Json;
+          updated_at: string | null;
+        };
       };
       check_rpc_throttle: {
         Args: {
@@ -3506,6 +3701,7 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          delegation_note: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -3554,6 +3750,39 @@ export type Database = {
         Returns: undefined;
       };
       revoke_report_share: { Args: { p_id: string }; Returns: undefined };
+      set_case_status: {
+        Args: {
+          p_case_id: string;
+          p_contract_executed_date?: string;
+          p_effective_date?: string;
+          p_evidence_touch_id?: string;
+          p_expected_status?: string;
+          p_group_provider_id?: string;
+          p_individual_provider_id?: string;
+          p_is_correction?: boolean;
+          p_note?: string;
+          p_reason_code_id?: string;
+          p_to_status: string;
+        };
+        Returns: Json;
+      };
+      set_global_portal_flags: {
+        Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };
+        Returns: {
+          created_at: string;
+          form_url: string | null;
+          id: string;
+          is_verified: boolean;
+          last_verified_at: string | null;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          portal_key: string;
+          proven_at: string | null;
+          updated_at: string;
+          url_changed_at: string | null;
+        };
+      };
       set_primary_assignment: {
         Args: { p_assignment_id: string; p_provider_id: string };
         Returns: undefined;
@@ -3575,8 +3804,62 @@ export type Database = {
         Args: { p_ssn: string; p_token: string };
         Returns: Json;
       };
+      train_global_field_map: {
+        Args: {
+          p_field_label?: string;
+          p_id: string;
+          p_source: string;
+          p_status: string;
+          p_token?: string;
+        };
+        Returns: {
+          confidence: number | null;
+          created_at: string;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          selector: string;
+          selector_fallbacks: Json | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        };
+      };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
+      upsert_global_portal: {
+        Args: {
+          p_form_url?: string;
+          p_id: string;
+          p_name: string;
+          p_payer_id?: string;
+          p_portal_key: string;
+        };
+        Returns: {
+          created_at: string;
+          form_url: string | null;
+          id: string;
+          is_verified: boolean;
+          last_verified_at: string | null;
+          name: string;
+          org_id: string | null;
+          payer_id: string | null;
+          portal_key: string;
+          proven_at: string | null;
+          updated_at: string;
+          url_changed_at: string | null;
+        };
+      };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
       validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };

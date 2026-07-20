@@ -10,7 +10,11 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
-import { planAssignmentSync, type GroupAssignmentInput } from "@/lib/groupAssignments";
+import {
+  planAssignmentSync,
+  validateGroupAssignments,
+  type GroupAssignmentInput,
+} from "@/lib/groupAssignments";
 import { insertAssignmentRows } from "@/services/providerAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
@@ -656,6 +660,87 @@ export async function listProviderGroupAssignments(): Promise<ProviderGroupAssig
     .eq("org_id", orgId);
   if (error) throw error;
   return camelizeRow<ProviderGroupAssignment[]>(data ?? []);
+}
+
+// E6.4 F6.4.3 — the record's in-place group-membership editor. A NARROW write:
+// touches ONLY provider_group_assignments (+ the frozen providers.group_id
+// mirror of the primary) through the same planAssignmentSync order the roster
+// form uses — never licenses, never facility assignments, never other columns.
+export async function setGroupAssignments(
+  providerId: string,
+  assignments: GroupAssignmentInput[],
+): Promise<void> {
+  const orgId = requireActiveOrg();
+  const validation = validateGroupAssignments(assignments);
+  if (validation) throw new Error(validation);
+
+  const { data: storedRows, error: storedErr } = await supabase
+    .from("provider_group_assignments")
+    .select("id, group_id, is_primary")
+    .eq("org_id", orgId)
+    .eq("provider_id", providerId);
+  if (storedErr) throw translateDbError(storedErr);
+  const stored = (storedRows ?? []).map((r) => ({
+    id: r.id as string,
+    groupId: r.group_id as string,
+    isPrimary: Boolean(r.is_primary),
+  }));
+
+  const plan = planAssignmentSync(assignments, stored);
+  if (plan.demoteIds.length > 0) {
+    const { error } = await supabase
+      .from("provider_group_assignments")
+      .update({ is_primary: false })
+      .eq("org_id", orgId)
+      .eq("provider_id", providerId)
+      .in("id", plan.demoteIds);
+    if (error) throw translateDbError(error);
+  }
+  if (plan.deleteIds.length > 0) {
+    const { error } = await supabase
+      .from("provider_group_assignments")
+      .delete()
+      .eq("org_id", orgId)
+      .eq("provider_id", providerId)
+      .in("id", plan.deleteIds);
+    if (error) throw translateDbError(error);
+  }
+  if (plan.promoteId) {
+    const { error } = await supabase
+      .from("provider_group_assignments")
+      .update({ is_primary: true })
+      .eq("org_id", orgId)
+      .eq("provider_id", providerId)
+      .eq("id", plan.promoteId);
+    if (error) throw translateDbError(error);
+  }
+  if (plan.inserts.length > 0) {
+    const { error } = await supabase.from("provider_group_assignments").insert(
+      plan.inserts.map((a) => ({
+        org_id: orgId,
+        provider_id: providerId,
+        group_id: a.groupId,
+        is_primary: a.isPrimary,
+      })),
+    );
+    if (error) throw translateDbError(error);
+  }
+  // Keep the frozen legacy mirror in step with the primary (E1.3 rule).
+  const { error: mirrorErr } = await supabase
+    .from("providers")
+    .update({ group_id: plan.primaryGroupId })
+    .eq("org_id", orgId)
+    .eq("id", providerId);
+  if (mirrorErr) throw translateDbError(mirrorErr);
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "provider",
+    entityId: providerId,
+    before: { groupAssignments: stored },
+    after: { groupAssignments: assignments },
+    description: "Updated provider group memberships",
+  });
 }
 
 const TERMINATION_ACTIVE_LABELS = ["active", "approved, pending effective date"];

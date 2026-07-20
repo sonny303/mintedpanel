@@ -2,13 +2,14 @@
 // the E1.0 SECTION_BODIES registry, replacing the E1.0 start placeholder.
 // Lists the org's ACTIVE groups (name, TIN, states), opens the entity form
 // for create/edit, soft-deletes (is_active=false — never a row delete), and
-// renders the PM's dual-path exit: once a group is saved, a primary
-// "Next: Facilities" continues the journey while a secondary "Add another
-// group" keeps multi-TIN clients here — no confirmation gate. Progress flips
-// via derived resolvers only (≥1 active group = Complete).
+// keeps multi-TIN clients adding via "Add another group" — no confirmation
+// gate. Progress flips via derived resolvers only (≥1 active group =
+// Complete). The E1.1 inline "Next: Facilities" exit was removed by user
+// request (2026-07-19) — step advance belongs to the wizard's NextActionCard,
+// which derives the same CTA at the top of the page.
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,16 +21,12 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProviderGroupForm } from "@/components/onboarding/ProviderGroupForm";
-import { openSection } from "@/components/onboarding/openSection";
 import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { useUpdateProviderGroup } from "@/hooks/useOrgSettings";
 import { formatTin } from "@/lib/providerGroup";
-import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
 import type { ProviderGroup } from "@/types";
 import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
-
-const FACILITIES_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "facilities");
 
 function DeactivateConfirm({ group, onClose }: { group: ProviderGroup; onClose: () => void }) {
   const updateMut = useUpdateProviderGroup(group.id);
@@ -165,18 +162,7 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
         ))}
       </ul>
 
-      {/* Dual-path exit (PM 2026-07-10): primary continues the journey,
-          secondary keeps multi-TIN clients adding — no confirmation gate. */}
       <div className="flex items-center gap-2">
-        {FACILITIES_DEF ? (
-          <Button
-            onClick={() => openSection(FACILITIES_DEF)}
-            className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-          >
-            Next: Facilities
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        ) : null}
         <Button variant="outline" onClick={() => setModal({ group: null })}>
           <Plus className="h-4 w-4" />
           Add another group

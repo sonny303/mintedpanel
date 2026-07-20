@@ -1,9 +1,9 @@
-// Case detail at /cases/$id. Composes header, MSO callout, side cards, and
-// the tasks / touches / history / notes panels from src/components/cases.
-import { useMemo, useState } from "react";
+// Case detail at /cases/$id. Composes header (with the E6.0 unified status
+// control), MSO callout, side cards, and the tasks / touches / history /
+// notes panels from src/components/cases.
+import { useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { differenceInDays, parseISO } from "date-fns";
-import { AlertTriangle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,28 +18,28 @@ import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
   useCase,
   useCases,
-  useContractFor,
   useDenialReasonCodes,
+  useSetCaseStatus,
   useSetPayerReference,
-  useUpdateCaseStatus,
 } from "@/hooks/useCases";
 import { useProviders } from "@/hooks/useProviders";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { usePortals } from "@/hooks/usePortals";
-import { useCoordinators, useMsoRoutingRule } from "@/hooks/useLookups";
+import { useCoordinators } from "@/hooks/useLookups";
 import { casePortalTargets } from "@/lib/casePortals";
 import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import type { StatusConfig } from "@/types";
 import { CaseHeader } from "@/components/cases/CaseHeader";
-import { PayerPipelineControl } from "@/components/cases/pipeline/PayerPipelineControl";
+import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
+import { CaseStatusHistoryPanel } from "@/components/cases/CaseStatusHistoryPanel";
 import {
   TrackingIdField,
   type TrackingIdSibling,
 } from "@/components/cases/pipeline/TrackingIdField";
 import { PayerPipelineHistoryPanel } from "@/components/cases/pipeline/PayerPipelineHistoryPanel";
-import { isTerminalPipelineState } from "@/lib/payerPipeline";
+import { isTerminalCaseStatus } from "@/lib/caseStatus";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
 import { CaseRequiredDocuments } from "@/components/documents/CaseRequiredDocuments";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
@@ -47,15 +47,10 @@ import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
 import { CaseWizard } from "@/components/cases/CaseWizard";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
 import { CaseHistoryPanel } from "@/components/cases/CaseHistoryPanel";
-import { ChangeStatusDialog } from "@/components/cases/ChangeStatusDialog";
 
 export const Route = createFileRoute("/cases/$id")({
   component: CaseDetailPage,
 });
-
-function isExecutedLabel(label: string | undefined): boolean {
-  return (label ?? "").toLowerCase().includes("execut");
-}
 
 function CaseDetailPage() {
   const { id } = Route.useParams();
@@ -69,13 +64,11 @@ function CaseDetailPage() {
   const coordinatorsQ = useCoordinators();
   const reasonCodesQ = useDenialReasonCodes();
   const c = caseQ.data;
-  const contractQ = useContractFor(c?.groupId ?? undefined, c?.payerId, c?.state);
-  const routingRuleQ = useMsoRoutingRule(c?.payerId, c?.state, c?.specialty ?? null);
   // Same org + payer cases feed the F4.0.2 duplicate tracking-ID warning.
   const payerCasesQ = useCases(c?.payerId ? { payerId: c.payerId } : {});
   const providersQ = useProviders();
 
-  const updateStatusM = useUpdateCaseStatus();
+  const setStatusM = useSetCaseStatus();
   const logTouchM = useLogTouch();
   const correctTouchM = useCorrectTouch();
   const logNoteM = useLogNote();
@@ -97,19 +90,13 @@ function CaseDetailPage() {
       });
   }, [c, payerCasesQ.data, providersQ.data]);
 
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [taskView, setTaskView] = useState("list");
-
+  // The legacy (pre-unification) status_configs map still names the retained
+  // read-only status_history ledger's entries.
   const statusById = useMemo(() => {
     const m = new Map<string, StatusConfig>();
     (statusesQ.data ?? []).forEach((s) => m.set(s.id, s));
     return m;
   }, [statusesQ.data]);
-
-  const credentialingStatuses = useMemo(
-    () => (statusesQ.data ?? []).filter((s) => s.track === "credentialing"),
-    [statusesQ.data],
-  );
 
   const coordinatorName = useMemo(() => {
     if (!c?.assignedTo) return "—";
@@ -159,13 +146,6 @@ function CaseDetailPage() {
     );
   }
 
-  const credStatus = c.credentialingStatusId ? statusById.get(c.credentialingStatusId) : null;
-  const contract = contractQ.data ?? null;
-  const contractStatus = contract?.contractingStatusId
-    ? statusById.get(contract.contractingStatusId)
-    : null;
-  const contractIsExecuted = isExecutedLabel(contractStatus?.label);
-
   const tasks = (c.tasks ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
   // E4.3 F4.3.1 — the case's launchable portals (from its open tasks' portal
   // steps), resolved to a name + URL for the "Work in portal" handoff.
@@ -184,12 +164,8 @@ function CaseDetailPage() {
       <div className="space-y-6">
         <CaseHeader
           c={c}
-          credStatus={credStatus}
-          contractStatus={contractStatus}
-          canEdit={canEdit}
-          onOpenStatus={() => setStatusModalOpen(true)}
-          pipelineControl={
-            <PayerPipelineControl
+          statusControl={
+            <CaseStatusControl
               c={c}
               reasonCodes={reasonCodesQ.data ?? []}
               canEdit={canEdit}
@@ -199,8 +175,9 @@ function CaseDetailPage() {
           trackingId={
             <TrackingIdField
               value={c.payerReferenceId}
-              // F4.0.2/TE-3 — post-terminal tracking-ID edits are admin-only.
-              canEdit={canEdit && (!isTerminalPipelineState(c.payerPipelineState) || isAdmin)}
+              // F4.0.2/TE-3 (re-keyed E6.0) — post-terminal tracking-ID edits
+              // are admin-only.
+              canEdit={canEdit && (!isTerminalCaseStatus(c.caseStatus) || isAdmin)}
               saving={setReferenceM.isPending}
               siblings={trackingSiblings}
               onSave={async (value) => {
@@ -221,35 +198,7 @@ function CaseDetailPage() {
           </div>
         ) : null}
 
-        <ReapplyCaseAction c={c} credStatusLabel={credStatus?.label ?? null} canEdit={canEdit} />
-
-        {c.mso ? (
-          <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-md p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 text-[#D97706]">
-                <AlertTriangle className="w-5 h-5 shrink-0" />
-                <span className="text-[14px] font-medium">
-                  Route through {c.mso.name}, not {c.payer?.name ?? "payer"} directly
-                </span>
-              </div>
-              {c.mso.portalUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 bg-white border-[#FDE68A] text-[#D97706] hover:bg-[#FEF3C7] hover:text-[#D97706]"
-                  asChild
-                >
-                  <a href={c.mso.portalUrl} target="_blank" rel="noreferrer">
-                    Go to Portal <ExternalLink className="w-3 h-3 ml-1.5" />
-                  </a>
-                </Button>
-              )}
-            </div>
-            {routingRuleQ.data?.notes ? (
-              <p className="text-[12px] text-[#92400E] mt-2 ml-8">{routingRuleQ.data.notes}</p>
-            ) : null}
-          </div>
-        ) : null}
+        <ReapplyCaseAction c={c} canEdit={canEdit} />
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-3 space-y-6">
@@ -281,7 +230,7 @@ function CaseDetailPage() {
                 download for the manual portal attach (D3 interim path).
                 Hidden when the case's tasks require no documents. */}
             <CaseRequiredDocuments providerId={c.providerId} groupId={c.groupId} tasks={tasks} />
-            <Tabs value={taskView} onValueChange={setTaskView}>
+            <Tabs defaultValue="list">
               <TabsList className="mb-3">
                 <TabsTrigger value="list">List</TabsTrigger>
                 <TabsTrigger value="wizard">Wizard</TabsTrigger>
@@ -297,12 +246,33 @@ function CaseDetailPage() {
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}
               canEdit={canEdit}
-              savingTouch={logTouchM.isPending || correctTouchM.isPending}
+              savingTouch={logTouchM.isPending || correctTouchM.isPending || setStatusM.isPending}
               savingNote={logNoteM.isPending}
+              // E6.0 F6.0.3 — the Add-touch dialog offers a status bump when
+              // the touch implies one; accepting logs touch + transition
+              // together, the touch linked as the transition's evidence.
+              currentStatus={c.caseStatus}
               onSaveTouch={async (input) => {
                 try {
-                  await logTouchM.mutateAsync({ caseId: c.id, input });
+                  const touch = await logTouchM.mutateAsync({ caseId: c.id, input });
                   toast.success("Touch logged");
+                  return touch;
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  return null;
+                }
+              }}
+              onStatusBump={async (toStatus, evidenceTouchId) => {
+                try {
+                  // expectedStatus is deliberately NULL: the touch just logged
+                  // may itself have auto-advanced the case (first recorded
+                  // work), so the bump validates against the live status.
+                  await setStatusM.mutateAsync({
+                    caseId: c.id,
+                    toStatus,
+                    evidenceTouchId,
+                  });
+                  toast.success("Status updated with the touch as evidence");
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
@@ -348,6 +318,10 @@ function CaseDetailPage() {
                     }
                   />
                   <Row
+                    label="Contract executed"
+                    value={<span className="tabular-nums">{fmtDate(c.contractExecutedDate)}</span>}
+                  />
+                  <Row
                     label="Days open"
                     value={
                       <span className="tabular-nums">
@@ -391,40 +365,19 @@ function CaseDetailPage() {
               </CardContent>
             </Card>
 
-            <PayerPipelineHistoryPanel history={c.payerPipelineHistory} />
-
-            <CaseHistoryPanel history={statusHistory} statusById={statusById} />
+            {/* E6.0 — the unified timeline, then the two retained read-only
+                pre-unification ledgers (rendered only when they carry rows;
+                zero cases lose history). */}
+            <CaseStatusHistoryPanel history={c.caseStatusHistory ?? []} touches={touches} />
+            {(c.payerPipelineHistory ?? []).length > 0 ? (
+              <PayerPipelineHistoryPanel history={c.payerPipelineHistory} />
+            ) : null}
+            {statusHistory.length > 0 ? (
+              <CaseHistoryPanel history={statusHistory} statusById={statusById} />
+            ) : null}
           </div>
         </div>
       </div>
-
-      <ChangeStatusDialog
-        open={statusModalOpen}
-        onOpenChange={setStatusModalOpen}
-        statuses={credentialingStatuses}
-        currentStatusId={c.credentialingStatusId}
-        payerName={c.payer?.name ?? "payer"}
-        state={c.state}
-        contractIsExecuted={contractIsExecuted}
-        saving={updateStatusM.isPending}
-        onSave={async ({ statusId, metadata, withoutContractWarning }) => {
-          try {
-            const merged: Record<string, unknown> = { ...metadata };
-            if (withoutContractWarning) {
-              merged.__warning = "set Active without executed contract";
-            }
-            await updateStatusM.mutateAsync({
-              caseId: c.id,
-              statusId,
-              metadata: merged,
-            });
-            setStatusModalOpen(false);
-            toast.success("Status updated");
-          } catch (e) {
-            toast.error((e as Error).message);
-          }
-        }}
-      />
     </TooltipProvider>
   );
 }

@@ -1,0 +1,959 @@
+<title>Journey A + B into C — the case-generation handoff</title>
+<style>
+  :root {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161a;
+      --raised: #191f1d;
+      --ink: #edeae3;
+      --ink-soft: #a9b0ac;
+      --ink-faint: #77807c;
+      --border: #2a322d;
+      --border-soft: #232b27;
+      --accent: #5fbe9a;
+      --accent-strong: #8fd8bc;
+      --accent-soft: #1b3229;
+      --amber-bg: #33270f;
+      --amber-fg: #e0af6b;
+      --blue-bg: #17222e;
+      --blue-fg: #7faaf0;
+      --green-bg: #14291f;
+      --green-fg: #6ccfa5;
+      --idle-bg: #232b27;
+      --idle-fg: #a9b0ac;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161a;
+    --raised: #191f1d;
+    --ink: #edeae3;
+    --ink-soft: #a9b0ac;
+    --ink-faint: #77807c;
+    --border: #2a322d;
+    --border-soft: #232b27;
+    --accent: #5fbe9a;
+    --accent-strong: #8fd8bc;
+    --accent-soft: #1b3229;
+    --amber-bg: #33270f;
+    --amber-fg: #e0af6b;
+    --blue-bg: #17222e;
+    --blue-fg: #7faaf0;
+    --green-bg: #14291f;
+    --green-fg: #6ccfa5;
+    --idle-bg: #232b27;
+    --idle-fg: #a9b0ac;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code,
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 40px 28px 90px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 25px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 8px 0 10px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 66ch;
+    margin: 0 0 34px;
+  }
+  .dek b {
+    color: var(--ink);
+  }
+
+  .step-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+  }
+  .step-label .num {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--raised);
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+  .step-label h2 {
+    font-size: 16.5px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+
+  .note {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 68ch;
+    margin: 10px 0 0;
+  }
+  .note b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .flow-connector {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+  }
+  .flow-connector svg {
+    color: var(--ink-faint);
+  }
+
+  /* Lanes */
+  .lanes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 760px) {
+    .lanes {
+      grid-template-columns: 1fr;
+    }
+  }
+  .lane {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 17px 19px;
+    box-shadow: var(--shadow);
+  }
+  .lane .lane-tag {
+    display: inline-flex;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .lane.a .lane-tag {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .lane.b .lane-tag {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+  .lane h3 {
+    font-size: 14.5px;
+    font-weight: 650;
+    margin: 0 0 3px;
+  }
+  .lane .who {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    margin-bottom: 12px;
+  }
+  .lane ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lane li {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    padding-left: 18px;
+    position: relative;
+  }
+  .lane li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  .lane li b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .lane .produces {
+    margin-top: 13px;
+    padding-top: 11px;
+    border-top: 1px dashed var(--border);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .lane .produces b {
+    color: var(--ink);
+  }
+
+  /* Engine */
+  .engine {
+    background: var(--accent-strong);
+    border-radius: 12px;
+    padding: 22px 24px;
+    color: #edeae3;
+  }
+  :root[data-theme="light"] .engine,
+  .engine {
+    color: #f0efe9;
+  }
+  .engine .engine-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 10px;
+  }
+  .engine .formula {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.9;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .engine .formula .op {
+    opacity: 0.55;
+    padding: 0 2px;
+  }
+  .engine .formula .term {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .engine .formula .result {
+    background: rgba(255, 255, 255, 0.22);
+    font-weight: 700;
+  }
+  .engine .engine-note {
+    font-size: 12px;
+    line-height: 1.6;
+    opacity: 0.75;
+    margin-top: 12px;
+    max-width: 62ch;
+  }
+
+  /* Ledger table */
+  .ledger-wrap {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .ledger-head {
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ledger-head .t {
+    font-size: 13.5px;
+    font-weight: 650;
+  }
+  .ledger-head .s {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .tbl-scroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    min-width: 620px;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td .payer {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  td .kind {
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    display: block;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+  .pill.proposed {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+  .pill.enrolled {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .pill.excluded {
+    background: var(--amber-bg);
+    color: var(--amber-fg);
+  }
+  .pill.existing {
+    background: var(--idle-bg);
+    color: var(--idle-fg);
+  }
+  td .why {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  td .sop {
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  td .sop b {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .sum-row td {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .sum-row td span {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Case card */
+  .case-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .case-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .case-card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .case-card .cc-head {
+    padding: 13px 17px;
+    border-bottom: 1px solid var(--border);
+  }
+  .case-card .cc-title {
+    font-size: 13.5px;
+    font-weight: 650;
+  }
+  .case-card .cc-sub {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    margin-top: 2px;
+  }
+  .case-card .cc-provenance {
+    margin: 12px 17px 0;
+    padding: 8px 12px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .case-card.good .cc-provenance {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .case-card.fallback .cc-provenance {
+    background: var(--amber-bg);
+    color: var(--amber-fg);
+  }
+  .case-card ol {
+    list-style: none;
+    margin: 0;
+    padding: 12px 17px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    counter-reset: t;
+  }
+  .case-card ol li {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    padding-left: 26px;
+    position: relative;
+    counter-increment: t;
+  }
+  .case-card ol li::before {
+    content: counter(t);
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 17px;
+    height: 17px;
+    border-radius: 4px;
+    background: var(--idle-bg);
+    color: var(--idle-fg);
+    font-size: 10.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .case-card ol li b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .case-card ol li .fill-ready {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--green-fg);
+    background: var(--green-bg);
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+
+  /* Invariant */
+  .invariant {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .invariant h3 {
+    font-size: 14px;
+    font-weight: 650;
+    margin: 0 0 8px;
+  }
+  .invariant p {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    margin: 0 0 10px;
+    max-width: 70ch;
+  }
+  .invariant p:last-child {
+    margin-bottom: 0;
+  }
+  .invariant b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .where-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .where-list .w {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .where-list .w .k {
+    flex: none;
+    width: 158px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .where-list .w .v {
+    color: var(--ink-soft);
+  }
+
+  section {
+    margin-bottom: 8px;
+  }
+  .section-gap {
+    height: 34px;
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Minted Panel — alignment visual · not a build</div>
+  <h1>How Journey A and Journey B hand off into case generation</h1>
+  <p class="dek">
+    The question this page answers:
+    <b
+      >"why can I trust that all the right cases get generated under a provider — nothing missing,
+      nothing extra?"</b
+    >
+    Running example: BEST Physical Therapy · one group · one facility (NC) · seven payers targeted
+    on day 1 · Dr. Riley Chen hired on day 50.
+  </p>
+
+  <!-- STEP 1: the two lanes -->
+  <section>
+    <div class="step-label">
+      <span class="num">1</span>
+      <h2>Two journeys, two kinds of facts — neither creates work</h2>
+    </div>
+    <div class="lanes">
+      <div class="lane a">
+        <span class="lane-tag">Journey A · per payer, once, global</span>
+        <h3>Payer readiness</h3>
+        <div class="who">Ops team · no org context · authored once, inherited by every org</div>
+        <ul>
+          <li>
+            <b>Catalog entry</b> — canonical identity, covered states, what this payer calls its
+            provider ID
+          </li>
+          <li>
+            <b>SOP template</b> — the step-by-step checklist for getting credentialed with this
+            payer
+          </li>
+          <li>
+            <b>Form setup inside the SOP</b> — portal URL, captured fields, trained mappings,
+            dry-run proven on masked mock data
+          </li>
+        </ul>
+        <div class="produces">
+          Produces: <b>"HOW to credential with this payer"</b> — knowledge, zero cases.
+        </div>
+      </div>
+      <div class="lane b">
+        <span class="lane-tag">Journey B · per org</span>
+        <h3>Org reality</h3>
+        <div class="who">
+          Admin / onboarding team · manual forms or CSV, unified summary at the end
+        </div>
+        <ul>
+          <li><b>Group</b> — BEST PT Group (TIN, operating states: NC)</li>
+          <li><b>Facility</b> — Harborview Clinic, NC</li>
+          <li>
+            <b>7 payer targets on the group</b> — the contract's promise, recorded day 1, zero
+            providers needed
+          </li>
+          <li>
+            <b>Dr. Chen (day 50)</b> — roster + group membership + facility assignment +
+            <b>existing enrollments under this group's contract</b> (new hire → none)
+          </li>
+        </ul>
+        <div class="produces">
+          Produces: <b>"WHO needs to be credentialed WHERE"</b> — facts, zero cases.
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      Neither journey creates a single case. That is the decoupling: onboarding records reality, and
+      only the confirm in step 4 creates work.
+    </p>
+  </section>
+
+  <div class="flow-connector" aria-hidden="true">
+    <svg
+      width="22"
+      height="26"
+      viewBox="0 0 24 28"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M12 2v20" />
+      <path d="m5 16 7 7 7-7" />
+    </svg>
+  </div>
+
+  <!-- STEP 2: the engine -->
+  <section>
+    <div class="step-label">
+      <span class="num">2</span>
+      <h2>The candidate math — computed live, never stored, never guessed</h2>
+    </div>
+    <div class="engine">
+      <div class="engine-tag">For each provider on the group</div>
+      <div class="formula">
+        <span class="term">group's payer targets</span>
+        <span class="op">−</span>
+        <span class="term">enrollments under this group</span>
+        <span class="op">−</span>
+        <span class="term">cases that already exist</span>
+        <span class="op">−</span>
+        <span class="term">standing exclusions</span>
+        <span class="op">=</span>
+        <span class="term result">candidates awaiting generation</span>
+      </div>
+      <div class="engine-note">
+        Dr. Chen joins the group → instantly a candidate for all 7 targets. Nobody assigns payers to
+        a provider; membership in the group IS the assignment. Every subtraction is a fact someone
+        deliberately recorded — a migration enrollment, a prior case, a reasoned exclusion — so
+        nothing is ever dropped silently.
+      </div>
+    </div>
+  </section>
+
+  <div class="flow-connector" aria-hidden="true">
+    <svg
+      width="22"
+      height="26"
+      viewBox="0 0 24 28"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M12 2v20" />
+      <path d="m5 16 7 7 7-7" />
+    </svg>
+  </div>
+
+  <!-- STEP 3: the ledger -->
+  <section>
+    <div class="step-label">
+      <span class="num">3</span>
+      <h2>The preview is a full accounting — every target lands in exactly one bucket</h2>
+    </div>
+    <div class="ledger-wrap">
+      <div class="ledger-head">
+        <span class="t">Dr. Riley Chen × BEST PT Group × NC</span>
+        <span class="s"
+          >shown as a migration variant so all four buckets are visible — as a plain new hire, all 7
+          rows read Proposed</span
+        >
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Payer target</th>
+              <th>Bucket</th>
+              <th>Why</th>
+              <th>SOP that will drive the case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="payer">Anthem BCBS NC</span><span class="kind">Commercial</span></td>
+              <td><span class="pill proposed">Proposed</span></td>
+              <td><span class="why">No case, no enrollment — checked by default</span></td>
+              <td>
+                <span class="sop"><b>Anthem NC SOP v3</b> · form fill ready</span>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="payer">Aetna</span><span class="kind">Commercial</span></td>
+              <td><span class="pill enrolled">Already enrolled</span></td>
+              <td>
+                <span class="why"
+                  >Migration fact: active under this group's contract — recorded as a completed
+                  case</span
+                >
+              </td>
+              <td><span class="sop">— none needed; counts toward payer "Active"</span></td>
+            </tr>
+            <tr>
+              <td><span class="payer">Cigna</span><span class="kind">Commercial</span></td>
+              <td><span class="pill proposed">Proposed</span></td>
+              <td><span class="why">No case, no enrollment</span></td>
+              <td>
+                <span class="sop"><b>Cigna SOP v1</b> · form fill ready</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span class="payer">UnitedHealthcare</span><span class="kind">Commercial</span>
+              </td>
+              <td><span class="pill proposed">Proposed</span></td>
+              <td>
+                <span class="why"
+                  >No case, no enrollment — <b>no payer SOP yet</b>: visible warning, still
+                  generatable</span
+                >
+              </td>
+              <td>
+                <span class="sop"
+                  ><b>Generic fallback SOP</b> · flagged until Journey A is done</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td><span class="payer">Medicare</span><span class="kind">Government</span></td>
+              <td><span class="pill enrolled">Already enrolled</span></td>
+              <td><span class="why">Migration fact: PTAN active under this group</span></td>
+              <td><span class="sop">— none needed</span></td>
+            </tr>
+            <tr>
+              <td><span class="payer">NC Medicaid</span><span class="kind">Government</span></td>
+              <td><span class="pill proposed">Proposed</span></td>
+              <td><span class="why">No case, no enrollment</span></td>
+              <td>
+                <span class="sop"><b>NC Medicaid SOP v2</b> · form fill ready</span>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="payer">TRICARE</span><span class="kind">Government</span></td>
+              <td><span class="pill excluded">Excluded</span></td>
+              <td>
+                <span class="why"
+                  >Standing exclusion: "not pursuing" (recorded by J. Alvarez, day 12) — one click
+                  restores it</span
+                >
+              </td>
+              <td><span class="sop">— sits in the Excluded section, never disappears</span></td>
+            </tr>
+            <tr class="sum-row">
+              <td>7 targets</td>
+              <td colspan="3">
+                <span
+                  >= 4 proposed + 2 already enrolled + 1 excluded + 0 existing — buckets always sum
+                  to the target count</span
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">
+      This table IS the trust mechanism. If a combination you expected is missing from "Proposed,"
+      it is not gone — it is sitting in another bucket with a named reason and, for exclusions, the
+      person who put it there. The sum row always reconciles.
+    </p>
+  </section>
+
+  <div class="flow-connector" aria-hidden="true">
+    <svg
+      width="22"
+      height="26"
+      viewBox="0 0 24 28"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M12 2v20" />
+      <path d="m5 16 7 7 7-7" />
+    </svg>
+  </div>
+
+  <!-- STEP 4: confirm -->
+  <section>
+    <div class="step-label">
+      <span class="num">4</span>
+      <h2>Confirm — the only moment cases are created, and where Journey A pays off</h2>
+    </div>
+    <div class="case-grid">
+      <div class="case-card good">
+        <div class="cc-head">
+          <div class="cc-title">Case: Dr. Chen × Anthem BCBS NC</div>
+          <div class="cc-sub">Created from run #14 · payer flips Targeted → In Progress</div>
+        </div>
+        <div class="cc-provenance">
+          SOP lookup at confirm: <b>Anthem NC SOP v3</b> found → its steps become this case's tasks,
+          with Dr. Chen's real data substituted in.
+        </div>
+        <ol>
+          <li><b>Verify CAQH attestation is current</b> — Chen's CAQH ID pre-filled</li>
+          <li>
+            <b>Complete Availity enrollment form</b> — NPI, NC license #, group TIN pre-mapped
+            <span class="fill-ready">auto-fill ready</span>
+          </li>
+          <li><b>Submit and record the tracking ID</b></li>
+          <li><b>Follow up every 14 days until determination</b></li>
+        </ol>
+      </div>
+      <div class="case-card fallback">
+        <div class="cc-head">
+          <div class="cc-title">Case: Dr. Chen × UnitedHealthcare</div>
+          <div class="cc-sub">Created from run #14 · same run, honest about the gap</div>
+        </div>
+        <div class="cc-provenance">
+          SOP lookup: no UHC SOP exists yet → <b>generic fallback checklist</b>, case visibly
+          flagged "generic SOP" until ops finishes Journey A for UHC.
+        </div>
+        <ol>
+          <li><b>Confirm enrollment route with payer</b></li>
+          <li><b>Prepare and submit application</b> — no auto-fill until a form is trained</li>
+          <li><b>Record tracking ID and follow up</b></li>
+        </ol>
+      </div>
+    </div>
+    <p class="note">
+      Every task is stamped with which SOP version produced it, and the whole batch is recorded as
+      one immutable run — so months later "why does this case look like this" always has an answer.
+    </p>
+  </section>
+
+  <div class="section-gap"></div>
+
+  <!-- STEP 5: invariant -->
+  <section>
+    <div class="step-label">
+      <span class="num">5</span>
+      <h2>Why nothing slips through — and where you see it</h2>
+    </div>
+    <div class="invariant">
+      <h3>The invariant</h3>
+      <p>
+        Every <b>provider × target</b> combination is always in exactly one visible bucket:
+        <b>proposed · already enrolled · existing case · excluded (with reason and author)</b>. The
+        buckets sum to the target count on every screen that shows them. A case can only come into
+        existence through a human confirm (batch generation, or the one-off manual escape hatch) —
+        never as a side effect of onboarding.
+      </p>
+      <h3 style="margin-top: 14px">Where each number lives</h3>
+      <div class="where-list">
+        <div class="w">
+          <span class="k">Fulfillment view</span
+          ><span class="v"
+            >per payer: Targeted → In Progress → Active, plus "candidates awaiting generation" — the
+            nudge that work is waiting</span
+          >
+        </div>
+        <div class="w">
+          <span class="k">Generation preview</span
+          ><span class="v"
+            >the full accounting table above, checked rows by default, exclusions restorable</span
+          >
+        </div>
+        <div class="w">
+          <span class="k">Run history</span
+          ><span class="v"
+            >the immutable record of every past run: what was created, skipped, excluded, and
+            why</span
+          >
+        </div>
+        <div class="w">
+          <span class="k">Provider page</span
+          ><span class="v"
+            >all of the provider's cases and their statuses — including denial rollup for
+            reporting</span
+          >
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

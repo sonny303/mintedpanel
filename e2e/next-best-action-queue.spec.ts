@@ -1,11 +1,14 @@
-// E2.3 TE-12 — next-best-action queue coverage over the mock harness:
-//   TS-55 deadline-ordered queue: mixed deadline signals rank correctly —
-//         Marco's near-future provider start date outranks Jane's later task
-//         due date, with the reason naming the start date; the queue itself
-//         writes NOTHING (TE-10, derived not stored). The post-generation
-//         landing (?run=, URL-state and shareable) filters to the batch with
-//         the created/skipped banner from the immutable run row; the All
-//         work toggle clears the param.
+// E2.3 TE-12 — next-best-action queue coverage over the mock harness. Since
+// E6.1 F6.1.3 the queue is the DEFAULT (to-do) pivot of the merged /cases
+// surface and the shipped default ranking is grouped: overdue follow-ups →
+// task due dates → provider start dates → the rest.
+//   TS-55 deadline-ordered queue: Jane's task due date now outranks Marco's
+//         sooner provider start date (grouped tiers, not date-merged), and
+//         Marco's entry still names the start date as its reason; the queue
+//         itself writes NOTHING (TE-10, derived not stored). The
+//         post-generation landing (?run=, URL-state and shareable) filters
+//         to the batch with the created/skipped banner from the immutable
+//         run row; the All work toggle clears the param.
 //   TS-56 cadence follow-up: a case 14+ days since its last touchpoint whose
 //         stamped SOP step carries followUpEveryDays: 14 surfaces an overdue
 //         "touch due" entry — a same-day NOTE never resets the clock — and
@@ -435,7 +438,7 @@ function seedAuth(context: {
   );
 }
 
-test("TS-55: start date outranks a later task due date with a stated reason; the batch filter is URL-state with the run banner", async ({
+test("TS-55 (E6.1 default tiers): a due task outranks a sooner provider start, whose entry still states its reason; the batch filter is URL-state with the run banner", async ({
   context,
   page,
 }) => {
@@ -473,25 +476,26 @@ test("TS-55: start date outranks a later task due date with a stated reason; the
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/work");
-  await expect(page.getByRole("heading", { name: "My Cases" })).toBeVisible({ timeout: 30000 });
+  await page.goto("/cases");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
 
-  // Deadline order: Marco's start-date-driven submission ranks above Jane's
-  // later-due task, and his entry says WHY (the provider start date).
+  // E6.1 F6.1.3 default order: the task_due group ranks above provider_start
+  // even though Marco starts sooner; Marco's entry says WHY it ranks (the
+  // provider start date).
   const rows = page.locator("ol > li");
   await expect(rows).toHaveCount(2, { timeout: 30000 });
-  await expect(rows.nth(0)).toContainText("Submit Marco's application");
-  await expect(rows.nth(0)).toContainText("Marco Reyes");
-  await expect(rows.nth(0)).toContainText("provider start date");
-  await expect(rows.nth(1)).toContainText("Follow up on Jane's application");
-  await expect(rows.nth(1)).toContainText("task due date");
+  await expect(rows.nth(0)).toContainText("Follow up on Jane's application");
+  await expect(rows.nth(0)).toContainText("task due date");
+  await expect(rows.nth(1)).toContainText("Submit Marco's application");
+  await expect(rows.nth(1)).toContainText("Marco Reyes");
+  await expect(rows.nth(1)).toContainText("provider start date");
 
   // Derived, never stored (TE-10): rendering the queue wrote NOTHING.
   expect(writes).toHaveLength(0);
 
   // The batch landing is shareable URL-state: opening ?run= directly filters
   // to the batch and shows the created/skipped banner from the run row.
-  await page.goto("/work?run=run-9");
+  await page.goto("/cases?run=run-9");
   await expect(page.getByText("1 created · 0 skipped (existing) · 0 excluded")).toBeVisible({
     timeout: 30000,
   });
@@ -500,7 +504,7 @@ test("TS-55: start date outranks a later task due date with a stated reason; the
 
   // One-click "all work": clearing is a param removal, not component state.
   await page.getByRole("tab", { name: "All work" }).click();
-  await expect(page).toHaveURL(/\/work\/?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
   await expect(rows).toHaveCount(2);
 });
 
@@ -569,7 +573,7 @@ test("TS-56: a 14-day cadence surfaces an overdue touch-due entry (notes never r
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/work");
+  await page.goto("/cases");
   const row = page.locator("ol > li").first();
   await expect(row).toContainText("Touch due — follow up with BCBS-NC", { timeout: 30000 });
   await expect(row).toContainText("Overdue");
@@ -580,15 +584,24 @@ test("TS-56: a 14-day cadence surfaces an overdue touch-due entry (notes never r
   // the queue has no write affordance).
   await row.getByRole("link").click();
   await expect(page).toHaveURL(/\/cases\/case-jane/, { timeout: 15000 });
+  // E6.6: the /cases toolbar now ALSO carries an "Add touch" button, so wait
+  // for the destination page to COMMIT before clicking (the documented
+  // TanStack-transition harness rule — the source route can linger briefly
+  // after the URL flips, and its toolbar button would swallow the click).
+  await expect(page.getByText("Touchlog")).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: "Add touch" }).click();
   await page.getByRole("button", { name: "Save touch" }).click();
   await expect(page.getByText("Touch logged")).toBeVisible({ timeout: 15000 });
 
-  // Back on the queue, the touch-due entry has re-derived away: the cadence
-  // clock restarted today, so the case is no longer touch-due (its honest
-  // action is the review fallback — its only task is completed).
-  await page.getByRole("link", { name: "My Cases" }).click();
-  await expect(page.getByRole("heading", { name: "My Cases" })).toBeVisible({ timeout: 15000 });
+  // Back on the queue (the Cases nav entry's default to-do pivot), the
+  // touch-due entry has re-derived away: the cadence clock restarted today,
+  // so the case is no longer touch-due (its honest action is the review
+  // fallback — its only task is completed).
+  await page
+    .locator("aside")
+    .getByRole("link", { name: /^Cases/ })
+    .click();
+  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
   await expect(row).toContainText("Review case — no open tasks", { timeout: 30000 });
   await expect(row).not.toContainText("Touch due — follow up");
   await expect(row).not.toContainText("Overdue");

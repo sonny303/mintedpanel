@@ -11,6 +11,7 @@
 // admin of their own org per [r5-review]). Same parse/stage pipeline as the
 // internal tool at /admin/import; simplified error handling, no power tooling.
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,9 @@ import {
 import { ProviderRosterForm } from "@/components/onboarding/ProviderRosterForm";
 import { openSection } from "@/components/onboarding/openSection";
 import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
+import { useFacilities } from "@/hooks/useLookups";
+import { usePayers } from "@/hooks/useAdmin";
+import { providerImportReference, type SectionScanContext } from "@/lib/importSections";
 import { StatusPill } from "@/components/StatusPill";
 import {
   useProviderGroupAssignments,
@@ -94,6 +98,21 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
   const roster = wizard.providers.filter((p) => p.status !== "terminated");
   const activeGroups = wizard.providerGroups.filter((g) => g.isActive);
   const groupNameById = new Map(wizard.providerGroups.map((g) => [g.id, g.name]));
+  // E6.4 F6.4.6 — scan-time name→id resolution + the real-names reference
+  // sheet for the one-row-per-relationship provider template.
+  const facilitiesQ = useFacilities();
+  const payersQ = usePayers();
+  const uploadScanContext: SectionScanContext = {
+    provider: {
+      facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
+      payers: (payersQ.data ?? []).map((py) => ({ id: py.id, name: py.name })),
+    },
+  };
+  const uploadReference = providerImportReference(
+    wizard.providerGroups.map((g) => ({ name: g.name, tin: g.tin })),
+    facilitiesQ.data ?? [],
+    payersQ.data ?? [],
+  );
   // E3.1 F3.1.4 — imported providers land Pending Verification; they carry the
   // pill here and are fenced out of readiness/generation until verified.
   const pendingIds = roster
@@ -149,7 +168,12 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
             </Button>
           ) : null}
         </div>
-        <SectionUploadCard entityKind="provider" activeGroupCount={activeGroups.length} />
+        <SectionUploadCard
+          entityKind="provider"
+          activeGroupCount={activeGroups.length}
+          scanContext={uploadScanContext}
+          referenceCsv={uploadReference}
+        />
       </div>
     );
   }
@@ -223,13 +247,13 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
                       Verify
                     </Button>
                   ) : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => setModal({ provider: p })}
-                  >
-                    Edit
+                  {/* E6.4 F6.1.5 — ongoing edits live on the provider RECORD
+                      (inline fields, in-place assignments); the wizard keeps
+                      only the create door. */}
+                  <Button asChild variant="outline" size="sm" className="h-7 px-2 text-[11px]">
+                    <Link to="/providers/$id" params={{ id: p.id }}>
+                      Open record
+                    </Link>
                   </Button>
                   <Button
                     variant="outline"
@@ -254,7 +278,12 @@ export function ProviderRosterSection({ wizard }: SectionBodyProps) {
         Add provider
       </Button>
 
-      <SectionUploadCard entityKind="provider" activeGroupCount={activeGroups.length} />
+      <SectionUploadCard
+        entityKind="provider"
+        activeGroupCount={activeGroups.length}
+        scanContext={uploadScanContext}
+        referenceCsv={uploadReference}
+      />
 
       {modal ? (
         <ProviderRosterForm

@@ -22,7 +22,7 @@ import {
 import { usePortals } from "@/hooks/usePortals";
 import { DEADLINE_SOURCE_LABELS, filterQueueToRun, type QueueEntry } from "@/lib/nextBestActions";
 import { resolvePortalTargets, type CasePortalTarget } from "@/lib/casePortals";
-import { PayerPipelineBadge } from "@/components/cases/pipeline/PayerPipelineBadge";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { WorkInPortalButton } from "@/components/cases/WorkInPortalButton";
 import { fmtDate } from "@/lib/format";
 
@@ -62,10 +62,8 @@ function QueueRow({
       >
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-medium text-foreground">{entry.action}</span>
-          {/* E4.0 TE-7 — payer-pipeline state, kept distinct from the action/task. */}
-          {entry.payerPipelineState ? (
-            <PayerPipelineBadge state={entry.payerPipelineState} />
-          ) : null}
+          {/* E6.0 — THE unified case status on the queue row. */}
+          {entry.caseStatus ? <CaseStatusPill status={entry.caseStatus} /> : null}
           {entry.actionKind === "readiness_gap" ? (
             <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
               Readiness gap
@@ -128,7 +126,8 @@ export function NextBestActionQueue({ run }: { run?: string }) {
   }
 
   const entries = filterQueueToRun(queue.entries, run);
-  const showAll = () => navigate({ to: "/work", search: {} });
+  // E6.1 F6.1.3 — the queue lives on the merged Cases surface's to-do pivot.
+  const showAll = () => navigate({ to: "/cases", search: {} });
 
   return (
     <div className="space-y-4">
@@ -174,8 +173,11 @@ export function NextBestActionQueue({ run }: { run?: string }) {
               Show all work
             </Button>
           ) : (
+            // E6.1 F6.1.6 — /generation is retired; generation re-homes on
+            // the group's Payer Network (E6.2/E6.3). Interim: the Groups
+            // shell carries the payer-network pointer.
             <Button asChild size="sm" className="mt-3 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
-              <Link to="/generation">Generate applications</Link>
+              <Link to="/groups">Set up payers &amp; generation</Link>
             </Button>
           )}
         </div>

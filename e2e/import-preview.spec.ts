@@ -819,33 +819,29 @@ test("TS-63: pending-verification providers are fenced out of generation until v
   await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures, wire));
   await seedAuth(context);
 
-  // Generation preview: the pending provider yields NO candidate.
-  await page.goto("/generation");
-  await expect(page.getByRole("heading", { name: "Generate applications" })).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page.getByText("No combinations to propose yet")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("Pending Provider")).toHaveCount(0);
+  // The fence's visible surface: /generation retired with E6.1 F6.1.6, so the
+  // shared readiness-facts read is observed on the wizard's Scope Review
+  // matrix (the same fenced provider universe — TE-2's single fence). The
+  // pending provider yields NO readiness row.
+  await page.goto("/onboarding/wizard");
+  const scopeCard = page.locator("#wizard-scope-review");
+  await expect(scopeCard).toBeVisible({ timeout: 30000 });
+  await expect(scopeCard.getByText("Pending Provider")).toHaveCount(0);
 
   // Verify the provider on the wizard roster.
-  await page.goto("/onboarding/wizard");
   const rosterCard = page.locator("#wizard-providers");
   await expect(rosterCard).toBeVisible({ timeout: 30000 });
   await expect(rosterCard.getByText("Pending verification").first()).toBeVisible();
   await rosterCard.getByRole("button", { name: "Verify", exact: true }).first().click();
   await expect(rosterCard.getByText("Pending verification")).toHaveCount(0, { timeout: 15000 });
 
-  // Now the same provider IS a generation candidate — with a readiness signal,
-  // proving BOTH the generation candidacy fence and the shared readiness read
-  // lift together on verify.
-  await page.goto("/generation");
-  await expect(page.getByRole("heading", { name: "Generate applications" })).toBeVisible({
-    timeout: 30000,
-  });
-  await expect(page.getByRole("cell", { name: "Pending Provider", exact: true })).toBeVisible({
-    timeout: 15000,
-  });
-  await expect(page.getByRole("cell", { name: "Aetna", exact: true })).toBeVisible();
+  // Now the same provider IS in the fenced universe — the readiness matrix
+  // gains the row on a fresh derivation, proving the single fence lifted on
+  // verify (generation candidacy consumes the SAME read; its surface returns
+  // with E6.3).
+  await page.goto("/onboarding/wizard");
+  await expect(scopeCard.getByText("Pending Provider").first()).toBeVisible({ timeout: 30000 });
+  await expect(scopeCard.getByText("Aetna").first()).toBeVisible();
 });
 
 test("TS-63: one-step batch assignment fills gaps and is idempotent on re-run", async ({

@@ -1,7 +1,7 @@
 import { test, expect, type Route } from "@playwright/test";
 
 // E0.8 TE-9 — Onboarding-shell coverage over the mock harness (CLAUDE.md recipe):
-//   TS-17 standalone onboarding page: intake run lands on Account Detail; the
+//   TS-17 standalone onboarding page: intake run lands in the wizard flow; the
 //         share popup targets exactly one typed-in recipient (no party dropdown)
 //   TS-18 People Enroll role rows on Account Detail
 //   TS-19 Account Detail read-only summary of the org-intake outputs
@@ -214,7 +214,7 @@ function seedAuth(context: {
   );
 }
 
-test("TS-17: intake run on the onboarding page lands on the new org's Account Detail", async ({
+test("TS-17: intake run on the onboarding page lands in the new org's wizard flow (E6.1 F6.1.5)", async ({
   context,
   page,
 }) => {
@@ -254,10 +254,10 @@ test("TS-17: intake run on the onboarding page lands on the new org's Account De
 
   await form.getByRole("button", { name: "Create organization" }).click();
 
-  // F0.8.1 AC / TE-3: saving the intake form navigates to the new org's
-  // Account Detail.
-  await expect(page).toHaveURL(/\/get-started\/?$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Account Detail" })).toBeVisible({
+  // E6.1 F6.1.5 (supersedes the F0.8.1 Get-started landing): saving the
+  // intake form lands IN the new org's one-time wizard flow.
+  await expect(page).toHaveURL(/\/onboarding\/wizard\/?$/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Onboarding" })).toBeVisible({
     timeout: 15000,
   });
 });
@@ -304,7 +304,7 @@ test("TS-18: People Enroll lists the intake people with their roles", async ({ c
   await context.route(/\/(rest|auth)\/v1\//, makeHandler());
   await seedAuth(context);
 
-  await page.goto("/get-started");
+  await page.goto("/org-detail");
 
   await expect(page.getByRole("heading", { name: "People Enroll" })).toBeVisible({
     timeout: 30000,
@@ -317,16 +317,13 @@ test("TS-18: People Enroll lists the intake people with their roles", async ({ c
   await expect(page.getByText("Sales Rep").first()).toBeVisible();
 });
 
-test("TS-19: Account Detail mirrors the org-intake outputs read-only", async ({
-  context,
-  page,
-}) => {
+test("TS-19: Org Detail mirrors the org-intake outputs read-only", async ({ context, page }) => {
   await context.route(/\/(rest|auth)\/v1\//, makeHandler());
   await seedAuth(context);
 
-  await page.goto("/get-started");
+  await page.goto("/org-detail");
 
-  await expect(page.getByRole("heading", { name: "Account Detail" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({
     timeout: 30000,
   });
   await expect(page.getByText("Organization summary")).toBeVisible();
@@ -350,9 +347,9 @@ test("TS-20: workspace shell carries Minted Panel branding with the Workspace se
   await context.route(/\/(rest|auth)\/v1\//, makeHandler());
   await seedAuth(context);
 
-  await page.goto("/get-started");
+  await page.goto("/org-detail");
 
-  await expect(page.getByRole("heading", { name: "Account Detail" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({
     timeout: 30000,
   });
   // F0.8.7 branding holds; the E0.8 "Org space" label was superseded by E0.9

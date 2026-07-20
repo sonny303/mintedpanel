@@ -1,50 +1,64 @@
-// E2.0 — the case-generation preview surface ("Generate applications").
-// Entered from the Scope Review readiness section (the same row universe per
-// TE-4/Q1); URL-reachable like other pre-nav surfaces — Sidebar edits aren't
-// §5-authorized for this epic. The page is readable by any member; exclusion
-// and restore writes are admin-only and the controls mirror the RLS.
+// E6.3 — /generation is ALIVE again as the decoupled generation grid: the one
+// door cases come through, launched from the group's Payer Network board (or
+// a payer row, a provider record, or a facility row — same screen,
+// pre-filtered via search params). The E6.1 interim redirect to /groups is
+// superseded; the legacy E4.2 `payerId`/`groupId` param spellings stay
+// accepted so old links keep their scope.
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { History } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { GenerationPreviewContent } from "@/components/generation/GenerationPreviewContent";
+import { Button } from "@/components/ui/button";
+import { GenerationGrid } from "@/components/generation/GenerationGrid";
+import type { GridPivot } from "@/lib/generationGrid";
 
 interface GenerationSearch {
-  // E4.2 TE-6 — bulk generation entered from a payer's row pre-scopes the
-  // preview to that payer (optionally a specific group). Absent = whole org.
+  group?: string;
+  payer?: string;
+  provider?: string;
+  facility?: string;
+  pivot?: GridPivot;
+  // Legacy spellings (E4.2 links: /generation?payerId=&groupId=).
   payerId?: string;
   groupId?: string;
 }
 
+const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
+
 export const Route = createFileRoute("/generation")({
   validateSearch: (search: Record<string, unknown>): GenerationSearch => ({
-    payerId: typeof search.payerId === "string" ? search.payerId : undefined,
-    groupId: typeof search.groupId === "string" ? search.groupId : undefined,
+    group: str(search.group),
+    payer: str(search.payer),
+    provider: str(search.provider),
+    facility: str(search.facility),
+    pivot: search.pivot === "payer" || search.pivot === "provider" ? search.pivot : undefined,
+    payerId: str(search.payerId),
+    groupId: str(search.groupId),
   }),
   component: GenerationPage,
 });
 
 function GenerationPage() {
-  const { payerId, groupId } = Route.useSearch();
-  const scoped = Boolean(payerId);
+  const search = Route.useSearch();
+  const scope = {
+    groupId: search.group ?? search.groupId,
+    payerId: search.payer ?? search.payerId,
+    providerId: search.provider,
+    facilityId: search.facility,
+  };
+  // A payer-scoped entry (the board's payer row) reads best grouped by payer.
+  const defaultPivot: GridPivot = search.pivot ?? (scope.payerId ? "payer" : "provider");
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Generate applications"
-        description={
-          scoped
-            ? "Scoped to the selected payer — every eligible provider × group × state combination for it, reviewed before anything is created."
-            : "Every provider × group × payer × state combination the system can derive from your roster, clinic assignments, and payer targets — reviewed here before anything is created."
-        }
+        title="Review & generate"
+        description="Every provider × payer target lands in exactly one bucket — select what this batch creates; skipping keeps a candidate in the buffer. A human always confirms."
         actions={
           <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/generation/runs">
-              <History className="mr-1 h-4 w-4" /> Run history
-            </Link>
+            <Link to="/generation/runs">Run history</Link>
           </Button>
         }
       />
-      <GenerationPreviewContent scope={payerId ? { payerId, groupId } : undefined} />
+      <GenerationGrid scope={scope} defaultPivot={defaultPivot} />
     </div>
   );
 }

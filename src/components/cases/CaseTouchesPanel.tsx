@@ -33,6 +33,8 @@ import {
 import { followUpStatus } from "@/lib/followUps";
 import { buildTouchesCsv } from "@/lib/touchesExport";
 import { downloadCsvText } from "@/lib/csv";
+import type { CaseStatus } from "@/lib/caseStatus";
+import { AddTouchForm } from "@/components/cases/AddTouchForm";
 import type { TouchInput } from "@/services/touches";
 import {
   Calendar,
@@ -81,6 +83,8 @@ export function CaseTouchesPanel({
   onSaveTouch,
   onSaveNote,
   onCorrectTouch,
+  currentStatus,
+  onStatusBump,
   today = format(new Date(), "yyyy-MM-dd"),
 }: {
   touches: Touch[];
@@ -88,9 +92,17 @@ export function CaseTouchesPanel({
   canEdit: boolean;
   savingTouch: boolean;
   savingNote: boolean;
-  onSaveTouch: (input: TouchInput) => Promise<void> | void;
+  /** Returns the logged touch so an accepted status bump (F6.0.3) can link
+   * it as the transition's evidence; null when the log failed. */
+  onSaveTouch: (input: TouchInput) => Promise<Touch | null> | void;
   onSaveNote: (content: string) => Promise<void> | void;
   onCorrectTouch: (originalTouchId: string, input: TouchInput) => Promise<void> | void;
+  /** E6.0 F6.0.3 — the case's unified status; when set, the Add-touch form
+   * offers the implied status bump alongside the touch. */
+  currentStatus?: CaseStatus;
+  /** Accepting the bump records touch + transition together, the touch
+   * linked as evidence. Declining logs the touch alone. */
+  onStatusBump?: (toStatus: CaseStatus, evidenceTouchId: string) => Promise<void> | void;
   today?: string;
 }) {
   const [openForm, setOpenForm] = useState<"none" | "touch" | "note">("none");
@@ -279,9 +291,17 @@ export function CaseTouchesPanel({
             key="new-touch"
             correctionOf={null}
             saving={savingTouch}
+            bumpTargets={currentStatus ? [{ id: "case", currentStatus }] : []}
             onCancel={() => setOpenForm("none")}
-            onSave={async (input) => {
-              await onSaveTouch(input);
+            onSave={async (input, acceptedBumps) => {
+              const touch = await onSaveTouch(input);
+              // F6.0.3 — the same gesture writes both: the touch, then the
+              // transition with the touch linked as its evidence. Declining
+              // (no accepted bump) logs the touch alone.
+              const acceptedBump = acceptedBumps[0]?.toStatus ?? null;
+              if (acceptedBump && touch && onStatusBump) {
+                await onStatusBump(acceptedBump, touch.id);
+              }
               setOpenForm("none");
             }}
           />
@@ -626,183 +646,6 @@ function EntryBadge({ icon: Icon, label }: { icon: typeof Phone; label: string }
     >
       <Icon className="w-3 h-3" /> {label}
     </Badge>
-  );
-}
-
-// Structured entry form (F4.1.1/F4.1.4/F4.1.5/F4.1.2). Also serves corrections
-// when `correctionOf` is set.
-function AddTouchForm({
-  correctionOf,
-  saving,
-  onCancel,
-  onSave,
-}: {
-  correctionOf: Touch | null;
-  saving: boolean;
-  onCancel: () => void;
-  onSave: (input: TouchInput) => void;
-}) {
-  const today = format(new Date(), "yyyy-MM-dd");
-  const [touchDate, setTouchDate] = useState(correctionOf?.touchDate ?? today);
-  const [touchType, setTouchType] = useState<TouchType>(
-    (correctionOf?.touchType as TouchType | undefined) ?? "call",
-  );
-  const [outcome, setOutcome] = useState<string>(correctionOf?.outcome ?? NO_OUTCOME);
-  const [recipientName, setRecipientName] = useState(correctionOf?.recipientName ?? "");
-  const [recipientContact, setRecipientContact] = useState(correctionOf?.recipientContact ?? "");
-  const [notes, setNotes] = useState("");
-  const [nextFollowUpDate, setNextFollowUpDate] = useState("");
-  const [clearFollowUp, setClearFollowUp] = useState(false);
-
-  const requiresContext = dispositionRequiresContext(outcome as TouchOutcome);
-  const contextMissing = requiresContext && !notes.trim();
-  const disableSave = saving || contextMissing;
-
-  const submit = () => {
-    onSave({
-      touchDate,
-      touchType,
-      outcome: outcome === NO_OUTCOME ? null : (outcome as TouchOutcome),
-      recipientName: recipientName.trim() ? recipientName.trim() : null,
-      recipientContact: recipientContact.trim() ? recipientContact.trim() : null,
-      notes: notes.trim() ? notes.trim() : null,
-      nextFollowUpDate: clearFollowUp ? null : nextFollowUpDate || null,
-      clearsFollowUp: clearFollowUp,
-    });
-  };
-
-  return (
-    <div className="p-4 bg-muted/30 border-b border-border space-y-4">
-      {correctionOf ? (
-        <div className="text-[12px] text-[#92400E] bg-[#FEF3C7] border border-[#FDE68A] rounded px-2 py-1.5 inline-flex items-center gap-1.5">
-          <RotateCcw className="w-3.5 h-3.5" />
-          Logging a correction of the {TOUCH_TYPE_LABELS[correctionOf.touchType as TouchType]} touch
-          from {fmtDate(correctionOf.touchDate)}. The original stays in the log.
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Date</Label>
-          <Input
-            type="date"
-            value={touchDate}
-            onChange={(e) => setTouchDate(e.target.value)}
-            className="h-8 text-[13px] bg-background"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Type</Label>
-          <Select value={touchType} onValueChange={(v) => setTouchType(v as TouchType)}>
-            <SelectTrigger className="h-8 text-[13px] bg-background">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CANONICAL_TOUCH_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {TOUCH_TYPE_LABELS[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Recipient capture — optional but prominent (F4.1.5). */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Recipient
-          </Label>
-          <Input
-            value={recipientName}
-            onChange={(e) => setRecipientName(e.target.value)}
-            placeholder="Who you contacted"
-            className="h-8 text-[13px] bg-background"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Recipient contact
-          </Label>
-          <Input
-            value={recipientContact}
-            onChange={(e) => setRecipientContact(e.target.value)}
-            placeholder="Phone, email, portal…"
-            className="h-8 text-[13px] bg-background"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          Outcome <span className="normal-case text-muted-foreground/70">(optional)</span>
-        </Label>
-        <Select value={outcome} onValueChange={setOutcome}>
-          <SelectTrigger className="h-8 text-[13px] bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_OUTCOME}>— No outcome —</SelectItem>
-            {TOUCH_DISPOSITIONS.map((d) => (
-              <SelectItem key={d.value} value={d.value}>
-                {d.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-          {outcome === OTHER_DISPOSITION ? "Context (required for Other)" : "Context"}
-        </Label>
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="What happened on this touch…"
-          className="min-h-[64px] text-[13px] bg-background resize-none"
-        />
-        {contextMissing ? (
-          <p className="text-[11px] text-[#B91C1C]">A one-line context is required for “Other”.</p>
-        ) : null}
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Next follow-up
-          </Label>
-          <Input
-            type="date"
-            value={nextFollowUpDate}
-            disabled={clearFollowUp}
-            onChange={(e) => setNextFollowUpDate(e.target.value)}
-            className="h-8 text-[13px] bg-background disabled:opacity-50"
-          />
-        </div>
-        <label className="flex items-end gap-2 pb-1.5 cursor-pointer">
-          <Checkbox checked={clearFollowUp} onCheckedChange={(v) => setClearFollowUp(Boolean(v))} />
-          <span className="text-[12px] text-muted-foreground leading-tight">
-            Clear the active follow-up
-          </span>
-        </label>
-      </div>
-      {!clearFollowUp && !nextFollowUpDate ? (
-        <p className="-mt-2 text-[11px] text-muted-foreground">
-          Leaving this blank keeps any existing follow-up (it carries forward).
-        </p>
-      ) : null}
-
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
-          Cancel
-        </Button>
-        <Button size="sm" disabled={disableSave} onClick={submit}>
-          {saving ? "Saving…" : correctionOf ? "Log correction" : "Save touch"}
-        </Button>
-      </div>
-    </div>
   );
 }
 

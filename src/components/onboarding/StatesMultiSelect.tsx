@@ -12,6 +12,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { US_STATES } from "@/lib/usStates";
 
+// When this menu opens inside a modal Dialog (ProviderGroupForm, GroupsPanel),
+// the Dialog's scroll lock (react-remove-scroll) swallows wheel events over the
+// PORTALED menu — the portal renders outside the lock's allowed subtree, and
+// modal={false} (required below) means the menu never mounts its own lock. The
+// menu is geometrically scrollable (max-h + overflow-y-auto) but the wheel
+// never moves it, stranding every state below the fold. Owning the wheel event
+// (non-passive, preventDefault + imperative scroll) restores scrolling in every
+// context without double-scrolling where the native path still works.
+function ownWheelScroll(node: HTMLDivElement | null) {
+  if (!node) return;
+  const onWheel = (e: WheelEvent) => {
+    const dy = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 32 : e.deltaY;
+    node.scrollTop += dy;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  node.addEventListener("wheel", onWheel, { passive: false });
+  return () => node.removeEventListener("wheel", onWheel);
+}
+
 interface StatesMultiSelectProps {
   id?: string;
   value: string[];
@@ -48,7 +68,11 @@ export function StatesMultiSelect({ id, value, onChange, invalid }: StatesMultiS
           <ChevronDown className="h-4 w-4 flex-none text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-[260px] w-56 overflow-y-auto">
+      <DropdownMenuContent
+        ref={ownWheelScroll}
+        align="start"
+        className="max-h-[260px] w-56 overflow-y-auto"
+      >
         {US_STATES.map((code) => (
           <DropdownMenuCheckboxItem
             key={code}

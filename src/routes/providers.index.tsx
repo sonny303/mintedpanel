@@ -1,508 +1,399 @@
-// Provider-grouped work view at /providers (M2). Every case renders inline
-// under its provider row; the action engine (src/lib/actionState.ts) drives
-// card counts, row states, and worst-state rollups. Read-and-navigate only:
-// name → legacy provider detail, row/CTA → case detail. No writes.
-import React, { useMemo } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import { fmtDate } from "@/lib/format";
-import { Download, Plus } from "lucide-react";
+// E6.4 F6.4.1 — the Providers roster: A→Z by last name (stated on screen;
+// search/filters never change the sort), PHI-safe list projection, ambient
+// gap pills (src/lib/providerGaps.ts — reuses the readiness/candidacy rules,
+// no new gap engine), and per-provider rollups joined client-side from the
+// caches the app already holds: groups (provider_group_assignments), facility
+// counts (provider_facility_assignments), license states + soonest expiry
+// (org license summary), CAQH date (list projection), cases x-of-y approved
+// (caseRollups). Clicking a gap pill lands on the record with that section
+// focused (#hash). The old case-grouped work view is gone — casework lives on
+// /cases (E6.1); this page is the people surface.
+import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { format } from "date-fns";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
-import { SummaryChips } from "@/components/triage/SummaryChips";
-import { GroupedList } from "@/components/triage/GroupedList";
-import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
-import { ActionBadge } from "@/components/triage/ActionBadge";
-import { ProgressBar } from "@/components/triage/ProgressBar";
-import { useProviders } from "@/hooks/useProviders";
-import { useCases } from "@/hooks/useCases";
-import { useTasks } from "@/hooks/useTasks";
-import { useContracts } from "@/hooks/useContracts";
-import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCanWrite } from "@/lib/permissions";
+import { useCases } from "@/hooks/useCases";
 import {
-  getActionState,
-  worstActionState,
-  daysSilent,
-  ACTION_STATE_SEVERITY,
-  type ActionState,
-} from "@/lib/actionState";
-import {
-  ACTION_BADGE_TONE,
-  badgeLabel,
-  chipCounts,
-  isAlertState,
-  matchesChip,
-  type ChipId,
-} from "@/lib/workView";
-import { IN_NETWORK_LABEL, PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+  useProviders,
+  useProviderGroupAssignments,
+  useProviderAssignments,
+} from "@/hooks/useProviders";
+import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
+import { usePayers } from "@/hooks/useAdmin";
+import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
+import { providerImportReference, type SectionScanContext } from "@/lib/importSections";
+import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
+import { providerCaseProgress } from "@/lib/caseRollups";
+import { deriveProviderGaps, sortRosterAz, type ProviderGap } from "@/lib/providerGaps";
 import { buildRosterCsv, type RosterRowInput } from "@/lib/rosterExport";
 import { downloadCsvText } from "@/lib/csv";
-import type { CredentialCase, Provider, StatusConfig, Task } from "@/types";
+import { fmtDate } from "@/lib/format";
+import type { Provider } from "@/types";
 
-// The selected filter card lives in the URL (?chip=needs|inprog|awaiting; no
-// param = all) so other pages — the Home queue's "view all" — can deep-link a
-// filtered work view. Unknown values fall back to all.
 export const Route = createFileRoute("/providers/")({
-  validateSearch: (search: Record<string, unknown>): { chip?: Exclude<ChipId, "all"> } => {
-    const chip = search.chip;
-    return chip === "needs" || chip === "inprog" || chip === "awaiting" ? { chip } : {};
-  },
-  component: ProvidersWorkView,
+  component: ProvidersRoster,
 });
 
-interface WorkRow {
-  case: CredentialCase;
-  state: ActionState;
-  statusLabel: string;
-  statusColor: string;
-  suffix: string | undefined;
-  contractStatus: StatusConfig | null;
-  payerName: string;
-  isPreCred: boolean;
-  lastTouchLabel: string;
-  days: number | null;
-  nextTask: Task | null;
-}
-
-interface WorkGroup {
+interface RosterRow {
   provider: Provider;
-  rows: WorkRow[];
-  openRows: WorkRow[];
-  worst: ActionState;
-  worstCount: number;
-  inNetwork: number;
-  denominator: number;
-  oldestDays: number | null;
-  /** migrated/onboard-existing provider: listed for reference, never worked (Epic 2e) */
-  isReference: boolean;
+  groupNames: string[];
+  facilityCount: number;
+  licenseStates: string[];
+  soonestExpiry: string | null;
+  gaps: ProviderGap[];
+  progress: { approved: number; total: number } | null;
 }
 
-function initialsOf(p: Provider): string {
-  return `${p.firstName[0] ?? ""}${p.lastName[0] ?? ""}`.toUpperCase();
+function GapPill({ providerId, gap }: { providerId: string; gap: ProviderGap }) {
+  return (
+    <Link
+      to="/providers/$id"
+      params={{ id: providerId }}
+      hash={gap.section}
+      className="inline-flex"
+      aria-label={`${gap.label} — open the record's ${gap.section.replace("-", " & ")} section`}
+    >
+      <StatusPill status={gap.key === "license_expired" ? "red" : "amber"} label={gap.label} />
+    </Link>
+  );
 }
 
-// Roster CSV row from a work group. group/facility name is left empty here —
-// the groups cache isn't loaded on this page and adding it would be a new
-// query; the summary covers every case for the provider, not just the
-// chip-filtered subset.
-function toRosterRow(g: WorkGroup): RosterRowInput {
-  return {
-    firstName: g.provider.firstName,
-    lastName: g.provider.lastName,
-    credentials: g.provider.credentials,
-    npi: g.provider.npi,
-    specialty: g.provider.specialty,
-    homeState: g.provider.homeState,
-    groupOrFacility: null,
-    cases: g.rows.map((r) => ({
-      payerName: r.payerName,
-      state: r.case.state,
-      statusLabel: r.statusLabel,
-    })),
-  };
-}
-
-const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
-
-function ProvidersWorkView() {
+function ProvidersRoster() {
   const navigate = useNavigate();
   const canWrite = useCanWrite();
   const providersQ = useProviders();
+  const groupAssignQ = useProviderGroupAssignments();
+  const facilityAssignQ = useProviderAssignments();
+  const licensesQ = useOrgStateLicenses();
+  const groupsQ = useProviderGroups();
   const casesQ = useCases();
-  const tasksQ = useTasks();
-  const contractsQ = useContracts();
-  const payersQ = usePayers();
-  const statusConfigsQ = useStatusConfigs();
-  const lastTouchQ = useLastTouchDates();
 
-  const { chip: chipParam } = Route.useSearch();
-  const chip: ChipId = chipParam ?? "all";
-  const setChip = (id: ChipId) =>
-    navigate({
-      to: "/providers",
-      search: id === "all" ? {} : { chip: id },
-      replace: true,
-    });
+  const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [stateFilter, setStateFilter] = useState<string>("all");
+  const [gapsOnly, setGapsOnly] = useState(false);
 
-  const loading =
-    providersQ.isLoading ||
-    casesQ.isLoading ||
-    tasksQ.isLoading ||
-    contractsQ.isLoading ||
-    payersQ.isLoading ||
-    statusConfigsQ.isLoading;
+  const today = localTodayIso();
 
-  const failed = providersQ.isError || casesQ.isError || payersQ.isError || statusConfigsQ.isError;
-
-  const groups: WorkGroup[] = useMemo(() => {
-    const providers = providersQ.data ?? [];
-    const cases = casesQ.data ?? [];
-    const statusById = new Map((statusConfigsQ.data ?? []).map((s) => [s.id, s]));
-    const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
-    const lastTouchByCase = lastTouchQ.data;
-
-    const openTasksByCase = new Map<string, Task[]>();
-    for (const t of tasksQ.data ?? []) {
-      if (!t.caseId || t.status === "completed") continue;
-      const list = openTasksByCase.get(t.caseId) ?? [];
-      list.push(t);
-      openTasksByCase.set(t.caseId, list);
+  const rows = useMemo<RosterRow[] | undefined>(() => {
+    if (!providersQ.data) return undefined;
+    const groupNameById = new Map((groupsQ.data ?? []).map((g) => [g.id, g.name]));
+    const groupsByProvider = new Map<string, { id: string; name: string; isPrimary: boolean }[]>();
+    for (const a of groupAssignQ.data ?? []) {
+      if (!a.providerId || !a.groupId) continue;
+      const list = groupsByProvider.get(a.providerId) ?? [];
+      list.push({
+        id: a.groupId,
+        name: groupNameById.get(a.groupId) ?? "—",
+        isPrimary: a.isPrimary,
+      });
+      groupsByProvider.set(a.providerId, list);
     }
-    for (const list of openTasksByCase.values()) {
-      list.sort(
-        (a, b) =>
-          a.sortOrder - b.sortOrder || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"),
-      );
+    const facilityCount = new Map<string, number>();
+    for (const a of facilityAssignQ.data ?? []) {
+      if (!a.providerId) continue;
+      facilityCount.set(a.providerId, (facilityCount.get(a.providerId) ?? 0) + 1);
     }
-
-    const contractByKey = new Map(
-      (contractsQ.data ?? []).map((c) => [`${c.groupId}|${c.payerId}|${c.state}`, c]),
+    const licensesByProvider = new Map<string, { states: Set<string>; soonest: string | null }>();
+    for (const l of licensesQ.data ?? []) {
+      if (!l.providerId) continue;
+      const entry = licensesByProvider.get(l.providerId) ?? { states: new Set(), soonest: null };
+      if (l.state) entry.states.add(l.state);
+      if (l.expirationDate && (!entry.soonest || l.expirationDate < entry.soonest)) {
+        entry.soonest = l.expirationDate;
+      }
+      licensesByProvider.set(l.providerId, entry);
+    }
+    const progress = providerCaseProgress(
+      (casesQ.data ?? []).map((c) => ({ providerId: c.providerId, status: c.caseStatus })),
     );
-
-    const now = new Date();
-    const rowsByProvider = new Map<string, WorkRow[]>();
-
-    for (const c of cases) {
-      const status = c.credentialingStatusId
-        ? (statusById.get(c.credentialingStatusId) ?? null)
-        : null;
-      const openTasks = openTasksByCase.get(c.id) ?? [];
-      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
-
-      const state = getActionState({
-        statusLabel: status?.label ?? null,
-        actionBucket: status?.actionBucket ?? null,
-        openTaskDueDates: openTasks.map((t) => t.dueDate),
-        lastTouchDate,
-        createdAt: c.createdAt,
-        confirmedEffectiveDate: c.confirmedEffectiveDate,
-        expectedEffectiveDate: c.expectedEffectiveDate,
-        now,
-      });
-
-      const effective = c.confirmedEffectiveDate ?? c.expectedEffectiveDate;
-      const suffix =
-        state === "stalled"
-          ? `${daysSilent({ lastTouchDate, createdAt: c.createdAt }, now)}d silent`
-          : state === "awaiting_effective" && effective
-            ? `eff ${fmtDate(effective)}`
-            : undefined;
-
-      const contract = contractByKey.get(`${c.groupId}|${c.payerId}|${c.state}`);
-      const contractStatus = contract?.contractingStatusId
-        ? (statusById.get(contract.contractingStatusId) ?? null)
-        : null;
-
-      const touchDays = lastTouchDate
-        ? differenceInCalendarDays(now, parseISO(lastTouchDate))
-        : null;
-      const days =
-        state === "complete"
-          ? null
-          : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt));
-
-      const row: WorkRow = {
-        case: c,
-        state,
-        statusLabel: status?.label ?? "No status",
-        statusColor: status?.color ?? "var(--mp-neutral)",
-        suffix,
-        contractStatus,
-        payerName: payerById.get(c.payerId)?.name ?? "Unknown payer",
-        isPreCred: payerById.get(c.payerId)?.name === PRE_CRED_PAYER_NAME,
-        lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
-        days,
-        nextTask: openTasks[0] ?? null,
-      };
-      const list = rowsByProvider.get(c.providerId) ?? [];
-      list.push(row);
-      rowsByProvider.set(c.providerId, list);
-    }
-
-    const built: WorkGroup[] = [];
-    for (const provider of providers) {
-      const rows = rowsByProvider.get(provider.id);
-      if (!rows || rows.length === 0) continue;
-      rows.sort((a, b) => {
-        if (a.isPreCred !== b.isPreCred) return a.isPreCred ? 1 : -1;
-        return severityRank(a.state) - severityRank(b.state) || (b.days ?? -1) - (a.days ?? -1);
-      });
-      const openRows = rows.filter((r) => r.state !== "complete");
-      const nonPreCred = rows.filter((r) => !r.isPreCred);
-      const worst = worstActionState(openRows.map((r) => r.state)) ?? "complete";
-      built.push({
+    return sortRosterAz(providersQ.data).map((provider) => {
+      const groups = groupsByProvider.get(provider.id) ?? [];
+      groups.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+      const lic = licensesByProvider.get(provider.id);
+      return {
         provider,
-        rows,
-        openRows,
-        worst,
-        worstCount: openRows.filter((r) => r.state === worst).length,
-        inNetwork: nonPreCred.filter((r) => r.statusLabel === IN_NETWORK_LABEL).length,
-        denominator: nonPreCred.length,
-        oldestDays: openRows.reduce<number | null>(
-          (max, r) => (r.days !== null && (max === null || r.days > max) ? r.days : max),
-          null,
-        ),
-        isReference: provider.referenceOnly,
-      });
-    }
-    built.sort(
-      (a, b) =>
-        severityRank(a.worst) - severityRank(b.worst) ||
-        a.provider.lastName.localeCompare(b.provider.lastName),
-    );
-    return built;
+        groupIds: groups.map((g) => g.id),
+        groupNames: groups.map((g) => g.name),
+        facilityCount: facilityCount.get(provider.id) ?? 0,
+        licenseStates: [...(lic?.states ?? [])].sort(),
+        soonestExpiry: lic?.soonest ?? null,
+        gaps: deriveProviderGaps({
+          provider,
+          hasFacilityAssignment: (facilityCount.get(provider.id) ?? 0) > 0,
+          soonestLicenseExpiry: lic?.soonest ?? null,
+          today,
+        }),
+        progress: progress.get(provider.id) ?? null,
+      } as RosterRow & { groupIds: string[] };
+    });
   }, [
     providersQ.data,
+    groupsQ.data,
+    groupAssignQ.data,
+    facilityAssignQ.data,
+    licensesQ.data,
     casesQ.data,
-    tasksQ.data,
-    contractsQ.data,
-    payersQ.data,
-    statusConfigsQ.data,
-    lastTouchQ.data,
+    today,
   ]);
 
-  // Reference-only providers are listed separately and never counted as work
-  // (Epic 2e): the chips, the filtered list, and the totals derive from worked
-  // providers only.
-  const workedGroups = useMemo(() => groups.filter((g) => !g.isReference), [groups]);
-  const referenceGroups = useMemo(() => groups.filter((g) => g.isReference), [groups]);
-  const openRowsAll = useMemo(() => workedGroups.flatMap((g) => g.openRows), [workedGroups]);
-  const counts = chipCounts(openRowsAll.map((r) => r.state));
-  const cards = [
-    { id: "all", label: "All open cases", n: counts.all },
-    { id: "needs", label: "Needs your action", n: counts.needs },
-    { id: "inprog", label: "In progress", n: counts.inprog },
-    { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
-  ];
+  const filtered = useMemo(() => {
+    if (!rows) return undefined;
+    const term = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (r.provider.status === "terminated") return false;
+      if (term) {
+        const hay =
+          `${r.provider.firstName} ${r.provider.lastName} ${r.provider.npi ?? ""}`.toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+      if (groupFilter !== "all") {
+        const ids = (r as RosterRow & { groupIds: string[] }).groupIds;
+        if (!ids.includes(groupFilter)) return false;
+      }
+      if (stateFilter !== "all" && !r.licenseStates.includes(stateFilter)) return false;
+      if (gapsOnly && r.gaps.length === 0) return false;
+      return true;
+    });
+  }, [rows, search, groupFilter, stateFilter, gapsOnly]);
 
-  // Same predicate as the card counts (matchesChip), so a card that says N
-  // always leaves exactly N case rows on screen.
-  const visibleGroups = useMemo(
-    () =>
-      workedGroups
-        .map((g) => ({ group: g, visibleRows: g.rows.filter((r) => matchesChip(chip, r.state)) }))
-        .filter(({ visibleRows }) => visibleRows.length > 0),
-    [workedGroups, chip],
+  const reference = useMemo(
+    () => (filtered ?? []).filter((r) => r.provider.referenceOnly),
+    [filtered],
+  );
+  const worked = useMemo(
+    () => (filtered ?? []).filter((r) => !r.provider.referenceOnly),
+    [filtered],
   );
 
-  const totalProviders = groups.length;
-  const totalOpen = openRowsAll.length;
+  const licenseStateOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rows ?? []) for (const s of r.licenseStates) set.add(s);
+    return [...set].sort();
+  }, [rows]);
 
-  // The roster exports exactly the providers on screen: the chip-filtered
-  // worked groups plus the always-visible reference section.
-  const exportGroups = useMemo(
-    () => [...visibleGroups.map((v) => v.group), ...referenceGroups],
-    [visibleGroups, referenceGroups],
+  const facilitiesQ = useFacilities();
+  const payersQ = usePayers();
+  const uploadScanContext: SectionScanContext = {
+    provider: {
+      facilities: (facilitiesQ.data ?? []).map((f) => ({ id: f.id, name: f.name })),
+      payers: (payersQ.data ?? []).map((py) => ({ id: py.id, name: py.name })),
+    },
+  };
+  const uploadReference = providerImportReference(
+    (groupsQ.data ?? []).map((g) => ({ name: g.name, tin: g.tin })),
+    facilitiesQ.data ?? [],
+    payersQ.data ?? [],
   );
+
   function handleExportRoster() {
-    if (exportGroups.length === 0) return;
-    downloadCsvText(
-      `roster-${format(new Date(), "yyyy-MM-dd")}.csv`,
-      buildRosterCsv(exportGroups.map(toRosterRow)),
-    );
+    const exportRows: RosterRowInput[] = (filtered ?? []).map((r) => ({
+      firstName: r.provider.firstName,
+      lastName: r.provider.lastName,
+      credentials: r.provider.credentials ?? null,
+      npi: r.provider.npi ?? null,
+      specialty: r.provider.specialty ?? null,
+      homeState: r.provider.homeState ?? null,
+      groupOrFacility: r.groupNames[0] ?? null,
+      cases: [],
+    }));
+    if (exportRows.length === 0) return;
+    downloadCsvText(`roster-${format(new Date(), "yyyy-MM-dd")}.csv`, buildRosterCsv(exportRows));
   }
 
-  function tableRow(row: WorkRow): CaseTableRow {
-    const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
-    const lead = row.isPreCred ? (
-      <span className="text-[length:var(--mp-text-sm)] text-[color:var(--mp-ink-secondary)]">
-        Pre-Credentialing
-      </span>
-    ) : (
-      <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
-        {row.payerName}
-      </span>
-    );
-    return {
-      id: row.case.id,
-      lead,
-      status: { label: row.statusLabel, color: row.statusColor, suffix: row.suffix },
-      contract: row.contractStatus
-        ? { label: row.contractStatus.label, color: row.contractStatus.color }
-        : null,
-      lastTouch: row.lastTouchLabel,
-      days: row.days,
-      daysStrong: isAlertState(row.state) || row.state === "stalled",
-      action: row.nextTask ? { label: row.nextTask.title, onClick: openCase } : null,
-      alert: isAlertState(row.state),
-      onOpen: openCase,
-    };
-  }
-
-  function groupHeader(g: WorkGroup) {
-    const openProvider = () => navigate({ to: "/providers/$id", params: { id: g.provider.id } });
+  if (providersQ.isError) {
     return (
-      <div className="flex flex-1 min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
-            {initialsOf(g.provider)}
-          </span>
-          <span className="min-w-0 md:w-60">
-            <span
-              role="link"
-              tabIndex={0}
-              className="block truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)] hover:underline"
-              onClick={(e) => {
-                e.stopPropagation();
-                openProvider();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.stopPropagation();
-                  openProvider();
-                }
-              }}
+      <div className="space-y-4">
+        <PageHeader title="Providers" />
+        <p className="text-[13px] text-[#B91C1C]">Couldn&apos;t load the roster.</p>
+      </div>
+    );
+  }
+
+  const RowTable = ({ list }: { list: RosterRow[] }) => (
+    <div className="overflow-x-auto rounded-md border border-[#E8E5E0]">
+      <table className="w-full text-left text-[13px]">
+        <thead>
+          <tr className="border-b border-[#F0EEE9] bg-[#FAFAF9] text-[12px] text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Provider</th>
+            <th className="px-3 py-2 font-medium">NPI</th>
+            <th className="px-3 py-2 font-medium">Groups</th>
+            <th className="px-3 py-2 font-medium">Facilities</th>
+            <th className="px-3 py-2 font-medium">Licenses</th>
+            <th className="px-3 py-2 font-medium">CAQH attested</th>
+            <th className="px-3 py-2 font-medium">Cases</th>
+            <th className="px-3 py-2 font-medium">Gaps</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((r) => (
+            <tr
+              key={r.provider.id}
+              className="cursor-pointer border-b border-[#F0EEE9] last:border-0 hover:bg-[#FAFAF9]"
+              onClick={() => navigate({ to: "/providers/$id", params: { id: r.provider.id } })}
             >
-              {g.provider.firstName} {g.provider.lastName}
-              {g.provider.credentials ? "," : ""}
-              {g.provider.credentials ? (
-                <span className="font-normal text-[color:var(--mp-ink-secondary)]">
-                  {" "}
-                  {g.provider.credentials}
+              <td className="px-3 py-2">
+                <Link
+                  to="/providers/$id"
+                  params={{ id: r.provider.id }}
+                  className="font-medium text-foreground hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {r.provider.lastName}, {r.provider.firstName}
+                  {r.provider.credentials ? (
+                    <span className="text-muted-foreground">, {r.provider.credentials}</span>
+                  ) : null}
+                </Link>
+                <span className="ml-2 inline-flex gap-1 align-middle">
+                  {r.provider.verificationState === "pending_verification" ? (
+                    <StatusPill status="amber" label="Pending verification" />
+                  ) : null}
+                  {r.provider.referenceOnly ? (
+                    <StatusPill status="neutral" label="Reference" />
+                  ) : null}
                 </span>
-              ) : null}
-            </span>
-            <span className="block text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-              {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
-              {g.oldestDays !== null ? (
-                <span className="md:hidden"> · {g.oldestDays}d oldest</span>
-              ) : null}
-            </span>
-          </span>
-        </div>
-        <span className="flex items-center gap-2 md:flex-1 md:min-w-0">
-          <span className="w-full max-w-44 md:w-40 md:flex-shrink-0">
-            <ProgressBar value={g.inNetwork} max={g.denominator} />
-          </span>
-          <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-            {g.inNetwork} of {g.denominator} in-network
-          </span>
-        </span>
-        <span className="flex items-center gap-3">
-          {g.worst !== "on_track" && g.worst !== "complete" ? (
-            <ActionBadge
-              tone={ACTION_BADGE_TONE[g.worst]}
-              text={badgeLabel(g.worst, g.worstCount)}
-            />
-          ) : null}
-          {g.oldestDays !== null ? (
-            <span className="hidden md:inline tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-              {g.oldestDays}d oldest
-            </span>
-          ) : null}
-        </span>
-      </div>
-    );
-  }
-
-  function referenceRow(g: WorkGroup) {
-    const openProvider = () => navigate({ to: "/providers/$id", params: { id: g.provider.id } });
-    return (
-      <div
-        key={g.provider.id}
-        role="link"
-        tabIndex={0}
-        onClick={openProvider}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") openProvider();
-        }}
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-mp-muted/50 transition-colors"
-      >
-        <span className="w-9 h-9 rounded-full bg-mp-primary-tint flex items-center justify-center text-[length:var(--mp-text-xs)] font-semibold text-[color:var(--mp-primary)] flex-shrink-0">
-          {initialsOf(g.provider)}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
-          {g.provider.firstName} {g.provider.lastName}
-          {g.provider.credentials ? (
-            <span className="font-normal text-[color:var(--mp-ink-secondary)]">
-              {" "}
-              {g.provider.credentials}
-            </span>
-          ) : null}
-        </span>
-        <span className="whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-          {g.rows.length} payer {g.rows.length === 1 ? "case" : "cases"}
-        </span>
-        <StatusPill status="neutral" label="Reference" />
-      </div>
-    );
-  }
+              </td>
+              <td className="px-3 py-2 tabular-nums">{r.provider.npi ?? "—"}</td>
+              <td className="max-w-[220px] truncate px-3 py-2">
+                {r.groupNames.length > 0 ? r.groupNames.join(", ") : "—"}
+              </td>
+              <td className="px-3 py-2 tabular-nums">{r.facilityCount}</td>
+              <td className="px-3 py-2">
+                {r.licenseStates.length > 0 ? (
+                  <span>
+                    {r.licenseStates.join(" · ")}
+                    {r.soonestExpiry ? (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — exp {fmtDate(r.soonestExpiry)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td className="px-3 py-2">
+                {r.provider.caqhLastAttestedDate ? fmtDate(r.provider.caqhLastAttestedDate) : "—"}
+              </td>
+              <td className="px-3 py-2 tabular-nums">
+                {r.progress ? `${r.progress.approved} of ${r.progress.total} approved` : "—"}
+              </td>
+              <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                <span className="inline-flex flex-wrap gap-1">
+                  {r.gaps.map((g) => (
+                    <GapPill key={g.key} providerId={r.provider.id} gap={g} />
+                  ))}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="space-y-4">
       <PageHeader
         title="Providers"
-        description={`${totalProviders} providers · ${totalOpen} open cases`}
+        description="Sorted A→Z by last name. Gap pills point at the exact record section to fix."
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="h-9 gap-2"
-              onClick={handleExportRoster}
-              disabled={exportGroups.length === 0}
-            >
-              <Download className="w-4 h-4" />
+            <Button variant="outline" size="sm" className="h-8" onClick={handleExportRoster}>
               Export roster
             </Button>
             {canWrite ? (
-              <Button onClick={() => navigate({ to: "/providers/new" })} className="h-9 gap-2">
-                <Plus className="w-4 h-4" />
-                New Provider
+              <Button asChild size="sm" className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+                <Link to="/providers/new">New Provider</Link>
               </Button>
             ) : null}
           </div>
         }
       />
 
-      <div className="mb-6">
-        <SummaryChips cards={cards} selected={chip} onSelect={(id) => setChip(id as ChipId)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name or NPI"
+          className="h-8 w-56 text-[13px]"
+          aria-label="Search providers"
+        />
+        <Select value={groupFilter} onValueChange={setGroupFilter}>
+          <SelectTrigger className="h-8 w-48 text-[13px]" aria-label="Filter by group">
+            <SelectValue placeholder="All groups" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All groups</SelectItem>
+            {(groupsQ.data ?? []).map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={stateFilter} onValueChange={setStateFilter}>
+          <SelectTrigger className="h-8 w-40 text-[13px]" aria-label="Filter by license state">
+            <SelectValue placeholder="All license states" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All license states</SelectItem>
+            {licenseStateOptions.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          aria-pressed={gapsOnly}
+          onClick={() => setGapsOnly((v) => !v)}
+        >
+          {gapsOnly ? "Showing gaps only" : "Has gaps"}
+        </Button>
       </div>
 
-      {failed ? (
-        <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
-          Couldn't load the work view. Refresh to retry.
+      {/* E6.4 — imports live with their data: the provider CSV (one row per
+          relationship) uploads from THIS page, with scan-time name resolution
+          and the real-names reference sheet. Admin-gated inside the card. */}
+      <SectionUploadCard
+        entityKind="provider"
+        activeGroupCount={(groupsQ.data ?? []).filter((g) => g.isActive).length}
+        scanContext={uploadScanContext}
+        referenceCsv={uploadReference}
+      />
+
+      {filtered === undefined ? (
+        <div className="h-40 animate-pulse rounded-md bg-mp-muted" />
+      ) : worked.length === 0 && reference.length === 0 ? (
+        <div className="rounded-md border border-[#E8E5E0] p-6 text-[13px] text-muted-foreground">
+          No providers match. Clear the filters, or add your first provider.
         </div>
-      ) : loading ? (
-        <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse" />
-          ))}
-        </div>
-      ) : visibleGroups.length === 0 && referenceGroups.length === 0 ? (
-        <EmptyState
-          message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
-          description={
-            chip === "all"
-              ? "Create a provider and open cases to start tracking."
-              : "No open cases match this filter right now."
-          }
-        />
       ) : (
-        <div className="space-y-6">
-          {visibleGroups.length > 0 ? (
-            <GroupedList
-              groups={visibleGroups.map(({ group, visibleRows }) => ({
-                id: group.provider.id,
-                header: groupHeader(group),
-                children: <CaseTable leadLabel="Payer" rows={visibleRows.map(tableRow)} />,
-              }))}
-            />
+        <>
+          {worked.length > 0 ? <RowTable list={worked} /> : null}
+          {reference.length > 0 ? (
+            <div className="space-y-2">
+              <h2 className="text-[13px] font-semibold text-muted-foreground">Reference</h2>
+              <RowTable list={reference} />
+            </div>
           ) : null}
-          {referenceGroups.length > 0 ? (
-            <section>
-              <h2 className="mb-2 text-[length:var(--mp-text-xs)] font-semibold uppercase tracking-wider text-[color:var(--mp-ink-faint)]">
-                Reference
-              </h2>
-              <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card divide-y divide-[color:var(--mp-border)]">
-                {referenceGroups.map(referenceRow)}
-              </div>
-            </section>
-          ) : null}
-        </div>
+        </>
       )}
     </div>
   );

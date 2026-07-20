@@ -98,7 +98,7 @@ describe("open-case derivation (TE-3)", () => {
 });
 
 describe("deadline sources and ordering (TE-1/TE-2)", () => {
-  it("TS-55: a near provider start date ranks above a later task due date, and the reason names the start date", () => {
+  it("TS-55 (default tiers re-stated by E6.1 F6.1.3): a task due date ranks above a provider start date, and the start-date entry's reason names it", () => {
     const entries = buildNextBestActions(
       baseInput({
         providers: [
@@ -115,11 +115,46 @@ describe("deadline sources and ordering (TE-1/TE-2)", () => {
         ],
       }),
     );
-    expect(entries.map((e) => e.caseId)).toEqual(["c-marco", "c-jane"]);
-    expect(entries[0].deadline?.source).toBe("provider_start");
-    expect(entries[0].reason).toContain("provider start date");
-    expect(entries[0].action).toBe("Submit Marco's application");
-    expect(entries[1].deadline?.source).toBe("task_due");
+    // E6.1: the shipped default ranks the task_due group above provider_start
+    // even when the start date is sooner (grouped tiers, not date-merged).
+    expect(entries.map((e) => e.caseId)).toEqual(["c-jane", "c-marco"]);
+    expect(entries[0].deadline?.source).toBe("task_due");
+    expect(entries[1].deadline?.source).toBe("provider_start");
+    expect(entries[1].reason).toContain("provider start date");
+    expect(entries[1].action).toBe("Submit Marco's application");
+  });
+
+  it("TS-119 (E6.1 F6.1.3): the default order is overdue follow-ups → task due dates → provider start dates → the rest (launch dates)", () => {
+    const entries = buildNextBestActions(
+      baseInput({
+        providers: [
+          { id: "pr-1", name: "Jane Whitaker", startDate: null },
+          { id: "pr-2", name: "Marco Reyes", startDate: addDaysIso(TODAY, 2) },
+        ],
+        facilities: [
+          // Launches sooner than everything else — still ranks last (the
+          // quiet lower-priority signal).
+          { id: "f-1", name: "Shelby Central", effectiveDate: addDaysIso(TODAY, 1) },
+        ],
+        cases: [
+          caseRow("c-follow", { providerId: "pr-1" }),
+          caseRow("c-task", { providerId: "pr-1" }),
+          caseRow("c-start", { providerId: "pr-2" }),
+          caseRow("c-launch", { providerId: "pr-1", facilityId: "f-1" }),
+        ],
+        tasks: [taskRow("c-task", { dueDate: addDaysIso(TODAY, 9) })],
+        touches: [
+          {
+            caseId: "c-follow",
+            entryType: "touchpoint",
+            touchDate: addDaysIso(TODAY, -3),
+            nextFollowUpDate: addDaysIso(TODAY, -1),
+          },
+        ],
+      }),
+    );
+    expect(entries.map((e) => e.caseId)).toEqual(["c-follow", "c-task", "c-start", "c-launch"]);
+    expect(entries[0].deadline?.overdue).toBe(true);
   });
 
   it("a past provider start date never ranks (history, not a deadline)", () => {

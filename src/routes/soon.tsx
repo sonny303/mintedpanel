@@ -1,24 +1,12 @@
-// Shared reserved-slot route (redesign E0.6, TE-2). Every reserved nav item
-// (Payer Setup, SOP, Cases, Tasks, Facilities, Providers) routes here with its
-// title, rendering the consistent "not yet available" empty state (E0.0
-// reserved-slot rule) — one route instead of a file per placeholder.
-import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { NotYetAvailable } from "@/components/empty/NotYetAvailable";
+// E6.1 F6.1.6 (2026-07-19) — the shared reserved-slot route retires with the
+// last reserved nav items (the six-item sidebar has none). Old ?title= links
+// land on the Reporting Center, the shared not-yet-available state's own
+// long-standing pointer. This URL stays alive as a redirect (legacy URLs
+// never dead-end).
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/soon")({
-  validateSearch: (search: Record<string, unknown>): { title: string } => ({
-    title: typeof search.title === "string" && search.title ? search.title : "This section",
-  }),
-  component: SoonPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/reporting", replace: true });
+  },
 });
-
-function SoonPage() {
-  const { title } = Route.useSearch();
-  return (
-    <div>
-      <PageHeader title={title} />
-      <NotYetAvailable title={title} />
-    </div>
-  );
-}

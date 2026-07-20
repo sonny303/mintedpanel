@@ -1,16 +1,16 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 TS-76/TS-78/TS-91 + the unified-payer-setup consolidation (§5 amendment
-// TE-18–TE-20) — the "Payer Setup" workspace over the mock harness. Covers:
-// the single admin-only nav entry (TE-18; P2/specialist has NO Payers entry
-// and is denied at the route with a read-only catalog pointer); the five
-// workspace areas (Setup / Catalog / SOP templates / Forms & portals /
-// Organization settings) with arrow-key tab traversal (TE-20c); the
-// reason-code vocabulary and org queue settings now living under Organization
-// settings; and the F4.2.1 resolution-identifier dialog, which — per the
-// e4-2c governance PR — writes org_payer_settings (the org × payer grain),
-// never the Minted-managed payers row. No live payer/extension dependency
-// (TE-11).
+// E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1 and E6.6 F6.6.6 — the
+// "Payer Setup" workspace is TWO REAL URL segments (/admin/payer-admin/
+// catalog + /admin/payer-admin/sops; the old ?tab= spellings redirect via the
+// index mapper). Covers: the single nav entry (all roles under the E6.1
+// interim posture); the two shareable segments with keyboard-operable tab
+// links (TE-20c successor); the Ready-for-business funnel head; the E6.6
+// fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code or
+// queue-ranking editors render anywhere — TS-115); and the F4.2.1
+// resolution-identifier dialog, which survives on /org-detail and still
+// writes org_payer_settings (the org × payer grain), never the
+// Minted-managed payers row.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -165,19 +165,21 @@ test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry and the five 
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
+  // The bare module URL maps to the Catalog segment (shareable real URL).
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByRole("tab", { name: "Setup" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Catalog" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "SOP templates" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Forms & portals" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Organization settings" })).toBeVisible();
+  const tabNav = page.getByRole("navigation", { name: "Payer Setup areas" });
+  await expect(tabNav.getByRole("link", { name: "Catalog" })).toBeVisible();
+  await expect(tabNav.getByRole("link", { name: "SOPs" })).toBeVisible();
+  // F6.5.6 — the interim-governance note stays visible in the module.
+  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible();
 
-  // The assigned payer's setup row is present with its scope + SOP dimensions
-  // (targets exist; no payer SOP → Needs payer SOP with a prefilled create link).
+  // The Ready-for-business funnel heads the page: the assigned payer renders
+  // an honest row — no global SOP yet → Needs SOP + the author entry.
   const row = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
   await expect(row).toBeVisible();
-  await expect(row.getByText("Needs payer SOP")).toBeVisible();
-  await expect(row.getByRole("link", { name: "Create payer SOP" })).toBeVisible();
+  await expect(row.getByText("Needs SOP")).toBeVisible();
+  await expect(row.getByRole("link", { name: /Author global SOP/ })).toBeVisible();
 });
 
 test("TE-20c — workspace tabs are arrow-key traversable; the nav entry is keyboard-operable", async ({
@@ -191,86 +193,84 @@ test("TE-20c — workspace tabs are arrow-key traversable; the nav entry is keyb
   await navEntry.focus();
   await expect(navEntry).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/?$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 15000 });
 
-  // Radix tabs: focus the active tab, ArrowRight moves + activates the next.
-  const setupTab = page.getByRole("tab", { name: "Setup" });
-  await expect(setupTab).toBeVisible({ timeout: 30000 });
-  await setupTab.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Catalog" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByLabel("Search payers")).toBeVisible();
+  // E6.5: the areas are plain LINKS (real segments) — keyboard-operable via
+  // focus + Enter, with aria-current marking the active one.
+  const tabNav = page.getByRole("navigation", { name: "Payer Setup areas" });
+  await expect(tabNav.getByRole("link", { name: "Catalog" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  const sopsLink = tabNav.getByRole("link", { name: "SOPs" });
+  await sopsLink.focus();
+  await expect(sopsLink).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/sops$/, { timeout: 15000 });
+  await expect(tabNav.getByRole("link", { name: "SOPs" })).toHaveAttribute("aria-current", "page");
 });
 
-test("TS-76 — P2/specialist has NO Payers nav entry and is denied at the route", async ({
+test("P2/specialist sees the Payer Setup entry and reaches the workspace (E6.1 F6.1.1 supersedes the TS-76 admin-only pin)", async ({
   page,
 }) => {
   currentRole = "specialist";
-  await page.goto("/get-started");
+  await page.goto("/org-detail");
   const rail = page.locator("aside").first();
-  // The specialist still has a nav (Workspace zone) — just no Payers entry of
-  // any name (TE-18 pin).
-  await expect(rail.getByRole("link", { name: "My Cases" })).toBeVisible({ timeout: 30000 });
-  await expect(rail.getByRole("link", { name: "Payer Setup" })).toHaveCount(0);
+  // E6.1 interim posture: Payer Setup renders for ALL roles; the superseded
+  // pre-consolidation entries never return.
+  await expect(rail.getByRole("link", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   await expect(rail.getByRole("link", { name: "Payer Management" })).toHaveCount(0);
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
-  await expect(page.getByText("available to administrators only")).toBeVisible({ timeout: 30000 });
-  // The denial still points at the read-only catalog (TE-20b — no dead end).
-  await expect(page.getByRole("link", { name: "Browse payer catalog" })).toBeVisible();
-});
-
-test("TS-78 — reason codes live under Organization settings: defaults non-deletable, org codes add + deactivate", async ({
-  page,
-}) => {
-  currentRole = "admin";
-  await page.goto("/admin/payer-admin?tab=org-settings");
-
-  // A seeded global default renders "Managed centrally" (non-deletable).
-  const defaultRow = page.locator("tr", { hasText: "Missing Documentation" });
-  await expect(defaultRow).toBeVisible({ timeout: 30000 });
-  await expect(defaultRow.getByText("Managed centrally")).toBeVisible();
-
-  // An org code carries a Deactivate control.
-  const orgRow = page.locator("tr", { hasText: "Roster mismatch" });
-  await expect(orgRow.getByRole("button", { name: "Deactivate" })).toBeVisible();
-
-  // Adding an org code succeeds (toast).
-  await page.getByLabel("Add an organization reason code").fill("Panel full");
-  await page.getByRole("button", { name: "Add code" }).click();
-  await expect(page.getByText("Reason code added.")).toBeVisible({ timeout: 15000 });
-});
-
-test("TS-91 — queue settings live under Organization settings: four inputs, reorder, reset", async ({
-  page,
-}) => {
-  currentRole = "admin";
-  await page.goto("/admin/payer-admin?tab=org-settings");
-
-  await expect(page.getByText("Overdue follow-ups", { exact: true })).toBeVisible({
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText("Task due dates")).toBeVisible();
-  await expect(page.getByText("Provider start dates")).toBeVisible();
-  await expect(page.getByText("Location launch dates")).toBeVisible();
+});
 
-  // Accessible move-down on the first input (TE-10, no drag needed).
-  await page.getByRole("button", { name: "Move Overdue follow-ups down" }).click();
-  await expect(page.getByRole("button", { name: "Save ranking" })).toBeEnabled();
+test("TS-78/TS-115 — fixed defaults (E6.6 F6.6.6): no reason-code editor renders anywhere; the legacy tab URL still redirects", async ({
+  page,
+}) => {
+  currentRole = "admin";
+  // The legacy org-settings tab spelling lands on Org Detail (org data left
+  // the module with the E6.5 consolidation).
+  await page.goto("/admin/payer-admin?tab=org-settings");
+  await expect(page).toHaveURL(/\/org-detail$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  // Reset is present (disabled on the shipped default until a config is saved).
-  await expect(page.getByRole("button", { name: "Reset to default" })).toBeVisible();
+  // The denial word-list ships as the fixed default set — the org editor is
+  // GONE (no add input, no Add code, no Deactivate, no Reason codes section).
+  await expect(page.getByRole("heading", { name: "Reason codes" })).toHaveCount(0);
+  await expect(page.getByLabel("Add an organization reason code")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add code" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Deactivate" })).toHaveCount(0);
+});
+
+test("TS-91/TS-115 — fixed defaults (E6.6 F6.6.6): no queue-ranking editor renders anywhere", async ({
+  page,
+}) => {
+  currentRole = "admin";
+  await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
+
+  // Queue ranking runs the shipped default order — the config UI is GONE.
+  await expect(page.getByRole("heading", { name: "Queue settings" })).toHaveCount(0);
+  await expect(page.getByText("Overdue follow-ups", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save ranking" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reset to default" })).toHaveCount(0);
+
+  // The surviving payer-relevant org setting (resolution identifiers) stays.
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toBeVisible();
 });
 
 test("F4.2.1 governance — Configure ID writes org_payer_settings, never the payers row", async ({
   page,
 }) => {
   currentRole = "admin";
-  // The resolution-identifier config is payer-relevant org config → the
-  // Organization settings tab carries a per-payer Configure control (the same
-  // e4-2c dialog is also reachable from each setup row's actions menu).
-  await page.goto("/admin/payer-admin?tab=org-settings");
+  // The resolution-identifier config is payer-relevant ORG config → it moved
+  // to Org Detail with the E6.5 consolidation (same e4-2c dialog).
+  await page.goto("/org-detail");
 
   const row = page.locator("tr", { hasText: "Aetna (CVS Health)" });
   await expect(row).toBeVisible({ timeout: 30000 });

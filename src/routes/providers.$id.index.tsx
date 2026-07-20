@@ -1,34 +1,19 @@
-// Provider detail at /providers/$id. Shows the provider header, cases table
-// on the left, and identity/licenses/employment/CAQH cards on the right.
-import React, { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { differenceInDays, format, parseISO } from "date-fns";
-import { Pencil, Plus, XCircle } from "lucide-react";
-import { PageHeader } from "@/components/layout/PageHeader";
+// E6.4 F6.4.2/F6.4.3/F6.4.4/F6.4.5 — the one-page provider record. Section
+// jump-nav (Identity · Groups & facilities · Licenses · Enrollments · Cases ·
+// Documents, deep-linkable #anchors), inline per-field editing (each field
+// saves independently through the audited updateProvider patch — the
+// monolithic edit form is RETIRED, killing the assignment-wipe defect),
+// in-place group/facility management (GroupsFacilitiesPanel — the existing
+// assignment services, never the provider UPDATE), enrollment-fact capture
+// (EnrollmentsPanel — facts, never auto-cases), and the read-only cases panel
+// with denial history preserved beneath reapply cycles. The provider-detail
+// "New case" manual door is retired with the form (the /cases ManualCaseModal
+// stays the ONE documented escape hatch, F6.3.5).
+import React, { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
+import { format } from "date-fns";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TableSkeletonRows } from "@/components/TableSkeletonRows";
-import { EmptyState } from "@/components/EmptyState";
-import { StatusPill, hexToStatusColor, type StatusColor } from "@/components/StatusPill";
-import { fmtDate } from "@/lib/format";
-import { CopyButton } from "@/components/CopyButton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useProvider, useTerminateProvider } from "@/hooks/useProviders";
-import { useCases } from "@/hooks/useCases";
-import { useContracts } from "@/hooks/useContracts";
-import { usePayers, useMsos, useStatusConfigs } from "@/hooks/useAdmin";
-import {
-  useProviderGroups,
-  useNotes,
-  useCreateNote,
-  useStateLicensesByProvider,
-} from "@/hooks/useLookups";
-import { useCanWrite } from "@/lib/permissions";
-import { NewCaseModal } from "@/components/cases/NewCaseModal";
-import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
-import { SsnVaultField } from "@/components/providers/SsnVaultField";
-import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
-
 import {
   Dialog,
   DialogContent,
@@ -40,171 +25,627 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
-
-import type {
-  Contract,
-  CredentialCase,
-  Mso,
-  Payer,
-  Provider,
-  ProviderGroup,
-  ProviderStatus,
-  StatusConfig,
-} from "@/types";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { StatusPill } from "@/components/StatusPill";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
+import { isOpenCaseStatus } from "@/lib/caseStatus";
+import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
+import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
+import { SsnVaultField } from "@/components/providers/SsnVaultField";
+import { InlineField } from "@/components/providers/InlineField";
+import { GroupsFacilitiesPanel } from "@/components/providers/GroupsFacilitiesPanel";
+import { EnrollmentsPanel } from "@/components/providers/EnrollmentsPanel";
+import { LicenseListEditor } from "@/components/onboarding/LicenseListEditor";
+import { type LicenseDraft } from "@/components/onboarding/licenseDraft";
+import {
+  useProvider,
+  useTerminateProvider,
+  useUpdateProvider,
+  useUpdateProviderWithLicenses,
+} from "@/hooks/useProviders";
+import { useCreateNote, useNotes, useStateLicensesByProvider } from "@/hooks/useLookups";
+import { useCases, useCaseDenialEntries, useDenialReasonCodes } from "@/hooks/useCases";
+import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
+import { usePayers } from "@/hooks/useAdmin";
+import { useCanWrite } from "@/lib/permissions";
+import { providerCaseProgress } from "@/lib/caseRollups";
+import { isValidEmail } from "@/lib/contactValidation";
+import { isValidNpi } from "@/lib/providerGroup";
+import { fmtDate } from "@/lib/format";
+import type { LicenseInput, ProviderInput } from "@/services/providers";
+import type { Provider } from "@/types";
 
 export const Route = createFileRoute("/providers/$id/")({
-  component: ProviderDetailPage,
+  component: ProviderRecordPage,
 });
 
-const PROVIDER_STATUS_LABEL: Record<ProviderStatus, string> = {
-  onboarding: "Onboarding",
-  active: "Active",
-  terminated: "Terminated",
-};
-
-const PROVIDER_STATUS_COLOR: Record<ProviderStatus, StatusColor> = {
-  onboarding: "amber",
+const STATUS_TONE: Record<string, "green" | "amber" | "neutral"> = {
   active: "green",
-  terminated: "gray",
+  onboarding: "amber",
+  terminated: "neutral",
 };
 
-function ProviderDetailPage() {
+const SECTIONS = [
+  { id: "identity", label: "Identity" },
+  { id: "groups-facilities", label: "Groups & facilities" },
+  { id: "licenses", label: "Licenses" },
+  { id: "enrollments", label: "Enrollments" },
+  { id: "cases", label: "Cases" },
+  { id: "documents", label: "Documents" },
+] as const;
+
+function Section({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      aria-labelledby={`${id}-heading`}
+      className="scroll-mt-24 rounded-md border border-[#E8E5E0] bg-white p-4"
+    >
+      <h2 id={`${id}-heading`} className="mb-3 text-[14px] font-semibold text-foreground">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function ProviderRecordPage() {
   const { id } = Route.useParams();
-  const navigate = useNavigate();
-  const canEdit = useCanWrite();
-  const canTerminate = useCanWrite();
-  const [newCaseOpen, setNewCaseOpen] = useState(false);
-  const [terminateOpen, setTerminateOpen] = useState(false);
-
   const providerQ = useProvider(id);
+  const canWrite = useCanWrite();
+  const location = useLocation();
 
-  const casesQ = useCases({ providerId: id });
-  const contractsQ = useContracts();
-  const payersQ = usePayers();
-  const msosQ = useMsos();
-  const statusesQ = useStatusConfigs();
-  const groupsQ = useProviderGroups();
-
-  const payerById = useMemo(() => {
-    const m = new Map<string, Payer>();
-    (payersQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [payersQ.data]);
-
-  const msoById = useMemo(() => {
-    const m = new Map<string, Mso>();
-    (msosQ.data ?? []).forEach((p) => m.set(p.id, p));
-    return m;
-  }, [msosQ.data]);
-
-  const statusById = useMemo(() => {
-    const m = new Map<string, StatusConfig>();
-    (statusesQ.data ?? []).forEach((s) => m.set(s.id, s));
-    return m;
-  }, [statusesQ.data]);
-
-  const groupById = useMemo(() => {
-    const m = new Map<string, ProviderGroup>();
-    (groupsQ.data ?? []).forEach((g) => m.set(g.id, g));
-    return m;
-  }, [groupsQ.data]);
-
-  const contractKey = (groupId: string | null, payerId: string, state: string) =>
-    `${groupId ?? ""}|${payerId}|${state}`;
-
-  const contractByKey = useMemo(() => {
-    const m = new Map<string, Contract>();
-    (contractsQ.data ?? []).forEach((c) => {
-      if (!c.payerId) return;
-      m.set(contractKey(c.groupId, c.payerId, c.state), c);
-    });
-    return m;
-  }, [contractsQ.data]);
+  // Deep-linked sections (#licenses …) scroll + focus their heading — the
+  // roster's gap pills land here (F6.4.1).
+  useEffect(() => {
+    const hash = location.hash?.replace(/^#/, "");
+    if (!hash || providerQ.data === undefined) return;
+    const el = document.getElementById(hash);
+    if (el) {
+      el.scrollIntoView({ block: "start" });
+      const heading = document.getElementById(`${hash}-heading`);
+      heading?.setAttribute("tabindex", "-1");
+      heading?.focus?.();
+    }
+  }, [location.hash, providerQ.data]);
 
   if (providerQ.isLoading) {
-    return (
-      <div>
-        <Skeleton className="h-8 w-64 mb-4" />
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
+    return <div className="h-40 animate-pulse rounded-md bg-mp-muted" />;
   }
-
-  if (providerQ.isError || !providerQ.data) {
-    return (
-      <div>
-        <PageHeader title="Provider not found" />
-        <Button variant="outline" onClick={() => navigate({ to: "/providers" })}>
-          Back to providers
-        </Button>
-      </div>
-    );
-  }
-
   const provider = providerQ.data;
-  const group = provider.groupId ? (groupById.get(provider.groupId) ?? null) : null;
-  const cases = casesQ.data ?? [];
+  if (!provider) {
+    return <p className="text-[13px] text-muted-foreground">Provider not found.</p>;
+  }
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <Header
-        provider={provider}
-        group={group}
-        canEdit={canEdit}
-        canTerminate={canTerminate}
-        onEdit={() => navigate({ to: "/providers/$id/edit", params: { id: provider.id } })}
-        onNewCase={() => setNewCaseOpen(true)}
-        onTerminate={() => setTerminateOpen(true)}
-      />
+    <TooltipProvider>
+      <div className="space-y-4">
+        <RecordHeader provider={provider} canWrite={canWrite} />
 
-      <NewCaseModal
-        open={newCaseOpen}
-        onOpenChange={setNewCaseOpen}
-        provider={provider}
-        group={group}
-      />
-      <TerminateProviderDialog
-        open={terminateOpen}
-        onOpenChange={setTerminateOpen}
-        provider={provider}
-      />
+        <nav
+          aria-label="Record sections"
+          className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 rounded-md border border-[#E8E5E0] bg-white px-2 py-1.5"
+        >
+          {SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="rounded px-2 py-1 text-[12.5px] text-muted-foreground hover:bg-[#F0EEE9] hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgba(27,77,62,.4)]"
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-6">
-        <div className="lg:col-span-3">
-          <CasesPanel
-            cases={cases}
-            loading={casesQ.isLoading}
-            payerById={payerById}
-            msoById={msoById}
-            statusById={statusById}
-            contractByKey={contractByKey}
-            contractKey={contractKey}
-            onOpenCase={(caseId) => navigate({ to: "/cases/$id", params: { id: caseId } })}
+        <Section id="identity" title="Identity">
+          <IdentitySection provider={provider} canWrite={canWrite} />
+        </Section>
+
+        <Section id="groups-facilities" title="Groups & facilities">
+          <GroupsFacilitiesPanel providerId={provider.id} canWrite={canWrite} />
+        </Section>
+
+        <Section id="licenses" title="Licenses">
+          <LicensesSection provider={provider} canWrite={canWrite} />
+        </Section>
+
+        <Section id="enrollments" title="Enrollments">
+          <EnrollmentsPanel providerId={provider.id} canWrite={canWrite} />
+        </Section>
+
+        <Section id="cases" title="Cases">
+          <CasesSection providerId={provider.id} />
+        </Section>
+
+        <Section id="documents" title="Documents">
+          <DocumentsPanel
+            ownerType="provider"
+            ownerId={provider.id}
+            ownerName={`${provider.firstName} ${provider.lastName}`}
           />
-        </div>
+        </Section>
 
-        <div className="lg:col-span-2 space-y-4">
-          <IdentityCard provider={provider} />
-          <LicensesCard provider={provider} />
-          <EmploymentCard provider={provider} />
-          <CaqhCard provider={provider} />
-          <ProviderNotes providerId={provider.id} canEdit={canEdit} />
-        </div>
-      </div>
-
-      {/* E4.5 F4.5.1 — the provider document store (kind, dates, current
-          version, uploader; versioned re-upload; audited signed download). */}
-      <div className="mt-6">
-        <DocumentsPanel
-          ownerType="provider"
-          ownerId={provider.id}
-          ownerName={`${provider.firstName} ${provider.lastName}`.trim()}
-        />
+        <ProviderNotes providerId={provider.id} canEdit={canWrite} />
       </div>
     </TooltipProvider>
   );
 }
+
+function RecordHeader({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
+  const [terminating, setTerminating] = useState(false);
+  const casesQ = useCases();
+  const progress = useMemo(() => {
+    const map = providerCaseProgress(
+      (casesQ.data ?? []).map((c) => ({ providerId: c.providerId, status: c.caseStatus })),
+    );
+    return map.get(provider.id) ?? null;
+  }, [casesQ.data, provider.id]);
+
+  return (
+    <div className="rounded-md border border-[#E8E5E0] bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[18px] font-semibold text-foreground">
+            {provider.firstName} {provider.lastName}
+            {provider.credentials ? (
+              <span className="text-muted-foreground">, {provider.credentials}</span>
+            ) : null}
+          </h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <StatusPill
+              status={STATUS_TONE[provider.status ?? "active"] ?? "neutral"}
+              label={(provider.status ?? "active").replace(/^./, (c) => c.toUpperCase())}
+            />
+            {provider.verificationState === "pending_verification" ? (
+              <StatusPill status="amber" label="Pending verification" />
+            ) : null}
+            {provider.referenceOnly ? <StatusPill status="neutral" label="Reference" /> : null}
+            {progress ? (
+              <span className="text-[12.5px] text-muted-foreground">
+                {progress.approved} of {progress.total} approved
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-[12.5px] text-muted-foreground">
+            NPI {provider.npi ?? "—"} · CAQH {provider.caqhId ?? "—"} · Taxonomy{" "}
+            {provider.taxonomyCode ?? "—"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {provider.status !== "terminated" ? (
+            <Button asChild variant="outline" size="sm" className="h-8">
+              <Link to="/generation" search={{ provider: provider.id }}>
+                Review &amp; generate
+              </Link>
+            </Button>
+          ) : null}
+          {canWrite && provider.status !== "terminated" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-[#B91C1C]"
+              onClick={() => setTerminating(true)}
+            >
+              Terminate provider
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {terminating ? (
+        <TerminateProviderDialog
+          open={terminating}
+          onOpenChange={setTerminating}
+          provider={provider}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ---------- Identity: one InlineField per column, one write per save ----------
+
+interface FieldDef {
+  label: string;
+  key: keyof ProviderInput & string;
+  value: string | null;
+  type?: "text" | "date" | "state";
+  validate?: (value: string) => string | null;
+  masked?: boolean;
+  display?: (value: string | null) => string;
+}
+
+function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
+  const update = useUpdateProvider(provider.id);
+  const save = (key: string) => async (value: string | null) => {
+    await update.mutateAsync({ [key]: value } as Partial<ProviderInput>);
+    toast.success("Saved.");
+  };
+
+  const dateDisplay = (v: string | null) => (v ? fmtDate(v) : "—");
+  const fields: FieldDef[] = [
+    { label: "First name", key: "firstName", value: provider.firstName },
+    { label: "Last name", key: "lastName", value: provider.lastName },
+    { label: "Credentials", key: "credentials", value: provider.credentials ?? null },
+    {
+      label: "Email",
+      key: "email",
+      value: provider.email ?? null,
+      validate: (v) => (isValidEmail(v) ? null : "Enter a valid email address."),
+    },
+    { label: "Phone", key: "phone", value: provider.phone ?? null },
+    {
+      label: "Date of birth",
+      key: "dateOfBirth",
+      value: provider.dateOfBirth ?? null,
+      type: "date",
+      masked: true,
+    },
+    { label: "Home street", key: "homeStreet", value: provider.homeStreet ?? null },
+    { label: "Home city", key: "homeCity", value: provider.homeCity ?? null },
+    { label: "Home state", key: "homeState", value: provider.homeState ?? null, type: "state" },
+    { label: "Home ZIP", key: "homeZip", value: provider.homeZip ?? null },
+    {
+      label: "NPI",
+      key: "npi",
+      value: provider.npi ?? null,
+      validate: (v) => (isValidNpi(v) ? null : "NPI is 10 digits."),
+    },
+    { label: "CAQH ID", key: "caqhId", value: provider.caqhId ?? null },
+    {
+      label: "CAQH last attested",
+      key: "caqhLastAttestedDate",
+      value: provider.caqhLastAttestedDate ?? null,
+      type: "date",
+      display: dateDisplay,
+    },
+    { label: "Taxonomy code", key: "taxonomyCode", value: provider.taxonomyCode ?? null },
+    { label: "Specialty", key: "specialty", value: provider.specialty ?? null },
+    {
+      label: "Start date",
+      key: "startDate",
+      value: provider.startDate ?? null,
+      type: "date",
+      display: dateDisplay,
+    },
+    { label: "Degree", key: "degree", value: provider.degree ?? null },
+    { label: "School", key: "schoolName", value: provider.schoolName ?? null },
+    {
+      label: "Graduation date",
+      key: "graduationDate",
+      value: provider.graduationDate ?? null,
+      type: "date",
+      display: dateDisplay,
+    },
+    {
+      label: "Malpractice carrier",
+      key: "malpracticeCarrier",
+      value: provider.malpracticeCarrier ?? null,
+    },
+    {
+      label: "Malpractice policy #",
+      key: "malpracticePolicyNumber",
+      value: provider.malpracticePolicyNumber ?? null,
+    },
+    {
+      label: "Malpractice coverage start",
+      key: "malpracticeCoverageStart",
+      value: provider.malpracticeCoverageStart ?? null,
+      type: "date",
+      display: dateDisplay,
+    },
+    {
+      label: "Malpractice coverage end",
+      key: "malpracticeCoverageEnd",
+      value: provider.malpracticeCoverageEnd ?? null,
+      type: "date",
+      display: dateDisplay,
+    },
+  ];
+
+  return (
+    <div className="grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+      {fields.map((f) => (
+        <InlineField
+          key={f.key}
+          label={f.label}
+          value={f.value}
+          type={f.type}
+          display={f.display}
+          masked={f.masked}
+          canWrite={canWrite}
+          validate={f.validate}
+          onSave={save(f.key)}
+        />
+      ))}
+      <div className="flex items-start justify-between gap-2 py-1.5">
+        <div>
+          <p className="text-[12px] text-muted-foreground">SSN</p>
+          <SsnVaultField provider={provider} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Licenses: read table + a licenses-only editor dialog ----------
+
+function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
+  const licensesQ = useStateLicensesByProvider(provider.id);
+  const [editing, setEditing] = useState(false);
+
+  const rows = licensesQ.data ?? [];
+  return (
+    <div className="space-y-2">
+      {canWrite ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[12px]"
+          onClick={() => setEditing(true)}
+        >
+          Edit licenses
+        </Button>
+      ) : null}
+      {rows.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">No state licenses recorded.</p>
+      ) : (
+        <table className="w-full text-left text-[13px]">
+          <thead>
+            <tr className="border-b border-[#F0EEE9] text-[12px] text-muted-foreground">
+              <th className="py-1.5 pr-3 font-medium">State</th>
+              <th className="py-1.5 pr-3 font-medium">Number</th>
+              <th className="py-1.5 pr-3 font-medium">Type</th>
+              <th className="py-1.5 pr-3 font-medium">Expires</th>
+              <th className="py-1.5 font-medium">PSV</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((l) => (
+              <tr key={l.id} className="border-b border-[#F0EEE9] last:border-0">
+                <td className="py-1.5 pr-3 font-medium">{l.state}</td>
+                <td className="py-1.5 pr-3">{l.licenseNumber ?? "—"}</td>
+                <td className="py-1.5 pr-3">{l.licenseType ?? "—"}</td>
+                <td className="py-1.5 pr-3">
+                  {l.expirationDate ? fmtDate(l.expirationDate) : "—"}
+                </td>
+                <td className="py-1.5">
+                  {l.verifiedStatus === "verified" ? (
+                    <StatusPill status="green" label="Verified" />
+                  ) : l.verifiedStatus === "failed" ? (
+                    <StatusPill status="red" label="Failed" />
+                  ) : (
+                    <StatusPill status="neutral" label="Unverified" />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {editing ? (
+        <LicensesEditorDialog provider={provider} onClose={() => setEditing(false)} />
+      ) : null}
+    </div>
+  );
+}
+
+function LicensesEditorDialog({ provider, onClose }: { provider: Provider; onClose: () => void }) {
+  const licensesQ = useStateLicensesByProvider(provider.id);
+  const update = useUpdateProviderWithLicenses(provider.id);
+  const [drafts, setDrafts] = useState<LicenseDraft[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (drafts === null && licensesQ.data) {
+      setDrafts(
+        licensesQ.data.map((l) => ({
+          id: l.id,
+          state: l.state,
+          licenseNumber: l.licenseNumber ?? "",
+          licenseType: l.licenseType ?? "full",
+          issueDate: l.issueDate ?? "",
+          expirationDate: l.expirationDate ?? "",
+          verifiedStatus: l.verifiedStatus ?? "unverified",
+          verificationSourceUrl: l.verificationSourceUrl ?? "",
+          storedExpirationDate: l.expirationDate,
+          storedVerifiedAt: l.verifiedAt,
+        })),
+      );
+    }
+  }, [drafts, licensesQ.data]);
+
+  const save = () => {
+    for (const d of drafts ?? []) {
+      if (
+        d.state.trim() &&
+        (d.verifiedStatus === "verified" || d.verifiedStatus === "failed") &&
+        !d.verificationSourceUrl.trim()
+      ) {
+        setError("PSV verify/fail requires the state board URL.");
+        return;
+      }
+    }
+    const licenses: LicenseInput[] = (drafts ?? [])
+      .filter((d) => d.state.trim())
+      .map((d) => ({
+        id: d.id ?? null,
+        state: d.state,
+        licenseNumber: d.licenseNumber.trim() || null,
+        licenseType: d.licenseType.trim() || null,
+        issueDate: d.issueDate.trim() || null,
+        expirationDate: d.expirationDate.trim() || null,
+        verifiedStatus: d.verifiedStatus,
+        verificationSourceUrl: d.verificationSourceUrl.trim() || null,
+      }));
+    // Licenses-only write: an EMPTY patch and no groupAssignments — this
+    // dialog can never touch identity fields or assignments.
+    update.mutate(
+      { patch: {}, licenses },
+      {
+        onSuccess: () => {
+          toast.success("Licenses saved.");
+          onClose();
+        },
+        onError: (e) => setError(e instanceof Error ? e.message : "Could not save licenses."),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit state licenses</DialogTitle>
+          <DialogDescription>
+            Licenses save on their own — nothing else on the record is touched. Editing an
+            expiration date resets that license to Unverified.
+          </DialogDescription>
+        </DialogHeader>
+        {drafts === null ? (
+          <div className="h-24 animate-pulse rounded-md bg-mp-muted" />
+        ) : (
+          <LicenseListEditor value={drafts} onChange={(next) => setDrafts(next)} errors={{}} />
+        )}
+        {error ? (
+          <p role="alert" className="text-[12px] text-[#B91C1C]">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-[#1B4D3E] hover:bg-[#163F33]"
+            disabled={update.isPending || drafts === null}
+            onClick={save}
+          >
+            Save licenses
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- Cases: read-only rows + preserved denial history (F6.4.5) ----------
+
+function CasesSection({ providerId }: { providerId: string }) {
+  const casesQ = useCases();
+  const payersQ = usePayers();
+  const denialsQ = useCaseDenialEntries();
+  const reasonsQ = useDenialReasonCodes();
+  const canWrite = useCanWrite();
+  const [touchOpen, setTouchOpen] = useState(false);
+
+  // F6.6.5 — "Add touch" is THE logging action on the record too: the
+  // provider's open cases feed the same unified dialog the /cases toolbar
+  // uses (one touch per selected case + suggested bumps where implied).
+  const touchCandidates: TouchCaseCandidate[] = useMemo(() => {
+    const payerName = new Map((payersQ.data ?? []).map((p) => [p.id, p.name]));
+    return (casesQ.data ?? [])
+      .filter((c) => c.providerId === providerId && isOpenCaseStatus(c.caseStatus))
+      .map((c) => ({
+        id: c.id,
+        label: `${payerName.get(c.payerId) ?? "—"} · ${c.state}`,
+        currentStatus: c.caseStatus,
+      }));
+  }, [casesQ.data, payersQ.data, providerId]);
+
+  const rows = useMemo(() => {
+    const payerName = new Map((payersQ.data ?? []).map((p) => [p.id, p.name]));
+    const reasonLabel = new Map((reasonsQ.data ?? []).map((r) => [r.id, r.label]));
+    const denialsByCase = new Map<string, { label: string; at: string }[]>();
+    for (const d of denialsQ.data ?? []) {
+      const list = denialsByCase.get(d.caseId) ?? [];
+      list.push({
+        label: d.reasonCodeId ? (reasonLabel.get(d.reasonCodeId) ?? "Denied") : "Denied",
+        at: d.changedAt,
+      });
+      denialsByCase.set(d.caseId, list);
+    }
+    return (casesQ.data ?? [])
+      .filter((c) => c.providerId === providerId)
+      .map((c) => ({
+        id: c.id,
+        payerName: payerName.get(c.payerId) ?? "—",
+        state: c.state,
+        status: c.caseStatus,
+        submittedDate: c.submittedDate ?? null,
+        denials: denialsByCase.get(c.id) ?? [],
+      }))
+      .sort((a, b) => a.payerName.localeCompare(b.payerName) || a.state.localeCompare(b.state));
+  }, [casesQ.data, payersQ.data, denialsQ.data, reasonsQ.data, providerId]);
+
+  if (rows.length === 0) {
+    return (
+      <p className="text-[13px] text-muted-foreground">
+        No cases yet. Cases come through Review &amp; generate on the group&apos;s Payer Network
+        board.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {canWrite && touchCandidates.length > 0 ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setTouchOpen(true)}
+          >
+            Add touch
+          </Button>
+        </div>
+      ) : null}
+      {touchOpen ? (
+        <AddTouchDialog
+          open={touchOpen}
+          candidates={touchCandidates}
+          onClose={() => setTouchOpen(false)}
+        />
+      ) : null}
+      <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
+        {rows.map((r) => (
+          <li key={r.id} className="px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              <Link
+                to="/cases/$id"
+                params={{ id: r.id }}
+                className="font-medium text-[#1B4D3E] underline-offset-2 hover:underline"
+              >
+                {r.payerName} — {r.state}
+              </Link>
+              <CaseStatusPill status={r.status} />
+              {r.submittedDate ? (
+                <span className="text-muted-foreground">submitted {fmtDate(r.submittedDate)}</span>
+              ) : null}
+            </div>
+            {/* The prior denial stays visible beneath the current cycle —
+              reapply continues the SAME case (E6.0), history is preserved. */}
+            {r.denials.length > 0 && r.status !== "denied" ? (
+              <p className="mt-1 text-[12.5px] text-muted-foreground">
+                Previously denied — {r.denials[0].label}, {fmtDate(r.denials[0].at)}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ---------- Notes + terminate (carried over) ----------
 
 function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: boolean }) {
   const notesQ = useNotes("provider", providerId);
@@ -216,105 +657,13 @@ function ProviderNotes({ providerId, canEdit }: { providerId: string; canEdit: b
       saving={createNoteM.isPending}
       onSaveNote={async (content) => {
         try {
-          await createNoteM.mutateAsync({
-            entityType: "provider",
-            entityId: providerId,
-            content,
-          });
+          await createNoteM.mutateAsync({ entityType: "provider", entityId: providerId, content });
           toast.success("Note added");
         } catch (e) {
           toast.error((e as Error).message);
         }
       }}
     />
-  );
-}
-
-interface HeaderProps {
-  provider: Provider;
-  group: ProviderGroup | null;
-  canEdit: boolean;
-  canTerminate: boolean;
-  onEdit: () => void;
-  onNewCase: () => void;
-  onTerminate: () => void;
-}
-
-function Header({
-  provider,
-  group,
-  canEdit,
-  canTerminate,
-  onEdit,
-  onNewCase,
-  onTerminate,
-}: HeaderProps) {
-  const name = `${provider.firstName} ${provider.lastName}${
-    provider.credentials ? `, ${provider.credentials}` : ""
-  }`;
-  const isTerminated = provider.status === "terminated";
-
-  return (
-    <div className="pb-4 mb-2 border-b border-border">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-[20px] font-semibold tracking-tight text-foreground">{name}</h1>
-            <StatusPill
-              status={PROVIDER_STATUS_COLOR[provider.status]}
-              label={PROVIDER_STATUS_LABEL[provider.status]}
-            />
-            {group ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-[20px] text-[12px] font-medium border border-border bg-muted text-foreground">
-                {group.name}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="mt-3 flex items-center gap-4 flex-wrap text-[13px]">
-            <IdField label="NPI" value={provider.npi} />
-            <span className="text-border">·</span>
-            <IdField label="CAQH" value={provider.caqhId} />
-            <span className="text-border">·</span>
-            <IdField label="Taxonomy" value={provider.taxonomyCode} />
-            {isTerminated && provider.terminatedDate ? (
-              <>
-                <span className="text-border">·</span>
-                <span className="text-[#9CA3AF]">
-                  Terminated {fmtDate(provider.terminatedDate)}
-                </span>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        {canEdit ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={onEdit}>
-              <Pencil className="h-4 w-4" />
-              Edit provider
-            </Button>
-
-            <Button size="sm" className="gap-2" onClick={onNewCase} disabled={isTerminated}>
-              <Plus className="h-4 w-4" />
-              New case
-            </Button>
-            {canTerminate ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={onTerminate}
-                disabled={isTerminated}
-              >
-                <XCircle className="h-4 w-4" />
-                {isTerminated ? "Terminated" : "Terminate provider"}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -388,7 +737,7 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Optional context for the termination"
-              className="min-h-[80px] text-[13px] resize-none"
+              className="min-h-[80px] resize-none text-[13px]"
             />
           </div>
         </div>
@@ -406,385 +755,5 @@ function TerminateProviderDialog({ open, onOpenChange, provider }: TerminateProv
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function IdField({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="inline-flex items-center gap-2">
-      <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</span>
-
-      <span className="text-foreground tabular-nums">{value ?? "—"}</span>
-      {value ? <CopyButton value={value} label={label} /> : null}
-    </div>
-  );
-}
-
-interface CasesPanelProps {
-  cases: CredentialCase[];
-  loading: boolean;
-  payerById: Map<string, Payer>;
-  msoById: Map<string, Mso>;
-  statusById: Map<string, StatusConfig>;
-  contractByKey: Map<string, Contract>;
-  contractKey: (groupId: string | null, payerId: string, state: string) => string;
-  onOpenCase: (id: string) => void;
-}
-
-function CasesPanel({
-  cases,
-  loading,
-  payerById,
-  msoById,
-  statusById,
-  contractByKey,
-  contractKey,
-  onOpenCase,
-}: CasesPanelProps) {
-  return (
-    <section>
-      <SectionTitle>Cases</SectionTitle>
-      <div className="border border-border rounded-md overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <Th>Payer</Th>
-              <Th>State</Th>
-              <Th>Credentialing</Th>
-              <Th>Group Contract</Th>
-              <Th>Submitted</Th>
-              <Th className="text-right">Days open</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <TableSkeletonRows rows={4} cols={6} />
-            ) : cases.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-12 text-center">
-                  <EmptyState message="No cases yet" />
-                </td>
-              </tr>
-            ) : (
-              cases.map((c) => {
-                const payer = payerById.get(c.payerId);
-                const credSc = c.credentialingStatusId
-                  ? statusById.get(c.credentialingStatusId)
-                  : null;
-                const contract = contractByKey.get(contractKey(c.groupId, c.payerId, c.state));
-                const contractSc = contract?.contractingStatusId
-                  ? statusById.get(contract.contractingStatusId)
-                  : null;
-                const mso = c.msoId ? msoById.get(c.msoId) : null;
-                const daysOpen = c.submittedDate
-                  ? differenceInDays(new Date(), parseISO(c.submittedDate))
-                  : null;
-
-                return (
-                  <tr
-                    key={c.id}
-                    onClick={() => onOpenCase(c.id)}
-                    className="border-b border-border h-10 cursor-pointer hover:bg-muted/40"
-                  >
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-foreground">{payer?.name ?? "—"}</span>
-                        {mso ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-[20px] text-[11px] font-medium border border-border bg-muted text-muted-foreground">
-                            via {mso.name}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-3 text-foreground">{c.state}</td>
-                    <td className="px-3 py-1.5">
-                      {credSc ? (
-                        <StatusPill status={hexToStatusColor(credSc.color)} label={credSc.label} />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {contractSc ? (
-                        <StatusPill
-                          status={hexToStatusColor(contractSc.color)}
-                          label={contractSc.label}
-                        />
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 text-foreground tabular-nums">
-                      {fmtDate(c.submittedDate)}
-                    </td>
-                    <td className="px-3 text-right text-foreground tabular-nums">
-                      {daysOpen !== null ? `${daysOpen}d` : "—"}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function IdentityCard({ provider }: { provider: Provider }) {
-  const addressLine =
-    [provider.homeStreet, provider.homeCity, provider.homeState, provider.homeZip]
-      .filter(Boolean)
-      .join(", ") || "—";
-
-  return (
-    <Card title="Identity">
-      <DL>
-        <DRow label="Date of birth" value={fmtDate(provider.dateOfBirth)} />
-        {/* E4.4 — the full SSN lives only in the server-only vault; this row
-            renders the mask plus role-gated vault actions (admin reveal, secure
-            store, intake link). */}
-        <DRow label="SSN" value={<SsnVaultField provider={provider} />} mono />
-        <DRow label="Email" value={provider.email ?? "—"} />
-        <DRow label="Phone" value={provider.phone ?? "—"} mono />
-        <DRow label="Address" value={addressLine} />
-      </DL>
-    </Card>
-  );
-}
-
-function LicensesCard({ provider }: { provider: Provider }) {
-  const licensesQ = useStateLicensesByProvider(provider.id);
-  const rows = licensesQ.data ?? [];
-
-  if (licensesQ.isLoading) {
-    return (
-      <Card title="Licenses">
-        <div className="text-[13px] text-muted-foreground">Loading…</div>
-      </Card>
-    );
-  }
-
-  if (licensesQ.error) {
-    return (
-      <Card title="Licenses">
-        <div className="text-[13px] text-[#DC2626]">
-          Failed to load licenses: {(licensesQ.error as Error).message}
-        </div>
-      </Card>
-    );
-  }
-
-  if (rows.length > 0) {
-    return (
-      <Card title="Licenses">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-border">
-              <Th>State</Th>
-              <Th>Number</Th>
-              <Th>Type</Th>
-              <Th>Issued</Th>
-              <Th>Expires</Th>
-              <Th>Status</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((l) => {
-              const exp = l.expirationDate;
-              let expired = false;
-              let expiringSoon = false;
-              if (exp) {
-                const days = (parseISO(exp).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-                expired = days < 0;
-                expiringSoon = !expired && days <= 90;
-              }
-              return (
-                <tr key={l.id} className="border-b border-border last:border-0 h-10">
-                  <td className="px-3 text-foreground">{l.state || "—"}</td>
-                  <td className="px-3 text-foreground tabular-nums">{l.licenseNumber ?? "—"}</td>
-                  <td className="px-3 text-foreground capitalize">{l.licenseType ?? "—"}</td>
-                  <td className="px-3 text-foreground tabular-nums">{fmtDate(l.issueDate)}</td>
-                  <td className="px-3 tabular-nums">
-                    <span
-                      className={
-                        expired
-                          ? "text-[#DC2626] font-medium"
-                          : expiringSoon
-                            ? "text-[#D97706] font-medium"
-                            : "text-foreground"
-                      }
-                    >
-                      {fmtDate(exp)}
-                    </span>
-                    {expired ? (
-                      <StatusPill status="red" label="Expired" className="ml-2" />
-                    ) : expiringSoon ? (
-                      <StatusPill status="amber" label="Expiring soon" className="ml-2" />
-                    ) : null}
-                  </td>
-                  <td className="px-3 text-foreground capitalize">{l.status ?? "—"}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
-    );
-  }
-
-  // Fallback to legacy provider columns (only when no state_licenses rows exist).
-  const number = provider.licenseNumber;
-  if (!number) {
-    return (
-      <Card title="Licenses">
-        <div className="text-[13px] text-muted-foreground">No licenses on file</div>
-      </Card>
-    );
-  }
-  const exp = provider.licenseExpirationDate;
-  let expired = false;
-  let expiringSoon = false;
-  if (exp) {
-    const days = (parseISO(exp).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-    expired = days < 0;
-    expiringSoon = !expired && days <= 90;
-  }
-  return (
-    <Card title="Licenses">
-      <div className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-        Legacy record
-      </div>
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-border">
-            <Th>State</Th>
-            <Th>Number</Th>
-            <Th>Issued</Th>
-            <Th>Expires</Th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-border last:border-0 h-10">
-            <td className="px-3 text-foreground">{provider.licenseState ?? "—"}</td>
-            <td className="px-3 text-foreground tabular-nums">{number}</td>
-            <td className="px-3 text-foreground tabular-nums">
-              {fmtDate(provider.licenseIssueDate)}
-            </td>
-            <td className="px-3 tabular-nums">
-              <span
-                className={
-                  expired
-                    ? "text-[#DC2626] font-medium"
-                    : expiringSoon
-                      ? "text-[#D97706] font-medium"
-                      : "text-foreground"
-                }
-              >
-                {fmtDate(exp)}
-              </span>
-              {expired ? (
-                <StatusPill status="red" label="Expired" className="ml-2" />
-              ) : expiringSoon ? (
-                <StatusPill status="amber" label="Expiring soon" className="ml-2" />
-              ) : null}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </Card>
-  );
-}
-
-function EmploymentCard({ provider }: { provider: Provider }) {
-  return (
-    <Card title="Employment & malpractice">
-      <DL>
-        <DRow label="Specialty" value={provider.specialty ?? "—"} />
-        <DRow label="Start date" value={fmtDate(provider.startDate)} />
-        <DRow label="Degree" value={provider.degree ?? "—"} />
-        <DRow label="School" value={provider.schoolName ?? "—"} />
-        <DRow label="Graduation" value={fmtDate(provider.graduationDate)} />
-        <DRow label="Carrier" value={provider.malpracticeCarrier ?? "—"} />
-        <DRow label="Policy #" value={provider.malpracticePolicyNumber ?? "—"} mono />
-        <DRow
-          label="Coverage"
-          value={
-            provider.malpracticeCoverageStart || provider.malpracticeCoverageEnd
-              ? `${fmtDate(provider.malpracticeCoverageStart)} – ${fmtDate(provider.malpracticeCoverageEnd)}`
-              : "—"
-          }
-        />
-      </DL>
-    </Card>
-  );
-}
-
-function CaqhCard({ provider }: { provider: Provider }) {
-  const attested = provider.caqhLastAttestedDate;
-  let days: number | null = null;
-  let cls = "text-foreground";
-  if (attested) {
-    days = differenceInDays(new Date(), parseISO(attested));
-    if (days >= 110) cls = "text-[#DC2626] font-medium";
-    else if (days >= 90) cls = "text-[#D97706] font-medium";
-  }
-  return (
-    <Card title="CAQH">
-      <DL>
-        <DRow label="CAQH ID" value={provider.caqhId ?? "—"} mono />
-        <DRow label="Last attested" value={fmtDate(attested)} />
-        <DRow
-          label="Days since"
-          value={days === null ? "—" : <span className={`tabular-nums ${cls}`}>{days}d</span>}
-        />
-      </DL>
-    </Card>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border border-border rounded-md bg-card">
-      <header className="px-4 h-10 flex items-center border-b border-border">
-        <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {title}
-        </h2>
-      </header>
-      <div className="p-4">{children}</div>
-    </section>
-  );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-2">
-      {children}
-    </h2>
-  );
-}
-
-function DL({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-[120px_1fr] gap-y-2 gap-x-3 text-[13px]">{children}</dl>;
-}
-
-function DRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <>
-      <dt className="text-[11px] uppercase tracking-wider text-muted-foreground self-center">
-        {label}
-      </dt>
-      <dd className={`text-foreground ${mono ? "tabular-nums" : ""}`}>{value}</dd>
-    </>
-  );
-}
-
-function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th
-      className={`text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground px-3 h-9 ${className}`}
-    >
-      {children}
-    </th>
   );
 }

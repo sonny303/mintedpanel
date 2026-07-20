@@ -1,0 +1,1446 @@
+<title>Minted Panel — Aligned Redesign Direction v1</title>
+<style>
+  :root {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161a;
+      --raised: #191f1d;
+      --ink: #edeae3;
+      --ink-soft: #a9b0ac;
+      --ink-faint: #77807c;
+      --border: #2a322d;
+      --border-soft: #232b27;
+      --accent: #5fbe9a;
+      --accent-strong: #0c2a1d;
+      --accent-soft: #1b3229;
+      --amber-bg: #33270f;
+      --amber-fg: #e0af6b;
+      --blue-bg: #17222e;
+      --blue-fg: #7faaf0;
+      --green-bg: #14291f;
+      --green-fg: #6ccfa5;
+      --red-bg: #2e1717;
+      --red-fg: #e58a8a;
+      --teal-bg: #10262b;
+      --teal-fg: #6fc4d8;
+      --idle-bg: #232b27;
+      --idle-fg: #a9b0ac;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161a;
+    --raised: #191f1d;
+    --ink: #edeae3;
+    --ink-soft: #a9b0ac;
+    --ink-faint: #77807c;
+    --border: #2a322d;
+    --border-soft: #232b27;
+    --accent: #5fbe9a;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #1b3229;
+    --amber-bg: #33270f;
+    --amber-fg: #e0af6b;
+    --blue-bg: #17222e;
+    --blue-fg: #7faaf0;
+    --green-bg: #14291f;
+    --green-fg: #6ccfa5;
+    --red-bg: #2e1717;
+    --red-fg: #e58a8a;
+    --teal-bg: #10262b;
+    --teal-fg: #6fc4d8;
+    --idle-bg: #232b27;
+    --idle-fg: #a9b0ac;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f3;
+    --raised: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #6b7280;
+    --ink-faint: #9ca3af;
+    --border: #e8e5e0;
+    --border-soft: #f0eeea;
+    --accent: #1b4d3e;
+    --accent-strong: #0c2a1d;
+    --accent-soft: #e7f0ec;
+    --amber-bg: #fbf0e1;
+    --amber-fg: #b45309;
+    --blue-bg: #e8eefd;
+    --blue-fg: #1d4ed8;
+    --green-bg: #e7f5ef;
+    --green-fg: #047857;
+    --red-bg: #fbeaea;
+    --red-fg: #b91c1c;
+    --teal-bg: #e4f3f7;
+    --teal-fg: #0e7490;
+    --idle-bg: #f1f1ef;
+    --idle-fg: #6b7280;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family:
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code,
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  a {
+    color: var(--accent);
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 28px 90px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin: 8px 0 10px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    max-width: 70ch;
+    margin: 0 0 18px;
+  }
+  .dek b {
+    color: var(--ink);
+  }
+  .decision-band {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    background: var(--raised);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-bottom: 44px;
+    box-shadow: var(--shadow);
+  }
+  .decision-band b {
+    color: var(--ink);
+  }
+  .decision-band .chip {
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+
+  section.blk {
+    margin-bottom: 58px;
+    scroll-margin-top: 20px;
+  }
+  .blk-head {
+    margin-bottom: 16px;
+  }
+  .blk-head .sec-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 9px;
+    border-radius: 5px;
+    margin-bottom: 9px;
+  }
+  .blk-head h2 {
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: -0.008em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .blk-head p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 72ch;
+    margin: 0;
+  }
+  .blk-head p b {
+    color: var(--ink);
+  }
+
+  .note {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 72ch;
+    margin: 12px 0 0;
+  }
+  .note b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* ---------- product rail ---------- */
+  .rail-row {
+    display: flex;
+    gap: 22px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .rail {
+    width: 240px;
+    flex: none;
+    background: #0c2a1d;
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    color-scheme: light;
+  }
+  .rail .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px 8px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .rail .brand .mark {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: linear-gradient(160deg, #6fbe9e, #1b4d3e 60%);
+    flex: none;
+  }
+  .rail .group {
+    padding: 10px 10px 4px;
+  }
+  .rail .group-label {
+    padding: 0 10px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.38);
+  }
+  .rail .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 5px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .rail .item.active {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 2px 0 0 #6fbe9e;
+    color: #fff;
+  }
+  .rail .item svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+  }
+  .rail .item .lbl {
+    flex: 1;
+  }
+  .rail .item .chip {
+    font-size: 10.5px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .rail .divider {
+    margin: 8px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .rail .org-tile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin: 2px 10px 4px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .rail .org-tile .eyebrow2 {
+    font-size: 9px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+    display: block;
+  }
+  .rail .org-tile .nm {
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .rail .footer-zone {
+    margin-top: auto;
+    padding: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .rail .user {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .rail .user .av {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #fff;
+    flex: none;
+  }
+  .rail .user .un {
+    font-size: 12.5px;
+    color: #fff;
+  }
+  .rail .user .ur {
+    font-size: 10.5px;
+    color: rgba(255, 255, 255, 0.5);
+    display: block;
+  }
+
+  /* ---------- item detail cards ---------- */
+  .item-cards {
+    flex: 1;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .icard {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 17px;
+    box-shadow: var(--shadow);
+  }
+  .icard .ic-top {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .icard .ic-name {
+    font-size: 13.5px;
+    font-weight: 650;
+  }
+  .icard .ic-flag {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .icard .ic-flag.landing {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+  .icard .ic-flag.everyone {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .icard p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .icard p b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .icard .sub-list {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .icard .sub-list li {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    padding-left: 16px;
+    position: relative;
+  }
+  .icard .sub-list li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--border);
+  }
+  .icard .sub-list li b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* ---------- journey stages ---------- */
+  .journey {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .journey ol.stages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+  }
+  .journey ol.stages::before {
+    content: "";
+    position: absolute;
+    left: 11px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    background: var(--border);
+  }
+  .journey .stage {
+    position: relative;
+    padding: 0 0 16px 38px;
+  }
+  .journey .stage:last-child {
+    padding-bottom: 0;
+  }
+  .journey .stage .n {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--raised);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .journey .stage.day .n {
+    background: var(--amber-fg);
+    font-size: 8.5px;
+    letter-spacing: 0.02em;
+  }
+  .journey .stage .where {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .journey .stage .where code {
+    font-size: 11px;
+    color: var(--ink-faint);
+    font-weight: 500;
+    margin-left: 6px;
+  }
+  .journey .stage .doing {
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    margin-top: 2px;
+    max-width: 62ch;
+  }
+  .journey .stage .doing b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .journey .substeps {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 56ch;
+  }
+  .journey .substeps .ss {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    padding-left: 18px;
+    position: relative;
+  }
+  .journey .substeps .ss::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    border: 2px solid var(--accent);
+  }
+  .journey .substeps .ss b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .journey .done-state {
+    margin-top: 14px;
+    padding: 10px 13px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.55;
+    max-width: 62ch;
+  }
+
+  /* ---------- pills ---------- */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+  .pill.idle {
+    background: var(--idle-bg);
+    color: var(--idle-fg);
+  }
+  .pill.blue {
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+  }
+  .pill.teal {
+    background: var(--teal-bg);
+    color: var(--teal-fg);
+  }
+  .pill.amber {
+    background: var(--amber-bg);
+    color: var(--amber-fg);
+  }
+  .pill.green {
+    background: var(--green-bg);
+    color: var(--green-fg);
+  }
+  .pill.red {
+    background: var(--red-bg);
+    color: var(--red-fg);
+  }
+
+  /* ---------- status flow ---------- */
+  .status-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 18px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  .status-flow .arr {
+    color: var(--ink-faint);
+    font-size: 13px;
+  }
+  .status-flow .fork {
+    font-size: 11px;
+    color: var(--ink-faint);
+    padding: 0 2px;
+  }
+
+  .derived-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .dcard {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 15px;
+    box-shadow: var(--shadow);
+  }
+  .dcard .dc-t {
+    font-size: 12px;
+    font-weight: 650;
+    margin-bottom: 4px;
+  }
+  .dcard .dc-b {
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .dcard .dc-b b {
+    color: var(--ink);
+  }
+
+  /* ---------- tables ---------- */
+  .tbl-card {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .tbl-scroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    min-width: 560px;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td b,
+  td .strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .sum-row td {
+    background: var(--bg);
+    font-weight: 600;
+    color: var(--ink);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- engine ---------- */
+  .engine {
+    background: var(--accent-strong);
+    border-radius: 12px;
+    padding: 20px 22px;
+    color: #f0efe9;
+    margin-bottom: 16px;
+  }
+  .engine .formula {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 2;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .engine .formula .op {
+    opacity: 0.55;
+    padding: 0 2px;
+  }
+  .engine .formula .term {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .engine .formula .result {
+    background: rgba(255, 255, 255, 0.22);
+    font-weight: 700;
+  }
+  .engine .en-note {
+    font-size: 11.5px;
+    line-height: 1.6;
+    opacity: 0.75;
+    margin-top: 8px;
+    max-width: 66ch;
+  }
+
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    background: var(--raised);
+    padding: 14px 17px;
+    box-shadow: var(--shadow);
+    margin-top: 14px;
+  }
+  .callout .co-t {
+    font-size: 12.5px;
+    font-weight: 650;
+    margin-bottom: 4px;
+  }
+  .callout p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 72ch;
+  }
+  .callout p b {
+    color: var(--ink);
+  }
+
+  footer {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 18px;
+    max-width: 72ch;
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Minted Panel · redesign decision record · 2026-07-19</div>
+  <h1>The aligned direction: one system, four journeys, one status</h1>
+  <p class="dek">
+    The consolidated outcome of the full workflow alignment (Sowmya, 2026-07-18/19). This supersedes
+    the earlier E5.0-only navigation mock and parts of the R6.5 epic slate.
+    <b>Nothing here is built</b> — this page is the reviewable decision record; approved sections
+    become the new epic slate next.
+  </p>
+  <div class="decision-band">
+    <span class="chip">Aligned · v2</span>
+    <span
+      ><b>Reads in 5 sections:</b> Workspace sidebar · Org space · Journey A (payer) · Journey B
+      (org, the Nov-1 example) · Journey C (generation) — then the unified status model and the
+      retirement ledger. <b>v2 revisions:</b> Groups is a menu item (the payer-network board lives
+      at group grain) · migration enrollments are facts, never auto-cases · occasional counts are
+      reports, not screens · a facility belongs to exactly one group.</span
+    >
+  </div>
+
+  <!-- ============ SECTION 1 ============ -->
+  <section class="blk" id="s1">
+    <div class="blk-head">
+      <span class="sec-tag">Section 1</span>
+      <h2>Sidebar — Workspace zone</h2>
+      <p>
+        Three starting points, cross-org. Home is gone — <b>Cases is where every login lands.</b> No
+        admin section exists anywhere in the app anymore.
+      </p>
+    </div>
+    <div class="rail-row">
+      <aside class="rail" aria-label="Workspace sidebar mock">
+        <div class="brand"><span class="mark"></span> Minted Panel</div>
+        <div class="group">
+          <div class="group-label">Workspace</div>
+          <div class="item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path
+                d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+              />
+            </svg>
+            <span class="lbl">Cases</span><span class="chip">14</span>
+          </div>
+          <div class="item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="20" height="14" x="2" y="5" rx="2" />
+              <line x1="2" x2="22" y1="10" y2="10" />
+            </svg>
+            <span class="lbl">Payer Setup</span><span class="chip">2</span>
+          </div>
+          <div class="item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3v18h18" />
+              <path d="M18 17V9" />
+              <path d="M13 17V5" />
+              <path d="M8 17v-3" />
+            </svg>
+            <span class="lbl">Reporting Center</span>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="group">
+          <div class="org-tile">
+            <span
+              ><span class="eyebrow2">Organization</span
+              ><span class="nm">BEST Physical Therapy</span></span
+            >
+          </div>
+          <div class="item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 2v2" />
+              <path d="M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2" />
+              <path d="M8 2v2" />
+              <circle cx="12" cy="11" r="3" />
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+            </svg>
+            <span class="lbl">Org Detail</span>
+          </div>
+          <div class="item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v2" />
+              <path d="m6.2 4.4 1.3 1.4" />
+              <path d="m17.8 4.4-1.3 1.4" />
+              <path d="M7.5 8.5a4.5 4.5 0 0 1 9 0" />
+              <circle cx="12" cy="12.5" r="2.4" />
+              <path d="M8.6 21v-1a3.4 3.4 0 0 1 6.8 0v1" />
+              <circle cx="5" cy="14" r="1.9" />
+              <path d="M2 21v-.4A3 3 0 0 1 5 17.6" />
+              <circle cx="19" cy="14" r="1.9" />
+              <path d="M22 21v-.4a3 3 0 0 0-3-3" />
+            </svg>
+            <span class="lbl">Groups</span>
+          </div>
+          <div class="item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="7" r="4" />
+              <path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+            </svg>
+            <span class="lbl">Providers</span>
+          </div>
+        </div>
+        <div class="footer-zone">
+          <div class="user">
+            <span class="av">S</span
+            ><span><span class="un">Sowmya</span><span class="ur">Admin</span></span>
+          </div>
+        </div>
+      </aside>
+
+      <div class="item-cards">
+        <div class="icard">
+          <div class="ic-top">
+            <span class="ic-name">Cases</span><span class="ic-flag landing">Default landing</span>
+          </div>
+          <p>
+            The org's case queue — <b>one surface, three pivots</b>. MVP is org-wide (no per-analyst
+            assignment; that's a future idea, not a field today).
+          </p>
+          <ul class="sub-list">
+            <li>
+              <b>To-do pivot (default):</b> ranked by overdue follow-ups → task due dates → provider
+              start dates → the rest.
+            </li>
+            <li>
+              <b>By provider / by payer pivots:</b> the same cases, re-sliced. No separate "Cases"
+              page — merged.
+            </li>
+            <li>
+              <b>Case detail:</b> SOP task checklist, portal fill via the extension (unchanged —
+              human always submits), tracking IDs, status changes incl. Denied + reason.
+            </li>
+            <li>
+              <b>"Add touch"</b> is the one global logging action — the old separate "Log Payer
+              Call" is gone; a payer call across N cases is an Add touch with N cases selected.
+            </li>
+          </ul>
+        </div>
+        <div class="icard">
+          <div class="ic-top">
+            <span class="ic-name">Payer Setup</span
+            ><span class="ic-flag everyone">Everyone, for now</span>
+          </div>
+          <p>
+            Journey A's home — global, authored once, inherited by every org. Tabs backed by real
+            URLs: <span class="mono">catalog · sops</span>.
+          </p>
+          <ul class="sub-list">
+            <li>
+              <b>Payer Catalog:</b> canonical payers + curated facts (covered states, what the payer
+              calls its provider ID, delegation).
+            </li>
+            <li>
+              <b>SOP Templates:</b> the library + editor. Form setup lives
+              <b>inside the form step</b>: portal URL, capture, train, mock-data dry run.
+              MSO-delegated paths are just SOP steps.
+            </li>
+            <li>
+              <b>Needs attention:</b> drift repair (ex-Fix-it) — a broken mapping reopens the same
+              form-step editor it was authored in.
+            </li>
+            <li>
+              No org data, no denials, no settings — those were mislocated and have been moved out.
+            </li>
+          </ul>
+        </div>
+        <div class="icard">
+          <div class="ic-top"><span class="ic-name">Reporting Center</span></div>
+          <p>All read-only investigation, grouped:</p>
+          <ul class="sub-list">
+            <li>
+              <b>Performance:</b> Portfolio (all orgs) · Launches (go-live report — the old Launches
+              page, demoted to what it really was).
+            </li>
+            <li>
+              <b>Credentialing:</b> Denials (provider-first, payer-pivotable, built on the one
+              status list) · Expiring credentials.
+            </li>
+            <li><b>Compliance:</b> Audit Log (who did what, when).</li>
+            <li><b>Intake:</b> Inbound leads queue, badge when leads await.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 2 ============ -->
+  <section class="blk" id="s2">
+    <div class="blk-head">
+      <span class="sec-tag">Section 2</span>
+      <h2>Sidebar — Org space</h2>
+      <p>
+        Three entries for the active org. <b>Org Detail</b> is the container's page (slim);
+        <b>Groups</b> is the working entity — everything operational hangs off the group, because
+        the data does (payers attach to groups, facilities belong to a group, cases are
+        group-grain); <b>Providers</b> is the consolidated people record. The onboarding wizard is
+        not a menu item — a one-time flow from Add organization, with a "Finish setup" banner on Org
+        Detail until complete.
+      </p>
+    </div>
+    <div class="item-cards">
+      <div class="icard">
+        <div class="ic-top"><span class="ic-name">Org Detail</span></div>
+        <p>
+          The container only: org summary, authorized/organization contacts, People Enroll,
+          <b>member management</b> (from the retired Settings page), capture-link re-issue, "Finish
+          setup" banner. Matches the two live screenshots reviewed 2026-07-19.
+        </p>
+      </div>
+      <div class="icard">
+        <div class="ic-top"><span class="ic-name">Groups</span></div>
+        <p>Per group — single-group orgs auto-land on their only group:</p>
+        <ul class="sub-list">
+          <li><b>Group facts:</b> legal name, TIN, operating states.</li>
+          <li>
+            <b>Facilities:</b> the same list treatment as Providers — search on top,
+            <b>state-grouped, A→Z within state</b>, filters (state, has-providers); each facility
+            belongs to exactly <b>one</b> group — a shared address across two groups is entered per
+            group, mirroring how payers see per-TIN service locations. Facility CSV lives here.
+            Occasional counts ("facilities with no providers", "locations per group") are
+            <b>Reporting Center reports, not screen widgets</b>.
+          </li>
+          <li>
+            <b>Payer Network:</b> the fulfillment board at its true grain — Targeted → In Progress
+            (open-case count) → Active (approved case OR enrollment fact), the "candidates awaiting
+            generation" buffer, eligibility-filtered attach + CSV, and
+            <b>Generation as the in-tab action</b> (preview → confirm → run history).
+          </li>
+        </ul>
+      </div>
+      <div class="icard">
+        <div class="ic-top"><span class="ic-name">Providers</span></div>
+        <p>
+          The consolidated people record, <b>sorted A→Z by default</b>: identity · licenses +
+          verification · CAQH · documents · <b>enrollment facts</b> (migration capture — facts,
+          never auto-cases; a new hire from another employer never records here) · all cases with
+          statuses · denial history · gaps inline. <b>Inline field editing</b> (no monolithic edit
+          form) and a first-class <b>"+ Add facility"</b> action on the record — fixing today's
+          defect where editing a provider silently drops facility assignments. Provider CSV here;
+          the wizard's provider step IS this surface.
+        </p>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="co-t">What no longer exists as navigation, anywhere</div>
+      <p>
+        Home · My Cases/Cases split · Fix-it · Client Progress · Onboarding tab · Launches page ·
+        Facilities entry · Data Import page · Statuses page · MSO Routing page · Settings page · the
+        Admin section itself. Every job those did has a named new home — see the retirement ledger
+        at the bottom.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 3 ============ -->
+  <section class="blk" id="s3">
+    <div class="blk-head">
+      <span class="sec-tag">Section 3</span>
+      <h2>Journey A — make a payer ready for business</h2>
+      <p>
+        Standalone and org-independent: ops works any payer to "ready" outside any onboarding
+        funnel, <b>once</b>, and every org inherits the result. Two steps.
+      </p>
+    </div>
+    <div class="journey">
+      <ol class="stages">
+        <li class="stage">
+          <span class="n">1</span>
+          <div class="where">Payer Catalog <code>payer-setup/catalog</code></div>
+          <div class="doing">
+            Confirm the canonical payer and its curated facts: covered states, kind, what it calls
+            the provider ID on approval letters, and
+            <b>whether credentialing is delegated (MSO)</b> — a payer fact, not an org rules table.
+            A missing payer is a platform request, never free-text.
+          </div>
+        </li>
+        <li class="stage">
+          <span class="n">2</span>
+          <div class="where">SOP Template <code>payer-setup/sops/$id</code></div>
+          <div class="doing">
+            Author the payer's checklist — tasks and steps, including the delegated-path steps where
+            an MSO is involved. Inside an <b>online form step</b>, in place:
+          </div>
+          <div class="substeps">
+            <div class="ss">
+              <b>Portal</b> — pick an already-registered portal for this payer, or register the URL
+              (user-driven, reusable, no separate module).
+            </div>
+            <div class="ss"><b>Capture</b> — pull the form's fields off the live page.</div>
+            <div class="ss">
+              <b>Train</b> — approve field-to-data mappings card by card; the label dictionary
+              learns silently.
+            </div>
+            <div class="ss">
+              <b>Dry run</b> — a fill against <b>masked mock data</b>. No org, no real PHI, once per
+              payer — never re-tested per org. Mappings are proven
+              <b>before any user starts casework</b>.
+            </div>
+            <div class="ss">
+              <b>Publish v1</b> — versioned; later edits publish v2, v3… history immutable.
+            </div>
+          </div>
+        </li>
+      </ol>
+      <div class="done-state">
+        Done state: the payer reads Ready on the Payer Setup funnel. Any group that attaches it
+        inherits a working SOP and a proven fillable form with zero additional setup. Drift (the
+        payer changes their form later) raises a needs-attention badge that reopens this same
+        editor.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 4 ============ -->
+  <section class="blk" id="s4">
+    <div class="blk-head">
+      <span class="sec-tag">Section 4</span>
+      <h2>Journey B — stand up an org and attach payers</h2>
+      <p>
+        The running example: BEST Physical Therapy · one group · one facility (NC) opening Nov 1 ·
+        contract promises <b>7 payers</b> (4 commercial, 3 government) · no providers until a day-50
+        hire.
+      </p>
+    </div>
+    <div class="journey">
+      <ol class="stages">
+        <li class="stage day">
+          <span class="n">DAY 1</span>
+          <div class="where">Add organization → one-time wizard</div>
+          <div class="doing">
+            Create the org (name + contacts), then: org details → <b>provider group</b> (TIN,
+            operating states) → <b>facility</b> (address; Nov 1 recorded as its go-live date — feeds
+            the Launches report and queue ranking, <b>nothing else</b>). Providers section skipped —
+            no one hired yet. Each section: manual form or CSV, side by side.
+          </div>
+        </li>
+        <li class="stage day">
+          <span class="n">DAY 1</span>
+          <div class="where">Attach payers <code>Groups › BEST PT Group › Payer Network</code></div>
+          <div class="doing">
+            The system queries the catalog and presents the <b>eligible list</b> — payers whose
+            covered states intersect the org's operating states. Pick the 7; one user-reviewed
+            confirm creates the <b>group × payer × state targets</b>. The org-level enablement
+            happens implicitly. CSV alternative: one row per group × payer.
+          </div>
+        </li>
+        <li class="stage day">
+          <span class="n">DAY 1</span>
+          <div class="where">Target state on record</div>
+          <div class="doing">
+            The fulfillment view now reads: <span class="pill idle">7 Targeted</span> · 0 candidates
+            · 0 in progress · 0 active. The contract's promise is visible from day one, with zero
+            providers — this is what admin and the credentialing team steer by.
+          </div>
+        </li>
+        <li class="stage day">
+          <span class="n">DAY 50</span>
+          <div class="where">Provider hired <code>Providers</code></div>
+          <div class="doing">
+            Add Dr. Riley Chen: identity, licenses, CAQH → <b>group membership</b> →
+            <b>facility assignment</b> → existing-enrollments section (<b
+              >empty — new hire; prior-employer status never carries over, full path regardless</b
+            >. If this were a migration, enrollments under this group's contract would be recorded
+            here as <b>enrollment facts — never cases</b>).
+          </div>
+        </li>
+        <li class="stage day">
+          <span class="n">DAY 50</span>
+          <div class="where">The tie is derived — nobody assigns payers to a provider</div>
+          <div class="doing">
+            Group membership IS the payer assignment: Chen is instantly a candidate for all 7
+            targets. The fulfillment view flips to <b>"7 candidates awaiting generation"</b> — the
+            visible buffer between onboarding and casework. Onboarding created <b>zero cases</b>.
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ SECTION 5 ============ -->
+  <section class="blk" id="s5">
+    <div class="blk-head">
+      <span class="sec-tag">Section 5</span>
+      <h2>Journey C — generation: the only door cases come through</h2>
+      <p>
+        Entered from the group's Payer Network board (<code>Groups › Review &amp; generate</code>).
+        A human always confirms; nothing is ever created as a side effect of onboarding (starter
+        cases: retired; launch-page creation: retired; the one-off manual modal remains as the
+        escape hatch).
+      </p>
+    </div>
+    <div class="engine">
+      <div class="formula">
+        <span class="term">group's payer targets</span><span class="op">−</span
+        ><span class="term">enrollments under this group</span><span class="op">−</span
+        ><span class="term">existing cases</span><span class="op">−</span
+        ><span class="term">standing exclusions</span><span class="op">=</span
+        ><span class="term result">candidates</span>
+      </div>
+      <div class="en-note">
+        Every subtraction is a fact someone deliberately recorded. The preview shows every
+        combination in exactly one bucket, and the buckets always sum to the target count — nothing
+        silently disappears.
+      </div>
+    </div>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Dr. Chen × 7 targets</th>
+              <th>Bucket</th>
+              <th>What confirm does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Anthem BCBS NC</b>, Cigna, NC Medicaid, TRICARE</td>
+              <td><span class="pill green">Proposed</span></td>
+              <td>
+                Case created; <b>SOP lookup</b> resolves the payer's checklist into tasks with
+                Chen's real data (NPI, NC license, TIN) — form steps arrive fill-ready and
+                pre-proven.
+              </td>
+            </tr>
+            <tr>
+              <td>UnitedHealthcare</td>
+              <td>
+                <span class="pill green">Proposed</span> <span class="pill amber">no SOP yet</span>
+              </td>
+              <td>
+                Still generatable — generic checklist, case visibly flagged until ops finishes
+                Journey A for UHC. Warns, never blocks.
+              </td>
+            </tr>
+            <tr>
+              <td>Aetna, Medicare <span class="strong">(migration variant)</span></td>
+              <td><span class="pill blue">Already enrolled</span></td>
+              <td>
+                No case, ever — the <b>enrollment fact</b> recorded at intake suppresses the
+                candidate and counts toward the payer reading Active. Zero queue noise.
+              </td>
+            </tr>
+            <tr class="sum-row">
+              <td>7 targets</td>
+              <td colspan="2">
+                = 5 proposed + 2 enrolled + 0 excluded + 0 existing — always reconciles
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="co-t">After confirm</div>
+      <p>
+        One immutable run records every disposition. The new cases land on <b>Cases</b> (the landing
+        surface), ranked with Chen's start date in the mix. The fulfillment view flips those payers
+        <span class="pill blue">In Progress</span> — and each one flips
+        <span class="pill green">Active</span> when its first case is Approved. Denials are recorded
+        on the case with a reason and roll up to the provider for reporting.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ STATUS MODEL ============ -->
+  <section class="blk" id="s6">
+    <div class="blk-head">
+      <span class="sec-tag">Status model</span>
+      <h2>One status list — the only status a human ever sets</h2>
+      <p>
+        Replaces four lists (~31 statuses): the internal credentialing track, the parallel payer
+        pipeline, the contracting track, and the location track. Fixed and canonical — the per-org
+        status configuration page retires with it.
+      </p>
+    </div>
+    <div class="status-flow" role="img" aria-label="Case status flow">
+      <span class="pill idle">Not Started</span><span class="arr">→</span>
+      <span class="pill blue">In Progress</span><span class="arr">→</span>
+      <span class="pill teal">Submitted</span><span class="arr">→</span>
+      <span class="pill teal">In Review</span><span class="arr">→</span>
+      <span class="pill amber">Action Required</span><span class="arr">→</span>
+      <span class="pill green">Approved</span>
+      <span class="fork">or</span><span class="pill red">Denied + reason</span>
+      <span class="fork">or</span><span class="pill idle">Not Pursuing</span>
+    </div>
+    <div class="derived-grid">
+      <div class="dcard">
+        <div class="dc-t">Payer fulfillment (derived)</div>
+        <div class="dc-b">
+          <b>Targeted → In Progress → Active</b> per group × payer, most-advanced-case-wins;
+          <b>Active = ≥1 approved case OR enrollment fact</b>. Never hand-set.
+        </div>
+      </div>
+      <div class="dcard">
+        <div class="dc-t">Provider progress (derived)</div>
+        <div class="dc-b">
+          <b>x of y approved</b> on the provider record; denial history alongside.
+        </div>
+      </div>
+      <div class="dcard">
+        <div class="dc-t">Contracts (fields, not a track)</div>
+        <div class="dc-b">
+          Execution + effective dates are <b>fields on the Approved case</b> — the 6-status
+          contracting machine retires.
+        </div>
+      </div>
+      <div class="dcard">
+        <div class="dc-t">Locations (a date, not a track)</div>
+        <div class="dc-b">
+          Go-live is a date on the facility feeding the Launches report + queue ranking — the
+          7-status location machine retires.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RETIREMENT LEDGER ============ -->
+  <section class="blk" id="s7">
+    <div class="blk-head">
+      <span class="sec-tag">Appendix</span>
+      <h2>Retirement ledger — every removed surface, and where its job went</h2>
+    </div>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Removed</th>
+              <th>Its job now lives</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Home</b></td>
+              <td>Cases is the landing; the org-resolver logic survives unchanged.</td>
+            </tr>
+            <tr>
+              <td><b>My Cases / Cases split</b></td>
+              <td>One Cases surface with to-do / by-provider / by-payer pivots.</td>
+            </tr>
+            <tr>
+              <td><b>Fix-it</b></td>
+              <td>
+                Drift → Payer Setup needs-attention (same editor it was authored in); provider data
+                gaps → provider record + generation preview chips.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Client Progress</b></td>
+              <td>Deprecated; progress/denial reporting covers the need.</td>
+            </tr>
+            <tr>
+              <td><b>Scope Review</b></td>
+              <td>
+                Deleted; readiness chips live on generation preview rows and provider records.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Onboarding tab</b></td>
+              <td>
+                One-time flow from Add organization; "Finish setup" banner on Org Detail until done;
+                ongoing edits live where the data lives.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Launches page</b></td>
+              <td>A Reporting Center report; go-live stays a facility date.</td>
+            </tr>
+            <tr>
+              <td><b>Facilities entry</b></td>
+              <td>
+                Groups › Facilities, state-grouped; one group per facility (shared addresses entered
+                per group). Occasional counts are Reporting Center reports.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Forms &amp; Portals module + training deck</b></td>
+              <td>Inside the SOP form step (author, train, dry-run, repair in one place).</td>
+            </tr>
+            <tr>
+              <td><b>Data Import page</b></td>
+              <td>
+                Imports live with their data: Providers, Groups › Facilities, Groups › Payer
+                Network.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Org Detail's data/network tabs</b></td>
+              <td>
+                Moved to the Groups menu item — the board and facilities now live at the group grain
+                the data always had.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Migration auto-cases</b></td>
+              <td>
+                Replaced by enrollment facts on the provider — no case, no queue noise; expiring a
+                fact re-opens the candidate.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Statuses page</b></td>
+              <td>Retired — the status list is fixed and canonical.</td>
+            </tr>
+            <tr>
+              <td><b>MSO Routing page</b></td>
+              <td>
+                Delegation is a payer fact: catalog + SOP steps (Journey A). Check: any current
+                client credentialing through an MSO gets its path re-encoded as a payer SOP before
+                the page dies.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Settings page</b></td>
+              <td>
+                Members → Org Detail › Overview; denial word-list + queue ranking ship as fixed
+                defaults.
+              </td>
+            </tr>
+            <tr>
+              <td><b>Payer Settings tab</b></td>
+              <td>Payer ID labels → catalog facts; org-grain leftovers dissolved with Settings.</td>
+            </tr>
+            <tr>
+              <td><b>Starter cases + launch-page case creation</b></td>
+              <td>Generation is the one door; the manual one-off modal is the escape hatch.</td>
+            </tr>
+            <tr>
+              <td><b>"Log Payer Call"</b></td>
+              <td>
+                Merged into the global <b>Add touch</b> (multi-case select), feeding the one Touch
+                Log.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="co-t">Explicitly out of scope / unchanged</div>
+      <p>
+        The Chrome extension and its fill contract (human always submits — locked, forever) · the
+        append-only audit and touch logs · org RLS/tenancy · roles stay as-is for two users (Payer
+        Setup open to everyone for now; revisit at the third hire). Next step after this review:
+        translate the approved sections into the new epic slate, superseding the affected R6.5
+        epics.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Decision record from the 2026-07-18/19 alignment sessions. Companion pieces: the Journey A+B→C
+    handoff visual (bucket accounting) and the E5.0 independent review (PR #194 — parts now
+    superseded by this direction).
+  </footer>
+</div>

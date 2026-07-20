@@ -111,16 +111,28 @@ export function TemplatesList() {
           />
           Show archived
         </label>
-        {canEdit ? (
+        <div className="ml-auto flex items-center gap-2">
+          {/* E6.5 F6.5.6 — global authoring is open to all signed-in users
+              under the interim posture; the wizard shows the shared-blast
+              warning and writes through author_global_sop. */}
           <Button
-            onClick={() => navigate({ to: "/admin/templates/new" })}
-            style={{ backgroundColor: "#1B4D3E" }}
-            className="ml-auto text-white hover:opacity-90"
+            variant="outline"
+            onClick={() => navigate({ to: "/admin/templates/new", search: { tier: "global" } })}
           >
             <Plus className="h-4 w-4 mr-2" />
-            New Template
+            New global SOP
           </Button>
-        ) : null}
+          {canEdit ? (
+            <Button
+              onClick={() => navigate({ to: "/admin/templates/new" })}
+              style={{ backgroundColor: "#1B4D3E" }}
+              className="text-white hover:opacity-90"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Template
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="rounded-md border border-[#E8E5E0] overflow-hidden">

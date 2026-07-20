@@ -278,7 +278,9 @@ export async function listRecentFillsFromApp(limit = 200): Promise<FillSession[]
 // (writer INSERT on own-org rows); org/performer from the auth context.
 // ---------------------------------------------------------------------------
 export interface TestFillInput {
-  providerId: string;
+  /** null since E6.5 — the mock-data dry run fills from the synthetic profile
+   * (mockFillProfile.ts) and involves no provider row at all. */
+  providerId: string | null;
   portalKey: string;
   fieldsFilled: number;
   fieldsSkipped: FillSkippedField[];

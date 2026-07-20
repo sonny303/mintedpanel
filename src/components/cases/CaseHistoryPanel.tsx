@@ -16,7 +16,7 @@ export function CaseHistoryPanel({
     <Card className="shadow-none border-border">
       <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between">
         <CardTitle className="text-[14px] font-semibold flex items-center gap-2">
-          <History className="w-4 h-4 text-muted-foreground" /> Status History
+          <History className="w-4 h-4 text-muted-foreground" /> Legacy status history
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4">

@@ -227,6 +227,7 @@ function makeFixtures(targetPayerId: string) {
     portals: [],
     tasks: [] as Record<string, unknown>[],
     status_history: [] as Record<string, unknown>[],
+    case_status_history: [] as Record<string, unknown>[],
     mso_routing_rules: [],
     msos: [],
     provider_groups: [
@@ -262,7 +263,26 @@ function makeFixtures(targetPayerId: string) {
     provider_facility_assignments: [facilityAssignment("pr-jane", "f-g1-nc")],
     state_licenses: [licenseRow("l1", "pr-jane")],
     payers: [payerRow("pay-bcbsnc", "BCBS-NC"), payerRow("pay-cigna", "Cigna-NC")],
-    org_payer_assignments: [],
+    // Both global payers are subscribed so the manual one-off picker (the
+    // E6.1 creation door for this suite) offers them.
+    org_payer_assignments: [
+      {
+        id: "opa-bcbsnc",
+        org_id: ORG_SHELBY,
+        payer_id: "pay-bcbsnc",
+        starter: false,
+        status: "active",
+        created_at: "2026-07-10T00:00:00Z",
+      },
+      {
+        id: "opa-cigna",
+        org_id: ORG_SHELBY,
+        payer_id: "pay-cigna",
+        starter: false,
+        status: "active",
+        created_at: "2026-07-10T00:00:00Z",
+      },
+    ],
     payer_network_targets: [
       {
         id: "t-1",
@@ -348,6 +368,8 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
     tasks: fixtures.tasks.filter((t) => t.case_id === row.id),
     touches: [],
     status_history: fixtures.status_history.filter((h) => h.case_id === row.id),
+    payer_pipeline_history: [],
+    case_status_history: fixtures.case_status_history.filter((h) => h.case_id === row.id),
   });
 
   const handler = async (route: Route) => {
@@ -394,6 +416,8 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
         mso_id: input.mso_id ?? null,
         assigned_to: input.assigned_to ?? null,
         credentialing_status_id: input.credentialing_status_id ?? "st-notstarted",
+        case_status: "not_started",
+        payer_pipeline_state: "not_started",
         submitted_date: null,
         approved_date: null,
         confirmed_effective_date: null,
@@ -437,6 +461,51 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
           updated_at: "2026-07-13T00:00:00Z",
         });
       }
+      return json(row);
+    }
+    if (url.pathname.endsWith("/rpc/set_case_status") && req.method() === "POST") {
+      // E6.0 write-through: canonical flip + legacy-mirror lockstep + an
+      // appended case_status_history row (mirrors the RPC).
+      const body = req.postDataJSON() as Record<string, unknown>;
+      writes.push({ table: "rpc/set_case_status", method: "POST", body });
+      const row = fixtures.credential_cases.find((c) => c.id === body.p_case_id);
+      if (!row) return json({ message: "case_status_case_not_found" }, 400);
+      const from = (row.case_status as string | undefined) ?? "not_started";
+      if (body.p_expected_status && body.p_expected_status !== from) {
+        return json({ message: `case_status_conflict:${from}` }, 400);
+      }
+      const to = body.p_to_status as string;
+      const mirrorLabel = (
+        {
+          not_started: "Not Started",
+          in_progress: "In Progress",
+          submitted: "Submitted",
+          in_review: "Submitted",
+          action_required: "Waiting on Provider",
+          approved: "Approved",
+          denied: "Denied",
+          not_pursuing: "Not Required",
+        } as Record<string, string>
+      )[to];
+      const mirror = fixtures.status_configs.find(
+        (c) => c.track === "credentialing" && c.label === mirrorLabel,
+      );
+      row.case_status = to;
+      if (mirror) row.credentialing_status_id = mirror.id;
+      fixtures.case_status_history.push({
+        id: `csh-${nextId++}`,
+        org_id: row.org_id,
+        case_id: row.id,
+        from_status: from,
+        to_status: to,
+        actor_kind: "user",
+        reason_code_id: body.p_reason_code_id ?? null,
+        evidence_touch_id: body.p_evidence_touch_id ?? null,
+        is_correction: body.p_is_correction ?? false,
+        note: body.p_note ?? null,
+        changed_by: USER_ID,
+        changed_at: "2026-07-19T00:00:00Z",
+      });
       return json(row);
     }
     if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
@@ -550,6 +619,26 @@ function seedAuth(
   );
 }
 
+async function createManualCase(
+  page: import("@playwright/test").Page,
+  provider: string,
+  payer: string,
+) {
+  await page.goto("/cases");
+  await page.getByRole("button", { name: "New case" }).click();
+  const modal = page.getByRole("dialog");
+  await modal.getByRole("combobox", { name: "Provider" }).click();
+  await page.getByRole("option", { name: provider }).click();
+  await modal.getByRole("combobox", { name: "Group" }).click();
+  await page.getByRole("option", { name: "Group 1" }).click();
+  await modal.getByRole("combobox", { name: "Payer" }).click();
+  await page.getByRole("option", { name: payer }).click();
+  await modal.getByRole("combobox", { name: "State" }).click();
+  await page.getByRole("option", { name: "NC", exact: true }).click();
+  await modal.getByRole("button", { name: "Create case" }).click();
+  await expect(page).toHaveURL(/\/cases\/case-new-/, { timeout: 30000 });
+}
+
 const rpcTasks = (w: RecordedWrite) =>
   ((w.body as { p_tasks?: Array<Record<string, unknown>> })?.p_tasks ?? []) as Array<
     Record<string, unknown>
@@ -564,11 +653,10 @@ test("TS-53: batches straddling a publish stamp v1 then v2; the earlier batch ke
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
 
-  // April's batch: Jane resolves the BCBS-NC SOP at v1.
-  await page.goto("/generation");
-  await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
-  await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
+  // April's case: Jane resolves the BCBS-NC SOP at v1. (Creation rides the
+  // manual one-off door — the /generation surface retired with E6.1 F6.1.6;
+  // ManualCaseModal stamps through the SAME pickTemplate selection, E2.2 Q2.)
+  await createManualCase(page, "Jane Whitaker", "BCBS-NC");
 
   const aprilRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(aprilRpc).toHaveLength(1);
@@ -596,10 +684,7 @@ test("TS-53: batches straddling a publish stamp v1 then v2; the earlier batch ke
   fixtures.provider_facility_assignments.push(facilityAssignment("pr-mark", "f-g1-nc"));
   fixtures.state_licenses.push(licenseRow("l2", "pr-mark"));
 
-  await page.goto("/generation");
-  await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
-  await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
+  await createManualCase(page, "Mark Ostrander", "BCBS-NC");
 
   const allRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(allRpc).toHaveLength(2);
@@ -645,11 +730,9 @@ test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
 
-  // Generation: no Cigna SOP exists — the fallback resolves and stamps.
-  await page.goto("/generation");
-  await expect(page.getByText("1 proposed", { exact: false })).toBeVisible({ timeout: 30000 });
-  await page.getByRole("button", { name: "Confirm & create 1 case" }).click();
-  await expect(page).toHaveURL(/\/work\?run=/, { timeout: 30000 });
+  // No Cigna SOP exists — the fallback resolves and stamps (created via the
+  // manual door; the /generation surface retired with E6.1 F6.1.6).
+  await createManualCase(page, "Jane Whitaker", "Cigna-NC");
 
   const genRpc = writes.filter((w) => w.table === "rpc/create_case_with_tasks");
   expect(genRpc).toHaveLength(1);
@@ -663,11 +746,11 @@ test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is
 
   // The URL-driven chip filters to fallback-stamped cases (the coverage-gap
   // working list).
-  await page.goto("/cases");
+  await page.goto("/cases?pivot=payer");
   const genericChip = page.getByRole("button", { name: /Using generic SOP/ });
   await expect(genericChip).toContainText("1");
   await genericChip.click();
-  await expect(page).toHaveURL(/\/cases\?chip=generic/);
+  await expect(page).toHaveURL(/chip=generic/);
   await expect(page.getByText("Jane Whitaker").first()).toBeVisible({ timeout: 30000 });
 
   // The case is visibly marked: fallback provenance + the neutral pill.
@@ -698,6 +781,7 @@ test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is
     versionRow("tpl-cigna", 1, "Cigna-NC enrollment", taskDefsV1),
   );
   fixtures.credential_cases[0].credentialing_status_id = "st-denied";
+  fixtures.credential_cases[0].case_status = "denied";
 
   await page.goto(`/cases/${caseId}`);
   await expect(page.getByText("This application was denied.", { exact: false })).toBeVisible({
