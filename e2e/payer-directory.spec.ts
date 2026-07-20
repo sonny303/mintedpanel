@@ -307,6 +307,9 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
   // Item 7: the adopted-payers filter narrows to active subscriptions only.
   await page.getByLabel("Filter by network").click();
   await page.getByRole("option", { name: "In my network" }).click();
+  // Selecting "In my network" widens the kind filter to all so every adopted
+  // payer is visible, not just the commercial-default slice.
+  await expect(page.getByLabel("Filter by payer kind")).toContainText("All kinds");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await expect(page.getByText("National Health Plan")).not.toBeVisible();
 

@@ -366,7 +366,16 @@ export function PayerCatalogBrowser() {
             <SelectItem value="all">All kinds</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={network} onValueChange={(v) => setNetwork(v as "all" | "mine")}>
+        <Select
+          value={network}
+          onValueChange={(v) => {
+            setNetwork(v as "all" | "mine");
+            // "In my network" means every adopted payer, so widen the kind
+            // filter to all — a non-commercial adopted payer would otherwise
+            // be hidden by the commercial default. Kind stays re-narrowable.
+            if (v === "mine") setKind("all");
+          }}
+        >
           <SelectTrigger className="h-9 w-44" aria-label="Filter by network">
             <SelectValue placeholder="Network" />
           </SelectTrigger>
