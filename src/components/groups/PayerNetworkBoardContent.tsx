@@ -39,6 +39,7 @@ import {
   useSetTargetIdentifier,
 } from "@/hooks/usePayerNetworkTargets";
 import { useVoidCaseGenerationExclusion } from "@/hooks/useGenerationPreview";
+import { useResumableImportRun } from "@/hooks/useImportRuns";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { EXCLUSION_REASON_LABELS } from "@/lib/generationPreview";
@@ -66,6 +67,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
   const groupsQ = useProviderGroups();
   const catalogQ = useGlobalPayers();
   const assignmentsQ = useProviderGroupAssignments();
+  const payerAttachRun = useResumableImportRun("internal", "payer_attach", "internal");
   const [attachOpen, setAttachOpen] = useState(false);
   const [removing, setRemoving] = useState<PayerBoardRow | null>(null);
 
@@ -200,7 +202,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       {isAdmin ? (
         // The pattern this panel standardized site-wide (2026-07-20) started
         // here — now rendered through the ONE shared disclosure.
-        <CsvImportPanel label="Attach payers from a CSV">
+        <CsvImportPanel label="Attach payers from a CSV" defaultOpen={payerAttachRun !== undefined}>
           <RosterUploader
             source="internal"
             variant="internal"

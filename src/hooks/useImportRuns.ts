@@ -111,6 +111,26 @@ export function useImportRuns() {
   });
 }
 
+/** The run a section surfaces on return, filtered by source + entity_kind so
+ * a section only resumes its own runs (TE-4). Internal surfaces resume only
+ * in-flight runs; streamlined surfaces also resume finished
+ * (ready_for_review/failed) runs so the outcome stays visible (F3.0.4).
+ * Disclosure wrappers use this to open when a run is waiting. */
+export function useResumableImportRun(
+  source: ImportRunSource,
+  entityKind: SectionEntityKind,
+  variant: "internal" | "streamlined",
+) {
+  const runsQ = useImportRuns();
+  const resumeStates =
+    variant === "internal"
+      ? ["uploading", "scanning"]
+      : ["uploading", "scanning", "ready_for_review", "failed"];
+  return (runsQ.data ?? []).find(
+    (r) => r.source === source && r.entityKind === entityKind && resumeStates.includes(r.state),
+  );
+}
+
 /** One run's durable progress row; polls while the scan is in flight so the
  * progress bar and state pill track the server-persisted counts. */
 export function useImportRun(runId: string | null) {
