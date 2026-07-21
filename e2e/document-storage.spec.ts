@@ -447,6 +447,8 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   await expect(page.getByRole("heading", { name: /Brooke Ostrander/ })).toBeVisible({
     timeout: 30000,
   });
+  // 2026-07-21 tabbed record: documents live on the Documents tab.
+  await page.getByRole("tab", { name: "Documents" }).click();
   const panel = page.locator("section", { hasText: "Documents" }).last();
   await expect(panel).toContainText("No documents on file");
 
@@ -670,6 +672,8 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
   // carries the advisory warning: COI passes (21 days out) WITH the amber
   // note — never a gap, nothing disabled.
   await page.goto(`/providers/${PROVIDER_ID}`);
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
   const card = page.locator("#readiness");
   await expect(card).toContainText("Ready", { timeout: 30000 });
   await card.locator("tbody tr").first().click();

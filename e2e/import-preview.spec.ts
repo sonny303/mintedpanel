@@ -825,6 +825,8 @@ test("TS-63: pending-verification providers are fenced out of generation until v
   // fence). The pending provider yields NO readiness row — its own record
   // renders the empty derive explainer, never the Aetna target.
   await page.goto(`/providers/${PROV}`);
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
   const readinessCard = page.locator("#readiness");
   await expect(readinessCard).toBeVisible({ timeout: 30000 });
   await expect(readinessCard.getByText("Aetna")).toHaveCount(0);
@@ -841,6 +843,7 @@ test("TS-63: pending-verification providers are fenced out of generation until v
   // gains the row on a fresh derivation, proving the single fence lifted on
   // verify (generation candidacy consumes the SAME read — E6.3's grid).
   await page.goto(`/providers/${PROV}`);
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(readinessCard.getByText("Aetna").first()).toBeVisible({ timeout: 30000 });
 });
 

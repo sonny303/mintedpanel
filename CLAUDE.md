@@ -1969,6 +1969,54 @@ is pure churn — revisit only if product insists). e2e:
 record); onboarding-wizard TS-25/28, import-preview TS-63, and
 document-storage TS-89 retargeted.
 
+- **Provider-detail redesign (2026-07-21, design handoff — supersedes the
+  E6.4 single-scroll jump-nav).** `/providers/$id` is now **TABBED** (handoff
+  issue 8: one section at a time, so no sticky nav overlaps content). Seven
+  underline tabs on `@radix-ui/react-tabs` primitives (styled inline in
+  `providers.$id.index.tsx`, NOT the pill-style shared `ui/tabs`): Provider
+  Info · Groups & facilities · Licenses · Enrollments · Cases · Documents ·
+  Internal Notes (Internal Notes is now a tab, was a bottom panel).
+  `activeTab` is DERIVED from the URL hash via `HASH_TO_TAB`: the roster
+  gap-pill deep-links (`#identity`/`#groups-facilities`/`#licenses`, TanStack
+  `Link` hash) AND the Readiness fix-here `<a href="#x">` anchors (a native
+  `hashchange` listener — the router does not observe those) both activate
+  the right tab; `onTabChange` reflects the tab in the URL (`navigate` +
+  `replace`). **Readiness lives INSIDE the Cases tab** (user ask —
+  `#readiness` maps to `cases`): #229's `ProviderReadinessSection` is
+  rendered verbatim in the Cases `TabsContent` under its own
+  `RecordSectionCard id="readiness"`, so the specs that read `#readiness`
+  (`provider-readiness`, `document-storage` TS-89, `import-preview` TS-63)
+  now click the Cases tab first. **Header:** a **facility line** (Building2
+  icon + the primary facility's name + address) REPLACES the routine status
+  badge + the `providerCaseProgress` "x of y approved" meter (both removed as
+  noise per the handoff; the header no longer reads `useCases`); Terminated /
+  Pending verification / Reference edge pills are kept, NPI/CAQH/Taxonomy are
+  mono, and the #229 "Generate cases" + Terminate actions stay. **Provider
+  Info** is reorganized into three labeled sub-groups (Personal / Credentials
+  & identifiers / Education & employment) and **home address + malpractice
+  were removed from the edit form** (handoff decision, user-confirmed: home
+  address is set at creation via `ProviderFormSections`; malpractice is
+  managed at the group level via `InsurancePanel`/`group_insurance_policies`
+  — both columns are untouched in the DB and still feed autofill/readiness).
+  SSN (`SsnVaultField`) sits in the Personal group; the #228 ONE master
+  "Edit details" → whole-form → "Save changes" diff-only patch is unchanged
+  (now in the card header, pencil icon). **New shared primitives**
+  `src/components/providers/RecordSectionCard.tsx`: `RecordSectionCard`
+  ({id,title,action}, keeps `#{id}-heading` so deep-links still land) +
+  `AddButton` (the ONE "+ Add" affordance — primary forest green, leading
+  "+" glyph kept in the accessible name, whitespace-nowrap).
+  `IdentitySection` / `LicensesSection` / `CasesSection` /
+  `GroupsFacilitiesPanel` / `EnrollmentsPanel` each render their own
+  `RecordSectionCard` with the section add in the header (`+ Add
+group/facility/license/enrollment/touch` all via `AddButton`);
+  `DocumentsPanel` + `CaseNotesPanel` keep their own self-carding (shared
+  components, untouched). Add license stays a **Dialog** (the app has no
+  Sheet primitive; the handoff's slide-over is presentational and the e2e
+  pins `role=dialog "Add license"`). e2e: 7 provider-record specs gained
+  tab-activation clicks (providers-area also renames the Identity heading →
+  "Provider Info"); no migration, no new deps (`@radix-ui/react-tabs`
+  already present).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

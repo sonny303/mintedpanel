@@ -19,6 +19,9 @@
 // button is GONE (no user value on this surface). expireEnrollmentFact stays
 // in the service/hook layer — expiry is still the data model's re-open flip,
 // just no longer a provider-record affordance.
+// 2026-07-21 provider-detail redesign — renders its OWN RecordSectionCard
+// ("Enrollments") with the shared "+ Add enrollment" affordance in the header
+// (handoff issues 1 & 7).
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -43,6 +46,7 @@ import {
 import { DatePicker } from "@/components/DatePicker";
 import { StateSelect } from "@/components/StateSelect";
 import { StatusPill } from "@/components/StatusPill";
+import { AddButton, RecordSectionCard } from "@/components/providers/RecordSectionCard";
 import {
   useCreateEnrollmentFact,
   useEnrollmentFacts,
@@ -149,83 +153,96 @@ export function EnrollmentsPanel({
   };
 
   return (
-    <div className="space-y-3">
-      <p className="rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-2 text-[12.5px] text-muted-foreground">
-        {ENROLLMENT_GUARD_TEXT}
-      </p>
-      {canWrite ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-[12px]"
-          onClick={() => setAdding(true)}
-          disabled={myGroups.length === 0}
-        >
-          + Add enrollment
-        </Button>
-      ) : null}
-      {myRows.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
-          No enrollments yet — approved cases appear here automatically; record a fact only for
-          pre-existing enrollments.
-        </p>
-      ) : (
-        <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
-          {myRows.map((row) => {
-            const fact = row.factId ? (factById.get(row.factId) ?? null) : null;
-            return (
-              <li key={row.key} className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px]">
-                <span className="font-medium">{row.payerName}</span>
-                <span>{row.state}</span>
-                <span className="text-muted-foreground">under {row.groupName}</span>
-                {row.effectiveDate ? (
-                  <span className="text-muted-foreground">since {fmtDate(row.effectiveDate)}</span>
-                ) : null}
-                {row.payerIssuedId ? (
-                  <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
-                    {row.pinLabel}: {row.payerIssuedId}
-                  </span>
-                ) : null}
-                {row.source === "case" ? (
-                  <>
-                    <StatusPill status="green" label="Active" />
-                    {/* Derived from the approved case — the case IS the
-                        record; edits/corrections happen there and re-derive. */}
-                    <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-muted-foreground">
-                      From case
-                    </span>
-                  </>
-                ) : row.live ? (
-                  // Standard status vocabulary: an in-force enrollment is
-                  // "Active" whichever source it derives from ("Live" was a
-                  // drift — user handoff 2026-07-21).
-                  <StatusPill status="green" label="Active" />
-                ) : (
-                  <StatusPill status="neutral" label={`Expired ${fmtDate(row.expiredAt ?? "")}`} />
-                )}
-                {row.source === "case" && row.caseId ? (
-                  <Link
-                    to="/cases/$id"
-                    params={{ id: row.caseId }}
-                    className="ml-auto text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+    <>
+      <RecordSectionCard
+        id="enrollments"
+        title="Enrollments"
+        action={
+          canWrite ? (
+            <AddButton
+              label="Add enrollment"
+              onClick={() => setAdding(true)}
+              disabled={myGroups.length === 0}
+            />
+          ) : undefined
+        }
+      >
+        <div className="space-y-3">
+          <p className="rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-2 text-[12.5px] text-muted-foreground">
+            {ENROLLMENT_GUARD_TEXT}
+          </p>
+          {myRows.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">
+              No enrollments yet — approved cases appear here automatically; record a fact only for
+              pre-existing enrollments.
+            </p>
+          ) : (
+            <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
+              {myRows.map((row) => {
+                const fact = row.factId ? (factById.get(row.factId) ?? null) : null;
+                return (
+                  <li
+                    key={row.key}
+                    className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px]"
                   >
-                    Open case
-                  </Link>
-                ) : null}
-                {row.source === "fact" && canWrite && fact ? (
-                  <button
-                    type="button"
-                    className="ml-auto text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                    onClick={() => setEditingId(fact)}
-                  >
-                    {row.payerIssuedId ? "Edit ID" : "Add ID"}
-                  </button>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    <span className="font-medium">{row.payerName}</span>
+                    <span>{row.state}</span>
+                    <span className="text-muted-foreground">under {row.groupName}</span>
+                    {row.effectiveDate ? (
+                      <span className="text-muted-foreground">
+                        since {fmtDate(row.effectiveDate)}
+                      </span>
+                    ) : null}
+                    {row.payerIssuedId ? (
+                      <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
+                        {row.pinLabel}: {row.payerIssuedId}
+                      </span>
+                    ) : null}
+                    {row.source === "case" ? (
+                      <>
+                        <StatusPill status="green" label="Active" />
+                        {/* Derived from the approved case — the case IS the
+                            record; edits/corrections happen there and re-derive. */}
+                        <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-muted-foreground">
+                          From case
+                        </span>
+                      </>
+                    ) : row.live ? (
+                      // Standard status vocabulary: an in-force enrollment is
+                      // "Active" whichever source it derives from ("Live" was a
+                      // drift — user handoff 2026-07-21).
+                      <StatusPill status="green" label="Active" />
+                    ) : (
+                      <StatusPill
+                        status="neutral"
+                        label={`Expired ${fmtDate(row.expiredAt ?? "")}`}
+                      />
+                    )}
+                    {row.source === "case" && row.caseId ? (
+                      <Link
+                        to="/cases/$id"
+                        params={{ id: row.caseId }}
+                        className="ml-auto text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                      >
+                        Open case
+                      </Link>
+                    ) : null}
+                    {row.source === "fact" && canWrite && fact ? (
+                      <button
+                        type="button"
+                        className="ml-auto text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        onClick={() => setEditingId(fact)}
+                      >
+                        {row.payerIssuedId ? "Edit ID" : "Add ID"}
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </RecordSectionCard>
 
       {adding ? (
         <Dialog open onOpenChange={(o) => !o && setAdding(false)}>
@@ -321,7 +338,7 @@ export function EnrollmentsPanel({
           onClose={() => setEditingId(null)}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 

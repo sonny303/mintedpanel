@@ -448,7 +448,10 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
   // changed field (the assignment-wipe regression pin, 2026-07-21 rework:
   // one Edit details → whole form editable → one Save changes).
   await page.getByRole("link", { name: /Ostrander, Brooke/ }).click();
-  await expect(page.getByRole("heading", { name: "Identity" })).toBeVisible({ timeout: 30000 });
+  // 2026-07-21 tabbed record: Provider Info is the default tab.
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
   const writesBefore = requests.filter((r) => r.method !== "GET" && r.method !== "HEAD").length;
   await page.getByRole("button", { name: "Edit details" }).click();
   await page.getByLabel("Phone", { exact: true }).fill("252-555-0199");
@@ -469,7 +472,8 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
   const patchKeys = Object.keys(providerPatches[0].body as Record<string, unknown>);
   expect(patchKeys).toEqual(["phone"]);
 
-  // + Add facility in place: pick the second clinic with a start date.
+  // + Add facility in place (on the Groups & facilities tab).
+  await page.getByRole("tab", { name: "Groups & facilities" }).click();
   await page.getByRole("button", { name: "+ Add facility" }).click();
   const dialog = page.getByRole("dialog", { name: "Add facility" });
   await dialog.getByLabel("Facility to add").click();
@@ -488,6 +492,7 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
 
   // Cases panel: the reapplied case shows its CURRENT status with the prior
   // denial preserved beneath (reason + date from the unified history).
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Aetna — NC/ })).toBeVisible();
   await expect(page.getByText(/Previously denied — Panel closed, Jul 5, 2026/)).toBeVisible();
@@ -551,6 +556,8 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
   await seedAuth(context);
 
   await page.goto("/providers/pr-brooke");
+  // 2026-07-21 tabbed record: enrollments live on the Enrollments tab.
+  await page.getByRole("tab", { name: "Enrollments" }).click();
   await expect(page.getByRole("heading", { name: "Enrollments" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText(/Prior-employer status does NOT belong here/)).toBeVisible();
 
@@ -669,7 +676,9 @@ test("TS-130: PHI sweep — the roster list read selects no DOB/SSN/home-address
 
   // The record masks: DOB hidden at rest (reveal only in edit mode); SSN last-4.
   await page.goto("/providers/pr-brooke");
-  await expect(page.getByRole("heading", { name: "Identity" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
   await expect(page.getByText("••••••••")).toBeVisible();
   await expect(page.getByText("1990-01-01")).toHaveCount(0);
   await expect(page.getByText("***--1234")).toBeVisible();

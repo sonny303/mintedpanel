@@ -499,9 +499,10 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await expect(page.getByText("Payer pipeline history")).toBeVisible();
   await expect(page.getByText("Legacy status history")).toBeVisible();
 
-  // Provider record (E6.4 one-page record): the Cases panel renders the same
-  // canonical value through the shared pill.
+  // Provider record (2026-07-21 tabbed record): the Cases panel renders the
+  // same canonical value through the shared pill.
   await page.goto("/providers/pr-dana");
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible({
     timeout: 30000,
   });
