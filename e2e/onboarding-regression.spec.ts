@@ -62,10 +62,10 @@ const FIXTURES: Record<string, unknown[]> = {
   parties: [],
   party_role_assignments: [],
   party_role_types: [
-    { role_key: "owner", label: "Owner", is_active: true },
+    { role_key: "owner", label: "Authorized contact", is_active: true },
     {
       role_key: "customer_escalation_contact",
-      label: "Customer Escalation Contact",
+      label: "Organization contact",
       is_active: true,
     },
     { role_key: "sales_rep", label: "Sales Rep", is_active: true },

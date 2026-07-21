@@ -1937,6 +1937,19 @@ one-changed-field patch). (d) Enrollments cleanup: live fact rows render
 the standard "Active" pill ("Live" was vocabulary drift), the row Expire
 button is REMOVED (service/hook `expireEnrollmentFact` kept, no UI caller),
 and both enrollment add buttons say "+ Add enrollment" (the "+ Add" design).
+**Org Detail consolidation (same day, Tasks A+B):** the Org Detail Profile
+card is GONE (whole setter chain deleted — `ProfilePanel`/`useUserProfile`/
+`userProfile` service; `{{user.name}}` still resolves from auth
+user_metadata, NO in-app setter remains); `AccountDetailSummary` is
+ORG-IDENTITY only (name + organization address — people are never restated
+there); `PartiesManager` is headed **"People"** (was "People Enroll") and is
+the ONE people surface: contacts with role chips — the governed labels now
+read "Authorized contact"/"Organization contact" (migration
+`20260721120000_party_role_label_terminology.sql`, repo + hosted;
+`PARTY_ROLE_LABELS` fallback mirrors) — PLUS the **"Access" subgroup**
+rendering `MembersPanel` INSIDE the section (member role dropdown/joined/
+remove capability and admin-only rules bit-identical; the standalone
+"Manage who has access" section + helper line are gone).
 
 ## What this is
 

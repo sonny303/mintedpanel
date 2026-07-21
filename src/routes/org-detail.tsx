@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { FinishSetupBanner } from "@/components/org/FinishSetupBanner";
 import { PartiesManager } from "@/components/org/PartiesManager";
-import { MembersPanel } from "@/components/settings/MembersPanel";
 
 export const Route = createFileRoute("/org-detail")({
   component: OrgDetailPage,
@@ -31,14 +30,16 @@ function OrgDetailPage() {
       <PageHeader title="Org Detail" />
       {/* F6.1.5: shown until the one-time wizard completes, then never again. */}
       <FinishSetupBanner />
-      {/* Read-only summary of org intake outputs (org, authorized contact,
-          organization contact, address). */}
+      {/* Read-only ORG-IDENTITY summary (name + organization address). Since
+          the 2026-07-21 consolidation it does NOT restate people — the People
+          section below is the one place contacts appear. */}
       <AccountDetailSummary />
-      {/* E0.3: the org's people and their roles — People Enroll. */}
+      {/* The unified People section: contacts with role chips (Authorized /
+          Organization contact designations ARE roles, governed labels) PLUS
+          the Access subgroup — member role management relocated INSIDE it
+          (Task B; the standalone members section is gone, capability and
+          admin-only permission rules unchanged). */}
       <PartiesManager />
-      {/* F6.1.4: member management (invite, role change) relocated from the
-          retired Settings page. */}
-      <MembersPanel />
       {/* 2026-07-20 re-scope: the Resolution identifiers table is GONE from
           Org Detail — a payer-issued enrollment ID is not an org-wide value.
           The issued VALUE is captured where it is issued (the provider's

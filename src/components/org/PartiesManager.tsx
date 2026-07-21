@@ -6,6 +6,14 @@
 //   F0.3.2 assign an active role (org scope); reserved roles visible-disabled
 //   F0.3.3 one party, many roles      F0.3.4 reuse an existing party in this org
 //   F0.3.5 governed role list         F0.2.2 can't remove the only sales rep
+// 2026-07-21 consolidation (user handoff Tasks A+B): the section is headed
+// "People" and is the ONE place people appear on Org Detail — the summary
+// block no longer restates contacts (the Authorized/Organization contact
+// designations ARE roles here, via the governed labels), and workspace-member
+// access management renders INSIDE this section as the "Access" subgroup
+// (MembersPanel — same capability, same admin-only permission rules, no
+// standalone page section). Parties (CRM contacts, no login) and members
+// (authenticated users) remain distinct records by design.
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
@@ -28,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ContactFields } from "@/components/org/ContactFields";
+import { MembersPanel } from "@/components/settings/MembersPanel";
 import {
   useOrgParties,
   usePartyRoleTypes,
@@ -484,7 +493,7 @@ export function PartiesManager() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-[15px] font-semibold text-foreground">People Enroll</h2>
+        <h2 className="text-[15px] font-semibold text-foreground">People</h2>
         <div className="flex gap-2">
           {candidates.length > 0 ? (
             <Button variant="outline" size="sm" onClick={() => setAddingExisting(true)}>
@@ -544,6 +553,18 @@ export function PartiesManager() {
       {removing ? (
         <RemovePartyDialog orgParty={removing} onClose={() => setRemoving(null)} />
       ) : null}
+
+      {/* Task B (2026-07-21): access management lives INSIDE the unified
+          People section — the same members capability with the same
+          admin-only permission rules (role dropdown, joined date, remove,
+          legacy pending invites), just no longer a standalone section. */}
+      <div className="space-y-2 pt-3">
+        <h3 className="text-[13.5px] font-semibold text-foreground">Access</h3>
+        <p className="text-[13px] text-muted-foreground">
+          Workspace members and their access level for this organization.
+        </p>
+        <MembersPanel />
+      </div>
     </section>
   );
 }

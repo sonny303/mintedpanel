@@ -5,6 +5,10 @@
 // ONLY when legacy rows exist (they stay revocable and claimable at login);
 // with none, the section disappears instead of showing a dead empty state.
 // Admin-only mutations; every mutation surfaces success/error via toast.
+// 2026-07-21 (user handoff Task B): no longer a standalone Org Detail section
+// — rendered INSIDE PartiesManager's "Access" subgroup, which supplies the
+// heading/framing (the old "Manage who has access" helper line is gone).
+// Capability and permission rules are bit-identical.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -131,10 +135,6 @@ export function MembersPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="text-[13px] text-muted-foreground">
-        Manage who has access to this organization.
-      </div>
-
       <div className="border border-[#E8E5E0] rounded-md bg-white">
         <table className="w-full text-[13px]">
           <thead>

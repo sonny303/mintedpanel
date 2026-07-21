@@ -1,14 +1,15 @@
+// Read-only org identity summary. Slimmed 2026-07-21 (user handoff Task A):
+// people are NOT restated here — the unified People section below is the ONE
+// place contacts appear, with the Authorized/Organization contact
+// designations rendered as role chips (governed party_role_types labels,
+// migration 20260721120000). Org-level identity only: name + organization
+// address (the intake's "Organization address" section writes the
+// organization-contact party's address columns — that address IS the org's).
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrgContacts } from "@/hooks/useParties";
 import { useActiveMembership } from "@/lib/auth-store";
 import type { Party } from "@/types";
-
-const ROLE_DISPLAY: Record<string, string> = {
-  owner: "Authorized contact",
-  customer_escalation_contact: "Organization contact",
-};
 
 function formatAddress(p: Party): string | null {
   const parts: string[] = [];
@@ -35,8 +36,8 @@ export function AccountDetailSummary() {
   const contactsQ = useOrgContacts();
   const contacts = contactsQ.data ?? [];
 
-  const owner = contacts.find((c) => c.roleKey === "owner");
-  const customer = contacts.find((c) => c.roleKey === "customer_escalation_contact");
+  const orgContact = contacts.find((c) => c.roleKey === "customer_escalation_contact");
+  const orgAddress = orgContact ? formatAddress(orgContact.party) : null;
 
   if (contactsQ.isLoading) {
     return (
@@ -53,44 +54,8 @@ export function AccountDetailSummary() {
     <Card>
       <CardContent className="space-y-4 p-4">
         <h2 className="text-[15px] font-semibold text-foreground">Organization summary</h2>
-
         <DataRow label="Organization name" value={active?.orgName ?? null} />
-
-        {owner ? (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <div className="text-[13px] font-semibold text-foreground">
-                {ROLE_DISPLAY[owner.roleKey] ?? owner.roleKey}
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <DataRow label="Name" value={owner.party.name} />
-                <DataRow label="Email" value={owner.party.email} />
-              </div>
-            </div>
-          </>
-        ) : null}
-
-        {customer ? (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <div className="text-[13px] font-semibold text-foreground">
-                {ROLE_DISPLAY[customer.roleKey] ?? customer.roleKey}
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <DataRow label="Name" value={customer.party.name} />
-                <DataRow label="Email" value={customer.party.email} />
-                {customer.party.phoneOffice ? (
-                  <DataRow label="Phone" value={customer.party.phoneOffice} />
-                ) : null}
-              </div>
-              {formatAddress(customer.party) ? (
-                <DataRow label="Address" value={formatAddress(customer.party)} />
-              ) : null}
-            </div>
-          </>
-        ) : null}
+        <DataRow label="Organization address" value={orgAddress} />
       </CardContent>
     </Card>
   );
