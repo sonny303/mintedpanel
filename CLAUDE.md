@@ -2017,6 +2017,36 @@ group/facility/license/enrollment/touch` all via `AddButton`);
   "Provider Info"); no migration, no new deps (`@radix-ui/react-tabs`
   already present).
 
+- **Cases page redesign (2026-07-22, design handoff — PR #233 to `main`).**
+  `/cases` (`src/routes/cases.index.tsx`) rebuilt as ONE surface with three
+  VIEWS via a segmented control: **Flat** (default) · **By provider** · **By
+  payer**. The E6.1 "to-do" pivot is retired **as a tab** but its ranking is
+  not — Flat's DEFAULT sort IS the E2.3 deadline ranking (reused via
+  `useNextBestActions`); a column header switches to that column's sort (Case
+  Status = spine order via `CASE_STATUSES` index). By provider/By payer are
+  grouped `GroupedList` cards, **collapsed by default** (new additive
+  `defaultCollapsed` prop; existing callers unchanged) with subtitle +
+  "X of Y approved" rollup + red "N needs action" pill (needs-action = open
+  `ours`-bucket cases). **The orphaned `NextBestActionQueue` component (the old
+  to-do pivot UI, whole `src/components/work/` dir) is DELETED** — the ranking
+  lives on only as Flat's sort. **Case# (NEW):** migration
+  `20260722120000_case_number.sql` (repo + hosted) adds a `case_number bigint
+NOT NULL` column on `credential_cases` — a globally-sequential (ONE
+  `credential_cases_case_number_seq` across ALL orgs, not per-org), immutable
+  (BEFORE UPDATE trigger) number backfilled base-1001 in global `created_at`
+  order, drawn by a column DEFAULT so `create_case_with_tasks`'s explicit
+  column list is unchanged (no RPC change); shown `C-<n>` in mono and IS the
+  row click-through (no separate Open affordance). `CredentialCase.caseNumber`
+  and `CASE_LIST_COLUMNS` carry it. **KPI cards are DERIVED FILTERS, not
+  statuses** (Total · In progress · Awaiting effective date [Approved w/o
+  `confirmed_effective_date`] · Denied/appeal); selection rides `?chip`. Status
+  vocabulary is ONLY the canonical `caseStatus`/`CaseStatusPill`. Pure view
+  logic (KPI/filter/sort/group/paginate) in `src/lib/casesView.ts` (+tested).
+  URL back-compat preserved: `?pivot`/`?chip` (legacy needs/generic→Total)/
+  `?ids`/`?runId`/`?run` + the `/work` redirect. e2e: `cases-pivots.spec.ts`
+  rebuilt; `next-best-action-queue.spec.ts` deleted with its component;
+  `unified-case-status` TS-104 retargeted to Flat + the Case# link.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

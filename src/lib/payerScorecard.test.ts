@@ -57,6 +57,7 @@ function fieldMap(over: Partial<PortalFieldMap>): PortalFieldMap {
 function credCase(over: Partial<CredentialCase>): CredentialCase {
   return {
     id: "c",
+    caseNumber: 1001,
     orgId: "org",
     providerId: "prov",
     groupId: null,

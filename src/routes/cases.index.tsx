@@ -1,486 +1,348 @@
-// E6.1 F6.1.3 — ONE Cases surface with three pivots. "My Cases" (/work) and
-// the payer-grouped work view merged here: the ranked to-do queue (the E2.3
-// next-best-action derivation) is the DEFAULT pivot; "By provider" and
-// "By payer" re-slice the SAME open cases. Pivot state rides the URL
-// (?pivot=provider|payer, no param = to-do) so any slice is shareable.
-// Back-compat: legacy /cases links carrying list params (?chip=, ?ids=,
-// ?runId=) land on the payer pivot so their behavior is unchanged, and /work
-// redirects here preserving ?run= (the post-generation batch banner).
-import React, { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+// 2026-07-22 Cases page redesign — ONE Cases surface with three VIEWS via a
+// segmented control: Flat (default) · By provider · By payer. The former
+// "to-do" pivot is retired AS A TAB, but its ranked ordering is not: Flat's
+// DEFAULT sort is the E2.3 next-best-action deadline ranking (reused via
+// useNextBestActions); clicking a column header switches to that column's sort
+// (Case Status sorts in spine order). Four KPI cards at the top are DERIVED
+// FILTERS (Total · In progress · Awaiting effective date · Denied/appeal), not
+// statuses — the canonical 8-state machine (src/lib/caseStatus.ts) is the only
+// status vocabulary and CaseStatusPill renders it.
+//
+// Case# is the NEW globally-sequential immutable case number (C-<n>, Geist
+// Mono) and IS the row's click-through — there is no separate Open-case action.
+//
+// Back-compat: ?pivot=provider|payer selects a view (no param = Flat); ?chip=
+// maps to the KPI quick-filter (legacy needs/generic land on Total); ?ids= pins
+// a bulk-touch set; ?runId=/?run= filter to a generation run's cases + banner;
+// /work still redirects here.
+import { useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { differenceInCalendarDays, parseISO } from "date-fns";
-import { fmtDate } from "@/lib/format";
+import { ArrowDown, ArrowUp, MessageSquarePlus, Plus, Search, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { SummaryChips } from "@/components/triage/SummaryChips";
 import { GroupedList } from "@/components/triage/GroupedList";
-import { CaseTable, type CaseTableRow } from "@/components/triage/CaseTable";
-import { ActionBadge } from "@/components/triage/ActionBadge";
 import { ProgressBar } from "@/components/triage/ProgressBar";
-import { NextBestActionQueue } from "@/components/work/NextBestActionQueue";
-import { useProviders } from "@/hooks/useProviders";
-import { useCases } from "@/hooks/useCases";
-import { useTasks } from "@/hooks/useTasks";
-import { useLastTouchDates } from "@/hooks/useTouches";
-import { usePayers, useSops } from "@/hooks/useAdmin";
-import {
-  getActionState,
-  worstActionState,
-  daysSilent,
-  ACTION_STATE_SEVERITY,
-  type ActionState,
-} from "@/lib/actionState";
-import {
-  ACTION_BADGE_TONE,
-  badgeLabel,
-  chipCounts,
-  isAlertState,
-  isOpenState,
-  matchesChip,
-  type ChipId,
-} from "@/lib/workView";
-import { caseIdsUsingGenericSop, fallbackTemplateIds } from "@/lib/sopStamp";
-import { CASE_STATUS_BUCKETS, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
-import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageSquarePlus, Plus, Search, X } from "lucide-react";
-import { useCanWrite } from "@/lib/permissions";
-import { useTablePrefs } from "@/hooks/useTablePrefs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
-import type { CredentialCase, Provider, Task } from "@/types";
+import { useProviders, useProviderAssignments } from "@/hooks/useProviders";
+import { useCases } from "@/hooks/useCases";
+import { useLastTouchDates } from "@/hooks/useTouches";
+import { useFacilities } from "@/hooks/useLookups";
+import { usePayers } from "@/hooks/useAdmin";
+import { useNextBestActions, useGenerationRun } from "@/hooks/useNextBestActions";
+import { fmtDate } from "@/lib/format";
+import { useCanWrite } from "@/lib/permissions";
+import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
+import {
+  CASES_KPIS,
+  filterRows,
+  groupRows,
+  kpiCounts,
+  needsAction,
+  pageCount,
+  paginate,
+  sortFlatRows,
+  statesInRows,
+  type CasesKpi,
+  type CaseViewRow,
+  type FlatSortKey,
+  type SortDir,
+} from "@/lib/casesView";
 
-// E2.1 F2.1.2 interim landing: ?runId=<uuid> filters the list to the cases a
-// confirmed generation batch created (URL-state, sharable) — old links live.
-// E2.2 F2.2.2: ?chip= is the deep-linkable filter-card state. F4.1.7: ?ids=
-// pins the view to a bulk-touch confirmation set. E6.1: ?run= carries the
-// /work post-generation banner onto the to-do pivot; ?pivot= selects a slice.
-type CasesChipId = ChipId | "generic";
-type CasesPivot = "todo" | "provider" | "payer";
+type CasesView = "flat" | "provider" | "payer";
+
+// The KPI quick-filter rides ?chip (kept for back-compat); the new values are
+// inprog/awaiting/denied. Legacy needs/generic land on Total (all).
+const CHIP_TO_KPI: Record<string, CasesKpi> = {
+  inprog: "inprog",
+  awaiting: "awaiting",
+  denied: "denied",
+  needs: "total",
+  generic: "total",
+};
 
 interface CasesSearch {
-  pivot?: Exclude<CasesPivot, "todo">;
-  run?: string;
-  runId?: string;
-  chip?: Exclude<CasesChipId, "all">;
+  pivot?: "provider" | "payer";
+  chip?: string;
   ids?: string;
+  runId?: string;
+  run?: string;
 }
 
 export const Route = createFileRoute("/cases/")({
-  component: CasesWorkView,
+  component: CasesPage,
   validateSearch: (search: Record<string, unknown>): CasesSearch => ({
     pivot: search.pivot === "provider" || search.pivot === "payer" ? search.pivot : undefined,
-    run: typeof search.run === "string" && search.run ? search.run : undefined,
-    runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
-    chip:
-      search.chip === "needs" ||
-      search.chip === "inprog" ||
-      search.chip === "awaiting" ||
-      search.chip === "generic"
-        ? search.chip
-        : undefined,
+    chip: typeof search.chip === "string" && search.chip in CHIP_TO_KPI ? search.chip : undefined,
     ids: typeof search.ids === "string" && search.ids.trim() ? search.ids : undefined,
+    runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
+    run: typeof search.run === "string" && search.run ? search.run : undefined,
   }),
 });
 
-interface CaseRow {
-  case: CredentialCase;
-  state: ActionState;
-  /** E6.0 — THE unified case status the row renders. */
-  caseStatus: CaseStatus;
-  suffix: string | undefined;
-  provider: Provider | null;
-  payerId: string;
-  payerName: string;
-  isPreCred: boolean;
-  lastTouchLabel: string;
-  days: number | null;
-  nextTask: Task | null;
+const KPI_LABELS: Record<CasesKpi, string> = {
+  total: "Total cases",
+  inprog: "In progress",
+  awaiting: "Awaiting effective date",
+  denied: "Denied / appeal",
+};
+
+const PAGE_SIZES = [10, 25, 50];
+
+function capitalize(s: string): string {
+  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
-interface CaseGroup {
-  id: string;
-  title: string;
-  titleDetail: string | null;
-  isPreCred: boolean;
-  rows: CaseRow[];
-  openRows: CaseRow[];
-  worst: ActionState;
-  worstCount: number;
-  approved: number;
-}
-
-const severityRank = (s: ActionState) => ACTION_STATE_SEVERITY.indexOf(s);
-
-function providerNameOf(row: CaseRow): string {
-  return row.provider ? `${row.provider.firstName} ${row.provider.lastName}` : "Unknown provider";
-}
-
-function finishGroup(g: CaseGroup): CaseGroup {
-  g.rows.sort(
-    (a, b) => severityRank(a.state) - severityRank(b.state) || (b.days ?? -1) - (a.days ?? -1),
-  );
-  g.openRows = g.rows.filter((r) => r.state !== "complete");
-  g.worst = worstActionState(g.openRows.map((r) => r.state)) ?? "complete";
-  g.worstCount = g.openRows.filter((r) => r.state === g.worst).length;
-  g.approved = g.rows.filter((r) => r.caseStatus === "approved").length;
-  return g;
-}
-
-function CasesWorkView() {
+function CasesPage() {
   const navigate = useNavigate();
-  const { pivot: pivotParam, run, runId, chip: chipParam, ids: idsParam } = Route.useSearch();
+  const { pivot: pivotParam, chip: chipParam, ids: idsParam, runId, run } = Route.useSearch();
+
   const providersQ = useProviders();
   const casesQ = useCases();
-  const tasksQ = useTasks();
   const payersQ = usePayers();
-  const templatesQ = useSops();
   const lastTouchQ = useLastTouchDates();
+  const assignmentsQ = useProviderAssignments();
+  const facilitiesQ = useFacilities();
+  const queue = useNextBestActions();
   const canWrite = useCanWrite();
+  const runQ = useGenerationRun(runId ?? run ?? undefined);
 
-  // Legacy /cases links carried list params with no pivot — keep them landing
-  // on the list they always rendered (the payer slice), never the queue.
-  const pivot: CasesPivot = pivotParam ?? (chipParam || idsParam || runId ? "payer" : "todo");
+  const view: CasesView = pivotParam ?? "flat";
+  const kpi: CasesKpi = chipParam ? (CHIP_TO_KPI[chipParam] ?? "total") : "total";
 
-  const chip: CasesChipId = chipParam ?? "all";
-  const listSearch = (over: Partial<CasesSearch>): CasesSearch => ({
-    ...(pivot !== "todo" ? { pivot } : {}),
-    ...(runId ? { runId } : {}),
-    ...(chip !== "all" ? { chip } : {}),
-    ...over,
-  });
-  const setChip = (id: CasesChipId) =>
-    navigate({
-      to: "/cases",
-      search: listSearch({ chip: id === "all" ? undefined : id }),
-    });
-  const setPivot = (p: CasesPivot) =>
-    navigate({
-      to: "/cases",
-      search:
-        p === "todo"
-          ? run
-            ? { run }
-            : {}
-          : {
-              pivot: p,
-              ...(runId ? { runId } : {}),
-              ...(chip !== "all" ? { chip } : {}),
-              ...(idsParam ? { ids: idsParam } : {}),
-            },
-    });
+  const runFilter = runId ?? run ?? null;
+
+  // Local filter + pagination state (search/state/status/pagination live in
+  // component state; view + KPI ride the URL so they stay shareable).
+  const [search, setSearch] = useState("");
+  const [stateFilter, setStateFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sortKey, setSortKey] = useState<FlatSortKey>("default");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [bulkOpen, setBulkOpen] = useState(false);
   const [newCaseOpen, setNewCaseOpen] = useState(false);
 
-  // ?ids pins the view to exactly these cases (bulk-touch follow-up link).
+  const loading = providersQ.isLoading || casesQ.isLoading || payersQ.isLoading;
+  const failed = providersQ.isError || casesQ.isError || payersQ.isError;
+
   const idSet = useMemo(
     () => (idsParam ? new Set(idsParam.split(",").filter(Boolean)) : null),
     [idsParam],
   );
-  // F4.0.2 — case search matches on the tracking ID (+ provider/payer/state).
-  const [search, setSearch] = useState("");
-  // F4.0.2 — the Tracking ID column is default-hidden, toggled via user prefs.
-  const { prefs, savePrefs } = useTablePrefs("cases.list");
-  const showTrackingId = prefs?.visibleCols?.trackingId ?? false;
-  const toggleTrackingId = () =>
-    savePrefs({
-      visibleCols: { ...(prefs?.visibleCols ?? {}), trackingId: !showTrackingId },
-    }).catch(() => undefined);
 
-  // F2.2.2 — a case "uses the generic SOP" iff a task of it is stamped with a
-  // fallback (global payerless) template id; both inputs are already-loaded
-  // org caches (the tasks list projection carries the two stamp columns).
-  const genericCaseIds = useMemo(
-    () => caseIdsUsingGenericSop(tasksQ.data ?? [], fallbackTemplateIds(templatesQ.data ?? [])),
-    [tasksQ.data, templatesQ.data],
-  );
+  // The E2.3 deadline rank: one entry per OPEN case, in queue order.
+  const rankByCaseId = useMemo(() => {
+    const m = new Map<string, number>();
+    (queue.entries ?? []).forEach((e, i) => m.set(e.caseId, i));
+    return m;
+  }, [queue.entries]);
 
-  const loading = providersQ.isLoading || casesQ.isLoading || tasksQ.isLoading || payersQ.isLoading;
-
-  const failed = providersQ.isError || casesQ.isError || payersQ.isError;
-
-  // One flat row per case; both list pivots group the SAME rows.
-  const rows: CaseRow[] = useMemo(() => {
-    const cases = (casesQ.data ?? []).filter(
-      (c) => !runId || (c.generationRunId ?? null) === runId,
-    );
+  const allRows: CaseViewRow[] = useMemo(() => {
     const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
     const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
     const lastTouchByCase = lastTouchQ.data;
-
-    const openTasksByCase = new Map<string, Task[]>();
-    for (const t of tasksQ.data ?? []) {
-      if (!t.caseId || t.status === "completed") continue;
-      const list = openTasksByCase.get(t.caseId) ?? [];
-      list.push(t);
-      openTasksByCase.set(t.caseId, list);
-    }
-    for (const list of openTasksByCase.values()) {
-      list.sort(
-        (a, b) =>
-          a.sortOrder - b.sortOrder || (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"),
-      );
-    }
-
     const now = new Date();
-    const built: CaseRow[] = [];
 
-    for (const c of cases) {
-      const openTasks = openTasksByCase.get(c.id) ?? [];
-      const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
-
-      // E6.0 — the action engine keys off the canonical status's label +
-      // bucket (the same closed ActionBucket domain the legacy configs used).
-      const state = getActionState({
-        statusLabel: caseStatusLabel(c.caseStatus),
-        actionBucket: CASE_STATUS_BUCKETS[c.caseStatus],
-        openTaskDueDates: openTasks.map((t) => t.dueDate),
-        lastTouchDate,
-        createdAt: c.createdAt,
-        confirmedEffectiveDate: c.confirmedEffectiveDate,
-        expectedEffectiveDate: c.expectedEffectiveDate,
-        now,
+    return (casesQ.data ?? [])
+      .filter((c) => !runFilter || (c.generationRunId ?? null) === runFilter)
+      .filter((c) => !idSet || idSet.has(c.id))
+      .map((c) => {
+        const provider = providerById.get(c.providerId) ?? null;
+        const rawPayerName = payerById.get(c.payerId)?.name ?? "Unknown payer";
+        const isPreCred = rawPayerName === PRE_CRED_PAYER_NAME;
+        const lastTouchDate = lastTouchByCase?.get(c.id) ?? null;
+        const lastTouchDays = lastTouchDate
+          ? differenceInCalendarDays(now, parseISO(lastTouchDate))
+          : null;
+        return {
+          caseId: c.id,
+          caseNumber: c.caseNumber ?? null,
+          providerId: provider?.id ?? null,
+          providerName: provider
+            ? `${provider.firstName} ${provider.lastName}`
+            : "Unknown provider",
+          providerCredentials: provider?.credentials ?? null,
+          payerId: c.payerId,
+          payerName: isPreCred ? "Pre-Credentialing" : rawPayerName,
+          isPreCred,
+          state: c.state,
+          caseStatus: c.caseStatus,
+          confirmedEffectiveDate: c.confirmedEffectiveDate,
+          lastTouchLabel:
+            lastTouchDays === null ? "—" : lastTouchDays === 0 ? "today" : `${lastTouchDays}d ago`,
+          lastTouchDays,
+          daysOpen: Math.max(0, differenceInCalendarDays(now, parseISO(c.createdAt))),
+          createdAt: c.createdAt,
+        };
       });
+  }, [providersQ.data, casesQ.data, payersQ.data, lastTouchQ.data, runFilter, idSet]);
 
-      const effective = c.confirmedEffectiveDate ?? c.expectedEffectiveDate;
-      const suffix =
-        state === "stalled"
-          ? `${daysSilent({ lastTouchDate, createdAt: c.createdAt }, now)}d silent`
-          : state === "awaiting_effective" && effective
-            ? `eff ${fmtDate(effective)}`
-            : undefined;
+  // KPI counts always reflect the full (pre-filter) set so the cards are stable.
+  const counts = useMemo(() => kpiCounts(allRows), [allRows]);
+  const states = useMemo(() => statesInRows(allRows), [allRows]);
 
-      const touchDays = lastTouchDate
-        ? differenceInCalendarDays(now, parseISO(lastTouchDate))
-        : null;
-      const days =
-        state === "complete"
-          ? null
-          : differenceInCalendarDays(now, parseISO(c.submittedDate ?? c.createdAt));
+  const filtered = useMemo(
+    () => filterRows(allRows, { kpi, state: stateFilter, status: statusFilter, search }),
+    [allRows, kpi, stateFilter, statusFilter, search],
+  );
 
-      const rawPayerName = payerById.get(c.payerId)?.name ?? "Unknown payer";
-      const isPreCred = rawPayerName === PRE_CRED_PAYER_NAME;
-      built.push({
-        case: c,
-        state,
-        caseStatus: c.caseStatus,
-        suffix,
-        provider: providerById.get(c.providerId) ?? null,
-        payerId: c.payerId,
-        payerName: isPreCred ? "Pre-Credentialing" : rawPayerName,
-        isPreCred,
-        lastTouchLabel: touchDays === null ? "—" : touchDays === 0 ? "today" : `${touchDays}d ago`,
-        days,
-        nextTask: openTasks[0] ?? null,
-      });
-    }
-    return built;
-  }, [providersQ.data, casesQ.data, tasksQ.data, payersQ.data, lastTouchQ.data, runId]);
-
-  const groups: CaseGroup[] = useMemo(() => {
-    const byKey = new Map<string, CaseGroup>();
-    for (const r of rows) {
-      const key = pivot === "provider" ? (r.provider?.id ?? "unknown-provider") : r.payerId;
-      let g = byKey.get(key);
-      if (!g) {
-        g =
-          pivot === "provider"
-            ? {
-                id: key,
-                title: providerNameOf(r),
-                titleDetail: r.provider?.credentials ?? null,
-                isPreCred: false,
-                rows: [],
-                openRows: [],
-                worst: "complete",
-                worstCount: 0,
-                approved: 0,
-              }
-            : {
-                id: key,
-                title: r.payerName,
-                titleDetail: null,
-                isPreCred: r.isPreCred,
-                rows: [],
-                openRows: [],
-                worst: "complete",
-                worstCount: 0,
-                approved: 0,
-              };
-        byKey.set(key, g);
+  // Subtitle metadata: providers → NPI + primary facility; payers → kind + states.
+  const providerSubtitle = useMemo(() => {
+    const facilityName = new Map((facilitiesQ.data ?? []).map((f) => [f.id, f.name]));
+    const primaryByProvider = new Map<string, string>();
+    for (const a of assignmentsQ.data ?? []) {
+      if (a.isPrimary && a.providerId && a.facilityId) {
+        primaryByProvider.set(a.providerId, facilityName.get(a.facilityId) ?? "");
       }
-      g.rows.push(r);
     }
-    const built = [...byKey.values()].map(finishGroup);
-    built.sort((a, b) => {
-      // Pre-cred payer group pinned last, always (payer pivot only).
-      if (a.isPreCred !== b.isPreCred) return a.isPreCred ? 1 : -1;
-      return severityRank(a.worst) - severityRank(b.worst) || a.title.localeCompare(b.title);
+    const npiByProvider = new Map((providersQ.data ?? []).map((p) => [p.id, p.npi]));
+    return (providerId: string): string | null => {
+      const parts: string[] = [];
+      const npi = npiByProvider.get(providerId);
+      if (npi) parts.push(`NPI ${npi}`);
+      const fac = primaryByProvider.get(providerId);
+      if (fac) parts.push(fac);
+      return parts.length ? parts.join(" · ") : null;
+    };
+  }, [assignmentsQ.data, facilitiesQ.data, providersQ.data]);
+
+  const payerSubtitle = useMemo(() => {
+    const payerById = new Map((payersQ.data ?? []).map((p) => [p.id, p]));
+    const statesByPayer = new Map<string, Set<string>>();
+    for (const r of allRows) {
+      const set = statesByPayer.get(r.payerId) ?? new Set<string>();
+      set.add(r.state);
+      statesByPayer.set(r.payerId, set);
+    }
+    return (payerId: string): string | null => {
+      const payer = payerById.get(payerId);
+      const parts: string[] = [];
+      if (payer?.payerKind) parts.push(capitalize(payer.payerKind));
+      const set = statesByPayer.get(payerId);
+      if (set && set.size) parts.push([...set].sort().join(", "));
+      return parts.length ? parts.join(" · ") : null;
+    };
+  }, [payersQ.data, allRows]);
+
+  const groups = useMemo(() => {
+    if (view === "flat") return [];
+    return groupRows(filtered, view, {
+      subtitleFor: view === "provider" ? providerSubtitle : payerSubtitle,
     });
-    return built;
-  }, [rows, pivot]);
+  }, [filtered, view, providerSubtitle, payerSubtitle]);
 
-  const openRowsAll = useMemo(() => rows.filter((r) => r.state !== "complete"), [rows]);
-  const counts = chipCounts(openRowsAll.map((r) => r.state));
-  const genericCount = openRowsAll.filter((r) => genericCaseIds.has(r.case.id)).length;
-  const cards = [
-    { id: "all", label: "All open cases", n: counts.all },
-    { id: "needs", label: "Needs your action", n: counts.needs },
-    { id: "inprog", label: "In progress", n: counts.inprog },
-    { id: "awaiting", label: "Awaiting effective date", n: counts.awaiting },
-    { id: "generic", label: "Using generic SOP", n: genericCount },
-  ];
+  const sortedFlat = useMemo(
+    () => sortFlatRows(filtered, sortKey, sortDir, rankByCaseId),
+    [filtered, sortKey, sortDir, rankByCaseId],
+  );
 
-  // Same predicate as the card counts (matchesChip / the generic derivation),
-  // so a card that says N always leaves exactly N case rows on screen. The
-  // free-text search (F4.0.2) additionally narrows by provider/payer/state and
-  // — the point of the feature — the tracking ID.
-  // Add-touch candidates (F6.6.5): every open case, labelled provider ·
-  // state · payer, carrying its status so the dialog can suggest bumps.
+  // Pagination applies to rows (Flat) or groups (grouped views).
+  const totalItems = view === "flat" ? sortedFlat.length : groups.length;
+  const pages = pageCount(totalItems, pageSize);
+  const safePage = Math.min(page, pages);
+  const pagedFlat = view === "flat" ? paginate(sortedFlat, safePage, pageSize) : [];
+  const pagedGroups = view === "flat" ? [] : paginate(groups, safePage, pageSize);
+
+  const setView = (v: CasesView) => {
+    setPage(1);
+    navigate({
+      to: "/cases",
+      search: {
+        ...(v === "flat" ? {} : { pivot: v }),
+        ...(chipParam ? { chip: chipParam } : {}),
+        ...(runFilter ? { runId: runFilter } : {}),
+        ...(idsParam ? { ids: idsParam } : {}),
+      },
+    });
+  };
+  const setKpi = (k: CasesKpi) => {
+    setPage(1);
+    navigate({
+      to: "/cases",
+      search: {
+        ...(view === "flat" ? {} : { pivot: view }),
+        ...(k === "total" ? {} : { chip: k }),
+        ...(runFilter ? { runId: runFilter } : {}),
+        ...(idsParam ? { ids: idsParam } : {}),
+      },
+    });
+  };
+  const onSort = (key: Exclude<FlatSortKey, "default">) => {
+    setPage(1);
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const resetFilter =
+    <T,>(setter: (v: T) => void) =>
+    (v: T) => {
+      setPage(1);
+      setter(v);
+    };
+
   const bulkCandidates: TouchCaseCandidate[] = useMemo(
     () =>
-      openRowsAll.map((r) => ({
-        id: r.case.id,
-        label: `${providerNameOf(r)} · ${r.case.state} · ${r.payerName}`,
-        currentStatus: r.case.caseStatus,
-      })),
-    [openRowsAll],
+      allRows
+        .filter(
+          (r) => needsAction(r) || r.caseStatus === "submitted" || r.caseStatus === "in_review",
+        )
+        .map((r) => ({
+          id: r.caseId,
+          label: `${r.providerName} · ${r.state} · ${r.payerName}`,
+          currentStatus: r.caseStatus,
+        })),
+    [allRows],
   );
 
-  const q = search.trim().toLowerCase();
-  const visibleGroups = useMemo(
-    () =>
-      groups
-        .map((g) => ({
-          group: g,
-          visibleRows: g.rows.filter((r) => {
-            // ids pinning takes precedence over chip/generic/search so the
-            // bulk-touch link shows exactly the affected set.
-            if (idSet) return idSet.has(r.case.id);
-            const chipOk =
-              chip === "generic"
-                ? isOpenState(r.state) && genericCaseIds.has(r.case.id)
-                : matchesChip(chip, r.state);
-            if (!chipOk) return false;
-            if (!q) return true;
-            return [
-              providerNameOf(r).toLowerCase(),
-              r.payerName.toLowerCase(),
-              r.case.state.toLowerCase(),
-              (r.case.payerReferenceId ?? "").toLowerCase(),
-            ].some((h) => h.includes(q));
-          }),
-        }))
-        .filter(({ visibleRows }) => visibleRows.length > 0),
-    [groups, chip, genericCaseIds, q, idSet],
-  );
-  const pinnedCount = visibleGroups.reduce((n, { visibleRows }) => n + visibleRows.length, 0);
-
-  function tableRow(row: CaseRow): CaseTableRow {
-    const openCase = () => navigate({ to: "/cases/$id", params: { id: row.case.id } });
-    const lead =
-      pivot === "provider" ? (
-        <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
-          {row.payerName}
-          <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-            {" "}
-            · {row.case.state}
-          </span>
-        </span>
-      ) : (
-        <span className="text-[length:var(--mp-text-sm)] font-medium text-[color:var(--mp-ink)]">
-          {providerNameOf(row)}
-          {row.provider?.credentials ? (
-            <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-              {" "}
-              {row.provider.credentials}
-            </span>
-          ) : null}
-          <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-            {" "}
-            · {row.case.state}
-          </span>
-        </span>
-      );
-    return {
-      id: row.case.id,
-      lead,
-      status: { status: row.caseStatus, suffix: row.suffix },
-      trackingId: row.case.payerReferenceId ?? null,
-      lastTouch: row.lastTouchLabel,
-      days: row.days,
-      daysStrong: isAlertState(row.state) || row.state === "stalled",
-      action: row.nextTask ? { label: row.nextTask.title, onClick: openCase } : null,
-      alert: isAlertState(row.state),
-      onOpen: openCase,
-    };
-  }
-
-  function groupHeader(g: CaseGroup) {
-    return (
-      <div className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="truncate text-[length:var(--mp-text-sm)] font-semibold text-[color:var(--mp-ink)]">
-          {g.title}
-          {g.titleDetail ? (
-            <span className="font-normal text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)]">
-              {" "}
-              {g.titleDetail}
-            </span>
-          ) : null}
-        </span>
-        <span className="tabular-nums text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-faint)] whitespace-nowrap">
-          {g.rows.length} {g.rows.length === 1 ? "case" : "cases"}
-        </span>
-        {!g.isPreCred ? (
-          <span className="hidden sm:flex items-center gap-2 ml-auto">
-            <span className="w-40">
-              <ProgressBar value={g.approved} max={g.rows.length} />
-            </span>
-            <span className="tabular-nums whitespace-nowrap text-[length:var(--mp-text-xs)] text-[color:var(--mp-ink-secondary)]">
-              {g.approved} of {g.rows.length} approved
-            </span>
-          </span>
-        ) : (
-          <span className="ml-auto" />
-        )}
-        {g.worst !== "on_track" && g.worst !== "complete" ? (
-          <ActionBadge tone={ACTION_BADGE_TONE[g.worst]} text={badgeLabel(g.worst, g.worstCount)} />
-        ) : null}
-      </div>
-    );
-  }
-
-  const description =
-    pivot === "todo"
-      ? "Every open case, ordered by what to touch first — start at the top."
-      : pivot === "provider"
-        ? `${groups.length} providers · ${counts.all} open cases`
-        : `${groups.length} payers · ${counts.all} open cases`;
+  const subtitle =
+    view === "flat"
+      ? `${counts.total} ${counts.total === 1 ? "case" : "cases"}`
+      : view === "provider"
+        ? `${groups.length} ${groups.length === 1 ? "provider" : "providers"} · ${counts.total} cases`
+        : `${groups.length} ${groups.length === 1 ? "payer" : "payers"} · ${counts.total} cases`;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Cases"
-        description={description}
+        description={subtitle}
         actions={
           canWrite ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="h-8" onClick={() => setBulkOpen(true)}>
-                <MessageSquarePlus className="w-4 h-4 mr-1" /> Add touch
+                <MessageSquarePlus className="mr-1 h-4 w-4" /> Add touch
               </Button>
               <Button
                 size="sm"
                 className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
                 onClick={() => setNewCaseOpen(true)}
               >
-                <Plus className="w-4 h-4 mr-1" /> New case
+                <Plus className="mr-1 h-4 w-4" /> New case
               </Button>
             </div>
           ) : null
         }
       />
+
       {bulkOpen ? (
         <AddTouchDialog
           open={bulkOpen}
@@ -493,12 +355,45 @@ function CasesWorkView() {
       ) : null}
       {newCaseOpen ? <ManualCaseModal onClose={() => setNewCaseOpen(false)} /> : null}
 
-      {/* The pivot switcher — URL state, shareable (F6.1.3). */}
-      <div className="mb-4">
-        <Tabs value={pivot} onValueChange={(v) => setPivot(v as CasesPivot)}>
-          <TabsList aria-label="Cases pivots">
-            <TabsTrigger className="text-[12.5px]" value="todo">
-              To-do
+      {/* KPI cards — derived filters (Total is the default / no filter). */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {CASES_KPIS.map((k) => {
+          const selected = kpi === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKpi(k)}
+              aria-pressed={selected}
+              className={
+                "rounded-md border px-4 py-3 text-left transition-colors " +
+                (selected
+                  ? "border-[#1B4D3E] bg-[#1B4D3E] text-white"
+                  : "border-[#E8E5E0] bg-white hover:bg-[#F5F4F1]")
+              }
+            >
+              <div
+                className={
+                  "text-[11px] font-semibold uppercase tracking-[0.05em] " +
+                  (selected ? "text-white/80" : "text-[#6B7280]")
+                }
+              >
+                {KPI_LABELS[k]}
+              </div>
+              <div className="mt-1 text-[26px] font-semibold tabular-nums leading-none">
+                {counts[k]}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Segmented control + search + State/Case Status filters. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Tabs value={view} onValueChange={(v) => setView(v as CasesView)}>
+          <TabsList aria-label="Cases views">
+            <TabsTrigger className="text-[12.5px]" value="flat">
+              Flat
             </TabsTrigger>
             <TabsTrigger className="text-[12.5px]" value="provider">
               By provider
@@ -508,111 +403,429 @@ function CasesWorkView() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
+
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => resetFilter(setSearch)(e.target.value)}
+            placeholder="Search provider or payer…"
+            className="h-9 pl-8"
+            aria-label="Search cases"
+          />
+        </div>
+
+        <Select value={stateFilter} onValueChange={resetFilter(setStateFilter)}>
+          <SelectTrigger className="h-9 w-[130px]" aria-label="Filter by state">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All states</SelectItem>
+            {states.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={statusFilter}
+          onValueChange={resetFilter((v: string) => setStatusFilter(v as CaseStatus | "all"))}
+        >
+          <SelectTrigger className="h-9 w-[160px]" aria-label="Filter by case status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {CASE_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {caseStatusLabel(s)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {pivot === "todo" ? (
-        <div className="max-w-4xl">
-          <NextBestActionQueue run={run} />
+      {runFilter ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            {runQ.data
+              ? `Generation run ${fmtDate(runQ.data.createdAt)}: ${runQ.data.createdCount} created · ${
+                  runQ.data.skippedExistingCount
+                } skipped (existing) · ${runQ.data.excludedCount} excluded — showing only the ${
+                  allRows.length
+                } ${allRows.length === 1 ? "case" : "cases"} created by this generation run.`
+              : `Showing only the ${allRows.length} ${allRows.length === 1 ? "case" : "cases"} created by this generation run.`}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() =>
+              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+            }
+          >
+            Show all cases
+          </Button>
         </div>
+      ) : null}
+      {idSet ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
+          <span>
+            Showing {allRows.length} {allRows.length === 1 ? "case" : "cases"} you just logged a
+            touch on.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7"
+            onClick={() =>
+              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+            }
+          >
+            <X className="mr-1 h-4 w-4" /> Show all cases
+          </Button>
+        </div>
+      ) : null}
+
+      {failed ? (
+        <div className="rounded-md border border-mp-border bg-mp-card p-6 text-center text-[13px] text-[color:var(--mp-danger)]">
+          Couldn&apos;t load cases. Refresh to retry.
+        </div>
+      ) : loading ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-14 animate-pulse rounded-md bg-mp-muted" />
+          ))}
+        </div>
+      ) : totalItems === 0 ? (
+        <EmptyState
+          message={
+            kpi === "total" && !search && stateFilter === "all" && statusFilter === "all"
+              ? "No cases yet"
+              : "Nothing matches these filters"
+          }
+          description={
+            kpi === "total" && !search && stateFilter === "all" && statusFilter === "all"
+              ? "Use New case for a one-off case, or open a provider to generate cases."
+              : "Adjust the KPI card, view, or filters to see cases."
+          }
+        />
+      ) : view === "flat" ? (
+        <FlatCaseTable
+          rows={pagedFlat}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={onSort}
+          showProvider
+          showPayer
+        />
       ) : (
-        <>
-          {idSet ? (
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
-              <span>
-                Showing {pinnedCount} {pinnedCount === 1 ? "case" : "cases"} you just logged a touch
-                on.
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-7"
-                onClick={() => navigate({ to: "/cases", search: { pivot } })}
-              >
-                <X className="mr-1 h-4 w-4" /> Show all cases
-              </Button>
-            </div>
-          ) : null}
-
-          {runId ? (
-            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
-              <span>
-                Showing only the {rows.length} {rows.length === 1 ? "case" : "cases"} created by
-                this generation run.
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-7"
-                onClick={() => navigate({ to: "/cases", search: { pivot } })}
-              >
-                Show all cases
-              </Button>
-            </div>
-          ) : null}
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] max-w-sm flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search provider, payer, or tracking ID…"
-                className="h-9 pl-8"
-                aria-label="Search cases"
+        <GroupedList
+          defaultCollapsed
+          groups={pagedGroups.map((g) => ({
+            id: g.id,
+            header: (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="truncate text-[13px] font-semibold text-foreground">
+                  {g.title}
+                </span>
+                {g.subtitle ? (
+                  <span className="truncate text-[12px] text-muted-foreground">{g.subtitle}</span>
+                ) : null}
+                <span className="whitespace-nowrap text-[12px] tabular-nums text-muted-foreground">
+                  {g.total} {g.total === 1 ? "case" : "cases"}
+                </span>
+                {!g.isPreCred ? (
+                  <span className="ml-auto hidden items-center gap-2 sm:flex">
+                    <span className="w-32">
+                      <ProgressBar value={g.approved} max={g.total} />
+                    </span>
+                    <span className="whitespace-nowrap text-[12px] tabular-nums text-muted-foreground">
+                      {g.approved} of {g.total} approved
+                    </span>
+                  </span>
+                ) : (
+                  <span className="ml-auto" />
+                )}
+                {g.needsAction > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FBEAEA] px-2.5 py-0.5 text-[12px] font-medium text-[#B91C1C]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#DC2626]" aria-hidden />
+                    {g.needsAction} needs action
+                  </span>
+                ) : null}
+              </div>
+            ),
+            children: (
+              <FlatCaseTable
+                rows={g.rows}
+                showProvider={view === "payer"}
+                showPayer={view === "provider"}
               />
-            </div>
-            <Button variant="outline" size="sm" className="h-9" onClick={toggleTrackingId}>
-              {showTrackingId ? "Hide tracking ID" : "Show tracking ID"}
-            </Button>
-          </div>
-
-          <div className="mb-6">
-            <SummaryChips
-              cards={cards}
-              selected={chip}
-              onSelect={(id) => setChip(id as CasesChipId)}
-            />
-          </div>
-
-          {failed ? (
-            <div className="rounded-[var(--mp-radius-lg)] border border-mp-border bg-mp-card p-6 text-center text-[length:var(--mp-text-sm)] text-[color:var(--mp-danger)]">
-              Couldn't load cases. Refresh to retry.
-            </div>
-          ) : loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-14 rounded-[var(--mp-radius-lg)] bg-mp-muted animate-pulse"
-                />
-              ))}
-            </div>
-          ) : visibleGroups.length === 0 ? (
-            <EmptyState
-              message={chip === "all" ? "No cases yet" : "Nothing in this bucket"}
-              description={
-                chip === "all"
-                  ? "Use New case for a one-off case, or open a provider to start with context."
-                  : "No open cases match this filter right now."
-              }
-            />
-          ) : (
-            <GroupedList
-              groups={visibleGroups.map(({ group, visibleRows }) => ({
-                id: group.id,
-                header: groupHeader(group),
-                children: (
-                  <CaseTable
-                    leadLabel={pivot === "provider" ? "Payer" : "Provider"}
-                    rows={visibleRows.map(tableRow)}
-                    showTrackingId={showTrackingId}
-                  />
-                ),
-              }))}
-            />
-          )}
-        </>
+            ),
+          }))}
+        />
       )}
+
+      {!loading && !failed && totalItems > 0 ? (
+        <Pagination
+          page={safePage}
+          pages={pages}
+          pageSize={pageSize}
+          total={totalItems}
+          unit={view === "flat" ? "cases" : view === "provider" ? "providers" : "payers"}
+          onPage={setPage}
+          onPageSize={(n) => {
+            setPageSize(n);
+            setPage(1);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The shared case table — consistent column vocabulary across all three views.
+// Case# is the click-through (no separate Open-case action). Only the Flat view
+// passes sort handlers; grouped expansions render the same columns unsorted.
+// ---------------------------------------------------------------------------
+
+const HEADER_CELL =
+  "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-muted-foreground";
+
+function SortHeader({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  col: Exclude<FlatSortKey, "default">;
+  sortKey?: FlatSortKey;
+  sortDir?: SortDir;
+  onSort?: (col: Exclude<FlatSortKey, "default">) => void;
+  align?: "left" | "right";
+}) {
+  if (!onSort) {
+    return <th className={`${HEADER_CELL} ${align === "right" ? "text-right" : ""}`}>{label}</th>;
+  }
+  const active = sortKey === col;
+  return (
+    <th className={`${HEADER_CELL} ${align === "right" ? "text-right" : ""}`}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+        className={
+          "inline-flex items-center gap-1 uppercase tracking-[0.04em] hover:text-foreground " +
+          (active ? "text-foreground" : "")
+        }
+      >
+        {label}
+        {active ? (
+          sortDir === "asc" ? (
+            <ArrowUp className="h-3 w-3" aria-hidden />
+          ) : (
+            <ArrowDown className="h-3 w-3" aria-hidden />
+          )
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
+function FlatCaseTable({
+  rows,
+  showProvider,
+  showPayer,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  rows: CaseViewRow[];
+  showProvider: boolean;
+  showPayer: boolean;
+  sortKey?: FlatSortKey;
+  sortDir?: SortDir;
+  onSort?: (col: Exclude<FlatSortKey, "default">) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-md border border-[#E8E5E0] bg-white">
+      <table className="w-full min-w-[720px] border-collapse text-[13px]">
+        <thead>
+          <tr className="border-b border-[#E8E5E0]">
+            <SortHeader
+              label="Case#"
+              col="caseNumber"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+            />
+            {showProvider ? (
+              <SortHeader
+                label="Provider"
+                col="provider"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+              />
+            ) : null}
+            {showPayer ? (
+              <SortHeader
+                label="Payer"
+                col="payer"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+              />
+            ) : null}
+            <SortHeader
+              label="State"
+              col="state"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+            />
+            <SortHeader
+              label="Case Status"
+              col="status"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+            />
+            <SortHeader
+              label="Last touch"
+              col="lastTouch"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+            />
+            <SortHeader
+              label="Days open"
+              col="daysOpen"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+              align="right"
+            />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={r.caseId}
+              className="border-b border-[#F0EEE9] last:border-0 hover:bg-[#FAFAF9]"
+            >
+              <td className="px-3 py-2.5">
+                <Link
+                  to="/cases/$id"
+                  params={{ id: r.caseId }}
+                  className="font-mono text-[13px] font-medium text-[#1B4D3E] hover:underline"
+                >
+                  {r.caseNumber != null ? `C-${r.caseNumber}` : "—"}
+                </Link>
+              </td>
+              {showProvider ? (
+                <td className="px-3 py-2.5">
+                  <span className="font-medium text-foreground">{r.providerName}</span>
+                  {r.providerCredentials ? (
+                    <span className="text-muted-foreground"> {r.providerCredentials}</span>
+                  ) : null}
+                </td>
+              ) : null}
+              {showPayer ? <td className="px-3 py-2.5 text-foreground">{r.payerName}</td> : null}
+              <td className="px-3 py-2.5 text-muted-foreground">{r.state}</td>
+              <td className="px-3 py-2.5">
+                <CaseStatusPill status={r.caseStatus} />
+              </td>
+              <td className="px-3 py-2.5 text-muted-foreground">{r.lastTouchLabel}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                {r.daysOpen}d
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Pagination({
+  page,
+  pages,
+  pageSize,
+  total,
+  unit,
+  onPage,
+  onPageSize,
+}: {
+  page: number;
+  pages: number;
+  pageSize: number;
+  total: number;
+  unit: string;
+  onPage: (p: number) => void;
+  onPageSize: (n: number) => void;
+}) {
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const pageNums = Array.from({ length: pages }, (_, i) => i + 1);
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
+      <span>Rows per page</span>
+      <Select value={String(pageSize)} onValueChange={(v) => onPageSize(Number(v))}>
+        <SelectTrigger className="h-8 w-[72px]" aria-label="Rows per page">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PAGE_SIZES.map((n) => (
+            <SelectItem key={n} value={String(n)}>
+              {n}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="tabular-nums">
+        Showing {from}–{to} of {total} {unit}
+      </span>
+      <div className="ml-auto flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          Prev
+        </Button>
+        {pageNums.map((n) => (
+          <Button
+            key={n}
+            variant={n === page ? "default" : "outline"}
+            size="sm"
+            className={
+              "h-8 w-8 p-0 " + (n === page ? "bg-[#1B4D3E] text-white hover:bg-[#163F33]" : "")
+            }
+            onClick={() => onPage(n)}
+            aria-current={n === page ? "page" : undefined}
+          >
+            {n}
+          </Button>
+        ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={page >= pages}
+          onClick={() => onPage(page + 1)}
+        >
+          Next
+        </Button>
+      </div>
     </div>
   );
 }

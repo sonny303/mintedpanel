@@ -14,15 +14,17 @@ export interface GroupedListGroup {
 
 interface GroupedListProps {
   groups: GroupedListGroup[];
+  /** Start every group collapsed (opt-in; existing callers stay expanded). */
+  defaultCollapsed?: boolean;
 }
 
-export function GroupedList({ groups }: GroupedListProps) {
+export function GroupedList({ groups, defaultCollapsed = false }: GroupedListProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   return (
     <div className="space-y-4">
       {groups.map((group) => {
-        const isCollapsed = collapsed[group.id] ?? false;
+        const isCollapsed = collapsed[group.id] ?? defaultCollapsed;
         return (
           <section
             key={group.id}

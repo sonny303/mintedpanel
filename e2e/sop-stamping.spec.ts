@@ -8,8 +8,9 @@
 //          rename never rewrites history) and links into the read-only
 //          version view (E1.7b F1.7b.2).
 //   TS-54  A payer with no authored SOP resolves the global generic fallback
-//          (never zero tasks), the case is filterable via the URL-driven
-//          "Using generic SOP" chip and marked with the neutral pill;
+//          (never zero tasks) and is marked with the neutral "Generic SOP"
+//          provenance pill (the URL-driven quick-filter chip retired with the
+//          2026-07-22 Cases redesign — the KPI cards replaced the chip cards);
 //          authoring a payer SOP later changes nothing on the existing case,
 //          and reapply restamps the NEW cycle at the current payer SOP while
 //          the original cycle's fallback stamp survives untouched.
@@ -721,7 +722,7 @@ test("TS-53: batches straddling a publish stamp v1 then v2; the earlier batch ke
   });
 });
 
-test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is chip-filterable and marked; reapply restamps at the later-authored payer SOP without touching the original stamp", async ({
+test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is marked; reapply restamps at the later-authored payer SOP without touching the original stamp", async ({
   context,
   page,
 }) => {
@@ -744,14 +745,9 @@ test("TS-54: a no-SOP payer resolves the generic fallback (never zero tasks), is
   });
   const caseId = fixtures.credential_cases[0].id as string;
 
-  // The URL-driven chip filters to fallback-stamped cases (the coverage-gap
-  // working list).
-  await page.goto("/cases?pivot=payer");
-  const genericChip = page.getByRole("button", { name: /Using generic SOP/ });
-  await expect(genericChip).toContainText("1");
-  await genericChip.click();
-  await expect(page).toHaveURL(/chip=generic/);
-  await expect(page.getByText("Jane Whitaker").first()).toBeVisible({ timeout: 30000 });
+  // (The "Using generic SOP" quick-filter chip retired with the 2026-07-22
+  // Cases redesign — the KPI cards replaced the chip cards; the fallback
+  // provenance marking below is the surviving signal.)
 
   // The case is visibly marked: fallback provenance + the neutral pill.
   await page.goto(`/cases/${caseId}`);

@@ -1,12 +1,9 @@
-// E6.1 F6.1.3 / TS-119 — the merged Cases surface's three pivots over the
-// mock harness (fixture idiom shared with next-best-action-queue.spec.ts):
-//   - the to-do pivot (default) ranks overdue follow-ups → task due dates →
-//     provider start dates, with the top card naming WHY it is first
-//   - pivots are URL states that restore exactly (deep-linkable slices)
-//   - the by-payer pivot lists every open case for the payer under one group
-//     header; the by-provider pivot re-slices the SAME cases per provider
-//     with the x-of-y approved rollup
-//   - legacy /cases list params (?chip=) land on the list, never the queue
+// 2026-07-22 Cases page redesign — the rebuilt /cases surface over the mock
+// harness. Three VIEWS (Flat default · By provider · By payer), four derived
+// KPI cards (Total · In progress · Awaiting effective · Denied/appeal), a
+// globally-sequential Case# that is the row click-through, and URL back-compat
+// (?pivot / ?chip / ?ids / ?runId; /work redirect). The former "to-do" pivot is
+// retired as a tab, but its E2.3 deadline ranking IS Flat's default sort.
 import { test, expect, type Route } from "@playwright/test";
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -60,8 +57,14 @@ const providerRow = (id: string, first: string, last: string, startDate: string 
   updated_at: "2026-07-10T00:00:00Z",
 });
 
-const caseRow = (id: string, providerId: string, over: Partial<Record<string, unknown>> = {}) => ({
+const caseRow = (
+  id: string,
+  caseNumber: number,
+  providerId: string,
+  over: Partial<Record<string, unknown>> = {},
+) => ({
   id,
+  case_number: caseNumber,
   org_id: ORG_ID,
   provider_id: providerId,
   payer_id: "pay-bcbsnc",
@@ -71,7 +74,7 @@ const caseRow = (id: string, providerId: string, over: Partial<Record<string, un
   specialty: null,
   mso_id: null,
   assigned_to: null,
-  credentialing_status_id: "st-inprog",
+  credentialing_status_id: null,
   case_status: "in_progress",
   submitted_date: null,
   approved_date: null,
@@ -79,6 +82,8 @@ const caseRow = (id: string, providerId: string, over: Partial<Record<string, un
   expected_effective_date: null,
   termination_date: null,
   payer_reference_id: null,
+  payer_individual_provider_id: null,
+  payer_pipeline_state: "not_started",
   generation_run_id: null,
   case_email_token: `tok-${id}`,
   created_by: USER_ID,
@@ -110,6 +115,19 @@ const taskRow = (
   created_at: "2026-06-01T00:00:00Z",
   updated_at: "2026-06-01T00:00:00Z",
   ...over,
+});
+
+const payer = (id: string, name: string, kind: string, states: string[]) => ({
+  id,
+  org_id: null,
+  name,
+  payer_kind: kind,
+  states,
+  aliases: [],
+  status: "active",
+  payer_slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+  is_active: true,
+  created_at: "2026-07-10T00:00:00Z",
 });
 
 function makeFixtures() {
@@ -169,47 +187,14 @@ function makeFixtures() {
     provider_facility_assignments: [],
     state_licenses: [],
     payers: [
-      {
-        id: "pay-bcbsnc",
-        org_id: null,
-        name: "BCBS-NC",
-        payer_kind: "commercial",
-        states: ["NC"],
-        aliases: [],
-        status: "active",
-        payer_slug: "bcbs-nc",
-        is_active: true,
-        created_at: "2026-07-10T00:00:00Z",
-      },
+      payer("pay-bcbsnc", "BCBS-NC", "commercial", ["NC"]),
+      payer("pay-aetna", "Aetna", "commercial", ["NC"]),
     ],
     org_payer_assignments: [],
     payer_network_targets: [],
     provider_documents: [],
     group_insurance_policies: [],
-    status_configs: [
-      {
-        id: "st-inprog",
-        org_id: ORG_ID,
-        track: "credentialing",
-        label: "In Progress",
-        color: "#888888",
-        sort_order: 20,
-        required_fields: [],
-        action_bucket: "ours",
-        created_at: "2026-07-10T00:00:00Z",
-      },
-      {
-        id: "st-approved",
-        org_id: ORG_ID,
-        track: "credentialing",
-        label: "Approved",
-        color: "#888888",
-        sort_order: 70,
-        required_fields: [],
-        action_bucket: "complete",
-        created_at: "2026-07-10T00:00:00Z",
-      },
-    ],
+    status_configs: [],
     sop_templates: [],
     credential_cases: [] as Record<string, unknown>[],
     tasks: [] as Record<string, unknown>[],
@@ -220,6 +205,7 @@ function makeFixtures() {
 }
 
 function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
+  const writes: { table: string; method: string }[] = [];
   const handler = async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -231,7 +217,10 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
 
     const table = url.pathname.split("/rest/v1/")[1] ?? "";
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
-    if (req.method() !== "GET") return json(null, 201);
+    if (req.method() !== "GET") {
+      writes.push({ table, method: req.method() });
+      return json(null, 201);
+    }
 
     const matchFilters = (row: Record<string, unknown>): boolean => {
       for (const [key, raw] of url.searchParams.entries()) {
@@ -268,7 +257,7 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
     }
     return json(rows);
   };
-  return { handler };
+  return { handler, writes };
 }
 
 function seedAuth(context: {
@@ -286,25 +275,29 @@ function seedAuth(context: {
   );
 }
 
-// The TS-119 mix: an overdue follow-up, a due task, and an approaching
-// provider start date, plus one approved case for the rollups.
+// A ranking-bearing mix (overdue follow-up → task due → provider start) plus
+// one approved (Awaiting effective) and one denied case for the KPI cards.
 function seedCases(fixtures: Record<string, Record<string, unknown>[]>) {
   fixtures.credential_cases.push(
-    caseRow("case-follow", "pr-jane", { state: "NC" }),
-    caseRow("case-task", "pr-jane", { state: "SC" }),
-    caseRow("case-start", "pr-marco", { state: "NC" }),
-    caseRow("case-approved", "pr-jane", {
+    caseRow("case-follow", 1001, "pr-jane", { state: "NC" }),
+    caseRow("case-task", 1002, "pr-jane", { state: "SC" }),
+    caseRow("case-start", 1003, "pr-marco", { state: "NC", case_status: "not_started" }),
+    caseRow("case-approved", 1004, "pr-jane", {
       state: "CO",
-      credentialing_status_id: "st-approved",
       case_status: "approved",
+      payer_id: "pay-aetna",
+      confirmed_effective_date: null,
+      approved_date: "2026-06-15",
+    }),
+    caseRow("case-denied", 1005, "pr-marco", {
+      state: "NC",
+      case_status: "denied",
+      payer_id: "pay-aetna",
     }),
   );
   fixtures.tasks.push(
     taskRow("task-follow", "case-follow", "pr-jane", { title: "Chase the missing roster" }),
-    taskRow("task-task", "case-task", "pr-jane", {
-      title: "Follow up on Jane's application",
-      due_date: daysFromNow(9),
-    }),
+    taskRow("task-task", "case-task", "pr-jane", { title: "Follow up", due_date: daysFromNow(9) }),
     taskRow("task-start", "case-start", "pr-marco", { title: "Submit Marco's application" }),
   );
   fixtures.touches.push({
@@ -325,7 +318,7 @@ function seedCases(fixtures: Record<string, Record<string, unknown>[]>) {
   });
 }
 
-test("TS-119: the to-do pivot ranks overdue follow-ups → task dues → provider starts, naming each reason", async ({
+test("Flat view (default): KPI cards, Case# columns, and the E2.3 deadline ranking as default sort", async ({
   context,
   page,
 }) => {
@@ -337,22 +330,58 @@ test("TS-119: the to-do pivot ranks overdue follow-ups → task dues → provide
 
   await page.goto("/cases");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByRole("tab", { name: "To-do" })).toHaveAttribute("aria-selected", "true");
+  // Flat is the default view.
+  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
 
-  const rows = page.locator("ol > li");
-  await expect(rows).toHaveCount(3, { timeout: 30000 });
-  // Top card: the overdue follow-up, and it says WHY it is first.
-  await expect(rows.nth(0)).toContainText("Touch due — follow up with BCBS-NC");
-  await expect(rows.nth(0)).toContainText("Follow-up overdue");
-  await expect(rows.nth(0)).toContainText("Overdue");
-  // Then the due task, then the approaching provider start.
-  await expect(rows.nth(1)).toContainText("Follow up on Jane's application");
-  await expect(rows.nth(1)).toContainText("task due date");
-  await expect(rows.nth(2)).toContainText("Submit Marco's application");
-  await expect(rows.nth(2)).toContainText("provider start date");
+  // KPI cards are derived filters: Total 5 / In progress 2 (follow + task) /
+  // Awaiting effective 1 (approved, no confirmed date) / Denied 1.
+  const total = page.getByRole("button", { name: /Total cases/ });
+  await expect(total).toContainText("5", { timeout: 30000 });
+  await expect(page.getByRole("button", { name: /In progress/ })).toContainText("2");
+  await expect(page.getByRole("button", { name: /Awaiting effective date/ })).toContainText("1");
+  await expect(page.getByRole("button", { name: /Denied \/ appeal/ })).toContainText("1");
+
+  // The Flat table carries the redesign columns and the mono Case# link.
+  await expect(page.getByRole("columnheader", { name: "Case#" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Days open" })).toBeVisible();
+
+  // Default sort = the E2.3 ranking: the overdue follow-up (C-1001) is first.
+  const firstCaseLink = page.locator("tbody tr").first().getByRole("link");
+  await expect(firstCaseLink).toHaveText("C-1001");
+
+  // Case# IS the click-through — no separate Open-case affordance.
+  await firstCaseLink.click();
+  await expect(page).toHaveURL(/\/cases\/case-follow/);
 });
 
-test("TS-119: pivots are URL states that restore exactly; the by-payer slice lists every open case for the payer", async ({
+test("KPI + Case Status filters narrow the Flat table; the KPI selection rides ?chip", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+  await expect(page.locator("tbody tr")).toHaveCount(5, { timeout: 30000 });
+
+  // Clicking the In progress KPI filters to the two in_progress cases and
+  // writes ?chip=inprog (shareable).
+  await page.getByRole("button", { name: /In progress/ }).click();
+  await expect(page).toHaveURL(/chip=inprog/, { timeout: 15000 });
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+
+  // The Case Status dropdown composes with it: Denied while the In progress
+  // KPI is active leaves nothing.
+  await page.getByLabel("Filter by case status").click();
+  await page.getByRole("option", { name: "Denied" }).click();
+  await expect(page.getByText("Nothing matches these filters")).toBeVisible();
+});
+
+test("By provider / By payer grouped views with subtitles, approved rollup, and needs-action", async ({
   context,
   page,
 }) => {
@@ -365,29 +394,31 @@ test("TS-119: pivots are URL states that restore exactly; the by-payer slice lis
   await page.goto("/cases");
   await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
 
-  // Switching pivots writes the URL — the slice is shareable.
+  // By payer: grouped, subtitle carries the kind, and the rollups render.
   await page.getByRole("tab", { name: "By payer" }).click();
-  await expect(page).toHaveURL(/\/cases\?pivot=payer$/, { timeout: 15000 });
-  await expect(page.getByText("BCBS-NC")).toBeVisible();
-  await expect(page.getByText("4 cases")).toBeVisible();
-  await expect(page.getByText("1 of 4 approved")).toBeVisible();
-  // Every open case for the payer sits in the one group (the payer-call view).
-  await expect(page.getByRole("button", { name: "All open cases 3" })).toBeVisible();
+  await expect(page).toHaveURL(/pivot=payer$/, { timeout: 15000 });
+  const bcbs = page.getByRole("button", { name: /BCBS-NC/ });
+  await expect(bcbs).toBeVisible();
+  await expect(bcbs).toContainText("Commercial");
+  await expect(bcbs).toContainText("3 cases"); // follow + task + start
+  await expect(bcbs).toContainText("needs action");
 
-  // Deep-linking the by-provider pivot restores that exact slice: groups per
-  // provider, rows lead with the payer, and the per-provider rollup shows.
+  // Deep-linking By provider restores that exact slice.
   await page.goto("/cases?pivot=provider");
   await expect(page.getByRole("tab", { name: "By provider" })).toHaveAttribute(
     "aria-selected",
     "true",
     { timeout: 30000 },
   );
-  await expect(page.getByText("Jane Whitaker")).toBeVisible();
-  await expect(page.getByText("Marco Reyes")).toBeVisible();
-  await expect(page.getByText("1 of 3 approved")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Jane Whitaker/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Marco Reyes/ })).toBeVisible();
+  // Jane has one approved case (of her three) — the x-of-y rollup.
+  await expect(page.getByRole("button", { name: /Jane Whitaker/ })).toContainText(
+    "1 of 3 approved",
+  );
 });
 
-test("legacy list params land on the list, never the queue (?chip= back-compat)", async ({
+test("legacy back-compat: ?chip= maps to the KPI quick-filter; case-detail deep links resolve", async ({
   context,
   page,
 }) => {
@@ -397,15 +428,72 @@ test("legacy list params land on the list, never the queue (?chip= back-compat)"
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
+  // Legacy ?chip=needs has no new KPI equivalent — it lands on Total (Flat),
+  // never a dead end.
   await page.goto("/cases?chip=needs");
-  await expect(page.getByRole("tab", { name: "By payer" })).toHaveAttribute(
-    "aria-selected",
+  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true", {
+    timeout: 30000,
+  });
+  await expect(page.getByRole("button", { name: /Total cases/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // A direct new value selects that KPI.
+  await page.goto("/cases?chip=inprog");
+  await expect(page.getByRole("button", { name: /In progress/ })).toHaveAttribute(
+    "aria-pressed",
     "true",
     { timeout: 30000 },
   );
-  // The chip filter is applied exactly as before the merge.
-  await expect(page.getByRole("button", { name: /Needs your action/ })).toBeVisible();
-  // Case-detail deep links resolve unchanged (F6.1.3 AC).
+
+  // Case-detail deep links resolve unchanged.
   await page.goto("/cases/case-task");
   await expect(page).toHaveURL(/\/cases\/case-task/);
+});
+
+test("post-generation ?run= filters to that batch with a banner; Show all cases clears it; rendering writes nothing", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  // One case belongs to generation run-9 — the post-generation landing target
+  // (?run=/?runId=, shareable URL-state; the /work redirect preserves it).
+  fixtures.credential_cases.push(
+    caseRow("case-run", 1006, "pr-marco", { generation_run_id: "run-9", state: "SC" }),
+  );
+  fixtures.case_generation_runs.push({
+    id: "run-9",
+    org_id: ORG_ID,
+    created_by: USER_ID,
+    created_at: "2026-07-12T00:00:00Z",
+    proposed_count: 1,
+    created_count: 1,
+    skipped_existing_count: 0,
+    excluded_count: 0,
+    failed_count: 0,
+  });
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?run=run-9");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("created by this generation run")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr").first().getByRole("link")).toHaveText("C-1006");
+
+  // The queue ranking that feeds the default sort is DERIVED, never stored
+  // (E2.3 TE-10): rendering the list wrote nothing.
+  expect(writes).toHaveLength(0);
+
+  // "Show all cases" is a param removal, not component state — back to all six.
+  await page.getByRole("button", { name: "Show all cases" }).click();
+  await expect(page).toHaveURL(/\/cases\/?$/, { timeout: 15000 });
+  await expect(page.locator("tbody tr")).toHaveCount(6);
+
+  // The E2.1 ?runId= spelling is honored too (old links stay live).
+  await page.goto("/cases?runId=run-9");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
 });
