@@ -375,7 +375,10 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
     const errors: Record<string, string> = {};
     for (const f of fields) {
       const v = (draft[f.key] ?? "").trim();
-      if (v !== "" && f.validate) {
+      // Validate only fields the user actually changed — a legacy invalid
+      // value in an untouched field must not block an unrelated edit.
+      const changed = (v === "" ? null : v) !== (f.value ?? null);
+      if (changed && v !== "" && f.validate) {
         const message = f.validate(v);
         if (message) errors[f.key] = message;
       }
