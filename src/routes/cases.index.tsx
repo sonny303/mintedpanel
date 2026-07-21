@@ -266,6 +266,7 @@ function CasesPage() {
         ...(v === "flat" ? {} : { pivot: v }),
         ...(chipParam ? { chip: chipParam } : {}),
         ...(runFilter ? { runId: runFilter } : {}),
+        ...(idsParam ? { ids: idsParam } : {}),
       },
     });
   };
@@ -277,6 +278,7 @@ function CasesPage() {
         ...(view === "flat" ? {} : { pivot: view }),
         ...(k === "total" ? {} : { chip: k }),
         ...(runFilter ? { runId: runFilter } : {}),
+        ...(idsParam ? { ids: idsParam } : {}),
       },
     });
   };
