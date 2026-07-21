@@ -6,12 +6,12 @@ by the PM.
 
 ## Roles
 
-| Role                    | Agent          | Responsibility                                                                                 |
-| ----------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| PM                      | Human (Sowmya) | Business scope, UX design system, stage promotion                                              |
-| Requirements author     | ChatPRD        | Drafts epic `EX.X-*.md` files per the template                                                 |
-| Reviewer / Orchestrator | Devin          | Polishes epics, populates technical enablers, gates and merges Claude Code PRs into `redesign` |
-| Builder                 | Claude Code    | Implements epics as PRs targeting `redesign`                                                   |
+| Role                    | Agent          | Responsibility                                                                                  |
+| ----------------------- | -------------- | ----------------------------------------------------------------------------------------------- |
+| PM                      | Human (Sowmya) | Business scope, UX design system, stage promotion                                               |
+| Requirements author     | ChatPRD        | Drafts epic `EX.X-*.md` files per the template                                                  |
+| Reviewer / Orchestrator | Devin          | Polishes epics, populates technical enablers, gates and merges Claude Code PRs into `main`      |
+| Builder                 | Claude Code    | Implements epics as PRs targeting `main` (the `redesign` staging branch was retired 2026-07-21) |
 
 ## Directory layout
 
