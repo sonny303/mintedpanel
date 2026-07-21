@@ -41,7 +41,8 @@ import { useCases } from "@/hooks/useCases";
 import { useLastTouchDates } from "@/hooks/useTouches";
 import { useFacilities } from "@/hooks/useLookups";
 import { usePayers } from "@/hooks/useAdmin";
-import { useNextBestActions } from "@/hooks/useNextBestActions";
+import { useNextBestActions, useGenerationRun } from "@/hooks/useNextBestActions";
+import { fmtDate } from "@/lib/format";
 import { useCanWrite } from "@/lib/permissions";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
 import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
@@ -117,6 +118,7 @@ function CasesPage() {
   const facilitiesQ = useFacilities();
   const queue = useNextBestActions();
   const canWrite = useCanWrite();
+  const runQ = useGenerationRun(runId ?? run ?? undefined);
 
   const view: CasesView = pivotParam ?? "flat";
   const kpi: CasesKpi = chipParam ? (CHIP_TO_KPI[chipParam] ?? "total") : "total";
@@ -446,8 +448,13 @@ function CasesPage() {
       {runFilter ? (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] p-3 text-[13px]">
           <span>
-            Showing only the {allRows.length} {allRows.length === 1 ? "case" : "cases"} created by
-            this generation run.
+            {runQ.data
+              ? `Generation run ${fmtDate(runQ.data.createdAt)}: ${runQ.data.createdCount} created · ${
+                  runQ.data.skippedExistingCount
+                } skipped (existing) · ${runQ.data.excludedCount} excluded — showing only the ${
+                  allRows.length
+                } ${allRows.length === 1 ? "case" : "cases"} created by this generation run.`
+              : `Showing only the ${allRows.length} ${allRows.length === 1 ? "case" : "cases"} created by this generation run.`}
           </span>
           <Button
             variant="outline"
