@@ -13,6 +13,7 @@ import {
   listPayerNetworkTargets,
   removeGroupPayer,
   restoreTarget,
+  setTargetIdentifier,
 } from "@/services/payerNetworkTargets";
 import type { AttachmentSavePlan } from "@/lib/payerExpansion";
 
@@ -49,6 +50,17 @@ export function useArchiveTarget() {
   const invalidate = useInvalidateTargets();
   return useMutation({
     mutationFn: (id: string) => archiveTarget(id),
+    onSuccess: invalidate,
+  });
+}
+
+/** Set/clear the payer-issued GROUP identifier on one target (2026-07-20
+ * re-scope — the group-level PIN, edited from the Payer Network board). */
+export function useSetTargetIdentifier() {
+  const invalidate = useInvalidateTargets();
+  return useMutation({
+    mutationFn: ({ id, payerIssuedId }: { id: string; payerIssuedId: string | null }) =>
+      setTargetIdentifier(id, payerIssuedId),
     onSuccess: invalidate,
   });
 }

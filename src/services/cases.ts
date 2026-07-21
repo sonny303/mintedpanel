@@ -54,7 +54,10 @@ export interface CaseInput {
 // resolution provider-IDs are detail-only (getCase select *), not listed here.
 // E6.0: case_status is THE status every list surface renders.
 const CASE_LIST_COLUMNS =
-  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_pipeline_state, created_at, updated_at";
+  // payer_individual_provider_id added 2026-07-21: the provider record's
+  // unified Enrollments view derives approved-case rows (providerEnrollments)
+  // off this projection and shows the payer-issued ID the approval captured.
+  "id, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_pipeline_state, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();

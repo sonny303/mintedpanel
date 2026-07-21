@@ -703,6 +703,7 @@ export type Database = {
           id: string;
           org_id: string;
           payer_id: string;
+          payer_issued_id: string | null;
           provider_id: string;
           source: string;
           state: string;
@@ -717,6 +718,7 @@ export type Database = {
           id?: string;
           org_id: string;
           payer_id: string;
+          payer_issued_id?: string | null;
           provider_id: string;
           source?: string;
           state: string;
@@ -731,6 +733,7 @@ export type Database = {
           id?: string;
           org_id?: string;
           payer_id?: string;
+          payer_issued_id?: string | null;
           provider_id?: string;
           source?: string;
           state?: string;
@@ -1899,6 +1902,7 @@ export type Database = {
           id: string;
           org_id: string;
           payer_id: string;
+          payer_issued_id: string | null;
           state: string;
           status: string;
         };
@@ -1908,6 +1912,7 @@ export type Database = {
           id?: string;
           org_id: string;
           payer_id: string;
+          payer_issued_id?: string | null;
           state: string;
           status?: string;
         };
@@ -1917,6 +1922,7 @@ export type Database = {
           id?: string;
           org_id?: string;
           payer_id?: string;
+          payer_issued_id?: string | null;
           state?: string;
           status?: string;
         };
@@ -3624,6 +3630,12 @@ export type Database = {
           task_definitions: Json;
           updated_at: string | null;
         };
+        SetofOptions: {
+          from: "*";
+          to: "sop_templates";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       check_rpc_throttle: {
         Args: {
@@ -3782,6 +3794,12 @@ export type Database = {
           updated_at: string;
           url_changed_at: string | null;
         };
+        SetofOptions: {
+          from: "*";
+          to: "portals";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       set_primary_assignment: {
         Args: { p_assignment_id: string; p_provider_id: string };
@@ -3834,9 +3852,13 @@ export type Database = {
           updated_at: string;
           url_pattern: string | null;
         };
+        SetofOptions: {
+          from: "*";
+          to: "portal_field_maps";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
-      user_org_ids: { Args: never; Returns: string[] };
-      user_role: { Args: { p_org: string }; Returns: string };
       upsert_global_portal: {
         Args: {
           p_form_url?: string;
@@ -3859,7 +3881,15 @@ export type Database = {
           updated_at: string;
           url_changed_at: string | null;
         };
+        SetofOptions: {
+          from: "*";
+          to: "portals";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
+      user_org_ids: { Args: never; Returns: string[] };
+      user_role: { Args: { p_org: string }; Returns: string };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
       validate_report_share: { Args: { p_token: string }; Returns: Json };
       validate_ssn_intake_token: { Args: { p_token: string }; Returns: Json };

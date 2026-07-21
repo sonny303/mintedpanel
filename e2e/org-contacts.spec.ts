@@ -153,6 +153,6 @@ test("seeded org contacts (customer + Zeb sales rep) render on the workspace", a
   await expect(
     page.getByText("zeb@mintedpanel.example.test", { exact: false }).first(),
   ).toBeVisible();
-  await expect(page.getByText("Customer Escalation Contact").first()).toBeVisible();
+  await expect(page.getByText("Organization contact").first()).toBeVisible();
   await expect(page.getByText("Sales Rep").first()).toBeVisible();
 });

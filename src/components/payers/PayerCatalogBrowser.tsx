@@ -1,11 +1,16 @@
 // E1.6 F1.6.1 + E4.2 hardening — the browsable global payer catalog (org_id IS
-// NULL rows only) with the org-admin self-service Add / Added / Reactivate /
+// NULL rows only) with the org-admin self-service Add / In-network / Reactivate /
 // Remove controls derived from org_payer_assignments. Extracted from the
 // /payer-directory route (E4.2 unified payer setup, TE-19) so the standalone
 // page and the Payer Setup workspace's Catalog tab render ONE implementation —
 // composition over duplication; the catalog filtering logic lives in
 // src/lib/payerDirectory.ts either way. Non-admins browse read-only; there is
 // deliberately NO free-text payer creation (identity is Minted-curated).
+// 2026-07-20 catalog UX pass: the subscription verbs say what they do ("Add to
+// my network" — an org-scoped org_payer_assignments row, never a catalog
+// write); the list keeps browse columns only (catalog key + avg decision moved
+// to the per-payer detail drill-in at catalog/$payerId); long state lists
+// expand in place; an "In my network" filter narrows to adopted payers.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -19,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -35,11 +41,15 @@ import {
   useReactivateAssignment,
 } from "@/hooks/useOrgPayerAssignments";
 import { useIsAdmin } from "@/lib/permissions";
-import { assignmentsByPayerId, catalogAction, type CatalogAction } from "@/lib/payerCatalogActions";
+import {
+  assignmentsByPayerId,
+  catalogAction,
+  isActiveAssignment,
+  type CatalogAction,
+} from "@/lib/payerCatalogActions";
 import {
   DEFAULT_DIRECTORY_KIND,
   filterDirectoryRows,
-  formatStates,
   PAYER_KIND_LABELS,
   type DirectoryKindFilter,
 } from "@/lib/payerDirectory";
@@ -90,7 +100,7 @@ function ManageCell({
   if (action.kind === "added") {
     return (
       <span className="inline-flex flex-wrap items-center gap-2">
-        <StatusPill status="green" label="Added to organization" />
+        <StatusPill status="green" label="In my network" />
         {canManage ? (
           <>
             <Link
@@ -137,8 +147,50 @@ function ManageCell({
       disabled={pending}
       onClick={() => onAdd(payer)}
     >
-      Add to organization
+      Add to my network
     </Button>
+  );
+}
+
+/**
+ * Item-3 fix for the truncated states column: up to four codes render inline;
+ * longer lists get an in-place "+N more" popover with every state, so a
+ * national payer's coverage is readable without leaving the list. The full
+ * list also lives on the payer detail page.
+ */
+function StatesCell({ states }: { states: readonly string[] | null | undefined }) {
+  const list = states ?? [];
+  if (list.length === 0) return <>—</>;
+  if (list.length <= 4) return <>{list.join(", ")}</>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span>{list.slice(0, 4).join(", ")}</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+          >
+            +{list.length - 4} more
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 border-[#E8E5E0] p-3 shadow-none">
+          <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {list.length} states
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {list.map((s) => (
+              <span
+                key={s}
+                className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11px] text-foreground"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 
@@ -148,7 +200,15 @@ function PayerRow(props: RowProps) {
   return (
     <tr className="border-b border-border last:border-0">
       <td className="px-3 py-2.5 align-top">
-        <div className="text-[13px] font-medium text-foreground">{payer.name}</div>
+        {/* The name is the drill-in: identity facts (catalog key, avg decision,
+            full coverage) + the payer's SOPs and portals live on the detail. */}
+        <Link
+          to="/admin/payer-admin/catalog/$payerId"
+          params={{ payerId: payer.id }}
+          className="text-[13px] font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          {payer.name}
+        </Link>
         {(payer.aliases ?? []).length > 0 ? (
           <div className="mt-0.5 max-w-[420px] truncate text-[11px] text-muted-foreground">
             {(payer.aliases ?? []).join(" · ")}
@@ -167,13 +227,7 @@ function PayerRow(props: RowProps) {
         <StatusPill status={KIND_PILL[kind]} label={PAYER_KIND_LABELS[kind]} />
       </td>
       <td className="px-3 py-2.5 align-top text-[13px] text-foreground">
-        {formatStates(payer.states)}
-      </td>
-      <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
-        {payer.payerSlug || "—"}
-      </td>
-      <td className="px-3 py-2.5 align-top text-[13px] text-muted-foreground">
-        {payer.avgDecisionDays != null ? `${payer.avgDecisionDays} days` : "—"}
+        <StatesCell states={payer.states} />
       </td>
       <td className="px-3 py-2.5 align-top">
         <ManageCell {...props} />
@@ -182,7 +236,13 @@ function PayerRow(props: RowProps) {
   );
 }
 
-function RemovePayerConfirmDialog({ payer, onClose }: { payer: Payer; onClose: () => void }) {
+export function RemovePayerConfirmDialog({
+  payer,
+  onClose,
+}: {
+  payer: Payer;
+  onClose: () => void;
+}) {
   const archiveMut = useArchiveAssignment();
   const handleRemove = () => {
     archiveMut.mutate(payer.id, {
@@ -191,7 +251,7 @@ function RemovePayerConfirmDialog({ payer, onClose }: { payer: Payer; onClose: (
         toast.success(
           n > 0
             ? `${payer.name} removed — ${n} network target${n === 1 ? "" : "s"} archived.`
-            : `${payer.name} removed from organization`,
+            : `${payer.name} removed from your network`,
         );
         onClose();
       },
@@ -202,7 +262,7 @@ function RemovePayerConfirmDialog({ payer, onClose }: { payer: Payer; onClose: (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>Remove {payer.name} from organization?</DialogTitle>
+          <DialogTitle>Remove {payer.name} from my network?</DialogTitle>
           <DialogDescription>
             This archives the payer for this organization along with any active credentialing scope
             (group × state targets) it has. Nothing is deleted — you can reactivate it later and
@@ -232,25 +292,30 @@ export function PayerCatalogBrowser() {
   const [query, setQuery] = useState("");
   const [state, setState] = useState<string>("all");
   const [kind, setKind] = useState<DirectoryKindFilter>(DEFAULT_DIRECTORY_KIND);
+  const [network, setNetwork] = useState<"all" | "mine">("all");
   const [removing, setRemoving] = useState<Payer | null>(null);
 
   const payers = useMemo(() => data ?? [], [data]);
-  const rows = useMemo(
-    () => filterDirectoryRows(payers, { query, state, kind }),
-    [payers, query, state, kind],
-  );
-
   const payerById = useMemo(() => new Map(payers.map((p) => [p.id, p])), [payers]);
   const assignByPayer = useMemo(
     () => assignmentsByPayerId((assignmentsQ.data as OrgPayerAssignment[] | undefined) ?? []),
     [assignmentsQ.data],
   );
+  // Item-7 adopted-payers filter: "In my network" = an ACTIVE subscription
+  // (org_payer_assignments), the same fact the Manage column renders — a
+  // client-side narrowing over the already-loaded caches, nothing stored.
+  const rows = useMemo(() => {
+    const filtered = filterDirectoryRows(payers, { query, state, kind });
+    if (network === "all") return filtered;
+    return filtered.filter((p) => isActiveAssignment(assignByPayer.get(p.id)));
+  }, [payers, query, state, kind, network, assignByPayer]);
   // An admin in an active org may mutate; everyone else browses read-only.
   const canManage = isAdmin && assignmentsQ.data !== undefined;
 
   const handleAdd = (payer: Payer) => {
     addMut.mutate(payer.id, {
-      onSuccess: () => toast.success(`${payer.name} added — configure credentialing scope next.`),
+      onSuccess: () =>
+        toast.success(`${payer.name} added to your network — configure credentialing scope next.`),
       onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't add the payer"),
     });
   };
@@ -301,6 +366,24 @@ export function PayerCatalogBrowser() {
             <SelectItem value="all">All kinds</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={network}
+          onValueChange={(v) => {
+            setNetwork(v as "all" | "mine");
+            // "In my network" means every adopted payer, so widen the kind
+            // filter to all — a non-commercial adopted payer would otherwise
+            // be hidden by the commercial default. Kind stays re-narrowable.
+            if (v === "mine") setKind("all");
+          }}
+        >
+          <SelectTrigger className="h-9 w-44" aria-label="Filter by network">
+            <SelectValue placeholder="Network" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All payers</SelectItem>
+            <SelectItem value="mine">In my network</SelectItem>
+          </SelectContent>
+        </Select>
         <span className="ml-auto text-[12px] text-muted-foreground">
           {isLoading ? "Loading…" : `${rows.length} payer${rows.length === 1 ? "" : "s"}`}
         </span>
@@ -315,14 +398,12 @@ export function PayerCatalogBrowser() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border bg-card">
-          <table className="w-full min-w-[960px] border-collapse text-left">
+          <table className="w-full min-w-[720px] border-collapse text-left">
             <thead>
               <tr className="border-b border-border text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2">Payer</th>
                 <th className="px-3 py-2">Kind</th>
                 <th className="px-3 py-2">States</th>
-                <th className="px-3 py-2">Catalog key</th>
-                <th className="px-3 py-2">Avg decision</th>
                 <th className="px-3 py-2">Manage</th>
               </tr>
             </thead>
@@ -330,7 +411,7 @@ export function PayerCatalogBrowser() {
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={4}
                     className="px-3 py-8 text-center text-[13px] text-muted-foreground"
                   >
                     Loading the catalog…
@@ -339,7 +420,7 @@ export function PayerCatalogBrowser() {
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={4}
                     className="px-3 py-8 text-center text-[13px] text-muted-foreground"
                   >
                     No payers match the current filters.

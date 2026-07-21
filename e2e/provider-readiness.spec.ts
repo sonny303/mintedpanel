@@ -1,6 +1,8 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E1.8 TE-12 — Scope Review readiness-matrix coverage over the mock harness:
+// E1.8 TE-12 readiness-matrix coverage — relocated 2026-07-21 with the
+// surface: the matrix lives on the PROVIDER RECORD's Readiness section now
+// (user handoff — Scope Review left the org wizard), same derived logic:
 //   TS-43 PSV flip drives readiness: an unverified NC license is a red item;
 //         recording the state-board PSV (an outside edit on the SOURCE data —
 //         readiness itself stores nothing) flips the check green on re-read.
@@ -325,24 +327,28 @@ test("TS-43: recording the license PSV flips the readiness check — nothing sto
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_OUTER_BANKS);
 
-  await page.goto("/onboarding/wizard");
-  const card = page.locator("#wizard-scope-review");
-  await expect(card).toContainText("In progress", { timeout: 30000 });
-  await expect(card).toContainText("0 of 1 ready");
+  await page.goto("/providers/pr-1");
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
+  const card = page.locator("#readiness");
+  await expect(card).toContainText("0 of 1 ready", { timeout: 30000 });
+  // Case-centric terminology: the generation entry is "Generate cases".
+  await expect(card.getByRole("link", { name: "Generate cases" })).toBeVisible();
 
   // Drill in: exactly one red item — the unverified license — with its
-  // fix-here link into the Providers section.
-  await card.locator("tr", { hasText: "Brooke Ostrander" }).first().click();
+  // fix-here anchor into the record's own Licenses section.
+  await card.locator("tr", { hasText: "Blue Cross" }).first().click();
   await expect(card).toContainText("1 gap");
   await expect(card).toContainText("NC license board-verified");
   await expect(card).toContainText("PSV: unverified");
-  await expect(card.getByRole("button", { name: "Fix in Providers" })).toBeVisible();
+  await expect(card.getByRole("link", { name: "Fix in Licenses" })).toBeVisible();
 
   // Outside edit on the SOURCE row (the E1.3 roster PSV recording); the
   // readiness matrix re-derives on re-read — no readiness table exists to
   // write to, and this harness records zero writes of any kind.
   license.verified_status = "verified";
   await page.reload();
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(card).toContainText("Ready", { timeout: 30000 });
   await expect(card).toContainText("1 of 1 ready");
   expect(writes).toHaveLength(0);
@@ -398,16 +404,18 @@ test("TS-44: group state gap + stale CAQH stay advisory — nothing blocked, no 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
 
-  await page.goto("/onboarding/wizard");
-  const card = page.locator("#wizard-scope-review");
+  await page.goto("/providers/pr-q");
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
+  const card = page.locator("#readiness");
   await expect(card).toContainText("2 gaps", { timeout: 30000 });
 
-  await card.locator("tr", { hasText: "Quinn James" }).first().click();
+  await card.locator("tr", { hasText: "Blue Cross" }).first().click();
   // Group checklist: the state-coverage gap, owned by the group, with its
-  // fix-here link into the Facilities section.
+  // fix-here anchor into the record's Groups & facilities section.
   await expect(card).toContainText("Group checklist");
   await expect(card).toContainText("No NC facility");
-  await expect(card.getByRole("button", { name: "Fix in Facilities" })).toBeVisible();
+  await expect(card.getByRole("link", { name: "Fix in Groups & facilities" })).toBeVisible();
   // Provider checklist: the stale CAQH red item CARRIES the attestation date.
   await expect(card).toContainText(`Attested ${stale}`);
 
@@ -420,7 +428,7 @@ test("TS-44: group state gap + stale CAQH stay advisory — nothing blocked, no 
   // The gap-type filter narrows to rows carrying that OPEN gap.
   await card.getByLabel("Filter by gap type").click();
   await page.getByRole("option", { name: "CAQH stale" }).click();
-  await expect(card).toContainText("Quinn James");
+  await expect(card).toContainText("Blue Cross");
   await card.getByLabel("Filter by gap type").click();
   await page.getByRole("option", { name: "License not verified" }).click();
   await expect(card).toContainText("No rows match the current filters.");

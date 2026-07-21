@@ -17,7 +17,6 @@ export const queryKeys = {
   payers: (orgId: string) => ["payers", orgId] as const,
   payer: (orgId: string, id: string) => ["payer", orgId, id] as const,
   orgPayerAssignments: (orgId: string) => ["org-payer-assignments", orgId] as const,
-  orgPayerSettings: (orgId: string) => ["org-payer-settings", orgId] as const,
   payerNetworkTargets: (orgId: string) => ["payer-network-targets", orgId] as const,
   // E6.2 — enrollment facts (F6.2.5). The denial-entries read deliberately
   // rides the "cases" prefix so every set_case_status invalidation re-derives

@@ -31,7 +31,14 @@ function taskStatusIcon(status: Task["status"], locked: boolean) {
   return <Circle className="w-4 h-4 text-muted-foreground" />;
 }
 
-export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
+export function CaseTasksPanel({
+  tasks,
+  tokenValues,
+}: {
+  tasks: Task[];
+  /** token -> value map for the drawer's pdf-step filler (built by the case page). */
+  tokenValues?: Record<string, string>;
+}) {
   const canEdit = useCanWrite();
   const updateStatusM = useUpdateTaskStatus();
   const [drawerTask, setDrawerTask] = useState<{ task: Task; locked: boolean } | null>(null);
@@ -214,6 +221,7 @@ export function CaseTasksPanel({ tasks }: { tasks: Task[] }) {
         locked={drawerTask?.locked ?? false}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        tokenValues={tokenValues}
       />
 
       <Dialog

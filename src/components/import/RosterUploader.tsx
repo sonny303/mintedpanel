@@ -14,7 +14,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ImportRunPanel } from "@/components/import/ImportRunPanel";
 import { RosterDropZone } from "@/components/import/RosterDropZone";
-import { useImportRuns, useStartRosterScan } from "@/hooks/useImportRuns";
+import { useResumableImportRun, useStartRosterScan } from "@/hooks/useImportRuns";
 import { parseCsv, type ParsedCsv } from "@/lib/csvImport";
 import { downloadCsvText } from "@/lib/csv";
 import {
@@ -61,22 +61,11 @@ export function RosterUploader({
   const descriptor = sectionDescriptor(entityKind);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const startScan = useStartRosterScan();
-  const runsQ = useImportRuns();
 
   // Resume affordance: a run started earlier from this SECTION surfaces on
-  // return — filtered by entity_kind (TE-4) so a section only resumes its own
-  // runs. Progress lives on the run row, not this component's state.
-  const resumeStates =
-    variant === "internal"
-      ? ["uploading", "scanning"]
-      : ["uploading", "scanning", "ready_for_review", "failed"];
-  const inFlight =
-    phase.kind === "idle"
-      ? (runsQ.data ?? []).find(
-          (r) =>
-            r.source === source && r.entityKind === entityKind && resumeStates.includes(r.state),
-        )
-      : undefined;
+  // return. Progress lives on the run row, not this component's state.
+  const resumableRun = useResumableImportRun(source, entityKind, variant);
+  const inFlight = phase.kind === "idle" ? resumableRun : undefined;
 
   const handleFile = async (file: File) => {
     const fileError = checkRosterFile(file.name, file.size);

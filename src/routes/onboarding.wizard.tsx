@@ -24,7 +24,6 @@ import {
   PayerNetworkSectionBody,
   ProviderGroupSectionBody,
   ProvidersSectionBody,
-  ScopeReviewSectionBody,
   type SectionBodyProps,
 } from "@/components/onboarding/sectionBodies";
 import { useOnboardingWizard } from "@/hooks/useOnboardingWizard";
@@ -59,7 +58,6 @@ const SECTION_BODIES: Record<ActiveSectionKey, ComponentType<SectionBodyProps>> 
   providers: ProvidersSectionBody,
   assignments: AssignmentsSectionBody,
   payer_network: PayerNetworkSectionBody,
-  scope_review: ScopeReviewSectionBody,
 };
 
 function OnboardingWizardPage() {

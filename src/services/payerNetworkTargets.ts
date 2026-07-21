@@ -56,6 +56,37 @@ export async function attachPayerTargets(payerId: string, plan: AttachmentSavePl
   }
 }
 
+/** Set/clear the payer-issued GROUP identifier (group PIN) on one target —
+ * the 2026-07-20 re-scope's group-level capture (a payer issues a group ID
+ * under the group's contract, per state where they differ). Audited; the RLS
+ * admin-write policy governs who may set it. */
+export async function setTargetIdentifier(
+  id: string,
+  payerIssuedId: string | null,
+): Promise<PayerNetworkTarget> {
+  const orgId = requireActiveOrg();
+  const value = payerIssuedId?.trim() ? payerIssuedId.trim() : null;
+  const { data, error } = await supabase
+    .from("payer_network_targets")
+    .update({ payer_issued_id: value } as never)
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<PayerNetworkTarget>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "payer_network_target",
+    entityId: after.id,
+    after,
+    description: value
+      ? `Set payer-issued group ID on network target (${after.state})`
+      : `Cleared payer-issued group ID on network target (${after.state})`,
+  });
+  return after;
+}
+
 /** Flip one target to archived. Never a DELETE (TE-5). */
 export async function archiveTarget(id: string): Promise<void> {
   await setTargetStatus(id, "archived");

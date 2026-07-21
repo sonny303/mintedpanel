@@ -447,6 +447,8 @@ test("TS-88: provider-grain upload requires the expiration for dated kinds, vers
   await expect(page.getByRole("heading", { name: /Brooke Ostrander/ })).toBeVisible({
     timeout: 30000,
   });
+  // 2026-07-21 tabbed record: documents live on the Documents tab.
+  await page.getByRole("tab", { name: "Documents" }).click();
   const panel = page.locator("section", { hasText: "Documents" }).last();
   await expect(panel).toContainText("No documents on file");
 
@@ -666,16 +668,20 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
   await expect(dataRows.nth(1)).toContainText("Brooke Ostrander");
   await expect(dataRows.nth(2)).toContainText("Outer Banks Rehab Group LLC");
 
-  // The group's readiness view carries the advisory warning: COI passes (21
-  // days out) WITH the amber note — never a gap, nothing disabled.
-  await page.goto("/onboarding/wizard");
-  const card = page.locator("#wizard-scope-review");
-  await expect(card).toContainText("Brooke Ostrander", { timeout: 30000 });
-  await card.locator("tr", { hasText: "Brooke Ostrander" }).first().click();
+  // The readiness view (the provider record's section since 2026-07-21)
+  // carries the advisory warning: COI passes (21 days out) WITH the amber
+  // note — never a gap, nothing disabled.
+  await page.goto(`/providers/${PROVIDER_ID}`);
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
+  const card = page.locator("#readiness");
+  await expect(card).toContainText("Ready", { timeout: 30000 });
+  await card.locator("tbody tr").first().click();
   await expect(card).toContainText("Group COI current");
   await expect(card).toContainText(`COI expires ${isoDaysFromNow(21)}`);
   // Advisory, not a gap: no fix-here affordance for the COI check.
   await expect(card.getByRole("button", { name: /Fix.*COI/ })).toHaveCount(0);
+  await expect(card.getByRole("link", { name: /Fix.*COI/ })).toHaveCount(0);
 });
 
 test("TS-90: case detail derives required-document status live and downloads the current version via a short-lived signed URL", async ({

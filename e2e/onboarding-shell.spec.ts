@@ -3,7 +3,7 @@ import { test, expect, type Route } from "@playwright/test";
 // E0.8 TE-9 — Onboarding-shell coverage over the mock harness (CLAUDE.md recipe):
 //   TS-17 standalone onboarding page: intake run lands in the wizard flow; the
 //         share popup targets exactly one typed-in recipient (no party dropdown)
-//   TS-18 People Enroll role rows on Account Detail
+//   TS-18 People-section role rows on Org Detail (renamed from People Enroll 2026-07-21)
 //   TS-19 Account Detail read-only summary of the org-intake outputs
 //   TS-20 branded shell (Minted Panel / Workspace / Org space) + branded
 //         outbound recipient form
@@ -124,10 +124,10 @@ const FIXTURES: Record<string, unknown[]> = {
   parties: [],
   party_role_assignments: ASSIGNMENTS,
   party_role_types: [
-    { role_key: "owner", label: "Owner", is_active: true },
+    { role_key: "owner", label: "Authorized contact", is_active: true },
     {
       role_key: "customer_escalation_contact",
-      label: "Customer Escalation Contact",
+      label: "Organization contact",
       is_active: true,
     },
     { role_key: "sales_rep", label: "Sales Rep", is_active: true },
@@ -300,13 +300,16 @@ test("TS-17: share popup requires one typed-in recipient — no party dropdown",
   );
 });
 
-test("TS-18: People Enroll lists the intake people with their roles", async ({ context, page }) => {
+test("TS-18: the People section lists the intake people with their roles", async ({
+  context,
+  page,
+}) => {
   await context.route(/\/(rest|auth)\/v1\//, makeHandler());
   await seedAuth(context);
 
   await page.goto("/org-detail");
 
-  await expect(page.getByRole("heading", { name: "People Enroll" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible({
     timeout: 30000,
   });
   // Authorized person + organization contact created during intake appear here

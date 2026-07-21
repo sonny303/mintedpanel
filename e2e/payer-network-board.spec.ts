@@ -542,9 +542,9 @@ test("TS-109/TS-113: facts flip rows Active with zero cases, the expired fact re
     page.getByText(/2 candidates awaiting generation — Cigna enrollment fact expired/),
   ).toBeVisible();
 
-  // E6.3 — Review & generate is LIVE: the banner enters the ONE shared grid
+  // E6.3 — Generate cases is LIVE: the banner enters the ONE shared grid
   // scoped to this group.
-  await expect(page.getByRole("link", { name: "Review & generate" }).first()).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Generate cases" }).first()).toHaveAttribute(
     "href",
     /\/generation\?group=g-ob/,
   );
@@ -679,4 +679,47 @@ test("TS-122: the same payer on two groups derives two honest boards — no org-
   await expect(rowG2.getByText("In Progress", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(rowG2.getByText("1 open case")).toBeVisible();
   await expect(rowG2.getByText("Active", { exact: true })).toHaveCount(0);
+});
+
+test("2026-07-20 re-scope: the payer-issued GROUP ID is captured on the payer entry per state — a PATCH on the target row, coexisting with provider-level IDs", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  // Two states so the dialog shows the per-state grain; one pre-set ID so the
+  // display chip and the edit prefill are both covered.
+  fixtures.payer_network_targets = [
+    target("p1"),
+    target("p1", { id: "t-p1-sc", state: "SC", payer_issued_id: "GRP-SC-777" }),
+  ];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/groups/g-ob/payer-network");
+  const aetna = page.locator("li", { hasText: "Aetna" }).first();
+  await expect(aetna).toBeVisible({ timeout: 30000 });
+
+  // The pre-set group ID renders on the payer entry.
+  await expect(aetna.getByText(/Group ID: SC GRP-SC-777/)).toBeVisible();
+
+  // Admin sets the NC group ID through the per-state dialog.
+  await aetna.getByRole("button", { name: "Edit group IDs" }).click();
+  const dialog = page.getByRole("dialog", { name: /Group identifiers — Aetna/ });
+  await expect(dialog.getByLabel("SC")).toHaveValue("GRP-SC-777");
+  await dialog.getByLabel("NC").fill("GRP-NC-123");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+
+  await expect(aetna.getByText(/Group ID: NC GRP-NC-123 · SC GRP-SC-777/)).toBeVisible({
+    timeout: 15000,
+  });
+
+  // Exactly one PATCH (the unchanged SC row is never rewritten), on the
+  // target row itself — the group grain, not any org-wide settings table.
+  const idPatches = writes.filter(
+    (w) => w.method === "PATCH" && w.path === "payer_network_targets",
+  );
+  expect(idPatches).toHaveLength(1);
+  expect(idPatches[0].body?.payer_issued_id).toBe("GRP-NC-123");
+  expect(writes.filter((w) => w.path === "org_payer_settings")).toHaveLength(0);
 });

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/CopyButton";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -44,7 +43,6 @@ import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel
 import { CaseRequiredDocuments } from "@/components/documents/CaseRequiredDocuments";
 import { ReapplyCaseAction } from "@/components/cases/ReapplyCaseAction";
 import { CaseTasksPanel } from "@/components/cases/CaseTasksPanel";
-import { CaseWizard } from "@/components/cases/CaseWizard";
 import { CaseTouchesPanel } from "@/components/cases/CaseTouchesPanel";
 import { CaseHistoryPanel } from "@/components/cases/CaseHistoryPanel";
 
@@ -104,9 +102,9 @@ function CaseDetailPage() {
     return found?.fullName ?? found?.email ?? "—";
   }, [c?.assignedTo, coordinatorsQ.data]);
 
-  // token -> value map for the Wizard's pdf-step form filler, from the data this
-  // page already holds (no extra fetch). PHI stays in the browser.
-  const wizardTokenValues = useMemo(
+  // token -> value map for the TaskDrawer's pdf-step form filler, from the
+  // data this page already holds (no extra fetch). PHI stays in the browser.
+  const stepTokenValues = useMemo(
     () => buildProviderTokenValues(c?.provider ?? null, c?.group ?? null, c?.facility ?? null),
     [c?.provider, c?.group, c?.facility],
   );
@@ -230,18 +228,11 @@ function CaseDetailPage() {
                 download for the manual portal attach (D3 interim path).
                 Hidden when the case's tasks require no documents. */}
             <CaseRequiredDocuments providerId={c.providerId} groupId={c.groupId} tasks={tasks} />
-            <Tabs defaultValue="list">
-              <TabsList className="mb-3">
-                <TabsTrigger value="list">List</TabsTrigger>
-                <TabsTrigger value="wizard">Wizard</TabsTrigger>
-              </TabsList>
-              <TabsContent value="list" className="mt-0">
-                <CaseTasksPanel tasks={tasks} />
-              </TabsContent>
-              <TabsContent value="wizard" className="mt-0">
-                <CaseWizard tasks={tasks} tokenValues={wizardTokenValues} />
-              </TabsContent>
-            </Tabs>
+            {/* 2026-07-20: the step-at-a-time Wizard tab is retired — the
+                List checklist is the ONE task view; full step bodies (Gmail
+                hand-off, pdf filler, resolved fields) render in the
+                TaskDrawer a row click opens. */}
+            <CaseTasksPanel tasks={tasks} tokenValues={stepTokenValues} />
             <CaseTouchesPanel
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}

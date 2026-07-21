@@ -1,9 +1,10 @@
-// E6.1 F6.1.4/F6.1.5 — the "Finish setup" banner on Org Detail: renders while
-// the one-time onboarding wizard is incomplete and never again after (status
-// is DERIVED live from the same section resolvers the wizard renders — the
-// E1.0 derived-progress rule, no stored flags). Composed from existing
-// primitives (card + button), superseding the E0.4 OnboardingBanner's
-// disabled CTA with the real wizard entry.
+// E6.1 F6.1.4 — the "Finish setup" banner on Org Detail: renders while the
+// onboarding wizard is incomplete (status is DERIVED live from the same
+// section resolvers the wizard renders — the E1.0 derived-progress rule, no
+// stored flags). Once every section is complete the big banner yields to a
+// compact persistent "Setup wizard" entry (PM decision 2026-07-21 — the
+// wizard must stay reachable from Org Detail; supersedes F6.1.5's
+// never-again rule). Composed from existing primitives (card + button).
 import { Link } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,9 +16,26 @@ export function FinishSetupBanner() {
   const active = useActiveMembership();
   const { nextSection } = useOnboardingWizard();
 
-  // undefined = reads still resolving (no flash); null = every section
-  // complete → the banner is gone for good (F6.1.5 AC).
-  if (!nextSection) return null;
+  // undefined = reads still resolving (no flash).
+  if (nextSection === undefined) return null;
+
+  // Every section complete: the loud banner yields to a quiet persistent
+  // entry so the wizard's review surfaces stay one click away.
+  if (nextSection === null) {
+    return (
+      <div className="flex items-center justify-between rounded-md border border-[#E8E5E0] px-4 py-2.5">
+        <p className="text-[12.5px] text-muted-foreground">
+          Setup is complete. You can revisit any setup section at any time.
+        </p>
+        <Link
+          to="/onboarding/wizard"
+          className={`${buttonVariants({ variant: "outline", size: "sm" })} shrink-0`}
+        >
+          Open setup wizard
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <Card className="border-[#E8E5E0]">

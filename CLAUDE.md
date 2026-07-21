@@ -1309,11 +1309,14 @@ AND archived = false` (live data verified duplicate-free first) + service-side
   `PayerCatalogChangesPanel` DELETED (+ its hooks/service fns/query key) —
   the directory renders no review queue. **Resolution-ID config moved to the
   org grain:** `orgPayerSettings.ts` service (audited upsert on the unique
-  key) → `useOrgPayerSettings.ts`; `PayerResolutionIdDialog` writes the org
-  setting (takes a `setting` prop), and `resolveIdentifierConfig(payer,
-orgSetting?)` is now the three-tier chain org setting → Minted global
-  fallback (payers columns) → generic — `PipelineDialogs.ProviderIdFields`
-  reads it via `useOrgPayerSetting`. **Legacy cutover: CLOSED as superseded
+  key) → `useOrgPayerSettings.ts`; `PayerResolutionIdDialog` wrote the org
+  setting, and `resolveIdentifierConfig` was the three-tier chain org setting
+  → Minted global fallback (payers columns) → generic. **SUPERSEDED by the
+  2026-07-20 resolution-ID re-scope:** the org tier is retired app-side
+  (`org_payer_settings` dormant, service/hooks/dialog/section deleted) — the
+  chain is now two-tier (Minted-curated payers columns → generic) and the
+  ISSUED values live on `enrollment_facts.payer_issued_id` /
+  `payer_network_targets.payer_issued_id` (see the post-E6 wave note). **Legacy cutover: CLOSED as superseded
   (2026-07-18).** The 18-row re-keying inventory in
   `docs/data-model/legacy-payer-cutover.md` never ran — the PM-approved
   pre-prod-cut data wipe (2026-07-17, AGENTS.md carve-out; pre-wipe data in
@@ -1858,14 +1861,161 @@ effective_date`) resolved to ids AT SCAN TIME via the E6.2
   FIXED shipped order — the `rankingConfig` input/validator were REMOVED
   from `buildNextBestActions` and BOTH config reads dropped (browser
   useNextBestActions + server nextBestAction.ts — no /api wire change);
-  `next_best_action_configs` is dormant (TD-44). Org Detail keeps
-  ResolutionIdSettingsSection only. e2e: touch-log.spec.ts REWRITTEN
+  `next_best_action_configs` is dormant (TD-44). Org Detail kept
+  ResolutionIdSettingsSection only — until the 2026-07-20 re-scope removed it
+  too (see the post-E6 wave note below). e2e: touch-log.spec.ts REWRITTEN
   (TS-115 multi-case + TS-137 suggestion rules, stateful RPC/touches
   write-through); reporting-center.spec.ts extended (four groups, badge,
   TS-135, TS-136 incl. CSV download, counts, audit relocation);
   legacy-routes rows moved (/admin/audit → REDIRECTING; launches/progress
   retargets); payer-admin-module TS-78/TS-91 flipped to negative pins;
   contact-inbound operator half → /reporting/leads.
+
+### Post-E6 user-feedback wave (2026-07-20, PRs #217/#218/#221/#223/#224)
+
+Live-usage handoffs recorded via the browser extension, shipped same-day:
+form/UX fixes (#217: Operating-states wheel-scroll fix via an owned
+non-passive listener, group-level malpractice moved onto the canonical
+`group_insurance_policies` table, provider-form address/malpractice removal,
+license-grid regrid; #218: capture-link card + invite UI removed from Org
+Detail — backend kept; role chips label from live `party_role_types`).
+**Catalog UX (#221 + the #223 follow-up):** "my network" verbs (Add to my
+network / In my network), list slimmed to browse columns, in-place states
+popover, "In my network" filter (auto-widens the kind filter), and the
+read-only **payer detail drill-in `/admin/payer-admin/catalog/$payerId`**
+(`PayerDetailContent` — identity incl. catalog key/avg decision/identifier
+label, full states, the payer's SOPs + portals, network actions). Root cause
+of the "Couldn't load payer readiness" 400 was HOSTED DRIFT — the operator
+migrations `20260719170000`/`20260719190000` had never been applied; both are
+now live and **hosted is fully in sync with the repo** (types.ts regen is
+safe again). **#224 (three handoffs):** (1) the resolution-identifier
+re-scope — migration `20260720230000` (repo + hosted) added
+`payer_issued_id` to `enrollment_facts` (provider PIN, captured/edited on the
+E6.4 EnrollmentsPanel with payer-labeled fields) and `payer_network_targets`
+(group PIN per state, edited from the board's Group-IDs dialog); Org Detail's
+Resolution identifiers table + the whole org_payer_settings app chain deleted
+(`resolveIdentifierConfig(payer)` is two-tier; the label shows as a payer
+fact on the catalog detail); (2) **`CsvImportPanel`**
+(`src/components/import/`) — every CSV entry point (wizard sections,
+/providers, group facilities, the board) renders the ONE collapsed-by-default
+disclosure; (3) the case-detail List/Wizard tabs retired — `CaseWizard.tsx`
+deleted, its step bodies extracted to `src/components/cases/StepDetails.tsx`
+(`StepBody`) and rendered in the **TaskDrawer** under unlocked steps (the
+F1.7b.5 Gmail hand-off + pdf filler live there now; the gmailCompose
+no-auto-send pin greps StepDetails; `caseWizard.ts` keeps the token-highlight
+helpers). e2e retargets ride each PR; sop-email-recipients' resolve test now
+runs through the drawer. **Unified provider enrollment view (2026-07-21, no
+migration):** the record's Enrollments panel now composes manual facts AND
+APPROVED cases through pure `src/lib/providerEnrollments.ts`
+(`buildProviderEnrollmentRows`, tested) — an approved case derives a
+read-only "From case" row carrying the case's own
+`confirmed_effective_date` and `payer_individual_provider_id` (payer-labeled
+chip, "Open case" link, no Expire), so resolving a case updates the
+enrollment picture by DERIVATION, never a dual write (facts stay
+migration-capture; a status correction away from Approved re-derives the row
+out; deliberately NO dedupe against a live fact on the same combo — its
+Expire must stay reachable). In-flight cases stay the Cases panel's job.
+`CASE_LIST_COLUMNS` gained `payer_individual_provider_id`; TS-113 extended
+with the derived-row slice. **Provider-record UX handoff (2026-07-21, same
+day, 7 issues):** (a) THE licenses save-failure root cause —
+`updateProviderWithLicenses` with the record dialog's EMPTY patch issued
+`.update({}).select().single()` on `providers`; real PostgREST matches ZERO
+rows on an empty PATCH so `.single()` 406s ("Could not save licenses." on
+every save; the e2e mock masked it by accepting empty PATCHes — the
+provider-roster harness now mirrors the zero-row behavior and TS-35 pins
+ZERO providers PATCHes during license saves). The service now SKIPS the
+providers write when the payload is empty (`after = before`). (b) Licenses
+UI rebuilt to the standard pattern: "+ Add license" + per-row Edit/Remove
+(single-license dialog + remove-confirm; every write composes the FULL list
+through the same audited sync; blank state-board URL accepted for
+unverified — required only for verify/fail; `LicenseListEditor` remains the
+wizard create-flow editor). (c) Identity is ONE master "Edit details" →
+whole-form edit → "Save changes" committing a DIFF-ONLY audited
+`updateProvider` patch (per-field `InlineField` pencils retired; component
+DELETED; DOB stays masked-at-rest/reveal-in-edit; TS-112 pins the
+one-changed-field patch). (d) Enrollments cleanup: live fact rows render
+the standard "Active" pill ("Live" was vocabulary drift), the row Expire
+button is REMOVED (service/hook `expireEnrollmentFact` kept, no UI caller),
+and both enrollment add buttons say "+ Add enrollment" (the "+ Add" design).
+**Org Detail consolidation (same day, Tasks A+B):** the Org Detail Profile
+card is GONE (whole setter chain deleted — `ProfilePanel`/`useUserProfile`/
+`userProfile` service; `{{user.name}}` still resolves from auth
+user_metadata, NO in-app setter remains); `AccountDetailSummary` is
+ORG-IDENTITY only (name + organization address — people are never restated
+there); `PartiesManager` is headed **"People"** (was "People Enroll") and is
+the ONE people surface: contacts with role chips — the governed labels now
+read "Authorized contact"/"Organization contact" (migration
+`20260721120000_party_role_label_terminology.sql`, repo + hosted;
+`PARTY_ROLE_LABELS` fallback mirrors) — PLUS the **"Access" subgroup**
+rendering `MembersPanel` INSIDE the section (member role dropdown/joined/
+remove capability and admin-only rules bit-identical; the standalone
+"Manage who has access" section + helper line are gone). **Scope Review
+relocation (same day):** the wizard section is GONE — the readiness matrix
+lives on the provider record as the **Readiness** section
+(`src/components/providers/ProviderReadinessSection.tsx`, provider-scoped:
+no Provider column, payer/state/gap filters, fix-here links anchor the
+record's own sections, group-doc gaps still link /groups; same
+`useEnrollmentReadiness` derivation, still advisory, nothing stored).
+`onboardingProgress` dropped `scope_review` (6 active sections;
+`resolveScopeReviewStatus` deleted; wizard completeness — and the
+Finish-setup banner — no longer depend on readiness; the wizard hook no
+longer composes `useEnrollmentReadiness`). **Terminology: the canonical
+noun is CASE** — every generation entry reads "Generate cases" (record
+header + Readiness CTA + board/facilities rows + /generation PageHeader +
+runs back-link; "Generate applications"/"Review & generate" are gone). The
+`/generation` URL itself deliberately stays (internal identifier; renaming
+is pure churn — revisit only if product insists). e2e:
+`scope-review.spec.ts` → **`provider-readiness.spec.ts`** (TS-43/44 on the
+record); onboarding-wizard TS-25/28, import-preview TS-63, and
+document-storage TS-89 retargeted.
+
+- **Provider-detail redesign (2026-07-21, design handoff — supersedes the
+  E6.4 single-scroll jump-nav).** `/providers/$id` is now **TABBED** (handoff
+  issue 8: one section at a time, so no sticky nav overlaps content). Seven
+  underline tabs on `@radix-ui/react-tabs` primitives (styled inline in
+  `providers.$id.index.tsx`, NOT the pill-style shared `ui/tabs`): Provider
+  Info · Groups & facilities · Licenses · Enrollments · Cases · Documents ·
+  Internal Notes (Internal Notes is now a tab, was a bottom panel).
+  `activeTab` is DERIVED from the URL hash via `HASH_TO_TAB`: the roster
+  gap-pill deep-links (`#identity`/`#groups-facilities`/`#licenses`, TanStack
+  `Link` hash) AND the Readiness fix-here `<a href="#x">` anchors (a native
+  `hashchange` listener — the router does not observe those) both activate
+  the right tab; `onTabChange` reflects the tab in the URL (`navigate` +
+  `replace`). **Readiness lives INSIDE the Cases tab** (user ask —
+  `#readiness` maps to `cases`): #229's `ProviderReadinessSection` is
+  rendered verbatim in the Cases `TabsContent` under its own
+  `RecordSectionCard id="readiness"`, so the specs that read `#readiness`
+  (`provider-readiness`, `document-storage` TS-89, `import-preview` TS-63)
+  now click the Cases tab first. **Header:** a **facility line** (Building2
+  icon + the primary facility's name + address) REPLACES the routine status
+  badge + the `providerCaseProgress` "x of y approved" meter (both removed as
+  noise per the handoff; the header no longer reads `useCases`); Terminated /
+  Pending verification / Reference edge pills are kept, NPI/CAQH/Taxonomy are
+  mono, and the #229 "Generate cases" + Terminate actions stay. **Provider
+  Info** is reorganized into three labeled sub-groups (Personal / Credentials
+  & identifiers / Education & employment) and **home address + malpractice
+  were removed from the edit form** (handoff decision, user-confirmed: home
+  address is set at creation via `ProviderFormSections`; malpractice is
+  managed at the group level via `InsurancePanel`/`group_insurance_policies`
+  — both columns are untouched in the DB and still feed autofill/readiness).
+  SSN (`SsnVaultField`) sits in the Personal group; the #228 ONE master
+  "Edit details" → whole-form → "Save changes" diff-only patch is unchanged
+  (now in the card header, pencil icon). **New shared primitives**
+  `src/components/providers/RecordSectionCard.tsx`: `RecordSectionCard`
+  ({id,title,action}, keeps `#{id}-heading` so deep-links still land) +
+  `AddButton` (the ONE "+ Add" affordance — primary forest green, leading
+  "+" glyph kept in the accessible name, whitespace-nowrap).
+  `IdentitySection` / `LicensesSection` / `CasesSection` /
+  `GroupsFacilitiesPanel` / `EnrollmentsPanel` each render their own
+  `RecordSectionCard` with the section add in the header (`+ Add
+group/facility/license/enrollment/touch` all via `AddButton`);
+  `DocumentsPanel` + `CaseNotesPanel` keep their own self-carding (shared
+  components, untouched). Add license stays a **Dialog** (the app has no
+  Sheet primitive; the handoff's slide-over is presentational and the e2e
+  pins `role=dialog "Add license"`). e2e: 7 provider-record specs gained
+  tab-activation clicks (providers-area also renames the Identity heading →
+  "Provider Info"); no migration, no new deps (`@radix-ui/react-tabs`
+  already present).
 
 ## What this is
 
@@ -2138,10 +2288,12 @@ built only when a real consumer pulls them. The current surface:
   keys (`selected_facility_id`, `needs_facility`) are the locked wire
   contract, like the touches body. The `{{user.*}}` token family (`user.name` from
   user_metadata full_name/name, `user.email` from the JWT claim — no schema
-  backing) is appended by the route via `src/server/userTokens.ts`; users set
-  their own full_name in Settings → Profile (`ProfilePanel` →
-  `src/services/userProfile.ts`, `supabase.auth.updateUser` — separate from
-  `profiles.full_name`, which the sidebar/store display reads);
+  backing) is appended by the route via `src/server/userTokens.ts`. NB there
+  is NO in-app setter for user_metadata full_name anymore — the Org Detail
+  Profile section and its whole chain (`ProfilePanel` →
+  `useUserProfile` → `src/services/userProfile.ts`) were removed by user
+  request 2026-07-21 (already-set names persist; `profiles.full_name`, which
+  the sidebar/store display reads, is separate and unaffected);
   empty-resolution notes surface in the envelope's `meta.notes`. **The most
   PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
   by design): `Cache-Control: no-store`, never log the body. Every successful
@@ -2672,7 +2824,7 @@ cross-system idiom (`portal_field_maps`, `fill_sessions`, the touches contract).
 - **Generated task views:** `src/components/portals/PortalStepLink.tsx` resolves a
   step's `portalKey` against `usePortals()` and shows portal name + "Open portal"
   (`formUrl`, `target=_blank`) + verification pill; unresolved key → neutral
-  "not set up in this org" note. Rendered in `TaskDrawer`, `CaseWizard`
+  "not set up in this org" note. Rendered in `TaskDrawer` (via StepDetails since 2026-07-20; CaseWizard before that)
   (`OnlineFormStep`), and `/tasks/$id`. The verification pill is the shared
   `src/components/portals/PortalVerificationPill.tsx` (`portalVerification()`
   helper) — Admin > Portals `StatusCell` now delegates to it (was duplicated).

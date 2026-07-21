@@ -17,7 +17,7 @@ function RunHistoryPage() {
         description="Every confirmed run with its immutable per-candidate disposition ledger."
         actions={
           <Button asChild variant="outline" size="sm" className="h-8">
-            <Link to="/generation">Back to Review &amp; generate</Link>
+            <Link to="/generation">Back to Generate cases</Link>
           </Button>
         }
       />

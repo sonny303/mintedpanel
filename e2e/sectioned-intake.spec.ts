@@ -375,9 +375,14 @@ test("TS-65: each wizard section shows manual + upload; templates match the form
   const providerCard = page.locator("#wizard-providers");
   await expect(groupCard).toBeVisible({ timeout: 30000 });
 
-  // Provider Group: manual + upload side by side.
+  // Each section: manual form beside the shared COLLAPSED import disclosure
+  // (2026-07-20) — the labeled trigger shows; template + drop zone on expand.
   await expect(groupCard.getByRole("button", { name: "Add another group" })).toBeVisible();
   await expect(groupCard.getByText("Bulk provider group import")).toBeVisible();
+  await expect(
+    groupCard.getByRole("button", { name: "Download Provider group template" }),
+  ).toHaveCount(0);
+  await groupCard.getByText("Bulk provider group import").click();
   await expect(
     groupCard.getByRole("button", { name: "Download Provider group template" }),
   ).toBeVisible();
@@ -386,6 +391,7 @@ test("TS-65: each wizard section shows manual + upload; templates match the form
   // Facilities: manual + upload.
   await expect(facilityCard.getByRole("button", { name: "Add facility" })).toBeVisible();
   await expect(facilityCard.getByText("Bulk facility import")).toBeVisible();
+  await facilityCard.getByText("Bulk facility import").click();
   await expect(
     facilityCard.getByRole("button", { name: "Download Facility template" }),
   ).toBeVisible();
@@ -394,6 +400,7 @@ test("TS-65: each wizard section shows manual + upload; templates match the form
   // Providers: manual + upload.
   await expect(providerCard.getByRole("button", { name: "Add provider" })).toBeVisible();
   await expect(providerCard.getByText("Bulk provider import")).toBeVisible();
+  await providerCard.getByText("Bulk provider import").click();
   await expect(
     providerCard.getByRole("button", { name: "Download Provider template" }),
   ).toBeVisible();
@@ -432,18 +439,20 @@ test("TS-66: facilities upload blocked without a group, proceeds + commits after
   const facilityCard = page.locator("#wizard-facilities");
   await expect(facilityCard).toBeVisible({ timeout: 30000 });
 
-  // Blocked without a group: a disabled drop zone with a pointer, never a file input.
+  // Blocked without a group: a disabled drop zone with a pointer, never a
+  // file input (behind the shared collapsed disclosure — expand first).
+  await facilityCard.getByText("Bulk facility import").click();
   await expect(facilityCard.getByText("Add a provider group first")).toBeVisible();
   await expect(
     facilityCard.getByRole("button", { name: "Download Facility template" }),
   ).toHaveCount(0);
 
-  // A group exists → the upload proceeds.
+  // A group exists → the upload proceeds (reload resets the disclosure).
   fixtures.provider_groups = [activeGroup()];
   await page.reload();
-  await expect(facilityCard.getByText("Add a provider group first")).toHaveCount(0, {
-    timeout: 15000,
-  });
+  await expect(facilityCard.getByText("Bulk facility import")).toBeVisible({ timeout: 15000 });
+  await facilityCard.getByText("Bulk facility import").click();
+  await expect(facilityCard.getByText("Add a provider group first")).toHaveCount(0);
   await expect(
     facilityCard.getByRole("button", { name: "Download Facility template" }),
   ).toBeVisible();
@@ -542,10 +551,14 @@ test("TS-67: combined template retired — rejected with guidance; three uploads
     timeout: 30000,
   });
 
-  // Three per-section uploads, no combined uploader anywhere.
+  // Three per-section uploads, no combined uploader anywhere (each behind
+  // the shared collapsed disclosure — expand to reach the controls).
   const groupCard = page.locator("#wizard-provider-group");
   const facilityCard = page.locator("#wizard-facilities");
   const providerCard = page.locator("#wizard-providers");
+  await groupCard.getByText("Bulk provider group import").click();
+  await facilityCard.getByText("Bulk facility import").click();
+  await providerCard.getByText("Bulk provider import").click();
   await expect(
     groupCard.getByRole("button", { name: "Download Provider group template" }),
   ).toBeVisible();

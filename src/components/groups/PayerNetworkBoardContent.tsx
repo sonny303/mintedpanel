@@ -11,26 +11,35 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ChevronDown, Plus, Upload } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
+import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { GroupAttachPayerDialog } from "@/components/groups/GroupAttachPayerDialog";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { usePayerNetworkBoard } from "@/hooks/usePayerNetworkBoard";
-import { usePayerNetworkTargets, useRemoveGroupPayer } from "@/hooks/usePayerNetworkTargets";
+import {
+  usePayerNetworkTargets,
+  useRemoveGroupPayer,
+  useSetTargetIdentifier,
+} from "@/hooks/usePayerNetworkTargets";
 import { useVoidCaseGenerationExclusion } from "@/hooks/useGenerationPreview";
+import { useResumableImportRun } from "@/hooks/useImportRuns";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { EXCLUSION_REASON_LABELS } from "@/lib/generationPreview";
@@ -39,7 +48,7 @@ import { useIsAdmin } from "@/lib/permissions";
 import type { SectionScanContext } from "@/lib/importSections";
 import type { PayerBoardRow } from "@/lib/payerNetworkBoard";
 import type { PayerFulfillment } from "@/lib/caseRollups";
-import type { ProviderGroup } from "@/types";
+import type { PayerNetworkTarget, ProviderGroup } from "@/types";
 
 const FULFILLMENT_PILL: Record<
   PayerFulfillment,
@@ -58,6 +67,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
   const groupsQ = useProviderGroups();
   const catalogQ = useGlobalPayers();
   const assignmentsQ = useProviderGroupAssignments();
+  const payerAttachRun = useResumableImportRun("internal", "payer_attach", "internal");
   const [attachOpen, setAttachOpen] = useState(false);
   const [removing, setRemoving] = useState<PayerBoardRow | null>(null);
 
@@ -131,7 +141,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       </div>
 
       {/* F6.2.3 — the candidates-awaiting-generation banner: count = the E6.3
-          candidate math, cause named; Review & generate opens the shared grid. */}
+          candidate math, cause named; Generate cases opens the shared grid. */}
       {candidates.length > 0 ? (
         <Card className="border-[#FDE68A] bg-[#FEF3C7]">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -151,7 +161,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
             {/* E6.3 — the one door: the grid opens scoped to this group. */}
             <Button asChild variant="outline" size="sm" className="h-8">
               <Link to="/generation" search={{ group: group.id }}>
-                Review &amp; generate
+                Generate cases
               </Link>
             </Button>
           </CardContent>
@@ -180,6 +190,9 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
               row={row}
               groupId={group.id}
               isAdmin={isAdmin}
+              targets={(targetsQ.data ?? []).filter(
+                (t) => t.groupId === group.id && t.payerId === row.payerId && t.status === "active",
+              )}
               onRemove={() => setRemoving(row)}
             />
           ))}
@@ -187,23 +200,16 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       )}
 
       {isAdmin ? (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground">
-            <Upload className="h-3.5 w-3.5" aria-hidden />
-            Attach payers from a CSV
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="mt-2 rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-4">
-              <RosterUploader
-                source="internal"
-                variant="internal"
-                entityKind="payer_attach"
-                scanContext={scanContext}
-              />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        // The pattern this panel standardized site-wide (2026-07-20) started
+        // here — now rendered through the ONE shared disclosure.
+        <CsvImportPanel label="Attach payers from a CSV" defaultOpen={payerAttachRun !== undefined}>
+          <RosterUploader
+            source="internal"
+            variant="internal"
+            entityKind="payer_attach"
+            scanContext={scanContext}
+          />
+        </CsvImportPanel>
       ) : null}
 
       {attachOpen ? (
@@ -225,15 +231,21 @@ function BoardRowCard({
   row,
   groupId,
   isAdmin,
+  targets,
   onRemove,
 }: {
   row: PayerBoardRow;
   groupId: string;
   isAdmin: boolean;
+  /** The group's ACTIVE targets for this payer — carriers of the payer-issued
+   * GROUP identifier (group PIN), one per state (2026-07-20 re-scope). */
+  targets: PayerNetworkTarget[];
   onRemove: () => void;
 }) {
   const pill = FULFILLMENT_PILL[row.fulfillment];
   const restoreMut = useVoidCaseGenerationExclusion();
+  const [editingGroupIds, setEditingGroupIds] = useState(false);
+  const setIds = targets.filter((t) => (t.payerIssuedId ?? "").trim());
 
   return (
     <li className="rounded-md border border-[#E8E5E0] bg-white">
@@ -265,6 +277,22 @@ function BoardRowCard({
             <span className="text-[12px] text-muted-foreground">
               {row.targetStates.join(" · ")}
             </span>
+            {/* 2026-07-20 re-scope: the payer-issued GROUP identifier lives on
+                the payer entry here — per state where payers differ. */}
+            {setIds.length > 0 ? (
+              <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
+                Group ID: {setIds.map((t) => `${t.state} ${t.payerIssuedId}`).join(" · ")}
+              </span>
+            ) : null}
+            {isAdmin && targets.length > 0 ? (
+              <button
+                type="button"
+                className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                onClick={() => setEditingGroupIds(true)}
+              >
+                {setIds.length > 0 ? "Edit group IDs" : "Add group ID"}
+              </button>
+            ) : null}
           </div>
           <div className="flex flex-none items-center gap-2">
             <Button asChild variant="outline" size="sm" className="h-8">
@@ -272,7 +300,7 @@ function BoardRowCard({
                 to="/generation"
                 search={{ group: groupId, payer: row.payerId, pivot: "payer" }}
               >
-                Review &amp; generate
+                Generate cases
               </Link>
             </Button>
             {isAdmin ? (
@@ -393,7 +421,91 @@ function BoardRowCard({
           </div>
         </CollapsibleContent>
       </Collapsible>
+
+      {editingGroupIds ? (
+        <GroupIdsDialog
+          payerName={row.payerName}
+          targets={targets}
+          onClose={() => setEditingGroupIds(false)}
+        />
+      ) : null}
     </li>
+  );
+}
+
+// 2026-07-20 re-scope — capture the payer-issued GROUP identifier on the
+// payer entry, per active target state (payers that issue one group PIN
+// across states just repeat it). Audited status-preserving UPDATEs; blank
+// clears. Admin-only, matching every other board write.
+function GroupIdsDialog({
+  payerName,
+  targets,
+  onClose,
+}: {
+  payerName: string;
+  targets: PayerNetworkTarget[];
+  onClose: () => void;
+}) {
+  const setIdMut = useSetTargetIdentifier();
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(targets.map((t) => [t.id, t.payerIssuedId ?? ""])),
+  );
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      for (const t of targets) {
+        const next = (drafts[t.id] ?? "").trim() || null;
+        const prev = (t.payerIssuedId ?? "").trim() || null;
+        if (next !== prev) {
+          await setIdMut.mutateAsync({ id: t.id, payerIssuedId: next });
+        }
+      }
+      toast.success("Group identifiers saved");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't save the group identifiers");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !saving && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Group identifiers — {payerName}</DialogTitle>
+          <DialogDescription>
+            The group enrollment ID this payer issued under the group&apos;s contract, per state.
+            Leave a state blank if none was issued (provider-level IDs live on each provider&apos;s
+            enrollment record — both can coexist).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {targets.map((t) => (
+            <div key={t.id} className="space-y-1.5">
+              <Label htmlFor={`group-id-${t.id}`}>{t.state}</Label>
+              <Input
+                id={`group-id-${t.id}`}
+                value={drafts[t.id] ?? ""}
+                onChange={(e) => setDrafts((d) => ({ ...d, [t.id]: e.target.value }))}
+                placeholder="As issued by the payer"
+                className="h-9"
+              />
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button className="bg-[#1B4D3E] hover:bg-[#163F33]" disabled={saving} onClick={save}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

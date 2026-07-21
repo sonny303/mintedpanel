@@ -9,19 +9,16 @@
 // to the Reporting Center's Intake report (E6.6 F6.6.1), and the reason-code
 // + queue-ranking editors are GONE — both vocabularies ship as fixed defaults
 // (E6.6 F6.6.6; documented in src/services/cases.ts `listDenialReasonCodes`
-// and src/lib/nextBestActions.ts). The user's own profile section (display
-// name → the {{user.name}} preparer token) rides along from the retired
-// Settings page — it has no other home until a dedicated user-scoped surface
-// exists (flagged in the E6.1 PR).
+// and src/lib/nextBestActions.ts). The user Profile section (display name →
+// the {{user.name}} preparer token) was REMOVED 2026-07-21 by user request —
+// the whole setter chain (ProfilePanel/useUserProfile/userProfile service)
+// is deleted with it; {{user.name}} still resolves from auth user_metadata
+// (src/server/userTokens.ts), already-set names persist unchanged.
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Separator } from "@/components/ui/separator";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { FinishSetupBanner } from "@/components/org/FinishSetupBanner";
 import { PartiesManager } from "@/components/org/PartiesManager";
-import { MembersPanel } from "@/components/settings/MembersPanel";
-import { ProfilePanel } from "@/components/settings/ProfilePanel";
-import { ResolutionIdSettingsSection } from "@/components/settings/ResolutionIdSettingsSection";
 
 export const Route = createFileRoute("/org-detail")({
   component: OrgDetailPage,
@@ -33,35 +30,21 @@ function OrgDetailPage() {
       <PageHeader title="Org Detail" />
       {/* F6.1.5: shown until the one-time wizard completes, then never again. */}
       <FinishSetupBanner />
-      {/* Read-only summary of org intake outputs (org, authorized contact,
-          organization contact, address). */}
+      {/* Read-only ORG-IDENTITY summary (name + organization address). Since
+          the 2026-07-21 consolidation it does NOT restate people — the People
+          section below is the one place contacts appear. */}
       <AccountDetailSummary />
-      {/* E0.3: the org's people and their roles — People Enroll. */}
+      {/* The unified People section: contacts with role chips (Authorized /
+          Organization contact designations ARE roles, governed labels) PLUS
+          the Access subgroup — member role management relocated INSIDE it
+          (Task B; the standalone members section is gone, capability and
+          admin-only permission rules unchanged). */}
       <PartiesManager />
-      {/* F6.1.4: member management (invite, role change) relocated from the
-          retired Settings page. */}
-      <MembersPanel />
-      {/* E6.5/E6.6: of the payer-relevant org settings that moved here from
-          the Payer Setup module, only resolution identifiers remain — the
-          denial word-list and queue ranking are fixed defaults with no
-          editors anywhere (F6.6.6). */}
-      <Separator />
-      <section aria-labelledby="resolution-ids-heading" className="space-y-3">
-        <div>
-          <h2 id="resolution-ids-heading" className="text-[15px] font-semibold">
-            Resolution identifiers
-          </h2>
-          <p className="text-[12.5px] text-muted-foreground">
-            What each payer calls its payer-issued enrollment ID at approval. Configured per
-            organization; unconfigured payers fall back to the Minted default, then the generic
-            “Payer-issued ID”.
-          </p>
-        </div>
-        <ResolutionIdSettingsSection />
-      </section>
-      <Separator />
-      {/* User-scoped: your display name ({{user.name}} on payer forms). */}
-      <ProfilePanel />
+      {/* 2026-07-20 re-scope: the Resolution identifiers table is GONE from
+          Org Detail — a payer-issued enrollment ID is not an org-wide value.
+          The issued VALUE is captured where it is issued (the provider's
+          enrollment fact; the group's Payer Network entry) and the per-payer
+          LABEL is a Minted-curated payer fact shown in Payer Setup. */}
     </div>
   );
 }

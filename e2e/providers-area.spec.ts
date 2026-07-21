@@ -3,8 +3,9 @@
 //           in-place Add facility (the assignment-wipe defect regression pin:
 //           an inline edit writes ONLY its field — no assignment writes);
 //           the cases panel with preserved denial history.
-//   TS-113  Enrollment-fact capture on the record + Expire re-opens the
-//           candidate (fact flip at the wire; never a case write).
+//   TS-113  Enrollment-fact capture on the record + APPROVED cases derive
+//           read-only rows (2026-07-21: standard "Active" pill, no Expire
+//           affordance; never a case write from facts).
 //   TS-129  Gap pill deep-links the focused record section; a zero-facility
 //           provider is flagged (not generatable) until assigned.
 //   TS-130  PHI sweep: the roster's list read carries no DOB/SSN/home-address
@@ -442,14 +443,19 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
     page.getByRole("row", { name: /Ostrander/ }).getByText(/Missing|No facility/),
   ).toHaveCount(0);
 
-  // Open Brooke's record; inline-edit the phone — the ONLY write is a
-  // single-field providers PATCH (the assignment-wipe regression pin).
+  // Open Brooke's record; master-edit the identity form changing ONLY the
+  // phone — the write is one DIFF-ONLY providers PATCH carrying exactly the
+  // changed field (the assignment-wipe regression pin, 2026-07-21 rework:
+  // one Edit details → whole form editable → one Save changes).
   await page.getByRole("link", { name: /Ostrander, Brooke/ }).click();
-  await expect(page.getByRole("heading", { name: "Identity" })).toBeVisible({ timeout: 30000 });
+  // 2026-07-21 tabbed record: Provider Info is the default tab.
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
   const writesBefore = requests.filter((r) => r.method !== "GET" && r.method !== "HEAD").length;
-  await page.getByRole("button", { name: "Edit Phone" }).click();
-  await page.getByLabel("Phone value").fill("252-555-0199");
-  await page.getByRole("button", { name: "Save Phone" }).click();
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await page.getByLabel("Phone", { exact: true }).fill("252-555-0199");
+  await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("252-555-0199")).toBeVisible({ timeout: 15000 });
   const writesAfter = requests.filter((r) => r.method !== "GET" && r.method !== "HEAD");
   const newWrites = writesAfter.slice(writesBefore);
@@ -462,11 +468,12 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
       (w) => w.path === "provider_facility_assignments" || w.path === "provider_group_assignments",
     ),
   ).toHaveLength(0);
-  // The single-field patch touched nothing else on the provider.
+  // The diff-only patch carried nothing but the changed field.
   const patchKeys = Object.keys(providerPatches[0].body as Record<string, unknown>);
   expect(patchKeys).toEqual(["phone"]);
 
-  // + Add facility in place: pick the second clinic with a start date.
+  // + Add facility in place (on the Groups & facilities tab).
+  await page.getByRole("tab", { name: "Groups & facilities" }).click();
   await page.getByRole("button", { name: "+ Add facility" }).click();
   const dialog = page.getByRole("dialog", { name: "Add facility" });
   await dialog.getByLabel("Facility to add").click();
@@ -485,26 +492,94 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
 
   // Cases panel: the reapplied case shows its CURRENT status with the prior
   // denial preserved beneath (reason + date from the unified history).
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(page.getByRole("heading", { name: "Cases", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Aetna — NC/ })).toBeVisible();
   await expect(page.getByText(/Previously denied — Panel closed, Jul 5, 2026/)).toBeVisible();
 });
 
-test("TS-113: enrollment-fact capture on the record; Expire flips the fact at the wire — zero case writes anywhere", async ({
+test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-only rows beside facts; standard Active pill, no Expire — zero case writes anywhere", async ({
   context,
   page,
 }) => {
   const fixtures = baseFixtures();
+  // 2026-07-21 unified-enrollment fixtures: an APPROVED case derives an
+  // enrollment row (case's own effective date + payer-issued ID, payer-labeled
+  // via the curated resolution_id_label); the in_progress Aetna case (c-1)
+  // must NOT derive one — in-flight casework belongs to the Cases panel.
+  fixtures.payers.push({
+    id: "p2",
+    org_id: null,
+    name: "United Healthcare",
+    payer_kind: "commercial",
+    states: ["NC"],
+    aliases: [],
+    status: "active",
+    payer_slug: "united-healthcare",
+    avg_decision_days: null,
+    resolution_id_label: "Provider ID",
+    resolution_id_expected: true,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.org_payer_assignments.push({
+    id: "a-p2",
+    org_id: ORG_ID,
+    payer_id: "p2",
+    starter: false,
+    status: "active",
+    archived_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.credential_cases.push({
+    id: "c-appr",
+    org_id: ORG_ID,
+    provider_id: "pr-brooke",
+    payer_id: "p2",
+    state: "NC",
+    group_id: "g-ob",
+    facility_id: null,
+    mso_id: null,
+    credentialing_status_id: null,
+    case_status: "approved",
+    submitted_date: "2026-06-01",
+    approved_date: "2026-06-15",
+    payer_reference_id: null,
+    payer_pipeline_state: "approved",
+    confirmed_effective_date: "2026-06-15",
+    payer_individual_provider_id: "UHC-778899",
+    generation_run_id: null,
+    created_at: "2026-05-20T00:00:00Z",
+    updated_at: "2026-06-15T00:00:00Z",
+  });
   const { handler, requests } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
   await page.goto("/providers/pr-brooke");
+  // 2026-07-21 tabbed record: enrollments live on the Enrollments tab.
+  await page.getByRole("tab", { name: "Enrollments" }).click();
   await expect(page.getByRole("heading", { name: "Enrollments" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText(/Prior-employer status does NOT belong here/)).toBeVisible();
 
-  // Record a fact under the group's contract.
-  await page.getByRole("button", { name: "Add enrollment" }).click();
+  // The approved case ALREADY renders as an enrollment row — Active pill,
+  // "From case" chip, the case's own effective date and payer-labeled ID,
+  // an Open case link, and NO Expire control (the case is the record).
+  const caseRow = page.locator("#enrollments li").filter({ hasText: "United Healthcare" });
+  await expect(caseRow).toBeVisible({ timeout: 15000 });
+  await expect(caseRow.getByText("Active", { exact: true })).toBeVisible();
+  await expect(caseRow.getByText("From case")).toBeVisible();
+  await expect(caseRow.getByText("since Jun 15, 2026")).toBeVisible();
+  await expect(caseRow.getByText("Provider ID: UHC-778899")).toBeVisible();
+  await expect(caseRow.getByRole("link", { name: "Open case" })).toHaveAttribute(
+    "href",
+    "/cases/c-appr",
+  );
+  await expect(caseRow.getByRole("button", { name: "Expire" })).toHaveCount(0);
+  // The in_progress case derives NOTHING here — exactly one "From case" row.
+  await expect(page.getByText("From case")).toHaveCount(1);
+
+  // Record a fact under the group's contract ("+ Add" pattern, issue 7).
+  await page.getByRole("button", { name: "+ Add enrollment" }).click();
   const dialog = page.getByRole("dialog", { name: "Record an enrollment fact" });
   await dialog.getByLabel("Enrollment group").click();
   await page.getByRole("option", { name: "Outer Banks Rehab Group LLC" }).click();
@@ -512,9 +587,17 @@ test("TS-113: enrollment-fact capture on the record; Expire flips the fact at th
   await page.getByRole("option", { name: "Aetna" }).click();
   await dialog.getByLabel("State", { exact: true }).click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
+  // 2026-07-20 re-scope: the payer-issued ID (PIN) is captured WITH the
+  // enrollment it belongs to — optional, payer-labeled field.
+  await dialog.getByLabel(/Payer-issued ID \(optional\)/).fill("PIN-12345");
   await dialog.getByRole("button", { name: "Record fact" }).click();
 
-  await expect(page.getByText("Live", { exact: true })).toBeVisible({ timeout: 15000 });
+  // 2026-07-21 status cleanup: a live fact reads "Active" — the SAME standard
+  // pill as the case-derived row ("Live" was a vocabulary drift), and rows
+  // carry NO Expire affordance anywhere in the section.
+  const factRow = page.locator("#enrollments li").filter({ hasText: "Aetna" });
+  await expect(factRow.getByText("Active", { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#enrollments").getByRole("button", { name: /Expire/ })).toHaveCount(0);
   const factPost = requests.find((r) => r.method === "POST" && r.path === "enrollment_facts");
   expect(factPost).toBeTruthy();
   const factBody = (Array.isArray(factPost!.body) ? factPost!.body[0] : factPost!.body) as Record<
@@ -524,17 +607,14 @@ test("TS-113: enrollment-fact capture on the record; Expire flips the fact at th
   expect(factBody.provider_id).toBe("pr-brooke");
   expect(factBody.payer_id).toBe("p1");
   expect(factBody.source).toBe("migration");
+  expect(factBody.payer_issued_id).toBe("PIN-12345");
 
-  // Expire: a status FLIP (PATCH sets expired_at), never a delete.
-  await page.getByRole("button", { name: "Expire", exact: true }).click();
-  await page.getByRole("button", { name: "Expire enrollment" }).click();
-  await expect(page.getByText(/Expired/)).toBeVisible({ timeout: 15000 });
-  const factPatch = requests.find((r) => r.method === "PATCH" && r.path === "enrollment_facts");
-  expect(factPatch).toBeTruthy();
-  expect((factPatch!.body as Record<string, unknown>).expired_at).toBeTruthy();
+  // The PIN renders on the fact row with its payer-labeled chip.
+  await expect(page.getByText("Payer-issued ID: PIN-12345")).toBeVisible({ timeout: 15000 });
+
+  // Facts are never deleted from here, and NEVER create cases: no fact
+  // DELETE, no case insert, no case RPC anywhere.
   expect(requests.filter((r) => r.method === "DELETE")).toHaveLength(0);
-
-  // Facts NEVER create cases: no case insert and no case RPC anywhere.
   expect(
     requests.filter(
       (r) =>
@@ -594,13 +674,15 @@ test("TS-130: PHI sweep — the roster list read selects no DOB/SSN/home-address
     expect(sel).not.toContain("home_zip");
   }
 
-  // The record masks: DOB hidden at rest (reveal only on edit); SSN last-4.
+  // The record masks: DOB hidden at rest (reveal only in edit mode); SSN last-4.
   await page.goto("/providers/pr-brooke");
-  await expect(page.getByRole("heading", { name: "Identity" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Provider Info" })).toBeVisible({
+    timeout: 30000,
+  });
   await expect(page.getByText("••••••••")).toBeVisible();
   await expect(page.getByText("1990-01-01")).toHaveCount(0);
   await expect(page.getByText("***--1234")).toBeVisible();
-  // Reveal-on-edit: opening the DOB editor exposes the date input with value.
-  await page.getByRole("button", { name: "Edit Date of birth" }).click();
-  await expect(page.getByLabel("Date of birth value")).toHaveValue("1990-01-01");
+  // Reveal-on-edit: the master edit mode exposes the DOB date input w/ value.
+  await page.getByRole("button", { name: "Edit details" }).click();
+  await expect(page.getByLabel("Date of birth", { exact: true })).toHaveValue("1990-01-01");
 });

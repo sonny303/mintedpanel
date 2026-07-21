@@ -356,20 +356,23 @@ test("TS-107: Org Detail carries only the container content, members render with
   await page.goto("/org-detail");
   await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  // The container content (F6.1.4): summary + contacts, People Enroll, and
-  // the relocated member management. The capture-link re-issue card was
-  // removed from MVP by user request (2026-07-19) — /onboarding's share
-  // journey is the remaining operator surface.
+  // The container content (F6.1.4, consolidated 2026-07-21): an ORG-IDENTITY
+  // summary (people are NOT restated there) + the unified People section
+  // carrying contacts AND the Access subgroup. The capture-link re-issue card
+  // was removed from MVP by user request (2026-07-19).
   await expect(page.getByRole("heading", { name: "Organization summary" })).toBeVisible();
-  await expect(page.getByText("Coach Eric Taylor").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "People Enroll" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+  // The contact person renders ONCE — in the People list, not the summary.
+  await expect(page.getByText("Coach Eric Taylor")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Data capture link" })).toHaveCount(0);
 
-  // Invite capability removed from MVP (user request 2026-07-19, UI only —
-  // the backend invite model stays): no button, no dialog, and the Pending
-  // invites table is hidden when no legacy rows exist. The members table
-  // itself still renders (read + role management).
-  await expect(page.getByText("Manage who has access to this organization.")).toBeVisible();
+  // Task B: member access management lives INSIDE the People section as the
+  // Access subgroup — the standalone "Manage who has access" section is gone
+  // while the capability (role dropdown, joined date) renders unchanged.
+  // Invite capability stays removed (2026-07-19): no button, no dialog, and
+  // the Pending invites table is hidden when no legacy rows exist.
+  await expect(page.getByText("Manage who has access to this organization.")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Sowmya Seed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Invite member" })).toHaveCount(0);
   await expect(page.getByText("Pending invites")).toHaveCount(0);
@@ -377,6 +380,13 @@ test("TS-107: Org Detail carries only the container content, members render with
   // The Organization-data freight is gone (it lives on the Groups shell).
   await expect(page.getByRole("heading", { name: "Provider groups" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Provider roster" })).toHaveCount(0);
+
+  // 2026-07-20 re-scope: the Resolution identifiers table is GONE from Org
+  // Detail — a payer-issued enrollment ID is not an org-wide value. The
+  // issued VALUE is captured on the provider's enrollment fact / the group's
+  // Payer Network entry; the LABEL is a Minted-curated payer fact.
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Configure ID" })).toHaveCount(0);
 
   // The Finish-setup banner: shown while the wizard is incomplete, entering
   // the wizard flow (F6.1.5 re-entry).
@@ -399,8 +409,10 @@ test("TS-107: the banner never renders once every wizard section is complete; th
   await page.goto("/org-detail");
   await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Organization summary" })).toBeVisible();
-  // Every section resolves complete → the banner is gone for good.
+  // Every section resolves complete → the loud banner is gone, replaced by
+  // the compact persistent wizard entry (PM decision 2026-07-21).
   await expect(page.getByText(/Finish setting up/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open setup wizard" })).toBeVisible();
 
   // The organization data lives under Groups (E6.2): a single-group org
   // auto-lands on its group hub with the facts card + the two area doors.

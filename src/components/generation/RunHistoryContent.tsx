@@ -56,7 +56,7 @@ export function RunHistoryContent() {
           or excluded, and why.
         </p>
         <Button asChild size="sm" className="mt-3 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
-          <Link to="/generation">Generate applications</Link>
+          <Link to="/generation">Generate cases</Link>
         </Button>
       </div>
     );

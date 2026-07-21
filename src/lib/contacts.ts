@@ -32,9 +32,12 @@ export const DEFAULT_SALES_REP: ContactInput = {
 
 // Display labels for the governed role list (mirrors party_role_types.label).
 // E0.3's role picker reads the live reference table; this covers E0.2 display.
+// Static fallback labels — the LIVE governed list (party_role_types.label) is
+// consulted first wherever chips render; this map mirrors it (migration
+// 20260721120000 aligned owner/customer with the E0.8 terminology).
 export const PARTY_ROLE_LABELS: Record<PartyRoleKey, string> = {
-  owner: "Owner",
-  customer_escalation_contact: "Customer Escalation Contact",
+  owner: "Authorized contact",
+  customer_escalation_contact: "Organization contact",
   sales_rep: "Sales Rep",
   billing_contact: "Billing Contact",
   contracting_signer: "Contracting Signer",

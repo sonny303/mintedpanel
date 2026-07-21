@@ -28,6 +28,9 @@ export interface EnrollmentFactInput {
   payerId: string;
   state: string;
   effectiveDate?: string | null;
+  /** Payer-issued enrollment identifier (PIN) — optional; captured with the
+   * fact because the ID is issued to THIS enrollment (2026-07-20 re-scope). */
+  payerIssuedId?: string | null;
 }
 
 export async function createEnrollmentFact(input: EnrollmentFactInput): Promise<EnrollmentFact> {
@@ -41,6 +44,7 @@ export async function createEnrollmentFact(input: EnrollmentFactInput): Promise<
       payer_id: input.payerId,
       state: normalizeStateCode(input.state),
       effective_date: input.effectiveDate ?? null,
+      payer_issued_id: input.payerIssuedId?.trim() ? input.payerIssuedId.trim() : null,
       source: "migration",
     } as never)
     .select("*")
@@ -55,6 +59,37 @@ export async function createEnrollmentFact(input: EnrollmentFactInput): Promise<
     description: `Recorded enrollment fact (${created.state})`,
   });
   return created;
+}
+
+/** Set/clear the payer-issued identifier on an existing fact (audited). The
+ * PIN is a factual detail of the enrollment — editable after capture (an
+ * approval letter often arrives later than the fact), on expired rows too
+ * (history stays correctable). */
+export async function setEnrollmentFactIdentifier(
+  id: string,
+  payerIssuedId: string | null,
+): Promise<EnrollmentFact> {
+  const orgId = requireActiveOrg();
+  const value = payerIssuedId?.trim() ? payerIssuedId.trim() : null;
+  const { data, error } = await supabase
+    .from("enrollment_facts")
+    .update({ payer_issued_id: value } as never)
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<EnrollmentFact>(data);
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "enrollment_fact",
+    entityId: after.id,
+    after,
+    description: value
+      ? `Set payer-issued ID on enrollment fact (${after.state})`
+      : `Cleared payer-issued ID on enrollment fact (${after.state})`,
+  });
+  return after;
 }
 
 /** The expiry flip — never a delete. Re-opens the combination as a generation

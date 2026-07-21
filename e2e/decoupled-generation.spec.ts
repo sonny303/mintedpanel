@@ -519,7 +519,7 @@ test("TS-111: four buckets sum across both pivots; skip-for-now is free, Exclude
   await seedAuth(context);
 
   await page.goto("/generation?group=g-ob");
-  await expect(page.getByRole("heading", { name: "Review & generate" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Generate cases" })).toBeVisible({
     timeout: 30000,
   });
 
@@ -655,7 +655,7 @@ test("TS-125: a payer-scoped entry over a 4-provider roster groups all candidate
 
   // The board's payer-row link shape: group + payer scope, payer pivot.
   await page.goto("/generation?group=g-sh&payer=p1");
-  await expect(page.getByRole("heading", { name: "Review & generate" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Generate cases" })).toBeVisible({
     timeout: 30000,
   });
 
@@ -745,12 +745,14 @@ test("TS-127: a provider-record entry scopes the grid to that provider's slice; 
 
   // The provider record carries the scoped entry link (F6.3.1's record slice).
   await page.goto("/providers/pr-2");
-  const entry = page.getByRole("link", { name: /Review & generate/ });
+  // The record carries the entry twice (header CTA + Readiness section CTA),
+  // both scoped to the provider — assert the first.
+  const entry = page.getByRole("link", { name: /Generate cases/ }).first();
   await expect(entry).toBeVisible({ timeout: 30000 });
   await expect(entry).toHaveAttribute("href", /\/generation\?provider=pr-2/);
 
   await entry.click();
-  await expect(page.getByRole("heading", { name: "Review & generate" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Generate cases" })).toBeVisible({
     timeout: 30000,
   });
 

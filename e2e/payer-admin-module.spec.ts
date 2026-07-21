@@ -7,10 +7,10 @@ import { test, expect, type Route } from "@playwright/test";
 // interim posture); the two shareable segments with keyboard-operable tab
 // links (TE-20c successor); the Ready-for-business funnel head; the E6.6
 // fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code or
-// queue-ranking editors render anywhere — TS-115); and the F4.2.1
-// resolution-identifier dialog, which survives on /org-detail and still
-// writes org_payer_settings (the org × payer grain), never the
-// Minted-managed payers row.
+// queue-ranking editors render anywhere — TS-115); and the 2026-07-20
+// re-scope NEGATIVE pin (supersedes F4.2.1): Org Detail carries no per-org
+// resolution-identifier config — the label is a Minted-curated payer fact
+// and issued IDs live on enrollment facts / payer network targets.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -260,46 +260,28 @@ test("TS-91/TS-115 — fixed defaults (E6.6 F6.6.6): no queue-ranking editor ren
   await expect(page.getByRole("button", { name: "Save ranking" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reset to default" })).toHaveCount(0);
 
-  // The surviving payer-relevant org setting (resolution identifiers) stays.
-  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toBeVisible();
+  // 2026-07-20 re-scope: the Resolution identifiers table is gone too — Org
+  // Detail carries NO payer-settings editors at all now (the identifier label
+  // is a Minted-curated payer fact; issued IDs live on enrollments).
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toHaveCount(0);
 });
 
-test("F4.2.1 governance — Configure ID writes org_payer_settings, never the payers row", async ({
+test("2026-07-20 re-scope — Org Detail carries NO per-org identifier config; nothing writes org_payer_settings or payers", async ({
   page,
 }) => {
   currentRole = "admin";
-  // The resolution-identifier config is payer-relevant ORG config → it moved
-  // to Org Detail with the E6.5 consolidation (same e4-2c dialog).
+  // Supersedes the F4.2.1 Configure-ID flow: a payer-issued enrollment ID is
+  // not an org-wide value. The LABEL is a Minted-curated payer-definition
+  // fact (shown in Payer Setup); the issued VALUE is captured on the
+  // provider's enrollment fact or the group's Payer Network entry. Org
+  // Detail keeps no identifier table and no Configure-ID affordance, and the
+  // dormant org_payer_settings grain is never written.
   await page.goto("/org-detail");
+  await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  const row = page.locator("tr", { hasText: "Aetna (CVS Health)" });
-  await expect(row).toBeVisible({ timeout: 30000 });
-  await expect(row.getByText("Generic fallback")).toBeVisible();
-  await row.getByRole("button", { name: "Configure ID" }).click();
+  await expect(page.getByRole("heading", { name: "Resolution identifiers" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Configure ID" })).toHaveCount(0);
 
-  await expect(page.getByRole("heading", { name: /Resolution identifier/ })).toBeVisible();
-  await page.getByLabel("Identifier label").fill("Provider PIN");
-  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Resolution identifier saved for this organization.")).toBeVisible({
-    timeout: 15000,
-  });
-
-  // The write landed on the org × payer settings grain, upserted on its
-  // (org_id, payer_id) unique key, org-stamped from the active org…
-  const settingWrites = writes.filter((w) => w.table === "org_payer_settings");
-  expect(settingWrites).toHaveLength(1);
-  expect(settingWrites[0].method).toBe("POST");
-  expect(settingWrites[0].url).toContain("on_conflict=org_id%2Cpayer_id");
-  const body = JSON.parse(settingWrites[0].body) as Record<string, unknown>;
-  expect(body).toMatchObject({
-    org_id: ORG_ID,
-    payer_id: PAYER_ID,
-    resolution_id_label: "Provider PIN",
-    resolution_id_expected: true,
-  });
-
-  // …and the Minted-managed payers row was never touched.
+  expect(writes.filter((w) => w.table === "org_payer_settings")).toEqual([]);
   expect(writes.filter((w) => w.table === "payers")).toEqual([]);
-  // The setting change is audited.
-  expect(writes.some((w) => w.table === "audit_log")).toBe(true);
 });
