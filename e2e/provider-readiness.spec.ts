@@ -328,6 +328,8 @@ test("TS-43: recording the license PSV flips the readiness check — nothing sto
   await seedAuth(context, ORG_OUTER_BANKS);
 
   await page.goto("/providers/pr-1");
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
   const card = page.locator("#readiness");
   await expect(card).toContainText("0 of 1 ready", { timeout: 30000 });
   // Case-centric terminology: the generation entry is "Generate cases".
@@ -346,6 +348,7 @@ test("TS-43: recording the license PSV flips the readiness check — nothing sto
   // write to, and this harness records zero writes of any kind.
   license.verified_status = "verified";
   await page.reload();
+  await page.getByRole("tab", { name: "Cases" }).click();
   await expect(card).toContainText("Ready", { timeout: 30000 });
   await expect(card).toContainText("1 of 1 ready");
   expect(writes).toHaveLength(0);
@@ -402,6 +405,8 @@ test("TS-44: group state gap + stale CAQH stay advisory — nothing blocked, no 
   await seedAuth(context, ORG_SHELBY);
 
   await page.goto("/providers/pr-q");
+  // 2026-07-21 tabbed record: Readiness lives on the Cases tab.
+  await page.getByRole("tab", { name: "Cases" }).click();
   const card = page.locator("#readiness");
   await expect(card).toContainText("2 gaps", { timeout: 30000 });
 

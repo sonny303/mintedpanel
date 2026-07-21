@@ -432,6 +432,8 @@ test("TS-34: two-TIN provider — both groups assigned, first primary; last-assi
   // Remove the non-primary group; the remaining PRIMARY chip carries no
   // remove affordance — the last assignment is structurally unremovable.
   await card.getByRole("link", { name: "Open record" }).click();
+  // 2026-07-21 tabbed record: group memberships live on the Groups & facilities tab.
+  await page.getByRole("tab", { name: "Groups & facilities" }).click();
   await expect(page.getByRole("heading", { name: "Groups & facilities" })).toBeVisible({
     timeout: 30000,
   });
@@ -485,6 +487,8 @@ test("TS-35: per-row license editing — PSV verify with board URL, renewal rese
   // (the standard record pattern) — each save composes the full list through
   // the licenses-only sync; identity fields and assignments are untouchable.
   await page.goto("/providers/prov-ob");
+  // 2026-07-21 tabbed record: licenses live on the Licenses tab.
+  await page.getByRole("tab", { name: "Licenses" }).click();
   await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
 
   // Verify the NC license against the state board (row Edit → dialog).

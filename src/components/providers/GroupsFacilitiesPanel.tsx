@@ -5,6 +5,11 @@
 // (full-set diff sync) + the atomic set_primary_assignment RPC. Nothing here
 // rides the provider UPDATE — the old monolithic form's assignment-wipe
 // defect is structurally impossible on this path.
+// 2026-07-21 provider-detail redesign — renders its OWN RecordSectionCard
+// ("Groups & facilities") with two labeled subsections, each carrying the
+// shared "+ Add" affordance (handoff issues 1 & 7). The Make-primary / Remove
+// row actions are kept (real capabilities the prototype's static "Edit" link
+// only stood in for).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Star, Trash2 } from "lucide-react";
@@ -26,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/DatePicker";
+import { AddButton, RecordSectionCard } from "@/components/providers/RecordSectionCard";
 import {
   useProviderAssignments,
   useProviderGroupAssignments,
@@ -37,6 +43,8 @@ import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { facilitiesForProviderGroups, type AssignmentDraft } from "@/lib/assignmentScope";
 import { LAST_ASSIGNMENT_MESSAGE } from "@/lib/groupAssignments";
 import { fmtDate } from "@/lib/format";
+
+const SUBHEADING = "text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6B7280]";
 
 export function GroupsFacilitiesPanel({
   providerId,
@@ -189,138 +197,140 @@ export function GroupsFacilitiesPanel({
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <div className="mb-1.5 flex items-center justify-between">
-          <h3 className="text-[13px] font-semibold">Group memberships</h3>
-          {canWrite ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[12px]"
-              onClick={() => {
-                setDialogError(null);
-                setAddingGroup(true);
-              }}
-              disabled={addableGroups.length === 0}
-            >
-              Add group
-            </Button>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {myGroups.map((g) => (
-            <span
-              key={g.groupId}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E5E0] px-2.5 py-1 text-[12.5px]"
-            >
-              {g.isPrimary ? (
-                <Star
-                  className="h-3 w-3 fill-[#1B4D3E] text-[#1B4D3E]"
-                  aria-label="Primary group"
+    <>
+      <RecordSectionCard id="groups-facilities" title="Groups & facilities">
+        <div className="space-y-5">
+          <div>
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <h3 className={SUBHEADING}>Group memberships</h3>
+              {canWrite ? (
+                <AddButton
+                  label="Add group"
+                  onClick={() => {
+                    setDialogError(null);
+                    setAddingGroup(true);
+                  }}
+                  disabled={addableGroups.length === 0}
                 />
               ) : null}
-              {g.name}
-              {canWrite && !g.isPrimary ? (
-                <>
-                  <button
-                    type="button"
-                    className="text-[11px] text-muted-foreground underline hover:text-foreground"
-                    onClick={() => makePrimaryGroup(g.groupId)}
-                  >
-                    Make primary
-                  </button>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-[#B91C1C]"
-                    aria-label={`Remove group ${g.name}`}
-                    onClick={() => removeGroup(g.groupId)}
-                  >
-                    <Trash2 className="h-3 w-3" aria-hidden />
-                  </button>
-                </>
-              ) : null}
-            </span>
-          ))}
-          {myGroups.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">No group membership yet.</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-1.5 flex items-center justify-between">
-          <h3 className="text-[13px] font-semibold">Facilities</h3>
-          {canWrite ? (
-            <Button
-              size="sm"
-              className="h-7 bg-[#1B4D3E] text-[12px] text-white hover:bg-[#163F33]"
-              onClick={() => {
-                setDialogError(null);
-                setAddingFacility(true);
-              }}
-            >
-              + Add facility
-            </Button>
-          ) : null}
-        </div>
-        {myFacilities.length === 0 ? (
-          <p className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-2 text-[12.5px] text-[#92400E]">
-            No facility assignment — this provider cannot generate cases until one is added.
-          </p>
-        ) : (
-          <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
-            {myFacilities.map((f) => (
-              <li key={f.assignmentId} className="flex items-center gap-2 px-3 py-2 text-[13px]">
-                {f.isPrimary ? (
-                  <Star
-                    className="h-3.5 w-3.5 fill-[#1B4D3E] text-[#1B4D3E]"
-                    aria-label="Primary location"
-                  />
-                ) : (
-                  <span className="w-3.5" aria-hidden />
-                )}
-                <span className="font-medium">{f.name}</span>
-                <span className="text-muted-foreground">
-                  {f.startDate ? `starts ${fmtDate(f.startDate)}` : "no start date"}
-                </span>
-                {canWrite ? (
-                  <span className="ml-auto inline-flex items-center gap-2">
-                    {!f.isPrimary ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[12px]"
-                        disabled={setPrimary.isPending}
-                        onClick={() =>
-                          setPrimary.mutate(
-                            { providerId, assignmentId: f.assignmentId },
-                            {
-                              onSuccess: () => toast.success("Primary location updated."),
-                              onError: (e) =>
-                                toast.error(e instanceof Error ? e.message : "Could not update."),
-                            },
-                          )
-                        }
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {myGroups.map((g) => (
+                <span
+                  key={g.groupId}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#E8E5E0] px-2.5 py-1 text-[12.5px]"
+                >
+                  {g.isPrimary ? (
+                    <Star
+                      className="h-3 w-3 fill-[#1B4D3E] text-[#1B4D3E]"
+                      aria-label="Primary group"
+                    />
+                  ) : null}
+                  {g.name}
+                  {canWrite && !g.isPrimary ? (
+                    <>
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted-foreground underline hover:text-foreground"
+                        onClick={() => makePrimaryGroup(g.groupId)}
                       >
                         Make primary
-                      </Button>
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-[#B91C1C]"
+                        aria-label={`Remove group ${g.name}`}
+                        onClick={() => removeGroup(g.groupId)}
+                      >
+                        <Trash2 className="h-3 w-3" aria-hidden />
+                      </button>
+                    </>
+                  ) : null}
+                </span>
+              ))}
+              {myGroups.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">No group membership yet.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="border-t border-[#F0EEEA] pt-5">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <h3 className={SUBHEADING}>Facilities</h3>
+              {canWrite ? (
+                <AddButton
+                  label="Add facility"
+                  onClick={() => {
+                    setDialogError(null);
+                    setAddingFacility(true);
+                  }}
+                />
+              ) : null}
+            </div>
+            {myFacilities.length === 0 ? (
+              <p className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-2 text-[12.5px] text-[#92400E]">
+                No facility assignment — this provider cannot generate cases until one is added.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
+                {myFacilities.map((f) => (
+                  <li
+                    key={f.assignmentId}
+                    className="flex items-center gap-2 px-3 py-2 text-[13px]"
+                  >
+                    {f.isPrimary ? (
+                      <Star
+                        className="h-3.5 w-3.5 fill-[#1B4D3E] text-[#1B4D3E]"
+                        aria-label="Primary location"
+                      />
+                    ) : (
+                      <span className="w-3.5" aria-hidden />
+                    )}
+                    <span className="font-medium">{f.name}</span>
+                    <span className="text-muted-foreground">
+                      {f.startDate ? `starts ${fmtDate(f.startDate)}` : "no start date"}
+                    </span>
+                    {canWrite ? (
+                      <span className="ml-auto inline-flex items-center gap-2">
+                        {!f.isPrimary ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[12px]"
+                            disabled={setPrimary.isPending}
+                            onClick={() =>
+                              setPrimary.mutate(
+                                { providerId, assignmentId: f.assignmentId },
+                                {
+                                  onSuccess: () => toast.success("Primary location updated."),
+                                  onError: (e) =>
+                                    toast.error(
+                                      e instanceof Error ? e.message : "Could not update.",
+                                    ),
+                                },
+                              )
+                            }
+                          >
+                            Make primary
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[12px]"
+                          onClick={() => removeFacility(f.facilityId)}
+                        >
+                          Remove
+                        </Button>
+                      </span>
                     ) : null}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[12px]"
-                      onClick={() => removeFacility(f.facilityId)}
-                    >
-                      Remove
-                    </Button>
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </RecordSectionCard>
 
       {addingGroup ? (
         <Dialog open onOpenChange={(o) => !o && setAddingGroup(false)}>
@@ -419,6 +429,6 @@ export function GroupsFacilitiesPanel({
           </DialogContent>
         </Dialog>
       ) : null}
-    </div>
+    </>
   );
 }
