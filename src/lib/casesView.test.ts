@@ -52,9 +52,9 @@ describe("KPI counts (derived filters, not statuses)", () => {
   });
 
   it("awaiting = Approved AND no confirmed effective date", () => {
-    expect(matchesKpi(row({ caseStatus: "approved", confirmedEffectiveDate: null }), "awaiting")).toBe(
-      true,
-    );
+    expect(
+      matchesKpi(row({ caseStatus: "approved", confirmedEffectiveDate: null }), "awaiting"),
+    ).toBe(true);
     expect(
       matchesKpi(row({ caseStatus: "approved", confirmedEffectiveDate: "2026-08-01" }), "awaiting"),
     ).toBe(false);
@@ -68,8 +68,18 @@ describe("KPI counts (derived filters, not statuses)", () => {
 });
 
 describe("filterRows composes KPI + state + status + search (AND)", () => {
-  const a = row({ providerName: "Jim Apple", payerName: "Aetna", state: "AZ", caseStatus: "denied" });
-  const b = row({ providerName: "Sarah Nguyen", payerName: "Aetna", state: "CO", caseStatus: "in_progress" });
+  const a = row({
+    providerName: "Jim Apple",
+    payerName: "Aetna",
+    state: "AZ",
+    caseStatus: "denied",
+  });
+  const b = row({
+    providerName: "Sarah Nguyen",
+    payerName: "Aetna",
+    state: "CO",
+    caseStatus: "in_progress",
+  });
   const rows = [a, b];
 
   it("no filters = all rows", () => {
@@ -86,7 +96,9 @@ describe("filterRows composes KPI + state + status + search (AND)", () => {
     expect(filterRows(rows, { ...EMPTY_FILTERS, search: "aetna" })).toHaveLength(2);
   });
   it("KPI + status compose (denied KPI + in_progress status = empty)", () => {
-    expect(filterRows(rows, { ...EMPTY_FILTERS, kpi: "denied", status: "in_progress" })).toEqual([]);
+    expect(filterRows(rows, { ...EMPTY_FILTERS, kpi: "denied", status: "in_progress" })).toEqual(
+      [],
+    );
   });
   it("statesInRows is the distinct sorted set", () => {
     expect(statesInRows(rows)).toEqual(["AZ", "CO"]);
@@ -97,8 +109,16 @@ describe("sortFlatRows", () => {
   it("default sort follows the E2.3 rank; unranked (terminal) cases come after, newest first", () => {
     const open1 = row({ caseId: "open-1", caseStatus: "in_progress" });
     const open2 = row({ caseId: "open-2", caseStatus: "action_required" });
-    const term1 = row({ caseId: "term-1", caseStatus: "approved", createdAt: "2026-07-05T00:00:00Z" });
-    const term2 = row({ caseId: "term-2", caseStatus: "denied", createdAt: "2026-07-10T00:00:00Z" });
+    const term1 = row({
+      caseId: "term-1",
+      caseStatus: "approved",
+      createdAt: "2026-07-05T00:00:00Z",
+    });
+    const term2 = row({
+      caseId: "term-2",
+      caseStatus: "denied",
+      createdAt: "2026-07-10T00:00:00Z",
+    });
     // queue ranks open-2 before open-1
     const rank = new Map([
       ["open-2", 0],
@@ -113,12 +133,12 @@ describe("sortFlatRows", () => {
     const r2 = row({ caseNumber: 1005 });
     const r3 = row({ caseNumber: 1003 });
     const empty = new Map<string, number>();
-    expect(sortFlatRows([r2, r1, r3], "caseNumber", "asc", empty).map((r) => r.caseNumber)).toEqual([
-      1001, 1003, 1005,
-    ]);
-    expect(sortFlatRows([r2, r1, r3], "caseNumber", "desc", empty).map((r) => r.caseNumber)).toEqual([
-      1005, 1003, 1001,
-    ]);
+    expect(sortFlatRows([r2, r1, r3], "caseNumber", "asc", empty).map((r) => r.caseNumber)).toEqual(
+      [1001, 1003, 1005],
+    );
+    expect(
+      sortFlatRows([r2, r1, r3], "caseNumber", "desc", empty).map((r) => r.caseNumber),
+    ).toEqual([1005, 1003, 1001]);
   });
 
   it("status sort is spine order (not alphabetical)", () => {
@@ -136,10 +156,9 @@ describe("sortFlatRows", () => {
   it("lastTouch sorts never-touched last regardless of direction", () => {
     const touched = row({ caseId: "t", lastTouchDays: 2 });
     const never = row({ caseId: "n", lastTouchDays: null });
-    expect(sortFlatRows([never, touched], "lastTouch", "asc", new Map()).map((r) => r.caseId)).toEqual([
-      "t",
-      "n",
-    ]);
+    expect(
+      sortFlatRows([never, touched], "lastTouch", "asc", new Map()).map((r) => r.caseId),
+    ).toEqual(["t", "n"]);
     expect(
       sortFlatRows([touched, never], "lastTouch", "desc", new Map()).map((r) => r.caseId),
     ).toEqual(["t", "n"]);
@@ -177,8 +196,18 @@ describe("groupRows", () => {
   });
 
   it("By payer pins the Pre-Credentialing group last", () => {
-    const normal = row({ payerId: "aetna", payerName: "Aetna", isPreCred: false, caseStatus: "in_progress" });
-    const pre = row({ payerId: "pre", payerName: "Pre-Credentialing", isPreCred: true, caseStatus: "in_progress" });
+    const normal = row({
+      payerId: "aetna",
+      payerName: "Aetna",
+      isPreCred: false,
+      caseStatus: "in_progress",
+    });
+    const pre = row({
+      payerId: "pre",
+      payerName: "Pre-Credentialing",
+      isPreCred: true,
+      caseStatus: "in_progress",
+    });
     const groups = groupRows([pre, normal], "payer", meta);
     expect(groups[groups.length - 1].isPreCred).toBe(true);
   });

@@ -15,14 +15,7 @@ export type CasesKpi = "total" | "inprog" | "awaiting" | "denied";
 export const CASES_KPIS: readonly CasesKpi[] = ["total", "inprog", "awaiting", "denied"];
 
 export type FlatSortKey =
-  | "default"
-  | "caseNumber"
-  | "provider"
-  | "payer"
-  | "state"
-  | "status"
-  | "lastTouch"
-  | "daysOpen";
+  "default" | "caseNumber" | "provider" | "payer" | "state" | "status" | "lastTouch" | "daysOpen";
 
 export type SortDir = "asc" | "desc";
 
@@ -85,7 +78,12 @@ export interface CasesFilters {
   search: string;
 }
 
-export const EMPTY_FILTERS: CasesFilters = { kpi: "total", state: "all", status: "all", search: "" };
+export const EMPTY_FILTERS: CasesFilters = {
+  kpi: "total",
+  state: "all",
+  status: "all",
+  search: "",
+};
 
 export function rowMatchesSearch(row: CaseViewRow, q: string): boolean {
   const needle = q.trim().toLowerCase();

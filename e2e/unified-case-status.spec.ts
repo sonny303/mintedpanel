@@ -477,11 +477,10 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_DILLON);
 
-  // The cases work list (the merged surface's by-payer pivot since E6.1)
-  // renders the canonical pill — ONE status column, no pipeline / contract
-  // machine columns.
-  await page.goto("/cases?pivot=payer");
-  await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible({
+  // The cases work list (the redesigned Flat view) renders the canonical pill —
+  // ONE "Case Status" column, no pipeline / contract machine columns.
+  await page.goto("/cases");
+  await expect(page.getByRole("columnheader", { name: "Case Status" })).toBeVisible({
     timeout: 30000,
   });
   await expect(page.getByRole("columnheader", { name: "Payer Pipeline" })).toHaveCount(0);
@@ -490,8 +489,9 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await expect(listRow).toContainText("Submitted");
 
   // Case detail: the same value from the same field, attributed system with
-  // the documented migration note; both retained ledgers readable.
-  await listRow.click();
+  // the documented migration note; both retained ledgers readable. Case# is
+  // the row click-through (the redesign retired the whole-row/Open affordance).
+  await listRow.getByRole("link").click();
   await expect(page.getByText("Status", { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("Set by system")).toBeVisible();
   await expect(page.getByText("Status history", { exact: true })).toBeVisible();

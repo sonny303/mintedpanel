@@ -298,7 +298,9 @@ function CasesPage() {
   const bulkCandidates: TouchCaseCandidate[] = useMemo(
     () =>
       allRows
-        .filter((r) => needsAction(r) || r.caseStatus === "submitted" || r.caseStatus === "in_review")
+        .filter(
+          (r) => needsAction(r) || r.caseStatus === "submitted" || r.caseStatus === "in_review",
+        )
         .map((r) => ({
           id: r.caseId,
           label: `${r.providerName} · ${r.state} · ${r.payerName}`,
@@ -451,7 +453,9 @@ function CasesPage() {
             variant="outline"
             size="sm"
             className="ml-auto h-7"
-            onClick={() => navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })}
+            onClick={() =>
+              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+            }
           >
             Show all cases
           </Button>
@@ -467,7 +471,9 @@ function CasesPage() {
             variant="outline"
             size="sm"
             className="ml-auto h-7"
-            onClick={() => navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })}
+            onClick={() =>
+              navigate({ to: "/cases", search: view === "flat" ? {} : { pivot: view } })
+            }
           >
             <X className="mr-1 h-4 w-4" /> Show all cases
           </Button>
@@ -508,6 +514,7 @@ function CasesPage() {
         />
       ) : (
         <GroupedList
+          defaultCollapsed
           groups={pagedGroups.map((g) => ({
             id: g.id,
             header: (
@@ -667,7 +674,13 @@ function FlatCaseTable({
                 onSort={onSort}
               />
             ) : null}
-            <SortHeader label="State" col="state" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+            <SortHeader
+              label="State"
+              col="state"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={onSort}
+            />
             <SortHeader
               label="Case Status"
               col="status"
@@ -694,7 +707,10 @@ function FlatCaseTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.caseId} className="border-b border-[#F0EEE9] last:border-0 hover:bg-[#FAFAF9]">
+            <tr
+              key={r.caseId}
+              className="border-b border-[#F0EEE9] last:border-0 hover:bg-[#FAFAF9]"
+            >
               <td className="px-3 py-2.5">
                 <Link
                   to="/cases/$id"
