@@ -71,7 +71,7 @@ export function TemplateVersionHistoryDialog({
                       <td className="px-3 h-10 text-sm tabular-nums">
                         <span className="font-medium">v{v.version}</span>
                         {v.version === currentVersion ? (
-                          <span className="ml-2 inline-flex items-center rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-0.5 text-[11px] text-[#059669]">
+                          <span className="ml-2 inline-flex items-center rounded-[4px] bg-[var(--mp-ok-tint)] px-2 py-0.5 text-[11px] text-[var(--mp-ok-ink)]">
                             Current
                           </span>
                         ) : null}

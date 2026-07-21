@@ -34,7 +34,7 @@ export function OnboardingBanner() {
         </div>
         <div className="flex flex-col items-start gap-1 sm:items-end">
           {/* Stage 1 target — disabled next-action, honest that it isn't live yet. */}
-          <Button disabled className="bg-[#1B4D3E] text-white hover:bg-[#163E32]">
+          <Button disabled className="bg-[#1B4D3E] text-white hover:bg-[#163F33]">
             Begin onboarding
           </Button>
           <span className="text-[11px] text-muted-foreground">Available in a later release</span>

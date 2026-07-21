@@ -61,7 +61,7 @@ export function InsurancePanel({ groupId, canEdit }: { groupId: string; canEdit:
           <Button
             size="sm"
             onClick={() => setModal({ policy: null })}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-7 text-[11px] px-2"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-7 text-[11px] px-2"
           >
             <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy
           </Button>
@@ -278,7 +278,7 @@ function InsurancePolicyEditModal({
           <Button
             onClick={handleSave}
             disabled={pending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {pending ? "Saving…" : policy ? "Save changes" : "Create policy"}
           </Button>

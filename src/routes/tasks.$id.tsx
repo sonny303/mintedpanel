@@ -342,7 +342,7 @@ function TaskDetailPage() {
 
         {/* Success banner */}
         {allComplete ? (
-          <div className="flex items-center gap-2 rounded-md border border-[#A7F3D0] bg-[#ECFDF5] px-3 py-2 text-[13px] text-[#065F46]">
+          <div className="flex items-center gap-2 rounded-md bg-[var(--mp-ok-tint)] px-3 py-2 text-[13px] text-[var(--mp-ok-ink)]">
             <CheckCircle2 className="h-4 w-4" />
             All steps complete. Task marked completed.
           </div>
@@ -379,7 +379,7 @@ function TaskDetailPage() {
                       <span
                         className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold tabular-nums ${
                           isChecked
-                            ? "bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]"
+                            ? "bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]"
                             : isActive
                               ? "bg-[#1B4D3E] text-white"
                               : "bg-muted text-muted-foreground border border-[#E8E5E0]"

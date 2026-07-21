@@ -124,7 +124,7 @@ export function AddContractDialog({ open, onClose }: { open: boolean; onClose: (
             Cancel
           </Button>
           <Button
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
             disabled={createM.isPending}
             onClick={handleSubmit}
           >

@@ -29,7 +29,7 @@ import { fmtDate } from "@/lib/format";
 function DeadlinePill({ entry }: { entry: QueueEntry }) {
   if (!entry.deadline) {
     return (
-      <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+      <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
         No deadline
       </Badge>
     );
@@ -39,7 +39,7 @@ function DeadlinePill({ entry }: { entry: QueueEntry }) {
     ? "bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]"
     : "bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]";
   return (
-    <Badge className={`rounded-full border-0 whitespace-nowrap ${tone}`}>
+    <Badge className={`rounded-[4px] border-0 whitespace-nowrap ${tone}`}>
       {entry.deadline.overdue ? "Overdue · " : ""}
       {fmtDate(entry.deadline.date)} · {DEADLINE_SOURCE_LABELS[entry.deadline.source]}
     </Badge>
@@ -65,7 +65,7 @@ function QueueRow({
           {/* E6.0 — THE unified case status on the queue row. */}
           {entry.caseStatus ? <CaseStatusPill status={entry.caseStatus} /> : null}
           {entry.actionKind === "readiness_gap" ? (
-            <Badge className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
+            <Badge className="rounded-[4px] border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]">
               Readiness gap
             </Badge>
           ) : null}

@@ -256,7 +256,7 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163f33]"
+          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163F33]"
           onClick={() => openInGmail(subject, body, toAddrs, ccAddrs)}
         >
           <Mail className="h-3.5 w-3.5" />
@@ -393,7 +393,7 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163f33]"
+          className="h-8 gap-1.5 bg-[#1B4D3E] px-3 text-[13px] hover:bg-[#163F33]"
           disabled={!file || busy !== null || willFill.length === 0}
           onClick={handleGenerate}
         >

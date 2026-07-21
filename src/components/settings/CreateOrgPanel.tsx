@@ -16,7 +16,7 @@ export function CreateOrgPanel() {
       </p>
       <Button
         onClick={() => setOpen(true)}
-        className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+        className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9"
       >
         Create organization
       </Button>

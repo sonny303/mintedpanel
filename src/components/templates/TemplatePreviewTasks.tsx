@@ -106,7 +106,7 @@ export function TemplatePreviewTasks({
                   </div>
                   {stepType === "online_form" ? (
                     portal ? (
-                      <span className="mt-1 inline-flex items-center rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2 py-0.5 text-[11px] text-[#059669]">
+                      <span className="mt-1 inline-flex items-center rounded-[4px] bg-[var(--mp-ok-tint)] px-2 py-0.5 text-[11px] text-[var(--mp-ok-ink)]">
                         Portal: {portal.name}
                       </span>
                     ) : (

@@ -40,7 +40,7 @@ function DispositionPill({ disposition }: { disposition: GenerationRowDispositio
         ? "bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]"
         : "bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]";
   return (
-    <Badge className={`rounded-full border-0 whitespace-nowrap ${tone}`}>
+    <Badge className={`rounded-[4px] border-0 whitespace-nowrap ${tone}`}>
       {DISPOSITION_LABELS[disposition]}
     </Badge>
   );
@@ -71,7 +71,7 @@ function RowLink({ row }: { row: CaseGenerationRunRow }) {
     }
     return (
       <span className="inline-flex items-center gap-2 text-[12px] text-muted-foreground">
-        <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+        <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
           {EXCLUSION_REASON_LABELS[exclusion.reason]} ·{" "}
           {exclusion.status === "active" ? "still excluded" : "since restored"}
         </Badge>
@@ -145,7 +145,7 @@ export function RunDetailContent({ runId }: { runId: string }) {
           failed
         </span>
         {counts.fromPlan ? (
-          <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+          <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
             plan counts — no per-row record
           </Badge>
         ) : null}

@@ -55,7 +55,7 @@ export function OrgPanel() {
           <Button
             disabled={!nameDirty || saveName.isPending || !currentName.trim()}
             onClick={handleSaveName}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9"
           >
             {saveName.isPending ? "Saving…" : "Save"}
           </Button>

@@ -158,7 +158,7 @@ export function PortalsRegistry({ initialAddPayerId }: { initialAddPayerId?: str
         {isAdmin ? (
           <Button
             onClick={() => setAdding(true)}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9 flex-none"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9 flex-none"
           >
             <Plus className="w-4 h-4 mr-1" /> Add portal
           </Button>
@@ -400,7 +400,7 @@ function EditUrlEditor({
         <Button
           onClick={save}
           disabled={updateMut.isPending}
-          className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-8 text-[12px] px-3"
+          className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-8 text-[12px] px-3"
         >
           Save URL
         </Button>
@@ -652,7 +652,7 @@ function AddPortalModal({
           <Button
             onClick={save}
             disabled={createMut.isPending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             Create
           </Button>

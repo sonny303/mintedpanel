@@ -205,7 +205,7 @@ function ContactPage() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+                  className="w-full bg-[#1B4D3E] text-white hover:bg-[#163F33]"
                 >
                   {submitting ? "Sending…" : "Send"}
                 </Button>

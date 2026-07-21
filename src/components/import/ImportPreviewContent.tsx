@@ -136,7 +136,7 @@ function UpdateRow({
         ) : null}
         {entry.conflicts.length > 0 ? (
           <Badge
-            className={`ml-auto rounded-full border-0 ${
+            className={`ml-auto rounded-[4px] border-0 ${
               unresolved.length > 0
                 ? "bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]"
                 : "bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]"

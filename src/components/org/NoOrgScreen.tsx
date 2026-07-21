@@ -41,7 +41,7 @@ export function NoOrgScreen() {
         <Button
           onClick={form.submit}
           disabled={form.isPending}
-          className="mt-4 w-full bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+          className="mt-4 w-full bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9"
         >
           {form.isPending ? "Creating…" : "Create your first organization"}
         </Button>

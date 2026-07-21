@@ -171,7 +171,7 @@ export function ShareReportPanel() {
               type="button"
               onClick={onCreate}
               disabled={!canCreate}
-              className="bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+              className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
             >
               <Link2 className="h-4 w-4" />
               Create share link

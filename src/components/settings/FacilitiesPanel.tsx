@@ -58,7 +58,7 @@ export function FacilitiesPanel() {
           <Button
             size="sm"
             onClick={() => setModal({ facility: null, defaultGroupId: null })}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-8"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-8"
           >
             <Plus className="w-4 h-4 mr-1" /> Add facility
           </Button>
@@ -320,7 +320,7 @@ function FacilityEditModal({
           <Button
             onClick={handleSave}
             disabled={pending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {pending ? "Saving…" : facility ? "Save changes" : "Create facility"}
           </Button>

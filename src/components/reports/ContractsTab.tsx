@@ -129,7 +129,7 @@ export function ContractsTab() {
           </div>
           {canEdit && (
             <Button
-              className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+              className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9"
               onClick={() => setAddOpen(true)}
             >
               <Plus className="w-4 h-4 mr-1" /> Add contract

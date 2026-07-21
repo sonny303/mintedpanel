@@ -37,7 +37,7 @@ export function CreateOrganizationModal({ onClose }: { onClose: () => void }) {
           <Button
             onClick={form.submit}
             disabled={form.isPending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {form.isPending ? "Creating…" : "Create organization"}
           </Button>

@@ -35,7 +35,7 @@ export function CopyButton({ value, label, className = "" }: CopyButtonProps) {
       aria-label={copied ? `Copied ${label ?? value}` : `Copy ${label ?? value}`}
       className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border text-[12px] font-medium transition-colors ${
         copied
-          ? "border-[#A7F3D0] bg-[#ECFDF5] text-[#059669]"
+          ? "bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]"
           : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted"
       } ${className}`}
     >

@@ -308,7 +308,7 @@ export function TaskDrawer({
                             {isLocked ? null : <StepBody step={step} tokenValues={tokenValues} />}
                           </div>
                           {isChecked ? (
-                            <CheckCircle2 className="h-4 w-4 text-[#059669] flex-shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 text-[var(--mp-ok-ink)] flex-shrink-0" />
                           ) : isLocked ? (
                             <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
                           ) : null}

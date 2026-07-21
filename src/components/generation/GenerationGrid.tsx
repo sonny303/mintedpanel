@@ -63,14 +63,14 @@ import {
 function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) {
   if (!readiness) {
     return (
-      <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+      <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
         No readiness data
       </Badge>
     );
   }
   if (readiness.ready) {
     return (
-      <Badge className="rounded-full border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
+      <Badge className="rounded-[4px] border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
         Ready
       </Badge>
     );
@@ -78,7 +78,7 @@ function ReadinessBadge({ readiness }: { readiness: ReadinessRow | undefined }) 
   const gaps = readiness.checks.filter((c) => !c.pass);
   return (
     <Badge
-      className="rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
+      className="rounded-[4px] border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
       title={gaps.map((c) => c.label).join(", ")}
     >
       {readiness.openGaps} {readiness.openGaps === 1 ? "gap" : "gaps"}
@@ -388,7 +388,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                       <TableCell className="max-w-[340px] text-[12px] text-muted-foreground">
                         {bucket === "existing" && row.existingCase ? (
                           <span className="inline-flex flex-wrap items-center gap-2">
-                            <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+                            <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
                               {existingCaseIndicator(row.existingCase).label}
                             </Badge>
                             {existingCaseIndicator(row.existingCase).reapply ? (
@@ -402,12 +402,12 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                             ) : null}
                           </span>
                         ) : bucket === "enrolled" ? (
-                          <Badge className="rounded-full border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
+                          <Badge className="rounded-[4px] border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
                             Already enrolled under {row.groupName}
                           </Badge>
                         ) : bucket === "excluded" ? (
                           <span className="inline-flex flex-wrap items-center gap-2">
-                            <Badge className="rounded-full border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
+                            <Badge className="rounded-[4px] border-0 bg-[var(--mp-neutral-tint)] text-[var(--mp-neutral-ink)]">
                               Excluded —{" "}
                               {row.exclusion ? EXCLUSION_REASON_LABELS[row.exclusion.reason] : ""}
                             </Badge>
@@ -417,7 +417,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                           <span className="inline-flex flex-col gap-1">
                             {fallbackKeys.has(key) ? (
                               <Badge
-                                className="w-fit rounded-full border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
+                                className="w-fit rounded-[4px] border-0 bg-[var(--mp-warn-tint)] text-[var(--mp-warn-ink)]"
                                 title="No payer-specific SOP matches — generates with the generic checklist"
                               >
                                 Generic fallback SOP

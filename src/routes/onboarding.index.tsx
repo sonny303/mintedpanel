@@ -181,7 +181,7 @@ function ShareLinkDialog({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={onIssue}
               disabled={!canIssue}
-              className="w-full bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+              className="w-full bg-[#1B4D3E] text-white hover:bg-[#163F33]"
             >
               <Link2 className="h-4 w-4" />
               {issue.isPending ? "Sharing…" : "Share onboarding link"}
@@ -222,7 +222,7 @@ function OnboardingPage() {
               <Button
                 type="submit"
                 disabled={form.isPending}
-                className="w-full bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+                className="w-full bg-[#1B4D3E] text-white hover:bg-[#163F33]"
               >
                 {form.isPending ? "Creating…" : "Create organization"}
               </Button>
@@ -253,7 +253,7 @@ function OnboardingPage() {
                 type="button"
                 onClick={() => setShareOpen(true)}
                 disabled={!active}
-                className="w-full bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+                className="w-full bg-[#1B4D3E] text-white hover:bg-[#163F33]"
               >
                 <Link2 className="h-4 w-4" />
                 Share onboarding link

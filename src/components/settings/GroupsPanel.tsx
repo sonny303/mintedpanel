@@ -46,7 +46,7 @@ export function GroupsPanel() {
           <Button
             size="sm"
             onClick={() => setModal({ group: null })}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-8"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-8"
           >
             <Plus className="w-4 h-4 mr-1" /> Add group
           </Button>
@@ -393,7 +393,7 @@ function GroupEditModal({ group, onClose }: { group: ProviderGroup | null; onClo
           <Button
             onClick={handleSave}
             disabled={pending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {pending ? "Saving…" : group ? "Save changes" : "Create group"}
           </Button>

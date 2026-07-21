@@ -48,7 +48,7 @@ function LeadRow({ lead }: { lead: InboundLead }) {
           </Button>
           <Button
             type="button"
-            className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163E32]"
+            className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]"
             disabled={busy}
             onClick={() =>
               convert.mutate(lead, {

@@ -277,7 +277,7 @@ function AddPartyDialog({
           <Button
             onClick={save}
             disabled={pending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {pending ? "Adding…" : "Add person"}
           </Button>
@@ -366,7 +366,7 @@ function AddExistingPartyDialog({
           <Button
             onClick={save}
             disabled={assignRole.isPending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {assignRole.isPending ? "Adding…" : "Add to organization"}
           </Button>
@@ -425,7 +425,7 @@ function EditPartyDialog({ party, onClose }: { party: Party; onClose: () => void
           <Button
             onClick={save}
             disabled={update.isPending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             {update.isPending ? "Saving…" : "Save"}
           </Button>
@@ -504,7 +504,7 @@ export function PartiesManager() {
           <Button
             size="sm"
             onClick={() => setAdding(true)}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white"
           >
             <Plus className="h-4 w-4" />
             Add person

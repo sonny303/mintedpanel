@@ -283,7 +283,7 @@ export function RosterTab() {
           <Button
             disabled={!canGenerate}
             onClick={handleGenerate}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white h-9"
+            className="bg-[#1B4D3E] hover:bg-[#163F33] text-white h-9"
           >
             Generate roster
           </Button>

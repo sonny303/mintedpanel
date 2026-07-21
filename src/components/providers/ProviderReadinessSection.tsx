@@ -264,11 +264,11 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
                       <TableCell>
                         <span className="flex items-center gap-1.5">
                           {r.ready ? (
-                            <Badge className="rounded-full border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
+                            <Badge className="rounded-[4px] border-0 bg-[var(--mp-ok-tint)] text-[var(--mp-ok-ink)]">
                               Ready
                             </Badge>
                           ) : (
-                            <Badge className="rounded-full border-0 bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]">
+                            <Badge className="rounded-[4px] border-0 bg-[var(--mp-danger-tint)] text-[var(--mp-danger-ink)]">
                               {r.openGaps} {r.openGaps === 1 ? "gap" : "gaps"}
                             </Badge>
                           )}
