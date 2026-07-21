@@ -6,11 +6,19 @@ this file adds the system map and operational knowledge those rules assume.
 `ARCHITECTURE.md` and `SCHEMA.md` are the deeper references for layering and
 tables.
 
-## Redesign program (you are on the `redesign` branch)
+## Branch policy (PM decision 2026-07-21): work on `main`
 
-The product redesign is built epic-by-epic on the long-lived `redesign` branch
-and NEVER merges to `main` until the PM promotes a stage. If you are
-implementing a redesign epic:
+The redesign staging model is RETIRED. The long-lived `redesign` branch was
+promoted to `main` in #231 and is no longer used: **branch off `main`, target
+every PR at `main`** (`gh pr create --base main`). Everything below that says
+"branch off `redesign` / PR targets `redesign`" now reads `main` — the rest of
+the workflow (one epic per PR, gates, Devin review-and-merge, never
+self-merge) is unchanged.
+
+## Redesign program (historical staging model)
+
+The product redesign was built epic-by-epic on the long-lived `redesign`
+branch. If you are implementing a redesign epic:
 
 - Epics live at `docs/redesign/EX.X-<slug>.md` (e.g. `E0.0-app-shell.md`).
   Only build from epics whose frontmatter says `reviewed: true`. From R1

@@ -17,8 +17,9 @@ Devin authored the epic; your job is to catch what the author missed.
   other epics, edit `CLARIFICATIONS_NEEDED.md`, edit protected files, or flip
   `reviewed: true` (that is the PM's call).
 - Use a recommended model with maximum diligence (Opus) via `/model`.
-- Work on a fresh branch off `redesign` named `review/<epic>` and open a PR
-  titled `Review: EX.X <title>` targeting `redesign`.
+- Work on a fresh branch off `main` named `review/<epic>` and open a PR
+  titled `Review: EX.X <title>` targeting `main` (the `redesign` staging
+  branch was retired 2026-07-21).
 
 ## Review checklist — ground every claim in the repo
 
