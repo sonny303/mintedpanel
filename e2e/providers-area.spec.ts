@@ -490,11 +490,59 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
   await expect(page.getByText(/Previously denied — Panel closed, Jul 5, 2026/)).toBeVisible();
 });
 
-test("TS-113: enrollment-fact capture on the record; Expire flips the fact at the wire — zero case writes anywhere", async ({
+test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-only rows beside facts; Expire flips the fact at the wire — zero case writes anywhere", async ({
   context,
   page,
 }) => {
   const fixtures = baseFixtures();
+  // 2026-07-21 unified-enrollment fixtures: an APPROVED case derives an
+  // enrollment row (case's own effective date + payer-issued ID, payer-labeled
+  // via the curated resolution_id_label); the in_progress Aetna case (c-1)
+  // must NOT derive one — in-flight casework belongs to the Cases panel.
+  fixtures.payers.push({
+    id: "p2",
+    org_id: null,
+    name: "United Healthcare",
+    payer_kind: "commercial",
+    states: ["NC"],
+    aliases: [],
+    status: "active",
+    payer_slug: "united-healthcare",
+    avg_decision_days: null,
+    resolution_id_label: "Provider ID",
+    resolution_id_expected: true,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.org_payer_assignments.push({
+    id: "a-p2",
+    org_id: ORG_ID,
+    payer_id: "p2",
+    starter: false,
+    status: "active",
+    archived_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.credential_cases.push({
+    id: "c-appr",
+    org_id: ORG_ID,
+    provider_id: "pr-brooke",
+    payer_id: "p2",
+    state: "NC",
+    group_id: "g-ob",
+    facility_id: null,
+    mso_id: null,
+    credentialing_status_id: null,
+    case_status: "approved",
+    submitted_date: "2026-06-01",
+    approved_date: "2026-06-15",
+    payer_reference_id: null,
+    payer_pipeline_state: "approved",
+    confirmed_effective_date: "2026-06-15",
+    payer_individual_provider_id: "UHC-778899",
+    generation_run_id: null,
+    created_at: "2026-05-20T00:00:00Z",
+    updated_at: "2026-06-15T00:00:00Z",
+  });
   const { handler, requests } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
@@ -502,6 +550,23 @@ test("TS-113: enrollment-fact capture on the record; Expire flips the fact at th
   await page.goto("/providers/pr-brooke");
   await expect(page.getByRole("heading", { name: "Enrollments" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText(/Prior-employer status does NOT belong here/)).toBeVisible();
+
+  // The approved case ALREADY renders as an enrollment row — Active pill,
+  // "From case" chip, the case's own effective date and payer-labeled ID,
+  // an Open case link, and NO Expire control (the case is the record).
+  const caseRow = page.locator("#enrollments li").filter({ hasText: "United Healthcare" });
+  await expect(caseRow).toBeVisible({ timeout: 15000 });
+  await expect(caseRow.getByText("Active", { exact: true })).toBeVisible();
+  await expect(caseRow.getByText("From case")).toBeVisible();
+  await expect(caseRow.getByText("since Jun 15, 2026")).toBeVisible();
+  await expect(caseRow.getByText("Provider ID: UHC-778899")).toBeVisible();
+  await expect(caseRow.getByRole("link", { name: "Open case" })).toHaveAttribute(
+    "href",
+    "/cases/c-appr",
+  );
+  await expect(caseRow.getByRole("button", { name: "Expire" })).toHaveCount(0);
+  // The in_progress case derives NOTHING here — exactly one "From case" row.
+  await expect(page.getByText("From case")).toHaveCount(1);
 
   // Record a fact under the group's contract.
   await page.getByRole("button", { name: "Add enrollment" }).click();

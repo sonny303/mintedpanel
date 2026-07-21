@@ -1904,7 +1904,19 @@ deleted, its step bodies extracted to `src/components/cases/StepDetails.tsx`
 F1.7b.5 Gmail hand-off + pdf filler live there now; the gmailCompose
 no-auto-send pin greps StepDetails; `caseWizard.ts` keeps the token-highlight
 helpers). e2e retargets ride each PR; sop-email-recipients' resolve test now
-runs through the drawer.
+runs through the drawer. **Unified provider enrollment view (2026-07-21, no
+migration):** the record's Enrollments panel now composes manual facts AND
+APPROVED cases through pure `src/lib/providerEnrollments.ts`
+(`buildProviderEnrollmentRows`, tested) — an approved case derives a
+read-only "From case" row carrying the case's own
+`confirmed_effective_date` and `payer_individual_provider_id` (payer-labeled
+chip, "Open case" link, no Expire), so resolving a case updates the
+enrollment picture by DERIVATION, never a dual write (facts stay
+migration-capture; a status correction away from Approved re-derives the row
+out; deliberately NO dedupe against a live fact on the same combo — its
+Expire must stay reachable). In-flight cases stay the Cases panel's job.
+`CASE_LIST_COLUMNS` gained `payer_individual_provider_id`; TS-113 extended
+with the derived-row slice.
 
 ## What this is
 

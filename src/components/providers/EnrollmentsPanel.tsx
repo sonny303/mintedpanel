@@ -9,7 +9,14 @@
 // on the enrollment it belongs to — optional at capture, editable after (the
 // approval letter often arrives later). The field label is the payer's own
 // Minted-curated term via the resolveIdentifierConfig seam.
+// 2026-07-21 — ONE enrollment picture: APPROVED cases derive rows here too
+// (providerEnrollments reducer), carrying the effective date + payer-issued
+// ID the approval captured on the case — resolving a case updates this view
+// with zero re-entry and zero dual writes ("From case" rows are read-only
+// links; corrections happen on the case and re-derive). Manual facts keep
+// their capture/edit/expire controls unchanged.
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,11 +45,13 @@ import {
   useExpireEnrollmentFact,
   useSetEnrollmentFactIdentifier,
 } from "@/hooks/useEnrollmentFacts";
+import { useCases } from "@/hooks/useCases";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { usePayers } from "@/hooks/useAdmin";
 import { fmtDate } from "@/lib/format";
 import { resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
+import { buildProviderEnrollmentRows } from "@/lib/providerEnrollments";
 import type { EnrollmentFact } from "@/types";
 
 export const ENROLLMENT_GUARD_TEXT =
@@ -56,6 +65,8 @@ export function EnrollmentsPanel({
   canWrite: boolean;
 }) {
   const factsQ = useEnrollmentFacts();
+  // The record page already holds this org cache (its Cases panel) — free read.
+  const casesQ = useCases();
   const groupAssignQ = useProviderGroupAssignments();
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
@@ -88,22 +99,22 @@ export function EnrollmentsPanel({
     [groupAssignQ.data, groupsQ.data, providerId],
   );
 
-  const myFacts = useMemo(
+  const myRows = useMemo(
     () =>
-      (factsQ.data ?? [])
-        .filter((f) => f.providerId === providerId)
-        .map((f) => {
-          const factPayer = (payersQ.data ?? []).find((p) => p.id === f.payerId) ?? null;
+      buildProviderEnrollmentRows(providerId, factsQ.data ?? [], casesQ.data ?? [])
+        .map((row) => {
+          const rowPayer = (payersQ.data ?? []).find((p) => p.id === row.payerId) ?? null;
           return {
-            ...f,
-            payerName: factPayer?.name ?? "—",
-            pinLabel: resolveIdentifierConfig(factPayer).individualLabel,
-            groupName: (groupsQ.data ?? []).find((g) => g.id === f.groupId)?.name ?? "—",
+            ...row,
+            payerName: rowPayer?.name ?? "—",
+            pinLabel: resolveIdentifierConfig(rowPayer).individualLabel,
+            groupName: (groupsQ.data ?? []).find((g) => g.id === row.groupId)?.name ?? "—",
           };
         })
         .sort((a, b) => a.payerName.localeCompare(b.payerName) || a.state.localeCompare(b.state)),
-    [factsQ.data, payersQ.data, groupsQ.data, providerId],
+    [factsQ.data, casesQ.data, payersQ.data, groupsQ.data, providerId],
   );
+  const factById = useMemo(() => new Map((factsQ.data ?? []).map((f) => [f.id, f])), [factsQ.data]);
 
   const submit = () => {
     if (!groupDraft || !payerDraft || !stateDraft) {
@@ -152,45 +163,66 @@ export function EnrollmentsPanel({
           Add enrollment
         </Button>
       ) : null}
-      {myFacts.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">No enrollment facts recorded.</p>
+      {myRows.length === 0 ? (
+        <p className="text-[13px] text-muted-foreground">
+          No enrollments yet — approved cases appear here automatically; record a fact only for
+          pre-existing enrollments.
+        </p>
       ) : (
         <ul className="divide-y divide-[#F0EEE9] rounded-md border border-[#E8E5E0]">
-          {myFacts.map((f) => {
-            const live = f.expiredAt === null;
+          {myRows.map((row) => {
+            const fact = row.factId ? (factById.get(row.factId) ?? null) : null;
             return (
-              <li key={f.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px]">
-                <span className="font-medium">{f.payerName}</span>
-                <span>{f.state}</span>
-                <span className="text-muted-foreground">under {f.groupName}</span>
-                {f.effectiveDate ? (
-                  <span className="text-muted-foreground">since {fmtDate(f.effectiveDate)}</span>
+              <li key={row.key} className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px]">
+                <span className="font-medium">{row.payerName}</span>
+                <span>{row.state}</span>
+                <span className="text-muted-foreground">under {row.groupName}</span>
+                {row.effectiveDate ? (
+                  <span className="text-muted-foreground">since {fmtDate(row.effectiveDate)}</span>
                 ) : null}
-                {f.payerIssuedId ? (
+                {row.payerIssuedId ? (
                   <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
-                    {f.pinLabel}: {f.payerIssuedId}
+                    {row.pinLabel}: {row.payerIssuedId}
                   </span>
                 ) : null}
-                {live ? (
+                {row.source === "case" ? (
+                  <>
+                    <StatusPill status="green" label="Active" />
+                    {/* Derived from the approved case — the case IS the
+                        record; edits/corrections happen there and re-derive. */}
+                    <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-muted-foreground">
+                      From case
+                    </span>
+                  </>
+                ) : row.live ? (
                   <StatusPill status="green" label="Live" />
                 ) : (
-                  <StatusPill status="neutral" label={`Expired ${fmtDate(f.expiredAt ?? "")}`} />
+                  <StatusPill status="neutral" label={`Expired ${fmtDate(row.expiredAt ?? "")}`} />
                 )}
-                {canWrite ? (
+                {row.source === "case" && row.caseId ? (
+                  <Link
+                    to="/cases/$id"
+                    params={{ id: row.caseId }}
+                    className="ml-auto text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                  >
+                    Open case
+                  </Link>
+                ) : null}
+                {row.source === "fact" && canWrite && fact ? (
                   <span className="ml-auto flex items-center gap-2">
                     <button
                       type="button"
                       className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      onClick={() => setEditingId(f)}
+                      onClick={() => setEditingId(fact)}
                     >
-                      {f.payerIssuedId ? "Edit ID" : "Add ID"}
+                      {row.payerIssuedId ? "Edit ID" : "Add ID"}
                     </button>
-                    {live ? (
+                    {row.live ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 text-[12px]"
-                        onClick={() => setExpiring(f.id)}
+                        onClick={() => setExpiring(fact.id)}
                       >
                         Expire
                       </Button>
@@ -289,7 +321,11 @@ export function EnrollmentsPanel({
       {editingId ? (
         <FactIdentifierDialog
           fact={editingId}
-          label={myFacts.find((f) => f.id === editingId.id)?.pinLabel ?? "Payer-issued ID"}
+          label={
+            resolveIdentifierConfig(
+              (payersQ.data ?? []).find((p) => p.id === editingId.payerId) ?? null,
+            ).individualLabel
+          }
           onClose={() => setEditingId(null)}
         />
       ) : null}
