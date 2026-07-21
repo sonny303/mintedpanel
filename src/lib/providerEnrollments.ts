@@ -10,11 +10,11 @@
 // status correction away from Approved re-derives the row out automatically.
 //
 // Deliberately NO dedupe when a live fact and an approved case cover the same
-// provider x group x payer x state: the fact row must stay visible so its
-// Expire/Edit-ID controls remain reachable (a silently suppressed live fact
-// would keep suppressing generation candidates with no way to expire it).
-// The board's rollup already treats either source as Active, so double
-// counting is not a concern here — this is a display grain.
+// provider x group x payer x state: the fact row must stay visible so its own
+// record (Edit-ID, expiry history) stays reachable and honest — a silently
+// suppressed live fact would keep suppressing generation candidates while
+// hiding that it exists. The board's rollup already treats either source as
+// Active, so double counting is not a concern here — this is a display grain.
 import type { CredentialCase, EnrollmentFact } from "@/types";
 
 export interface ProviderEnrollmentRow {

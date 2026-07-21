@@ -13,8 +13,12 @@
 // (providerEnrollments reducer), carrying the effective date + payer-issued
 // ID the approval captured on the case — resolving a case updates this view
 // with zero re-entry and zero dual writes ("From case" rows are read-only
-// links; corrections happen on the case and re-derive). Manual facts keep
-// their capture/edit/expire controls unchanged.
+// links; corrections happen on the case and re-derive).
+// 2026-07-21 status/action cleanup (user handoff): live rows say "Active"
+// (the standard vocabulary — "Live" was a drift) and the row-level Expire
+// button is GONE (no user value on this surface). expireEnrollmentFact stays
+// in the service/hook layer — expiry is still the data model's re-open flip,
+// just no longer a provider-record affordance.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -42,7 +46,6 @@ import { StatusPill } from "@/components/StatusPill";
 import {
   useCreateEnrollmentFact,
   useEnrollmentFacts,
-  useExpireEnrollmentFact,
   useSetEnrollmentFactIdentifier,
 } from "@/hooks/useEnrollmentFacts";
 import { useCases } from "@/hooks/useCases";
@@ -71,7 +74,6 @@ export function EnrollmentsPanel({
   const groupsQ = useProviderGroups();
   const payersQ = usePayers();
   const createFact = useCreateEnrollmentFact();
-  const expireFact = useExpireEnrollmentFact();
 
   const [adding, setAdding] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
@@ -80,7 +82,6 @@ export function EnrollmentsPanel({
   const [dateDraft, setDateDraft] = useState("");
   const [pinDraft, setPinDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [expiring, setExpiring] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<EnrollmentFact | null>(null);
 
   // The PIN field is labeled with the selected payer's own Minted-curated
@@ -160,7 +161,7 @@ export function EnrollmentsPanel({
           onClick={() => setAdding(true)}
           disabled={myGroups.length === 0}
         >
-          Add enrollment
+          + Add enrollment
         </Button>
       ) : null}
       {myRows.length === 0 ? (
@@ -195,7 +196,10 @@ export function EnrollmentsPanel({
                     </span>
                   </>
                 ) : row.live ? (
-                  <StatusPill status="green" label="Live" />
+                  // Standard status vocabulary: an in-force enrollment is
+                  // "Active" whichever source it derives from ("Live" was a
+                  // drift — user handoff 2026-07-21).
+                  <StatusPill status="green" label="Active" />
                 ) : (
                   <StatusPill status="neutral" label={`Expired ${fmtDate(row.expiredAt ?? "")}`} />
                 )}
@@ -209,25 +213,13 @@ export function EnrollmentsPanel({
                   </Link>
                 ) : null}
                 {row.source === "fact" && canWrite && fact ? (
-                  <span className="ml-auto flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      onClick={() => setEditingId(fact)}
-                    >
-                      {row.payerIssuedId ? "Edit ID" : "Add ID"}
-                    </button>
-                    {row.live ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[12px]"
-                        onClick={() => setExpiring(fact.id)}
-                      >
-                        Expire
-                      </Button>
-                    ) : null}
-                  </span>
+                  <button
+                    type="button"
+                    className="ml-auto text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                    onClick={() => setEditingId(fact)}
+                  >
+                    {row.payerIssuedId ? "Edit ID" : "Add ID"}
+                  </button>
                 ) : null}
               </li>
             );
@@ -328,41 +320,6 @@ export function EnrollmentsPanel({
           }
           onClose={() => setEditingId(null)}
         />
-      ) : null}
-
-      {expiring ? (
-        <Dialog open onOpenChange={(o) => !o && setExpiring(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Expire this enrollment?</DialogTitle>
-              <DialogDescription>
-                Expiry is a flip, never a delete. The combination immediately re-opens as a
-                generation candidate in the group&apos;s buffer.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setExpiring(null)}>
-                Cancel
-              </Button>
-              <Button
-                className="bg-[#1B4D3E] hover:bg-[#163F33]"
-                disabled={expireFact.isPending}
-                onClick={() =>
-                  expireFact.mutate(expiring, {
-                    onSuccess: () => {
-                      toast.success("Enrollment expired — the candidate is back in the buffer.");
-                      setExpiring(null);
-                    },
-                    onError: (e) =>
-                      toast.error(e instanceof Error ? e.message : "Could not expire the fact."),
-                  })
-                }
-              >
-                Expire enrollment
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       ) : null}
     </div>
   );

@@ -584,7 +584,7 @@ function FormBody({
                 ])
               }
             >
-              Add enrollment
+              + Add enrollment
             </Button>
           </div>
         ) : null}

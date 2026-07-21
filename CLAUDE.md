@@ -1916,7 +1916,27 @@ migration-capture; a status correction away from Approved re-derives the row
 out; deliberately NO dedupe against a live fact on the same combo — its
 Expire must stay reachable). In-flight cases stay the Cases panel's job.
 `CASE_LIST_COLUMNS` gained `payer_individual_provider_id`; TS-113 extended
-with the derived-row slice.
+with the derived-row slice. **Provider-record UX handoff (2026-07-21, same
+day, 7 issues):** (a) THE licenses save-failure root cause —
+`updateProviderWithLicenses` with the record dialog's EMPTY patch issued
+`.update({}).select().single()` on `providers`; real PostgREST matches ZERO
+rows on an empty PATCH so `.single()` 406s ("Could not save licenses." on
+every save; the e2e mock masked it by accepting empty PATCHes — the
+provider-roster harness now mirrors the zero-row behavior and TS-35 pins
+ZERO providers PATCHes during license saves). The service now SKIPS the
+providers write when the payload is empty (`after = before`). (b) Licenses
+UI rebuilt to the standard pattern: "+ Add license" + per-row Edit/Remove
+(single-license dialog + remove-confirm; every write composes the FULL list
+through the same audited sync; blank state-board URL accepted for
+unverified — required only for verify/fail; `LicenseListEditor` remains the
+wizard create-flow editor). (c) Identity is ONE master "Edit details" →
+whole-form edit → "Save changes" committing a DIFF-ONLY audited
+`updateProvider` patch (per-field `InlineField` pencils retired; component
+DELETED; DOB stays masked-at-rest/reveal-in-edit; TS-112 pins the
+one-changed-field patch). (d) Enrollments cleanup: live fact rows render
+the standard "Active" pill ("Live" was vocabulary drift), the row Expire
+button is REMOVED (service/hook `expireEnrollmentFact` kept, no UI caller),
+and both enrollment add buttons say "+ Add enrollment" (the "+ Add" design).
 
 ## What this is
 
