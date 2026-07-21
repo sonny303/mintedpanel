@@ -9,18 +9,17 @@
 // to the Reporting Center's Intake report (E6.6 F6.6.1), and the reason-code
 // + queue-ranking editors are GONE — both vocabularies ship as fixed defaults
 // (E6.6 F6.6.6; documented in src/services/cases.ts `listDenialReasonCodes`
-// and src/lib/nextBestActions.ts). The user's own profile section (display
-// name → the {{user.name}} preparer token) rides along from the retired
-// Settings page — it has no other home until a dedicated user-scoped surface
-// exists (flagged in the E6.1 PR).
+// and src/lib/nextBestActions.ts). The user Profile section (display name →
+// the {{user.name}} preparer token) was REMOVED 2026-07-21 by user request —
+// the whole setter chain (ProfilePanel/useUserProfile/userProfile service)
+// is deleted with it; {{user.name}} still resolves from auth user_metadata
+// (src/server/userTokens.ts), already-set names persist unchanged.
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Separator } from "@/components/ui/separator";
 import { AccountDetailSummary } from "@/components/org/AccountDetailSummary";
 import { FinishSetupBanner } from "@/components/org/FinishSetupBanner";
 import { PartiesManager } from "@/components/org/PartiesManager";
 import { MembersPanel } from "@/components/settings/MembersPanel";
-import { ProfilePanel } from "@/components/settings/ProfilePanel";
 
 export const Route = createFileRoute("/org-detail")({
   component: OrgDetailPage,
@@ -45,9 +44,6 @@ function OrgDetailPage() {
           The issued VALUE is captured where it is issued (the provider's
           enrollment fact; the group's Payer Network entry) and the per-payer
           LABEL is a Minted-curated payer fact shown in Payer Setup. */}
-      <Separator />
-      {/* User-scoped: your display name ({{user.name}} on payer forms). */}
-      <ProfilePanel />
     </div>
   );
 }

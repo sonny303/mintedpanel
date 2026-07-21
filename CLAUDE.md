@@ -2209,10 +2209,12 @@ built only when a real consumer pulls them. The current surface:
   keys (`selected_facility_id`, `needs_facility`) are the locked wire
   contract, like the touches body. The `{{user.*}}` token family (`user.name` from
   user_metadata full_name/name, `user.email` from the JWT claim — no schema
-  backing) is appended by the route via `src/server/userTokens.ts`; users set
-  their own full_name in Settings → Profile (`ProfilePanel` →
-  `src/services/userProfile.ts`, `supabase.auth.updateUser` — separate from
-  `profiles.full_name`, which the sidebar/store display reads);
+  backing) is appended by the route via `src/server/userTokens.ts`. NB there
+  is NO in-app setter for user_metadata full_name anymore — the Org Detail
+  Profile section and its whole chain (`ProfilePanel` →
+  `useUserProfile` → `src/services/userProfile.ts`) were removed by user
+  request 2026-07-21 (already-set names persist; `profiles.full_name`, which
+  the sidebar/store display reads, is separate and unaffected);
   empty-resolution notes surface in the envelope's `meta.notes`. **The most
   PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
   by design): `Cache-Control: no-store`, never log the body. Every successful
