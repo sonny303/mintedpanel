@@ -312,6 +312,12 @@ test("TS-108: multi-group A→Z list → hub with editable group facts + navigat
   await expect(page.getByText("12-3456789")).toBeVisible();
   await expect(page.getByText("NC, SC")).toBeVisible();
 
+  // 2026-07-21: malpractice moved to the GROUP — the hub carries the
+  // Insurance & malpractice panel (group_insurance_policies), admin can add.
+  await expect(page.getByRole("heading", { name: "Insurance & malpractice" })).toBeVisible();
+  await expect(page.getByText("Insurance Policies", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Add Policy/ })).toBeVisible();
+
   // Facts are editable inline (admin) through the audited group update.
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Legal name").fill("Carolina Coast Rehab, LLC");

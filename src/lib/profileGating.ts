@@ -12,13 +12,11 @@
 import type { ProviderReadinessFacts } from "./enrollmentReadiness";
 
 export type ProfileAttributeKey =
-  | "caqh_id"
-  | "caqh_attested"
-  | "npi"
-  | "dob"
-  | "ssn_last4"
-  | "home_address"
-  | "malpractice_coverage";
+  "caqh_id" | "caqh_attested" | "npi" | "dob" | "ssn_last4" | "home_address";
+// (`malpractice_coverage` retired 2026-07-21: malpractice moved to the GROUP,
+// so it is no longer a provider-profile attribute — the group's coverage is
+// already verified by the group-owned `group_coi` readiness check. Any SOP
+// that stored the key sheds it via normalizeRequiredAttributes.)
 
 interface ProfileAttributeDef {
   key: ProfileAttributeKey;
@@ -40,11 +38,6 @@ export const PROFILE_ATTRIBUTES: readonly ProfileAttributeDef[] = [
   { key: "dob", label: "Date of birth", satisfied: (f) => f.dobPresent },
   { key: "ssn_last4", label: "SSN (last 4)", satisfied: (f) => f.ssnLast4Present },
   { key: "home_address", label: "Home address", satisfied: (f) => f.homeAddressPresent },
-  {
-    key: "malpractice_coverage",
-    label: "Malpractice coverage",
-    satisfied: (f) => f.malpracticeCoverageEnd !== null,
-  },
 ];
 
 const BY_KEY = new Map<ProfileAttributeKey, ProfileAttributeDef>(

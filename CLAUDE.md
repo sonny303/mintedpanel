@@ -1967,7 +1967,24 @@ runs back-link; "Generate applications"/"Review & generate" are gone). The
 is pure churn — revisit only if product insists). e2e:
 `scope-review.spec.ts` → **`provider-readiness.spec.ts`** (TS-43/44 on the
 record); onboarding-wizard TS-25/28, import-preview TS-63, and
-document-storage TS-89 retargeted.
+document-storage TS-89 retargeted. **Malpractice → group (2026-07-21, no
+migration):** malpractice coverage is a GROUP fact — the group's
+`professional_liability` policy in `group_insurance_policies` (already
+verified by the group-owned `group_coi` readiness check) covers every
+assigned provider. The four malpractice fields left the provider record
+Identity section AND the `/providers/new` create form; the existing
+`InsurancePanel` (group insurance policies) now renders on the **group hub**
+(`groups.$groupId.index.tsx`, "Insurance & malpractice", admin-editable) —
+it was previously only in the wizard group form. Readiness dropped the
+provider-level `malpractice_current` check (and its `malpracticeCoverageEnd`
+fact in both the browser + `/api/next-best-action` reads — the provider
+projection no longer selects `malpractice_coverage_end`); `profileGating.ts`
+dropped the `malpractice_coverage` governed attribute (stored SOP keys shed
+it via `normalizeRequiredAttributes`). Provider malpractice COLUMNS stay
+dormant (additive rule); `providerProfile.ts` already resolves `{{malpractice.*}}`
+tokens from the group's professional-liability policy (2026-07-17 PM
+decision, unchanged). e2e: groups-hub TS-108 asserts the hub Insurance
+panel; provider-group/provider-roster already pinned the group placement.
 
 ## What this is
 

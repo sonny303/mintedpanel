@@ -6,8 +6,10 @@ import { ArrowRight, Building2, Network } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { GroupFactsCard } from "@/components/groups/GroupFactsCard";
+import { InsurancePanel } from "@/components/settings/InsurancePanel";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
+import { useIsAdmin } from "@/lib/permissions";
 
 export const Route = createFileRoute("/groups/$groupId/")({
   component: GroupHubPage,
@@ -18,6 +20,7 @@ function GroupHubPage() {
   const groupsQ = useProviderGroups();
   const facilitiesQ = useFacilities();
   const targetsQ = usePayerNetworkTargets();
+  const isAdmin = useIsAdmin();
   const group = (groupsQ.data ?? []).find((g) => g.id === groupId);
   if (!group) return null; // the layout renders the not-found state
 
@@ -52,6 +55,13 @@ function GroupHubPage() {
         description="The group's facts, locations, and payer network."
       />
       <GroupFactsCard group={group} />
+      {/* 2026-07-21: malpractice + other coverage lives on the GROUP —
+          the group's professional-liability policy applies to every
+          assigned provider (moved off the provider record). */}
+      <div className="space-y-2">
+        <h2 className="text-[15px] font-semibold text-foreground">Insurance & malpractice</h2>
+        <InsurancePanel groupId={groupId} canEdit={isAdmin} />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {areas.map((a) => (
           <Link key={a.label} to={a.to} params={{ groupId }} className="group">

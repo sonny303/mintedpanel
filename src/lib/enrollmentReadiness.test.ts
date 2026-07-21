@@ -25,7 +25,6 @@ const facts = (over: Partial<ProviderReadinessFacts> = {}): ProviderReadinessFac
   dobPresent: true,
   ssnLast4Present: true,
   homeAddressPresent: true,
-  malpracticeCoverageEnd: "2027-01-01",
   ...over,
 });
 
@@ -76,7 +75,8 @@ describe("provider checklist", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].ready).toBe(true);
     expect(rows[0].openGaps).toBe(0);
-    expect(rows[0].checks).toHaveLength(12);
+    // 7 provider checks (malpractice moved to the group 2026-07-21) + 4 group.
+    expect(rows[0].checks).toHaveLength(11);
   });
 
   it("license expiration is date-only inclusive: today passes, yesterday fails", () => {
@@ -362,7 +362,7 @@ describe("group contract check (E2.0 TE-8 — optional, additive)", () => {
   it("emits no group_contract check when the contracts input is omitted", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].checks.some((c) => c.key === "group_contract")).toBe(false);
-    expect(rows[0].checks).toHaveLength(12);
+    expect(rows[0].checks).toHaveLength(11);
   });
 
   it("passes when a contract at the exact group × payer × state is Contracted", () => {

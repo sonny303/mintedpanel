@@ -32,8 +32,11 @@ export type ProviderCheckKey =
   | "caqh_id"
   | "caqh_current"
   | "npi"
-  | "demographics"
-  | "malpractice_current";
+  | "demographics";
+// (`malpractice_current` retired 2026-07-21: malpractice coverage moved to the
+// GROUP — a group `professional_liability` policy in group_insurance_policies,
+// already verified by the group-owned `group_coi` check. No provider-level
+// malpractice check remains; the provider columns are dormant.)
 
 export type GroupCheckKey =
   "state_facility" | "w9" | "group_coi" | "voided_check" | "group_contract";
@@ -68,7 +71,6 @@ export interface ProviderReadinessFacts {
   dobPresent: boolean;
   ssnLast4Present: boolean;
   homeAddressPresent: boolean;
-  malpracticeCoverageEnd: string | null;
 }
 
 export interface ReadinessLicenseInput {
@@ -247,16 +249,9 @@ function providerChecks(
         missingDemographics.length === 0 ? null : `Missing: ${missingDemographics.join(", ")}`,
       fixTarget: "providers_section",
     },
-    {
-      key: "malpractice_current",
-      owner: "provider",
-      label: "Malpractice coverage current",
-      pass: onOrAfter(facts.malpracticeCoverageEnd, today),
-      detail: facts.malpracticeCoverageEnd
-        ? `Coverage ends ${facts.malpracticeCoverageEnd}`
-        : "No coverage end date",
-      fixTarget: "providers_section",
-    },
+    // Malpractice coverage is a GROUP concern (2026-07-21) — the group's
+    // professional-liability policy is verified by the group-owned `group_coi`
+    // check; no provider-level malpractice check is emitted here.
   ];
   return checks;
 }

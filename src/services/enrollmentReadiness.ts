@@ -31,7 +31,6 @@ interface ProviderFactsRow {
   homeCity: string | null;
   homeState: string | null;
   homeZip: string | null;
-  malpracticeCoverageEnd: string | null;
 }
 
 export async function listProviderReadinessFacts(): Promise<ProviderReadinessFacts[]> {
@@ -49,7 +48,7 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
   const { data, error } = await supabase
     .from("providers")
     .select(
-      "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, home_street, home_city, home_state, home_zip, malpractice_coverage_end",
+      "id, first_name, last_name, status, verification_state, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, home_street, home_city, home_state, home_zip",
     )
     .eq("org_id", orgId)
     .neq("status", "terminated")
@@ -68,7 +67,6 @@ export async function listProviderReadinessFacts(): Promise<ProviderReadinessFac
     homeAddressPresent: Boolean(
       r.homeStreet?.trim() && r.homeCity?.trim() && r.homeState?.trim() && r.homeZip?.trim(),
     ),
-    malpracticeCoverageEnd: r.malpracticeCoverageEnd,
   }));
 }
 

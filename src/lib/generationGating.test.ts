@@ -33,7 +33,6 @@ function facts(over: Partial<ProviderReadinessFacts>): ProviderReadinessFacts {
     dobPresent: true,
     ssnLast4Present: true,
     homeAddressPresent: true,
-    malpracticeCoverageEnd: "2027-01-01",
     ...over,
   };
 }

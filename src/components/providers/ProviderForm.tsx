@@ -279,16 +279,6 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <Row label="Degree" value={form.degree} />
         <Row label="School" value={form.schoolName} />
         <Row label="Graduation" value={form.graduationDate} />
-        <Row label="Carrier" value={form.malpracticeCarrier} />
-        <Row label="Policy" value={form.malpracticePolicyNumber} />
-        <Row
-          label="Coverage"
-          value={
-            form.malpracticeCoverageStart || form.malpracticeCoverageEnd
-              ? `${form.malpracticeCoverageStart || "—"} → ${form.malpracticeCoverageEnd || "—"}`
-              : null
-          }
-        />
       </Section>
     </div>
   );

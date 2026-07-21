@@ -346,30 +346,11 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
       type: "date",
       display: dateDisplay,
     },
-    {
-      label: "Malpractice carrier",
-      key: "malpracticeCarrier",
-      value: provider.malpracticeCarrier ?? null,
-    },
-    {
-      label: "Malpractice policy #",
-      key: "malpracticePolicyNumber",
-      value: provider.malpracticePolicyNumber ?? null,
-    },
-    {
-      label: "Malpractice coverage start",
-      key: "malpracticeCoverageStart",
-      value: provider.malpracticeCoverageStart ?? null,
-      type: "date",
-      display: dateDisplay,
-    },
-    {
-      label: "Malpractice coverage end",
-      key: "malpracticeCoverageEnd",
-      value: provider.malpracticeCoverageEnd ?? null,
-      type: "date",
-      display: dateDisplay,
-    },
+    // 2026-07-21: malpractice moved to the GROUP — coverage is carried by the
+    // group's professional-liability policy (group hub → Insurance policies)
+    // and applies to every assigned provider, so the four malpractice fields
+    // are no longer entered/shown per-provider. The provider columns stay
+    // dormant (additive rule); nothing writes them from here anymore.
   ];
 
   const startEdit = () => {

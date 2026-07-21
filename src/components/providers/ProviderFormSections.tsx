@@ -344,32 +344,9 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
           onChange={(e) => update("graduationDate", e.target.value)}
         />
       </Field>
-      <Field label="Malpractice carrier">
-        <Input
-          value={form.malpracticeCarrier}
-          onChange={(e) => update("malpracticeCarrier", e.target.value)}
-        />
-      </Field>
-      <Field label="Policy number">
-        <Input
-          value={form.malpracticePolicyNumber}
-          onChange={(e) => update("malpracticePolicyNumber", e.target.value)}
-        />
-      </Field>
-      <Field label="Coverage start">
-        <Input
-          type="date"
-          value={form.malpracticeCoverageStart}
-          onChange={(e) => update("malpracticeCoverageStart", e.target.value)}
-        />
-      </Field>
-      <Field label="Coverage end">
-        <Input
-          type="date"
-          value={form.malpracticeCoverageEnd}
-          onChange={(e) => update("malpracticeCoverageEnd", e.target.value)}
-        />
-      </Field>
+      {/* Malpractice is a GROUP fact (2026-07-21) — the group's
+          professional-liability policy covers every assigned provider (group
+          hub → Insurance policies), so it's not collected per-provider. */}
     </div>
   );
 }
