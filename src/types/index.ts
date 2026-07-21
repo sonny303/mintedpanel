@@ -703,6 +703,10 @@ export interface StatusConfig {
 
 export interface CredentialCase {
   id: string;
+  // 2026-07-22 — the globally-sequential, immutable case number (one sequence
+  // across all orgs), displayed as C-<caseNumber>. Backfilled in created_at
+  // order; drawn by a column DEFAULT on every insert path.
+  caseNumber: number;
   orgId: string;
   providerId: string;
   groupId: string | null;
