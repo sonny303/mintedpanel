@@ -50,7 +50,7 @@ function GenerationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Review & generate"
+        title="Generate cases"
         description="Every provider × payer target lands in exactly one bucket — select what this batch creates; skipping keeps a candidate in the buffer. A human always confirms."
         actions={
           <Button asChild variant="outline" size="sm" className="h-8">

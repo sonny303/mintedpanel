@@ -11,16 +11,13 @@ import { partyToContactInput } from "@/lib/contacts";
 export type OnboardingSectionStatus = "not_started" | "in_progress" | "complete";
 
 export type ActiveSectionKey =
-  | "org_details"
-  | "provider_group"
-  | "facilities"
-  | "providers"
-  | "assignments"
-  | "payer_network"
-  | "scope_review";
+  "org_details" | "provider_group" | "facilities" | "providers" | "assignments" | "payer_network";
 // All R3 previews have activated (E1.4 Assignments, E1.5 Payer Network, E1.8
 // Scope Review). The preview machinery stays for future stages — this union
-// is empty until one arrives.
+// is empty until one arrives. 2026-07-21 (user handoff): Scope Review is
+// GONE from the wizard — readiness review lives on the provider record
+// (ProviderReadinessSection) where the per-provider × group × payer × state
+// grain belongs; setup completion no longer depends on readiness.
 export type PreviewSectionKey = never;
 export type OnboardingSectionKey = ActiveSectionKey | PreviewSectionKey;
 
@@ -60,17 +57,12 @@ export const ONBOARDING_SECTIONS: readonly OnboardingSectionDef[] = [
   // E1.4: Assignments went live — the first R3 preview to activate.
   { key: "assignments", title: "Assignments", domId: "wizard-assignments", kind: "active" },
   // E1.5: Payer Network went live — the group×payer×state attachment surface.
+  // (E1.8's Scope Review section was relocated to the provider record
+  // 2026-07-21 — readiness is a provider-side review, not an org setup step.)
   {
     key: "payer_network",
     title: "Payer Network",
     domId: "wizard-payer-network",
-    kind: "active",
-  },
-  // E1.8: Scope Review went live — the derived enrollment-readiness matrix.
-  {
-    key: "scope_review",
-    title: "Scope Review",
-    domId: "wizard-scope-review",
     kind: "active",
   },
 ];
@@ -153,18 +145,6 @@ export function resolvePayerNetworkStatus(
   targets: ReadonlyArray<{ status: "active" | "archived" }>,
 ): OnboardingSectionStatus {
   return resolveActiveRowsStatus(targets.map((t) => ({ isActive: t.status === "active" })));
-}
-
-// Scope Review (E1.8): readiness is fully derived — the section is
-// not_started with zero readiness rows (no active targets × roster yet),
-// complete when every case-key row is Ready, else in_progress. The chip is
-// informational; readiness itself is ADVISORY and never blocks anything.
-export function resolveScopeReviewStatus(summary: {
-  total: number;
-  ready: number;
-}): OnboardingSectionStatus {
-  if (summary.total === 0) return "not_started";
-  return summary.ready === summary.total ? "complete" : "in_progress";
 }
 
 // ---------- next action (F1.0.3 / TE-4) ----------

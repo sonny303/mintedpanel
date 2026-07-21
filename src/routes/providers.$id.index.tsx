@@ -49,6 +49,7 @@ import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { SsnVaultField } from "@/components/providers/SsnVaultField";
 import { GroupsFacilitiesPanel } from "@/components/providers/GroupsFacilitiesPanel";
 import { EnrollmentsPanel } from "@/components/providers/EnrollmentsPanel";
+import { ProviderReadinessSection } from "@/components/providers/ProviderReadinessSection";
 import { EMPTY_LICENSE_DRAFT, type LicenseDraft } from "@/components/onboarding/licenseDraft";
 import {
   useProvider,
@@ -84,6 +85,9 @@ const SECTIONS = [
   { id: "groups-facilities", label: "Groups & facilities" },
   { id: "licenses", label: "Licenses" },
   { id: "enrollments", label: "Enrollments" },
+  // 2026-07-21 relocation: the wizard's Scope Review lives HERE now — the
+  // provider-scoped readiness matrix, right before the casework it precedes.
+  { id: "readiness", label: "Readiness" },
   { id: "cases", label: "Cases" },
   { id: "documents", label: "Documents" },
 ] as const;
@@ -175,6 +179,10 @@ function ProviderRecordPage() {
           <EnrollmentsPanel providerId={provider.id} canWrite={canWrite} />
         </Section>
 
+        <Section id="readiness" title="Readiness">
+          <ProviderReadinessSection providerId={provider.id} />
+        </Section>
+
         <Section id="cases" title="Cases">
           <CasesSection providerId={provider.id} />
         </Section>
@@ -237,7 +245,7 @@ function RecordHeader({ provider, canWrite }: { provider: Provider; canWrite: bo
           {provider.status !== "terminated" ? (
             <Button asChild variant="outline" size="sm" className="h-8">
               <Link to="/generation" search={{ provider: provider.id }}>
-                Review &amp; generate
+                Generate cases
               </Link>
             </Button>
           ) : null}
@@ -969,8 +977,7 @@ function CasesSection({ providerId }: { providerId: string }) {
   if (rows.length === 0) {
     return (
       <p className="text-[13px] text-muted-foreground">
-        No cases yet. Cases come through Review &amp; generate on the group&apos;s Payer Network
-        board.
+        No cases yet. Cases come through Generate cases on the group&apos;s Payer Network board.
       </p>
     );
   }

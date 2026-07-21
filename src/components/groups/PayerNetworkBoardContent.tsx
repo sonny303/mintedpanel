@@ -141,7 +141,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
       </div>
 
       {/* F6.2.3 — the candidates-awaiting-generation banner: count = the E6.3
-          candidate math, cause named; Review & generate opens the shared grid. */}
+          candidate math, cause named; Generate cases opens the shared grid. */}
       {candidates.length > 0 ? (
         <Card className="border-[#FDE68A] bg-[#FEF3C7]">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -161,7 +161,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
             {/* E6.3 — the one door: the grid opens scoped to this group. */}
             <Button asChild variant="outline" size="sm" className="h-8">
               <Link to="/generation" search={{ group: group.id }}>
-                Review &amp; generate
+                Generate cases
               </Link>
             </Button>
           </CardContent>
@@ -300,7 +300,7 @@ function BoardRowCard({
                 to="/generation"
                 search={{ group: groupId, payer: row.payerId, pivot: "payer" }}
               >
-                Review &amp; generate
+                Generate cases
               </Link>
             </Button>
             {isAdmin ? (

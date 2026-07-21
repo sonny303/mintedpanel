@@ -10,7 +10,6 @@ import { useOrgContacts } from "@/hooks/useParties";
 import { usePayers } from "@/hooks/useAdmin";
 import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
-import { useEnrollmentReadiness } from "@/hooks/useEnrollmentReadiness";
 import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import {
   useProviderAssignments,
@@ -25,7 +24,6 @@ import {
   resolveOrgDetailsStatus,
   resolvePayerNetworkStatus,
   resolveProviderGroupStatus,
-  resolveScopeReviewStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
   type OnboardingSectionDef,
@@ -93,9 +91,8 @@ export function useOnboardingWizard(): OnboardingWizardData {
   const payersQ = usePayers();
   const payerAssignmentsQ = useOrgPayerAssignments();
   const targetsQ = usePayerNetworkTargets();
-  // E1.8: the derived readiness matrix drives the Scope Review chip. Shares
-  // every org-scoped cache with the sections above (no duplicate fetches).
-  const readiness = useEnrollmentReadiness();
+  // (E1.8's readiness composition left with Scope Review 2026-07-21 — the
+  // matrix lives on the provider record now, off the wizard's read path.)
 
   const contacts = contactsQ.data ?? [];
   const orgName = active?.orgName ?? null;
@@ -166,14 +163,6 @@ export function useOnboardingWizard(): OnboardingWizardData {
       isError: targetsQ.isError,
       refetch: targetsQ.refetch,
     },
-    // E1.8: derived readiness — complete only when every case-key row is
-    // Ready (informational; readiness never blocks anything).
-    scope_review: {
-      status: readiness.summary ? resolveScopeReviewStatus(readiness.summary) : undefined,
-      isLoading: readiness.isLoading,
-      isError: readiness.isError,
-      refetch: readiness.refetch,
-    },
   };
 
   const orgDetailsStatus = sections.org_details.status;
@@ -182,15 +171,13 @@ export function useOnboardingWizard(): OnboardingWizardData {
   const providersStatus = sections.providers.status;
   const assignmentsStatus = sections.assignments.status;
   const payerNetworkStatus = sections.payer_network.status;
-  const scopeReviewStatus = sections.scope_review.status;
   const nextSection =
     orgDetailsStatus &&
     groupStatus &&
     facilitiesStatus &&
     providersStatus &&
     assignmentsStatus &&
-    payerNetworkStatus &&
-    scopeReviewStatus
+    payerNetworkStatus
       ? getNextIncompleteSection({
           org_details: orgDetailsStatus,
           provider_group: groupStatus,
@@ -198,7 +185,6 @@ export function useOnboardingWizard(): OnboardingWizardData {
           providers: providersStatus,
           assignments: assignmentsStatus,
           payer_network: payerNetworkStatus,
-          scope_review: scopeReviewStatus,
         })
       : undefined;
 

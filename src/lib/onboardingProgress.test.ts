@@ -10,7 +10,6 @@ import {
   resolveOrgDetailsStatus,
   resolvePayerNetworkStatus,
   resolveProviderGroupStatus,
-  resolveScopeReviewStatus,
   resolveRowCountStatus,
   type ActiveSectionKey,
   type OnboardingSectionStatus,
@@ -178,11 +177,10 @@ describe("section registry", () => {
       "Providers",
       "Assignments",
       "Payer Network",
-      "Scope Review",
     ]);
-    // E1.4/E1.5/E1.8 activated every R3 preview — the whole journey is live.
+    // E1.4/E1.5 activated the R3 previews; Scope Review left for the provider
+    // record 2026-07-21 — the whole remaining journey is live.
     expect(ONBOARDING_SECTIONS.map((s) => s.kind)).toEqual([
-      "active",
       "active",
       "active",
       "active",
@@ -197,7 +195,7 @@ describe("section registry", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("derives ACTIVE_SECTIONS in registry order (all seven live as of E1.8)", () => {
+  it("derives ACTIVE_SECTIONS in registry order (six live sections)", () => {
     expect(ACTIVE_SECTIONS.map((s) => s.key)).toEqual([
       "org_details",
       "provider_group",
@@ -205,7 +203,6 @@ describe("section registry", () => {
       "providers",
       "assignments",
       "payer_network",
-      "scope_review",
     ]);
   });
 });
@@ -246,14 +243,6 @@ describe("resolvePayerNetworkStatus (E1.5)", () => {
   });
 });
 
-describe("resolveScopeReviewStatus (E1.8)", () => {
-  it("not_started with zero rows; in_progress with gaps; complete when all ready", () => {
-    expect(resolveScopeReviewStatus({ total: 0, ready: 0 })).toBe("not_started");
-    expect(resolveScopeReviewStatus({ total: 3, ready: 1 })).toBe("in_progress");
-    expect(resolveScopeReviewStatus({ total: 3, ready: 3 })).toBe("complete");
-  });
-});
-
 describe("getNextIncompleteSection", () => {
   const all = (
     status: OnboardingSectionStatus,
@@ -264,7 +253,6 @@ describe("getNextIncompleteSection", () => {
     providers: status,
     assignments: status,
     payer_network: status,
-    scope_review: status,
   });
 
   it("returns the first non-complete active section in registry order", () => {
@@ -284,9 +272,6 @@ describe("getNextIncompleteSection", () => {
     expect(
       getNextIncompleteSection({ ...all("complete"), payer_network: "not_started" })?.key,
     ).toBe("payer_network");
-    expect(getNextIncompleteSection({ ...all("complete"), scope_review: "in_progress" })?.key).toBe(
-      "scope_review",
-    );
   });
 
   it("treats in_progress as incomplete", () => {
@@ -304,7 +289,6 @@ describe("getNextIncompleteSection", () => {
         providers: "not_started",
         assignments: "not_started",
         payer_network: "not_started",
-        scope_review: "not_started",
       })?.key,
     ).toBe("provider_group");
   });

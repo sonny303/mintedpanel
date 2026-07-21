@@ -47,7 +47,7 @@ export function CaseProvenancePanel({ c, tasks }: { c: CaseDetail; tasks: Task[]
         <span className="flex flex-wrap items-center gap-2 text-[12px] text-muted-foreground">
           <GitBranch className="h-4 w-4 shrink-0" />
           <span>
-            {cycles.length} application cycles on this case:{" "}
+            {cycles.length} case cycles on this case:{" "}
             {cycles
               .map(
                 (cycle, i) =>
