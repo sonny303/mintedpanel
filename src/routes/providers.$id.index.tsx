@@ -1,14 +1,21 @@
 // E6.4 F6.4.2/F6.4.3/F6.4.4/F6.4.5 — the one-page provider record. Section
 // jump-nav (Identity · Groups & facilities · Licenses · Enrollments · Cases ·
-// Documents, deep-linkable #anchors), inline per-field editing (each field
-// saves independently through the audited updateProvider patch — the
-// monolithic edit form is RETIRED, killing the assignment-wipe defect),
-// in-place group/facility management (GroupsFacilitiesPanel — the existing
-// assignment services, never the provider UPDATE), enrollment-fact capture
-// (EnrollmentsPanel — facts, never auto-cases), and the read-only cases panel
-// with denial history preserved beneath reapply cycles. The provider-detail
-// "New case" manual door is retired with the form (the /cases ManualCaseModal
-// stays the ONE documented escape hatch, F6.3.5).
+// Documents, deep-linkable #anchors), in-place group/facility management
+// (GroupsFacilitiesPanel — the existing assignment services, never the
+// provider UPDATE), enrollment-fact capture (EnrollmentsPanel — facts, never
+// auto-cases), and the read-only cases panel with denial history preserved
+// beneath reapply cycles. The provider-detail "New case" manual door is
+// retired (the /cases ManualCaseModal stays the ONE documented escape hatch,
+// F6.3.5).
+// 2026-07-21 user handoff: Identity is ONE master Edit — the whole form goes
+// editable, one Save commits a DIFF-ONLY audited updateProvider patch (the
+// per-field pencil editing was tedious; the assignment-wipe protection holds
+// because the patch carries only identity columns, never assignments). The
+// Licenses section follows the standard "+ Add license" pattern with per-row
+// Edit/Remove — every write composes the full list into the audited
+// updateProviderWithLicenses sync with an EMPTY provider patch (the service
+// now skips the providers PATCH outright for empty patches; PostgREST 406s
+// an empty PATCH under .single(), the 2026-07-21 save-failure root cause).
 import React, { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { format } from "date-fns";
@@ -24,19 +31,25 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { StateSelect } from "@/components/StateSelect";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { CaseNotesPanel } from "@/components/cases/CaseNotesPanel";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { SsnVaultField } from "@/components/providers/SsnVaultField";
-import { InlineField } from "@/components/providers/InlineField";
 import { GroupsFacilitiesPanel } from "@/components/providers/GroupsFacilitiesPanel";
 import { EnrollmentsPanel } from "@/components/providers/EnrollmentsPanel";
-import { LicenseListEditor } from "@/components/onboarding/LicenseListEditor";
-import { type LicenseDraft } from "@/components/onboarding/licenseDraft";
+import { EMPTY_LICENSE_DRAFT, type LicenseDraft } from "@/components/onboarding/licenseDraft";
 import {
   useProvider,
   useTerminateProvider,
@@ -44,6 +57,7 @@ import {
   useUpdateProviderWithLicenses,
 } from "@/hooks/useProviders";
 import { useCreateNote, useNotes, useStateLicensesByProvider } from "@/hooks/useLookups";
+import type { StateLicense } from "@/services/lookups";
 import { useCases, useCaseDenialEntries, useDenialReasonCodes } from "@/hooks/useCases";
 import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { usePayers } from "@/hooks/useAdmin";
@@ -250,7 +264,7 @@ function RecordHeader({ provider, canWrite }: { provider: Provider; canWrite: bo
   );
 }
 
-// ---------- Identity: one InlineField per column, one write per save ----------
+// ---------- Identity: ONE master edit — whole form, one diff-only save ----------
 
 interface FieldDef {
   label: string;
@@ -264,10 +278,10 @@ interface FieldDef {
 
 function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
   const update = useUpdateProvider(provider.id);
-  const save = (key: string) => async (value: string | null) => {
-    await update.mutateAsync({ [key]: value } as Partial<ProviderInput>);
-    toast.success("Saved.");
-  };
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const dateDisplay = (v: string | null) => (v ? fmtDate(v) : "—");
   const fields: FieldDef[] = [
@@ -350,36 +364,175 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
     },
   ];
 
+  const startEdit = () => {
+    setDraft(Object.fromEntries(fields.map((f) => [f.key, f.value ?? ""])));
+    setFieldErrors({});
+    setSaveError(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const errors: Record<string, string> = {};
+    for (const f of fields) {
+      const v = (draft[f.key] ?? "").trim();
+      // Validate only fields the user actually changed — a legacy invalid
+      // value in an untouched field must not block an unrelated edit.
+      const changed = (v === "" ? null : v) !== (f.value ?? null);
+      if (changed && v !== "" && f.validate) {
+        const message = f.validate(v);
+        if (message) errors[f.key] = message;
+      }
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    // Diff-only patch: untouched fields never ride the write, so one save is
+    // still one narrow audited UPDATE — and assignments stay untouchable
+    // from here (the E6.4 wipe-defect protection holds by construction).
+    const patch: Partial<ProviderInput> = {};
+    for (const f of fields) {
+      const trimmed = (draft[f.key] ?? "").trim();
+      const next = trimmed === "" ? null : trimmed;
+      if (next !== (f.value ?? null)) (patch as Record<string, string | null>)[f.key] = next;
+    }
+    if (Object.keys(patch).length === 0) {
+      setEditing(false);
+      return;
+    }
+    try {
+      await update.mutateAsync(patch);
+      toast.success("Saved.");
+      setEditing(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save.");
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="space-y-2">
+        {canWrite ? (
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={startEdit}>
+            Edit details
+          </Button>
+        ) : null}
+        <div className="grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+          {fields.map((f) => (
+            <div key={f.key} className="py-1.5">
+              <p className="text-[12px] text-muted-foreground">{f.label}</p>
+              <p className="truncate text-[13px] text-foreground">
+                {f.masked
+                  ? f.value
+                    ? "••••••••"
+                    : "—"
+                  : f.display
+                    ? f.display(f.value)
+                    : (f.value ?? "—")}
+              </p>
+            </div>
+          ))}
+          <div className="py-1.5">
+            <p className="text-[12px] text-muted-foreground">SSN</p>
+            <SsnVaultField provider={provider} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
-      {fields.map((f) => (
-        <InlineField
-          key={f.key}
-          label={f.label}
-          value={f.value}
-          type={f.type}
-          display={f.display}
-          masked={f.masked}
-          canWrite={canWrite}
-          validate={f.validate}
-          onSave={save(f.key)}
-        />
-      ))}
-      <div className="flex items-start justify-between gap-2 py-1.5">
-        <div>
+    <div className="space-y-3">
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+        {fields.map((f) => (
+          <div key={f.key} className="space-y-1">
+            <Label htmlFor={`identity-${f.key}`} className="text-[12px]">
+              {f.label}
+            </Label>
+            {f.type === "state" ? (
+              <StateSelect
+                id={`identity-${f.key}`}
+                value={draft[f.key] ?? ""}
+                onChange={(v) => {
+                  setDraft((d) => ({ ...d, [f.key]: v }));
+                  setFieldErrors((e) => ({ ...e, [f.key]: "" }));
+                }}
+                className="h-8 text-[13px]"
+              />
+            ) : (
+              <Input
+                id={`identity-${f.key}`}
+                type={f.type === "date" ? "date" : "text"}
+                value={draft[f.key] ?? ""}
+                onChange={(e) => {
+                  setDraft((d) => ({ ...d, [f.key]: e.target.value }));
+                  setFieldErrors((prev) => ({ ...prev, [f.key]: "" }));
+                }}
+                className="h-8 text-[13px]"
+              />
+            )}
+            {fieldErrors[f.key] ? (
+              <p role="alert" className="text-[12px] text-[#B91C1C]">
+                {fieldErrors[f.key]}
+              </p>
+            ) : null}
+          </div>
+        ))}
+        <div className="space-y-1">
           <p className="text-[12px] text-muted-foreground">SSN</p>
           <SsnVaultField provider={provider} />
         </div>
+      </div>
+      {saveError ? (
+        <p role="alert" className="text-[12px] text-[#B91C1C]">
+          {saveError}
+        </p>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-8 bg-[#1B4D3E] hover:bg-[#163F33]"
+          disabled={update.isPending}
+          onClick={() => void save()}
+        >
+          Save changes
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={update.isPending}
+          onClick={() => setEditing(false)}
+        >
+          Cancel
+        </Button>
       </div>
     </div>
   );
 }
 
-// ---------- Licenses: read table + a licenses-only editor dialog ----------
+// ---------- Licenses: standard "+ Add" pattern, per-row Edit / Remove ----------
+// Every write composes the FULL license list (unchanged rows pass through
+// verbatim) into the ONE audited updateProviderWithLicenses sync with an
+// EMPTY provider patch — identity fields and assignments are untouchable
+// from here, and the PSV rules (verify/fail requires the board URL; renewal
+// resets to Unverified) ride the same service path as before. The URL is
+// OPTIONAL for unverified rows.
+
+const licenseToInput = (l: StateLicense): LicenseInput => ({
+  id: l.id,
+  state: l.state,
+  licenseNumber: l.licenseNumber,
+  licenseType: l.licenseType,
+  issueDate: l.issueDate,
+  expirationDate: l.expirationDate,
+  verifiedStatus: l.verifiedStatus ?? "unverified",
+  verificationSourceUrl: l.verificationSourceUrl,
+});
 
 function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite: boolean }) {
   const licensesQ = useStateLicensesByProvider(provider.id);
-  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<StateLicense | null>(null);
+  const [removing, setRemoving] = useState<StateLicense | null>(null);
 
   const rows = licensesQ.data ?? [];
   return (
@@ -389,9 +542,9 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
           variant="outline"
           size="sm"
           className="h-7 text-[12px]"
-          onClick={() => setEditing(true)}
+          onClick={() => setAdding(true)}
         >
-          Edit licenses
+          + Add license
         </Button>
       ) : null}
       {rows.length === 0 ? (
@@ -405,6 +558,11 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
               <th className="py-1.5 pr-3 font-medium">Type</th>
               <th className="py-1.5 pr-3 font-medium">Expires</th>
               <th className="py-1.5 font-medium">PSV</th>
+              {canWrite ? (
+                <th className="py-1.5 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -425,95 +583,318 @@ function LicensesSection({ provider, canWrite }: { provider: Provider; canWrite:
                     <StatusPill status="neutral" label="Unverified" />
                   )}
                 </td>
+                {canWrite ? (
+                  <td className="py-1.5 text-right">
+                    <span className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        aria-label={`Edit ${l.state} license`}
+                        onClick={() => setEditing(l)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        aria-label={`Remove ${l.state} license`}
+                        onClick={() => setRemoving(l)}
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {adding ? (
+        <LicenseDialog
+          provider={provider}
+          licenses={rows}
+          license={null}
+          onClose={() => setAdding(false)}
+        />
+      ) : null}
       {editing ? (
-        <LicensesEditorDialog provider={provider} onClose={() => setEditing(false)} />
+        <LicenseDialog
+          provider={provider}
+          licenses={rows}
+          license={editing}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {removing ? (
+        <RemoveLicenseDialog
+          provider={provider}
+          licenses={rows}
+          license={removing}
+          onClose={() => setRemoving(null)}
+        />
       ) : null}
     </div>
   );
 }
 
-function LicensesEditorDialog({ provider, onClose }: { provider: Provider; onClose: () => void }) {
-  const licensesQ = useStateLicensesByProvider(provider.id);
+function LicenseDialog({
+  provider,
+  licenses,
+  license,
+  onClose,
+}: {
+  provider: Provider;
+  licenses: StateLicense[];
+  /** null = add a new license; set = edit this one. */
+  license: StateLicense | null;
+  onClose: () => void;
+}) {
   const update = useUpdateProviderWithLicenses(provider.id);
-  const [drafts, setDrafts] = useState<LicenseDraft[] | null>(null);
+  const [draft, setDraft] = useState<LicenseDraft>(() =>
+    license
+      ? {
+          id: license.id,
+          state: license.state,
+          licenseNumber: license.licenseNumber ?? "",
+          licenseType: license.licenseType || "full",
+          issueDate: license.issueDate ?? "",
+          expirationDate: license.expirationDate ?? "",
+          verifiedStatus: license.verifiedStatus ?? "unverified",
+          verificationSourceUrl: license.verificationSourceUrl ?? "",
+          storedExpirationDate: license.expirationDate,
+          storedVerifiedAt: license.verifiedAt,
+        }
+      : { ...EMPTY_LICENSE_DRAFT },
+  );
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (drafts === null && licensesQ.data) {
-      setDrafts(
-        licensesQ.data.map((l) => ({
-          id: l.id,
-          state: l.state,
-          licenseNumber: l.licenseNumber ?? "",
-          licenseType: l.licenseType ?? "full",
-          issueDate: l.issueDate ?? "",
-          expirationDate: l.expirationDate ?? "",
-          verifiedStatus: l.verifiedStatus ?? "unverified",
-          verificationSourceUrl: l.verificationSourceUrl ?? "",
-          storedExpirationDate: l.expirationDate,
-          storedVerifiedAt: l.verifiedAt,
-        })),
-      );
-    }
-  }, [drafts, licensesQ.data]);
+  const set = (patch: Partial<LicenseDraft>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    setError(null);
+  };
+
+  const willReset =
+    license !== null &&
+    draft.expirationDate !== (draft.storedExpirationDate ?? "") &&
+    draft.verifiedStatus !== "unverified";
 
   const save = () => {
-    for (const d of drafts ?? []) {
-      if (
-        d.state.trim() &&
-        (d.verifiedStatus === "verified" || d.verifiedStatus === "failed") &&
-        !d.verificationSourceUrl.trim()
-      ) {
-        setError("PSV verify/fail requires the state board URL.");
-        return;
-      }
+    if (!draft.state.trim()) {
+      setError("State is required.");
+      return;
     }
-    const licenses: LicenseInput[] = (drafts ?? [])
-      .filter((d) => d.state.trim())
-      .map((d) => ({
-        id: d.id ?? null,
-        state: d.state,
-        licenseNumber: d.licenseNumber.trim() || null,
-        licenseType: d.licenseType.trim() || null,
-        issueDate: d.issueDate.trim() || null,
-        expirationDate: d.expirationDate.trim() || null,
-        verifiedStatus: d.verifiedStatus,
-        verificationSourceUrl: d.verificationSourceUrl.trim() || null,
-      }));
-    // Licenses-only write: an EMPTY patch and no groupAssignments — this
-    // dialog can never touch identity fields or assignments.
+    if (
+      (draft.verifiedStatus === "verified" || draft.verifiedStatus === "failed") &&
+      !draft.verificationSourceUrl.trim()
+    ) {
+      setError("PSV verify/fail requires the state board URL.");
+      return;
+    }
+    const edited: LicenseInput = {
+      id: license?.id ?? null,
+      state: draft.state,
+      licenseNumber: draft.licenseNumber.trim() || null,
+      licenseType: draft.licenseType.trim() || null,
+      issueDate: draft.issueDate.trim() || null,
+      expirationDate: draft.expirationDate.trim() || null,
+      verifiedStatus: draft.verifiedStatus,
+      verificationSourceUrl: draft.verificationSourceUrl.trim() || null,
+    };
+    const next = license
+      ? licenses.map((l) => (l.id === license.id ? edited : licenseToInput(l)))
+      : [...licenses.map(licenseToInput), edited];
     update.mutate(
-      { patch: {}, licenses },
+      { patch: {}, licenses: next },
       {
         onSuccess: () => {
-          toast.success("Licenses saved.");
+          toast.success(license ? "License saved." : "License added.");
           onClose();
         },
-        onError: (e) => setError(e instanceof Error ? e.message : "Could not save licenses."),
+        onError: (e) => setError(e instanceof Error ? e.message : "Could not save the license."),
       },
     );
   };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit state licenses</DialogTitle>
+          <DialogTitle>{license ? "Edit license" : "Add license"}</DialogTitle>
           <DialogDescription>
             Licenses save on their own — nothing else on the record is touched. Editing an
             expiration date resets that license to Unverified.
           </DialogDescription>
         </DialogHeader>
-        {drafts === null ? (
-          <div className="h-24 animate-pulse rounded-md bg-mp-muted" />
-        ) : (
-          <LicenseListEditor value={drafts} onChange={(next) => setDrafts(next)} errors={{}} />
-        )}
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="license-state" className="text-[12px]">
+                State
+              </Label>
+              <StateSelect
+                id="license-state"
+                value={draft.state}
+                onChange={(s) => set({ state: s })}
+                allowNone={false}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="license-number" className="text-[12px]">
+                License number
+              </Label>
+              <Input
+                id="license-number"
+                value={draft.licenseNumber}
+                onChange={(e) => set({ licenseNumber: e.target.value })}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="license-type" className="text-[12px]">
+                Type
+              </Label>
+              <Select
+                value={draft.licenseType || "full"}
+                onValueChange={(t) => set({ licenseType: t })}
+              >
+                <SelectTrigger id="license-type" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full">Full</SelectItem>
+                  <SelectItem value="compact">Compact</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="license-issued" className="text-[12px]">
+                Issued
+              </Label>
+              <Input
+                id="license-issued"
+                type="date"
+                value={draft.issueDate}
+                onChange={(e) => set({ issueDate: e.target.value })}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="license-expires" className="text-[12px]">
+                Expires
+              </Label>
+              <Input
+                id="license-expires"
+                type="date"
+                value={draft.expirationDate}
+                onChange={(e) => set({ expirationDate: e.target.value })}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="license-psv" className="text-[12px]">
+                Verification
+              </Label>
+              <Select
+                value={draft.verifiedStatus}
+                onValueChange={(v) => set({ verifiedStatus: v as LicenseDraft["verifiedStatus"] })}
+              >
+                <SelectTrigger id="license-psv" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unverified">Unverified</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="license-url" className="text-[12px]">
+              State-board lookup URL (optional)
+            </Label>
+            <Input
+              id="license-url"
+              value={draft.verificationSourceUrl}
+              onChange={(e) => set({ verificationSourceUrl: e.target.value })}
+              className="h-9"
+            />
+            <p className="text-[11.5px] text-muted-foreground">
+              Required only to record Verified or Failed.
+            </p>
+          </div>
+          {willReset ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-[12px] text-muted-foreground">
+              The expiration date changed — this license returns to Unverified on save (re-verify
+              against the state board after renewal).
+            </p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="text-[12px] text-[#B91C1C]">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-[#1B4D3E] hover:bg-[#163F33]"
+            disabled={update.isPending}
+            onClick={save}
+          >
+            {license ? "Save license" : "Add license"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemoveLicenseDialog({
+  provider,
+  licenses,
+  license,
+  onClose,
+}: {
+  provider: Provider;
+  licenses: StateLicense[];
+  license: StateLicense;
+  onClose: () => void;
+}) {
+  const update = useUpdateProviderWithLicenses(provider.id);
+  const [error, setError] = useState<string | null>(null);
+
+  const remove = () => {
+    update.mutate(
+      {
+        patch: {},
+        licenses: licenses.filter((l) => l.id !== license.id).map(licenseToInput),
+      },
+      {
+        onSuccess: () => {
+          toast.success("License removed.");
+          onClose();
+        },
+        onError: (e) => setError(e instanceof Error ? e.message : "Could not remove the license."),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove this license?</DialogTitle>
+          <DialogDescription>
+            This deletes the {license.state} license
+            {license.licenseNumber ? ` (#${license.licenseNumber})` : ""} from the record.
+          </DialogDescription>
+        </DialogHeader>
         {error ? (
           <p role="alert" className="text-[12px] text-[#B91C1C]">
             {error}
@@ -525,10 +906,10 @@ function LicensesEditorDialog({ provider, onClose }: { provider: Provider; onClo
           </Button>
           <Button
             className="bg-[#1B4D3E] hover:bg-[#163F33]"
-            disabled={update.isPending || drafts === null}
-            onClick={save}
+            disabled={update.isPending}
+            onClick={remove}
           >
-            Save licenses
+            Remove license
           </Button>
         </DialogFooter>
       </DialogContent>

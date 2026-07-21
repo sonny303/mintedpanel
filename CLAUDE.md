@@ -1916,7 +1916,40 @@ migration-capture; a status correction away from Approved re-derives the row
 out; deliberately NO dedupe against a live fact on the same combo — its
 Expire must stay reachable). In-flight cases stay the Cases panel's job.
 `CASE_LIST_COLUMNS` gained `payer_individual_provider_id`; TS-113 extended
-with the derived-row slice.
+with the derived-row slice. **Provider-record UX handoff (2026-07-21, same
+day, 7 issues):** (a) THE licenses save-failure root cause —
+`updateProviderWithLicenses` with the record dialog's EMPTY patch issued
+`.update({}).select().single()` on `providers`; real PostgREST matches ZERO
+rows on an empty PATCH so `.single()` 406s ("Could not save licenses." on
+every save; the e2e mock masked it by accepting empty PATCHes — the
+provider-roster harness now mirrors the zero-row behavior and TS-35 pins
+ZERO providers PATCHes during license saves). The service now SKIPS the
+providers write when the payload is empty (`after = before`). (b) Licenses
+UI rebuilt to the standard pattern: "+ Add license" + per-row Edit/Remove
+(single-license dialog + remove-confirm; every write composes the FULL list
+through the same audited sync; blank state-board URL accepted for
+unverified — required only for verify/fail; `LicenseListEditor` remains the
+wizard create-flow editor). (c) Identity is ONE master "Edit details" →
+whole-form edit → "Save changes" committing a DIFF-ONLY audited
+`updateProvider` patch (per-field `InlineField` pencils retired; component
+DELETED; DOB stays masked-at-rest/reveal-in-edit; TS-112 pins the
+one-changed-field patch). (d) Enrollments cleanup: live fact rows render
+the standard "Active" pill ("Live" was vocabulary drift), the row Expire
+button is REMOVED (service/hook `expireEnrollmentFact` kept, no UI caller),
+and both enrollment add buttons say "+ Add enrollment" (the "+ Add" design).
+**Org Detail consolidation (same day, Tasks A+B):** the Org Detail Profile
+card is GONE (whole setter chain deleted — `ProfilePanel`/`useUserProfile`/
+`userProfile` service; `{{user.name}}` still resolves from auth
+user_metadata, NO in-app setter remains); `AccountDetailSummary` is
+ORG-IDENTITY only (name + organization address — people are never restated
+there); `PartiesManager` is headed **"People"** (was "People Enroll") and is
+the ONE people surface: contacts with role chips — the governed labels now
+read "Authorized contact"/"Organization contact" (migration
+`20260721120000_party_role_label_terminology.sql`, repo + hosted;
+`PARTY_ROLE_LABELS` fallback mirrors) — PLUS the **"Access" subgroup**
+rendering `MembersPanel` INSIDE the section (member role dropdown/joined/
+remove capability and admin-only rules bit-identical; the standalone
+"Manage who has access" section + helper line are gone).
 
 ## What this is
 
@@ -2189,10 +2222,12 @@ built only when a real consumer pulls them. The current surface:
   keys (`selected_facility_id`, `needs_facility`) are the locked wire
   contract, like the touches body. The `{{user.*}}` token family (`user.name` from
   user_metadata full_name/name, `user.email` from the JWT claim — no schema
-  backing) is appended by the route via `src/server/userTokens.ts`; users set
-  their own full_name in Settings → Profile (`ProfilePanel` →
-  `src/services/userProfile.ts`, `supabase.auth.updateUser` — separate from
-  `profiles.full_name`, which the sidebar/store display reads);
+  backing) is appended by the route via `src/server/userTokens.ts`. NB there
+  is NO in-app setter for user_metadata full_name anymore — the Org Detail
+  Profile section and its whole chain (`ProfilePanel` →
+  `useUserProfile` → `src/services/userProfile.ts`) were removed by user
+  request 2026-07-21 (already-set names persist; `profiles.full_name`, which
+  the sidebar/store display reads, is separate and unaffected);
   empty-resolution notes surface in the envelope's `meta.notes`. **The most
   PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
   by design): `Cache-Control: no-store`, never log the body. Every successful

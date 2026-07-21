@@ -280,6 +280,11 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
     }
     if (STATEFUL.has(table) && req.method() === "PATCH") {
       const body = JSON.parse(req.postData() ?? "{}") as Record<string, unknown>;
+      // Real PostgREST matches ZERO rows on an empty PATCH body — mirror it
+      // so an accidental empty providers patch 406s here exactly like
+      // production did (the 2026-07-21 licenses save failure).
+      if (Object.keys(body).length === 0)
+        return wantsObject ? json({ code: "PGRST116", message: "no rows" }, 406) : json([]);
       const targets = (fixtures[table] as Record<string, unknown>[]).filter(matchFilters);
       for (const t of targets) Object.assign(t, body);
       return json(wantsObject ? (targets[0] ?? {}) : targets);
@@ -435,7 +440,7 @@ test("TS-34: two-TIN provider — both groups assigned, first primary; last-assi
   await expect(page.getByLabel(/Remove group/)).toHaveCount(0);
 });
 
-test("TS-35: PSV verify with board URL, then renewal edit resets to unverified", async ({
+test("TS-35: per-row license editing — PSV verify with board URL, renewal reset, add with blank URL, remove; ZERO providers PATCHes", async ({
   context,
   page,
 }) => {
@@ -463,25 +468,35 @@ test("TS-35: PSV verify with board URL, then renewal edit resets to unverified",
     ],
     state_licenses: [licenseRow(ORG_OUTER_BANKS, "lic-nc", "prov-ob")],
   });
-  await context.route(/\/(rest|auth)\/v1\//, makeHandler(fixtures));
+  const handler = makeHandler(fixtures);
+  // 2026-07-21 regression pin: license saves must NEVER touch the providers
+  // table — the old empty PATCH matched zero rows and 406'd on production
+  // PostgREST ("Could not save licenses."). Record every providers PATCH.
+  const providerPatches: string[] = [];
+  await context.route(/\/(rest|auth)\/v1\//, async (route) => {
+    const req = route.request();
+    if (req.method() === "PATCH" && new URL(req.url()).pathname.endsWith("/rest/v1/providers"))
+      providerPatches.push(req.url());
+    return handler(route);
+  });
   await seedAuth(context, ORG_OUTER_BANKS);
 
-  // E6.4: license edits live on the RECORD's licenses-only dialog — an empty
-  // provider patch, so identity fields and assignments are untouchable here.
+  // 2026-07-21: license edits live on per-row Edit/Remove + "+ Add license"
+  // (the standard record pattern) — each save composes the full list through
+  // the licenses-only sync; identity fields and assignments are untouchable.
   await page.goto("/providers/prov-ob");
   await expect(page.getByRole("heading", { name: "Licenses" })).toBeVisible({ timeout: 30000 });
 
-  // Verify the NC license against the state board.
-  await page.getByRole("button", { name: "Edit licenses" }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit state licenses" });
-  await expect(dialog.getByText("Unverified").first()).toBeVisible({ timeout: 15000 });
-  await dialog.locator("#lic-0-url").fill("https://www.ncbpte.org/license-verification");
-  await dialog.locator("#lic-0-psv").click();
+  // Verify the NC license against the state board (row Edit → dialog).
+  await page.getByRole("button", { name: "Edit NC license" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit license" });
+  await dialog.locator("#license-url").fill("https://www.ncbpte.org/license-verification");
+  await dialog.locator("#license-psv").click();
   await page.getByRole("option", { name: "Verified", exact: true }).click();
-  await dialog.getByRole("button", { name: "Save licenses" }).click();
+  await dialog.getByRole("button", { name: "Save license" }).click();
 
   // The dialog closes only after the service write completes.
-  await expect(page.getByRole("dialog", { name: "Edit state licenses" })).toHaveCount(0, {
+  await expect(page.getByRole("dialog", { name: "Edit license" })).toHaveCount(0, {
     timeout: 15000,
   });
   const lic = fixtures.state_licenses![0] as Record<string, unknown>;
@@ -490,19 +505,46 @@ test("TS-35: PSV verify with board URL, then renewal edit resets to unverified",
   expect(lic.verification_source_url).toBe("https://www.ncbpte.org/license-verification");
 
   // Renewal: editing the expiration date resets the PSV trail.
-  await page.getByRole("button", { name: "Edit licenses" }).click();
-  const dialog2 = page.getByRole("dialog", { name: "Edit state licenses" });
-  await expect(dialog2.getByText("Verified", { exact: true }).first()).toBeVisible({
-    timeout: 15000,
-  });
-  await dialog2.locator("#lic-0-expiration").fill("2029-01-31");
+  await page.getByRole("button", { name: "Edit NC license" }).click();
+  const dialog2 = page.getByRole("dialog", { name: "Edit license" });
+  await dialog2.locator("#license-expires").fill("2029-01-31");
   await expect(dialog2).toContainText("returns to Unverified on save");
-  await dialog2.getByRole("button", { name: "Save licenses" }).click();
+  await dialog2.getByRole("button", { name: "Save license" }).click();
 
-  await expect(page.getByRole("dialog", { name: "Edit state licenses" })).toHaveCount(0, {
+  await expect(page.getByRole("dialog", { name: "Edit license" })).toHaveCount(0, {
     timeout: 15000,
   });
   await expect.poll(() => lic.verified_status).toBe("unverified");
   expect(lic.verified_at).toBeNull();
   expect(lic.expiration_date).toBe("2029-01-31");
+
+  // Add a second license with a BLANK state-board URL — the URL is optional
+  // for unverified rows (2026-07-21 handoff issue 3); the save must succeed
+  // and the unchanged NC row must pass through the sync untouched.
+  await page.getByRole("button", { name: "+ Add license" }).click();
+  const addDialog = page.getByRole("dialog", { name: "Add license" });
+  await addDialog.locator("#license-state").click();
+  await page.getByRole("option", { name: "AZ", exact: true }).click();
+  await addDialog.locator("#license-number").fill("5678");
+  await addDialog.getByRole("button", { name: "Add license" }).click();
+  await expect(page.getByRole("dialog", { name: "Add license" })).toHaveCount(0, {
+    timeout: 15000,
+  });
+  await expect.poll(() => fixtures.state_licenses!.length).toBe(2);
+  const added = (fixtures.state_licenses as Record<string, unknown>[]).find(
+    (l) => l.state === "AZ",
+  )!;
+  expect(added.license_number).toBe("5678");
+  expect(added.verification_source_url).toBeNull();
+  expect(lic.expiration_date).toBe("2029-01-31");
+  await expect(page.getByRole("row", { name: /AZ/ })).toBeVisible({ timeout: 15000 });
+
+  // Remove the AZ license (row Remove → confirm) — a real row delete.
+  await page.getByRole("button", { name: "Remove AZ license" }).click();
+  await page.getByRole("button", { name: "Remove license" }).click();
+  await expect.poll(() => fixtures.state_licenses!.length).toBe(1);
+  expect((fixtures.state_licenses![0] as Record<string, unknown>).state).toBe("NC");
+
+  // The regression pin: not one PATCH ever hit the providers table.
+  expect(providerPatches).toEqual([]);
 });

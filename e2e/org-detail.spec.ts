@@ -356,20 +356,23 @@ test("TS-107: Org Detail carries only the container content, members render with
   await page.goto("/org-detail");
   await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
 
-  // The container content (F6.1.4): summary + contacts, People Enroll, and
-  // the relocated member management. The capture-link re-issue card was
-  // removed from MVP by user request (2026-07-19) — /onboarding's share
-  // journey is the remaining operator surface.
+  // The container content (F6.1.4, consolidated 2026-07-21): an ORG-IDENTITY
+  // summary (people are NOT restated there) + the unified People section
+  // carrying contacts AND the Access subgroup. The capture-link re-issue card
+  // was removed from MVP by user request (2026-07-19).
   await expect(page.getByRole("heading", { name: "Organization summary" })).toBeVisible();
-  await expect(page.getByText("Coach Eric Taylor").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "People Enroll" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+  // The contact person renders ONCE — in the People list, not the summary.
+  await expect(page.getByText("Coach Eric Taylor")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Data capture link" })).toHaveCount(0);
 
-  // Invite capability removed from MVP (user request 2026-07-19, UI only —
-  // the backend invite model stays): no button, no dialog, and the Pending
-  // invites table is hidden when no legacy rows exist. The members table
-  // itself still renders (read + role management).
-  await expect(page.getByText("Manage who has access to this organization.")).toBeVisible();
+  // Task B: member access management lives INSIDE the People section as the
+  // Access subgroup — the standalone "Manage who has access" section is gone
+  // while the capability (role dropdown, joined date) renders unchanged.
+  // Invite capability stays removed (2026-07-19): no button, no dialog, and
+  // the Pending invites table is hidden when no legacy rows exist.
+  await expect(page.getByText("Manage who has access to this organization.")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Access" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Sowmya Seed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Invite member" })).toHaveCount(0);
   await expect(page.getByText("Pending invites")).toHaveCount(0);

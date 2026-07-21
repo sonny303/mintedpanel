@@ -456,15 +456,24 @@ export async function updateProviderWithLicenses(
     payload.home_state = normalizeOptionalStateCode(input.patch.homeState);
   // Frozen legacy mirror: providers.group_id follows the primary assignment.
   if (assignmentPlan) payload.group_id = assignmentPlan.primaryGroupId;
-  const { data, error } = await supabase
-    .from("providers")
-    .update(payload as unknown as ProviderUpdate)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw translateDbError(error);
-  const after = camelizeRow<Provider>(data);
+  // Licenses-only saves (the record's editor) send an EMPTY patch. PostgREST
+  // updates ZERO rows on an empty PATCH body, so `.single()` would 406 — skip
+  // the providers write entirely; the licenses sync below is the whole save.
+  let after: Provider;
+  if (Object.keys(payload).length === 0) {
+    if (!before) throw new Error("Provider not found.");
+    after = before;
+  } else {
+    const { data, error } = await supabase
+      .from("providers")
+      .update(payload as unknown as ProviderUpdate)
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select("*")
+      .single();
+    if (error) throw translateDbError(error);
+    after = camelizeRow<Provider>(data);
+  }
 
   const cleanLicenses = input.licenses.filter(
     (l) => l.state || l.licenseNumber || l.issueDate || l.expirationDate || l.licenseType,

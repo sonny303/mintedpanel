@@ -111,14 +111,14 @@ const FIXTURES: Record<string, unknown[]> = {
       scope_type: "org",
       scope_id: null,
       created_at: "2026-07-01T00:00:00Z",
-      party_role_types: { role_key: "owner", label: "Owner", is_active: true },
+      party_role_types: { role_key: "owner", label: "Authorized contact", is_active: true },
     },
   ],
   party_role_types: [
-    { role_key: "owner", label: "Owner", is_active: true },
+    { role_key: "owner", label: "Authorized contact", is_active: true },
     {
       role_key: "customer_escalation_contact",
-      label: "Customer Escalation Contact",
+      label: "Organization contact",
       is_active: true,
     },
     { role_key: "sales_rep", label: "Sales Rep", is_active: true },
