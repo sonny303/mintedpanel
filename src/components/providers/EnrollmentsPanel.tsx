@@ -195,7 +195,7 @@ export function EnrollmentsPanel({
                     </span>
                   </>
                 ) : row.live ? (
-                  <StatusPill status="green" label="Live" />
+                  <StatusPill status="green" label="Active" />
                 ) : (
                   <StatusPill status="neutral" label={`Expired ${fmtDate(row.expiredAt ?? "")}`} />
                 )}

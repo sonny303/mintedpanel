@@ -582,7 +582,7 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
   await dialog.getByLabel(/Payer-issued ID \(optional\)/).fill("PIN-12345");
   await dialog.getByRole("button", { name: "Record fact" }).click();
 
-  await expect(page.getByText("Live", { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Active", { exact: true }).first()).toBeVisible({ timeout: 15000 });
   const factPost = requests.find((r) => r.method === "POST" && r.path === "enrollment_facts");
   expect(factPost).toBeTruthy();
   const factBody = (Array.isArray(factPost!.body) ? factPost!.body[0] : factPost!.body) as Record<
