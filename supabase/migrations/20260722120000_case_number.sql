@@ -1,7 +1,7 @@
 -- Case# — a globally-sequential, immutable case number across ALL orgs
 -- (2026-07-22 Cases page redesign). ONE sequence (not per-org), backfilled in
--- global created_at order, displayed as C-<n>. Additive; repo-first — hosted
--- apply is an operator step (see the PR body). Guarded so a repo-only rebuild
+-- global created_at order, displayed as C-<n>. Additive; applied to hosted via
+-- MCP the same day (repo + hosted in sync). Guarded so a repo-only rebuild
 -- (fresh stack / CI) still passes.
 
 -- 1. The global sequence — one across all orgs.
