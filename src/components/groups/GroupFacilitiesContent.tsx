@@ -216,7 +216,7 @@ export function GroupFacilitiesContent({ group }: { group: ProviderGroup }) {
                               // providers (the retired launch dialog's job).
                               <Button asChild variant="outline" size="sm" className="h-8">
                                 <Link to="/generation" search={{ group: group.id, facility: f.id }}>
-                                  Review &amp; generate
+                                  Generate cases
                                 </Link>
                               </Button>
                             ) : null}

@@ -1949,7 +1949,25 @@ read "Authorized contact"/"Organization contact" (migration
 `PARTY_ROLE_LABELS` fallback mirrors) — PLUS the **"Access" subgroup**
 rendering `MembersPanel` INSIDE the section (member role dropdown/joined/
 remove capability and admin-only rules bit-identical; the standalone
-"Manage who has access" section + helper line are gone).
+"Manage who has access" section + helper line are gone). **Scope Review
+relocation (same day):** the wizard section is GONE — the readiness matrix
+lives on the provider record as the **Readiness** section
+(`src/components/providers/ProviderReadinessSection.tsx`, provider-scoped:
+no Provider column, payer/state/gap filters, fix-here links anchor the
+record's own sections, group-doc gaps still link /groups; same
+`useEnrollmentReadiness` derivation, still advisory, nothing stored).
+`onboardingProgress` dropped `scope_review` (6 active sections;
+`resolveScopeReviewStatus` deleted; wizard completeness — and the
+Finish-setup banner — no longer depend on readiness; the wizard hook no
+longer composes `useEnrollmentReadiness`). **Terminology: the canonical
+noun is CASE** — every generation entry reads "Generate cases" (record
+header + Readiness CTA + board/facilities rows + /generation PageHeader +
+runs back-link; "Generate applications"/"Review & generate" are gone). The
+`/generation` URL itself deliberately stays (internal identifier; renaming
+is pure churn — revisit only if product insists). e2e:
+`scope-review.spec.ts` → **`provider-readiness.spec.ts`** (TS-43/44 on the
+record); onboarding-wizard TS-25/28, import-preview TS-63, and
+document-storage TS-89 retargeted.
 
 ## What this is
 

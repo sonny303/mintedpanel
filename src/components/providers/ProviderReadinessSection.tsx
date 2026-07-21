@@ -1,14 +1,15 @@
-// Scope Review wizard section body (E1.8) — the last E1.0 preview to go
-// live: the derived enrollment-readiness matrix at the E2.x case-key grain
-// (provider × group × payer × state). Everything here is ADVISORY (F1.8.3):
-// red items carry fix-here links and nothing is ever disabled or gated; no
-// tasks are auto-created. Checks with an exact editor link to their wizard
-// section; document/COI/voided-check gaps link to the owning group screen
-// (PM decision [e1.8] Option 3, 2026-07-12). No readiness state is stored —
-// the matrix re-derives from the source caches on every read (F1.8.1).
+// Provider-scoped readiness review (relocated 2026-07-21 from the wizard's
+// Scope Review section by user handoff — the matrix is fundamentally
+// per provider × group × payer × state, so it lives on the provider record).
+// Everything here stays ADVISORY (the E1.8 contract): red items carry
+// fix-here links and nothing is ever disabled or gated; no tasks are
+// auto-created; no readiness state is stored — the matrix re-derives from
+// the source caches on every read. The generation entry is case-centric
+// ("Generate cases", the canonical noun — the nav says Cases) and lands on
+// the provider-scoped /generation grid (E6.3 TS-127).
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,22 +29,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { openSection } from "@/components/onboarding/openSection";
 import { useEnrollmentReadiness } from "@/hooks/useEnrollmentReadiness";
 import {
   filterReadinessRows,
-  type FixTarget,
   type ReadinessCheck,
   type ReadinessCheckKey,
   type ReadinessFilters,
   type ReadinessRow,
 } from "@/lib/enrollmentReadiness";
-import { ONBOARDING_SECTIONS } from "@/lib/onboardingProgress";
-import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
-
-const PROVIDERS_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "providers");
-const FACILITIES_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "facilities");
-const PAYER_NETWORK_DEF = ONBOARDING_SECTIONS.find((s) => s.key === "payer_network");
 
 // The gap-type filter offers every check in checklist order.
 const GAP_OPTIONS: Array<{ key: ReadinessCheckKey; label: string }> = [
@@ -63,28 +56,30 @@ const GAP_OPTIONS: Array<{ key: ReadinessCheckKey; label: string }> = [
 
 const ALL_FILTERS: ReadinessFilters = { groupId: "all", payerId: "all", state: "all", gap: "all" };
 
+// Fix-here targets on the RECORD: provider-owned gaps anchor the record's own
+// sections (the same #hash focus mechanism the roster gap pills use), and
+// group-owned document gaps link the Groups shell (the E1.8 Option 3 rule).
+function fixAnchor(check: ReadinessCheck): { href: string; label: string } {
+  if (check.fixTarget === "group_screen") return { href: "/groups", label: "Fix on Groups" };
+  if (check.fixTarget === "facilities_section")
+    return { href: "#groups-facilities", label: "Fix in Groups & facilities" };
+  if (check.key.startsWith("license")) return { href: "#licenses", label: "Fix in Licenses" };
+  return { href: "#identity", label: "Fix in Identity" };
+}
+
 function FixHereLink({ check }: { check: ReadinessCheck }) {
-  const target: FixTarget = check.fixTarget;
-  if (target === "group_screen") {
-    // Document/COI/voided-check gaps: soft link to the owning group screen
-    // (E6.1: Account Detail became Org Detail; the group summaries live on
-    // the Groups shell until E6.2 lands the full hub).
+  const target = fixAnchor(check);
+  if (target.href.startsWith("/")) {
     return (
-      <Link to="/groups" className="text-[12px] underline underline-offset-2">
-        Fix on Groups
+      <Link to={target.href} className="text-[12px] underline underline-offset-2">
+        {target.label}
       </Link>
     );
   }
-  const def = target === "facilities_section" ? FACILITIES_DEF : PROVIDERS_DEF;
-  if (!def) return null;
   return (
-    <button
-      type="button"
-      className="text-[12px] underline underline-offset-2"
-      onClick={() => openSection(def)}
-    >
-      Fix in {def.title}
-    </button>
+    <a href={target.href} className="text-[12px] underline underline-offset-2">
+      {target.label}
+    </a>
   );
 }
 
@@ -120,7 +115,7 @@ function CheckList({ checks, owner }: { checks: ReadinessCheck[]; owner: "provid
   );
 }
 
-export function ScopeReviewSection({ wizard }: SectionBodyProps) {
+export function ProviderReadinessSection({ providerId }: { providerId: string }) {
   const readiness = useEnrollmentReadiness();
   const [filters, setFilters] = useState<ReadinessFilters>(ALL_FILTERS);
   const [open, setOpen] = useState<string | null>(null);
@@ -139,22 +134,20 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
     return <Skeleton className="h-16 w-full" />;
   }
 
-  if (readiness.rows.length === 0) {
-    const hasTargets = wizard.payerNetworkTargets.some((t) => t.status === "active");
+  // The record's slice of the org matrix: this provider's rows only.
+  const myRows = readiness.rows.filter((r) => r.providerId === providerId);
+
+  if (myRows.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3">
         <p className="text-[13px] text-muted-foreground">
-          Readiness rows derive from active payer network targets and each group&apos;s roster —
-          {hasTargets
-            ? " assign providers to the targeted groups to see their pre-flight checks here."
-            : " attach payers in the Payer Network section to see pre-flight checks here."}
+          Readiness rows derive from active payer network targets and the provider&apos;s group
+          memberships — attach payers on the group&apos;s Payer Network board to see pre-flight
+          checks here.
         </p>
-        {!hasTargets && PAYER_NETWORK_DEF ? (
-          <Button variant="outline" onClick={() => openSection(PAYER_NETWORK_DEF)}>
-            <ArrowRight className="h-4 w-4" />
-            Go to Payer Network
-          </Button>
-        ) : null}
+        <Button asChild variant="outline">
+          <Link to="/groups">Open Groups</Link>
+        </Button>
       </div>
     );
   }
@@ -163,45 +156,28 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
     readiness.groups.find((g) => g.id === id)?.name ?? "Unknown group";
   const payerName = (id: string) =>
     readiness.payers.find((p) => p.id === id)?.name ?? "Unknown payer";
-  const states = Array.from(new Set(readiness.rows.map((r) => r.state))).sort();
-  const groupIds = Array.from(new Set(readiness.rows.map((r) => r.groupId)));
-  const payerIds = Array.from(new Set(readiness.rows.map((r) => r.payerId)));
+  const states = Array.from(new Set(myRows.map((r) => r.state))).sort();
+  const payerIds = Array.from(new Set(myRows.map((r) => r.payerId)));
 
-  const visible = filterReadinessRows(readiness.rows, filters);
-  const rowKey = (r: ReadinessRow) => `${r.providerId}|${r.groupId}|${r.payerId}|${r.state}`;
+  const visible = filterReadinessRows(myRows, filters);
+  const ready = myRows.filter((r) => r.ready).length;
+  const rowKey = (r: ReadinessRow) => `${r.groupId}|${r.payerId}|${r.state}`;
 
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         <p className="text-[13px] text-muted-foreground">
-          The pre-flight check before enrollment starts: one row per provider, group, payer, and
-          state from your active payer targets. Readiness is advisory — nothing here blocks case
-          work.
+          The pre-flight check before enrollment starts: one row per group, payer, and state from
+          the active payer targets. Readiness is advisory — nothing here blocks creating cases.
         </p>
-        {/* E2.0 entry affordance: the generation preview shares this row
-            universe (candidates are its clinic-assigned subset). */}
         <Button asChild className="shrink-0 bg-[#1B4D3E] hover:bg-[#163F33]">
-          <Link to="/generation">Generate applications</Link>
+          <Link to="/generation" search={{ provider: providerId }}>
+            Generate cases
+          </Link>
         </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={filters.groupId}
-          onValueChange={(v) => setFilters((f) => ({ ...f, groupId: v }))}
-        >
-          <SelectTrigger className="h-8 w-[170px] text-[12px]" aria-label="Filter by group">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All groups</SelectItem>
-            {groupIds.map((id) => (
-              <SelectItem key={id} value={id}>
-                {groupName(id)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select
           value={filters.payerId}
           onValueChange={(v) => setFilters((f) => ({ ...f, payerId: v }))}
@@ -250,11 +226,9 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
             ))}
           </SelectContent>
         </Select>
-        {readiness.summary ? (
-          <span className="ml-auto text-[12px] text-muted-foreground">
-            {readiness.summary.ready} of {readiness.summary.total} ready
-          </span>
-        ) : null}
+        <span className="ml-auto text-[12px] text-muted-foreground">
+          {ready} of {myRows.length} ready
+        </span>
       </div>
 
       {visible.length === 0 ? (
@@ -263,7 +237,6 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Provider</TableHead>
               <TableHead>Group</TableHead>
               <TableHead>Payer</TableHead>
               <TableHead>State</TableHead>
@@ -284,9 +257,8 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
                   <CollapsibleTrigger asChild>
                     <TableRow
                       className="cursor-pointer"
-                      aria-label={`Readiness for ${r.providerName} — ${payerName(r.payerId)} ${r.state}`}
+                      aria-label={`Readiness for ${payerName(r.payerId)} ${r.state}`}
                     >
-                      <TableCell className="text-[13px] font-medium">{r.providerName}</TableCell>
                       <TableCell className="text-[13px]">{groupName(r.groupId)}</TableCell>
                       <TableCell className="text-[13px]">{payerName(r.payerId)}</TableCell>
                       <TableCell className="text-[13px]">{r.state}</TableCell>
@@ -310,7 +282,7 @@ export function ScopeReviewSection({ wizard }: SectionBodyProps) {
                   </CollapsibleTrigger>
                   <CollapsibleContent asChild>
                     <TableRow>
-                      <TableCell colSpan={5} className="bg-[var(--mp-neutral-tint)]/40">
+                      <TableCell colSpan={4} className="bg-[var(--mp-neutral-tint)]/40">
                         <div className="grid gap-4 py-1 sm:grid-cols-2">
                           <CheckList checks={r.checks} owner="provider" />
                           <CheckList checks={r.checks} owner="group" />

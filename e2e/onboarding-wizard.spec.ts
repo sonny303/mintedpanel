@@ -10,7 +10,7 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 //   TS-27 resume across org switch: "Next: Facilities" is derived, so it
 //         survives the E0.0 org-switch state reset; the CTA moves keyboard
 //         focus to the section heading
-//   TS-28 all-complete state: every section (incl. E1.8 Scope Review) is
+//   TS-28 all-complete state: every section (Scope Review relocated to the provider record 2026-07-21) is
 //         complete and the journey card has no CTA and no preview handoff
 // Plus the F1.0.4 shell sweep: approved white logo mark + rail text alphas.
 // Fixture personas per seed-universe.md: Lone Star Rehab Group (partially
@@ -282,7 +282,6 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     "Providers",
     "Assignments",
     "Payer Network",
-    "Scope Review",
   ]);
 
   // Derived chips: org details complete, scope sections not started (F1.0.2).
@@ -319,26 +318,15 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     sectionCard(page, "wizard-payer-network").getByRole("link", { name: "Browse payer catalog" }),
   ).toBeVisible();
 
-  // E1.8 activated Scope Review (the last preview): with zero targets it
-  // renders the derive explainer pointing at Payer Network — no preview
+  // 2026-07-21: Scope Review left the wizard for the provider record
+  // (Readiness section) — no scope-review card renders here, and no preview
   // cards remain anywhere on the journey.
-  await expect(sectionCard(page, "wizard-scope-review")).toContainText("Not started");
-  await expect(sectionCard(page, "wizard-scope-review")).toContainText(
-    "attach payers in the Payer Network section",
-  );
+  await expect(page.locator("#wizard-scope-review")).toHaveCount(0);
+  await expect(page.getByText("Scope Review")).toHaveCount(0);
   await expect(page.getByText("Coming next")).toHaveCount(0);
 
   // Next action targets the first incomplete section (F1.0.3).
   await expect(page.getByRole("button", { name: "Next: Provider Group" })).toBeVisible();
-
-  // E4.2 F item 4 — the Scope Review "Go to Payer Network" hand-off is
-  // perceivable: it scrolls to and MOVES FOCUS to the Payer Network section
-  // heading (the temporary highlight ring reinforces it visually), not a focus
-  // change users can't see.
-  await sectionCard(page, "wizard-scope-review")
-    .getByRole("button", { name: "Go to Payer Network" })
-    .click();
-  await expect(page.locator("#wizard-payer-network-heading")).toBeFocused();
 });
 
 test("TS-26: a facility added through the admin surface flips the wizard chip — zero wizard writes", async ({
@@ -478,7 +466,8 @@ test("TS-28: every active section complete ends the journey (no preview left)", 
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
-    // E1.8: readiness inputs that complete the Scope Review section.
+    // Readiness fixtures (the matrix lives on the provider record now;
+    // harmless here — completion no longer depends on them).
     provider_group_assignments: [
       {
         id: "ga-1",
@@ -527,7 +516,7 @@ test("TS-28: every active section complete ends the journey (no preview left)", 
   await seedAuth(context, ORG_LONE_STAR);
 
   await page.goto("/onboarding/wizard");
-  await expect(page.getByText("All scope sections are complete.")).toBeVisible({
+  await expect(page.getByText("All setup sections are complete.")).toBeVisible({
     timeout: 30000,
   });
   // The next-action card hands off to the preview — no CTA there. (E1.1's

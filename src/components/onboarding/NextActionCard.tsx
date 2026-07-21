@@ -31,10 +31,10 @@ export function NextActionCard({
         ) : nextSection === null ? (
           <>
             <div className="text-[13px] text-foreground">
-              All scope sections are complete.
+              All setup sections are complete.
               {FIRST_PREVIEW
                 ? ` ${FIRST_PREVIEW.title} is the next step in this journey.`
-                : " Case generation arrives in the next stage."}
+                : " Review readiness and generate cases from each provider's record."}
             </div>
             {FIRST_PREVIEW ? <ComingNextPill /> : null}
           </>
