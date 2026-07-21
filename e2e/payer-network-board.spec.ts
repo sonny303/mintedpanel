@@ -542,9 +542,9 @@ test("TS-109/TS-113: facts flip rows Active with zero cases, the expired fact re
     page.getByText(/2 candidates awaiting generation — Cigna enrollment fact expired/),
   ).toBeVisible();
 
-  // E6.3 — Review & generate is LIVE: the banner enters the ONE shared grid
+  // E6.3 — Generate cases is LIVE: the banner enters the ONE shared grid
   // scoped to this group.
-  await expect(page.getByRole("link", { name: "Review & generate" }).first()).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Generate cases" }).first()).toHaveAttribute(
     "href",
     /\/generation\?group=g-ob/,
   );
