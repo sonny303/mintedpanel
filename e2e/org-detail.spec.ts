@@ -409,8 +409,10 @@ test("TS-107: the banner never renders once every wizard section is complete; th
   await page.goto("/org-detail");
   await expect(page.getByRole("heading", { name: "Org Detail" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Organization summary" })).toBeVisible();
-  // Every section resolves complete → the banner is gone for good.
+  // Every section resolves complete → the loud banner is gone, replaced by
+  // the compact persistent wizard entry (PM decision 2026-07-21).
   await expect(page.getByText(/Finish setting up/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open setup wizard" })).toBeVisible();
 
   // The organization data lives under Groups (E6.2): a single-group org
   // auto-lands on its group hub with the facts card + the two area doors.
