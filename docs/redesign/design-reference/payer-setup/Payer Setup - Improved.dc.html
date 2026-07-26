@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; text-decoration: none; }
+    a:hover { color: #0C2A1D; text-decoration: underline; }
+    input::placeholder { color: #9CA3AF; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:28px 32px 64px">
+  <div style="max-width:1200px;margin:0 auto">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="flex:1 1 auto;min-width:0">
+        <h1 style="margin:0 0 4px 0;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#1F2937">Payer Setup</h1>
+        <div style="font-size:14px;color:#6B7280">{{ headerSubtitle }}</div>
+      </div>
+    </div>
+
+    <div style="height:1px;background:#E8E5E0;margin:20px 0"></div>
+
+    <!-- KPI cards (My network readiness) -->
+    <sc-if value="{{ isNetwork }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <button type="button" data-net="ready" onClick="{{ setNet }}" aria-pressed="{{ kpi.ready.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ kpi.ready.border }};background:{{ kpi.ready.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ kpi.ready.label }}">Ready for business</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ kpi.ready.num }}">{{ stats.ready }}</span></button>
+      <button type="button" data-net="needssop" onClick="{{ setNet }}" aria-pressed="{{ kpi.needssop.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ kpi.needssop.border }};background:{{ kpi.needssop.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ kpi.needssop.label }}">Needs template</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ kpi.needssop.num }}">{{ stats.needssop }}</span></button>
+      <button type="button" data-net="formnotproven" onClick="{{ setNet }}" aria-pressed="{{ kpi.formnotproven.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ kpi.formnotproven.border }};background:{{ kpi.formnotproven.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ kpi.formnotproven.label }}">Form not proven</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ kpi.formnotproven.num }}">{{ stats.formnotproven }}</span></button>
+      <button type="button" data-net="drift" onClick="{{ setNet }}" aria-pressed="{{ kpi.drift.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ kpi.drift.border }};background:{{ kpi.drift.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ kpi.drift.label }}">Drift detected</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ kpi.drift.num }}">{{ stats.drift }}</span></button>
+    </div>
+    </sc-if>
+
+    <!-- KPI cards (Catalog membership) -->
+    <sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px">
+      <button type="button" data-mem="in" onClick="{{ setCatMem }}" aria-pressed="{{ catKpi.in.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ catKpi.in.border }};background:{{ catKpi.in.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ catKpi.in.label }}">In network</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ catKpi.in.num }}">{{ catStats.inNet }}</span></button>
+      <button type="button" data-mem="out" onClick="{{ setCatMem }}" aria-pressed="{{ catKpi.notadded.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ catKpi.notadded.border }};background:{{ catKpi.notadded.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ catKpi.notadded.label }}">Not added</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ catKpi.notadded.num }}">{{ catStats.notAdded }}</span></button>
+      <button type="button" data-mem="inactive" onClick="{{ setCatMem }}" aria-pressed="{{ catKpi.inactive.on }}" style="text-align:left;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:6px;cursor:pointer;font-family:inherit;border:1px solid {{ catKpi.inactive.border }};background:{{ catKpi.inactive.bg }}" style-hover="border-color:#1B4D3E"><span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:{{ catKpi.inactive.label }}">Inactive</span><span style="font-size:26px;font-weight:700;line-height:1;color:{{ catKpi.inactive.num }}">{{ catStats.inactive }}</span></button>
+    </div>
+    </sc-if>
+
+    <!-- Toolbar: tabs + search + filters -->
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">
+      <div role="tablist" aria-label="Payer views" style="display:inline-flex;gap:3px;padding:3px;background:#F1F1EF;border-radius:6px;flex:none">
+        <button type="button" role="tab" aria-selected="{{ isNetwork }}" data-view="network" onClick="{{ setView }}" style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:4px;border:1px solid {{ seg.network.border }};background:{{ seg.network.bg }};color:{{ seg.network.color }};font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">My network<span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:{{ seg.network.badgeBg }};color:{{ seg.network.badgeColor }};font-size:11px;font-weight:600">{{ networkCount }}</span></button>
+        <button type="button" role="tab" aria-selected="{{ isCatalog }}" data-view="catalog" onClick="{{ setView }}" style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:4px;border:1px solid {{ seg.catalog.border }};background:{{ seg.catalog.bg }};color:{{ seg.catalog.color }};font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap">Catalog<span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:{{ seg.catalog.badgeBg }};color:{{ seg.catalog.badgeColor }};font-size:11px;font-weight:600">{{ catalogTotal }}</span></button>
+      </div>
+      <div style="position:relative;flex:1 1 220px;min-width:180px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="position:absolute;left:11px;top:11px"><circle cx="10.5" cy="10.5" r="6.5" stroke="#9CA3AF" stroke-width="1.7"></circle><path d="M20 20l-4.2-4.2" stroke="#9CA3AF" stroke-width="1.7" stroke-linecap="round"></path></svg><input type="text" aria-label="Search payers" value="{{ searchVal }}" onChange="{{ setSearch }}" placeholder="{{ searchPlaceholder }}" style="width:100%;height:36px;padding:0 12px 0 32px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></div>
+      <sc-if value="{{ isNetwork }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:8px;flex:none">
+          <div style="position:relative"><select aria-label="Filter network by state" value="{{ netStateF }}" onChange="{{ setNetStateF }}" style="height:36px;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ netStateOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+          <div style="position:relative"><select aria-label="Filter network by kind" value="{{ netKindF }}" onChange="{{ setNetKindF }}" style="height:36px;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ netKindOptions }}" as="o" hint-placeholder-count="3"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:8px;flex:none">
+          <div style="position:relative"><select aria-label="Filter by state" value="{{ stateF }}" onChange="{{ setStateF }}" style="height:36px;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ stateOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+          <div style="position:relative"><select aria-label="Filter by kind" value="{{ kindF }}" onChange="{{ setKindF }}" style="height:36px;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ kindOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+          <div style="position:relative"><select aria-label="Filter by membership" value="{{ memF }}" onChange="{{ setMemF }}" style="height:36px;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ memOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+          <button type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF;white-space:nowrap" style-hover="background:#163F33;border-color:#163F33"><span style="font-size:15px;line-height:1;margin-top:-1px">+</span><span>Add payers</span></button>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- ============ MY NETWORK ============ -->
+    <sc-if value="{{ isNetwork }}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top:22px">
+
+        <!-- Readiness table -->
+        <div style="margin-top:16px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+          <div style="overflow-x:auto">
+          <table style="width:100%;min-width:840px;border-collapse:collapse">
+            <thead>
+              <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+                <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Payer</th>
+                <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">State(s)</th>
+                <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Kind</th>
+                <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Template status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ networkRows }}" as="r" hint-placeholder-count="7">
+                <tr style="border-top:1px solid #F0EEEA">
+                  <td style="padding:13px 18px;vertical-align:middle">
+                    <a href="{{ r.href }}" style="font-size:14px;font-weight:600;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ r.name }}</a>
+                  </td>
+                  <td style="padding:13px 14px;vertical-align:middle;font-size:13px;color:#6B7280">{{ r.states }}</td>
+                  <td style="padding:13px 14px;vertical-align:middle;font-size:13px;color:#6B7280">{{ r.kind }}</td>
+                  <td style="padding:13px 18px;vertical-align:middle"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;background:{{ r.sopBg }};color:{{ r.sopColor }}">{{ r.sopLabel }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <!-- Default (payerless) template — no payer, so it lives here rather than under one -->
+        <div style="margin-top:16px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:15px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <a href="Template Editor - Improved.dc.html#edit-default" style="font-size:14px;font-weight:600;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">General Enrollment</a>
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:500;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280">Default template</span>
+            </div>
+            <div style="font-size:12.5px;color:#9CA3AF;margin-top:3px">Used when no payer template matches · 4 tasks · updated Jul 12, 2026</div>
+          </div>
+          <a href="Template Editor - Improved.dc.html#edit-default" style="display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 13px;border-radius:4px;font-size:13px;font-weight:500;text-decoration:none;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;flex:none" style-hover="background:#F5F4F1">Edit</a>
+        </div>
+
+        <!-- Footer: rows per page + pagination -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:13px;color:#6B7280;white-space:nowrap">Rows per page</label>
+            <div style="position:relative">
+              <select aria-label="Rows per page" value="{{ pageSize }}" onChange="{{ setPageSize }}" style="height:32px;padding:0 30px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ pageSizeOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+              <span style="position:absolute;right:11px;top:13px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span>
+            </div>
+            <span style="font-size:13px;color:#6B7280;white-space:nowrap">{{ pagerLabel }}</span>
+          </div>
+          <sc-if value="{{ showPager }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:6px">
+              <button type="button" onClick="{{ prevPage }}" style="display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;{{ prevStyle }}" style-hover="background:#F5F4F1">Prev</button>
+              <sc-for list="{{ pages }}" as="p" hint-placeholder-count="2"><button type="button" data-page="{{ p.n }}" onClick="{{ goPage }}" aria-current="{{ p.current }}" style="min-width:32px;height:30px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.color }}">{{ p.n }}</button></sc-for>
+              <button type="button" onClick="{{ nextPage }}" style="display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;{{ nextStyle }}" style-hover="background:#F5F4F1">Next</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ CATALOG ============ -->
+    <sc-if value="{{ isCatalog }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:22px">
+
+        <!-- Catalog table -->
+        <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+          <div style="overflow-x:auto">
+          <table style="width:100%;min-width:820px;border-collapse:collapse">
+            <thead>
+              <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+                <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Payer</th>
+                <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Kind</th>
+                <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">States</th>
+                <th scope="col" style="text-align:right;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Manage</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ catalogRows }}" as="r" hint-placeholder-count="12">
+                <tr style="border-top:1px solid #F0EEEA">
+                  <td style="padding:13px 18px;vertical-align:middle">
+                    <a href="{{ r.href }}" style="font-size:14px;font-weight:600;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ r.name }}</a>
+                    <sc-if value="{{ r.alias }}" hint-placeholder-val="{{ true }}"><div style="font-size:12px;color:#9CA3AF;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px">{{ r.alias }}</div></sc-if>
+                  </td>
+                  <td style="padding:13px 14px;vertical-align:middle"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;background:#E7F5EF;color:#047857">{{ r.kind }}</span></td>
+                  <td style="padding:13px 14px;vertical-align:middle;font-size:13px;color:#6B7280;max-width:340px">
+                    <sc-if value="{{ r.notExpanded }}" hint-placeholder-val="{{ true }}"><span style="white-space:nowrap">{{ r.states }}</span><sc-if value="{{ r.moreStates }}" hint-placeholder-val="{{ false }}"><button type="button" data-key="{{ r.rowKey }}" onClick="{{ toggleStates }}" style="margin-left:6px;background:transparent;border:none;padding:0;font-family:inherit;font-size:13px;color:#1B4D3E;cursor:pointer" style-hover="text-decoration:underline">{{ r.moreStates }}</button></sc-if></sc-if>
+                    <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}"><span>{{ r.statesFull }}</span><button type="button" data-key="{{ r.rowKey }}" onClick="{{ toggleStates }}" style="margin-left:6px;background:transparent;border:none;padding:0;font-family:inherit;font-size:13px;color:#1B4D3E;cursor:pointer;white-space:nowrap" style-hover="text-decoration:underline">Show less</button></sc-if>
+                  </td>
+                  <td style="padding:13px 18px;vertical-align:middle">
+                    <div style="display:flex;align-items:center;justify-content:flex-end;gap:14px">
+                      <sc-if value="{{ r.isIn }}" hint-placeholder-val="{{ true }}">
+                        <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#1B4D3E;white-space:nowrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#1B4D3E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>In my network</span>
+                        <button type="button" style="background:transparent;border:none;padding:0;font-family:inherit;font-size:13px;color:#9CA3AF;cursor:pointer" style-hover="color:#B91C1C;text-decoration:underline">Remove</button>
+                      </sc-if>
+                      <sc-if value="{{ r.isInactive }}" hint-placeholder-val="{{ false }}">
+                        <button type="button" style="display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Reactivate</button>
+                      </sc-if>
+                      <sc-if value="{{ r.isOut }}" hint-placeholder-val="{{ false }}">
+                        <button type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33;border-color:#163F33"><span style="font-size:15px;line-height:1;margin-top:-1px">+</span>Add to my network</button>
+                      </sc-if>
+                    </div>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+        <!-- Footer: rows per page + pagination -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:13px;color:#6B7280;white-space:nowrap">Rows per page</label>
+            <div style="position:relative">
+              <select aria-label="Rows per page" value="{{ pageSize }}" onChange="{{ setPageSize }}" style="height:32px;padding:0 30px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><sc-for list="{{ pageSizeOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o }}">{{ o }}</option></sc-for></select>
+              <span style="position:absolute;right:11px;top:13px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span>
+            </div>
+            <span style="font-size:13px;color:#6B7280;white-space:nowrap">{{ pagerLabel }}</span>
+          </div>
+          <sc-if value="{{ showPager }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:6px">
+              <button type="button" onClick="{{ prevPage }}" style="display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;{{ prevStyle }}" style-hover="background:#F5F4F1">Prev</button>
+              <sc-for list="{{ pages }}" as="p" hint-placeholder-count="2"><button type="button" data-page="{{ p.n }}" onClick="{{ goPage }}" aria-current="{{ p.current }}" style="min-width:32px;height:30px;padding:0 8px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.color }}">{{ p.n }}</button></sc-for>
+              <button type="button" onClick="{{ nextPage }}" style="display:inline-flex;align-items:center;justify-content:center;height:30px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;{{ nextStyle }}" style-hover="background:#F5F4F1">Next</button>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ catalogEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid #E8E5E0;border-radius:6px;padding:36px;text-align:center;margin-top:16px"><div style="font-size:14px;font-weight:600;color:#1F2937">No payers match these filters</div><div style="font-size:13px;color:#6B7280;margin-top:4px">Try a different state, kind, or clear the search.</div></div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;My network&quot;,&quot;Catalog&quot;],&quot;default&quot;:&quot;My network&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;View&quot;},&quot;showGovernanceNote&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;View&quot;}}">
+class Component extends DCLogic {
+  state = { view: null, netFilter: "all", search: "", stateF: "", kindF: "", memF: "", sopSearch: "", showArchived: false, page: 1, pageSize: 10 };
+  renderVals() {
+    const payerHref = "Payer Detail - Improved.dc.html";
+    const viewMap = { "My network": "network", "Catalog": "catalog", "SOPs": "sops" };
+    const view = this.state.view || viewMap[this.props.defaultView] || "network";
+    const showGov = this.props.showGovernanceNote ?? true;
+    const netFilter = this.state.netFilter || "all";
+    const search = (this.state.search || "").trim().toLowerCase();
+    const netStateF = this.state.netStateF || "";
+    const netKindF = this.state.netKindF || "";
+    const netStateOptions = [{ value: "", label: "All states" }].concat(["AZ", "CA", "CO", "NM", "NY", "UT"].map((s) => ({ value: s, label: s })));
+    const netKindOptions = [{ value: "", label: "All kinds" }, { value: "Commercial", label: "Commercial" }, { value: "Medicare Advantage", label: "Medicare Advantage" }];
+    const catalogTotal = 137;
+
+    const tone = (t) => ({
+      green: { bg: "#E7F5EF", color: "#047857" }, amber: { bg: "#FBF0E1", color: "#B45309" },
+      blue: { bg: "#E8EEFD", color: "#1D4ED8" }, teal: { bg: "#E4F3F7", color: "#0E7490" },
+      red: { bg: "#FBEAEA", color: "#B91C1C" }, gray: { bg: "#F1F1EF", color: "#6B7280" },
+      neutral: { bg: "#F4F4F1", color: "#57605A" }
+    }[t] || { bg: "#F1F1EF", color: "#6B7280" });
+
+    // ---- My network (readiness pipeline) ----
+    // Mirrors src/lib/payerReadinessFunnel.ts (E6.5 F6.5.1).
+    // sopPublished: bool ; needsPortal: SOP has an online_form step ;
+    // formState: none|registered|trained|proven ; driftCount: number
+    const net = [
+      { name: "Aetna (CVS Health)", meta: "Commercial · 44 states", kind: "Commercial", states: "AZ, CA, CO, NY", sopPublished: true, needsPortal: true, formState: "proven", driftCount: 0 },
+      { name: "UnitedHealthcare", meta: "Commercial · CO, AZ, NM", kind: "Commercial", states: "AZ, CO, NM", sopPublished: true, needsPortal: true, formState: "trained", driftCount: 0 },
+      { name: "Cigna Healthcare", meta: "Commercial · CO", kind: "Commercial", states: "CO", sopPublished: true, needsPortal: true, formState: "registered", capturedCount: 5, driftCount: 0 },
+      { name: "Molina Healthcare", meta: "Medicaid · CO", kind: "Medicaid", states: "CO", sopPublished: true, needsPortal: true, formState: "registered", capturedCount: 0, driftCount: 0 },
+      { name: "Kaiser Permanente Colorado", meta: "Commercial · CO", kind: "Commercial", states: "CO", sopPublished: true, needsPortal: false, formState: "none", driftCount: 0 },
+      { name: "SelectHealth (Intermountain)", meta: "Commercial · CO, UT", kind: "Commercial", states: "CO, UT", sopPublished: true, needsPortal: true, formState: "proven", driftCount: 3 },
+      { name: "Humana", meta: "Medicare Advantage · CO", kind: "Medicare Advantage", states: "CO", sopPublished: true, needsPortal: true, formState: "none", driftCount: 0 },
+      { name: "Banner Health Plans", meta: "Medicare Advantage · AZ", kind: "Medicare Advantage", states: "AZ", sopPublished: false, needsPortal: false, formState: "none", driftCount: 0 },
+      { name: "Rocky Mountain Health Plans (UnitedHealthcare)", meta: "Commercial · CO", kind: "Commercial", states: "CO", sopPublished: false, needsPortal: false, formState: "none", driftCount: 0 }
+    ];
+    const sopVM = (s) => s ? { label: "Published", t: "green" } : { label: "Needs template", t: "amber" };
+    const formVM = (f) => ({
+      proven: { label: "Proven", t: "green" }, trained: { label: "Trained", t: "blue" },
+      registered: { label: "Registered", t: "teal" }, none: { label: "—", t: "gray" }
+    }[f]);
+    const driftVM = (n) => n > 0 ? { label: "Drift", t: "red" } : { label: "Clean", t: "green" };
+    // Exact precedence from buildPayerReadinessFunnel().
+    const readyNoteOf = (p) => (p.sopPublished && !p.needsPortal) ? "Template has no online form step — no portal required" : "";
+    const nextAction = (p) => {
+      if (!p.sopPublished) return "author_sop";
+      if (!p.needsPortal) return "ready";
+      if (p.formState === "none") return "register_portal";
+      // PROPOSED: portal registered but the extension has captured nothing yet —
+      // today this misreports as train_mappings and dead-ends.
+      if ((p.capturedCount ?? 0) === 0 && p.formState === "registered") return "capture_fields";
+      if (p.driftCount > 0) return "repair_drift";
+      if (p.formState === "registered") return "train_mappings";
+      if (p.formState === "trained") return "run_dry_test";
+      return "ready";
+    };
+    const ACTION_LABEL = {
+      author_sop: "Author template", register_portal: "Register portal",
+      capture_fields: "Capture fields", train_mappings: "Train mappings",
+      repair_drift: "Repair drift", run_dry_test: "Run dry test", ready: "Ready"
+    };
+    // Job + position: which of the two real destinations, and where in its ladder.
+    const JOB = {
+      author_sop: { job: "Author template", pos: "" },
+      register_portal: { job: "Form setup", pos: "1 of 3" },
+      capture_fields: { job: "Form setup", pos: "1 of 3" },
+      train_mappings: { job: "Form setup", pos: "2 of 3" },
+      repair_drift: { job: "Form setup", pos: "drift" },
+      run_dry_test: { job: "Form setup", pos: "3 of 3" },
+      ready: { job: "", pos: "" }
+    };
+    const classify = (p) => {
+      const a = nextAction(p);
+      if (a === "ready") return "ready";
+      if (a === "author_sop") return "needssop";
+      return "action";
+    };
+    const isFormNotProven = (p) => p.sopPublished && p.needsPortal && p.formState !== "proven";
+    const netPass = (p) => netFilter === "all" ? true
+      : netFilter === "ready" ? classify(p) === "ready"
+      : netFilter === "needssop" ? !p.sopPublished
+      : netFilter === "formnotproven" ? isFormNotProven(p)
+      : netFilter === "drift" ? p.driftCount > 0
+      : true;
+    const nextStep = (p) => ACTION_LABEL[nextAction(p)];
+    const readyVM = (cls) => cls === "ready" ? { label: "Ready", t: "green", dot: "#047857" }
+      : cls === "needssop" ? { label: "Not ready", t: "gray", dot: "#9CA3AF" }
+      : { label: "In progress", t: "amber", dot: "#D08329" };
+
+    const stats = {
+      ready: net.filter((p) => classify(p) === "ready").length,
+      needssop: net.filter((p) => !p.sopPublished).length,
+      formnotproven: net.filter(isFormNotProven).length,
+      drift: net.filter((p) => p.driftCount > 0).length
+    };
+
+    const networkAll = net.filter((p) => netPass(p) && (!search || p.name.toLowerCase().indexOf(search) !== -1) && (!netStateF || p.states.indexOf(netStateF) !== -1) && (!netKindF || p.kind === netKindF)).map((p) => {
+      const cls = classify(p);
+      const act = nextAction(p);
+      const s = sopVM(p.sopPublished), f = formVM(p.formState), d = driftVM(p.driftCount), rd = readyVM(cls);
+      const sT = tone(s.t), fT = tone(f.t), dT = tone(d.t), rT = tone(rd.t);
+      const isReady = cls === "ready";
+      const emphasize = act === "author_sop" || act === "repair_drift";
+      const jb = JOB[act];
+      const intentSlug = { register_portal: "register", capture_fields: "capture", train_mappings: "train", repair_drift: "repair", run_dry_test: "prove" }[act];
+      return {
+        name: p.name, meta: p.meta, href: payerHref,
+        states: p.states, kind: p.kind,
+        sopLabel: s.label, sopBg: sT.bg, sopColor: sT.color,
+        formLabel: f.label, formBg: fT.bg, formColor: fT.color,
+        driftLabel: d.label, driftBg: dT.bg, driftColor: dT.color,
+        readyLabel: rd.label, readyBg: rT.bg, readyColor: rT.color, readyDot: rd.dot,
+        isReady, notReady: !isReady, next: nextStep(p),
+        job: jb.job, pos: jb.pos, hasPos: !!jb.pos,
+        readyNote: readyNoteOf(p), hasReadyNote: !!readyNoteOf(p),
+        ctaHref: act === "author_sop" ? "Template Editor - Improved.dc.html" : ("Template Editor - Improved.dc.html#edit&intent=" + intentSlug),
+        ctaBg: emphasize ? "#1B4D3E" : "#FFFFFF",
+        ctaColor: emphasize ? "#FFFFFF" : "#1F2937",
+        ctaBorder: emphasize ? "#1B4D3E" : "#E8E5E0",
+        ctaHover: emphasize ? "background:#163F33;border-color:#163F33" : "background:#F5F4F1"
+      };
+    });
+
+    const cardStyle = (on) => ({ on, bg: on ? "#1B4D3E" : "#FFFFFF", border: on ? "#1B4D3E" : "#E8E5E0", label: on ? "rgba(255,255,255,.72)" : "#6B7280", num: on ? "#FFFFFF" : "#1F2937" });
+    const kpiVM = (key) => cardStyle(netFilter === key);
+
+    // ---- Catalog ----
+    const S = "#E7F5EF";
+    const cat = [
+      { name: "Aetna (CVS Health)", alias: "Aetna (JV) · Aetna Better Health (exited NY Medicaid) · Aetna Better Health (no CO …", kind: "Commercial", states: "AK, AL, AZ, CA", statesFull: "AK, AL, AZ, AR, CA, CO, CT, DC, DE, FL, GA, IA, ID, IL, IN, KS, KY, LA, ME, MD, MI, MN, MO, MS, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, SC, TN, TX, UT, VA, WA, WI, WV", more: "+40 more", mem: "in" },
+      { name: "Allegiance Benefit Plan Management (Cigna)", alias: "Allegiance · Cigna + Allegiance", kind: "Commercial", states: "MT", more: "", mem: "inactive" },
+      { name: "Alliant Health Plans", alias: "SimpleCare · SoloCare", kind: "Commercial", states: "GA", more: "", mem: "inactive" },
+      { name: "Ambetter from Arkansas Health & Wellness (Centene)", alias: "Arkansas Health & Wellness · Celtic Insurance (issuer)", kind: "Commercial", states: "AR", more: "", mem: "inactive" },
+      { name: "Ambetter from WellCare of Kentucky (Centene)", alias: "Ambetter", kind: "Commercial", states: "KY", more: "", mem: "out" },
+      { name: "Ambetter from Western Sky Community Care (Centene)", alias: "Ambetter of New Mexico · Western Sky Community Care", kind: "Commercial", states: "NM", more: "", mem: "out" },
+      { name: "Ambetter Health of Nebraska (Centene)", alias: "Ambetter from Nebraska Total Care", kind: "Commercial", states: "NE", more: "", mem: "out" },
+      { name: "Ambetter of Magnolia (Centene)", alias: "Ambetter", kind: "Commercial", states: "MS", more: "", mem: "out" },
+      { name: "Ambetter of Peach State (Centene)", alias: "Peach State Health Plan (Medicaid brand, exited 7/2026) · Wellcare of Georgia", kind: "Commercial", states: "GA", more: "", mem: "out" },
+      { name: "Ambetter of Tennessee (Centene)", alias: "Celtic Insurance Company · Wellcare (Centene MA brand in TN)", kind: "Commercial", states: "TN", more: "", mem: "out" },
+      { name: "AmeriHealth New Jersey", alias: "AmeriHealth Insurance Company of New Jersey", kind: "Commercial", states: "NJ", more: "", mem: "out" },
+      { name: "Anthem Blue Cross and Blue Shield of Colorado (Elevance)", alias: "Anthem BCBS of Colorado · Wellpoint (Medicaid brand, not active in CO)", kind: "Commercial", states: "CO", more: "", mem: "inactive" },
+      { name: "Banner Health Plans", alias: "Banner|Aetna", kind: "Medicare Advantage", states: "AZ", more: "", mem: "in" },
+      { name: "Blue Cross Blue Shield of Arizona", alias: "BCBS AZ · AZ Blue", kind: "Commercial", states: "AZ", more: "", mem: "out" }
+    ];
+    const stateF = this.state.stateF || "", kindF = this.state.kindF || "", memF = this.state.memF || "";
+    const catStats = { inNet: net.length, inactive: 2, notAdded: catalogTotal - net.length - 2 };
+    const catKpi = { in: cardStyle(memF === "in"), notadded: cardStyle(memF === "out"), inactive: cardStyle(memF === "inactive") };
+    const catFiltered = cat.filter((r) =>
+      (!search || (r.name + " " + r.alias).toLowerCase().indexOf(search) !== -1)
+      && (!stateF || (r.statesFull || r.states).indexOf(stateF) !== -1)
+      && (!kindF || r.kind === kindF)
+      && (!memF || r.mem === memF));
+    const expandStates = this.state.expandStates || {};
+    const catalogAll = catFiltered.map((r) => {
+      const expanded = !!expandStates[r.name];
+      return {
+        name: r.name, alias: r.alias, kind: r.kind, href: payerHref, rowKey: r.name,
+        states: r.states, statesFull: r.statesFull || r.states, moreStates: r.more,
+        expanded: expanded && !!r.more, notExpanded: !(expanded && !!r.more),
+        isIn: r.mem === "in", isInactive: r.mem === "inactive", isOut: r.mem === "out"
+      };
+    });
+
+    // ---- SOPs library ----
+    const knownPayers = { "Aetna (CVS Health)": 1, "UnitedHealthcare": 1, "Cigna Healthcare": 1, "Kaiser Permanente Colorado": 1, "SelectHealth (Intermountain)": 1 };
+    const sopsAll = [
+      { name: "General Enrollment", tag: "Template", fallback: true, payer: "", state: "—", group: "—", tasks: 4, updated: "Jul 12, 2026", archived: false },
+      { name: "Aetna (CVS Health) — Commercial enrollment", tag: "Global SOP", payer: "Aetna (CVS Health)", state: "—", group: "—", tasks: 7, updated: "Jul 18, 2026", archived: false },
+      { name: "UnitedHealthcare — Commercial enrollment", tag: "Global SOP", payer: "UnitedHealthcare", state: "—", group: "—", tasks: 6, updated: "Jul 19, 2026", archived: false },
+      { name: "Cigna Healthcare — CO enrollment", tag: "Global SOP", payer: "Cigna Healthcare", state: "CO", group: "—", tasks: 5, updated: "Jul 17, 2026", archived: false },
+      { name: "Kaiser Permanente Colorado — enrollment", tag: "Global SOP", payer: "Kaiser Permanente Colorado", state: "CO", group: "—", tasks: 5, updated: "Jul 15, 2026", archived: false },
+      { name: "SelectHealth (Intermountain) — enrollment", tag: "Global SOP", payer: "SelectHealth (Intermountain)", state: "UT", group: "—", tasks: 5, updated: "Jul 10, 2026", archived: false },
+      { name: "Legacy CO Medicaid enrollment", tag: "Global SOP", payer: "", state: "CO", group: "—", tasks: 3, updated: "Feb 2, 2026", archived: true }
+    ];
+    const sopSearch = (this.state.sopSearch || "").trim().toLowerCase();
+    const showArchived = this.state.showArchived || false;
+    const sopsFiltered = sopsAll.filter((s) => (showArchived || !s.archived) && (!sopSearch || s.name.toLowerCase().indexOf(sopSearch) !== -1));
+    const sopsRows = sopsFiltered.map((s) => {
+      const t = s.tag === "Global SOP" ? tone("teal") : tone("neutral");
+      return { name: s.name, tag: s.tag, tagBg: t.bg, tagColor: t.color, fallback: !!s.fallback, archived: s.archived,
+        payer: s.payer, payerHref: (s.payer && knownPayers[s.payer]) ? payerHref : "", noPayer: !s.payer,
+        state: s.state, group: s.group, tasks: s.tasks, updated: s.updated };
+    });
+    const sopCount = sopsAll.filter((s) => !s.archived).length;
+    const anyFilter = !!(search || stateF || kindF || memF);
+    const catalogSubtitle = anyFilter ? (catFiltered.length + " of " + catalogTotal + " payers") : (catalogTotal + " payers in catalog");
+
+    const stateOptions = [{ value: "", label: "All states" }].concat(["AZ", "CA", "CO", "GA", "KY", "MT", "NE", "NJ", "NM", "TN", "UT"].map((s) => ({ value: s, label: s })));
+    const kindOptions = [{ value: "", label: "All kinds" }, { value: "Commercial", label: "Commercial" }, { value: "Medicare Advantage", label: "Medicare Advantage" }, { value: "Medicaid", label: "Medicaid" }];
+    const memOptions = [{ value: "", label: "All payers" }, { value: "in", label: "In my network" }, { value: "out", label: "Not added" }, { value: "inactive", label: "Inactive" }];
+
+    const headerSubtitle = view === "catalog" ? catalogSubtitle : (net.length + " payers in your network");
+
+    const pageSize = this.state.pageSize || 10;
+    const pageSizeOptions = [10, 25, 50, 100];
+    const activeAll = view === "catalog" ? catalogAll : networkAll;
+    const totalPages = Math.max(1, Math.ceil(activeAll.length / pageSize));
+    let page = this.state.page || 1; if (page > totalPages) page = totalPages; if (page < 1) page = 1;
+    const startIdx = (page - 1) * pageSize;
+    const networkRows = networkAll.slice(startIdx, startIdx + pageSize);
+    const catalogRows = catalogAll.slice(startIdx, startIdx + pageSize);
+    const from = activeAll.length === 0 ? 0 : startIdx + 1;
+    const to = Math.min(startIdx + pageSize, activeAll.length);
+    const pages = Array.from({ length: totalPages }, (_, i) => { const n = i + 1, on = n === page; return { n, current: on ? "page" : "false", bg: on ? "#1B4D3E" : "#FFFFFF", color: on ? "#FFFFFF" : "#1F2937", border: on ? "#1B4D3E" : "#E8E5E0" }; });
+
+    return {
+      pageSize, pageSizeOptions, pages, showPager: totalPages > 1,
+      pagerLabel: "Showing " + from + "\u2013" + to + " of " + activeAll.length + " payers",
+      prevStyle: page <= 1 ? "opacity:.45;pointer-events:none" : "",
+      nextStyle: page >= totalPages ? "opacity:.45;pointer-events:none" : "",
+      driftBanners: [{
+        headline: "3 mappings broke",
+        portal: "SelectHealth provider enrollment",
+        fields: "Tax ID (TIN), Practice street address, License number",
+        cta: "Repair in SelectHealth (Intermountain) — enrollment"
+      }],
+      headerSubtitle, searchPlaceholder: view === "catalog" ? "Search by name or alias…" : "Search payers…",
+      isNetwork: view === "network", isCatalog: view === "catalog", isSops: view === "sops",
+      showGov, networkCount: net.length, catalogTotal, sopCount,
+      seg: {
+        network: this.segVM(view === "network"),
+        catalog: this.segVM(view === "catalog"),
+        sops: this.segVM(view === "sops")
+      },
+      sopsRows, sopsEmpty: sopsFiltered.length === 0,
+      sopSearchVal: this.state.sopSearch || "", showArchived,
+      stats, networkRows,
+      kpi: { ready: kpiVM("ready"), needssop: kpiVM("needssop"), formnotproven: kpiVM("formnotproven"), drift: kpiVM("drift") },
+      catKpi, catStats,
+      netStateF, netKindF, netStateOptions, netKindOptions,
+      catalogRows, catalogSubtitle, catalogEmpty: catFiltered.length === 0,
+      searchVal: this.state.search || "", stateF, kindF, memF,
+      stateOptions, kindOptions, memOptions,
+      setView: (e) => this.setState({ view: e.currentTarget.getAttribute("data-view"), page: 1 }),
+      goCatalog: () => this.setState({ view: "catalog", page: 1 }),
+      setNet: (e) => { const f = e.currentTarget.getAttribute("data-net"); this.setState({ netFilter: this.state.netFilter === f ? "all" : f, view: "network", page: 1 }); },
+      setSearch: (e) => this.setState({ search: e.target.value, page: 1 }),
+      setStateF: (e) => this.setState({ stateF: e.target.value, page: 1 }),
+      setKindF: (e) => this.setState({ kindF: e.target.value, page: 1 }),
+      setMemF: (e) => this.setState({ memF: e.target.value, page: 1 }),
+      setCatMem: (e) => { const v = e.currentTarget.getAttribute("data-mem"); this.setState({ memF: this.state.memF === v ? "" : v, page: 1 }); },
+      setNetStateF: (e) => this.setState({ netStateF: e.target.value, page: 1 }),
+      setNetKindF: (e) => this.setState({ netKindF: e.target.value, page: 1 }),
+      toggleStates: (e) => { const k = e.currentTarget.getAttribute("data-key"); const ex = Object.assign({}, this.state.expandStates); ex[k] = !ex[k]; this.setState({ expandStates: ex }); },
+      setPageSize: (e) => this.setState({ pageSize: parseInt(e.currentTarget.value, 10) || 10, page: 1 }),
+      prevPage: () => this.setState({ page: Math.max(1, (this.state.page || 1) - 1) }),
+      nextPage: () => this.setState({ page: (this.state.page || 1) + 1 }),
+      goPage: (e) => this.setState({ page: parseInt(e.currentTarget.getAttribute("data-page"), 10) || 1 }),
+      setSopSearch: (e) => this.setState({ sopSearch: e.target.value }),
+      toggleArchived: (e) => this.setState({ showArchived: e.target.checked })
+    };
+  }
+  segVM(on) {
+    return {
+      bg: on ? "#FFFFFF" : "transparent", color: on ? "#1B4D3E" : "#6B7280",
+      border: on ? "#E8E5E0" : "transparent",
+      badgeBg: on ? "#E7F5EF" : "#E4E4DF", badgeColor: on ? "#1B4D3E" : "#8A8F88"
+    };
+  }
+}
+</script>
+</body>
+</html>
