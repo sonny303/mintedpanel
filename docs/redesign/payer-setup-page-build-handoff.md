@@ -56,7 +56,7 @@ them. The template library itself (`TemplatesList` + the `+ New Template` wizard
 entry) has no other home, and the design's default-template card links "to the
 editor" — an editor whose list page would no longer exist.
 
-**Recommendation:** *keep the route, drop the tab.* Rename the segment
+**Recommendation:** _keep the route, drop the tab._ Rename the segment
 `/admin/payer-admin/sops` → `/admin/payer-admin/templates` (terminology
 divergence 2), keep it rendering `TemplatesList`, point every legacy redirect and
 the default-template card at it, and simply do not list it in the segmented
@@ -64,8 +64,8 @@ control. Nothing user-facing advertises it; nothing dead-ends.
 
 ### B3 — Drift loses its landing surface while the sidebar still points here
 
-The sidebar Payer Setup entry carries a count chip labelled *"N broken form
-mappings"*, and E6.5 F6.5.4's AC requires the badge **and** a route into the
+The sidebar Payer Setup entry carries a count chip labelled _"N broken form
+mappings"_, and E6.5 F6.5.4's AC requires the badge **and** a route into the
 owning step. The design deliberately removes the drift banner and the per-row
 next step, leaving only the **Drift detected** KPI card.
 
@@ -88,7 +88,7 @@ The generic fallback SOP is a **seeded, locked singleton**
 `publish_sop_template_version` raise `fallback_sop_locked` for `authenticated`
 JWTs (migration `20260719170000_e65_global_authoring.sql`); only service-role /
 direct SQL can touch it. So: it is seeded, it is singleton, and there is no
-create path *by design* — but the design's **Edit** button would fail for every
+create path _by design_ — but the design's **Edit** button would fail for every
 real user.
 
 **Recommendation:** render the card read-only — `View` + a `Platform-managed`
@@ -125,8 +125,8 @@ Alternative, if the PM wants the two-value badge to stand: define `Published` as
 ### D2 — Do org-tier templates count? (answers README open question 2)
 
 Today they do not: `buildPayerReadinessFunnel` skips every template with
-`orgId !== null`, so a payer whose only template is an org override reads *Needs
-template* even though generation resolves it correctly (org override beats
+`orgId !== null`, so a payer whose only template is an org override reads _Needs
+template_ even though generation resolves it correctly (org override beats
 global — `resolutionTier`). Under B1 the tab is now explicitly org-scoped, which
 makes the current behaviour wrong for this page.
 
@@ -138,17 +138,17 @@ a build-time one.
 
 ## 2. Prototype vs README conflicts (build session: follow the README)
 
-| # | README says | Prototype does | Call |
-| --- | --- | --- | --- |
-| C1 | Active KPI card = `#F0F5F2` bg, `#1B4D3E` border, forest label + number | `cardStyle()` fills the card solid `#1B4D3E` with white text | **Follow the README** — the screenshots that would settle it were not delivered |
-| C2 | Rows per page `5 / 10 / 25 / 50 / 100` | `[10, 25, 50, 100]` | **Follow the README** (add 5) |
-| C3 | Next step column, drift banner, drafts strip, meta subtitle all cut | The script still carries a third `SOPs` view, `sopsAll` fixtures, `ACTION_LABEL`/`JOB`/`intentSlug` next-step machinery | Dead code in the prototype — the rendered markup never uses it. **Do not port** |
-| C4 | Kind filter = Commercial / Medicare Advantage / Medicaid | Hardcodes two or three values per tab | `PayerKind` has six members with labels in `src/lib/payerDirectory.ts` (`PAYER_KIND_LABELS`). **Derive the options from the data**, never hardcode |
-| C5 | `screenshots/01-my-network.png`, `02-catalog.png` | not in the bundle | Not blocking; the prototype renders |
+| #   | README says                                                             | Prototype does                                                                                                          | Call                                                                                                                                               |
+| --- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Active KPI card = `#F0F5F2` bg, `#1B4D3E` border, forest label + number | `cardStyle()` fills the card solid `#1B4D3E` with white text                                                            | **Follow the README** — the screenshots that would settle it were not delivered                                                                    |
+| C2  | Rows per page `5 / 10 / 25 / 50 / 100`                                  | `[10, 25, 50, 100]`                                                                                                     | **Follow the README** (add 5)                                                                                                                      |
+| C3  | Next step column, drift banner, drafts strip, meta subtitle all cut     | The script still carries a third `SOPs` view, `sopsAll` fixtures, `ACTION_LABEL`/`JOB`/`intentSlug` next-step machinery | Dead code in the prototype — the rendered markup never uses it. **Do not port**                                                                    |
+| C4  | Kind filter = Commercial / Medicare Advantage / Medicaid                | Hardcodes two or three values per tab                                                                                   | `PayerKind` has six members with labels in `src/lib/payerDirectory.ts` (`PAYER_KIND_LABELS`). **Derive the options from the data**, never hardcode |
+| C5  | `screenshots/01-my-network.png`, `02-catalog.png`                       | not in the bundle                                                                                                       | Not blocking; the prototype renders                                                                                                                |
 
 Also missing from the design, and needed: the catalog's **retired / merged**
 payers. `catalogAction` returns an `unavailable` action that renders
-*"Merged — can't be added · use <successor>"*. The design's Manage column has
+_"Merged — can't be added · use <successor>"_. The design's Manage column has
 three states and no home for these; keep the existing fourth state rather than
 lose the successor guidance (**D3**).
 
@@ -156,16 +156,16 @@ lose the successor guidance (**D3**).
 
 ## 3. What the build reuses (do not rebuild)
 
-| Need | Existing seam |
-| --- | --- |
-| Catalog rows | `useGlobalPayers` → `listGlobalPayers` (`list_global_payers` RPC) |
-| Membership + add/remove/reactivate | `useOrgPayerAssignments`, `useAddAssignment`, `useArchiveAssignment`, `useReactivateAssignment`, `catalogAction`, `isActiveAssignment` |
-| "The org's payers" inclusion rule | `activeOrgPayers` (`src/lib/payerSetup.ts`) — excludes the `PRE_CRED_PAYER_NAME` sentinel; the header count must use it |
-| Readiness buckets | `usePayerReadinessFunnel` → `buildPayerReadinessFunnel` (`FunnelNextAction`) |
-| Drift counts | `useFormDrift` |
-| Catalog filtering (name **or** alias, state, kind) | `filterDirectoryRows` (`src/lib/payerDirectory.ts`) |
-| Template library + wizard | `TemplatesList`, the existing `/admin/templates/$id` editor routes |
-| Fallback template row | `isFallbackTemplate` (`src/lib/pickTemplate.ts`) |
+| Need                                               | Existing seam                                                                                                                          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalog rows                                       | `useGlobalPayers` → `listGlobalPayers` (`list_global_payers` RPC)                                                                      |
+| Membership + add/remove/reactivate                 | `useOrgPayerAssignments`, `useAddAssignment`, `useArchiveAssignment`, `useReactivateAssignment`, `catalogAction`, `isActiveAssignment` |
+| "The org's payers" inclusion rule                  | `activeOrgPayers` (`src/lib/payerSetup.ts`) — excludes the `PRE_CRED_PAYER_NAME` sentinel; the header count must use it                |
+| Readiness buckets                                  | `usePayerReadinessFunnel` → `buildPayerReadinessFunnel` (`FunnelNextAction`)                                                           |
+| Drift counts                                       | `useFormDrift`                                                                                                                         |
+| Catalog filtering (name **or** alias, state, kind) | `filterDirectoryRows` (`src/lib/payerDirectory.ts`)                                                                                    |
+| Template library + wizard                          | `TemplatesList`, the existing `/admin/templates/$id` editor routes                                                                     |
+| Fallback template row                              | `isFallbackTemplate` (`src/lib/pickTemplate.ts`)                                                                                       |
 
 **Bucket derivation (D4).** The four My network cards must be mutually exclusive
 so they sum to the network count. Map the existing `FunnelNextAction`:
@@ -174,8 +174,8 @@ Ready for business · everything else (`register_portal`, `train_mappings`,
 `run_dry_test`) → Form not proven. The prototype does exactly this; the README
 does not say it.
 
-**Bucket legibility (D5).** With per-row detail cut, filtering to *Form not
-proven* or *Drift detected* returns rows whose only badge says `Published` —
+**Bucket legibility (D5).** With per-row detail cut, filtering to _Form not
+proven_ or _Drift detected_ returns rows whose only badge says `Published` —
 nothing on screen explains why they are in that bucket. Either add a second
 badge column (`Form`: Not registered / Trained / Proven / Drift) or accept it
 knowingly. Recommend the column; it costs one cell and the data is already in

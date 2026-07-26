@@ -19,3 +19,6 @@ src/styles/tokens.css
 # Generated wiki site (npm run wiki:build)
 docs/wiki/site/
 public/wiki/
+# Verbatim PM design bundle for the Payer Setup page redesign — the prototype
+# and its runtime must stay byte-identical to what was handed off.
+docs/redesign/design-reference/
