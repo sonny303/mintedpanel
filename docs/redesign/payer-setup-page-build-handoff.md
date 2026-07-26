@@ -1,6 +1,6 @@
 ---
 title: Payer Setup page redesign — design review + Claude Code build handoff
-status: review-complete, PM decisions pending
+status: review-complete, PM decisions recorded 2026-07-26
 owner: devin
 design-reference: ./design-reference/payer-setup/
 reviewed-against: E6.5-payer-setup-consolidation.md, E6.1-sidebar-surface-restructure.md, main @ 1b1f047
@@ -24,10 +24,30 @@ the prototype disagree, the README wins (see §2).
 
 ---
 
-## 1. Decisions the PM must make before the build starts
+## 1. Decisions — asked, answered 2026-07-26
 
 Each of these is a place where the design, as written, cannot be implemented
-as-is — not a preference.
+as-is — not a preference. The PM's answers are recorded inline under each item.
+
+**The PM's framing (2026-07-26):** the page is deliberately narrowed to "which
+payers are aligned to which org". Everything the design strips — the SOPs tab,
+the per-row next step, the drift banner, the default-template card's editing —
+is **deferred into a payer-detail-style view that is still being designed**, not
+deleted from the product. So B2/B3/B5/D1 are sequencing items: this page may
+stop _showing_ them, but nothing may _dead-end_ before that view exists.
+
+| #   | Decision                                                                  |
+| --- | ------------------------------------------------------------------------- |
+| B1  | **Approved as designed** — My network is org-scoped; amend the E6.5 AC    |
+| B2  | Deferred to payer detail; **interim unlisted `…/templates` route stays**  |
+| B3  | Deferred to payer detail; sidebar chip must keep a live landing meanwhile |
+| B4  | Not a design call — DB-locked; **card is read-only wherever it lands**    |
+| B5  | Deferred with the rest; note keeps rendering until its new home exists    |
+| D1  | Deferred to payer detail; use the two-value badge on this page            |
+| D2  | Follows B1 — count org overrides on My network                            |
+
+Open and being decided separately: **whether the payer catalog survives at all**
+(precanned browse vs add-by-search). See §7.
 
 ### B1 — "My network" makes the module org-scoped, which E6.5 forbids
 
@@ -79,7 +99,7 @@ navigating blind.
 **Recommendation:** make the sidebar chip deep-link to
 `/admin/payer-admin/network?filter=drift` (the KPI filter becomes the landing),
 and add a drift indicator to Payer Detail as a small follow-up PR (out of this
-page's scope, but a go-live gate — see §7).
+page's scope, but a go-live gate — see §8).
 
 ### B4 — The default template cannot be edited (answers README open question 1)
 
@@ -191,6 +211,9 @@ requirement.
 
 ## 4. Build slices
 
+Build in this order; the Catalog slice is deliberately last because §7 may
+delete it outright.
+
 1. **Shell + routes** — `/admin/payer-admin/network` (default) and
    `/admin/payer-admin/catalog`; segmented control with count pills; header +
    live count line; `/admin/payer-admin/sops` → `/admin/payer-admin/templates`
@@ -233,8 +256,8 @@ requirement.
 
 > Implement the Payer Setup page redesign. Read, in order:
 > `docs/redesign/payer-setup-page-build-handoff.md` (this review — it carries the
-> PM decisions and the codebase mapping and overrides the design README where
-> they differ), then
+> PM decisions recorded 2026-07-26 in §1 and the codebase mapping, and overrides
+> the design README where they differ), then
 > `docs/redesign/design-reference/payer-setup/README.md`, then the
 > `.dc.html` prototype in that folder (a design reference, not production code —
 > rebuild it with the existing components, hooks, and tokens; its rows are
@@ -243,10 +266,37 @@ requirement.
 > change. Build the slices in §4, respect the gates and repo rules in §5, and
 > branch off `main` with the PR targeting `main`.
 
-## 7. Open items tracked to go-live
+## 7. The catalog-removal question (open, decided separately)
 
-- [ ] PM decisions B1–B5, D1, D2 recorded here before the build starts.
+The PM is weighing removing the payer catalog on the grounds that a precanned
+list of 137 payers is not useful. Two separable things:
+
+- **The browse UX** (scroll a curated list) — weak, and "search for the payer you
+  work with, add it" is the better interaction. Removing it costs this page's
+  Catalog tab and nothing else.
+- **The catalog data** — the identity spine. `payer_id` keys `credential_cases`,
+  `contracts`, `payer_network_targets`, `org_payer_assignments`, and every SOP
+  template; there is **no free-text payer creation**, and orgs have had no write
+  path to `payers` since `20260718120000` (Minted-curated by governance
+  decision). The design's own state / kind / alias filters read those curated
+  facts, as does resolution-identifier fallback.
+
+So "remove the catalog" means adding a payer-create path plus a governance
+decision on who owns payer identity and how duplicates across orgs are
+reconciled — a separate epic, not a change to this page. Recommended shape:
+keep the table, drop the browse, replace with add-by-search.
+
+If that lands, this page collapses to one tab (My network) plus an "Add payer"
+dialog — which is a reason to build slice 3 (Catalog) last.
+
+## 8. Open items tracked to go-live
+
+- [x] PM decisions B1–B5, D1, D2 recorded (2026-07-26).
+- [ ] Payer-detail-style view designed — it is the destination for everything
+      this page defers (templates library, next step, drift, default template).
+      Nothing deferred may be deleted from its current home until it ships.
 - [ ] Drift indicator added to Payer Detail (B3) — separate PR, before go-live.
+- [ ] Catalog-removal decision (§8).
 - [ ] Screenshots `01-my-network.png` / `02-catalog.png` supplied or waived (C5).
 - [ ] `DESIGN-DEBT.md` entry if the build introduces a non-system component.
 - [ ] E6.5 ACs F6.5.1 (org data) and F6.5.6 (governance note) amended or upheld.
