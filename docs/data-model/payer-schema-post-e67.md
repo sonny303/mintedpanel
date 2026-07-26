@@ -65,6 +65,19 @@ status <> 'merged'` (aliases stay guard-only)._
    `avg_decision_days`, `payer_slug`, `last_synced_at` — deprecated, never
    dropped (additive rule).
 
+## Radar: "resolution fields belong on contracts?" (PM, 2026-07-26)
+
+Resolved as a **split, not a move**. The fields are the _label/expectation_
+tier (a payer fact: what the payer calls its ID and whether it issues one);
+the issued _values_ already live at contract/provider grain
+(`payer_network_targets.payer_issued_id`, `enrollment_facts.payer_issued_id`,
+case approved-ID columns). The real gap was that one pair can't distinguish
+GROUP-ID vs PROVIDER-ID expectations — E6.7 F6.7.1a adds
+`group_id_label`/`group_id_expected` + `provider_id_label`/
+`provider_id_expected` (legacy pair backfills the provider side, deprecates
+in place), and `set_case_status` requires exactly the expected IDs at
+Approved.
+
 ## If all proposals land, the manual-model table reads
 
 ```
