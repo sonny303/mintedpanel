@@ -19,3 +19,5 @@ src/styles/tokens.css
 # Generated wiki site (npm run wiki:build)
 docs/wiki/site/
 public/wiki/
+# Verbatim design bundles from the design tool — keep byte-identical
+docs/redesign/design-reference/
