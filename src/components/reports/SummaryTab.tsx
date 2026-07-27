@@ -129,15 +129,11 @@ export function SummaryTab() {
       .map(([payerId, { total, n }]) => {
         const payer = payerById.get(payerId);
         const avg = Math.round(total / n);
-        const expected = payer?.avgDecisionDays ?? null;
-        const variance = expected !== null ? avg - expected : null;
         return {
           payerId,
           payerName: payer?.name ?? "—",
           avg,
           count: n,
-          expected,
-          variance,
         };
       })
       .sort((a, b) => b.count - a.count);
@@ -433,14 +429,8 @@ export function SummaryTab() {
             size="sm"
             onClick={() =>
               downloadCsv("avg-approval-by-payer.csv", [
-                ["Payer", "Avg days", "Cases", "Expected (avg_decision_days)", "Variance"],
-                ...approvalRows.map((r) => [
-                  r.payerName,
-                  r.avg,
-                  r.count,
-                  r.expected ?? "",
-                  r.variance ?? "",
-                ]),
+                ["Payer", "Avg days", "Cases"],
+                ...approvalRows.map((r) => [r.payerName, r.avg, r.count]),
               ])
             }
           >
@@ -454,40 +444,22 @@ export function SummaryTab() {
               <th className="text-left px-4 h-9 font-medium">Payer</th>
               <th className="text-right px-4 h-9 font-medium">Avg days</th>
               <th className="text-right px-4 h-9 font-medium">Cases</th>
-              <th className="text-right px-4 h-9 font-medium">Expected</th>
-              <th className="text-right px-4 h-9 font-medium">Variance</th>
             </tr>
           </thead>
           <tbody>
             {approvalRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-12">
+                <td colSpan={3} className="px-3 py-12">
                   <EmptyState message="No approved cases in range" />
                 </td>
               </tr>
             ) : (
               approvalRows.map((r) => {
-                const varClass =
-                  r.variance === null
-                    ? "text-muted-foreground"
-                    : r.variance <= 0
-                      ? "text-[#059669]"
-                      : "text-[#DC2626]";
-                const varText =
-                  r.variance === null
-                    ? "—"
-                    : r.variance === 0
-                      ? "on target"
-                      : r.variance < 0
-                        ? `${r.variance} d faster`
-                        : `+${r.variance} d slower`;
                 return (
                   <tr key={r.payerId} className="border-t border-[#E8E5E0] h-10 hover:bg-[#FAFAF9]">
                     <td className="px-4">{r.payerName}</td>
                     <td className="px-4 text-right tabular-nums">{r.avg}</td>
                     <td className="px-4 text-right tabular-nums">{r.count}</td>
-                    <td className="px-4 text-right tabular-nums">{r.expected ?? "—"}</td>
-                    <td className={`px-4 text-right tabular-nums ${varClass}`}>{varText}</td>
                   </tr>
                 );
               })
