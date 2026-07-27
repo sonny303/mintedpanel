@@ -17,20 +17,26 @@ export type ExecutionType = (typeof EXECUTION_TYPES)[number];
 /** null/absent execution type ⇒ manual (the DB CHECK allows null for this). */
 export const DEFAULT_EXECUTION_TYPE: ExecutionType = "manual";
 
+// User-facing labels (payer-and-cases §2.8 terminology): `extension_fill`
+// renders as "Auto-fill" — the internal identifier keeps its name, and the
+// design's Auto-fill IS the extension-fill capability with the extension
+// naming swept out of user copy.
 export const EXECUTION_TYPE_LABELS: Record<ExecutionType, string> = {
   manual: "Manual",
-  extension_fill: "Extension fill",
+  extension_fill: "Auto-fill",
   auto_verify: "Auto verify",
   document_attach: "Document attach",
 };
 
-/** Short capability note per type — R6 captures config only, so every type is
- * "captured, runs later" except manual. */
+/** Short capability note per type. Only Auto-fill changes anything today: it is
+ * what makes form setup and readiness apply to the template's payer. The other
+ * values are captured configuration. */
 export const EXECUTION_TYPE_HINTS: Record<ExecutionType, string> = {
-  manual: "Worked by a specialist.",
-  extension_fill: "The browser extension fills this form (activates in E4.3).",
-  auto_verify: "Automated verification (activates in R7).",
-  document_attach: "Pulls a document from the vault (activates in E4.5).",
+  manual: "A specialist works this task by hand.",
+  extension_fill:
+    "This task's form is filled automatically — what makes form setup and readiness apply to this payer.",
+  auto_verify: "Reserved for automated verification. Recorded now, no effect yet.",
+  document_attach: "Pulls a document from the vault. Recorded now, no effect yet.",
 };
 
 export function isExecutionType(value: unknown): value is ExecutionType {

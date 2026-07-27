@@ -1,23 +1,33 @@
-// Four-step wizard for authoring an SOP template (Admin > Templates). Replaces
-// the old single-page editor. The jsonb shape is unchanged (owned by
-// src/lib/sopResolver.ts): tasks -> steps -> data fields with bare tokens;
-// case creation reads it untouched.
+// Three-step wizard for authoring a template (payer-and-cases screen 4:
+// Basics · Tasks & steps · Review — the old Tasks and "Steps & fields" steps
+// rendered the same list twice and are merged). The jsonb shape is unchanged
+// (owned by src/lib/sopResolver.ts): tasks -> steps -> data fields with bare
+// tokens; case creation reads it untouched.
+//
+// Tier is DERIVED from the match key, never chosen: the editor authors GLOBAL
+// rows only (payer + state + optional group — §2.4: it never creates org-tier
+// rows; pickTemplate keeps resolving any existing ones, which stay editable
+// here as legacy). The payer comes FIXED from context (a payer page / funnel
+// link or the template itself); only a context-free create still offers a
+// picker so the /admin/templates entry point cannot dead-end.
 //
 // E1.7b Model A save split (TE-5): CONTENT (name + task definitions) saves
 // through Publish — the publish_sop_template_version RPC inserts an immutable
 // version row, updates the head, and bumps current_version (optimistic
 // concurrency; a losing publish gets a friendly conflict toast). MATCH-KEY
-// edits (payer/state/group — the E4.2 supported grain; legacy specialty is
-// preserved but not an editable match key) are head-level identity edits and go
-// through the plain audited update — no version bump. Global templates
-// (org_id NULL, incl. the seeded fallback) render read-only for org users.
+// edits (state/group) are head-level identity edits and go through the plain
+// audited update — no version bump.
+//
+// Versioning-lite (slice F): v-chip in the header, History dialog with
+// restore-as-new, publish captures ONE optional change note. The E6.7 fallback
+// unlock makes the default template's CONTENT editable here (#edit-default);
+// its match key and archive stay locked (fallback_sop_locked) and it exits to
+// Payer Setup.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArchiveRestore,
-  ArrowDown,
-  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -48,7 +58,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
-import { GripVertical, Trash2 } from "lucide-react";
 import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
 import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTasks";
 import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVersionHistory";
@@ -62,16 +71,22 @@ import {
 } from "@/components/templates/editableTemplate";
 import { useCreateSop, usePayers, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
 import { useAuthorGlobalSop } from "@/hooks/useGlobalAuthoring";
+import { useFormDrift } from "@/hooks/useFormDrift";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { useTokenCatalog } from "@/hooks/useMappingReview";
-import { usePortals } from "@/hooks/usePortals";
+import { usePortalFieldMaps, usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
 import { orgSopMatchKeyError } from "@/lib/sopMatchKey";
 import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
+import {
+  resolveIntentBanner,
+  type IntentStepFacts,
+  type TemplateEditorIntent,
+} from "@/lib/templateEditorIntent";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 import { SopVersionConflictError } from "@/services/templates";
 import { lintSopForPublish } from "@/lib/sopPublishLint";
-import { EXECUTION_TYPES, EXECUTION_TYPE_LABELS, type ExecutionType } from "@/lib/executionTypes";
 import {
   PROFILE_ATTRIBUTES,
   normalizeRequiredAttributes,
@@ -166,11 +181,12 @@ const US_STATES = [
   "WY",
 ];
 
+// Screen 4: three steps — the old Tasks and "Steps & fields" steps rendered
+// the same list twice, so they are ONE step now.
 const STEPS = [
   { n: 1, label: "Basics" },
-  { n: 2, label: "Tasks" },
-  { n: 3, label: "Steps & fields" },
-  { n: 4, label: "Review" },
+  { n: 2, label: "Tasks & steps" },
+  { n: 3, label: "Review" },
 ] as const;
 
 interface WizardPrefill {
@@ -194,37 +210,35 @@ interface DraftPayload {
 interface TemplateWizardProps {
   // null = create mode; a template = edit mode (pre-filled).
   initial: SOPTemplate | null;
-  // E4.2 TE-4 — the "Needs SOP" creation link prefills the match key.
+  // E4.2 TE-4 — a "Needs template" link prefills the match key; the payer half
+  // is the FIXED payer context (screen 4: payer is never a dropdown when the
+  // entry point carries one).
   prefill?: WizardPrefill;
   // E4.2 F4.2.1 — resume an existing draft (create mode only).
   draft?: SopTemplateDraft | null;
-  // E6.5 F6.5.6 — create-mode GLOBAL authoring (?tier=global): the head is an
-  // org_id NULL row written through author_global_sop, inherited by every org.
-  globalTier?: boolean;
+  // Slice F — a readiness CTA deep-link (?intent=): land on Tasks & steps with
+  // the owning form panel expanded and the derived context banner explaining
+  // why. The banner re-derives from live step state and disappears when the
+  // work is done.
+  intent?: TemplateEditorIntent | null;
 }
 
-export function TemplateWizard({ initial, prefill, draft, globalTier }: TemplateWizardProps) {
+export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWizardProps) {
   const navigate = useNavigate();
   const isEdit = initial !== null;
   const draftPayload = (draft?.payload ?? null) as DraftPayload | null;
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
   const isAdmin = useIsAdmin();
-  // E6.5 F6.5.6 — GLOBAL templates (org_id NULL) are now AUTHORABLE from here
-  // ("authored once, inherited by every org"), open to all authenticated users
-  // under the interim governance posture (R7 introduces platform roles). The
-  // seeded generic fallback stays platform-managed and read-only (its RPC
-  // guards reject org-user edits too).
-  const isGlobal = initial ? initial.orgId === null : Boolean(globalTier);
+  // Tier is DERIVED from the match key (screen 4 / handoff §2.4): the editor
+  // authors GLOBAL rows only, so create mode is always the global tier.
+  // Existing org-tier rows stay editable as legacy — the resolver keeps
+  // reading them — but no path here creates a new one.
+  const isGlobal = initial ? initial.orgId === null : true;
   const isFallback = initial ? isFallbackTemplate(initial) : false;
-  const canEdit = isFallback ? false : isGlobal ? true : isAdmin;
-  // E4.2 SOP hardening — the template tier, matching the deterministic
-  // pickTemplate precedence (organization override → global payer SOP → generic
-  // fallback). Org templates authored here are always the organization tier.
-  const tierLabel = isFallback
-    ? "Generic fallback"
-    : isGlobal
-      ? "Global payer SOP"
-      : "Organization override";
+  // E6.7 fallback unlock: the default template's CONTENT is editable like any
+  // global template (its match key/archive stay locked below). Org-tier legacy
+  // rows keep the admin gate.
+  const canEdit = isGlobal ? true : isAdmin;
 
   const payersQ = usePayers();
   const groupsQ = useProviderGroups();
@@ -268,7 +282,9 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
   }, [tokens]);
   const firstToken = tokens[0]?.token ?? "provider.firstName";
 
-  const [step, setStep] = useState(1);
+  // A deep-linked intent lands directly on Tasks & steps — that is where the
+  // work it points at lives.
+  const [step, setStep] = useState(intent ? 2 : 1);
   const [name, setName] = useState(draftPayload?.name ?? initial?.name ?? "");
   const [payerId, setPayerId] = useState<string>(
     draftPayload?.payerId ?? initial?.payerId ?? prefill?.payerId ?? "none",
@@ -300,11 +316,9 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
   const [publishOpen, setPublishOpen] = useState(false);
   const [changeNote, setChangeNote] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
-  // E4.2 F4.2.1 — global-tier blast-radius acknowledgment. A global/shared
-  // template is consumed by every org without an override, so publishing a
-  // change requires an explicit confirmation. (Org templates publish as before;
-  // global rows are platform-managed and read-only in the org UI, so this is a
-  // defense-in-depth gate for any privileged publish path.)
+  // E4.2 F4.2.1 — global-tier blast-radius acknowledgment. A global template is
+  // consumed by every org without an override, so publishing a change requires
+  // an explicit confirmation.
   const [blastAck, setBlastAck] = useState(false);
 
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
@@ -341,7 +355,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     setDirty(true);
   }, []);
 
-  // --- task-level edits (Step 2 + used by Step 3 via TemplateTaskRow) ---
+  // --- task-level edits (Tasks & steps, via TemplateTaskRow) ---
   function addTask() {
     setTasks((prev) => [
       ...prev,
@@ -357,16 +371,19 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     markDirty();
   }
   // E4.2 PM round-4 — accessible task reorder (move up/down, no drag needed).
-  function moveTask(index: number, delta: -1 | 1) {
-    setTasks((prev) => {
-      const target = index + delta;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-    markDirty();
-  }
+  const moveTask = useCallback(
+    (index: number, delta: -1 | 1) => {
+      setTasks((prev) => {
+        const target = index + delta;
+        if (target < 0 || target >= prev.length) return prev;
+        const next = [...prev];
+        [next[index], next[target]] = [next[target], next[index]];
+        return next;
+      });
+      markDirty();
+    },
+    [markDirty],
+  );
   const moveStep = useCallback(
     (taskId: string, index: number, delta: -1 | 1) => {
       setTasks((prev) =>
@@ -420,7 +437,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     [markDirty],
   );
 
-  // --- step-level edits (Step 3) ---
+  // --- step-level edits ---
   const addStep = useCallback(
     (taskId: string) => {
       setTasks((prev) =>
@@ -495,7 +512,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     [markDirty],
   );
 
-  // --- data-field edits (Step 3) ---
+  // --- data-field edits ---
   const addDataField = useCallback(
     (taskId: string, stepId: string) => {
       setTasks((prev) =>
@@ -583,6 +600,86 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     [name, payerId, state, specialty, groupId, previewTasks, requiredAttrs, isArchived],
   );
 
+  // The DERIVED tier line (screen 4): a pure read of the match key. Group only
+  // chooses between the two global pickTemplate rungs (exact group vs any
+  // group); the payerless fallback and legacy org rows label honestly.
+  const tierLabel = isFallback
+    ? "Default template"
+    : !isGlobal
+      ? "Organization tier (legacy)"
+      : groupId === "none"
+        ? "Global — all groups"
+        : "Global — this group only";
+
+  // The payer is FIXED from context (screen 4): the template's own payer in
+  // edit mode, the entry link's payer on create. Only a context-free create
+  // (the bare /admin/templates entry) still offers a picker.
+  const payerLocked = isEdit || Boolean(prefill?.payerId);
+  const payerName =
+    payerId === "none" ? null : ((payersQ.data ?? []).find((p) => p.id === payerId)?.name ?? null);
+
+  // Groups are scoped to the chosen state (screen 4): only groups operating in
+  // that state can be selected; the currently-selected group always stays
+  // listed (the existing-link precedent). Changing state drops a now-invalid
+  // pick back to "Any group".
+  const groupOptions = useMemo(() => {
+    const all = groupsQ.data ?? [];
+    if (state === "none") return all;
+    return all.filter((g) => g.id === groupId || (g.states ?? []).includes(state));
+  }, [groupsQ.data, state, groupId]);
+
+  function handleStateChange(next: string) {
+    setState(next);
+    if (groupId !== "none" && next !== "none") {
+      const g = (groupsQ.data ?? []).find((x) => x.id === groupId);
+      if (g && !(g.states ?? []).includes(next)) setGroupId("none");
+    }
+    markDirty();
+  }
+
+  // --- Slice F: the derived context banner for a readiness deep-link. The
+  // facts come from the SAME org caches the step's FormStepPanel reads, so the
+  // banner disappears the moment the work it points at is done. ---
+  const firstOnlineFormStep = useMemo(() => {
+    for (const t of tasks) {
+      for (const s of t.steps) {
+        if (s.stepType === "online_form") return s;
+      }
+    }
+    return null;
+  }, [tasks]);
+  const intentStepId = intent ? (firstOnlineFormStep?.id ?? null) : null;
+  const firstOfKey = firstOnlineFormStep ? normalizePortalKey(firstOnlineFormStep.portalKey) : null;
+  const intentMapsQ = usePortalFieldMaps(firstOfKey ?? undefined);
+  const drift = useFormDrift();
+  const intentFacts = useMemo<IntentStepFacts | null>(() => {
+    if (!intent || !firstOnlineFormStep) return null;
+    if (!portalsQ.isSuccess || !intentMapsQ.isSuccess) return null;
+    const portal = firstOfKey
+      ? (portalsQ.data ?? []).find((p) => normalizePortalKey(p.portalKey) === firstOfKey)
+      : undefined;
+    const maps = firstOfKey
+      ? (intentMapsQ.data ?? []).filter((m) => m.portalKey === firstOfKey && m.status !== "retired")
+      : [];
+    const brokenCount = firstOfKey ? (drift.driftByPortal.get(firstOfKey) ?? []).length : 0;
+    return {
+      hasPortal: Boolean(portal),
+      fieldCount: maps.length,
+      brokenCount,
+      proven: Boolean(portal?.provenAt),
+    };
+  }, [
+    intent,
+    firstOnlineFormStep,
+    firstOfKey,
+    portalsQ.isSuccess,
+    portalsQ.data,
+    intentMapsQ.isSuccess,
+    intentMapsQ.data,
+    drift.driftByPortal,
+  ]);
+  const intentBanner = step === 2 ? resolveIntentBanner(intent ?? null, intentFacts) : null;
+
   // E4.2 PM round-4 — minimum-content publish lint (≥1 task, every task ≥1 step,
   // no placeholder labels). Blocks Create/Publish and surfaces on Review.
   const lint = useMemo(() => lintSopForPublish(previewTasks), [previewTasks]);
@@ -656,6 +753,20 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
         payload.groupId !== initial.groupId
       : false;
 
+  // Where leaving the editor lands (screen 4): the default template belongs to
+  // no payer, so it exits to Payer Setup; a payer template exits to its payer;
+  // everything else falls back to the templates list.
+  const exitPayerId = isEdit ? initial?.payerId : (prefill?.payerId ?? null);
+  function exitEditor() {
+    if (isFallback) {
+      navigate({ to: "/admin/payer-admin/catalog" });
+    } else if (exitPayerId) {
+      navigate({ to: "/admin/payer-admin/catalog/$payerId", params: { payerId: exitPayerId } });
+    } else {
+      navigate({ to: "/admin/templates" });
+    }
+  }
+
   // Match-key-only head update (no version bump). Content changes go through
   // handlePublish below. Global heads route through author_global_sop (no
   // table policy allows a global write); org heads keep the audited update.
@@ -683,25 +794,24 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     }
     if (!lint.ok) {
       toast.error(lint.errors[0].message);
-      setStep(3);
+      setStep(2);
       return;
     }
     setSaving(true);
     try {
-      const created = isGlobal
-        ? await authorGlobalMut.mutateAsync({
-            name: payload.name,
-            payerId: payload.payerId,
-            state: payload.state,
-            groupId: payload.groupId,
-            taskDefinitions: payload.taskDefinitions,
-            requiredProfileAttributes: payload.requiredProfileAttributes,
-            archived: false,
-          })
-        : await createMut.mutateAsync(payload);
+      // Create is ALWAYS the global tier — the editor never creates org rows.
+      const created = await authorGlobalMut.mutateAsync({
+        name: payload.name,
+        payerId: payload.payerId,
+        state: payload.state,
+        groupId: payload.groupId,
+        taskDefinitions: payload.taskDefinitions,
+        requiredProfileAttributes: payload.requiredProfileAttributes,
+        archived: false,
+      });
       await discardDraftIfAny();
       setDirty(false);
-      toast.success(isGlobal ? "Global SOP created" : "Template created");
+      toast.success("Template created");
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
@@ -724,7 +834,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     if (contentChanged && !lint.ok) {
       toast.error(lint.errors[0].message);
       setPublishOpen(false);
-      setStep(3);
+      setStep(2);
       return;
     }
     setSaving(true);
@@ -745,7 +855,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
       await discardDraftIfAny();
       setDirty(false);
       setPublishOpen(false);
-      navigate({ to: "/admin/templates" });
+      exitEditor();
     } catch (err) {
       if (err instanceof SopVersionConflictError) {
         toast.error("Someone else published a newer version — reload to see it.");
@@ -762,7 +872,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
   // submission, so a task whose online_form steps point at different portals
   // would make the close-out target ambiguous. Block every content-writing save
   // (create, publish, duplicate) BEFORE any mutation and steer the author to the
-  // offending task, which also shows an inline warning in Step 3.
+  // offending task, which also shows an inline warning in Tasks & steps.
   function portalConflictBlocked(): boolean {
     const conflicts = portalKeyConflicts(tasks);
     if (conflicts.length === 0) return false;
@@ -770,17 +880,17 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     toast.error(
       `"${c.title.trim() || `Task ${c.taskIdx + 1}`}" links more than one portal (${c.keys.join(", ")}). A task can fill only one portal — pick one.`,
     );
-    setStep(3);
+    setStep(2);
     return true;
   }
 
-  // E4.2 SOP hardening — new SOPs and routing-key changes must target a payer
-  // AND a state; since E6.5 the same rule binds GLOBAL authoring (a payerless
-  // global row would collide with the generic fallback's grain — the
-  // author_global_sop RPC enforces it server-side too). Existing legacy
-  // templates with incomplete keys may still publish content-only versions
-  // under the E1.7b compatibility contract; changing their routing key
-  // requires completing it first.
+  // E4.2 SOP hardening — new templates and routing-key changes must target a
+  // payer AND a state (the author_global_sop RPC enforces it server-side too;
+  // a payerless global row would collide with the default template's grain).
+  // Existing legacy templates with incomplete keys may still publish
+  // content-only versions under the E1.7b compatibility contract — that is
+  // also the #edit-default path, since the default template has no match key
+  // at all.
   function matchKeyIncompleteBlocked(): boolean {
     const err = orgSopMatchKeyError({
       payerId: payerId === "none" ? null : payerId,
@@ -802,6 +912,11 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
       void handleCreate();
       return;
     }
+    if (isFallback && !contentChanged) {
+      // The default template has no match key to save — only content publishes.
+      toast.info("No content changes to publish yet.");
+      return;
+    }
     if (contentChanged) {
       // Content publishes a new version — collect the optional change note.
       setChangeNote("");
@@ -818,7 +933,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
     if (portalConflictBlocked()) return;
     try {
       // E4.2 — the copy shares the source's payer/state/group, which would
-      // collide with it under the active-org uniqueness rule. Create it ARCHIVED
+      // collide with it under the active uniqueness rule. Create it ARCHIVED
       // (outside the active grain) so the duplicate always succeeds; the author
       // re-keys it and restores it (validated at the new key).
       const created = isGlobal
@@ -873,18 +988,32 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
   }
 
   const canGoBack = step > 1;
-  const canGoNext = step < 4;
+  const canGoNext = step < 3;
+
+  const pageTitle = isFallback
+    ? "Edit default template"
+    : isEdit
+      ? name || "Untitled template"
+      : draft
+        ? "Resume draft"
+        : "New template";
 
   return (
     <div className="p-6">
       <PageHeader
-        title={isEdit ? name || "Untitled template" : "New template"}
+        title={pageTitle}
         description={
           isEdit && isArchived ? "Archived. Hidden from case-creation matching." : undefined
         }
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate({ to: "/admin/templates" })}>
+            {isEdit ? (
+              // Versioning-lite: the v-chip lives in the header next to History.
+              <span className="inline-flex items-center rounded-md border border-[#E8E5E0] bg-muted/30 px-2 py-0.5 font-mono text-xs font-semibold text-muted-foreground">
+                v{initial?.currentVersion ?? 1}
+              </span>
+            ) : null}
+            <Button variant="outline" onClick={exitEditor}>
               Cancel
             </Button>
             {canEdit ? (
@@ -903,7 +1032,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
                 History
               </Button>
             ) : null}
-            {isEdit && canEdit ? (
+            {isEdit && canEdit && !isFallback ? (
               <>
                 <Button variant="outline" onClick={handleDuplicate}>
                   <Copy className="h-4 w-4 mr-2" />
@@ -930,24 +1059,29 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
 
       {!canEdit ? (
         <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          {isFallback
-            ? "Generic fallback SOP — used when a case's payer and state have no authored SOP. Managed by the platform; read-only."
-            : "Read-only view. Only admins can create or edit templates."}
+          Read-only view. Only admins can edit this organization template.
         </div>
       ) : null}
-      {isGlobal && canEdit ? (
+      {isFallback && canEdit ? (
+        <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          Default template — used whenever no payer template matches. It has no match key of its
+          own; content changes reach every organization.
+        </div>
+      ) : null}
+      {isGlobal && !isFallback && canEdit ? (
         <div className="mb-4 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-sm text-[#92400E]">
-          Global SOP — authored once and inherited by every organization without an override.
+          Global template — authored once and inherited by every organization without an override.
           Authoring is open to all signed-in users for now; platform roles arrive in a later
           release.
         </div>
       ) : null}
 
-      {isEdit && canEdit ? (
-        <div className="mb-4 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          Version {initial?.currentVersion ?? 1}. Content changes publish a new version — earlier
-          versions are never overwritten. Match-key changes (payer/state/group) update the template
-          identity without a new version.
+      {/* Slice F — the derived context banner a readiness deep-link lands with.
+          Derived from live step state, so it disappears when the work is done. */}
+      {intentBanner ? (
+        <div className="mb-4 rounded-md border border-[#E8E5E0] border-l-[3px] border-l-[#1B4D3E] bg-[#F7FAF8] px-4 py-3">
+          <p className="text-sm font-semibold text-[#1B4D3E]">{intentBanner.title}</p>
+          <p className="text-[13px] text-[#33463C]">{intentBanner.body}</p>
         </div>
       ) : null}
 
@@ -984,17 +1118,18 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
       {step === 1 ? (
         <section className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4 max-w-2xl">
           <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-sm font-semibold">Match key</h2>
+            <h2 className="text-sm font-semibold">Basics</h2>
             <span className="inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
               {tierLabel}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mb-4">
-            A case resolves this template by payer + state; the group narrows it further. An
-            organization SOP <span className="font-medium">requires a payer and a state</span>.
-            Leave Group on “Any group” to cover every group — an exact-group SOP always wins over an
-            any-group one. Specialty is legacy metadata and is not used for matching.
-          </p>
+          {!isFallback ? (
+            <p className="text-xs text-muted-foreground mb-4">
+              A case resolves this template by payer + state; the group narrows it further. Leave
+              Group on “Any group” to cover every group — a group-specific template always wins over
+              an any-group one. Specialty is legacy metadata and is not used for matching.
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <Label>Template name</Label>
@@ -1007,87 +1142,105 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
                 disabled={!canEdit}
               />
             </div>
-            <div>
-              <Label>Payer</Label>
-              <Select
-                value={payerId}
-                onValueChange={(v) => {
-                  setPayerId(v);
-                  markDirty();
-                }}
-                disabled={!canEdit}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a payer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* No "Any payer" — organization SOPs must target a payer. The
-                      read-only path keeps a display item so a global/fallback row
-                      (payerless) still renders a value. */}
-                  {!canEdit ? <SelectItem value="none">Not payer-specific</SelectItem> : null}
-                  {(payersQ.data ?? []).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>State</Label>
-              <Select
-                value={state}
-                onValueChange={(v) => {
-                  setState(v);
-                  markDirty();
-                }}
-                disabled={!canEdit}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a state" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* No "Any state" — organization SOPs must target a state. */}
-                  {!canEdit ? <SelectItem value="none">Not state-specific</SelectItem> : null}
-                  {US_STATES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Group</Label>
-              <Select
-                value={groupId}
-                onValueChange={(v) => {
-                  setGroupId(v);
-                  markDirty();
-                }}
-                disabled={!canEdit}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Any group" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Any group</SelectItem>
-                  {(groupsQ.data ?? []).map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {specialty.trim() ? (
+            {isFallback ? (
               <div className="col-span-2">
-                <Label className="text-muted-foreground">
-                  Specialty (legacy — not used for matching)
-                </Label>
-                <p className="mt-1 text-[13px]">{specialty.trim()}</p>
+                <Label>Applies to</Label>
+                <div className="mt-1 flex flex-wrap items-baseline gap-2 rounded-md border border-[#E8E5E0] bg-muted/30 px-3 py-2">
+                  <span className="text-sm">Every payer, state, and group</span>
+                  <span className="text-xs text-muted-foreground">
+                    Used whenever no payer template matches — it has no match key of its own.
+                  </span>
+                </div>
               </div>
-            ) : null}
+            ) : (
+              <>
+                <div>
+                  <Label>Payer</Label>
+                  {payerLocked ? (
+                    // Fixed from context — the payer is never a dropdown here.
+                    <div className="mt-1 flex h-9 items-center rounded-md border border-[#F0EEEA] bg-muted/30 px-3 text-sm">
+                      {payerName ?? (payerId === "none" ? "Not payer-specific (legacy)" : "—")}
+                    </div>
+                  ) : (
+                    <Select
+                      value={payerId}
+                      onValueChange={(v) => {
+                        setPayerId(v);
+                        markDirty();
+                      }}
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a payer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(payersQ.data ?? []).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div>
+                  <Label>State</Label>
+                  <Select value={state} onValueChange={handleStateChange} disabled={!canEdit}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* No "Any state" — a template must target a state (the
+                          resolver matches states exactly). */}
+                      {!canEdit ? <SelectItem value="none">Not state-specific</SelectItem> : null}
+                      {US_STATES.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Group</Label>
+                  <Select
+                    value={groupId}
+                    onValueChange={(v) => {
+                      setGroupId(v);
+                      markDirty();
+                    }}
+                    disabled={!canEdit}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Any group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Any group</SelectItem>
+                      {groupOptions.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {state === "none"
+                      ? "Pick a state to scope the group list."
+                      : groupId === "none"
+                        ? `Applies to every group operating in ${state}.`
+                        : "Wins over the all-groups template for this group."}
+                  </p>
+                </div>
+                {specialty.trim() ? (
+                  <div className="col-span-2">
+                    <Label className="text-muted-foreground">
+                      Specialty (legacy — not used for matching)
+                    </Label>
+                    <p className="mt-1 text-[13px]">{specialty.trim()}</p>
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
 
           {/* E4.2 F4.2.6 — required provider-profile attributes (the generation
@@ -1096,7 +1249,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
           <div className="mt-5 border-t border-[#E8E5E0] pt-4">
             <h3 className="text-sm font-semibold">Required provider attributes</h3>
             <p className="text-xs text-muted-foreground mb-3">
-              A provider missing any of these is blocked from generation for this SOP (with the
+              A provider missing any of these is blocked from generation for this template (with the
               specific gap), so it becomes a data-collection task instead of a stalled case.
             </p>
             <div className="grid grid-cols-2 gap-2">
@@ -1117,12 +1270,13 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
       ) : null}
 
       {step === 2 ? (
-        <section className="space-y-3 max-w-3xl">
+        <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Tasks</h2>
+              <h2 className="text-sm font-semibold">Tasks &amp; steps</h2>
               <p className="text-xs text-muted-foreground">
-                Drag to reorder — order sets each task's sort order. Add steps in the next step.
+                Each task holds its own ordered steps — reorder with the arrows or by dragging. An
+                online-form step owns its portal setup inline.
               </p>
             </div>
             {canEdit ? (
@@ -1140,152 +1294,25 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
                 description="Add a task to start building this template"
               />
             </div>
-          ) : null}
-
-          {tasks.map((task, idx) => (
-            <div
-              key={task.id}
-              draggable={canEdit}
-              onDragStart={() => setDragTaskId(task.id)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                if (dragTaskId) reorderTasks(dragTaskId, task.id);
-                setDragTaskId(null);
-              }}
-              className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4"
-            >
-              <div className="flex items-start gap-2">
-                {canEdit ? (
-                  <div className="mt-1 flex flex-col items-center gap-0.5">
-                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                    {/* E4.2 PM round-4 — keyboard-operable reorder alongside drag. */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      disabled={idx === 0}
-                      aria-label={`Move task ${idx + 1} up`}
-                      onClick={() => moveTask(idx, -1)}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      disabled={idx === tasks.length - 1}
-                      aria-label={`Move task ${idx + 1} down`}
-                      onClick={() => moveTask(idx, 1)}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : null}
-                <div className="flex-1 grid grid-cols-[1fr_140px] gap-3">
-                  <div>
-                    <Label>Task {idx + 1} title</Label>
-                    <Input
-                      value={task.title}
-                      onChange={(e) => updateTask(task.id, { title: e.target.value })}
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div>
-                    <Label>Due day offset</Label>
-                    <Input
-                      type="number"
-                      value={task.dueOffsetDays}
-                      onChange={(e) =>
-                        updateTask(task.id, {
-                          dueOffsetDays: Number.parseInt(e.target.value, 10) || 0,
-                        })
-                      }
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div>
-                    {/* E4.2 TE-12 — execution type (captured; automation rides later epics). */}
-                    <Label>Execution type</Label>
-                    <Select
-                      value={task.executionType}
-                      onValueChange={(v) =>
-                        updateTask(task.id, { executionType: v as ExecutionType })
-                      }
-                      disabled={!canEdit}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EXECUTION_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {EXECUTION_TYPE_LABELS[t]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={task.description}
-                      onChange={(e) => updateTask(task.id, { description: e.target.value })}
-                      rows={2}
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <p className="col-span-2 text-xs text-muted-foreground">
-                    {task.steps.length} step{task.steps.length === 1 ? "" : "s"}
-                  </p>
-                </div>
-                {canEdit ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeTask(task.id)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </section>
-      ) : null}
-
-      {step === 3 ? (
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold">Steps &amp; fields</h2>
-            <p className="text-xs text-muted-foreground">
-              Add ordered steps to each task. Each step can carry data fields mapped to a live
-              token, or be a draft-email step.
-            </p>
-          </div>
-          {tasks.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
-              <EmptyState
-                message="No tasks to detail"
-                description="Go back to Tasks and add at least one task."
-              />
-            </div>
           ) : (
             tasks.map((task, taskIdx) => (
               <TemplateTaskRow
                 key={task.id}
                 task={task}
                 taskIdx={taskIdx}
+                taskCount={tasks.length}
                 canEdit={canEdit}
                 groupedTokens={groupedTokens}
                 portals={portals}
                 templatePayerId={payerId === "none" ? null : payerId}
                 isGlobalAuthoring={isGlobal}
+                autoOpenStepId={intentStepId}
                 dragTaskId={dragTaskId}
                 setDragTaskId={setDragTaskId}
                 dragStep={dragStep}
                 setDragStep={setDragStep}
                 reorderTasks={reorderTasks}
+                moveTask={moveTask}
                 updateTask={updateTask}
                 removeTask={removeTask}
                 addStep={addStep}
@@ -1302,7 +1329,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
         </section>
       ) : null}
 
-      {step === 4 ? (
+      {step === 3 ? (
         <section className="space-y-4 max-w-3xl">
           <div>
             <h2 className="text-sm font-semibold">Review</h2>
@@ -1313,24 +1340,24 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
           </div>
 
           <dl className="rounded-md border border-[#E8E5E0] bg-[#FDFDFC] p-4 grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-            <dt className="text-muted-foreground">Tier</dt>
-            <dd>{tierLabel}</dd>
+            <dt className="text-muted-foreground">{isFallback ? "Applies to" : "Tier"}</dt>
+            <dd>{isFallback ? "Every payer, state, and group" : tierLabel}</dd>
             <dt className="text-muted-foreground">Name</dt>
             <dd className="font-medium">{name.trim() || "—"}</dd>
-            <dt className="text-muted-foreground">Payer</dt>
-            <dd>
-              {payerId === "none"
-                ? "— (required)"
-                : ((payersQ.data ?? []).find((p) => p.id === payerId)?.name ?? "—")}
-            </dd>
-            <dt className="text-muted-foreground">State</dt>
-            <dd>{state === "none" ? "— (required)" : state}</dd>
-            <dt className="text-muted-foreground">Group</dt>
-            <dd>
-              {groupId === "none"
-                ? "Any group"
-                : ((groupsQ.data ?? []).find((g) => g.id === groupId)?.name ?? "—")}
-            </dd>
+            {!isFallback ? (
+              <>
+                <dt className="text-muted-foreground">Payer</dt>
+                <dd>{payerId === "none" ? "— (required)" : (payerName ?? "—")}</dd>
+                <dt className="text-muted-foreground">State</dt>
+                <dd>{state === "none" ? "— (required)" : state}</dd>
+                <dt className="text-muted-foreground">Group</dt>
+                <dd>
+                  {groupId === "none"
+                    ? "Any group"
+                    : ((groupsQ.data ?? []).find((g) => g.id === groupId)?.name ?? "—")}
+                </dd>
+              </>
+            ) : null}
             {specialty.trim() ? (
               <>
                 <dt className="text-muted-foreground">Specialty (legacy)</dt>
@@ -1377,7 +1404,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
         </Button>
         {canGoNext ? (
           <Button
-            onClick={() => setStep((s) => Math.min(4, s + 1))}
+            onClick={() => setStep((s) => Math.min(3, s + 1))}
             style={{ backgroundColor: "#1B4D3E" }}
             className="text-white hover:opacity-90"
           >
@@ -1396,7 +1423,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
               ? "Saving…"
               : !isEdit
                 ? "Create template"
-                : contentChanged
+                : contentChanged || isFallback
                   ? "Publish"
                   : "Save match key"}
           </Button>
@@ -1418,11 +1445,17 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
               </p>
               {isGlobal ? (
                 <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3 text-[13px] text-[#92400E]">
-                  <p className="font-medium">Global template — high blast radius</p>
+                  <p className="font-medium">
+                    {isFallback
+                      ? "Default template — high blast radius"
+                      : "Global template — high blast radius"}
+                  </p>
                   <p className="mt-1">
-                    This template is shared by every organization without an override. Publishing
-                    changes what all of them generate. Version {(initial?.currentVersion ?? 1) + 1}{" "}
-                    will carry {previewTasks.length} task
+                    {isFallback
+                      ? "Every organization inherits this template wherever no payer template matches."
+                      : "This template is shared by every organization without an override. Publishing changes what all of them generate."}{" "}
+                    Version {(initial?.currentVersion ?? 1) + 1} will carry {previewTasks.length}{" "}
+                    task
                     {previewTasks.length === 1 ? "" : "s"}.
                   </p>
                   <label className="mt-2 flex items-center gap-2">
@@ -1463,6 +1496,7 @@ export function TemplateWizard({ initial, prefill, draft, globalTier }: Template
           templateId={initial.id}
           currentVersion={initial.currentVersion ?? 1}
           portals={portals}
+          canRestore={canEdit}
           onClose={() => setHistoryOpen(false)}
         />
       ) : null}

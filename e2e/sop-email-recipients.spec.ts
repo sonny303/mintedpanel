@@ -318,11 +318,12 @@ test.describe("E1.7b draft-email recipients (TS-46)", () => {
     page,
   }) => {
     await page.goto(`/admin/templates/${TEMPLATE_ID}`);
-    // Step 3 — steps & fields — holds the recipient editor.
-    await expect(page.getByRole("button", { name: "Steps & fields" })).toBeVisible({
+    // Step 2 — Tasks & steps (slice F merged the old Tasks and "Steps &
+    // fields" steps) — holds the recipient editor.
+    await expect(page.getByRole("button", { name: "Tasks & steps" })).toBeVisible({
       timeout: 30000,
     });
-    await page.getByRole("button", { name: "Steps & fields" }).click();
+    await page.getByRole("button", { name: "Tasks & steps" }).click();
 
     // The draft-email step's To editor starts empty; author the Optum inbox.
     await page.getByRole("button", { name: "Add to" }).click();

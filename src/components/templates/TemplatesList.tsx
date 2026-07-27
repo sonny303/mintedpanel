@@ -206,7 +206,7 @@ export function TemplatesList() {
                     </Link>
                     {isFallbackTemplate(t) ? (
                       <span className="ml-2 inline-flex items-center rounded-full border border-[#E8E5E0] px-2 py-0.5 text-xs text-muted-foreground">
-                        Fallback — used when no payer SOP matches
+                        Default template — used when no payer template matches
                       </span>
                     ) : (t as TemplateRow & { orgId: string | null }).orgId === null ? (
                       // E4.2 F4.2.1 — template tier: global/shared vs org-specific.

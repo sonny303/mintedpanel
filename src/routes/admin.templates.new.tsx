@@ -1,10 +1,12 @@
-// Admin > Templates — create a new template via the 4-step wizard. Nothing is
-// written until the wizard's final Save (one insert). Admin-only edit is
-// enforced inside the wizard (render-time useIsAdmin backstop).
+// Template Editor — create a new template via the 3-step wizard. Nothing is
+// written until the wizard's final Create (one insert). Every create authors a
+// GLOBAL row (payer-and-cases §2.4 — the editor never creates org-tier rows),
+// so the legacy ?tier=global spelling is accepted for old links but no longer
+// changes anything.
 //
-// E4.2: the match key can be prefilled from a "Needs SOP" directory link
-// (?payerId/state/groupId, TE-4), and an existing draft can be resumed
-// (?draftId, F4.2.1).
+// E4.2: the match key can be prefilled from a "Needs template" link
+// (?payerId/state/groupId, TE-4 — the payer half becomes the FIXED payer
+// context), and an existing draft can be resumed (?draftId, F4.2.1).
 import { createFileRoute } from "@tanstack/react-router";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TemplateWizard } from "@/components/templates/TemplateWizard";
@@ -15,8 +17,7 @@ interface NewTemplateSearch {
   state?: string;
   groupId?: string;
   draftId?: string;
-  /** E6.5 F6.5.6 — author a GLOBAL SOP (org_id NULL head via author_global_sop).
-   * Entered from the Payer Setup funnel's "Author global SOP" action. */
+  /** Legacy spelling (E6.5 funnel links) — creates are always global now. */
   tier?: "global";
 }
 
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/admin/templates/new")({
 });
 
 function NewTemplate() {
-  const { payerId, state, groupId, draftId, tier } = Route.useSearch();
+  const { payerId, state, groupId, draftId } = Route.useSearch();
   const draftQ = useSopTemplateDraft(draftId);
 
   if (draftId && draftQ.isLoading) {
@@ -44,7 +45,6 @@ function NewTemplate() {
       initial={null}
       prefill={payerId || state || groupId ? { payerId, state, groupId } : undefined}
       draft={draftId ? (draftQ.data ?? null) : null}
-      globalTier={tier === "global"}
     />
   );
 }
