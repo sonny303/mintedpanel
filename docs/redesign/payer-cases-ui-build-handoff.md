@@ -59,6 +59,29 @@ on E6.8. Screens 4 and 6 have no new backend dependencies.
 8. **Terminology:** "Template" everywhere in the UI; internal identifiers may keep "sop".
 9. **`design_handoff_payer_setup/`** references in the bundle refer to the design tool's own
    project folder, not this repo. Nothing to delete here (#235 was closed unmerged).
+10. **Scorecard route already exists** — `admin.payers_.$id.scorecard.tsx` (the Journeys index
+    flags it as unaccounted). Slice C's Scorecard tab should fold/redirect it rather than add a
+    second scorecard surface.
+11. **Payer Detail becomes editable** — the Journeys index notes the production drill-in is
+    read-only and "the Edit mode drawn on its Overview needs a decision"; the decision is the
+    design itself (editable identity/aliases/delegation via `update_payer` from #237).
+
+### Bundle open-item traceability (nothing dropped)
+
+| Bundle open item (README §Open items / screen index)                                                               | Disposition                                              |
+| ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| "No way to create a payer" — payer create/edit API                                                                 | E6.7 PR 1 (#237): `create_payer`/`update_payer` + seams  |
+| ID-expectation columns (2 booleans + 2 labels; fixed `GROUP_PROVIDER_ID_LABEL`; unconsumed `resolutionIdExpected`) | E6.7 F6.7.1a (#237)                                      |
+| `payer_contacts` table                                                                                             | E6.7 F6.7.2a (#237)                                      |
+| Archive flag + merge operation                                                                                     | E6.8 F6.8.1 / F6.8.2                                     |
+| "Didn't receive" escape vs production hard-require                                                                 | E6.8 F6.8.3 (approved divergence — build the escape)     |
+| Legacy history ledgers not carried over                                                                            | Flagged §2.7 — PM to confirm the old ledgers stay hidden |
+| "Template" terminology                                                                                             | §2.8                                                     |
+| Versioning-lite                                                                                                    | Slice F scope; production ceremony not rebuilt           |
+| Stale `/catalog` route segment + `/sops` fold                                                                      | Slice G                                                  |
+| Stale `design_handoff_payer_setup/` bundle                                                                         | Design-tool side (§2.9) — no repo action                 |
+| Scorecard route unaccounted                                                                                        | §2.10 → Slice C                                          |
+| Payer Detail Edit decision                                                                                         | §2.11 — resolved: editable                               |
 
 ## 3 · Build slices (one PR each, in order)
 
