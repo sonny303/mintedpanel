@@ -377,6 +377,8 @@ const CASE_STATUS_ERROR_MESSAGES: Record<string, string> = {
   case_status_not_pursuing_needs_note: "A note is required to mark a case Not Pursuing.",
   case_status_approved_needs_effective_date: "An effective date is required to approve.",
   case_status_approved_needs_provider_id: "The payer-issued provider ID is required to approve.",
+  case_status_approved_needs_group_provider_id:
+    "This payer issues a group ID — it is required to approve.",
   case_status_evidence_invalid: "The evidencing touch doesn't belong to this case.",
 };
 

@@ -5,7 +5,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
-import { getPayer, listPayers } from "@/services/payers";
+import {
+  createPayer,
+  getPayer,
+  listPayers,
+  updatePayer,
+  type PayerWriteInput,
+} from "@/services/payers";
 import {
   createTemplate,
   getTemplate,
@@ -46,11 +52,40 @@ export function usePayer(id: string | undefined) {
   });
 }
 
-// E4.2 payer governance: there is deliberately NO useCreatePayer and NO
-// useUpdatePayer — canonical payer identities are selected from the Minted
-// catalog (payer-directory → org_payer_assignments) and Minted-curated facts
-// are org-read-only. (The org_payer_settings override tier retired
-// 2026-07-20 — the table stays dormant with no app reader.)
+// E6.7 manual payer setup (supersedes the E4.2 no-write posture, PM decision
+// 2026-07-26): creating/editing a payer goes through the guarded
+// create_payer / update_payer RPCs — never a direct table write. Creating
+// also adds the payer to the active org's network in the same transaction,
+// so the mutations invalidate the payer + assignment source families (the
+// useOrgPayerAssignments idiom — readiness/generation compose those caches
+// and re-derive on refetch). No dialog ships in E6.7; these hooks are the
+// seam the "+ Set up payer" design track calls.
+function useInvalidatePayerFamilies() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return () => {
+    void qc.invalidateQueries({ queryKey: queryKeys.payers(orgId) });
+    void qc.invalidateQueries({ queryKey: ["payer", orgId] });
+    void qc.invalidateQueries({ queryKey: queryKeys.orgPayerAssignments(orgId) });
+    void qc.invalidateQueries({ queryKey: queryKeys.payerCatalog() });
+  };
+}
+
+export function useCreatePayer() {
+  const invalidate = useInvalidatePayerFamilies();
+  return useMutation({
+    mutationFn: (input: PayerWriteInput) => createPayer(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdatePayer() {
+  const invalidate = useInvalidatePayerFamilies();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: PayerWriteInput }) => updatePayer(id, input),
+    onSuccess: invalidate,
+  });
+}
 
 export function useSops() {
   const orgId = useActiveOrgId() ?? "no-org";

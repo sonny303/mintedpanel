@@ -1,20 +1,25 @@
-// E4.2 payer governance — machine-checked posture, not review memory:
+// Payer governance — machine-checked posture, not review memory. E6.7
+// (manual payer setup, PM decisions 2026-07-26) re-anchored the write rules:
 //   1. The org application never touches the catalog diff queue: no src file
 //      reads payer_catalog_changes or calls review_payer_catalog_change.
 //   2. The revoke migration actually revokes authenticated SELECT/EXECUTE and
 //      keeps the service_role (platform) path, by grant definition.
-//   3. The payers service has no INSERT and (since the 2026-07-18 close-out)
-//      no UPDATE — payer writes are gone at the service boundary, not just
-//      hidden in the UI.
+//   3. Payer writes are RPC-ONLY at the service boundary: payers.ts calls
+//      create_payer/update_payer and never issues a direct payers
+//      INSERT/UPDATE — the 20260718120000 table lockdown still stands, and
+//      the E6.7 enabler migration never re-grants table DML or recreates the
+//      dropped write policies.
 //   4. The org_payer_settings migration carries the locked shape: unique
 //      (org_id, payer_id), admin-only INSERT/UPDATE policies, no DELETE grant
-//      for authenticated.
+//      for authenticated. (Dormant since 2026-07-20; the shape still binds.)
 //   5. The payers write-lockdown migration mirrors the same posture at the DB:
 //      the org INSERT/UPDATE policies are dropped and the grants revoked, so
 //      an org-scoped (legacy) payer row can never be minted again — while
 //      member SELECT stays intact.
+//   6. payer_contacts (E6.7 F6.7.2a) is SELECT-only for clients — writes go
+//      through the audited upsert/delete RPCs, anon rejected by grant floor.
 // (The live grant/RLS state was additionally verified on hosted via
-// rolled-back simulations — recorded in the PR description.)
+// rolled-back simulations — recorded in the PR descriptions.)
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -109,26 +114,35 @@ describe("the revoke migration (20260716191000) — grant definitions", () => {
   });
 });
 
-describe("payer writes are gone at the service boundary", () => {
+describe("payer writes are RPC-only at the service boundary (E6.7)", () => {
   const payersService = stripComments(readFileSync(join(SRC, "services/payers.ts"), "utf8"));
 
-  it("the payers service performs no INSERT or UPDATE and exports no createPayer/updatePayer", () => {
+  it("the payers service never issues a direct payers INSERT/UPDATE — writes ride the RPCs", () => {
     expect(payersService).not.toContain(".insert(");
     expect(payersService).not.toContain(".update(");
-    expect(payersService).not.toContain("createPayer");
-    expect(payersService).not.toContain("updatePayer");
+    expect(payersService).toContain('rpc("create_payer"');
+    expect(payersService).toContain('rpc("update_payer"');
   });
 
-  it("the admin payers route has no Add-payer affordance", () => {
+  it("the payer-contacts service is the same shape: RLS reads, RPC writes", () => {
+    const contacts = stripComments(readFileSync(join(SRC, "services/payerContacts.ts"), "utf8"));
+    expect(contacts).not.toContain(".insert(");
+    expect(contacts).not.toContain(".update(");
+    expect(contacts).not.toContain(".delete(");
+    expect(contacts).toContain('rpc("upsert_payer_contact"');
+    expect(contacts).toContain('rpc("delete_payer_contact"');
+  });
+
+  it("the admin payers route has no Add-payer affordance (zero rendered UI in E6.7)", () => {
     // E4.2 unified payer setup: /admin/payers is a redirect shell into the
-    // Payer Setup workspace, whose Catalog tab is the canonical add path.
+    // Payer Setup workspace; the future add-payer dialog is a separate track.
     const route = stripComments(readFileSync(join(SRC, "routes/admin.payers.tsx"), "utf8"));
     expect(route).not.toContain("Add payer");
     expect(route).not.toContain("useCreatePayer");
     expect(route).toContain("/admin/payer-admin");
   });
 
-  it("the Payer Setup funnel keeps the read-only posture (no free-text creation, no identity edit)", () => {
+  it("the Payer Setup funnel keeps its read-only posture (no creation, no identity edit)", () => {
     // E6.5: PayerSetupList retired; the module head is PayerReadinessFunnel.
     const funnel = stripComments(
       readFileSync(join(SRC, "components/payer-admin/PayerReadinessFunnel.tsx"), "utf8"),
@@ -138,11 +152,14 @@ describe("payer writes are gone at the service boundary", () => {
     expect(funnel).not.toContain("updatePayer");
   });
 
-  it("delegation_note has NO app writer (curated platform fact)", () => {
-    // F6.5.5 — delegation is a Minted-curated catalog fact; only the migration
-    // and generated types may name the column, and no snake/camel write path
-    // exists in services.
-    const services = readdirSync(join(SRC, "services")).filter((f) => f.endsWith(".ts"));
+  it("delegation_note is written ONLY through the payers RPC seam", () => {
+    // E6.7 supersedes the F6.5.5 no-app-writer pin: delegation is now a
+    // user-entered payer fact, but its ONLY writer is services/payers.ts
+    // (the create_payer/update_payer RPC params). No other service may
+    // name the column in a write position.
+    const services = readdirSync(join(SRC, "services")).filter(
+      (f) => f.endsWith(".ts") && !/\.test\.ts$/.test(f) && f !== "payers.ts",
+    );
     for (const file of services) {
       const src = stripComments(readFileSync(join(SRC, "services", file), "utf8"));
       expect(src, `services/${file} must not write delegation_note`).not.toMatch(
@@ -151,6 +168,50 @@ describe("payer writes are gone at the service boundary", () => {
       expect(src, `services/${file} must not write delegationNote`).not.toMatch(
         /delegationNote\s*:/,
       );
+    }
+  });
+});
+
+describe("the E6.7 enabler migrations — grant definitions", () => {
+  const enablerMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260727120000_e67_payer_manual_setup.sql"),
+    "utf8",
+  ).toLowerCase();
+  const contactsMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260727120200_e67_payer_contacts.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("never re-grants payers table DML or recreates the dropped write policies", () => {
+    expect(enablerMigration).not.toMatch(
+      /grant\s+[a-z, ]*insert[a-z, ]*on\s+(table\s+)?public\.payers/,
+    );
+    expect(enablerMigration).not.toMatch(
+      /grant\s+[a-z, ]*update[a-z, ]*on\s+(table\s+)?public\.payers/,
+    );
+    expect(enablerMigration).not.toMatch(/create policy payers_(insert|update)/);
+  });
+
+  it("the payer RPCs revoke anon and grant EXECUTE to authenticated", () => {
+    for (const fn of ["create_payer", "update_payer"]) {
+      expect(enablerMigration).toContain(`revoke all on function public.${fn}`);
+      expect(enablerMigration).toMatch(
+        new RegExp(`grant execute on function public\\.${fn}[^;]*to authenticated`),
+      );
+    }
+  });
+
+  it("payer_contacts is SELECT-only for clients; contact writes are RPC-only", () => {
+    expect(contactsMigration).toContain("revoke all on public.payer_contacts from authenticated");
+    expect(contactsMigration).toContain("grant select on public.payer_contacts to authenticated");
+    expect(contactsMigration).not.toMatch(
+      /grant\s+[a-z, ]*(insert|update|delete)[a-z, ]*on\s+public\.payer_contacts\s+to\s+authenticated/,
+    );
+    expect(contactsMigration).not.toMatch(
+      /create policy [a-z_]* on public\.payer_contacts\s*for (insert|update|delete)/,
+    );
+    for (const fn of ["upsert_payer_contact", "delete_payer_contact"]) {
+      expect(contactsMigration).toContain(`revoke all on function public.${fn}`);
     }
   });
 });
