@@ -86,6 +86,7 @@ import { Route as AdminPayersNewRouteImport } from './routes/admin.payers_.new'
 import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
 import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
+import { Route as AdminPayersIdEditRouteImport } from './routes/admin.payers_.$id.edit'
 import { Route as AdminPayerAdminFormsPayerIdRouteImport } from './routes/admin.payer-admin.forms.$payerId'
 import { Route as AdminPayerAdminCatalogPayerIdRouteImport } from './routes/admin.payer-admin.catalog_.$payerId'
 
@@ -478,6 +479,11 @@ const AdminPayersIdScorecardRoute = AdminPayersIdScorecardRouteImport.update({
   path: '/admin/payers/$id/scorecard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminPayersIdEditRoute = AdminPayersIdEditRouteImport.update({
+  id: '/admin/payers_/$id/edit',
+  path: '/admin/payers/$id/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminPayerAdminFormsPayerIdRoute =
   AdminPayerAdminFormsPayerIdRouteImport.update({
     id: '/forms/$payerId',
@@ -570,6 +576,7 @@ export interface FileRoutesByFullPath {
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/catalog/$payerId': typeof AdminPayerAdminCatalogPayerIdRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
+  '/admin/payers/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesByTo {
@@ -642,6 +649,7 @@ export interface FileRoutesByTo {
   '/providers/$id': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/catalog/$payerId': typeof AdminPayerAdminCatalogPayerIdRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
+  '/admin/payers/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRoutesById {
@@ -724,6 +732,7 @@ export interface FileRoutesById {
   '/providers/$id/': typeof ProvidersIdIndexRoute
   '/admin/payer-admin/catalog_/$payerId': typeof AdminPayerAdminCatalogPayerIdRoute
   '/admin/payer-admin/forms/$payerId': typeof AdminPayerAdminFormsPayerIdRoute
+  '/admin/payers_/$id/edit': typeof AdminPayersIdEditRoute
   '/admin/payers_/$id/scorecard': typeof AdminPayersIdScorecardRoute
 }
 export interface FileRouteTypes {
@@ -807,6 +816,7 @@ export interface FileRouteTypes {
     | '/providers/$id/'
     | '/admin/payer-admin/catalog/$payerId'
     | '/admin/payer-admin/forms/$payerId'
+    | '/admin/payers/$id/edit'
     | '/admin/payers/$id/scorecard'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -879,6 +889,7 @@ export interface FileRouteTypes {
     | '/providers/$id'
     | '/admin/payer-admin/catalog/$payerId'
     | '/admin/payer-admin/forms/$payerId'
+    | '/admin/payers/$id/edit'
     | '/admin/payers/$id/scorecard'
   id:
     | '__root__'
@@ -960,6 +971,7 @@ export interface FileRouteTypes {
     | '/providers/$id/'
     | '/admin/payer-admin/catalog_/$payerId'
     | '/admin/payer-admin/forms/$payerId'
+    | '/admin/payers_/$id/edit'
     | '/admin/payers_/$id/scorecard'
   fileRoutesById: FileRoutesById
 }
@@ -1018,6 +1030,7 @@ export interface RootRouteChildren {
   ReportingIndexRoute: typeof ReportingIndexRoute
   AdminPayersNewRoute: typeof AdminPayersNewRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
+  AdminPayersIdEditRoute: typeof AdminPayersIdEditRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
 }
 
@@ -1562,6 +1575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayersIdScorecardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/payers_/$id/edit': {
+      id: '/admin/payers_/$id/edit'
+      path: '/admin/payers/$id/edit'
+      fullPath: '/admin/payers/$id/edit'
+      preLoaderRoute: typeof AdminPayersIdEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/payer-admin/forms/$payerId': {
       id: '/admin/payer-admin/forms/$payerId'
       path: '/forms/$payerId'
@@ -1771,6 +1791,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportingIndexRoute: ReportingIndexRoute,
   AdminPayersNewRoute: AdminPayersNewRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
+  AdminPayersIdEditRoute: AdminPayersIdEditRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
 }
 export const routeTree = rootRouteImport

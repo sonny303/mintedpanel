@@ -142,6 +142,26 @@ describe("payer writes are RPC-only at the service boundary (E6.7)", () => {
     expect(route).toContain("/admin/payer-admin");
   });
 
+  it("the Slice B payer form writes ONLY through the hooks (never Supabase directly)", () => {
+    // Payer create/edit UI now EXISTS (payer-and-cases screen 2) — its posture
+    // is the layering rule: components → hooks → the RPC-bound service. No
+    // component may import the Supabase client or name a payers table write.
+    const surfaces = [
+      "components/payer-admin/PayerDetailsForm.tsx",
+      "components/payer-admin/PayerNameStep.tsx",
+      "components/payer-admin/PayerStatesField.tsx",
+      "routes/admin.payers_.new.tsx",
+      "routes/admin.payers_.$id.edit.tsx",
+    ];
+    for (const file of surfaces) {
+      const src = stripComments(readFileSync(join(SRC, file), "utf8"));
+      expect(src, `${file} must not import the Supabase client`).not.toContain(
+        "integrations/supabase",
+      );
+      expect(src, `${file} must not query the payers table`).not.toContain('from("payers")');
+    }
+  });
+
   it("the Payer Setup funnel keeps its read-only posture (no creation, no identity edit)", () => {
     // E6.5: PayerSetupList retired; the module head is PayerReadinessFunnel.
     const funnel = stripComments(
