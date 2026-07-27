@@ -2,8 +2,12 @@
 
 _Living status page for business review. Refreshed at least once per release
 milestone (owner: Devin, the reviewer/orchestrator). Last updated:
-**2026-07-21** (post-GA wave #221–#230 promoted to `main` in #231; the
-`redesign` staging branch is retired — all work now targets `main`)._
+**2026-07-22** (Cases page redesign #233 merged to `main`: Flat/By provider/By
+payer views with the E2.3 ranking as Flat's default sort, new globally-sequential
+immutable Case# `C-<n>` (migration `20260722120000`, applied to hosted), derived
+KPI cards on the canonical 8-state machine. Previously 2026-07-21: post-GA wave
+#221–#230 promoted in #231; `redesign` staging branch retired (#232) — all work
+now branches off and targets `main`)._
 
 ```
 R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ──► R5 ✅ ──► R6 ✅ ──► R7…R10 📋
