@@ -26,6 +26,7 @@ import {
   type ProviderReadinessFacts,
   type ReadinessRow,
 } from "@/lib/enrollmentReadiness";
+import { archivedPayerIds } from "@/lib/payerSetup";
 import {
   buildGenerationPreview,
   generationPreviewSummary,
@@ -177,6 +178,11 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
 
   const derived = useMemo(() => {
     if (!resolved) return undefined;
+    // E6.8 F6.8.1 — an ARCHIVED payer generates nothing: its targets are
+    // dropped from the candidate inputs (the target rows themselves are
+    // untouched, so reactivation restores the scope with zero writes).
+    const archivedPayers = archivedPayerIds(payersQ.data ?? []);
+    const liveTargets = (targetsQ.data ?? []).filter((t) => !archivedPayers.has(t.payerId));
     const statusById = new Map(
       (statusConfigsQ.data ?? []).map((s) => [s.id, { label: s.label, bucket: s.actionBucket }]),
     );
@@ -203,7 +209,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
 
     const allRows = buildGenerationPreview({
       today,
-      targets: targetsQ.data ?? [],
+      targets: liveTargets,
       groupAssignments: groupAssignmentsQ.data ?? [],
       facilityAssignments: facilityAssignmentsQ.data ?? [],
       facilities: facilitiesQ.data ?? [],
@@ -248,7 +254,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
 
     const readinessRows = evaluateEnrollmentReadiness({
       today,
-      targets: targetsQ.data ?? [],
+      targets: liveTargets,
       groupAssignments: groupAssignmentsQ.data ?? [],
       providers: factsQ.data ?? [],
       licenses: licensesQ.data ?? [],

@@ -6,9 +6,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import {
+  archivePayer,
   createPayer,
   getPayer,
   listPayers,
+  mergePayer,
+  reactivatePayer,
   updatePayer,
   type PayerWriteInput,
 } from "@/services/payers";
@@ -84,6 +87,54 @@ export function useUpdatePayer() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: PayerWriteInput }) => updatePayer(id, input),
     onSuccess: invalidate,
+  });
+}
+
+// E6.8 F6.8.4 — the lifecycle seam the Manage tab / Show-archived toggle
+// call (no rendered UI ships in E6.8). All three invalidate the four families
+// the epic names — payers, payer, org-payer-assignments, cases — via the
+// shared invalidator + the cases prefix; merge additionally touches the
+// target/fact/template families its transaction re-points.
+function useInvalidatePayerLifecycle() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  const invalidatePayers = useInvalidatePayerFamilies();
+  return () => {
+    invalidatePayers();
+    void qc.invalidateQueries({ queryKey: ["cases", orgId] });
+  };
+}
+
+export function useArchivePayer() {
+  const invalidate = useInvalidatePayerLifecycle();
+  return useMutation({
+    mutationFn: (id: string) => archivePayer(id),
+    onSuccess: invalidate,
+  });
+}
+
+export function useReactivatePayer() {
+  const invalidate = useInvalidatePayerLifecycle();
+  return useMutation({
+    mutationFn: (id: string) => reactivatePayer(id),
+    onSuccess: invalidate,
+  });
+}
+
+export function useMergePayer() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  const invalidate = useInvalidatePayerLifecycle();
+  return useMutation({
+    mutationFn: ({ loserId, survivorId }: { loserId: string; survivorId: string }) =>
+      mergePayer(loserId, survivorId),
+    onSuccess: () => {
+      invalidate();
+      void qc.invalidateQueries({ queryKey: queryKeys.payerNetworkTargets(orgId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.enrollmentFacts(orgId) });
+      void qc.invalidateQueries({ queryKey: queryKeys.templates(orgId) });
+      void qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
   });
 }
 

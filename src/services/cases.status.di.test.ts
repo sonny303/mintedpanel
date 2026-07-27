@@ -90,6 +90,49 @@ describe("setCaseStatus — params", () => {
     });
   });
 
+  it("the E6.8 missing-acks default to false — silence keeps the E6.7 strict guard", async () => {
+    rpcMock.mockResolvedValue({
+      data: { id: "case-1", case_status: "approved" },
+      error: null,
+    });
+    await setCaseStatus({
+      caseId: "case-1",
+      toStatus: "approved",
+      expectedStatus: "in_review",
+      effectiveDate: "2026-08-01",
+      individualProviderId: "PTAN-449",
+    });
+    const { args } = rpcArgs();
+    expect(args).toMatchObject({
+      p_provider_id_missing_ack: false,
+      p_group_id_missing_ack: false,
+    });
+  });
+
+  it('threads the per-ID "Didn\'t receive" acks on an Approved close (F6.8.3)', async () => {
+    rpcMock.mockResolvedValue({
+      data: { id: "case-1", case_status: "approved", payer_individual_provider_id: null },
+      error: null,
+    });
+    const result = await setCaseStatus({
+      caseId: "case-1",
+      toStatus: "approved",
+      expectedStatus: "in_review",
+      effectiveDate: "2026-08-01",
+      groupProviderId: "GRP-2210",
+      providerIdMissingAck: true,
+    });
+    // The acked-missing ID stays NULL — the Awaiting-ID derivation input.
+    expect(result.payerIndividualProviderId).toBeNull();
+    const { args } = rpcArgs();
+    expect(args).toMatchObject({
+      p_individual_provider_id: null,
+      p_group_provider_id: "GRP-2210",
+      p_provider_id_missing_ack: true,
+      p_group_id_missing_ack: false,
+    });
+  });
+
   it("threads the denial reason + the Add-touch evidence link", async () => {
     rpcMock.mockResolvedValue({
       data: { id: "case-1", case_status: "denied" },
@@ -183,6 +226,13 @@ describe("setCaseStatus — error mapping", () => {
     await expectCode(
       "case_status_approved_needs_provider_id",
       "case_status_approved_needs_provider_id",
+    );
+    rpcMock.mockReset();
+    // E6.8: an un-acked, un-supplied expected ID still raises the E6.7 named
+    // errors — the strict guard relaxes only by deliberate acknowledgment.
+    await expectCode(
+      "case_status_approved_needs_group_provider_id",
+      "case_status_approved_needs_group_provider_id",
     );
     rpcMock.mockReset();
     await expectCode("case_status_not_pursuing_needs_note", "case_status_not_pursuing_needs_note");

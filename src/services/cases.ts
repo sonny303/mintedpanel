@@ -421,6 +421,13 @@ export interface SetCaseStatusInput {
   contractExecutedDate?: string | null;
   /** F6.0.3 — the touch evidencing this transition (must be on this case). */
   evidenceTouchId?: string | null;
+  /** E6.8 F6.8.3 — the per-ID "Didn't receive" escape at Approved: each
+   * expected payer-issued ID must be EITHER supplied OR explicitly
+   * acknowledged missing (the enrollment then reads Awaiting ID — expected +
+   * approved + NULL id — and is back-filled via the existing set-later
+   * paths). Silence still raises the E6.7 named errors. */
+  providerIdMissingAck?: boolean;
+  groupIdMissingAck?: boolean;
 }
 
 // E6.0 — the single atomic transition entry point for the unified status:
@@ -446,6 +453,8 @@ export async function setCaseStatus(input: SetCaseStatusInput): Promise<Credenti
     p_group_provider_id: input.groupProviderId ?? null,
     p_contract_executed_date: input.contractExecutedDate ?? null,
     p_evidence_touch_id: input.evidenceTouchId ?? null,
+    p_provider_id_missing_ack: input.providerIdMissingAck ?? false,
+    p_group_id_missing_ack: input.groupIdMissingAck ?? false,
   });
   if (error) throw mapCaseStatusError(error);
   if (!data) throw new Error("set_case_status returned no data");

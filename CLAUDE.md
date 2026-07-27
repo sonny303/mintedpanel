@@ -2133,6 +2133,74 @@ states`/`_payer_norm_aliases`/`_payer_assert_name_available` (no client
   created→approved from case outcomes) and TD-46 (admin merge UI when
   manual-payer duplicate volume justifies it).
 
+- **E6.8 — Payer Lifecycle Enabler (backend only, zero rendered UI).** The
+  backend the payer-and-cases design bundle needs beyond E6.7 (archive,
+  merge, the Approved "Didn't receive" escape); THREE additive migrations
+  (repo + hosted, `20260727150000`–`150200`; behavior verified by
+  rollback-wrapped hosted probes impersonating a live admin member — one
+  probe caught and fixed a real `text[] || literal` parse bug in the ack
+  path). **F6.8.1 (`150000`):** `payers.archived_at timestamptz NULL` — the
+  REVERSIBLE org-workflow archive flag (NOT the platform `status` domain;
+  "remove from network" collapsed into Archive since the payer list IS the
+  network) — set/cleared ONLY by the `archive_payer`/`reactivate_payer`
+  SECURITY DEFINER RPCs (authenticated, anon rejected in-body,
+  writer-member, audited; archive rejects `payer_archive_open_cases: <n>`
+  while ANY org holds an open non-terminal case — open mirrors
+  `OPEN_CASE_STATUSES`, count spans orgs since payers are global, nothing
+  written on reject). Exclusion is CLIENT-side filtering on `archivedAt`
+  (no RLS change; closed cases keep resolving names): `activeOrgPayers`
+  gained the default archived exclusion + `{includeArchived}` (the slice-A
+  Show-archived seam) + `archivedPayerIds`; `splitAttachPicker` and
+  `validatePayerAttachRow` exclude/reject archived (the CSV check is
+  inert until the board's scanContext mapping threads `archivedAt` — a
+  slice-A one-liner, deliberately not a component edit here);
+  `useGenerationPreview` drops targets of archived payers before
+  buildGenerationPreview AND its readiness pass (targets untouched, so
+  reactivate restores scope with zero writes). **F6.8.2 (`150100`):**
+  `merge_payer(p_org_id, p_loser, p_survivor)` — ONE all-or-nothing
+  transaction: re-points `sop_templates` (unique_violation →
+  `payer_merge_template_conflict`), `payer_network_targets` (survivor wins
+  collisions: restored active if the loser's was, inherits the group PIN;
+  loser duplicates ARCHIVED in place — the non-partial unique blocks moving
+  them), `enrollment_facts` (colliding live loser facts EXPIRED first, PIN
+  inherited, then everything moves), OPEN `credential_cases` (pre-checked:
+  a 4-part-key collision raises `payer_merge_case_conflict` listing C-<n>
+  numbers, committing NOTHING; closed cases stay on the loser as history),
+  and `org_payer_assignments` (fold active-wins + DELETE the loser's dupe —
+  the one sanctioned delete); appends the loser's name to the survivor's
+  `aliases[]` (normalized-dedupe) and marks the loser `merged` +
+  `merged_into_id` (dropping it out of the normalized-name partial unique).
+  payer_contacts/contracts/exclusions deliberately stay (epic trace); not
+  undoable from the app. **F6.8.3 (`150200`):** `set_case_status` reissued
+  AGAIN — 11-param signature DROPPED, 13-param created (the E4.2
+  no-overload precedent) with `p_provider_id_missing_ack`/
+  `p_group_id_missing_ack` (default false): at Approved each expected ID
+  must be supplied OR explicitly acked missing (silence still raises the
+  E6.7 errors — supersedes the E6.7 strict-require criterion per the
+  handoff §2.1 PM-approved conflict resolution); an acked ID stays NULL
+  (Awaiting ID = expected + approved + NULL id, derived — slice D renders
+  it), the consumed ack rides the audit `after` payload + a "Didn't
+  receive: …" line under the history note, back-fill = the existing
+  set-later paths. **F6.8.4 seam (no components touched):** `payers.ts`
+  `archivePayer`/`reactivatePayer`/`mergePayer` (+`MergePayerResult`
+  counts receipt) + typed `PayerArchiveBlockedError` (openCaseCount) /
+  `PayerMergeConflictError` (conflictingCases C-list) + the lifecycle
+  guard messages (error map now longest-key-first like cases.ts);
+  `SetCaseStatusInput` gained the two ack flags (threaded `?? false`);
+  `useAdmin.ts` `useArchivePayer`/`useReactivatePayer`/`useMergePayer`
+  (payers/payer/assignments/catalog + cases; merge also targets/facts/
+  templates/audit-log). `Payer.archivedAt` added; types regenerated
+  (hosted in sync — the diff was purely additive). Tests:
+  `payers.lifecycle.di.test.ts`, ack threading in
+  `cases.status.di.test.ts`, archived-exclusion cases in
+  `payerSetup.test.ts`/`groupPayerAttach.test.ts`, and
+  `payerGovernance.test.ts` gained the E6.8 grant-shape block (no payers
+  DML re-grant, RPC grant floors, single set_case_status overload, merge
+  stays inside the table trace). Seed: TS-139's manual "United Healthcare"
+  global duplicate (variant spelling — slips the normalized-name guard
+  exactly like a real manual dup). TS-138/139/140 run at the RPC/service
+  layer (backend-only epic — no e2e).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

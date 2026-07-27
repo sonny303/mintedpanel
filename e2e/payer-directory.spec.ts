@@ -320,7 +320,10 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
   ).toBeVisible();
   await expect(page.getByText("In my network")).toBeVisible();
   await expect(page.getByText("bcbs-nc")).toBeVisible(); // catalog key (item 4 relocation)
-  await expect(page.getByText("45 days")).toBeVisible(); // curated avg decision (item 2 relocation)
+  // E6.7 PR 2 F6.7.5: stored avg_decision_days lost its writer with the sync,
+  // so the detail no longer renders the "Avg decision" fact — pin the absence
+  // (the assertion this line replaced was missed by the F6.7.5 retarget).
+  await expect(page.getByText("45 days")).toHaveCount(0);
   await expect(page.getByText("State coverage (1)")).toBeVisible();
   await expect(page.getByRole("link", { name: "BCBS NC — Standard Enrollment" })).toBeVisible();
   await expect(page.getByText("BCBS NC Enrollment Portal")).toBeVisible();

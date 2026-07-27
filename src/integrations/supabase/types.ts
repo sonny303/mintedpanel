@@ -2067,6 +2067,7 @@ export type Database = {
       payers: {
         Row: {
           aliases: string[] | null;
+          archived_at: string | null;
           avg_decision_days: number | null;
           created_at: string | null;
           created_by: string | null;
@@ -2092,6 +2093,7 @@ export type Database = {
         };
         Insert: {
           aliases?: string[] | null;
+          archived_at?: string | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
           created_by?: string | null;
@@ -2117,6 +2119,7 @@ export type Database = {
         };
         Update: {
           aliases?: string[] | null;
+          archived_at?: string | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
           created_by?: string | null;
@@ -3681,6 +3684,41 @@ export type Database = {
         Args: { p_org_id: string; p_payer_id: string };
         Returns: Json;
       };
+      archive_payer: {
+        Args: { p_org_id: string; p_payer_id: string };
+        Returns: {
+          aliases: string[] | null;
+          archived_at: string | null;
+          avg_decision_days: number | null;
+          created_at: string | null;
+          created_by: string | null;
+          delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          source: string | null;
+          states: string[] | null;
+          status: string;
+          updated_at: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       assert_contact_valid: {
         Args: { p: Json; p_label: string };
         Returns: undefined;
@@ -3780,6 +3818,7 @@ export type Database = {
         };
         Returns: {
           aliases: string[] | null;
+          archived_at: string | null;
           avg_decision_days: number | null;
           created_at: string | null;
           created_by: string | null;
@@ -3841,6 +3880,7 @@ export type Database = {
         Args: never;
         Returns: {
           aliases: string[] | null;
+          archived_at: string | null;
           avg_decision_days: number | null;
           created_at: string | null;
           created_by: string | null;
@@ -3875,6 +3915,10 @@ export type Database = {
         Args: { p_rpc_name: string };
         Returns: undefined;
       };
+      merge_payer: {
+        Args: { p_loser_id: string; p_org_id: string; p_survivor_id: string };
+        Returns: Json;
+      };
       publish_sop_template_version: {
         Args: {
           p_change_note?: string;
@@ -3885,6 +3929,41 @@ export type Database = {
           p_template_id: string;
         };
         Returns: Json;
+      };
+      reactivate_payer: {
+        Args: { p_org_id: string; p_payer_id: string };
+        Returns: {
+          aliases: string[] | null;
+          archived_at: string | null;
+          avg_decision_days: number | null;
+          created_at: string | null;
+          created_by: string | null;
+          delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          source: string | null;
+          states: string[] | null;
+          status: string;
+          updated_at: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       release_ssn_for_fill: {
         Args: { p_case_id: string; p_org_id: string; p_provider_id: string };
@@ -3906,10 +3985,12 @@ export type Database = {
           p_effective_date?: string;
           p_evidence_touch_id?: string;
           p_expected_status?: string;
+          p_group_id_missing_ack?: boolean;
           p_group_provider_id?: string;
           p_individual_provider_id?: string;
           p_is_correction?: boolean;
           p_note?: string;
+          p_provider_id_missing_ack?: boolean;
           p_reason_code_id?: string;
           p_to_status: string;
         };
@@ -4012,6 +4093,7 @@ export type Database = {
         };
         Returns: {
           aliases: string[] | null;
+          archived_at: string | null;
           avg_decision_days: number | null;
           created_at: string | null;
           created_by: string | null;

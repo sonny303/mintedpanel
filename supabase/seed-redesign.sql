@@ -485,3 +485,25 @@ SELECT 'e45d0000-0000-4000-a000-000000000004'::uuid, o.id,
        'e45f0000-0000-4000-a000-000000000004'::uuid, 1, NULL
 FROM public.organizations o WHERE o.name = 'Dillon Sports Medicine'
 ON CONFLICT (id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- E6.8 — Payer lifecycle fixtures (TS-139).
+-- ONE manual duplicate of the seeded UnitedHealthcare global fixture — the
+-- known manual-setup failure mode: a variant spelling ("United Healthcare",
+-- with the space) slips past the E6.7 normalized-name guard, and TS-139
+-- merges it into the canonical survivor via merge_payer. GLOBAL row
+-- (org_id NULL), source 'manual', no slug — exactly what create_payer would
+-- mint. TS-138/TS-140 are L1 derivations over the existing Dillon cases and
+-- seeded payers (no rows needed); the TS-139 case-collision slice creates
+-- its colliding cases at probe/test time, never in seed.
+-- Idempotent on the normalized-name key (the uq_payers_global_normalized_name
+-- grain — an ON CONFLICT can't target the expression index portably, so the
+-- guard is a NOT EXISTS on the same expression).
+-- ---------------------------------------------------------------------------
+INSERT INTO public.payers (org_id, name, payer_kind, states, status, source)
+SELECT NULL, 'United Healthcare', 'commercial', ARRAY['NC', 'TX'], 'active', 'manual'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.payers p
+  WHERE p.org_id IS NULL AND p.status <> 'merged'
+    AND lower(btrim(p.name)) = lower(btrim('United Healthcare'))
+);
