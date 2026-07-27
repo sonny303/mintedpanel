@@ -216,6 +216,65 @@ describe("the E6.7 enabler migrations — grant definitions", () => {
   });
 });
 
+describe("the E6.8 lifecycle migrations — grant definitions", () => {
+  const archiveMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260727150000_e68_payer_archive.sql"),
+    "utf8",
+  ).toLowerCase();
+  const mergeMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260727150100_e68_merge_payer.sql"),
+    "utf8",
+  ).toLowerCase();
+  const ackMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260727150200_e68_case_status_missing_ack.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("never re-grants payers table DML or recreates the dropped write policies", () => {
+    for (const sql of [archiveMigration, mergeMigration, ackMigration]) {
+      expect(sql).not.toMatch(/grant\s+[a-z, ]*insert[a-z, ]*on\s+(table\s+)?public\.payers/);
+      expect(sql).not.toMatch(/grant\s+[a-z, ]*update[a-z, ]*on\s+(table\s+)?public\.payers/);
+      expect(sql).not.toMatch(/create policy payers_(insert|update)/);
+    }
+  });
+
+  it("the lifecycle RPCs revoke anon and grant EXECUTE to authenticated", () => {
+    for (const [sql, fn] of [
+      [archiveMigration, "archive_payer"],
+      [archiveMigration, "reactivate_payer"],
+      [mergeMigration, "merge_payer"],
+    ] as const) {
+      expect(sql).toContain(`revoke all on function public.${fn}`);
+      expect(sql).toMatch(
+        new RegExp(`grant execute on function public\\.${fn}[^;]*to authenticated`),
+      );
+    }
+  });
+
+  it("the set_case_status reissue drops the old 11-param signature (no PostgREST overload) and re-grants only authenticated", () => {
+    expect(ackMigration).toMatch(
+      /drop function if exists public\.set_case_status\(\s*uuid, text, text, uuid, text, boolean, date, text, text, date, uuid\s*\)/,
+    );
+    expect(ackMigration).toContain("p_provider_id_missing_ack boolean default false");
+    expect(ackMigration).toContain("p_group_id_missing_ack boolean default false");
+    expect(ackMigration).toMatch(
+      /revoke all on function public\.set_case_status\([\s\S]*?\) from anon/,
+    );
+    expect(ackMigration).toMatch(
+      /grant execute on function public\.set_case_status\([\s\S]*?\) to authenticated/,
+    );
+    expect(ackMigration).not.toContain("security definer");
+  });
+
+  it("the merge stays inside the epic's table trace — no payer_contacts/contracts/exclusions writes", () => {
+    for (const table of ["payer_contacts", "contracts", "case_generation_exclusions"]) {
+      expect(mergeMigration).not.toMatch(
+        new RegExp(`(update|delete from|insert into) public\\.${table}`),
+      );
+    }
+  });
+});
+
 describe("the payers write-lockdown migration (20260718120000) — grant definitions", () => {
   const sql = lockdownMigration.toLowerCase();
 

@@ -60,6 +60,15 @@ describe("splitAttachPicker", () => {
     expect(split.eligible).toEqual([]);
     expect(split.ineligible).toEqual([]);
   });
+
+  it("archived payers are never offered (E6.8 — reactivate before attaching)", () => {
+    const split = splitAttachPicker(
+      [payer({ id: "arch", archivedAt: "2026-07-27T00:00:00Z", states: ["NC"] })],
+      GROUP,
+    );
+    expect(split.eligible).toEqual([]);
+    expect(split.ineligible).toEqual([]);
+  });
 });
 
 describe("groupAttachExpansion", () => {
@@ -159,6 +168,37 @@ describe("CSV row resolution + eligibility", () => {
       error: {
         column: "states",
         reason: "SC is not one of Outer Banks Rehab Group's operating states",
+      },
+    });
+  });
+
+  it("an archived payer fails the row with a reactivate pointer (E6.8)", () => {
+    const archivedCtx: PayerAttachScanContext = {
+      groups: ctx.groups,
+      payers: [
+        {
+          id: "pay3",
+          name: "Sleepy Health",
+          states: ["NC"],
+          status: "active",
+          archivedAt: "2026-07-27T00:00:00Z",
+        },
+      ],
+    };
+    expect(
+      validatePayerAttachRow(
+        {
+          groupName: "Outer Banks Rehab Group",
+          groupTin: null,
+          payer: "Sleepy Health",
+          states: ["NC"],
+        },
+        archivedCtx,
+      ),
+    ).toMatchObject({
+      error: {
+        column: "payer",
+        reason: "Sleepy Health is archived — reactivate it before attaching",
       },
     });
   });

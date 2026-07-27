@@ -579,6 +579,13 @@ export interface Payer {
   createdBy?: string | null;
   source?: PayerSource | null;
   updatedAt?: string | null;
+  // E6.8 F6.8.1 — the reversible org-workflow archive flag (NOT the platform
+  // status domain): set/cleared ONLY by the archive_payer/reactivate_payer
+  // RPCs. Archived payers are excluded from attach eligibility, generation
+  // candidates, and the default payer-list derivation by CLIENT filtering on
+  // this field (no RLS change — the row stays readable so closed cases keep
+  // resolving their payer name).
+  archivedAt?: string | null;
 }
 
 // E6.7 F6.7.1a — where a payer row came from. Pre-E6.7 rows are 'sync'

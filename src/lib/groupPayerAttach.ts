@@ -38,7 +38,8 @@ export interface AttachPickerSplit {
 }
 
 /** Split the ACTIVE catalog for one group. Retired/merged payers are excluded
- * outright (the E4.2 governance rule — a successor is attached instead). */
+ * outright (the E4.2 governance rule — a successor is attached instead), and
+ * so are ARCHIVED payers (E6.8 F6.8.1 — reactivate before attaching). */
 export function splitAttachPicker(
   catalog: readonly Payer[],
   group: Pick<ProviderGroup, "states">,
@@ -47,6 +48,7 @@ export function splitAttachPicker(
   const ineligible: Payer[] = [];
   for (const payer of catalog) {
     if (payer.status === "retired" || payer.status === "merged") continue;
+    if (payer.archivedAt != null) continue;
     const overlap = proposedAttachStates(payer, group);
     if (overlap.length > 0) eligible.push({ payer, overlap });
     else ineligible.push(payer);
@@ -97,6 +99,10 @@ export interface AttachContextPayer {
   aliases?: string[] | null;
   states?: string[] | null;
   status?: string | null;
+  /** E6.8 F6.8.1 — archived payers fail the CSV eligibility check. Optional:
+   * a context builder that doesn't thread it (the pre-E6.8 board mapping)
+   * simply leaves the check inert until the UI slice adds the field. */
+  archivedAt?: string | null;
 }
 
 export interface PayerAttachScanContext {
@@ -177,6 +183,14 @@ export function validatePayerAttachRow(
       error: {
         column: "payer",
         reason: `${payer.name} is ${payer.status} — attach its canonical successor instead`,
+      },
+    };
+  }
+  if (payer.archivedAt != null) {
+    return {
+      error: {
+        column: "payer",
+        reason: `${payer.name} is archived — reactivate it before attaching`,
       },
     };
   }

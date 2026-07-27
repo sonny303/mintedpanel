@@ -3,7 +3,7 @@
 // with the Org Detail settings table. What stays pinned here is the shared
 // inclusion rule (assignment-driven, sentinel excluded, name sort).
 import { describe, expect, it } from "vitest";
-import { activeOrgPayers } from "./payerSetup";
+import { activeOrgPayers, archivedPayerIds } from "./payerSetup";
 import { PRE_CRED_PAYER_NAME } from "./statusLabels";
 import type { OrgPayerAssignment, Payer } from "@/types";
 
@@ -65,5 +65,40 @@ describe("activeOrgPayers (inclusion is subscription-driven, never targets)", ()
       [assignment({ payerId: "a" }), assignment({ id: "x", payerId: "b" })],
     );
     expect(rows.map((r) => r.payer.name)).toEqual(["Alpha", "Zeta"]);
+  });
+});
+
+// E6.8 F6.8.1 — archive is the payer list's "remove" verb: the default
+// derivation drops archived payers; the Show-archived toggle opts back in.
+describe("activeOrgPayers — archived payers (E6.8)", () => {
+  it("an archived payer is excluded from the default derivation", () => {
+    const rows = activeOrgPayers(
+      [payer({ archivedAt: "2026-07-27T00:00:00Z" }), payer({ id: "payer-2", name: "UHC" })],
+      [assignment(), assignment({ id: "assign-2", payerId: "payer-2" })],
+    );
+    expect(rows.map((r) => r.payer.id)).toEqual(["payer-2"]);
+  });
+
+  it("includeArchived opts the archived payer back in (the Show-archived toggle)", () => {
+    const rows = activeOrgPayers([payer({ archivedAt: "2026-07-27T00:00:00Z" })], [assignment()], {
+      includeArchived: true,
+    });
+    expect(rows.map((r) => r.payer.id)).toEqual(["payer-1"]);
+  });
+
+  it("a reactivated payer (archivedAt cleared) returns without any option", () => {
+    const rows = activeOrgPayers([payer({ archivedAt: null })], [assignment()]);
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe("archivedPayerIds (the generation-candidate filter input)", () => {
+  it("collects only payers with the archive flag set", () => {
+    const ids = archivedPayerIds([
+      payer({ id: "a", archivedAt: "2026-07-27T00:00:00Z" }),
+      payer({ id: "b", archivedAt: null }),
+      payer({ id: "c" }),
+    ]);
+    expect([...ids]).toEqual(["a"]);
   });
 });
