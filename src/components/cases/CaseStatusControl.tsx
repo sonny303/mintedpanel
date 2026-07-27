@@ -195,6 +195,13 @@ export function CaseStatusControl({
         <ApprovedDialog
           open
           payer={c.payer}
+          caseSummary={[
+            c.provider ? `${c.provider.firstName} ${c.provider.lastName}`.trim() : null,
+            c.payer?.name ?? null,
+            c.state,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
           saving={saving}
           onCancel={() => setDialog(null)}
           onConfirm={(v) =>
@@ -207,6 +214,10 @@ export function CaseStatusControl({
                 individualProviderId: v.individualProviderId,
                 groupProviderId: v.groupProviderId,
                 contractExecutedDate: v.contractExecutedDate,
+                // E6.8 F6.8.3 — the "Didn't receive" escape rides the RPC's
+                // ack params; the acked ID stays NULL (Awaiting ID, derived).
+                providerIdMissingAck: v.providerIdMissingAck,
+                groupIdMissingAck: v.groupIdMissingAck,
               },
               "Case approved",
             )

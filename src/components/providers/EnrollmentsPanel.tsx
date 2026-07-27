@@ -22,6 +22,12 @@
 // 2026-07-21 provider-detail redesign — renders its OWN RecordSectionCard
 // ("Enrollments") with the shared "+ Add enrollment" affordance in the header
 // (handoff issues 1 & 7).
+// Slice D (payer-and-cases screen 5) — a case-derived row whose payer EXPECTS
+// a provider ID but whose approval acknowledged it missing (E6.8 "Didn't
+// receive": payer_individual_provider_id NULL) reads "Awaiting ID", DERIVED
+// via enrollmentIdBadge — never stored; the existing "Open case" link is the
+// way back to the capturing case. A payer that issues no provider ID reads
+// "No ID issued" instead. Fact rows keep their own Add/Edit-ID affordance.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -57,6 +63,7 @@ import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { usePayers } from "@/hooks/useAdmin";
 import { fmtDate } from "@/lib/format";
+import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
 import { buildProviderEnrollmentRows } from "@/lib/providerEnrollments";
 import type { EnrollmentFact } from "@/types";
@@ -114,6 +121,9 @@ export function EnrollmentsPanel({
             payerName: rowPayer?.name ?? "—",
             pinLabel: resolveIdentifierConfig(rowPayer).individualLabel,
             groupName: (groupsQ.data ?? []).find((g) => g.id === row.groupId)?.name ?? "—",
+            // Case rows only: the derived Awaiting-ID / No-ID-issued state
+            // (facts have their own set-later editor, never a wait pill).
+            idBadge: row.source === "case" ? enrollmentIdBadge(rowPayer, row.payerIssuedId) : null,
           };
         })
         .sort((a, b) => a.payerName.localeCompare(b.payerName) || a.state.localeCompare(b.state)),
@@ -197,6 +207,11 @@ export function EnrollmentsPanel({
                       <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
                         {row.pinLabel}: {row.payerIssuedId}
                       </span>
+                    ) : null}
+                    {row.idBadge?.kind === "awaiting" ? (
+                      <StatusPill status="amber" label="Awaiting ID" />
+                    ) : row.idBadge?.kind === "not_issued" ? (
+                      <StatusPill status="neutral" label="No ID issued" />
                     ) : null}
                     {row.source === "case" ? (
                       <>

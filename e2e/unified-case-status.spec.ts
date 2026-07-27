@@ -206,6 +206,38 @@ function makeFixtures(role: "admin" | "specialist" = "admin") {
         resolution_id_expected: null,
         created_at: "2026-07-01T00:00:00Z",
       },
+      // Slice D (screen 5) fixtures — the E6.7 ID-expectation split: Kaiser
+      // issues BOTH IDs under its own wording; Humana issues neither.
+      {
+        id: "pay-kaiser",
+        org_id: null,
+        name: "Kaiser Permanente Colorado",
+        is_active: true,
+        payer_kind: "commercial",
+        status: "active",
+        resolution_id_label: null,
+        resolution_id_expected: null,
+        group_id_label: "Group PIN",
+        group_id_expected: true,
+        provider_id_label: "Provider Number",
+        provider_id_expected: true,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+      {
+        id: "pay-humana",
+        org_id: null,
+        name: "Humana",
+        is_active: true,
+        payer_kind: "commercial",
+        status: "active",
+        resolution_id_label: null,
+        resolution_id_expected: null,
+        group_id_label: null,
+        group_id_expected: false,
+        provider_id_label: null,
+        provider_id_expected: false,
+        created_at: "2026-07-01T00:00:00Z",
+      },
     ],
     status_configs: STATUS_CONFIGS,
     denial_reason_codes: REASON_CODES,
@@ -309,10 +341,36 @@ function makeHandler(fixtures: ReturnType<typeof makeFixtures>) {
         return route.fulfill(json({ message: `case_status_conflict:${from}` }, 400));
       }
       const to = body.p_to_status as string;
+      // E6.7/E6.8 Approved evidence rules, mirrored BEFORE any mutation (a
+      // rejected close writes nothing): each expected ID must be supplied OR
+      // explicitly acknowledged missing — silence raises the named error.
+      if (to === "approved" && !body.p_is_correction) {
+        const payer = fixtures.payers.find((p) => p.id === row.payer_id) as
+          Record<string, unknown> | undefined;
+        const providerExpected =
+          (payer?.provider_id_expected ?? payer?.resolution_id_expected ?? true) === true;
+        const groupExpected = payer?.group_id_expected === true;
+        if (!body.p_effective_date) {
+          return route.fulfill(json({ message: "case_status_approved_needs_effective_date" }, 400));
+        }
+        if (
+          providerExpected &&
+          !body.p_individual_provider_id &&
+          body.p_provider_id_missing_ack !== true
+        ) {
+          return route.fulfill(json({ message: "case_status_approved_needs_provider_id" }, 400));
+        }
+        if (groupExpected && !body.p_group_provider_id && body.p_group_id_missing_ack !== true) {
+          return route.fulfill(
+            json({ message: "case_status_approved_needs_group_provider_id" }, 400),
+          );
+        }
+      }
       row.case_status = to;
       row.credentialing_status_id = MIRROR_STATUS_ID[CANONICAL_MIRROR_LABEL[to]];
       if (to === "approved" && !body.p_is_correction) {
         row.confirmed_effective_date = body.p_effective_date ?? null;
+        // An acked-missing ID stays NULL — the Awaiting-ID derivation input.
         row.payer_individual_provider_id = body.p_individual_provider_id ?? null;
         row.payer_group_provider_id = body.p_group_provider_id ?? null;
         row.contract_executed_date = body.p_contract_executed_date ?? null;
@@ -573,7 +631,7 @@ test("TS-105: first recorded work auto-flips to In Progress (system + evidence);
   await expect(page.getByText("Evidence:", { exact: false }).first()).toBeVisible();
 });
 
-test("TS-105: Approved demands the effective date + the payer-labeled ID; Denied demands a reason from the fixed list", async ({
+test("TS-105 (Slice D retarget): Approved asks for exactly what the payer issues under its own label — the effective date gates, the ID never does; Denied demands a reason from the fixed list", async ({
   context,
   page,
 }) => {
@@ -591,20 +649,25 @@ test("TS-105: Approved demands the effective date + the payer-labeled ID; Denied
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_DILLON);
 
-  // Approved: the dialog demands both facts, the ID under the payer's OWN
-  // label (Anthem's catalog term is "Provider ID").
+  // Approved (screen 5 "one ID" shape): Anthem's legacy pair resolves to a
+  // provider ID only, under the payer's OWN label ("Provider ID"); no group
+  // row renders because the payer doesn't issue one.
   await page.goto("/cases/case-rev");
   await expect(page.getByRole("button", { name: "Update" })).toBeVisible({ timeout: 30000 });
   await page.getByRole("button", { name: "Update" }).click();
   await page.getByRole("menuitem", { name: "Approved" }).click();
   const approvedDialog = page.getByRole("dialog");
-  await expect(approvedDialog).toContainText("Provider ID (required)");
-  const confirmApproved = approvedDialog.getByRole("button", { name: "Mark Approved" });
+  await expect(approvedDialog).toContainText("IDs Anthem issues");
+  await expect(approvedDialog.getByPlaceholder("Enter the Provider ID")).toBeVisible();
+  await expect(approvedDialog.getByPlaceholder(/Enter the Group/)).toHaveCount(0);
+  const confirmApproved = approvedDialog.getByRole("button", { name: "Approve", exact: true });
+  // The ONE client-side gate is the effective date…
   await expect(confirmApproved).toBeDisabled();
   await approvedDialog.getByRole("button", { name: "Effective date" }).click();
   await page.getByRole("button", { name: /15th/ }).first().click();
-  await expect(confirmApproved).toBeDisabled();
-  await approvedDialog.getByPlaceholder("Type 1 / NPI-linked ID").fill("ANTH-8891");
+  // …and NEVER the ID (handoff §2.1): the button enables with the ID blank.
+  await expect(confirmApproved).toBeEnabled();
+  await approvedDialog.getByPlaceholder("Enter the Provider ID").fill("ANTH-8891");
   await confirmApproved.click();
   await expect(page.getByText("Case approved")).toBeVisible({ timeout: 30000 });
   const approveRpc = writes.find(
@@ -612,6 +675,7 @@ test("TS-105: Approved demands the effective date + the payer-labeled ID; Denied
   );
   expect(approveRpc?.body?.p_individual_provider_id).toBe("ANTH-8891");
   expect(approveRpc?.body?.p_effective_date).toBeTruthy();
+  expect(approveRpc?.body?.p_provider_id_missing_ack).toBe(false);
 
   // Denied: the reason is required from the governed word-list.
   await page.goto("/cases/case-rev2");
@@ -629,6 +693,143 @@ test("TS-105: Approved demands the effective date + the payer-labeled ID; Denied
     (w) => w.table === "rpc/set_case_status" && w.body?.p_to_status === "denied",
   );
   expect(denyRpc?.body?.p_reason_code_id).toBe("reason-panel");
+});
+
+test("Slice D (screen 5, both IDs): silence is rejected by the RPC and surfaced; the “Didn't receive” ack approves with the ID NULL; the enrollment reads Awaiting ID and links the capturing case", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.credential_cases.push(
+    caseRow("case-both", {
+      case_status: "in_review",
+      payer_id: "pay-kaiser",
+      state: "CO",
+      payer_pipeline_state: "in_review",
+    }),
+  );
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_DILLON);
+
+  await page.goto("/cases/case-both");
+  await expect(page.getByRole("button", { name: "Update" })).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Update" }).click();
+  await page.getByRole("menuitem", { name: "Approved" }).click();
+  const dialog = page.getByRole("dialog");
+
+  // Both expected IDs render under the payer's OWN wording (E6.7 split).
+  await expect(dialog).toContainText("IDs Kaiser Permanente Colorado issues");
+  await expect(dialog).toContainText("one per group");
+  await expect(dialog).toContainText("one per provider");
+  const groupInput = dialog.getByPlaceholder("Enter the Group PIN");
+  const providerInput = dialog.getByPlaceholder("Enter the Provider Number");
+  await expect(groupInput).toBeVisible();
+  await expect(providerInput).toBeVisible();
+
+  const confirm = dialog.getByRole("button", { name: "Approve", exact: true });
+  await dialog.getByRole("button", { name: "Effective date" }).click();
+  await page.getByRole("button", { name: /15th/ }).first().click();
+  await expect(confirm).toBeEnabled();
+  await groupInput.fill("GP-448210");
+
+  // SILENCE (expected provider ID, no value, no ack) is the RPC's rejection —
+  // surfaced to the user, never pre-blocked client-side (handoff §2.1).
+  await confirm.click();
+  await expect(page.getByText(/This payer issues a provider ID — enter it or tick/)).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(dialog).toBeVisible();
+
+  // The per-field escape: tick "Didn't receive" — the input locks, the amber
+  // Awaiting-ID note + footer count appear, and the approve goes through.
+  await dialog.getByRole("checkbox", { name: "Didn't receive the Provider Number" }).click();
+  await expect(providerInput).toBeDisabled();
+  await expect(dialog.getByText(/the enrollment will show “Awaiting ID”/)).toBeVisible();
+  await expect(dialog.getByText("1 ID flagged as outstanding.")).toBeVisible();
+  await confirm.click();
+  await expect(page.getByText("Case approved")).toBeVisible({ timeout: 30000 });
+
+  // The wire: the ack rides the RPC params; the acked ID is NULL — and stays
+  // NULL on the stored row (Awaiting ID is DERIVED, never stored).
+  const approveRpc = writes
+    .filter((w) => w.table === "rpc/set_case_status" && w.body?.p_to_status === "approved")
+    .at(-1);
+  expect(approveRpc?.body).toMatchObject({
+    p_case_id: "case-both",
+    p_individual_provider_id: null,
+    p_provider_id_missing_ack: true,
+    p_group_provider_id: "GP-448210",
+    p_group_id_missing_ack: false,
+  });
+  expect(
+    fixtures.credential_cases.find((c) => c.id === "case-both")?.payer_individual_provider_id,
+  ).toBeNull();
+
+  // The provider record's Enrollments panel derives the wait and links back
+  // to the capturing case.
+  await page.goto("/providers/pr-dana");
+  await page.getByRole("tab", { name: "Enrollments" }).click();
+  const enrollRow = page.locator("#enrollments li").filter({ hasText: "Kaiser Permanente" });
+  await expect(enrollRow).toBeVisible({ timeout: 30000 });
+  await expect(enrollRow.getByText("Awaiting ID")).toBeVisible();
+  await expect(enrollRow.getByRole("link", { name: "Open case" })).toHaveAttribute(
+    "href",
+    "/cases/case-both",
+  );
+});
+
+test("Slice D (screen 5, no IDs): a payer that issues nothing gets effective date only; the enrollment reads No ID issued", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  fixtures.credential_cases.push(
+    caseRow("case-none", {
+      case_status: "in_review",
+      payer_id: "pay-humana",
+      state: "CO",
+      payer_pipeline_state: "in_review",
+    }),
+  );
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context, ORG_DILLON);
+
+  await page.goto("/cases/case-none");
+  await expect(page.getByRole("button", { name: "Update" })).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Update" }).click();
+  await page.getByRole("menuitem", { name: "Approved" }).click();
+  const dialog = page.getByRole("dialog");
+
+  // No ID fields, no escape checkboxes — just the honest explainer.
+  await expect(
+    dialog.getByText("Humana issues no enrollment ID, so there's nothing else to capture."),
+  ).toBeVisible();
+  await expect(dialog.getByText("Approving records the effective date.")).toBeVisible();
+  await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+
+  await dialog.getByRole("button", { name: "Effective date" }).click();
+  await page.getByRole("button", { name: /15th/ }).first().click();
+  await dialog.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Case approved")).toBeVisible({ timeout: 30000 });
+  const approveRpc = writes.find(
+    (w) => w.table === "rpc/set_case_status" && w.body?.p_to_status === "approved",
+  );
+  expect(approveRpc?.body).toMatchObject({
+    p_individual_provider_id: null,
+    p_group_provider_id: null,
+    p_provider_id_missing_ack: false,
+    p_group_id_missing_ack: false,
+  });
+
+  // The enrollment row: no wait to chase — the payer issues nothing.
+  await page.goto("/providers/pr-dana");
+  await page.getByRole("tab", { name: "Enrollments" }).click();
+  const enrollRow = page.locator("#enrollments li").filter({ hasText: "Humana" });
+  await expect(enrollRow).toBeVisible({ timeout: 30000 });
+  await expect(enrollRow.getByText("No ID issued")).toBeVisible();
+  await expect(enrollRow.getByText("Awaiting ID")).toHaveCount(0);
 });
 
 test("TS-116: reapply returns the SAME denied case to In Progress with a fresh cycle; the prior denial stays visible; never a second case", async ({

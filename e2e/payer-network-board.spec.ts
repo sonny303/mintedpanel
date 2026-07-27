@@ -723,3 +723,61 @@ test("2026-07-20 re-scope: the payer-issued GROUP ID is captured on the payer en
   expect(idPatches[0].body?.payer_issued_id).toBe("GRP-NC-123");
   expect(writes.filter((w) => w.path === "org_payer_settings")).toHaveLength(0);
 });
+
+test("Slice D (screen 5): the board derives Awaiting ID from an acked approval — expected + approved + NULL group ID — links the capturing case, and the stored PIN resolves it; a no-group-ID payer reads honestly", async ({
+  context,
+  page,
+}) => {
+  const fixtures = baseFixtures();
+  // Aetna EXPECTS a group ID under its own wording; Humana issues none (the
+  // unconfigured group side defaults to not-expected, mirroring the RPC).
+  const aetnaPayer = fixtures.payers.find((p) => p.id === "p1");
+  Object.assign(aetnaPayer ?? {}, { group_id_expected: true, group_id_label: "Group PIN" });
+  fixtures.payer_network_targets = [target("p1"), target("p4")];
+  fixtures.credential_cases = [
+    // The E6.8 "Didn't receive" outcome: approved with the group ID NULL.
+    caseRow("c-appr", "p1", {
+      case_status: "approved",
+      approved_date: "2026-07-01",
+      payer_group_provider_id: null,
+      case_number: 1042,
+    }),
+    caseRow("c-hum", "p4", {
+      case_status: "approved",
+      approved_date: "2026-07-02",
+      payer_group_provider_id: null,
+      case_number: 1043,
+    }),
+  ];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/groups/g-ob/payer-network");
+  const aetna = page.locator("li", { hasText: "Aetna" }).first();
+  await expect(aetna).toBeVisible({ timeout: 30000 });
+
+  // DERIVED, never stored: the amber wait + a link to the capturing case.
+  await expect(aetna.getByText("Awaiting ID", { exact: true })).toBeVisible();
+  await expect(aetna.getByRole("link", { name: "C-1042" })).toHaveAttribute(
+    "href",
+    "/cases/c-appr",
+  );
+
+  // Humana issues no group ID — honest state, no wait, no case chase.
+  const humana = page.locator("li", { hasText: "Humana" }).first();
+  await expect(humana.getByText("No group ID issued")).toBeVisible();
+  await expect(humana.getByText("Awaiting ID")).toHaveCount(0);
+
+  // Back-fill rides the EXISTING set-later path (the Group-IDs dialog): the
+  // stored target PIN resolves the wait by re-derivation — zero case writes.
+  await aetna.getByRole("button", { name: "Add group ID" }).click();
+  const dialog = page.getByRole("dialog", { name: /Group identifiers — Aetna/ });
+  await dialog.getByLabel("NC").fill("GP-448210");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+
+  // The chip is worded the payer's way (Group PIN), and the wait is gone.
+  await expect(aetna.getByText(/Group PIN: NC GP-448210/)).toBeVisible({ timeout: 15000 });
+  await expect(aetna.getByText("Awaiting ID")).toHaveCount(0);
+  expect(writes.filter((w) => w.path === "credential_cases")).toHaveLength(0);
+});

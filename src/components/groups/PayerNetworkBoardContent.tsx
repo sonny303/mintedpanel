@@ -8,6 +8,15 @@
 // with denial history preserved beneath reapply cycles. Excluded combinations
 // stay visible on their rows with one-click Restore; the buffer banner counts
 // the E6.3 candidate math and names its most recent cause.
+//
+// Slice D (payer-and-cases screen 5) — the payer-issued GROUP ID display: the
+// stored per-state PIN chip is worded the payer's way (groupIdLabel), and when
+// the payer EXPECTS a group ID but a case closed Approved without one (the
+// E6.8 "Didn't receive" escape, payer_group_provider_id NULL) the row shows a
+// DERIVED amber "Awaiting ID" pill linking the capturing case; storing the PIN
+// through the existing Group-IDs dialog resolves it by re-derivation. A payer
+// that issues no group ID reads "No group ID issued" once Approved evidence
+// exists. Read-only; never stored (awaitingGroupIdCases / groupIdNotIssued).
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -31,6 +40,8 @@ import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { CsvImportPanel } from "@/components/import/CsvImportPanel";
 import { RosterUploader } from "@/components/import/RosterUploader";
 import { GroupAttachPayerDialog } from "@/components/groups/GroupAttachPayerDialog";
+import { useCases } from "@/hooks/useCases";
+import { usePayers } from "@/hooks/useAdmin";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { usePayerNetworkBoard } from "@/hooks/usePayerNetworkBoard";
 import {
@@ -44,11 +55,13 @@ import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import { EXCLUSION_REASON_LABELS } from "@/lib/generationPreview";
 import { fmtDate } from "@/lib/format";
+import { awaitingGroupIdCases, groupIdNotIssued } from "@/lib/payerIssuedIds";
 import { useIsAdmin } from "@/lib/permissions";
 import type { SectionScanContext } from "@/lib/importSections";
+import type { GroupIdCaseSlice } from "@/lib/payerIssuedIds";
 import type { PayerBoardRow } from "@/lib/payerNetworkBoard";
 import type { PayerFulfillment } from "@/lib/caseRollups";
-import type { PayerNetworkTarget, ProviderGroup } from "@/types";
+import type { Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
 
 const FULFILLMENT_PILL: Record<
   PayerFulfillment,
@@ -66,6 +79,10 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
   const facilitiesQ = useFacilities();
   const groupsQ = useProviderGroups();
   const catalogQ = useGlobalPayers();
+  // Both caches are already warmed by usePayerNetworkBoard — free reads for
+  // the Slice D group-ID derivation (payer expectation flags + case columns).
+  const payersQ = usePayers();
+  const casesQ = useCases();
   const assignmentsQ = useProviderGroupAssignments();
   const payerAttachRun = useResumableImportRun("internal", "payer_attach", "internal");
   const [attachOpen, setAttachOpen] = useState(false);
@@ -190,6 +207,13 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
               row={row}
               groupId={group.id}
               isAdmin={isAdmin}
+              payer={(payersQ.data ?? []).find((p) => p.id === row.payerId) ?? null}
+              approvedCases={(casesQ.data ?? []).filter(
+                (c) =>
+                  c.groupId === group.id &&
+                  c.payerId === row.payerId &&
+                  c.caseStatus === "approved",
+              )}
               targets={(targetsQ.data ?? []).filter(
                 (t) => t.groupId === group.id && t.payerId === row.payerId && t.status === "active",
               )}
@@ -231,12 +255,18 @@ function BoardRowCard({
   row,
   groupId,
   isAdmin,
+  payer,
+  approvedCases,
   targets,
   onRemove,
 }: {
   row: PayerBoardRow;
   groupId: string;
   isAdmin: boolean;
+  /** The catalog row — carries the E6.7 group-ID expectation flags + label. */
+  payer: Payer | null;
+  /** The pair's APPROVED cases (group-stamped) — the Awaiting-ID inputs. */
+  approvedCases: GroupIdCaseSlice[];
   /** The group's ACTIVE targets for this payer — carriers of the payer-issued
    * GROUP identifier (group PIN), one per state (2026-07-20 re-scope). */
   targets: PayerNetworkTarget[];
@@ -246,6 +276,11 @@ function BoardRowCard({
   const restoreMut = useVoidCaseGenerationExclusion();
   const [editingGroupIds, setEditingGroupIds] = useState(false);
   const setIds = targets.filter((t) => (t.payerIssuedId ?? "").trim());
+  // Slice D — the payer's own wording for the group ID chip, and the derived
+  // Awaiting-ID / no-ID states (never stored; re-derives on every render).
+  const groupIdLabel = payer?.groupIdLabel?.trim() || "Group ID";
+  const awaitingIds = awaitingGroupIdCases(payer, approvedCases, targets);
+  const noGroupId = groupIdNotIssued(payer, approvedCases.length);
 
   return (
     <li className="rounded-md border border-[#E8E5E0] bg-white">
@@ -278,12 +313,32 @@ function BoardRowCard({
               {row.targetStates.join(" · ")}
             </span>
             {/* 2026-07-20 re-scope: the payer-issued GROUP identifier lives on
-                the payer entry here — per state where payers differ. */}
+                the payer entry here — per state where payers differ. Since
+                Slice D the chip is worded the payer's way (groupIdLabel). */}
             {setIds.length > 0 ? (
               <span className="rounded-[4px] bg-[#F4F2EF] px-1.5 py-0.5 text-[11.5px] text-foreground">
-                Group ID: {setIds.map((t) => `${t.state} ${t.payerIssuedId}`).join(" · ")}
+                {groupIdLabel}: {setIds.map((t) => `${t.state} ${t.payerIssuedId}`).join(" · ")}
               </span>
             ) : null}
+            {/* Slice D — expected + approved + NULL payer_group_provider_id
+                (E6.8 "Didn't receive") derives the wait, linking the capturing
+                case; a stored PIN above resolves it. */}
+            {awaitingIds.map((a) => (
+              <span key={a.state} className="inline-flex items-center gap-1.5">
+                <StatusPill
+                  status="amber"
+                  label={row.targetStates.length > 1 ? `Awaiting ID · ${a.state}` : "Awaiting ID"}
+                />
+                <Link
+                  to="/cases/$id"
+                  params={{ id: a.caseId }}
+                  className="font-mono text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+                >
+                  {a.caseNumber != null ? `C-${a.caseNumber}` : "Open case"}
+                </Link>
+              </span>
+            ))}
+            {noGroupId ? <StatusPill status="neutral" label="No group ID issued" /> : null}
             {isAdmin && targets.length > 0 ? (
               <button
                 type="button"
