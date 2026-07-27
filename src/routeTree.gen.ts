@@ -82,6 +82,7 @@ import { Route as GenerationRunsRunIdRouteImport } from './routes/generation_.ru
 import { Route as AdminTemplatesNewRouteImport } from './routes/admin.templates.new'
 import { Route as AdminTemplatesIdRouteImport } from './routes/admin.templates.$id'
 import { Route as AdminSopsIdRouteImport } from './routes/admin.sops.$id'
+import { Route as AdminPayersNewRouteImport } from './routes/admin.payers_.new'
 import { Route as AdminPayerAdminSopsRouteImport } from './routes/admin.payer-admin.sops'
 import { Route as AdminPayerAdminCatalogRouteImport } from './routes/admin.payer-admin.catalog'
 import { Route as AdminPayersIdScorecardRouteImport } from './routes/admin.payers_.$id.scorecard'
@@ -457,6 +458,11 @@ const AdminSopsIdRoute = AdminSopsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AdminSopsRoute,
 } as any)
+const AdminPayersNewRoute = AdminPayersNewRouteImport.update({
+  id: '/admin/payers_/new',
+  path: '/admin/payers/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminPayerAdminSopsRoute = AdminPayerAdminSopsRouteImport.update({
   id: '/sops',
   path: '/sops',
@@ -547,6 +553,7 @@ export interface FileRoutesByFullPath {
   '/reporting/': typeof ReportingIndexRoute
   '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
   '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
+  '/admin/payers/new': typeof AdminPayersNewRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -618,6 +625,7 @@ export interface FileRoutesByTo {
   '/reporting': typeof ReportingIndexRoute
   '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
   '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
+  '/admin/payers/new': typeof AdminPayersNewRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -699,6 +707,7 @@ export interface FileRoutesById {
   '/reporting/': typeof ReportingIndexRoute
   '/admin/payer-admin/catalog': typeof AdminPayerAdminCatalogRoute
   '/admin/payer-admin/sops': typeof AdminPayerAdminSopsRoute
+  '/admin/payers_/new': typeof AdminPayersNewRoute
   '/admin/sops/$id': typeof AdminSopsIdRoute
   '/admin/templates/$id': typeof AdminTemplatesIdRoute
   '/admin/templates/new': typeof AdminTemplatesNewRoute
@@ -781,6 +790,7 @@ export interface FileRouteTypes {
     | '/reporting/'
     | '/admin/payer-admin/catalog'
     | '/admin/payer-admin/sops'
+    | '/admin/payers/new'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -852,6 +862,7 @@ export interface FileRouteTypes {
     | '/reporting'
     | '/admin/payer-admin/catalog'
     | '/admin/payer-admin/sops'
+    | '/admin/payers/new'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -932,6 +943,7 @@ export interface FileRouteTypes {
     | '/reporting/'
     | '/admin/payer-admin/catalog'
     | '/admin/payer-admin/sops'
+    | '/admin/payers_/new'
     | '/admin/sops/$id'
     | '/admin/templates/$id'
     | '/admin/templates/new'
@@ -1004,6 +1016,7 @@ export interface RootRouteChildren {
   GroupsIndexRoute: typeof GroupsIndexRoute
   OnboardingIndexRoute: typeof OnboardingIndexRoute
   ReportingIndexRoute: typeof ReportingIndexRoute
+  AdminPayersNewRoute: typeof AdminPayersNewRoute
   PortalsPortalKeyTrainRoute: typeof PortalsPortalKeyTrainRoute
   AdminPayersIdScorecardRoute: typeof AdminPayersIdScorecardRoute
 }
@@ -1521,6 +1534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSopsIdRouteImport
       parentRoute: typeof AdminSopsRoute
     }
+    '/admin/payers_/new': {
+      id: '/admin/payers_/new'
+      path: '/admin/payers/new'
+      fullPath: '/admin/payers/new'
+      preLoaderRoute: typeof AdminPayersNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/payer-admin/sops': {
       id: '/admin/payer-admin/sops'
       path: '/sops'
@@ -1749,6 +1769,7 @@ const rootRouteChildren: RootRouteChildren = {
   GroupsIndexRoute: GroupsIndexRoute,
   OnboardingIndexRoute: OnboardingIndexRoute,
   ReportingIndexRoute: ReportingIndexRoute,
+  AdminPayersNewRoute: AdminPayersNewRoute,
   PortalsPortalKeyTrainRoute: PortalsPortalKeyTrainRoute,
   AdminPayersIdScorecardRoute: AdminPayersIdScorecardRoute,
 }

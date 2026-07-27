@@ -1,17 +1,19 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 hardening — canonical payer selection & org assignment, over the mock
-// harness (extends the E1.6 payer-directory rig with stateful
-// org_payer_assignments / payer_network_targets and the archive RPC):
-//   - An admin adds a catalog payer (alias search → Add to my network); the
-//     row flips to "In my network" + "Configure credentialing scope",
-//     and the subscription row is written.
-//   - Retired/merged payers cannot be newly added; the row explains why and
-//     names the canonical successor.
-//   - A non-admin browses but sees no mutation controls.
-//   - Remove archives the subscription AND its active targets (cascade) and the
-//     row offers Reactivate; reactivating flips the subscription back WITHOUT
-//     recreating the archived scope.
+// E4.2 hardening — canonical payer selection & org assignment, retargeted by
+// the payer-and-cases Slice A (the catalog browse is retired; the
+// subscription actions live on the read-only payer DETAIL page, and the
+// Payer Setup list shows only the org's own payers). Same stateful harness
+// (org_payer_assignments / payer_network_targets + the archive RPC):
+//   - An admin adds a catalog payer from its detail page; the header flips to
+//     "In my network" + "Configure credentialing scope", the subscription row
+//     is written, and the payer joins the Payer Setup list.
+//   - Retired/merged payers cannot be newly added; the detail explains why
+//     and names the canonical successor.
+//   - A non-admin browses list + detail but sees no mutation controls.
+//   - Remove archives the subscription AND its active targets (cascade) and
+//     the detail offers Reactivate; reactivating flips the subscription back
+//     WITHOUT recreating the archived scope.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -202,40 +204,46 @@ function seedAuth(context: {
   );
 }
 
-test("admin adds a canonical payer by alias → Added + Configure credentialing scope", async ({
+test("admin adds a canonical payer from its detail → In my network + it joins the Payer Setup list", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures("admin");
+  fixtures.payers = fixtures.global_payers;
   const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
+  // With no subscriptions yet, the Payer Setup list is honestly empty (the
+  // list shows the ORG'S payers, never the retired catalog browse).
   await page.goto("/payer-directory");
-  // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
-  // Setup workspace's Catalog tab (browse preserved for all roles).
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
+  await expect(page.getByText("No payers yet")).toBeVisible();
 
-  // Alias search narrows to BCBS-NC, which offers "Add to my network".
-  await page.getByLabel("Search payers").fill("Anthem NC");
-  const row = page.locator("tbody tr");
-  await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: "Add to my network" }).click();
+  // The subscription action lives on the payer detail.
+  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
+  await expect(
+    page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
+  ).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Add to my network" }).click();
 
-  // The row flips to Added + a clear "Configure credentialing scope" hand-off,
+  // The header flips to Added + the "Configure credentialing scope" hand-off,
   // and the subscription row was written for this org.
-  await expect(row.getByText("In my network")).toBeVisible({ timeout: 15000 });
-  await expect(row.getByRole("link", { name: "Configure credentialing scope" })).toBeVisible();
+  await expect(page.getByText("In my network")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("link", { name: "Configure credentialing scope" })).toBeVisible();
   const assigns = fixtures.org_payer_assignments as Array<Record<string, unknown>>;
   expect(assigns).toHaveLength(1);
   expect(assigns[0]).toMatchObject({ org_id: ORG, payer_id: "gp-bcbsnc", status: "active" });
 
-  // The hand-off lands on the Payer Network wizard section with the payer now in
-  // the curated shortlist (visible across surfaces without a manual refresh).
-  await row.getByRole("link", { name: "Configure credentialing scope" }).click();
-  await expect(page).toHaveURL(/\/onboarding\/wizard\?section=payer_network/);
+  // Back on the list, the payer now renders as an org payer row (visible
+  // across surfaces without a manual refresh).
+  await page.getByRole("link", { name: "← Back to catalog" }).click();
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible();
+  await expect(
+    page.locator("tbody tr", { hasText: "Blue Cross and Blue Shield of North Carolina" }),
+  ).toBeVisible({ timeout: 15000 });
 });
 
 test("retired and merged payers cannot be newly added; the successor is named", async ({
@@ -270,22 +278,34 @@ test("retired and merged payers cannot be newly added; the successor is named", 
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/payer-directory");
-  await page.getByLabel("Filter by payer kind").click({ timeout: 30000 });
-  await page.getByRole("option", { name: "All kinds" }).click();
+  // Slice A: the browse rows are gone — the unavailable state renders on the
+  // payer detail, which stays reachable by URL for history/links.
+  await page.goto("/admin/payer-admin/catalog/gp-merged");
+  await expect(page.getByRole("heading", { name: "Old BCBS of NC" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText(/Merged — can't be added/)).toBeVisible();
+  await expect(page.getByText("BCBS-NC (new entity)")).toBeVisible(); // canonical successor
+  await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
-  const merged = page.locator("tbody tr", { hasText: "Old BCBS of NC" });
-  await expect(merged).toContainText("Merged");
-  await expect(merged).toContainText("BCBS-NC (new entity)"); // canonical successor
-  await expect(merged.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
-
-  const retired = page.locator("tbody tr", { hasText: "Defunct Health Plan" });
-  await expect(retired).toContainText("Retired");
-  await expect(retired.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
+  await page.goto("/admin/payer-admin/catalog/gp-retired");
+  await expect(page.getByRole("heading", { name: "Defunct Health Plan" })).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(page.getByText(/Retired — can't be added/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 });
 
-test("a non-admin browses the catalog but sees no mutation controls", async ({ context, page }) => {
-  const fixtures = makeFixtures("billing");
+test("a non-admin browses list + detail but sees no mutation controls", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures("billing", {
+    org_payer_assignments: [
+      { id: "opa-1", org_id: ORG, payer_id: "gp-bcbsnc", starter: false, status: "active" },
+    ],
+  });
+  fixtures.payers = fixtures.global_payers;
   const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
@@ -294,8 +314,14 @@ test("a non-admin browses the catalog but sees no mutation controls", async ({ c
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).toBeVisible({
     timeout: 30000,
   });
-  // Browsing is allowed; adding is not.
+  // Browsing is allowed; the create entry and every subscription mutation are
+  // admin-only.
+  await expect(page.getByRole("link", { name: "+ Set up payer" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reactivate" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Blue Cross and Blue Shield of North Carolina" }).click();
+  await expect(page.getByText("In my network")).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remove from my network" })).toHaveCount(0);
 });
 
 test("Remove archives the subscription + active targets; Reactivate never recreates scope", async ({
@@ -326,22 +352,23 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
       },
     ],
   });
+  fixtures.payers = fixtures.global_payers;
   const { handler, deletes } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/payer-directory");
-  const row = page.locator("tbody tr", { hasText: "Blue Cross and Blue Shield of North Carolina" });
-  await expect(row.getByText("In my network")).toBeVisible({ timeout: 30000 });
+  // The subscription actions live on the payer detail now.
+  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
+  await expect(page.getByText("In my network")).toBeVisible({ timeout: 30000 });
 
   // Remove → confirm → the subscription AND its active target archive (cascade),
   // and NOTHING is deleted (status flips only).
-  await row.getByRole("button", { name: "Remove" }).click();
+  await page.getByRole("button", { name: "Remove from my network" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Remove Blue Cross and Blue Shield of North Carolina");
   await dialog.getByRole("button", { name: "Remove" }).click();
 
-  await expect(row.getByRole("button", { name: "Reactivate" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("button", { name: "Reactivate" })).toBeVisible({ timeout: 15000 });
   const assigns = fixtures.org_payer_assignments as Array<Record<string, unknown>>;
   const targets = fixtures.payer_network_targets as Array<Record<string, unknown>>;
   expect(assigns[0].status).toBe("archived");
@@ -350,8 +377,8 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
 
   // Reactivate flips the subscription back on WITHOUT recreating the archived
   // scope (the target stays archived for the existing restore/review flow).
-  await row.getByRole("button", { name: "Reactivate" }).click();
-  await expect(row.getByText("In my network")).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: "Reactivate" }).click();
+  await expect(page.getByText("In my network")).toBeVisible({ timeout: 15000 });
   expect(assigns[0].status).toBe("active");
   expect(targets[0].status).toBe("archived");
   expect(deletes).toHaveLength(0);

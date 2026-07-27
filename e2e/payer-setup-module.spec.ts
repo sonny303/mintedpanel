@@ -6,8 +6,12 @@ import { test, expect, type Route } from "@playwright/test";
 // org-grain setup list retired; the funnel is the global Ready-for-business
 // ladder asserted here).
 //
-//   TS-114 — two real segments + governance note; funnel honest states; global
-//            SOP authoring hits author_global_sop on the wire.
+//   TS-114 — the module head is the SINGLE-VIEW Payer Setup page (payer-and-
+//            cases screen 1 — Slice A retarget: the tab strip + Ready-for-
+//            business funnel are superseded by the KPI-card table; the SOPs
+//            segment stays a shareable legacy URL with the governance note
+//            until Slice G folds it); global SOP authoring still hits
+//            author_global_sop on the wire, entered via the SOPs segment.
 //   TS-131 — the portal picker offers the payer's registered portals first
 //            (shared registry reuse), "Show all portals" reveals the rest.
 //   TS-132 — real-fill drift telemetry → Sidebar badge + SOPs-tab banner →
@@ -458,29 +462,28 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("TS-114a — two shareable segments, governance note, honest funnel states", async ({
+test("TS-114a — the single-view Payer Setup page heads the module; the SOPs segment stays shareable", async ({
   page,
 }) => {
   scenario = "form-setup";
   await page.goto("/admin/payer-admin/catalog");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByRole("heading", { name: "Ready for business" })).toBeVisible();
-  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible();
 
-  // Honest per-payer ladder: Aetna has no global SOP → author entry; BCBS has
-  // a published SOP + a trained (1 approved / 1 proposed) form → the dry test
-  // is the next step.
-  const aetnaRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
-  await expect(aetnaRow.getByText("Needs SOP")).toBeVisible();
-  await expect(aetnaRow.getByRole("link", { name: /Author global SOP/ })).toBeVisible();
-  const bcbsRow = page.locator("tr", { hasText: "BCBS Kansas" }).first();
+  // Screen 1 is ONE view: no tab strip and no Ready-for-business funnel —
+  // per-payer state is the single Template-status badge in the table.
+  await expect(page.getByRole("navigation", { name: "Payer Setup areas" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ready for business" })).toHaveCount(0);
+  const aetnaRow = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" }).first();
+  await expect(aetnaRow.getByText("Needs template")).toBeVisible();
+  const bcbsRow = page.locator("tbody tr", { hasText: "BCBS Kansas" }).first();
   await expect(bcbsRow.getByText("Published")).toBeVisible();
-  await expect(bcbsRow.getByText("Trained")).toBeVisible();
-  await expect(bcbsRow.getByRole("link", { name: /Run mock dry test/ })).toBeVisible();
 
-  // The SOPs segment is its own shareable URL with the templates list.
+  // The SOPs segment is its own shareable URL with the templates list + the
+  // F6.5.6 interim-governance note (the authoring machinery lives there
+  // until Slice G folds the segment).
   await page.goto("/admin/payer-admin/sops");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible();
   await expect(page.getByText("BCBS Kansas NC Enrollment")).toBeVisible();
   await expect(page.getByRole("button", { name: "New global SOP" })).toBeVisible();
 });
@@ -489,14 +492,18 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   page,
 }) => {
   scenario = "authoring";
+  // Slice A retarget: the funnel's per-row author CTA is gone (screen 1 keeps
+  // one Template-status badge); a payer needing a template shows the honest
+  // badge, and authoring enters through the SOPs segment's New-global-SOP.
   await page.goto("/admin/payer-admin/catalog");
-  const aetnaRow = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
-  const authorLink = aetnaRow.getByRole("link", { name: /Author global SOP/ });
-  await expect(authorLink).toBeVisible({ timeout: 30000 });
-  await authorLink.click();
+  const aetnaRow = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" }).first();
+  await expect(aetnaRow.getByText("Needs template")).toBeVisible({ timeout: 30000 });
+  await page.goto("/admin/payer-admin/sops");
+  const newSopButton = page.getByRole("button", { name: "New global SOP" });
+  await expect(newSopButton).toBeVisible({ timeout: 30000 });
+  await newSopButton.click();
 
-  // The funnel entry lands on the wizard in GLOBAL mode with the payer
-  // prefilled and the shared-blast banner visible.
+  // The wizard opens in GLOBAL mode with the shared-blast banner visible.
   await expect(page).toHaveURL(/\/admin\/templates\/new\?.*tier=global/, { timeout: 30000 });
   await expect(page.getByText(/Global SOP — authored once and inherited/i)).toBeVisible();
 
@@ -505,7 +512,9 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
     .first()
     .locator("input")
     .fill("Aetna NC Enrollment");
-  // Match-key selects: Payer (prefilled) / State / Group — pick NC.
+  // Match-key selects: Payer / State / Group — pick Aetna + NC.
+  await page.locator('div:has(> label:text-is("Payer"))').first().getByRole("combobox").click();
+  await page.getByRole("option", { name: "Aetna (CVS Health)" }).click();
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
@@ -632,11 +641,14 @@ test("TS-133 — delegation renders as a catalog fact; the MSO routing engine is
   await page.goto("/admin/payer-admin/catalog");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
-  // The curated fact renders on the catalog row (search to surface it).
+  // Slice A retarget: the list keeps the four browse columns; the curated
+  // delegation fact lives on the payer detail behind the name link.
   await page.getByLabel("Search payers").fill("BCBS");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("link", { name: "BCBS Kansas" }).click();
   await expect(
     page.getByText(/Delegated to Availity — submit through the Availity portal/),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30000 });
 
   // The retired routing engine is never consulted anywhere in the module.
   await page.goto("/admin/payer-admin/sops");

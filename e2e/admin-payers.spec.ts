@@ -1,20 +1,19 @@
 import { test, expect, type Route } from "@playwright/test";
 
 // E4.2 payer governance + the unified-payer-setup consolidation (TE-18/TE-19),
-// post the 2026-07-18 legacy-payer close-out (payers are global-catalog-only;
-// the org-scoped "Legacy — catalog migration required" state is gone with the
-// rows it described):
-// /admin/payers is a REDIRECT SHELL into the Payer Setup workspace, and the
-// governance affordances the old route carried live on the workspace's Setup
-// tab —
-//   - the old deep link lands safely in Payer Setup (funnel step 12);
-//   - no free-text "Add payer" and no per-row Edit control anywhere; the
-//     canonical path is the workspace's Catalog tab;
+// post the 2026-07-18 legacy-payer close-out and the payer-and-cases Slice A
+// retarget (the module head is the single-view Payer Setup page):
+// /admin/payers is a REDIRECT SHELL into the Payer Setup page —
+//   - the old deep link lands safely on the single-view page;
+//   - payer CREATION is now sanctioned but never free-text: the "+ Set up
+//     payer" entry (admin-only) opens the guided /admin/payers/new flow on
+//     the E6.7 create_payer seam — no per-row Edit control, no inline
+//     identity edit anywhere on the list;
 //   - NO starter toggle anywhere (E6.3 F6.3.5 retired starter cases; the
 //     org_payer_assignments.starter column stays dormant per the additive
-//     rule) — the setup detail is read-only per-state readiness;
-//   - a specialist following the old URL gets the module's explicit denial
-//     with a read-only catalog pointer (TE-20b — no dead end).
+//     rule);
+//   - a specialist following the old URL lands on the same page read-only
+//     (E6.1 interim posture — no create entry, no Reactivate).
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -140,18 +139,23 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
 }) => {
   currentRole = "admin";
   await page.goto("/admin/payers");
-  // E6.5: the workspace is two REAL segments; the old URL lands on Catalog.
+  // The old URL still lands on the catalog segment (rename is Slice G's).
   await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
-  // No free-text payer creation and no per-row Edit control, anywhere.
+  // Slice A: creation is the guided "+ Set up payer" entry (admin-only) —
+  // never free-text on the list, and no per-row Edit control anywhere.
+  await expect(page.getByRole("link", { name: "+ Set up payer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
 
-  // The assigned catalog payer renders in the Ready-for-business funnel AND
-  // the catalog browse; the retired legacy migration state never appears.
-  await expect(page.getByRole("heading", { name: "Ready for business" })).toBeVisible();
-  await expect(page.getByText("Aetna (CVS Health)").first()).toBeVisible();
+  // The assigned catalog payer renders as ONE table row with the single
+  // Template-status badge; the funnel + catalog browse are superseded, and
+  // the retired legacy migration state never appears.
+  await expect(page.getByRole("heading", { name: "Ready for business" })).toHaveCount(0);
+  const row = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" });
+  await expect(row).toBeVisible();
+  await expect(row.getByText("Needs template")).toBeVisible();
   await expect(page.getByText("Legacy — catalog migration required")).toHaveCount(0);
 
   // E6.3 F6.3.5: the starter toggle is GONE with starter cases — NO switch
@@ -173,6 +177,10 @@ test("specialist following the old URL lands on the workspace — all roles for 
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
-  // Admin-only write affordances still never render for a specialist.
+  await expect(page.locator("tbody tr", { hasText: "Aetna (CVS Health)" })).toBeVisible();
+  // Admin-only write affordances still never render for a specialist: no
+  // create entry, no Reactivate, no switch.
+  await expect(page.getByRole("link", { name: "+ Set up payer" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reactivate" })).toHaveCount(0);
   await expect(page.getByRole("switch")).toHaveCount(0);
 });
