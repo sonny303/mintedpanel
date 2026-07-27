@@ -1,32 +1,14 @@
-// E6.5 F6.5.1 — Payer Setup / Catalog: the module landing. The per-payer
-// "Ready for business" funnel heads the page (F6.5.1) over the shared catalog
-// browse (select payers, delegation facts ride the catalog rows — F6.5.5).
-// Renders for ALL roles (E6.1 F6.1.1 interim posture); write affordances keep
-// their own role gates and RLS/RPCs backstop every write.
+// Payer & Cases design bundle, screen 1 (Slice A) — the module landing is the
+// single-view Payer Setup page (KPI filter cards + payer table + default-
+// template card). The E6.5 catalog-tab composition (tab strip + readiness
+// funnel + catalog browse) is superseded HERE; the /sops segment keeps its
+// authoring surface as a legacy URL until Slice G folds it. The `catalog`
+// segment name is stale by design — the route RENAME is Slice G's (never
+// break inbound links; /admin/payers, /payer-directory, and the ?tab=
+// spellings all still land here).
 import { createFileRoute } from "@tanstack/react-router";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { PayerAdminTabs } from "@/components/payer-admin/PayerAdminTabs";
-import { PayerReadinessFunnel } from "@/components/payer-admin/PayerReadinessFunnel";
-import { PayerCatalogBrowser } from "@/components/payers/PayerCatalogBrowser";
-import { Separator } from "@/components/ui/separator";
+import { PayerSetupPage } from "@/components/payer-admin/PayerSetupPage";
 
 export const Route = createFileRoute("/admin/payer-admin/catalog")({
-  component: CatalogTab,
+  component: PayerSetupPage,
 });
-
-function CatalogTab() {
-  return (
-    <div>
-      <PageHeader
-        title="Payer Setup"
-        description="One home for payer readiness — pick payers from the catalog, author their global SOPs, and prove their forms."
-      />
-      <div className="mt-2 space-y-6">
-        <PayerAdminTabs active="catalog" />
-        <PayerReadinessFunnel />
-        <Separator />
-        <PayerCatalogBrowser />
-      </div>
-    </div>
-  );
-}

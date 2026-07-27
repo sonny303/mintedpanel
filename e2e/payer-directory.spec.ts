@@ -1,9 +1,14 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E1.6 TE-6 + E4.2 payer governance — Payer Directory coverage over the mock
-// harness:
-//   TS-36 directory browse/search/filter: finds BCBS-NC by alias, commercial
-//         default hides MCO/government rows, state filter narrows by states[]
+// E1.6 TE-6 + E4.2 payer governance, retargeted by the payer-and-cases
+// Slice A (the catalog browse is retired — /payer-directory now lands on the
+// single-view Payer Setup page, which lists the ORG'S OWN payers):
+//   TS-36 (retargeted) — search/State/Kind filter the org's payer list; the
+//         catalog's alias search and commercial-default narrowing went with
+//         the browse (both pinned absent).
+//   Drill-in — the payer name is the only link; identity facts (catalog key,
+//         full coverage) live on the read-only detail; the interactive
+//         +N-more states disclosure is design-removed (plain text overflow).
 //   Governance: the catalog diff review is PLATFORM tooling — even with
 //         unreviewed diffs sitting in payer_catalog_changes, the org app never
 //         reads the table, never renders the review panel, and never calls the
@@ -176,30 +181,48 @@ function seedAuth(context: {
   );
 }
 
-test("TS-36: directory search by alias, commercial default, state + kind filters", async ({
+test("TS-36 (retargeted): the org payer list filters by name, State, and Kind — no alias search, no commercial default", async ({
   context,
   page,
 }) => {
-  const { handler } = makeHandler(makeFixtures());
+  // The org's own payers now feed the page (payers table ∩ active
+  // assignments), not the retired catalog browse.
+  const fixtures = makeFixtures();
+  fixtures.payers = fixtures.global_payers;
+  fixtures.org_payer_assignments = [
+    { id: "opa-1", org_id: ORG_TREE_HILL, payer_id: "gp-bcbsnc", starter: false, status: "active" },
+    { id: "opa-2", org_id: ORG_TREE_HILL, payer_id: "gp-uhc", starter: false, status: "active" },
+    {
+      id: "opa-3",
+      org_id: ORG_TREE_HILL,
+      payer_id: "gp-superior",
+      starter: false,
+      status: "active",
+    },
+  ];
+  const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
   await page.goto("/payer-directory");
   // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
-  // Setup workspace's Catalog tab (browse preserved for all roles).
+  // Setup page (the old catalog segment URL — rename is Slice G's).
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
 
-  // Commercial default: the MCO row is hidden until the kind filter widens.
+  // No commercial-default narrowing anymore: every org payer lists, MCO
+  // included (the default went with the catalog browse).
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).toBeVisible();
   await expect(page.getByText("UnitedHealthcare", { exact: true })).toBeVisible();
-  await expect(page.getByText("Superior HealthPlan (Centene)")).not.toBeVisible();
+  await expect(page.getByText("Superior HealthPlan (Centene)")).toBeVisible();
 
-  // Alias search finds BCBS-NC with its states. Catalog key + avg decision
-  // moved OFF the list to the per-payer detail drill-in (2026-07-20 catalog
-  // UX pass) — the list keeps browse columns only.
+  // Name search narrows; the catalog's ALIAS search is retired (an alias
+  // query lands on the honest filtered-empty state). Catalog key + avg
+  // decision stay off the list (detail-only facts).
   await page.getByLabel("Search payers").fill("Blue Cross NC");
+  await expect(page.getByText("No payers match these filters")).toBeVisible();
+  await page.getByLabel("Search payers").fill("Blue Cross and Blue Shield");
   const row = page.locator("tbody tr");
   await expect(row).toHaveCount(1);
   await expect(row.first()).toContainText("Blue Cross and Blue Shield of North Carolina");
@@ -207,25 +230,29 @@ test("TS-36: directory search by alias, commercial default, state + kind filters
   await expect(row.first()).not.toContainText("bcbs-nc");
   await expect(row.first()).not.toContainText("45 days");
 
-  // Widen kind to all → the Medicaid MCO appears; state filter narrows to TX.
+  // Kind narrows to the MCO; the state filter narrows by states[] membership.
   await page.getByLabel("Search payers").fill("");
   await page.getByLabel("Filter by payer kind").click();
+  await page.getByRole("option", { name: "Medicaid MCO" }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr").first()).toContainText("Superior HealthPlan (Centene)");
+  await page.getByLabel("Filter by payer kind").click();
   await page.getByRole("option", { name: "All kinds" }).click();
-  await expect(page.getByText("Superior HealthPlan (Centene)")).toBeVisible();
   await page.getByLabel("Filter by state").click();
   await page.getByRole("option", { name: "TX", exact: true }).click();
   await expect(page.locator("tbody tr")).toHaveCount(2);
   await expect(page.getByText("Blue Cross and Blue Shield of North Carolina")).not.toBeVisible();
 });
 
-test("catalog detail drill-in, In-my-network filter, and in-place states expansion", async ({
+test("payer detail drill-in behind the name link; long state lists truncate to text", async ({
   context,
   page,
 }) => {
-  // 2026-07-20 catalog UX pass: the list keeps browse columns; identity facts
-  // (catalog key, avg decision), full state coverage, and the payer's SOPs +
-  // portals live on the read-only detail page behind the payer-name link. The
-  // network filter narrows to ACTIVE org_payer_assignments client-side.
+  // Slice A: identity facts (catalog key), full state coverage, and the
+  // payer's SOPs + portals live on the read-only detail page behind the
+  // payer-name link (the row's only link). The list truncates long state
+  // lists to plain text — the interactive +N-more disclosure went with the
+  // catalog — and the In-my-network filter is gone (the list IS the network).
   const fixtures = makeFixtures({
     global_payers: [
       globalPayer({
@@ -248,6 +275,15 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
         id: "opa-1",
         org_id: ORG_TREE_HILL,
         payer_id: "gp-bcbsnc",
+        starter: false,
+        status: "active",
+        archived_at: null,
+        created_at: "2026-07-14T00:00:00Z",
+      },
+      {
+        id: "opa-2",
+        org_id: ORG_TREE_HILL,
+        payer_id: "gp-national",
         starter: false,
         status: "active",
         archived_at: null,
@@ -287,6 +323,7 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
       },
     ],
   });
+  fixtures.payers = fixtures.global_payers;
   const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
@@ -296,24 +333,16 @@ test("catalog detail drill-in, In-my-network filter, and in-place states expansi
     timeout: 30000,
   });
 
-  // Item 3: a long state list expands in place instead of truncating.
+  // A long state list truncates to plain text — the interactive expansion is
+  // design-removed; full coverage lives on the detail page.
   const national = page.locator("tbody tr", { hasText: "National Health Plan" });
-  await expect(national).toContainText("NC, SC, TX, CO");
-  await national.getByRole("button", { name: "+4 more" }).click();
-  await expect(page.getByText("8 states")).toBeVisible();
-  await expect(page.getByText("FL", { exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await expect(national).toContainText("NC, SC, TX, CO +4");
+  await expect(national.getByRole("button", { name: /more/ })).toHaveCount(0);
 
-  // Item 7: the adopted-payers filter narrows to active subscriptions only.
-  await page.getByLabel("Filter by network").click();
-  await page.getByRole("option", { name: "In my network" }).click();
-  // Selecting "In my network" widens the kind filter to all so every adopted
-  // payer is visible, not just the commercial-default slice.
-  await expect(page.getByLabel("Filter by payer kind")).toContainText("All kinds");
-  await expect(page.locator("tbody tr")).toHaveCount(1);
-  await expect(page.getByText("National Health Plan")).not.toBeVisible();
+  // The In-my-network filter went with the catalog: this list IS the network.
+  await expect(page.getByLabel("Filter by network")).toHaveCount(0);
 
-  // Item 8: the payer name is the drill-in.
+  // The payer name is the drill-in (the row's only link).
   await page.getByRole("link", { name: "Blue Cross and Blue Shield of North Carolina" }).click();
   await expect(
     page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
@@ -354,14 +383,24 @@ test("governance: catalog diff review is not exposed to org users", async ({ con
         created_at: "2026-07-12T12:00:00Z",
       },
     ],
+    org_payer_assignments: [
+      {
+        id: "opa-1",
+        org_id: ORG_TREE_HILL,
+        payer_id: "gp-bcbsnc",
+        starter: false,
+        status: "active",
+      },
+    ],
   });
+  fixtures.payers = fixtures.global_payers;
   const { handler, rpcCalls, tablesRead } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
   await page.goto("/payer-directory");
   // E6.1 F6.1.6: the /payer-directory goto rides the redirect into the Payer
-  // Setup workspace's Catalog tab (browse preserved for all roles).
+  // Setup page (the old catalog segment URL — rename is Slice G's).
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });

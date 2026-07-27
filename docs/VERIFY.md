@@ -113,8 +113,8 @@ npx playwright test e2e/<spec>.spec.ts
 
 | Surface                                          | Spec(s)                                                                                                                          |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `/payer-directory` (catalog browse, diff review) | `payer-directory.spec.ts`, `payer-catalog-selection.spec.ts`                                                                     |
-| `/admin/payer-admin` (Payer Setup module)        | `payer-admin-module.spec.ts` + `payer-setup-module.spec.ts`                                                                      |
+| `/payer-directory` (redirects into Payer Setup)  | `payer-directory.spec.ts`, `payer-catalog-selection.spec.ts`                                                                     |
+| `/admin/payer-admin` (Payer Setup page + module) | `payer-setup-page.spec.ts`, `payer-admin-module.spec.ts`, `payer-setup-module.spec.ts`, `admin-payers.spec.ts`                   |
 | `/admin/templates` (SOP authoring, versioning)   | `sop-versioning.spec.ts`, `sop-email-recipients.spec.ts`, `template-portal-integrity.spec.ts`, `template-typing-latency.spec.ts` |
 
 ### Generation, cases & work queue

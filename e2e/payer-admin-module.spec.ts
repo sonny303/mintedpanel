@@ -1,13 +1,15 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1 and E6.6 F6.6.6 — the
-// "Payer Setup" workspace is TWO REAL URL segments (/admin/payer-admin/
-// catalog + /admin/payer-admin/sops; the old ?tab= spellings redirect via the
-// index mapper). Covers: the single nav entry (all roles under the E6.1
-// interim posture); the two shareable segments with keyboard-operable tab
-// links (TE-20c successor); the Ready-for-business funnel head; the E6.6
-// fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code or
-// queue-ranking editors render anywhere — TS-115); and the 2026-07-20
+// E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1, E6.6 F6.6.6, and the
+// payer-and-cases Slice A retarget — the module head at /admin/payer-admin/
+// catalog is now the SINGLE-VIEW Payer Setup page (screen 1: KPI filter cards
+// + payer table; the tab strip and Ready-for-business funnel are superseded;
+// /admin/payer-admin/sops stays a shareable legacy URL until Slice G folds
+// it, and the old ?tab= spellings still redirect via the index mapper).
+// Covers: the single nav entry (all roles under the E6.1 interim posture);
+// keyboard operability of the new page's KPI filter cards (TE-20c successor);
+// the E6.6 fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code
+// or queue-ranking editors render anywhere — TS-115); and the 2026-07-20
 // re-scope NEGATIVE pin (supersedes F4.2.1): Org Detail carries no per-org
 // resolution-identifier config — the label is a Minted-curated payer fact
 // and issued IDs live on enrollment facts / payer network targets.
@@ -151,7 +153,7 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry and the five workspace areas", async ({
+test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry; the module head is the single-view page", async ({
   page,
 }) => {
   currentRole = "admin";
@@ -165,26 +167,28 @@ test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry and the five 
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
-  // The bare module URL maps to the Catalog segment (shareable real URL).
+  // The bare module URL still maps to the catalog segment (shareable URL; the
+  // segment RENAME is Slice G's).
   await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  const tabNav = page.getByRole("navigation", { name: "Payer Setup areas" });
-  await expect(tabNav.getByRole("link", { name: "Catalog" })).toBeVisible();
-  await expect(tabNav.getByRole("link", { name: "SOPs" })).toBeVisible();
-  // F6.5.6 — the interim-governance note stays visible in the module.
-  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible();
 
-  // The Ready-for-business funnel heads the page: the assigned payer renders
-  // an honest row — no global SOP yet → Needs SOP + the author entry.
-  const row = page.locator("tr", { hasText: "Aetna (CVS Health)" }).first();
+  // Slice A: ONE view — no tab strip, no funnel; the assigned payer renders
+  // an honest table row with the single Template-status badge.
+  await expect(page.getByRole("navigation", { name: "Payer Setup areas" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ready for business" })).toHaveCount(0);
+  const row = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" }).first();
   await expect(row).toBeVisible();
-  await expect(row.getByText("Needs SOP")).toBeVisible();
-  await expect(row.getByRole("link", { name: /Author global SOP/ })).toBeVisible();
+  await expect(row.getByText("Needs template")).toBeVisible();
+
+  // The legacy SOPs segment keeps the F6.5.6 interim-governance note until
+  // Slice G folds it.
+  await page.goto("/admin/payer-admin/sops");
+  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible({
+    timeout: 30000,
+  });
 });
 
-test("TE-20c — workspace tabs are arrow-key traversable; the nav entry is keyboard-operable", async ({
-  page,
-}) => {
+test("TE-20c — the nav entry and the KPI filter cards are keyboard-operable", async ({ page }) => {
   currentRole = "admin";
   await page.goto("/get-started");
   const rail = page.locator("aside").first();
@@ -195,19 +199,16 @@ test("TE-20c — workspace tabs are arrow-key traversable; the nav entry is keyb
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 15000 });
 
-  // E6.5: the areas are plain LINKS (real segments) — keyboard-operable via
-  // focus + Enter, with aria-current marking the active one.
-  const tabNav = page.getByRole("navigation", { name: "Payer Setup areas" });
-  await expect(tabNav.getByRole("link", { name: "Catalog" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  const sopsLink = tabNav.getByRole("link", { name: "SOPs" });
-  await sopsLink.focus();
-  await expect(sopsLink).toBeFocused();
+  // Slice A: the KPI cards are real buttons — focus + Enter toggles the
+  // filter and aria-pressed reports it.
+  const needsCard = page.getByRole("button", { name: /Needs template/ });
+  await expect(needsCard).toBeVisible({ timeout: 30000 });
+  await needsCard.focus();
+  await expect(needsCard).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/sops$/, { timeout: 15000 });
-  await expect(tabNav.getByRole("link", { name: "SOPs" })).toHaveAttribute("aria-current", "page");
+  await expect(needsCard).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Enter");
+  await expect(needsCard).toHaveAttribute("aria-pressed", "false");
 });
 
 test("P2/specialist sees the Payer Setup entry and reaches the workspace (E6.1 F6.1.1 supersedes the TS-76 admin-only pin)", async ({
