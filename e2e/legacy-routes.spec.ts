@@ -118,6 +118,10 @@ const RENDERING_ROUTES = [
   "/providers",
   "/reports",
   "/admin/templates/new",
+  // Slice B — the manual payer-setup doors (create + edit; a stale id renders
+  // an honest "Payer not found", never a dead end).
+  "/admin/payers/new",
+  "/admin/payers/pay-1/edit",
   "/onboarding",
   "/onboarding/wizard",
 ];

@@ -1,42 +1,112 @@
-// Payer & Cases design bundle — the "+ Set up payer" destination (screen 2,
-// Slice B). Slice A ships the ENTRY points (the Payer Setup toolbar button and
-// the zero-payers "Add your first payer" CTA); this route is their interim
-// landing until Slice B builds the two-step create form (name + near-match →
-// details) on the E6.7 create_payer seam. Un-nested with the `payers_` idiom
-// (the admin.payers_.$id.scorecard precedent) so the /admin/payers redirect
-// shell never hijacks it.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Landmark } from "lucide-react";
-import { EmptyState } from "@/components/EmptyState";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { buttonVariants } from "@/components/ui/button";
+// Payer & Cases design bundle, screen 2 (Slice B) — "+ Set up payer", the ONE
+// way a payer enters the system now that the seeded catalog browse is retired
+// (Slice A ships the entry points; this route is the flow). Two steps on one
+// route: step 1 asks the name and surfaces near matches BEFORE any other field
+// (the duplicate guardrail), step 2 collects the details and calls
+// create_payer — which also adds the payer to the active org's network in the
+// same transaction, so creating IS adding.
+//
+// Un-nested with the `payers_` idiom (the admin.payers_.$id.scorecard
+// precedent) so the /admin/payers redirect shell never hijacks it.
+import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { PayerDetailsForm } from "@/components/payer-admin/PayerDetailsForm";
+import { PayerNameStep } from "@/components/payer-admin/PayerNameStep";
+import { useCreatePayer } from "@/hooks/useAdmin";
+import { useGlobalPayers } from "@/hooks/usePayerCatalog";
+import {
+  EMPTY_PAYER_FORM,
+  hasPayerFormErrors,
+  payerFormErrors,
+  toPayerWriteInput,
+  type PayerFormDraft,
+} from "@/lib/payerForm";
+import { findPayerNearMatches } from "@/lib/payerNearMatch";
 
 export const Route = createFileRoute("/admin/payers_/new")({
   component: SetUpPayerPage,
 });
 
 function SetUpPayerPage() {
+  const navigate = useNavigate();
+  const catalogQ = useGlobalPayers();
+  const createMut = useCreatePayer();
+
+  const [step, setStep] = useState<"name" | "details">("name");
+  const [draft, setDraft] = useState<PayerFormDraft>(EMPTY_PAYER_FORM);
+  const [showErrors, setShowErrors] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // The near-match pool is every global row (create_payer's duplicate guard
+  // runs against the same universe), so a collision surfaces here rather than
+  // as a server rejection after the whole form is filled in.
+  const matches = useMemo(
+    () => findPayerNearMatches(draft.name, catalogQ.data ?? []),
+    [draft.name, catalogQ.data],
+  );
+
+  const handleContinue = () => {
+    if (draft.name.trim() === "") {
+      setNameError("A payer name is required.");
+      return;
+    }
+    setNameError(null);
+    setStep("details");
+  };
+
+  const handleCreate = () => {
+    setShowErrors(true);
+    setSubmitError(null);
+    if (hasPayerFormErrors(payerFormErrors(draft))) return;
+    createMut.mutate(toPayerWriteInput(draft), {
+      onSuccess: (payer) => {
+        toast.success(`${payer.name} added to your network`);
+        void navigate({ to: "/admin/payer-admin/catalog/$payerId", params: { payerId: payer.id } });
+      },
+      onError: (e) => setSubmitError(e instanceof Error ? e.message : "Couldn't create the payer."),
+    });
+  };
+
   return (
-    <div>
-      <PageHeader
-        title="Set up payer"
-        description="Create a payer deliberately — name it, then capture its states, kind, and the IDs it issues."
-      />
-      <div className="rounded-[6px] border border-[#E8E5E0] bg-white px-6 py-12">
-        <EmptyState
-          icon={<Landmark className="h-5 w-5 text-muted-foreground" />}
-          message="The guided payer form arrives in the next update."
-          description="It starts with a duplicate check against your existing payers, then captures states, kind, aliases, and ID expectations."
-          action={
-            <Link
-              to="/admin/payer-admin/catalog"
-              className={buttonVariants({ variant: "outline" })}
+    <div className="mx-auto max-w-3xl">
+      {step === "name" ? (
+        <PayerNameStep
+          name={draft.name}
+          onNameChange={(name) => {
+            setDraft((prev) => ({ ...prev, name }));
+            if (nameError) setNameError(null);
+          }}
+          matches={matches}
+          loadingMatches={catalogQ.isLoading}
+          error={nameError}
+          onContinue={handleContinue}
+        />
+      ) : (
+        <PayerDetailsForm
+          mode="create"
+          title={`Add ${draft.name.trim() || "a payer"}`}
+          description="No existing payer matched, so this creates a new catalog record."
+          draft={draft}
+          onChange={setDraft}
+          showErrors={showErrors}
+          onSubmit={handleCreate}
+          submitting={createMut.isPending}
+          submitError={submitError}
+          secondaryAction={
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-none"
+              onClick={() => setStep("name")}
             >
-              Back to Payer Setup
-            </Link>
+              Back
+            </Button>
           }
         />
-      </div>
+      )}
     </div>
   );
 }

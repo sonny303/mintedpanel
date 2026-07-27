@@ -172,6 +172,16 @@ export function PayerDetailContent({ payerId }: { payerId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Slice B — the screen-2 edit entry. Identity is still governed
+              (the update_payer RPC validates + guards duplicates); Slice C
+              makes the rest of this page editable in place. */}
+          {isAdmin && status === "active" ? (
+            <Button asChild variant="outline" size="sm" className="h-8 px-3 text-[12px]">
+              <Link to="/admin/payers/$id/edit" params={{ id: payer.id }}>
+                Edit payer
+              </Link>
+            </Button>
+          ) : null}
           {action.kind === "unavailable" ? (
             <span className="text-[12px] text-muted-foreground">
               {action.reason === "merged" ? "Merged" : "Retired"} — can&apos;t be added

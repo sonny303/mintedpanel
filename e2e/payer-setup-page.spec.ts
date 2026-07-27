@@ -513,7 +513,7 @@ test("archived rows — hidden by default; Show archived reveals badge + Reactiv
   expect(calls.filter((c) => c.kind === "rest" && c.path === "payers")).toEqual([]);
 });
 
-test("zero payers — three-step orientation; Add your first payer lands on the set-up stub", async ({
+test("zero payers — three-step orientation; Add your first payer opens the create flow", async ({
   page,
 }) => {
   scenario = "empty";
@@ -526,10 +526,12 @@ test("zero payers — three-step orientation; Add your first payer lands on the 
   await expect(page.getByText("Author a template", { exact: true })).toBeVisible();
   await expect(page.getByText("Generate cases", { exact: true })).toBeVisible();
 
+  // Slice B: the CTA lands on step 1 of the guided create flow (name +
+  // near-match), whose Cancel returns to this page.
   await page.getByRole("link", { name: "+ Add your first payer" }).click();
   await expect(page).toHaveURL(/\/admin\/payers\/new$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Set up payer" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to Payer Setup" }).click();
+  await expect(page.getByRole("heading", { name: "Add a payer" })).toBeVisible();
+  await page.getByRole("link", { name: "Cancel" }).click();
   await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 15000 });
 });
 
