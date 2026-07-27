@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:28px 32px 64px">
+  <div style="max-width:1120px;margin:0 auto">
+
+    <div>
+      <h1 style="margin:0 0 4px;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#1F2937">Payer — screen &amp; state index</h1>
+      <div style="font-size:14px;color:#6B7280">One index of the whole payer area. Every screen, every state it can be in, and where each one is designed.</div>
+    </div>
+
+    <div style="height:1px;background:#E8E5E0;margin:20px 0"></div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px">
+      <sc-for list="{{ counts }}" as="c" hint-placeholder-count="4">
+        <div style="border:1px solid #E8E5E0;border-radius:6px;background:#FFFFFF;padding:15px 17px">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6B7280">{{ c.label }}</div>
+          <div style="font-size:26px;font-weight:700;line-height:1;margin-top:9px;color:{{ c.color }}">{{ c.n }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+      <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;margin-bottom:14px">
+        <div style="padding:15px 20px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <a href="{{ g.href }}" style="font-size:16px;font-weight:600;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ g.name }}</a>
+              <span style="display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:500;white-space:nowrap;background:{{ g.stBg }};color:{{ g.stColor }}">{{ g.status }}</span>
+            </div>
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#9CA3AF;margin-top:3px">{{ g.route }}</div>
+          </div>
+          <span style="font-size:12.5px;color:#9CA3AF;flex:none">{{ g.count }}</span>
+        </div>
+        <div style="padding:6px 20px 14px">
+          <sc-for list="{{ g.states }}" as="s" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:14px;padding:11px 0;border-top:1px solid #F0EEEA;flex-wrap:wrap">
+              <div style="width:190px;flex:none;min-width:150px">
+                <div style="font-size:13.5px;font-weight:500;color:#1F2937">{{ s.name }}</div>
+                <sc-if value="{{ s.how }}" hint-placeholder-val="{{ false }}"><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;margin-top:2px">{{ s.how }}</div></sc-if>
+              </div>
+              <div style="flex:1;min-width:220px;font-size:13px;color:#6B7280">{{ s.desc }}</div>
+              <span style="display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:500;white-space:nowrap;flex:none;background:{{ s.tBg }};color:{{ s.tColor }}">{{ s.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <h2 style="margin:28px 0 4px;font-size:17px;font-weight:600;color:#1F2937">Open questions</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:14px">Design is done on every screen above. These are ordered so you can work top down — each group only matters once the one before it is settled.</div>
+
+    <sc-for list="{{ openGroups }}" as="g" hint-placeholder-count="4">
+      <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;margin-bottom:12px">
+        <div style="padding:13px 20px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:600;white-space:nowrap;background:{{ g.dotBg }};color:{{ g.dotColor }}">{{ g.title }}</span>
+          <span style="font-size:12.5px;color:#9CA3AF">{{ g.note }}</span>
+        </div>
+        <div style="padding:4px 20px 12px">
+          <sc-for list="{{ g.items }}" as="o" hint-placeholder-count="2">
+            <div style="padding:12px 0;border-top:1px solid #F0EEEA">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:3px">
+                <span style="font-size:13.5px;font-weight:600;color:#1F2937">{{ o.title }}</span>
+                <span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:4px;font-size:11px;font-weight:500;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280;white-space:nowrap">{{ o.owner }}</span>
+                <sc-if value="{{ o.blocks }}" hint-placeholder-val="{{ true }}"><span style="font-size:11.5px;color:#B45309;white-space:nowrap">{{ o.blocks }}</span></sc-if>
+              </div>
+              <div style="font-size:13px;color:#6B7280">{{ o.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const tone = (t) => ({
+      green: { bg: "#E7F5EF", color: "#047857" }, amber: { bg: "#FBF0E1", color: "#B45309" },
+      blue: { bg: "#E8EEFD", color: "#1D4ED8" }, gray: { bg: "#F1F1EF", color: "#6B7280" },
+      red: { bg: "#FBEAEA", color: "#B91C1C" }
+    }[t]);
+    const st = (name, how, desc, tag, t) => { const c = tone(t); return { name, how, desc, tag, tBg: c.bg, tColor: c.color }; };
+
+    const raw = [
+      { name: "Payer Setup", route: "/admin/payer-admin/catalog — segment name now stale, the catalog tab is gone", href: "1 - Payer Setup.dc.html",
+        status: "Designed", sT: "green",
+        states: [
+          st("Populated list", "", "Payer · State(s) · Kind · Template status, filtered by the four KPI cards, paginated.", "Default", "green"),
+          st("Zero payers", "emptyOrg", "New org. Three-step orientation and “Add your first payer”.", "Empty", "blue"),
+          st("Filtered to none", "", "Filters match nothing, but the org does have payers — offers Clear filters, not Add payer.", "Empty", "blue"),
+          st("Archived payers", "showArchived", "Hidden by default — the toggle reveals them with an Archived badge and Reactivate.", "State", "gray"),
+          st("Default template card", "", "The payerless fallback, edit-only, sits below the list because it has no payer.", "Always", "gray")
+        ] },
+      { name: "Payer Form", route: "/admin/payers/new · /$id/edit", href: "2 - Add or Edit Payer.dc.html",
+        status: "Designed", sT: "green",
+        states: [
+          st("Name + near match", "name", "Type the name; existing payers surface before any other field. Guards against duplicates.", "Step 1", "blue"),
+          st("Details — new", "create", "Blank form: kind, states, aliases, ID expectations (issues it? what's it called?), delegation note.", "Step 2", "blue"),
+          st("Edit payer", "edit", "Same fields, hydrated from the record.", "Edit", "gray"),
+          st("Edit — no IDs", "editnone", "A payer that issues no enrollment ID at all.", "Variant", "gray")
+        ] },
+      { name: "Payer Detail", route: "/admin/payer-admin/catalog_/$payerId", href: "3 - Payer Detail.dc.html",
+        status: "Designed", sT: "green",
+        states: [
+          st("Overview", "overview", "Identity, ID expectations, aliases, delegation note, state coverage, contacts.", "Tab", "gray"),
+          st("Enrollments", "enrollments", "Providers credentialed with this payer — captured IDs under the payer's own label, read-only.", "Tab", "gray"),
+          st("Scorecard", "scorecard", "Mapping coverage, first-pass rate, time in bucket. Admin & billing.", "Tab", "gray"),
+          st("Manage", "manage", "Archive and Merge live here, off the Overview header.", "Tab", "gray"),
+          st("Cases", "cases", "Open cases for this payer, by payer pipeline stage.", "Tab", "gray"),
+          st("Templates", "process", "Template list with state coverage in the header; the empty state carries the Author CTA.", "Tab", "gray"),
+          st("No template yet", "payer=Banner", "Empty state explaining the fallback, with Author template.", "Empty", "blue"),
+          st("Archive payer", "Archive…", "Consequence dialog — blocked while open cases exist.", "Dialog", "blue"),
+          st("Merge payer", "Merge…", "Pick the survivor; templates, IDs, and open cases move; the name survives as an alias.", "Dialog", "blue")
+        ] },
+      { name: "Template Editor", route: "/admin/templates/new · /$id", href: "4 - Template Editor.dc.html",
+        status: "Designed", sT: "green",
+        states: [
+          st("New template", "", "Blank — Basics, then tasks and steps, then review.", "Step", "blue"),
+          st("Resume draft", "draft", "Hydrated from a saved draft, titled Resume draft.", "Step", "blue"),
+          st("Edit template", "edit", "An existing payer template.", "Edit", "gray"),
+          st("Edit default", "edit-default", "The payerless fallback — no match key, exits to Payer Setup.", "Variant", "gray"),
+          st("Form setup — register", "edit&intent=register", "Online-form step with no portal linked yet.", "Inline", "amber"),
+          st("Form setup — capture", "edit&intent=capture", "Portal registered, no fields captured yet.", "Inline", "amber"),
+          st("Form setup — map", "edit&intent=train", "Captured fields awaiting a token each.", "Inline", "amber"),
+          st("Form setup — repair", "edit&intent=repair", "Drift: broken mappings first, repair framing.", "Inline", "amber"),
+          st("Form setup — prove", "edit&intent=prove", "Coverage check with a persistent pass/fail result.", "Inline", "amber"),
+          st("Version history", "History", "v-chip in the header; publish captures an optional one-line note; drawer lists versions with restore-as-new.", "Drawer", "gray")
+        ] },
+      { name: "Case close & IDs", route: "case approve · group board · provider detail", href: "5 - Case Close and IDs.dc.html",
+        status: "Designed", sT: "green",
+        states: [
+          st("Close — both IDs", "case-both", "Payer issues a group ID and a provider ID; dialog asks for both.", "Dialog", "blue"),
+          st("Close — one ID", "case-one", "Payer issues a provider ID only.", "Dialog", "blue"),
+          st("Close — no IDs", "case-none", "Payer issues nothing; effective date only.", "Dialog", "blue"),
+          st("Didn't receive", "", "Per-field escape — approve without blocking, enrollment reads Awaiting ID. Production requires the ID; this is an approved divergence.", "Variant", "amber"),
+          st("Close — Denied", "case-denied", "Reason from the governed list is required; “Other” needs one-line context.", "Dialog", "blue"),
+          st("Close — Not pursuing", "case-np", "Deliberate opt-out — note required.", "Dialog", "blue"),
+          st("Group payer board", "board", "Where captured group IDs land. Read-only.", "Display", "gray"),
+          st("Provider enrollments", "provider", "Where captured provider IDs land. Read-only.", "Display", "gray")
+        ] }
+    ];
+
+    const groups = raw.map((g) => {
+      const c = tone(g.sT);
+      return Object.assign({}, g, { stBg: c.bg, stColor: c.color, count: g.states.length + " states" });
+    });
+    const totalStates = raw.reduce((n, g) => n + g.states.length, 0);
+
+    const openGroups = [
+      { title: "1 · Backend in flight", note: "The screens are designed and waiting — these are the seams Devin is building under them.", t: "amber", items: [
+        { title: "Payer create / edit API", owner: "Devin", blocks: "Screens 1–2 ship when it lands",
+          body: "The workflow is designed (screen 2: near-match check → details). What's new on the backend is the seam under it — production's only payer-entry path was the seeded catalog, which was removed." },
+        { title: "ID-expectation columns on the payer record", owner: "Devin", blocks: "Blocks screen 5 (case close)",
+          body: "Two booleans and two labels: does this payer issue a group ID / provider ID, and what does it call each. Today only the individual label is configurable (payers.resolution_id_label); the group label is a fixed constant, and the expected flag has no consumer — the Approved dialog requires the ID regardless. These columns replace both limitations." },
+        { title: "payer_contacts table", owner: "Devin", blocks: "Blocks the Contacts card on screen 3",
+          body: "purpose, email, phone, note, is_default. The default row is the one a template's Draft-email step addresses." }
+      ] },
+      { title: "2 · Cleanup before handoff", note: "None of these block design or build.", t: "gray", items: [
+        { title: "The /catalog route segment is stale", owner: "Note for Devin", blocks: "",
+          body: "Payer Setup still lives at /admin/payer-admin/catalog, but the catalog tab it was named for is gone and /sops folded in. Rename when this ships." },
+        { title: "design_handoff_payer_setup/ is stale", owner: "Me", blocks: "",
+          body: "That bundle predates the file rename and links to old filenames. Regenerate before re-sending anything to engineering." }
+      ] }
+    ].map((g) => { const c = tone(g.t); return Object.assign({}, g, { dotBg: c.bg, dotColor: c.color }); });
+    const openCount = openGroups.reduce((n, g) => n + g.items.length, 0);
+
+    const counts = [
+      { label: "Screens", n: raw.length, color: "#1F2937" },
+      { label: "States designed", n: totalStates, color: "#047857" },
+      { label: "Open questions", n: openCount, color: "#B45309" },
+      { label: "Needs new schema", n: 2, color: "#B45309" }
+    ];
+
+
+    return { groups, counts, openGroups };
+  }
+}
+</script>
+</body>
+</html>

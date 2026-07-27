@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+    input::placeholder, textarea::placeholder { color: #9CA3AF; }
+  </style>
+</helmet>
+
+<div style="display:flex;align-items:flex-start;min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5">
+  <aside data-screen-label="Sidebar" style="width:216px;flex:none;background:#0C2A1D;padding:16px 12px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh">
+    <div style="display:flex;align-items:center;gap:9px;padding:2px 6px">
+      <img src="assets/logo-white.png" alt="Minted Panel" style="height:24px;width:auto;display:block">
+      <span style="font-size:15px;font-weight:600;color:#FFFFFF;white-space:nowrap">Minted Panel</span>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="#" style="display:flex;align-items:center;gap:9px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M3.5 9h17M8 3.5v3M16 3.5v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Today</span>
+      </a>
+      <a href="#" style="display:flex;align-items:center;gap:9px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="9.5" cy="8" r="3" stroke="currentColor" stroke-width="1.7"></circle><path d="M4 19c.9-3 3.1-4.5 5.5-4.5S14.1 16 15 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><path d="M16.4 5.6a3 3 0 0 1 0 4.8M18.6 14.6c.9.8 1.5 1.9 1.9 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Providers</span>
+      </a>
+      <a href="1 - Payer Setup.dc.html" aria-current="page" style="display:flex;align-items:center;gap:9px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:rgba(255,255,255,.10);color:#FFFFFF;font-weight:500;text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M3.5 10h17" stroke="currentColor" stroke-width="1.7"></path></svg><span>Payers</span>
+      </a>
+      <a href="#" style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF">
+        <span style="display:flex;align-items:center;gap:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M8 6.5v-2a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 16 4.5v2" stroke="currentColor" stroke-width="1.7"></path></svg><span>Cases</span></span>
+        <span style="min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.08);color:#8FA398;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center">5</span>
+      </a>
+    </nav>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:10px 6px;border-top:1px solid rgba(255,255,255,.08)">
+      <div style="width:26px;height:26px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">SW</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;color:#FFFFFF;font-weight:500;line-height:1.2">Sowmya</div><div style="font-size:11px;color:#8FA398">Admin</div></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#8FA398" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </aside>
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh">
+
+
+  <!-- Top bar -->
+  <div data-screen-label="Top bar" style="border-bottom:1px solid #E8E5E0;background:#FFFFFF;position:sticky;top:0;z-index:20">
+    <div style="max-width:1000px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <div style="min-width:0">
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:2px"><a href="1 - Payer Setup.dc.html" style="color:#9CA3AF;text-decoration:none" style-hover="color:#1B4D3E">Payers</a><sc-if value="{{ hasPayerCrumb }}" hint-placeholder-val="{{ true }}"> / <a href="3 - Payer Detail.dc.html" style="color:#9CA3AF;text-decoration:none" style-hover="color:#1B4D3E">{{ crumbPayer }}</a></sc-if></div>
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;color:#1F2937">{{ pageTitle }}</h1><span style="display:inline-flex;align-items:center;height:21px;padding:0 9px;border-radius:4px;font-size:11.5px;font-weight:600;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280;white-space:nowrap;font-family:'Geist Mono',ui-monospace,monospace">v{{ versionN }}</span><button type="button" onClick="{{ toggleHistory }}" style="background:transparent;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:500;color:#6B7280;cursor:pointer" style-hover="color:#1B4D3E;text-decoration:underline">History</button>
+          <sc-if value="{{ isDraft }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;height:21px;padding:0 9px;border-radius:4px;font-size:11.5px;font-weight:500;background:#FBF0E1;color:#B45309;white-space:nowrap">Unpublished draft · last saved Jul 25, 2:17 PM</span></sc-if>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex:none">
+        <a href="{{ exitHref }}" style="display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;text-decoration:none;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Cancel</a>
+        <button type="button" style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 3.5h9L19.5 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.6"></path><path d="M8.5 3.5v5h6" stroke="currentColor" stroke-width="1.6"></path></svg>Save draft</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:24px 24px 112px">
+    <div style="max-width:1000px;margin:0 auto">
+
+      <sc-if value="{{ hasBanner }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border:1px solid #E8E5E0;border-left:3px solid #1B4D3E;border-radius:6px;background:#F7FAF8;margin-bottom:18px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:#1B4D3E;margin-bottom:2px">{{ bannerTitle }}</div>
+            <div style="font-size:13px;color:#33463C">{{ bannerBody }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Stepper -->
+      <div role="tablist" aria-label="Wizard steps" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:24px">
+        <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+          <button type="button" data-step="{{ st.n }}" onClick="{{ goStep }}" aria-selected="{{ st.selected }}" style="display:inline-flex;align-items:center;gap:9px;height:36px;padding:0 14px 0 10px;border-radius:6px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:1px solid {{ st.border }};background:{{ st.bg }};color:{{ st.color }}">
+            <span style="width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:{{ st.dotBg }};color:{{ st.dotColor }}">{{ st.n }}</span>
+            {{ st.label }}
+          </button>
+          <sc-if value="{{ st.sep }}" hint-placeholder-val="{{ true }}"><span style="color:#C9C5BE">/</span></sc-if>
+        </sc-for>
+      </div>
+
+      <!-- ============ STEP 1: BASICS ============ -->
+      <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+        <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="padding:22px;display:flex;flex-direction:column;gap:18px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label for="tplName" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Template name</label>
+              <input id="tplName" type="text" value="{{ b.name }}" onChange="{{ setName }}" placeholder="e.g. Banner Health Plans — Medicare Advantage enrollment" style="height:38px;padding:0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+            </div>
+            <sc-if value="{{ isDefault }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Applies to</span>
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FBFBF9">
+                  <span style="font-size:14px;color:#1F2937">Every payer, state, and group</span>
+                  <span style="font-size:12.5px;color:#9CA3AF">Used whenever no payer template matches — it has no match key of its own.</span>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ notDefault }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 120px minmax(0,1.5fr);gap:14px;align-items:start">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Payer</span>
+                <div style="display:flex;align-items:center;height:38px;padding:0 12px;border:1px solid #F0EEEA;border-radius:4px;background:#FBFBF9;font-size:14px;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ payerFixedLabel }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label for="tplState" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">State</label>
+                <div style="position:relative"><select id="tplState" aria-label="State" value="{{ b.state }}" onChange="{{ setState }}" style="height:38px;width:100%;padding:0 30px 0 12px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="">Select a state…</option><option value="all">All states</option><option value="AZ">AZ</option><option value="CO">CO</option><option value="LA">LA</option><option value="NM">NM</option></select><span style="position:absolute;right:12px;top:16px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <span style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Groups</span>
+              <div style="position:relative">
+                <button type="button" onClick="{{ toggleGroupMenu }}" aria-expanded="{{ groupMenuOpen }}" aria-haspopup="listbox" style="width:100%;display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border-radius:4px;border:1px solid {{ groupFieldBorder }};background:#FFFFFF;font-family:inherit;font-size:13px;color:#1F2937;cursor:pointer;text-align:left" style-hover="border-color:#C9C5BE">
+                  <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ groupValueColor }}">{{ groupValueLabel }}</span>
+                  <sc-if value="{{ hasPicked }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:10px;background:#EDF3F0;color:#1B4D3E;font-size:11.5px;font-weight:600;flex:none">{{ pickedCount }}</span></sc-if>
+                  <span style="width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);flex:none;margin-bottom:2px"></span>
+                </button>
+
+                <sc-if value="{{ groupMenuOpen }}" hint-placeholder-val="{{ false }}">
+                  <div role="listbox" aria-label="Groups this template applies to" aria-multiselectable="true" style="position:absolute;top:40px;left:0;right:0;z-index:40;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;max-height:320px;display:flex;flex-direction:column;overflow:hidden">
+                    <div style="padding:9px 10px;border-bottom:1px solid #F0EEEA;position:relative;flex:none">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="position:absolute;left:20px;top:19px"><circle cx="10.5" cy="10.5" r="6.5" stroke="#9CA3AF" stroke-width="1.7"></circle><path d="M20 20l-4.2-4.2" stroke="#9CA3AF" stroke-width="1.7" stroke-linecap="round"></path></svg>
+                      <input type="text" aria-label="Search groups" value="{{ groupQuery }}" onChange="{{ setGroupQuery }}" placeholder="Search org or group…" style="width:100%;height:32px;padding:0 10px 0 30px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-family:inherit;font-size:13px;color:#1F2937" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                    </div>
+
+                    <div style="flex:1;min-height:0;overflow-y:auto;padding:5px 0">
+                      <button type="button" data-gid="all" onClick="{{ toggleGroup }}" role="option" aria-selected="{{ allGroups.on }}" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 12px;border:none;background:{{ allGroups.rowBg }};font-family:inherit;font-size:13px;font-weight:500;color:#1F2937;cursor:pointer;text-align:left" style-hover="background:#F5F4F1">
+                        <span style="width:15px;height:15px;border-radius:3px;border:1px solid {{ allGroups.boxBorder }};background:{{ allGroups.boxBg }};display:inline-flex;align-items:center;justify-content:center;flex:none"><sc-if value="{{ allGroups.on }}" hint-placeholder-val="{{ true }}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if></span>
+                        {{ allGroupsLabel }}
+                      </button>
+                      <div style="height:1px;background:#F0EEEA;margin:5px 0"></div>
+
+                      <sc-for list="{{ orgSections }}" as="o" hint-placeholder-count="2">
+                        <div>
+                          <div style="padding:7px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">{{ o.org }}</div>
+                          <sc-for list="{{ o.items }}" as="g" hint-placeholder-count="3">
+                            <button type="button" data-gid="{{ g.id }}" onClick="{{ toggleGroup }}" role="option" aria-selected="{{ g.on }}" style="width:100%;display:flex;align-items:center;gap:9px;padding:8px 12px;border:none;background:{{ g.rowBg }};font-family:inherit;font-size:13px;color:#1F2937;cursor:pointer;text-align:left" style-hover="background:#F5F4F1">
+                              <span style="width:15px;height:15px;border-radius:3px;border:1px solid {{ g.boxBorder }};background:{{ g.boxBg }};display:inline-flex;align-items:center;justify-content:center;flex:none"><sc-if value="{{ g.on }}" hint-placeholder-val="{{ false }}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if></span>
+                              <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.name }}</span>
+                            </button>
+                          </sc-for>
+                        </div>
+                      </sc-for>
+
+                      <sc-if value="{{ noGroupMatches }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:18px 12px;text-align:center;font-size:13px;color:#9CA3AF">No groups match “{{ groupQuery }}”</div>
+                      </sc-if>
+                    </div>
+
+                    <div style="flex:none;padding:8px 10px;border-top:1px solid #F0EEEA;display:flex;align-items:center;gap:8px">
+                      <span style="flex:1;min-width:0;font-size:12px;color:#9CA3AF">{{ groupFooter }}</span>
+                      <button type="button" onClick="{{ closeGroupMenu }}" style="height:30px;padding:0 13px;border-radius:4px;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;flex:none" style-hover="background:#163F33">Done</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+              </div>
+            </div>
+            </sc-if>
+            <div style="height:1px;background:#F0EEEA;margin:2px 0"></div>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:#1F2937;margin-bottom:14px">Required provider attributes</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 40px;max-width:640px">
+                <sc-for list="{{ attrs }}" as="a" hint-placeholder-count="7">
+                  <label style="display:flex;align-items:center;gap:10px;font-size:14px;color:#1F2937;cursor:pointer"><input type="checkbox" checked="{{ a.on }}" data-key="{{ a.key }}" onChange="{{ toggleAttr }}" style="width:16px;height:16px;accent-color:#1B4D3E;cursor:pointer">{{ a.label }}</label>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+      <!-- ============ STEP 2: TASKS ============ -->
+      <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px">
+          <div><h2 style="margin:0;font-size:16px;font-weight:600;color:#1F2937">Tasks &amp; steps</h2><p style="margin:4px 0 0;font-size:13px;color:#6B7280">Each task holds its ordered steps. Reorder tasks with the arrows — order sets each task’s sort order.</p></div>
+          <div style="display:flex;gap:8px;flex:none">
+            <sc-if value="{{ noTasks }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ prefillTasks }}" style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Start from template</button></sc-if>
+            <button type="button" onClick="{{ addTask }}" style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33;border-color:#163F33"><span style="font-size:16px;line-height:1;margin-top:-1px">+</span>Add task</button>
+          </div>
+        </div>
+        <sc-if value="{{ noTasks }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px dashed #D5D8D2;border-radius:6px;padding:40px;text-align:center"><div style="font-size:14px;font-weight:600;color:#1F2937">No tasks yet</div><div style="font-size:13px;color:#6B7280;margin-top:2px">Add a task to start building this SOP.</div></div>
+        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ taskCards }}" as="t" hint-placeholder-count="2">
+            <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:16px 18px;display:flex;gap:14px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:none;padding-top:22px">
+                <span style="color:#C9C5BE;font-size:15px;line-height:1;margin-bottom:4px">⠿</span>
+                <button type="button" data-tid="{{ t.tid }}" onClick="{{ taskUp }}" aria-label="Move task up" style="width:26px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:{{ t.upColor }}" style-hover="background:#F1F1EF"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+                <button type="button" data-tid="{{ t.tid }}" onClick="{{ taskDown }}" aria-label="Move task down" style="width:26px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:{{ t.downColor }}" style-hover="background:#F1F1EF"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;gap:14px;align-items:flex-end">
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                    <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Task {{ t.n }} title</label>
+                    <input aria-label="Task title" type="text" value="{{ t.title }}" data-tid="{{ t.tid }}" onChange="{{ setTaskTitle }}" placeholder="New task" style="height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                  </div>
+                  <div style="width:120px;flex:none;display:flex;flex-direction:column;gap:6px">
+                    <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Due day offset</label>
+                    <input aria-label="Due day offset" type="number" value="{{ t.dueOffset }}" data-tid="{{ t.tid }}" onChange="{{ setTaskOffset }}" style="height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                  </div>
+                  <button type="button" data-tid="{{ t.tid }}" onClick="{{ removeTask }}" aria-label="Delete task" style="width:36px;height:36px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E8E5E0;background:#FFFFFF;border-radius:4px;cursor:pointer;color:#9CA3AF" style-hover="background:#FBEAEA;border-color:#F3D3D3;color:#B91C1C"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2M8 7l1 13h6l1-13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Execution type</label>
+                    <div style="position:relative"><select aria-label="Execution type" value="{{ t.execType }}" data-tid="{{ t.tid }}" onChange="{{ setTaskExec }}" style="height:36px;width:100%;padding:0 30px 0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="Manual">Manual</option><option value="Auto-fill">Auto-fill</option><option value="Auto verify">Auto verify</option></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+                    <span style="font-size:12px;color:#9CA3AF">{{ t.execHint }}</span>
+                  </div>
+                  <div style="display:flex;align-items:flex-end;justify-content:flex-end"><span style="font-size:13px;color:#9CA3AF">{{ t.stepLabel }}</span></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px">
+                  <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Description</label>
+                  <textarea aria-label="Task description" value="{{ t.description }}" data-tid="{{ t.tid }}" onChange="{{ setTaskDesc }}" placeholder="What this task covers (optional)" style="min-height:64px;padding:9px 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:100%;resize:vertical" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></textarea>
+                </div>
+                <div style="border-top:1px solid #F0EEEA;margin-top:16px;padding-top:14px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px">
+                    <span style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Steps in this task</span>
+                    <button type="button" data-tid="{{ t.tid }}" onClick="{{ addStep }}" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;flex:none" style-hover="background:#F5F4F1"><span style="font-size:15px;line-height:1;margin-top:-1px">+</span>Add step</button>
+                  </div>
+                <sc-if value="{{ t.noSteps }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 0;text-align:center;font-size:13px;color:#9CA3AF">No steps yet — add the actions a coordinator takes for this task.</div></sc-if>
+                <sc-for list="{{ t.steps }}" as="s" hint-placeholder-count="1">
+                  <div style="border:1px solid #EFEEE9;border-radius:6px;padding:14px;margin-top:12px;background:#FCFCFA">
+                    <div style="display:flex;gap:12px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none;padding-top:2px">
+                        <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ stepUp }}" aria-label="Move step up" style="width:24px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:{{ s.upColor }}" style-hover="background:#F1F1EF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+                        <span style="width:22px;height:22px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin:2px 0">{{ s.n }}</span>
+                        <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ stepDown }}" aria-label="Move step down" style="width:24px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:{{ s.downColor }}" style-hover="background:#F1F1EF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+                      </div>
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:12px">
+                        <div style="display:flex;gap:12px;align-items:flex-start">
+                          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                            <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Step {{ s.n }} instruction</label>
+                            <input aria-label="Step instruction" type="text" value="{{ s.instruction }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepInstr }}" placeholder="What the coordinator does" style="height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                          </div>
+                          <div style="width:180px;flex:none;display:flex;flex-direction:column;gap:6px">
+                            <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Step type</label>
+                            <div style="position:relative"><select aria-label="Step type" value="{{ s.stepType }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepType }}" style="height:36px;width:100%;padding:0 30px 0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="Online form">Online form</option><option value="Draft email">Draft email</option><option value="Manual step">Manual step</option></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+                          </div>
+                          <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ removeStep }}" aria-label="Delete step" style="width:36px;height:36px;flex:none;margin-top:24px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E8E5E0;background:#FFFFFF;border-radius:4px;cursor:pointer;color:#9CA3AF" style-hover="background:#FBEAEA;border-color:#F3D3D3;color:#B91C1C"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+                        </div>
+
+                        <sc-if value="{{ s.isOnlineForm }}" hint-placeholder-val="{{ true }}">
+                          <div style="display:flex;flex-direction:column;gap:6px">
+                            <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Portal</label>
+                            <div style="display:flex;gap:8px;align-items:center">
+                              <div style="position:relative;flex:1;min-width:0"><select aria-label="Portal" value="{{ s.portal }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepPortal }}" style="height:36px;width:100%;padding:0 30px 0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="">Select or register a portal…</option><sc-for list="{{ portalOptions }}" as="po" hint-placeholder-count="1"><option value="{{ po.value }}">{{ po.label }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+                              <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ openRegister }}" style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;flex:none;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1"><span style="font-size:15px;line-height:1;margin-top:-1px">+</span>Register new</button>
+                            </div>
+
+                            <sc-if value="{{ noPayerPortals }}" hint-placeholder-val="{{ false }}">
+                              <span style="font-size:12px;color:#9CA3AF">No portals registered for this payer yet — register the one this step fills.</span>
+                            </sc-if>
+
+                            <sc-if value="{{ s.registerOpen }}" hint-placeholder-val="{{ false }}">
+                              <div style="border:1px solid #E8E5E0;border-radius:6px;background:#FFFFFF;padding:13px 14px;display:flex;flex-direction:column;gap:11px">
+                                <div style="font-size:13px;font-weight:600;color:#1F2937">Register a new portal</div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                                  <div style="display:flex;flex-direction:column;gap:5px">
+                                    <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Portal name</label>
+                                    <input type="text" aria-label="Portal name" placeholder="Banner PNM enrollment" style="height:32px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                                  </div>
+                                  <div style="display:flex;flex-direction:column;gap:5px">
+                                    <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Portal key</label>
+                                    <input type="text" aria-label="Portal key" placeholder="banner_pnm_enrollment" style="height:32px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                                  </div>
+                                </div>
+                                <div style="display:flex;flex-direction:column;gap:5px">
+                                  <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Form URL <span style="font-weight:400;text-transform:none;letter-spacing:0">— optional</span></label>
+                                  <input type="text" aria-label="Form URL" placeholder="https://…" style="height:32px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                  <span style="flex:1;min-width:0;font-size:12px;color:#9CA3AF">The key is permanent — it joins this step, its field maps, and fill logs.</span>
+                                  <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ closeRegister }}" style="height:30px;padding:0 12px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;flex:none" style-hover="background:#F5F4F1">Cancel</button>
+                                  <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ saveRegister }}" style="height:30px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF;flex:none" style-hover="background:#163F33">Register portal</button>
+                                </div>
+                              </div>
+                            </sc-if>
+                          </div>
+
+                          <sc-if value="{{ s.needsCapture }}" hint-placeholder-val="{{ false }}">
+                            <div style="border:1px dashed #D5D8D2;border-radius:6px;background:#FFFFFF;padding:14px;display:flex;align-items:flex-start;gap:12px">
+                              <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;font-weight:600;color:#1F2937;margin-bottom:3px">Capture this form's fields</div>
+                                <div style="font-size:12.5px;color:#6B7280">Capture the live portal form, then return here — the captured fields land in the table below, ready to map.</div>
+                              </div>
+                              <div style="display:flex;gap:8px;flex:none">
+                                <a href="#" style="display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border-radius:4px;font-size:12.5px;font-weight:500;text-decoration:none;white-space:nowrap;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Open form</a>
+                                <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ mockCapture }}" style="display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 12px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">Check for fields</button>
+                              </div>
+                            </div>
+                          </sc-if>
+
+                          <!-- FIELD MAPPING -->
+                          <div style="border:1px solid #E8E5E0;border-radius:6px;background:#FFFFFF">
+                            <div style="padding:12px 14px;border-bottom:1px solid #F0EEEA">
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                                <div style="font-size:13px;font-weight:600;color:#1F2937">Form fields → data mapping</div>
+                                <span style="font-size:12px;color:#9CA3AF">{{ s.fieldLabel }}</span>
+                              </div>
+                              <div style="font-size:12px;color:#9CA3AF;margin-top:3px">Add the fields this form needs. Pick what fills each one, or leave it for the coordinator.</div>
+                              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px">
+                                <sc-for list="{{ s.quickAdd }}" as="q" hint-placeholder-count="6">
+                                  <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-chip="{{ q.key }}" onClick="{{ addQuickField }}" style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:999px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #D5E4DC;background:#F0F5F2;color:#1B4D3E" style-hover="background:#E3EDE7"><span style="font-size:13px;line-height:1;margin-top:-1px">+</span>{{ q.label }}</button>
+                                </sc-for>
+                              </div>
+                            </div>
+                            <div style="padding:6px 14px 12px">
+                              <sc-if value="{{ s.noFields }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 0;text-align:center;font-size:13px;color:#9CA3AF">No fields mapped yet.</div></sc-if>
+                              <sc-if value="{{ s.hasFields }}" hint-placeholder-val="{{ true }}">
+                                <div style="display:grid;grid-template-columns:1fr 18px 1.2fr auto auto;gap:8px 10px;align-items:center;padding:8px 0 6px">
+                                  <span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Form field</span>
+                                  <span></span>
+                                  <span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Maps to</span>
+                                  <span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF;text-align:center">Req</span>
+                                  <span></span>
+                                </div>
+                                <sc-for list="{{ s.fields }}" as="f" hint-placeholder-count="3">
+                                  <div style="display:grid;grid-template-columns:1fr 18px 1.2fr auto auto;gap:8px 10px;align-items:center;padding:5px 0;border-top:1px solid #F5F4F1;background:{{ f.rowBg }}">
+                                    <sc-if value="{{ f.broken }}" hint-placeholder-val="{{ false }}"><span style="grid-column:1/-1;display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:4px;background:#FBEAEA;color:#B91C1C;font-size:11px;font-weight:600;width:fit-content;margin-top:5px">Broken — the portal changed</span></sc-if>
+                                    <input aria-label="Portal field name" type="text" value="{{ f.label }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-fid="{{ f.fid }}" onChange="{{ setFieldLabel }}" placeholder="Portal field name" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                                    <span style="color:#C9C5BE;text-align:center">→</span>
+                                    <div style="min-width:0">
+                                      <div style="position:relative"><select aria-label="Maps to" value="{{ f.source }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-fid="{{ f.fid }}" onChange="{{ setFieldSource }}" style="height:34px;width:100%;padding:0 28px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="blank">Leave blank (coordinator fills)</option><option value="manual">Manual value…</option><sc-for list="{{ sourceGroups }}" as="g" hint-placeholder-count="5"><optgroup label="{{ g.label }}"><sc-for list="{{ g.items }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.value }}</option></sc-for></optgroup></sc-for></select><span style="position:absolute;right:11px;top:14px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+                                      <sc-if value="{{ f.isManual }}" hint-placeholder-val="{{ false }}"><input type="text" value="{{ f.manualVal }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-fid="{{ f.fid }}" onChange="{{ setFieldManual }}" placeholder="Enter a fixed value" style="height:30px;margin-top:5px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></sc-if>
+                                      <sc-if value="{{ f.showSample }}" hint-placeholder-val="{{ true }}"><div style="font-size:12px;color:#8A8F88;margin-top:4px">e.g. <span style="font-family:'Geist Mono',ui-monospace,monospace;color:#5A5F59">{{ f.sample }}</span></div></sc-if>
+                                    </div>
+                                    <label style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" checked="{{ f.required }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-fid="{{ f.fid }}" onChange="{{ toggleFieldReq }}" style="width:15px;height:15px;accent-color:#1B4D3E;cursor:pointer"></label>
+                                    <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-fid="{{ f.fid }}" onClick="{{ removeField }}" aria-label="Remove field" style="width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:#9CA3AF" style-hover="background:#FBEAEA;color:#B91C1C"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+                                  </div>
+                                </sc-for>
+                              </sc-if>
+                              <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ addField }}" data-af="1" style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;margin-top:10px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px dashed #C9C5BE;background:#FFFFFF;color:#1F2937" style-hover="border-color:#1B4D3E;color:#1B4D3E"><span style="font-size:15px;line-height:1;margin-top:-1px">+</span>Add custom field</button>
+                            </div>
+                            <sc-if value="{{ s.canProve }}" hint-placeholder-val="{{ true }}">
+                              <div style="border-top:1px solid #F0EEEA;padding:11px 14px;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+                                <button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ runDry }}" style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;flex:none;border:1px solid {{ s.proveBorder }};background:{{ s.proveBg }};color:{{ s.proveColor }}" style-hover="background:#F5F4F1">
+                                  <sc-if value="{{ s.proven }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if>
+                                  {{ s.proveLabel }}
+                                </button>
+                                <span style="flex:1;min-width:180px;font-size:12px;color:#9CA3AF">{{ s.proveHint }}</span>
+                              </div>
+                            </sc-if>
+                          </div>
+
+                          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                            <div style="display:flex;flex-direction:column;gap:6px">
+                              <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Expected turnaround (days)</label>
+                              <input aria-label="Expected turnaround in days" type="number" value="{{ s.turnaround }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepTurn }}" placeholder="—" style="height:34px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:6px">
+                              <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Follow up every (days)</label>
+                              <input aria-label="Follow up every N days" type="number" value="{{ s.followUp }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepFollow }}" placeholder="—" style="height:34px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                            </div>
+                          </div>
+                        </sc-if>
+
+                        <sc-if value="{{ s.isDraftEmail }}" hint-placeholder-val="{{ false }}">
+                          <div style="border:1px solid #E8E5E0;border-radius:6px;background:#FFFFFF">
+                            <div style="padding:11px 14px;border-bottom:1px solid #F0EEEA;display:flex;flex-direction:column;gap:8px">
+                              <div style="font-size:13px;font-weight:600;color:#1F2937">Draft email</div>
+                              <div style="display:flex;flex-direction:column;gap:5px">
+                                <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Subject</label>
+                                <input type="text" value="{{ s.subject }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepSubject }}" placeholder="e.g. Enrollment request for a new provider" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                              </div>
+                            </div>
+                            <div style="padding:11px 14px;display:flex;flex-direction:column;gap:8px">
+                              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                                <label style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#9CA3AF">Email body</label>
+                                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                                  <div style="position:relative"><select value="" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ insertTokenSel }}" style="height:28px;padding:0 28px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:12px;color:#1B4D3E;font-weight:500;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="">＋ Insert field…</option><sc-for list="{{ sourceGroups }}" as="g" hint-placeholder-count="5"><optgroup label="{{ g.label }}"><sc-for list="{{ g.items }}" as="o" hint-placeholder-count="4"><option value="{{ o.value }}">{{ o.value }}</option></sc-for></optgroup></sc-for></select><span style="position:absolute;right:10px;top:10px;width:5px;height:5px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+                                </div>
+                              </div>
+                              <textarea value="{{ s.body }}" data-body="{{ s.sid }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onChange="{{ setStepBody }}" placeholder="Write the message. Use Insert field to pull provider, group, facility, MSO and license values." style="min-height:120px;padding:9px 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%;resize:vertical;line-height:1.6"></textarea>
+                              <div style="font-size:12px;color:#9CA3AF">Inserted fields resolve to each provider’s values when the email is drafted on a case.</div>
+                            </div>
+                          </div>
+                        </sc-if>
+
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <div style="display:flex;align-items:center;justify-content:space-between"><label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Required artifacts</label><button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" onClick="{{ addArtifact }}" style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1"><span style="font-size:13px;line-height:1;margin-top:-1px">+</span>Add artifact</button></div>
+                          <sc-for list="{{ s.artifacts }}" as="ar" hint-placeholder-count="1">
+                            <div style="display:flex;align-items:center;gap:8px"><input aria-label="Artifact name" type="text" value="{{ ar.name }}" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-aid="{{ ar.aid }}" onChange="{{ setArtifact }}" placeholder="e.g. Submission confirmation PDF" style="flex:1;height:32px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><button type="button" data-tid="{{ t.tid }}" data-sid="{{ s.sid }}" data-aid="{{ ar.aid }}" onClick="{{ removeArtifact }}" aria-label="Remove artifact" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:none;background:transparent;border-radius:4px;cursor:pointer;color:#9CA3AF" style-hover="background:#FBEAEA;color:#B91C1C"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button></div>
+                          </sc-for>
+                          <div style="font-size:12px;color:#9CA3AF">Name the attachments or proofs this step must produce. Reference shared logins by name only — never record a password.</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ============ STEP 3: REVIEW ============ -->
+      <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+        <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="padding:16px 20px;border-bottom:1px solid #E8E5E0"><h2 style="margin:0;font-size:16px;font-weight:600;color:#1F2937">Review</h2></div>
+          <div style="padding:20px;display:flex;flex-direction:column;gap:20px">
+            <div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:10px">{{ reviewKeyLabel }}</div>
+              <sc-if value="{{ isDefault }}" hint-placeholder-val="{{ false }}">
+                <div style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #E8E5E0;background:#F7F7F4;font-size:13px;color:#1F2937">Every payer, state, and group</div>
+              </sc-if>
+              <sc-if value="{{ notDefault }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #E8E5E0;background:#F7F7F4;font-size:13px;color:#1F2937"><span style="color:#9CA3AF">Scope</span>{{ tierLabel }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #E8E5E0;background:#F7F7F4;font-size:13px;color:#1F2937"><span style="color:#9CA3AF">Payer</span>{{ b.payer }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #E8E5E0;background:#F7F7F4;font-size:13px;color:#1F2937"><span style="color:#9CA3AF">State</span>{{ reviewState }}</span>
+                </div>
+              </sc-if>
+              <div style="font-size:13px;color:#6B7280;margin-top:10px">Required attributes: <span style="color:#1F2937">{{ reviewAttrs }}</span></div>
+            </div>
+            <div style="height:1px;background:#F0EEEA"></div>
+            <div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:12px">{{ reviewTaskLabel }}</div>
+              <sc-for list="{{ reviewTasks }}" as="t" hint-placeholder-count="2">
+                <div style="border:1px solid #E8E5E0;border-radius:6px;padding:14px 16px;margin-bottom:10px">
+                  <div style="display:flex;align-items:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none">{{ t.n }}</span><span style="font-size:14px;font-weight:600;color:#1F2937">{{ t.title }}</span><span style="font-size:12px;color:#9CA3AF">{{ t.meta }}</span></div>
+                  <sc-for list="{{ t.steps }}" as="s" hint-placeholder-count="1">
+                    <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0 0 32px;font-size:13px;color:#6B7280"><span style="color:#C9C5BE">{{ s.n }}.</span><span style="color:#1F2937">{{ s.instruction }}</span><span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:4px;font-size:11px;font-weight:500;background:#F1F1EF;color:#6B7280">{{ s.stepType }}</span><span>{{ s.fieldMeta }}</span></div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- Sticky footer -->
+  <div style="position:fixed;left:0;right:0;bottom:0;z-index:30;border-top:1px solid #E8E5E0;background:rgba(253,253,252,.92);backdrop-filter:blur(6px)">
+    <div style="max-width:1000px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <button type="button" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;{{ backStyle }}" style-hover="background:#F5F4F1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Back</button>
+      <sc-if value="{{ notLast }}" hint-placeholder-val="{{ true }}">
+        <button type="button" onClick="{{ next }}" style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 18px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33;border-color:#163F33">Next<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+      </sc-if>
+      <sc-if value="{{ isLast }}" hint-placeholder-val="{{ false }}">
+        <input type="text" aria-label="What changed" placeholder="What changed? (optional — saved with v{{ nextVersionN }})" style="flex:1;min-width:170px;max-width:300px;height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:12.5px;color:#1F2937;font-family:inherit" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><button type="button" onClick="{{ publish }}" style="display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 18px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33;border-color:#163F33">{{ publishLabel }}</button>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ published }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ dismiss }}" style="position:fixed;inset:0;background:rgba(12,42,29,.34);z-index:90"></div>
+    <div role="dialog" aria-label="Template published" style="position:fixed;z-index:91;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;max-width:92vw;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:8px;padding:24px">
+      <div style="width:44px;height:44px;border-radius:50%;background:#E7F5EF;display:flex;align-items:center;justify-content:center;margin-bottom:14px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#047857" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      <h2 style="margin:0 0 6px;font-size:18px;font-weight:600;color:#1F2937">{{ publishedTitle }}</h2>
+      <p style="margin:0 0 18px;font-size:14px;color:#6B7280">{{ publishedMsg }}</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><a href="{{ exitHref }}" style="display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;text-decoration:none;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">Back to payer</a></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ historyOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ toggleHistory }}" style="position:fixed;inset:0;background:rgba(12,42,29,.2);z-index:90"></div>
+    <div role="dialog" aria-label="Version history" style="position:fixed;top:0;right:0;bottom:0;width:380px;max-width:92vw;background:#FFFFFF;border-left:1px solid #E8E5E0;z-index:91;display:flex;flex-direction:column">
+      <div style="padding:16px 20px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:10px"><h2 style="margin:0;font-size:16px;font-weight:600;color:#1F2937;flex:1">Version history</h2><button type="button" onClick="{{ toggleHistory }}" aria-label="Close" style="width:26px;height:26px;border:none;background:transparent;border-radius:4px;color:#9CA3AF;font-size:18px;line-height:1;cursor:pointer;font-family:inherit" style-hover="background:#F5F4F1;color:#1F2937">×</button></div>
+      <div style="flex:1;overflow-y:auto;padding:6px 20px 20px">
+        <sc-for list="{{ versions }}" as="v" hint-placeholder-count="3">
+          <div style="padding:13px 0;border-bottom:1px solid #F0EEEA">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:3px">
+              <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;font-weight:600;color:#1F2937">v{{ v.n }}</span>
+              <sc-if value="{{ v.current }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:4px;font-size:11px;font-weight:500;background:#E7F5EF;color:#047857">Current</span></sc-if>
+              <span style="font-size:12px;color:#9CA3AF;margin-left:auto">{{ v.when }}</span>
+            </div>
+            <div style="font-size:13px;color:#4B5563;margin-bottom:6px">{{ v.note }}</div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:#9CA3AF">{{ v.who }}</span><sc-if value="{{ v.notCurrent }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ toggleHistory }}" style="margin-left:auto;background:transparent;border:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:500;color:#1B4D3E;cursor:pointer" style-hover="text-decoration:underline">Restore as v{{ nextVersionN }}</button></sc-if></div>
+          </div>
+        </sc-for>
+        <div style="padding:13px 2px;font-size:12px;color:#9CA3AF">Publishing never edits an old version — cases in flight keep the version they started on. Restoring copies an old version forward as a new one.</div>
+      </div>
+    </div>
+  </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    step: 1, published: false,
+    b: { name: "", payer: "Banner Health Plans", state: "all", groups: [] },
+    attrs: { caqhId: true, caqhAttest: true, npi: true, dob: false, ssn: false, homeAddr: false, malpractice: false },
+    tasks: null
+  };
+  SOURCES = [
+    { value: "blank", label: "Leave blank (coordinator fills)", sample: "" },
+    { value: "manual", label: "Manual value…", sample: "" },
+    { value: "provider.npi", label: "Provider · NPI", sample: "1234567890" },
+    { value: "provider.caqh", label: "Provider · CAQH ID", sample: "123456678" },
+    { value: "provider.firstName", label: "Provider · First name", sample: "Jim" },
+    { value: "provider.lastName", label: "Provider · Last name", sample: "Apple" },
+    { value: "provider.dob", label: "Provider · Date of birth", sample: "1980-03-04" },
+    { value: "provider.ssn4", label: "Provider · SSN (last 4)", sample: "1234" },
+    { value: "provider.address", label: "Provider · Practice address", sample: "123 Main St, Boulder CO" },
+    { value: "provider.email", label: "Provider · Email", sample: "jim@clinic.com" },
+    { value: "provider.phone", label: "Provider · Phone", sample: "(303) 555-0100" },
+    { value: "license.number", label: "License · Number", sample: "PT-45872" },
+    { value: "license.state", label: "License · State", sample: "CO" },
+    { value: "license.exp", label: "License · Expiration", sample: "2027-03-03" },
+    { value: "enrollment.payerId", label: "Enrollment · Payer ID", sample: "A1234567" },
+    { value: "case.state", label: "Case · State", sample: "CO" },
+    { value: "case.group", label: "Case · Group", sample: "YC PT" }
+  ];
+  SGROUPS = [
+    { label: "PROVIDER", items: [
+      { value: "provider.firstName", sample: "Jim" },
+      { value: "provider.lastName", sample: "Apple" },
+      { value: "provider.email", sample: "jim@clinic.com" },
+      { value: "provider.npi", sample: "1234567890" },
+      { value: "provider.caqhId", sample: "123456678" },
+      { value: "provider.caqhLastAttestedDate", sample: "2026-07-16" },
+      { value: "provider.taxonomyCode", sample: "1lkj" },
+      { value: "provider.licenseNumber", sample: "PT-45872" }
+    ] },
+    { label: "GROUP", items: [
+      { value: "group.name", sample: "YC PT" },
+      { value: "group.tin", sample: "84-1234567" },
+      { value: "group.npiType2", sample: "9876543210" }
+    ] },
+    { label: "FACILITY", items: [
+      { value: "facility.name", sample: "Boulder Main St Clinic" },
+      { value: "facility.street", sample: "123 Main St" },
+      { value: "facility.city", sample: "Boulder" },
+      { value: "facility.state", sample: "CO" },
+      { value: "facility.zip", sample: "80000" }
+    ] },
+    { label: "MSO", items: [
+      { value: "mso.portalUrl", sample: "https://portal.example.com" }
+    ] },
+    { label: "LICENSE", items: [
+      { value: "license.licenseNumber", sample: "PT-45872" },
+      { value: "license.state", sample: "CO" },
+      { value: "license.expirationDate", sample: "2027-03-03" }
+    ] }
+  ];
+  QUICK = [
+    { key: "npi", label: "NPI", field: { label: "NPI", source: "provider.npi", required: true } },
+    { key: "caqh", label: "CAQH ID", field: { label: "CAQH ID", source: "provider.caqhId", required: true } },
+    { key: "first", label: "First name", field: { label: "First name", source: "provider.firstName", required: true } },
+    { key: "last", label: "Last name", field: { label: "Last name", source: "provider.lastName", required: true } },
+    { key: "taxonomy", label: "Taxonomy", field: { label: "Taxonomy code", source: "provider.taxonomyCode", required: false } },
+    { key: "lic", label: "License #", field: { label: "License number", source: "provider.licenseNumber", required: true } },
+    { key: "tin", label: "Group TIN", field: { label: "Group TIN", source: "group.tin", required: true } },
+    { key: "fac", label: "Facility", field: { label: "Facility name", source: "facility.name", required: false } }
+  ];
+  _id = 100;
+  nid() { return ++this._id; }
+  intentOf() {
+    let h = "";
+    try { h = (location.hash || "").toLowerCase(); } catch (e) {}
+    const m = h.match(/intent=([a-z]+)/);
+    return m ? m[1] : "";
+  }
+  // A readiness CTA deep-links here with an intent; put the owning online-form
+  // step into the state that intent expects, so the link lands on the work.
+  applyIntent(intent, tasks) {
+    return tasks.map((t) => {
+      let hit = false;
+      const steps = t.steps.map((s) => {
+        if (s.stepType !== "Online form" || hit) return s;
+        hit = true;
+        if (intent === "register") return Object.assign({}, s, { portal: "", fields: [], registerOpen: true, proven: false });
+        if (intent === "capture") return Object.assign({}, s, { portal: "pnm", fields: [], registerOpen: false, proven: false });
+        if (intent === "repair") return Object.assign({}, s, { portal: "pnm", registerOpen: false, proven: false, brokenOnly: true,
+          fields: s.fields.map((f, i) => Object.assign({}, f, { broken: i < 2 })) });
+        if (intent === "prove") return Object.assign({}, s, { portal: "pnm", registerOpen: false, proven: false });
+        return Object.assign({}, s, { portal: "pnm", registerOpen: false, proven: false });
+      });
+      return hit ? Object.assign({}, t, { steps, open: true }) : t;
+    });
+  }
+  componentDidMount() {
+    const m = this.entryMode();
+    const intent = this.intentOf();
+    if (intent) {
+      const seeded = this.applyIntent(intent, this.seed());
+      this.setState({ mode: m === "new" ? "edit" : m, tasks: seeded, step: 2, intent,
+        b: Object.assign({}, this.state.b, { name: this.state.b.payer + " — Medicare Advantage enrollment" }) });
+      return;
+    }
+    if (m === "new") return;
+    // Draft resumes carry a saved name; an edit loads the published one.
+    const payer = this.state.b.payer;
+    // The fallback template's defining property is having NO payer.
+    if (m === "default") {
+      this.setState({ mode: m, b: Object.assign({}, this.state.b, { name: "General Enrollment", payer: "none", state: "", groups: [] }) });
+      return;
+    }
+    const name = m === "draft" ? (payer + " — Medicare Advantage enrollment (draft)") : (payer + " — Medicare Advantage enrollment");
+    this.setState({ mode: m, b: Object.assign({}, this.state.b, { name }) });
+  }
+  seed() {
+    return [
+      { id: this.nid(), title: "Verify provider is enrollment-ready", dueOffset: 0, execType: "Manual", description: "", steps: [] },
+      { id: this.nid(), title: "Submit enrollment via portal", dueOffset: 7, execType: "Auto-fill", description: "", steps: [
+        { id: this.nid(), instruction: "Complete the Banner PAR form in the portal", stepType: "Online form", portal: "pnm", turnaround: 30, followUp: 7,
+          fields: [
+            { id: this.nid(), label: "Provider NPI", source: "provider.npi", required: true, manualVal: "" },
+            { id: this.nid(), label: "CAQH ID", source: "provider.caqhId", required: true, manualVal: "" },
+            { id: this.nid(), label: "Requested effective date", source: "blank", required: false, manualVal: "" }
+          ],
+          artifacts: [ { id: this.nid(), name: "Submission confirmation PDF" } ] }
+      ] }
+    ];
+  }
+  // Mirrors TemplateWizard.tsx initial-state precedence: draft → initial (edit)
+  // → prefill (URL) → default. Three real entry modes, not two.
+  entryMode() {
+    let h = "";
+    try { h = (location.hash || "").toLowerCase(); } catch (e) {}
+    if (h.indexOf("default") !== -1) return "default";
+    if (h.indexOf("draft") !== -1) return "draft";
+    if (h.indexOf("edit") !== -1) return "edit";
+    return "new";
+  }
+  // The fallback template is payerless, so it cannot reuse the payer-scoped
+  // seed (Banner PAR copy, a `pnm` portal the payerless form can't select).
+  seedDefault() {
+    return [
+      { id: this.nid(), title: "Confirm the provider is enrollment-ready", dueOffset: 0, execType: "Manual", description: "", steps: [] },
+      { id: this.nid(), title: "Complete the payer's enrollment application", dueOffset: 7, execType: "Manual", description: "", steps: [] },
+      { id: this.nid(), title: "Submit and capture the confirmation", dueOffset: 10, execType: "Manual", description: "", steps: [] },
+      { id: this.nid(), title: "Record the approved effective date", dueOffset: 30, execType: "Manual", description: "", steps: [] }
+    ];
+  }
+  tasks() {
+    if (this.state.tasks) return this.state.tasks;
+    const m = this.entryMode();
+    this.state.tasks = m === "new" ? [] : m === "default" ? this.seedDefault() : this.seed();
+    return this.state.tasks;
+  }
+  commit(list) { this.setState({ tasks: list }); }
+  mapTask(fn) { this.commit(this.tasks().map(fn)); }
+  mapStep(tid, fn) { this.commit(this.tasks().map((t) => t.id !== +tid ? t : Object.assign({}, t, { steps: t.steps.map(fn) }))); }
+  mapField(tid, sid, fn) { this.mapStep(tid, (s) => s.id !== +sid ? s : Object.assign({}, s, { fields: s.fields.map(fn) })); }
+  srcOf(v) { for (const g of this.SGROUPS) { const f = g.items.find((i) => i.value === v); if (f) return f; } return { sample: "" }; }
+  // A portal belongs to a payer, so only this payer's registered portals are
+  // selectable — another payer's portal can never fill this form.
+  PORTALS = [
+    { value: "pnm", label: "Banner PNM enrollment", payer: "Banner Health Plans", state: "Proven" },
+    { value: "banner_par", label: "Banner PAR roster form", payer: "Banner Health Plans", state: "Registered" },
+    { value: "availity", label: "Availity — Aetna enrollment", payer: "Aetna (CVS Health)", state: "Proven" },
+    { value: "aetna_par", label: "Aetna PAR update", payer: "Aetna (CVS Health)", state: "Registered" },
+    { value: "optum", label: "Optum — UHC enrollment", payer: "UnitedHealthcare", state: "Proven" }
+  ];
+  // Execution type is captured configuration — only "Auto-fill" changes anything
+  // today: it is what makes this payer's form readiness apply.
+  EXEC_HINTS = {
+    "Manual": "A specialist works this task by hand.",
+    "Auto-fill": "This task's form is filled automatically — what makes form setup and readiness apply to this payer.",
+    "Auto verify": "Reserved for automated verification. Recorded now, no effect yet."
+  };
+  // Steps live inside their task now, so the view models are built per task.
+  stepVMs(t) {
+    return t.steps.map((s, j) => {
+      const isOF = s.stepType === "Online form";
+      const portalState = s.portalState || (s.portal ? "mapped" : "none");
+      return {
+        sid: s.id, n: j + 1, instruction: s.instruction, stepType: s.stepType, isOnlineForm: isOF,
+        isDraftEmail: s.stepType === "Draft email", subject: s.subject || "", body: s.body || "",
+        portal: s.portal, turnaround: s.turnaround, followUp: s.followUp,
+        needsPortal: isOF && !s.portal,
+        needsCapture: isOF && !!s.portal && s.fields.length === 0,
+        canProve: isOF && !!s.portal && s.fields.length > 0,
+        proven: !!s.proven,
+        proveLabel: s.proven ? "Form proven" : "Run dry run",
+        registerOpen: !!s.registerOpen,
+        proveHint: s.proven
+          ? "Every field on this form knows what fills it. Nothing was submitted."
+          : "Fills the form with fake sample data to check every field knows what fills it. Nothing is submitted, and no provider data is used.",
+        proveBg: s.proven ? "#E7F5EF" : "#FFFFFF",
+        proveColor: s.proven ? "#047857" : "#1F2937",
+        proveBorder: s.proven ? "#CDE7DA" : "#E8E5E0",
+        upColor: j === 0 ? "#D5D8D2" : "#9CA3AF", downColor: j === t.steps.length - 1 ? "#D5D8D2" : "#9CA3AF",
+        quickAdd: this.QUICK,
+        fieldLabel: s.fields.length === 1 ? "1 field" : s.fields.length + " fields",
+        noFields: s.fields.length === 0, hasFields: s.fields.length > 0,
+        brokenCount: s.fields.filter((f) => f.broken).length,
+        hasBroken: s.fields.some((f) => f.broken),
+        fields: s.fields.map((f) => ({
+          fid: f.id, label: f.label, source: f.source, required: f.required, manualVal: f.manualVal || "",
+          broken: !!f.broken, rowBg: f.broken ? "#FDF9F8" : "transparent",
+          isManual: f.source === "manual",
+          showSample: f.source !== "manual" && f.source !== "blank",
+          sample: this.srcOf(f.source).sample
+        })),
+        artifacts: s.artifacts.map((a) => ({ aid: a.id, name: a.name }))
+      };
+    });
+  }
+  renderVals() {
+    const step = this.state.step, tasks = this.tasks(), b = this.state.b;
+    const mode = this.state.mode || "new";
+    const intent = this.state.intent || "";
+    const INTENT_BANNER = {
+      register: { title: "Register the portal this step fills", body: "This step fills an online form, but no portal is linked yet." },
+      capture: { title: "Waiting on field capture", body: "The portal is registered, but no fields have been captured from it yet." },
+      train: { title: "Map the captured fields", body: "Decide what fills each captured field, then check coverage." },
+      repair: { title: "Repair broken mappings", body: "The portal changed and some fields no longer match. Re-map them, then re-check coverage." },
+      prove: { title: "Check field coverage", body: "Every captured field is mapped. Run the check to prove the form." }
+    };
+    // The banner describes a condition, so it must be derived from live step
+    // state — it disappears the moment the work it points at is done.
+    let ofStep = null;
+    tasks.forEach((t) => t.steps.forEach((s) => { if (!ofStep && s.stepType === "Online form") ofStep = s; }));
+    const stillTrue = (k) => {
+      if (!ofStep) return false;
+      const fieldCount = ofStep.fields.length;
+      if (k === "register") return !ofStep.portal;
+      if (k === "capture") return !!ofStep.portal && fieldCount === 0;
+      if (k === "repair") return ofStep.fields.some((f) => f.broken);
+      if (k === "train" || k === "prove") return !!ofStep.portal && fieldCount > 0 && !ofStep.proven;
+      return false;
+    };
+    const banner = (intent && step === 2 && stillTrue(intent)) ? INTENT_BANNER[intent] : null;
+    const isDefault = mode === "default";
+    const isEdit = mode === "edit" || isDefault;
+    const isDraft = mode === "draft";
+    // Templates authored from a payer are ALWAYS global tier — org overrides are
+    // a separate concern and the readiness funnel ignores them. Group sets only
+    // group_id, choosing between two real pickTemplate rungs:
+    // global + exact group  →  global + any group.
+    // Real deployments run 60+ groups across many orgs, so groups are listed
+    // Org — Group in a searchable checkbox menu rather than a chip row.
+    const GROUPS = [
+      { id: "ycpt", org: "New Org Workflow", name: "YC PT", state: "CO" },
+      { id: "ycot", org: "New Org Workflow", name: "YC OT", state: "CO" },
+      { id: "ycslp", org: "New Org Workflow", name: "YC Speech", state: "AZ" },
+      { id: "bsm", org: "Summit Rehab Group", name: "Boulder Sports Med", state: "CO" },
+      { id: "lwpt", org: "Summit Rehab Group", name: "Lakewood PT", state: "CO" },
+      { id: "ftc", org: "Summit Rehab Group", name: "Fort Collins OT", state: "AZ" },
+      { id: "dsr", org: "Front Range Health", name: "Denver Sports Rehab", state: "AZ" },
+      { id: "wmpt", org: "Front Range Health", name: "Westminster PT", state: "LA" }
+    ];
+    // The match key is payer + state + group, so only groups operating in the
+    // chosen state can be selected. Changing state drops now-invalid picks.
+    const allStates = b.state === "all";
+    const inState = GROUPS.filter((g) => !b.state || allStates || g.state === b.state);
+    const validIds = inState.map((g) => g.id);
+    const picked = (this.state.b.groups || []).filter((id) => validIds.indexOf(id) !== -1);
+    const groupAny = picked.length === 0;
+    const box = (on) => ({
+      on: on ? "true" : "false",
+      rowBg: on ? "#F7FAF8" : "transparent",
+      boxBg: on ? "#1B4D3E" : "#FFFFFF", boxBorder: on ? "#1B4D3E" : "#C9C5BE"
+    });
+    const allGroups = box(groupAny);
+    const gq = (this.state.groupQuery || "").trim().toLowerCase();
+    const visible = inState.filter((g) => !gq || (g.org + " " + g.name).toLowerCase().indexOf(gq) !== -1);
+    const orgSections = [];
+    visible.forEach((g) => {
+      let sec = orgSections.find((s) => s.org === g.org);
+      if (!sec) { sec = { org: g.org, items: [] }; orgSections.push(sec); }
+      sec.items.push(Object.assign({ id: g.id, name: g.name }, box(picked.indexOf(g.id) !== -1)));
+    });
+    const pickedGroups = inState.filter((g) => picked.indexOf(g.id) !== -1);
+    const pickedLabels = pickedGroups.map((g) => g.org + " — " + g.name);
+    const stName = allStates ? "all states" : (b.state || "any state");
+    const payerPortals = this.PORTALS.filter((p) => p.payer === b.payer);
+    const portalOptions = payerPortals.map((p) => ({ value: p.value, label: p.label + " · " + p.state }));
+    const groupValueLabel = groupAny ? ("All groups in " + stName) : pickedLabels.join(", ");
+    const groupHint = groupAny
+      ? (allStates
+          ? "Broadest match — every state and every group under this payer. Any narrower template wins over this one."
+          : "Applies to every group operating in " + stName + " under this payer.")
+      : "Applies to " + pickedGroups.length + (pickedGroups.length === 1 ? " group" : " groups") + " — and wins over the all-groups template. Publishes one template per group, kept in sync.";
+    const stepDefs = [ [1, "Basics"], [2, "Tasks & steps"], [3, "Review"] ];
+    const steps = stepDefs.map(([n, label], i) => {
+      const on = n === step;
+      return { n, label, selected: on ? "true" : "false", sep: i < stepDefs.length - 1,
+        bg: on ? "#1B4D3E" : "#FFFFFF", color: on ? "#FFFFFF" : "#6B7280", border: on ? "#1B4D3E" : "#E8E5E0",
+        dotBg: on ? "rgba(255,255,255,.22)" : "#F1F1EF", dotColor: on ? "#FFFFFF" : "#9CA3AF" };
+    });
+    const attrDefs = [ ["caqhId", "CAQH ID"], ["caqhAttest", "CAQH attestation on file"], ["npi", "NPI"], ["dob", "Date of birth"], ["ssn", "SSN (last 4)"], ["malpractice", "Malpractice coverage"] ];
+    const attrs = attrDefs.map(([key, label]) => ({ key, label, on: this.state.attrs[key] }));
+
+    const taskCards = tasks.map((t, i) => ({
+      tid: t.id, n: i + 1, title: t.title, dueOffset: t.dueOffset, execType: t.execType, description: t.description,
+      titleOr: t.title || "Untitled task", noSteps: t.steps.length === 0, steps: this.stepVMs(t),
+      execHint: this.EXEC_HINTS[t.execType] || "",
+      stepLabel: t.steps.length === 1 ? "1 step" : t.steps.length + " steps",
+      upColor: i === 0 ? "#D5D8D2" : "#9CA3AF", downColor: i === tasks.length - 1 ? "#D5D8D2" : "#9CA3AF"
+    }));
+
+
+
+    const stateLabel = allStates ? "All states" : (b.state || "— not set");
+
+    const onAttrs = attrs.filter((a) => a.on).map((a) => a.label).join(", ") || "None";
+    const reviewTasks = tasks.map((t, i) => ({
+      n: i + 1, title: t.title || "Untitled task",
+      meta: (t.execType) + " · due +" + t.dueOffset + "d · " + (t.steps.length === 1 ? "1 step" : t.steps.length + " steps"),
+      steps: t.steps.map((s, j) => ({ n: j + 1, instruction: s.instruction || "Untitled step", stepType: s.stepType, fieldMeta: s.stepType === "Online form" ? (s.fields.length + " fields") : "" }))
+    }));
+
+    return {
+      steps, isStep1: step === 1, isStep2: step === 2, isStep3: step === 3,
+      b, attrs, taskCards, sourceGroups: this.SGROUPS,
+      portalOptions, noPayerPortals: payerPortals.length === 0,
+      hasBanner: !!banner, bannerTitle: banner ? banner.title : "", bannerBody: banner ? banner.body : "",
+      noTasks: tasks.length === 0,
+      notLast: step < 3, isLast: step === 3,
+      backStyle: step === 1 ? "opacity:.45;pointer-events:none" : "",
+      reviewState: stateLabel, reviewAttrs: onAttrs,
+      reviewTasks, reviewTaskLabel: tasks.length === 1 ? "1 task" : tasks.length + " tasks",
+      published: this.state.published,
+      isGlobal: true, groupHint, allGroups, orgSections,
+      allGroupsLabel: allStates ? "All groups, all states" : ("All groups in " + stName),
+      groupsWhenAllStates: allStates && !groupAny,
+      groupValueLabel, groupValueColor: groupAny ? "#6B7280" : "#1F2937",
+      hasPicked: !groupAny, pickedCount: picked.length,
+      groupMenuOpen: !!this.state.groupMenu,
+      groupFieldBorder: this.state.groupMenu ? "#1B4D3E" : "#E8E5E0",
+      groupQuery: this.state.groupQuery || "",
+      noGroupMatches: visible.length === 0,
+      groupFooter: groupAny ? (inState.length + " groups in " + stName) : (picked.length + " of " + inState.length + " selected"),
+      tierLabel: groupAny ? ("All groups in " + stName) : pickedLabels.join(", "),
+      toggleGroupMenu: () => this.setState({ groupMenu: !this.state.groupMenu }),
+      closeGroupMenu: () => this.setState({ groupMenu: false, groupQuery: "" }),
+      setGroupQuery: (e) => this.setState({ groupQuery: e.target.value }),
+      toggleGroup: (e) => {
+        const id = e.currentTarget.getAttribute("data-gid");
+        const cur = this.state.b.groups || [];
+        const next = id === "all" ? [] : (cur.indexOf(id) !== -1 ? cur.filter((x) => x !== id) : cur.concat([id]));
+        this.setState({ b: Object.assign({}, this.state.b, { groups: next }) });
+      },
+      isDraft,
+      isDefault, notDefault: !isDefault,
+      versionN: 3, nextVersionN: 4,
+      historyOpen: !!this.state.history,
+      toggleHistory: () => this.setState({ history: !this.state.history }),
+      versions: [
+        { n: 3, current: true, notCurrent: false, when: "Jul 18, 2026", who: "Sowmya", note: "Added the PAR roster step and its portal form." },
+        { n: 2, current: false, notCurrent: true, when: "Jun 30, 2026", who: "Sowmya", note: "Split CO and AZ into separate tasks." },
+        { n: 1, current: false, notCurrent: true, when: "Jun 12, 2026", who: "Devin", note: "First published version." }
+      ],
+      reviewKeyLabel: isDefault ? "Applies to" : "Match key",
+      // The default template is global — it belongs to no payer, so it exits to
+      // Payer Setup and shows no payer breadcrumb.
+      exitHref: isDefault ? "1 - Payer Setup.dc.html" : "3 - Payer Detail.dc.html",
+      hasPayerCrumb: !isDefault, crumbPayer: b.payer,
+      payerFixedLabel: isDefault ? "Every payer (default template)" : b.payer,
+      pageTitle: isDefault ? "Edit default template" : isEdit ? "Edit template" : isDraft ? "Resume draft" : "New template",
+      publishLabel: isEdit ? "Save changes" : "Publish template",
+      publishedTitle: isEdit ? "Changes saved" : "Template published",
+      publishedMsg: isDefault ? "Your changes to the default template are live. Every organization inherits it wherever no payer template matches." : isEdit ? "Your changes to this template are live. Cases generated from it will use the updated tasks and fields." : "Banner Health Plans now has a published template. Next: register the portal form so it can reach “ready for business.”",
+      goStep: (e) => this.setState({ step: +e.currentTarget.getAttribute("data-step") }),
+      openRegister: (e) => { const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== sid ? s : Object.assign({}, s, { registerOpen: true })); },
+      closeRegister: (e) => { const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== sid ? s : Object.assign({}, s, { registerOpen: false })); },
+      saveRegister: (e) => { const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== sid ? s : Object.assign({}, s, { registerOpen: false, portal: "pnm", fields: [], proven: false })); },
+      mockCapture: (e) => { const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== sid ? s : Object.assign({}, s, { fields: [
+        { id: this.nid(), label: "Provider NPI", source: "provider.npi", required: true, manualVal: "" },
+        { id: this.nid(), label: "CAQH ID", source: "provider.caqhId", required: true, manualVal: "" },
+        { id: this.nid(), label: "Requested effective date", source: "blank", required: false, manualVal: "" }
+      ] })); },
+      runDry: (e) => { const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== sid ? s : Object.assign({}, s, { proven: !s.proven })); },
+      next: () => this.setState({ step: Math.min(3, step + 1) }),
+      back: () => this.setState({ step: Math.max(1, step - 1) }),
+      setName: (e) => this.setState({ b: Object.assign({}, b, { name: e.target.value }) }),
+      setState: (e) => this.setState({ b: Object.assign({}, b, { state: e.target.value, groups: [] }) }),
+
+      toggleAttr: (e) => { const k = e.currentTarget.getAttribute("data-key"); this.setState({ attrs: Object.assign({}, this.state.attrs, { [k]: e.target.checked }) }); },
+      addTask: () => this.commit(tasks.concat([{ id: this.nid(), title: "", dueOffset: 0, execType: "Manual", description: "", steps: [] }])),
+      prefillTasks: () => this.commit(this.seed()),
+      removeTask: (e) => this.commit(tasks.filter((t) => t.id !== +e.currentTarget.getAttribute("data-tid"))),
+      setTaskTitle: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); this.mapTask((t) => t.id !== id ? t : Object.assign({}, t, { title: e.target.value })); },
+      setTaskOffset: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); const v = e.target.value; this.mapTask((t) => t.id !== id ? t : Object.assign({}, t, { dueOffset: v })); },
+      setTaskExec: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); const v = e.target.value; this.mapTask((t) => t.id !== id ? t : Object.assign({}, t, { execType: v })); },
+      setTaskDesc: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); const v = e.target.value; this.mapTask((t) => t.id !== id ? t : Object.assign({}, t, { description: v })); },
+      taskUp: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); const a = tasks.slice(); const i = a.findIndex((t) => t.id === id); if (i > 0) { const tmp = a[i - 1]; a[i - 1] = a[i]; a[i] = tmp; this.commit(a); } },
+      taskDown: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); const a = tasks.slice(); const i = a.findIndex((t) => t.id === id); if (i < a.length - 1) { const tmp = a[i + 1]; a[i + 1] = a[i]; a[i] = tmp; this.commit(a); } },
+      addStep: (e) => { const id = +e.currentTarget.getAttribute("data-tid"); this.mapTask((t) => t.id !== id ? t : Object.assign({}, t, { steps: t.steps.concat([{ id: this.nid(), instruction: "", stepType: "Online form", portal: "availity", turnaround: "", followUp: "", subject: "", body: "", fields: [], artifacts: [] }]) })); },
+      removeStep: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); this.mapTask((t) => t.id !== +tid ? t : Object.assign({}, t, { steps: t.steps.filter((s) => s.id !== sid) })); },
+      setStepInstr: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { instruction: v })); },
+      setStepType: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { stepType: v })); },
+      setStepPortal: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { portal: v })); },
+      setStepTurn: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { turnaround: v })); },
+      setStepFollow: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { followUp: v })); },
+      setStepSubject: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { subject: v })); },
+      setStepBody: (e) => { const v = e.target.value; this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { body: v })); },
+      insertToken: (e) => { const tok = e.currentTarget.getAttribute("data-token"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { body: (s.body || "") + ((s.body && !/\s$/.test(s.body)) ? " " : "") + "{{ " + tok + " }}" })); },
+      insertTokenSel: (e) => {
+        const tok = e.target.value; if (!tok) return;
+        const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid");
+        const token = "{{ " + tok + " }}";
+        let el = null; try { el = document.querySelector('textarea[data-body="' + sid + '"]'); } catch (x) {}
+        let caret = null;
+        this.mapStep(tid, (s) => {
+          if (s.id !== sid) return s;
+          const body = s.body || "";
+          let start = body.length, end = body.length;
+          if (el && typeof el.selectionStart === "number") { start = el.selectionStart; end = el.selectionEnd; }
+          caret = start + token.length;
+          return Object.assign({}, s, { body: body.slice(0, start) + token + body.slice(end) });
+        });
+        if (el && caret != null) setTimeout(() => { try { el.focus(); el.setSelectionRange(caret, caret); } catch (x) {} }, 0);
+        e.target.value = "";
+      },
+      stepUp: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); this.mapTask((t) => { if (t.id !== +tid) return t; const a = t.steps.slice(); const i = a.findIndex((s) => s.id === sid); if (i > 0) { const tmp = a[i - 1]; a[i - 1] = a[i]; a[i] = tmp; } return Object.assign({}, t, { steps: a }); }); },
+      stepDown: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); this.mapTask((t) => { if (t.id !== +tid) return t; const a = t.steps.slice(); const i = a.findIndex((s) => s.id === sid); if (i < a.length - 1) { const tmp = a[i + 1]; a[i + 1] = a[i]; a[i] = tmp; } return Object.assign({}, t, { steps: a }); }); },
+      addField: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(tid, (s) => s.id !== sid ? s : Object.assign({}, s, { fields: s.fields.concat([{ id: this.nid(), label: "", source: "blank", required: false, manualVal: "" }]) })); },
+      addQuickField: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); const chip = e.currentTarget.getAttribute("data-chip"); const q = this.QUICK.find((x) => x.key === chip); this.mapStep(tid, (s) => s.id !== sid ? s : Object.assign({}, s, { fields: s.fields.concat([Object.assign({ id: this.nid(), manualVal: "" }, q.field)]) })); },
+      removeField: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); const fid = +e.currentTarget.getAttribute("data-fid"); this.mapStep(tid, (s) => s.id !== sid ? s : Object.assign({}, s, { fields: s.fields.filter((f) => f.id !== fid) })); },
+      setFieldLabel: (e) => { const v = e.target.value; this.mapField(e.currentTarget.getAttribute("data-tid"), e.currentTarget.getAttribute("data-sid"), (f) => f.id !== +e.currentTarget.getAttribute("data-fid") ? f : Object.assign({}, f, { label: v })); },
+      setFieldSource: (e) => { const v = e.target.value; this.mapField(e.currentTarget.getAttribute("data-tid"), e.currentTarget.getAttribute("data-sid"), (f) => f.id !== +e.currentTarget.getAttribute("data-fid") ? f : Object.assign({}, f, { source: v })); },
+      setFieldManual: (e) => { const v = e.target.value; this.mapField(e.currentTarget.getAttribute("data-tid"), e.currentTarget.getAttribute("data-sid"), (f) => f.id !== +e.currentTarget.getAttribute("data-fid") ? f : Object.assign({}, f, { manualVal: v })); },
+      toggleFieldReq: (e) => { const c = e.target.checked; this.mapField(e.currentTarget.getAttribute("data-tid"), e.currentTarget.getAttribute("data-sid"), (f) => f.id !== +e.currentTarget.getAttribute("data-fid") ? f : Object.assign({}, f, { required: c })); },
+      addArtifact: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); this.mapStep(tid, (s) => s.id !== sid ? s : Object.assign({}, s, { artifacts: s.artifacts.concat([{ id: this.nid(), name: "" }]) })); },
+      removeArtifact: (e) => { const tid = e.currentTarget.getAttribute("data-tid"); const sid = +e.currentTarget.getAttribute("data-sid"); const aid = +e.currentTarget.getAttribute("data-aid"); this.mapStep(tid, (s) => s.id !== sid ? s : Object.assign({}, s, { artifacts: s.artifacts.filter((a) => a.id !== aid) })); },
+      setArtifact: (e) => { const v = e.target.value; const aid = +e.currentTarget.getAttribute("data-aid"); this.mapStep(e.currentTarget.getAttribute("data-tid"), (s) => s.id !== +e.currentTarget.getAttribute("data-sid") ? s : Object.assign({}, s, { artifacts: s.artifacts.map((a) => a.id !== aid ? a : Object.assign({}, a, { name: v })) })); },
+      publish: () => this.setState({ published: true }),
+      dismiss: () => this.setState({ published: false })
+    };
+  }
+}
+</script>
+</body>
+</html>
