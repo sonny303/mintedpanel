@@ -684,7 +684,14 @@ test("TS-89: the expiring-credentials table sorts by expiration with derived sta
   await expect(card.getByRole("link", { name: /Fix.*COI/ })).toHaveCount(0);
 });
 
-test("TS-90: case detail derives required-document status live and downloads the current version via a short-lived signed URL", async ({
+// TS-90 (Slice E retarget, payer-and-cases screen 6 / handoff §2.7): the
+// required-documents card is REMOVED from case detail — documents are not a
+// product capability there, per the product owner, and the E4.5 surface is out
+// of the design rather than relocated. What the epic actually needs pinned is
+// the audited short-lived signed download, so this test now asserts the
+// removal on the case screen AND exercises the same download endpoint from the
+// provider record's Documents tab, where document work lives.
+test("TS-90: case detail renders no required-documents card; the current version downloads via a short-lived signed URL from the provider record", async ({
   context,
   page,
 }) => {
@@ -776,28 +783,25 @@ test("TS-90: case detail derives required-document status live and downloads the
   });
   const rec = await mountAll(context, fixtures);
 
+  // The case screen carries NO document surface — the task's requiredArtifacts
+  // are still authored data, they simply raise no card here anymore.
   await page.goto(`/cases/${CASE_ID}`);
-  const panel = page.locator("section", { hasText: "Required documents" }).last();
-  await expect(panel).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("button", { name: "Update status" })).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText("Required documents")).toHaveCount(0);
+  await expect(page.getByText("Submission confirmation PDF")).toHaveCount(0);
 
-  // Derived live from the store: present / expired / missing; the free-form
-  // artifact name never becomes a document requirement.
-  await expect(panel).toContainText("1 of 3 ready");
-  const licenseRow = panel.locator("li", { hasText: "State License" });
-  await expect(licenseRow).toContainText("Present");
-  const coiRow = panel.locator("li", { hasText: "COI" });
-  await expect(coiRow).toContainText("Expired");
-  const w9Row = panel.locator("li", { hasText: "W-9" });
-  await expect(w9Row).toContainText("Missing");
-  await expect(panel).not.toContainText("Submission confirmation PDF");
+  // The provider record is where documents live: one-click download of the
+  // current version rides the audited signed-URL endpoint (short-lived by
+  // contract) — the D3 interim path the extension consumes later.
+  await page.goto(`/providers/${PROVIDER_ID}`);
+  await page.getByRole("tab", { name: "Documents" }).click();
+  const panel = page.locator("section", { hasText: "Documents" }).last();
+  const licenseRow = panel.locator("tr", { hasText: "State License" });
+  await expect(licenseRow).toBeVisible({ timeout: 30000 });
 
-  // One-click download of the current version rides the audited signed-URL
-  // endpoint (short-lived by contract).
   const popupPromise = page.waitForEvent("popup");
-  await licenseRow.getByRole("button", { name: "Download license.pdf" }).click();
+  await licenseRow.getByRole("button", { name: /Download/ }).click();
   await popupPromise;
   const download = rec.apiCalls.find((c) => c.path.endsWith("/doc-lic/download"));
   expect(download).toBeTruthy();
-  // The missing W-9 offers no download.
-  await expect(w9Row.getByRole("button", { name: /Download/ })).toHaveCount(0);
 });
