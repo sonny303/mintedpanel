@@ -1,5 +1,15 @@
 # Payer catalog reference data (E1.6 prep — built without the Stedi API)
 
+> **FROZEN (E6.7 F6.7.4, 2026-07-27).** This dataset is no longer synced into
+> the application: the seed pipeline (`scripts/payer-catalog-sync.mjs`) was
+> retired with the catalog-sync retirement, `payer_catalog_changes` is
+> dormant, and `payers.payer_slug` / `payers.last_synced_at` are deprecated
+> in place (stop-write). New payers are entered manually through the
+> `create_payer` / `update_payer` RPCs; the 269 already-seeded global rows
+> remain live and power the duplicate guard. The CSVs below are kept as the
+> historical reference snapshot (2026-07-12) only — the quarterly refresh
+> process described later in this file no longer runs.
+
 Compiled 2026-07-12 on PM direction: gather the identity data the Stedi payer
 directory would have provided (E1.6 F1.6.2) ourselves, plus the market and
 MSO context a robust payer-selection table needs. This dataset is the
@@ -104,7 +114,7 @@ before acting on them.
   build that map from each MAC's payer list when it's needed; it is not
   reproduced here.
 
-## Refresh process (replaces the F1.6.2 Stedi sync)
+## Refresh process (RETIRED — historical; see the freeze banner above)
 
 Quarterly + on-demand, matching the epic's locked cadence: re-verify the
 volatile layers (Medicaid MCO contract lineups, TRICARE regions, M&A,

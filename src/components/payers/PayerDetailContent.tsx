@@ -227,10 +227,9 @@ export function PayerDetailContent({ payerId }: { payerId: string }) {
       <SectionCard title="Identity">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
           <Fact label="Catalog key" value={payer.payerSlug || "—"} />
-          <Fact
-            label="Avg decision"
-            value={payer.avgDecisionDays != null ? `${payer.avgDecisionDays} days` : "—"}
-          />
+          {/* E6.7 F6.7.5: stored avg_decision_days is no longer rendered — the
+              sync that curated it retired; a derived replacement (median
+              created→approved from case outcomes) is logged in TECH-DEBT.md. */}
           {/* 2026-07-20 re-scope: what this payer calls its payer-issued
               enrollment ID — a Minted-curated payer-definition fact (the
               per-org override table is retired). Issued VALUES are captured

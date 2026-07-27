@@ -525,8 +525,10 @@ active|merged|retired`, `aliases text[]`, `states text[]`, `payer_slug` +
   fallback ONLY to backfill slugless legacy rows; changed fields become diff
   rows, NEVER overwrites; disappeared payers reported only) → emits
   idempotent SQL (`ON CONFLICT (payer_slug)`). **All 270 entities are seeded
-  on hosted with slugs**; live TS-37 re-plan = 0 inserts / 0 diffs. Runbook
-  in the script header; quarterly manual refresh per the dataset README.
+  on hosted with slugs**; live TS-37 re-plan = 0 inserts / 0 diffs.
+  (**RETIRED by E6.7 PR 2** — the script, its `.d.mts`, and
+  `payerCatalogSync.test.ts` are deleted and the dataset README is frozen;
+  this paragraph is history.)
   **App layer:** `Payer` type widened additively (`PayerKind`, catalog
   fields optional incl. `payerSlug`) + `PayerCatalogChange`; cross-org keys
   `payerCatalog()`/`payerCatalogChanges()`; `src/services/payerCatalog.ts`
@@ -2108,8 +2110,28 @@ states`/`_payer_norm_aliases`/`_payer_assert_name_available` (no client
   `PayerSource`/`PayerContactPurpose` added. `payerGovernance.test.ts`
   re-anchored: payer writes are RPC-ONLY at the service boundary, the enabler
   migration never re-grants table DML, payer_contacts is client-SELECT-only,
-  and `delegation_note`'s single writer is the payers RPC seam. PR 2 (sync
-  retirement + avg_decision_days stop-render) follows separately.
+  and `delegation_note`'s single writer is the payers RPC seam.
+
+- **E6.7 PR 2 — Catalog Sync Retirement (CLOSES E6.7; no migration, no
+  schema change).** **F6.7.4:** the F1.6.2 seed pipeline is GONE —
+  `scripts/payer-catalog-sync.mjs` + `payer-catalog-sync.d.mts` +
+  `src/lib/payerCatalogSync.test.ts` deleted; the reference dataset
+  `docs/redesign/data/payer-catalog/` is FROZEN (README banner — the
+  quarterly refresh no longer runs; the CSVs stay as the 2026-07-12
+  historical snapshot). Register/SCHEMA rows updated: `payers.payer_slug` +
+  `last_synced_at` are deprecated in place (stop-write — manual rows already
+  write them NULL; seeded values retained per the additive rule);
+  `payer_catalog_changes` is DORMANT (its only diff writer was the sync;
+  table + platform-only review RPC kept). New payers are manual-only via the
+  PR 1 `create_payer`/`update_payer` RPCs. **F6.7.5:** stored
+  `payers.avg_decision_days` lost its only writer with the sync, so the UI
+  stopped rendering it — `PayerDetailContent` dropped the "Avg decision"
+  fact and the reports `SummaryTab` dropped the Expected/Variance columns
+  (its "Avg days to approval by payer" table + CSV are now purely the
+  OBSERVED per-case computation). Column + `Payer.avgDecisionDays` stay
+  (additive rule). TECH-DEBT gained TD-45 (derive decision-days = median
+  created→approved from case outcomes) and TD-46 (admin merge UI when
+  manual-payer duplicate volume justifies it).
 
 ## What this is
 
