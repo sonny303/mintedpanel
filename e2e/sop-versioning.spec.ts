@@ -1,6 +1,7 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E1.7b — SOP-as-Data over the mock harness (TS-45/46/47 UI slices):
+// E1.7b — SOP-as-Data over the mock harness (TS-45/46/47 UI slices), extended
+// by slice F (payer-and-cases screen 4 — Template Editor):
 //   TS-45  publish creates version N+1 through the publish RPC (payload
 //          pinned: expected version + change note; the head update is never a
 //          plain PATCH), and History renders v1 unchanged as a read-only
@@ -8,8 +9,15 @@ import { test, expect, type Route } from "@playwright/test";
 //   TS-46  the extended step shape (phone/fax steps, turnaround/cadence,
 //          required artifacts, email tokens) authors and renders through the
 //          wizard without loss.
-//   TS-47  the seeded global fallback appears in the template list, labeled,
-//          and opens read-only (platform-managed) even for an admin.
+//   TS-47  (#edit-default, E6.7 unlock) the default template appears in the
+//          list labeled, opens CONTENT-EDITABLE with its match key locked
+//          (no payer/state/group pickers, no Archive/Duplicate), publishes
+//          through the same RPC, and exits to Payer Setup.
+//   Slice F versioning-lite: the header v-chip; History offers restore-as-new
+//          (an old version republishes as version N+1 — never edited in
+//          place); a readiness deep-link (?intent=) lands on Tasks & steps
+//          with a DERIVED context banner that disappears when the work is
+//          done, and the owning form panel mounts expanded.
 // Selection order itself (fallback only when both payer tiers miss) is pinned
 // by unit tests in src/lib/pickTemplate.test.ts.
 
@@ -100,7 +108,24 @@ const FIXTURES: Record<string, unknown[]> = {
   profiles: [{ id: USER_ID, full_name: "Sowmya Seed", email: "sowmya.seed@example.test" }],
   payers: [],
   provider_groups: [],
-  portals: [],
+  portals: [
+    // Slice F intent coverage: a registered portal the deep-linked step can be
+    // linked to (payerless, so the payer-agnostic Humana KS template offers it).
+    {
+      id: "55555555-5555-4555-8555-555555555551",
+      org_id: ORG_ID,
+      portal_key: "humana_portal",
+      name: "Humana provider portal",
+      payer_id: null,
+      form_url: "https://portal.example/humana",
+      is_verified: false,
+      last_verified_at: null,
+      proven_at: null,
+      url_changed_at: null,
+      created_at: "2026-07-01T00:00:00Z",
+      updated_at: "2026-07-01T00:00:00Z",
+    },
+  ],
   sop_templates: [
     {
       id: TEMPLATE_ID,
@@ -242,18 +267,83 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     await seedAuth(context);
   });
 
-  test("TS-47: the fallback is listed and labeled, and opens read-only", async ({ page }) => {
+  test("TS-47 (#edit-default): the default template is content-editable with its match key locked, and exits to Payer Setup", async ({
+    page,
+  }) => {
     await page.goto("/admin/templates");
     const fallbackRow = page.locator("tr", { hasText: "General Enrollment (fallback)" });
     await expect(fallbackRow).toBeVisible({ timeout: 30000 });
-    await expect(fallbackRow.getByText("Fallback — used when no payer SOP matches")).toBeVisible();
+    await expect(
+      fallbackRow.getByText("Default template — used when no payer template matches"),
+    ).toBeVisible();
 
     await page.goto(`/admin/templates/${FALLBACK_ID}`);
+    await expect(page.getByRole("heading", { name: "Edit default template" })).toBeVisible({
+      timeout: 30000,
+    });
     await expect(
-      page.getByText(/Generic fallback SOP — used when a case's payer and state/),
-    ).toBeVisible({ timeout: 30000 });
-    // Read-only: no Publish/Save footer button for a platform-managed row.
-    await expect(page.getByRole("button", { name: /Publish|Save match key/ })).toHaveCount(0);
+      page.getByText(/Default template — used whenever no payer template matches/),
+    ).toBeVisible();
+
+    // E6.7 unlock: CONTENT is editable — the name input takes edits and the
+    // footer carries Publish on Review.
+    const nameInput = page.locator("section input").first();
+    await expect(nameInput).toBeEnabled();
+
+    // The match key stays locked: the fixed "Applies to" line renders instead
+    // of payer/state/group pickers, and Archive/Duplicate are gone.
+    await expect(page.getByText("Every payer, state, and group")).toBeVisible();
+    await expect(page.locator("section").first().getByRole("combobox")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Archive" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Duplicate" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Review" }).click();
+    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+
+    // The default template belongs to no payer — it exits to Payer Setup.
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  });
+
+  test("TS-47 (#edit-default): default-template content publishes through the publish RPC", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/templates/${FALLBACK_ID}`);
+    await expect(page.getByRole("heading", { name: "Edit default template" })).toBeVisible({
+      timeout: 30000,
+    });
+
+    await page.getByRole("button", { name: "Tasks & steps" }).click();
+    await page.getByRole("button", { name: "Add task" }).click();
+    await page
+      .locator('div:has(> label:text-is("Task 1 title"))')
+      .first()
+      .locator("input")
+      .fill("Confirm the provider is enrollment-ready");
+    await page.getByRole("button", { name: "Add step" }).click();
+    await page
+      .locator('div:has(> label:text-is("Step 1 instruction"))')
+      .first()
+      .locator("textarea")
+      .fill("Check licenses and CAQH before starting");
+
+    await page.getByRole("button", { name: "Review" }).click();
+    await page.getByRole("button", { name: "Publish" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("Publish version 2");
+    // Blast-radius ack — the default template reaches every organization.
+    await expect(dialog).toContainText("Default template — high blast radius");
+    await dialog.getByRole("checkbox").click();
+    await page.getByPlaceholder("What changed and why").fill("Tighten the generic checklist");
+    await dialog.getByRole("button", { name: "Publish" }).click();
+
+    await expect(page.getByText("Published version 3")).toBeVisible({ timeout: 15000 });
+    expect(captured.body).toMatchObject({
+      p_template_id: FALLBACK_ID,
+      p_expected_version: 1,
+      p_change_note: "Tighten the generic checklist",
+    });
+    expect(captured.headPatches).toBe(0);
   });
 
   test("TS-45: history shows v1 unchanged as a read-only snapshot", async ({ page }) => {
@@ -309,5 +399,58 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     // The content publish never rides the plain head PATCH (TE-5: that path is
     // match-key-only).
     expect(captured.headPatches).toBe(0);
+  });
+
+  test("slice F versioning-lite: restore copies an old version forward as a NEW version via the publish RPC", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/templates/${TEMPLATE_ID}`);
+    await expect(page.getByRole("button", { name: "History" })).toBeVisible({ timeout: 30000 });
+    // The v-chip labels the working copy's version in the header.
+    await expect(page.getByText("v2", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "History" }).click();
+    const v1Row = page.getByRole("dialog").locator("tr", { hasText: "v1" });
+    await v1Row.getByRole("button", { name: "Restore as v3" }).click();
+
+    await expect(page.getByText("Restored v1 as v3")).toBeVisible({ timeout: 15000 });
+    // Restore = republish the OLD content as version N+1: the v1 task
+    // definitions ride the RPC verbatim under a provenance change note; the
+    // old version row itself is never edited.
+    expect(captured.body).toMatchObject({
+      p_template_id: TEMPLATE_ID,
+      p_expected_version: 2,
+      p_name: "Humana KS",
+      p_change_note: "Restored from v1",
+    });
+    const defs = (captured.body?.p_task_definitions ?? null) as Array<{ title?: string }> | null;
+    expect(defs?.[0]?.title).toBe("Facility roster update (out-of-network)");
+    expect(captured.headPatches).toBe(0);
+  });
+
+  test("slice F: a readiness deep-link lands on Tasks & steps with a DERIVED context banner and the form panel open", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/templates/${TEMPLATE_ID}?intent=register`);
+
+    // Lands directly on the merged step with the register-mode banner.
+    await expect(page.getByText("Register the portal this step fills")).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(
+      page.getByText("This step fills an online form, but no portal is linked yet."),
+    ).toBeVisible();
+
+    // The owning online-form step's panel mounts EXPANDED — its content shows
+    // without clicking "Form setup".
+    await expect(
+      page.getByText("Pick a portal above, or register a new one to link this step."),
+    ).toBeVisible();
+
+    // The banner is DERIVED from live step state: linking a portal completes
+    // the register work and the banner disappears — no dismissal needed.
+    await page.getByRole("combobox").filter({ hasText: "No portal (not linked)" }).first().click();
+    await page.getByRole("option", { name: "Humana provider portal" }).click();
+    await expect(page.getByText("Register the portal this step fills")).toHaveCount(0);
   });
 });

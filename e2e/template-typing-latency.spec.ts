@@ -196,7 +196,7 @@ test.describe("Template Wizard typing latency (measured hotfix)", () => {
   }) => {
     await page.goto(`/admin/templates/${TEMPLATE_ID}`);
     await expect(page.locator("section input").first()).toBeVisible({ timeout: 30000 });
-    await page.getByRole("button", { name: "Steps & fields" }).click();
+    await page.getByRole("button", { name: "Tasks & steps" }).click();
 
     // The field wrapper is the div whose DIRECT child is the "Subject" label.
     const subject = page.locator('div:has(> label:text-is("Subject"))').first().locator("input");

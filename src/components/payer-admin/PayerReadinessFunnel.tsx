@@ -14,7 +14,18 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
-import type { FunnelFormState, FunnelRow } from "@/lib/payerReadinessFunnel";
+import type { FunnelFormState, FunnelNextAction, FunnelRow } from "@/lib/payerReadinessFunnel";
+import type { TemplateEditorIntent } from "@/lib/templateEditorIntent";
+
+// Slice F — each form next-step deep-links the owning Template Editor INTO the
+// online-form mode that is due (?intent=), which lands on Tasks & steps with
+// the form panel expanded and a derived context banner.
+const NEXT_ACTION_INTENT: Partial<Record<FunnelNextAction, TemplateEditorIntent>> = {
+  register_portal: "register",
+  train_mappings: "train",
+  repair_drift: "repair",
+  run_dry_test: "prove",
+};
 
 const FORM_STATE_PILL: Record<FunnelFormState, { label: string; tone: StatusColor }> = {
   none: { label: "No portal", tone: "neutral" },
@@ -46,9 +57,14 @@ function NextStepCell({ row }: { row: FunnelRow }) {
               ? `Repair ${row.driftCount} broken mapping${row.driftCount === 1 ? "" : "s"}`
               : "Run mock dry test";
       if (!row.sopTemplateId) return <span className="text-[12.5px] text-gray-500">{label}</span>;
+      const intent = NEXT_ACTION_INTENT[row.nextAction];
       return (
         <Button asChild size="sm" variant="outline" className="h-7">
-          <Link to="/admin/templates/$id" params={{ id: row.sopTemplateId }}>
+          <Link
+            to="/admin/templates/$id"
+            params={{ id: row.sopTemplateId }}
+            search={intent ? { intent } : undefined}
+          >
             {label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
           </Link>
         </Button>

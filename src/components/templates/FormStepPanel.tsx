@@ -75,6 +75,10 @@ export interface FormStepPanelProps {
   canEdit: boolean;
   /** The template is a GLOBAL row — register/train against the global tier. */
   isGlobalAuthoring: boolean;
+  /** Slice F — a readiness deep-link (?intent=) lands on this step: mount the
+   * panel EXPANDED so the link lands on the work. Read once at mount; every
+   * other panel keeps the collapsed default (the latency contract). */
+  defaultOpen?: boolean;
   /** Writes the registered portal's key back onto the step. */
   onPortalKeyChange?: (portalKey: string) => void;
 }
@@ -86,9 +90,10 @@ export function FormStepPanel({
   templatePayerId,
   canEdit,
   isGlobalAuthoring,
+  defaultOpen,
   onPortalKeyChange,
 }: FormStepPanelProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
   const [running, setRunning] = useState(false);
 

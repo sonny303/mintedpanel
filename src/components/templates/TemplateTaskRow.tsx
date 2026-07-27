@@ -23,6 +23,12 @@ import {
   type EditableRecipient,
 } from "@/components/templates/editableTemplate";
 import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import {
+  EXECUTION_TYPES,
+  EXECUTION_TYPE_HINTS,
+  EXECUTION_TYPE_LABELS,
+  type ExecutionType,
+} from "@/lib/executionTypes";
 import { isValidEmail } from "@/lib/contactValidation";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
@@ -64,6 +70,9 @@ interface EditableTask {
   title: string;
   description: string;
   dueOffsetDays: number;
+  // E4.2 TE-12 — per-task execution type (edited here since the Slice F
+  // Tasks-&-steps merge folded the old Tasks step into this card).
+  executionType: ExecutionType;
   steps: EditableStep[];
 }
 
@@ -93,6 +102,8 @@ function appendToken(body: string, token: string): string {
 export interface TemplateTaskRowProps {
   task: EditableTask;
   taskIdx: number;
+  /** Total task count — disables the last card's move-down arrow. */
+  taskCount: number;
   canEdit: boolean;
   groupedTokens: TokenGroup[];
   // The org's portal registry + this template's selected payer, so an
@@ -102,11 +113,16 @@ export interface TemplateTaskRowProps {
   /** E6.5 F6.5.6 — the template is a GLOBAL row: the step's form machinery
    * registers/trains against the global tier. Primitive (memo-safe). */
   isGlobalAuthoring: boolean;
+  /** Slice F — the step a readiness deep-link (?intent=) landed on: that step's
+   * form panel mounts EXPANDED. Stable string (memo-safe); null = none. */
+  autoOpenStepId: string | null;
   dragTaskId: string | null;
   setDragTaskId: (v: string | null) => void;
   dragStep: DragStep | null;
   setDragStep: (v: DragStep | null) => void;
   reorderTasks: (fromId: string, toId: string) => void;
+  // E4.2 PM round-4 — keyboard-operable task reorder alongside drag.
+  moveTask: (index: number, delta: -1 | 1) => void;
   updateTask: (taskId: string, patch: Partial<EditableTask>) => void;
   removeTask: (taskId: string) => void;
   addStep: (taskId: string) => void;
@@ -129,16 +145,19 @@ export interface TemplateTaskRowProps {
 export const TemplateTaskRow = memo(function TemplateTaskRow({
   task,
   taskIdx,
+  taskCount,
   canEdit,
   groupedTokens,
   portals,
   isGlobalAuthoring,
   templatePayerId,
+  autoOpenStepId,
   dragTaskId,
   setDragTaskId,
   dragStep,
   setDragStep,
   reorderTasks,
+  moveTask,
   updateTask,
   removeTask,
   addStep,
@@ -163,7 +182,30 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
     >
       <div className="flex items-start gap-2 p-4 border-b border-[#E8E5E0]">
         {canEdit ? (
-          <GripVertical className="h-4 w-4 text-muted-foreground mt-2 cursor-grab" />
+          <div className="mt-1 flex flex-col items-center gap-0.5">
+            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+            {/* E4.2 PM round-4 — keyboard-operable task reorder alongside drag. */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              disabled={taskIdx === 0}
+              aria-label={`Move task ${taskIdx + 1} up`}
+              onClick={() => moveTask(taskIdx, -1)}
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              disabled={taskIdx === taskCount - 1}
+              aria-label={`Move task ${taskIdx + 1} down`}
+              onClick={() => moveTask(taskIdx, 1)}
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         ) : null}
         <div className="flex-1 grid grid-cols-[1fr_140px] gap-3">
           <div>
@@ -186,6 +228,30 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
               }
               disabled={!canEdit}
             />
+          </div>
+          <div>
+            {/* E4.2 TE-12 — execution type (captured configuration; only
+                Auto-fill drives form setup + readiness today). */}
+            <Label>Execution type</Label>
+            <Select
+              value={task.executionType}
+              onValueChange={(v) => updateTask(task.id, { executionType: v as ExecutionType })}
+              disabled={!canEdit}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EXECUTION_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {EXECUTION_TYPE_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {EXECUTION_TYPE_HINTS[task.executionType]}
+            </p>
           </div>
           <div className="col-span-2">
             <Label>Description</Label>
@@ -217,7 +283,9 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
           </div>
         ) : null}
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">SOP steps</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Steps in this task
+          </span>
           {canEdit ? (
             <Button size="sm" variant="outline" onClick={() => addStep(task.id)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -414,6 +482,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                           templatePayerId={templatePayerId}
                           canEdit={canEdit}
                           isGlobalAuthoring={isGlobalAuthoring}
+                          defaultOpen={autoOpenStepId === step.id}
                           onPortalKeyChange={(portalKey) =>
                             updateStep(task.id, step.id, { portalKey })
                           }

@@ -18,10 +18,10 @@ export interface OrgSopMatchKey {
  * and never validated here. */
 export function orgSopMatchKeyError(key: OrgSopMatchKey): string | null {
   if (!key.payerId) {
-    return "Select a payer — an organization SOP must target a specific payer.";
+    return "Select a payer — a template must target a specific payer.";
   }
   if (!key.state) {
-    return "Select a state — an organization SOP must target a specific state.";
+    return "Select a state — a template must target a specific state.";
   }
   return null;
 }

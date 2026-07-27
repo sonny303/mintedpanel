@@ -504,8 +504,11 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await newSopButton.click();
 
   // The wizard opens in GLOBAL mode with the shared-blast banner visible.
+  // Slice F: this entry carries NO payer context (Slice A retired the funnel's
+  // per-row author CTA), so Basics renders the payer PICKER — the fixed-payer
+  // display is the deep-linked-with-?payerId path.
   await expect(page).toHaveURL(/\/admin\/templates\/new\?.*tier=global/, { timeout: 30000 });
-  await expect(page.getByText(/Global SOP — authored once and inherited/i)).toBeVisible();
+  await expect(page.getByText(/Global template — authored once and inherited/i)).toBeVisible();
 
   await page
     .locator('div:has(> label:text-is("Template name"))')
@@ -518,15 +521,15 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
-  // Step 2: one named task; Step 3: one named step (the lint minimum).
-  await page.getByRole("button", { name: /^2 Tasks$/ }).click();
+  // Step 2 (Tasks & steps — slice F merged the old Tasks and "Steps & fields"
+  // steps): one named task with one named step (the lint minimum).
+  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
   await page.getByRole("button", { name: "Add task" }).click();
   await page
     .locator('div:has(> label:text-is("Task 1 title"))')
     .first()
     .locator("input")
     .fill("Submit enrollment");
-  await page.getByRole("button", { name: /^3 Steps & fields$/ }).click();
   await page.getByRole("button", { name: "Add step" }).click();
   await page
     .locator('div:has(> label:text-is("Step 1 instruction"))')
@@ -534,9 +537,9 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
     .locator("textarea")
     .fill("Fill the Aetna portal form");
 
-  await page.getByRole("button", { name: /^4 Review$/ }).click();
+  await page.getByRole("button", { name: /^3 Review$/ }).click();
   await page.getByRole("button", { name: "Create template" }).click();
-  await expect(page.getByText("Global SOP created")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Template created")).toBeVisible({ timeout: 15000 });
 
   const authored = calls.filter((c) => c.kind === "rpc" && c.path === "author_global_sop");
   expect(authored).toHaveLength(1);
@@ -558,7 +561,7 @@ test("TS-131 — the step's portal picker offers the payer's registered portals 
   await expect(page.getByRole("heading", { name: "BCBS Kansas NC Enrollment" })).toBeVisible({
     timeout: 30000,
   });
-  await page.getByRole("button", { name: /^3 Steps & fields$/ }).click();
+  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
 
   // Payer-filtered by default: the BCBS portal is offered, the Aetna one is not.
   const portalTrigger = page.getByRole("combobox").filter({ hasText: "BCBS KS Enrollment" });
@@ -603,7 +606,7 @@ test("TS-132 — drift: badge + banner + in-editor repair clears it; never block
   await expect(page).toHaveURL(new RegExp(`/admin/templates/${BCBS_TPL_ID}$`), { timeout: 30000 });
 
   // Step 3 → the form panel queues the broken mapping FIRST, labeled.
-  await page.getByRole("button", { name: /^3 Steps & fields$/ }).click();
+  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
   const brokenRow = page
     .locator("div", { hasText: "NPI Number" })
@@ -667,7 +670,7 @@ test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run gre
   await expect(page.getByRole("heading", { name: "BCBS Kansas NC Enrollment" })).toBeVisible({
     timeout: 30000,
   });
-  await page.getByRole("button", { name: /^3 Steps & fields$/ }).click();
+  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
 
   // Run 1: the proposed CAQH mapping is undecided → the run fails honestly and
