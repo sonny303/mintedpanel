@@ -551,6 +551,53 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
     created_at: "2026-05-20T00:00:00Z",
     updated_at: "2026-06-15T00:00:00Z",
   });
+  // Slice D (screen 5): an approval that acked the expected provider ID
+  // missing (E6.8 "Didn't receive" — payer_individual_provider_id NULL) must
+  // derive the Awaiting-ID wait, linking the capturing case.
+  fixtures.payers.push({
+    id: "p3-await",
+    org_id: null,
+    name: "Kaiser Permanente",
+    payer_kind: "commercial",
+    states: ["NC"],
+    aliases: [],
+    status: "active",
+    payer_slug: "kaiser-permanente",
+    avg_decision_days: null,
+    provider_id_label: "Provider Number",
+    provider_id_expected: true,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.org_payer_assignments.push({
+    id: "a-p3-await",
+    org_id: ORG_ID,
+    payer_id: "p3-await",
+    starter: false,
+    status: "active",
+    archived_at: null,
+    created_at: "2026-06-01T00:00:00Z",
+  });
+  fixtures.credential_cases.push({
+    id: "c-await",
+    org_id: ORG_ID,
+    provider_id: "pr-brooke",
+    payer_id: "p3-await",
+    state: "NC",
+    group_id: "g-ob",
+    facility_id: null,
+    mso_id: null,
+    credentialing_status_id: null,
+    case_status: "approved",
+    submitted_date: "2026-06-20",
+    approved_date: "2026-07-01",
+    payer_reference_id: null,
+    payer_pipeline_state: "approved",
+    confirmed_effective_date: "2026-07-01",
+    payer_individual_provider_id: null,
+    generation_run_id: null,
+    created_at: "2026-06-10T00:00:00Z",
+    updated_at: "2026-07-01T00:00:00Z",
+  });
   const { handler, requests } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
@@ -575,8 +622,21 @@ test("TS-113: enrollment-fact capture on the record; APPROVED cases derive read-
     "/cases/c-appr",
   );
   await expect(caseRow.getByRole("button", { name: "Expire" })).toHaveCount(0);
-  // The in_progress case derives NOTHING here — exactly one "From case" row.
-  await expect(page.getByText("From case")).toHaveCount(1);
+
+  // Slice D — the acked-missing ID derives "Awaiting ID" (expected + approved
+  // + NULL id, never stored), linking back to the capturing case; the captured
+  // UHC row above shows its value instead, never a wait.
+  const awaitRow = page.locator("#enrollments li").filter({ hasText: "Kaiser Permanente" });
+  await expect(awaitRow.getByText("Awaiting ID")).toBeVisible();
+  await expect(awaitRow.getByRole("link", { name: "Open case" })).toHaveAttribute(
+    "href",
+    "/cases/c-await",
+  );
+  await expect(caseRow.getByText("Awaiting ID")).toHaveCount(0);
+
+  // The in_progress case derives NOTHING here — exactly the two approved
+  // cases' "From case" rows.
+  await expect(page.getByText("From case")).toHaveCount(2);
 
   // Record a fact under the group's contract ("+ Add" pattern, issue 7).
   await page.getByRole("button", { name: "+ Add enrollment" }).click();

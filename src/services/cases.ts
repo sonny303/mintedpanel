@@ -57,7 +57,10 @@ const CASE_LIST_COLUMNS =
   // payer_individual_provider_id added 2026-07-21: the provider record's
   // unified Enrollments view derives approved-case rows (providerEnrollments)
   // off this projection and shows the payer-issued ID the approval captured.
-  "id, case_number, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_pipeline_state, created_at, updated_at";
+  // payer_group_provider_id added with Slice D (payer-and-cases screen 5): the
+  // group board's Awaiting-ID derivation (expected + approved + NULL id, per
+  // E6.8 F6.8.3) reads it off the same cached list.
+  "id, case_number, provider_id, payer_id, state, group_id, facility_id, mso_id, credentialing_status_id, case_status, contract_executed_date, assigned_to, submitted_date, approved_date, confirmed_effective_date, expected_effective_date, termination_date, generation_run_id, payer_reference_id, payer_individual_provider_id, payer_group_provider_id, payer_pipeline_state, created_at, updated_at";
 
 export async function getCases(filters: CaseFilters = {}): Promise<CredentialCase[]> {
   const orgId = requireActiveOrg();
@@ -376,9 +379,11 @@ const CASE_STATUS_ERROR_MESSAGES: Record<string, string> = {
   case_status_other_needs_context: "Selecting “Other” requires a short context.",
   case_status_not_pursuing_needs_note: "A note is required to mark a case Not Pursuing.",
   case_status_approved_needs_effective_date: "An effective date is required to approve.",
-  case_status_approved_needs_provider_id: "The payer-issued provider ID is required to approve.",
+  // E6.8 F6.8.3 — silence still raises these; the message names the escape.
+  case_status_approved_needs_provider_id:
+    "This payer issues a provider ID — enter it or tick “Didn't receive”.",
   case_status_approved_needs_group_provider_id:
-    "This payer issues a group ID — it is required to approve.",
+    "This payer issues a group ID — enter it or tick “Didn't receive”.",
   case_status_evidence_invalid: "The evidencing touch doesn't belong to this case.",
 };
 

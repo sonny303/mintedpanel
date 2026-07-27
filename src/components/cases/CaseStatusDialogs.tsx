@@ -1,8 +1,15 @@
 // E6.0 F6.0.2/F6.0.4 — the unified-status transition dialogs. Each collects
 // exactly the evidence its target status requires and calls onConfirm;
 // CaseStatusControl owns the set_case_status mutation and toasts. Stock
-// shadcn compositions (Dialog/Select/Input/Textarea/DatePicker) styled by
-// tokens — no new primitives.
+// shadcn compositions (Dialog/Select/Input/Textarea/Checkbox/DatePicker)
+// styled by tokens — no new primitives.
+//
+// Slice D (payer-and-cases screen 5, 2026-07-27): the Approved dialog asks for
+// EXACTLY the IDs the payer's E6.7 expectation flags say it issues — under the
+// payer's own wording — and every ID field carries the E6.8 "Didn't receive"
+// escape (approve anyway; the enrollment reads Awaiting ID). There is NO hard
+// client-side ID requirement anymore (handoff §2.1, PM-approved): silence is
+// rejected by the RPC's named errors, which surface — never pre-blocked here.
 import { useState } from "react";
 import {
   Dialog,
@@ -13,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +33,10 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/DatePicker";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
-import { GROUP_PROVIDER_ID_LABEL, resolveIdentifierConfig } from "@/lib/payerResolutionIdentifier";
+import {
+  resolveGroupIdentifierConfig,
+  resolveIdentifierConfig,
+} from "@/lib/payerResolutionIdentifier";
 import type { DenialReasonCode, Payer } from "@/types";
 
 const FIELD_LABEL = "text-[11px] uppercase tracking-wide text-muted-foreground";
@@ -58,11 +69,12 @@ function ReasonCodeSelect({
   );
 }
 
-// ---- Payer-labeled provider-ID fields (Approved / correction-to-Approved).
-// The Minted-curated label on the payers row wins, then the generic default —
-// so the input is labeled with the payer's OWN term ("Provider ID" for
-// Anthem, "PTAN" for Medicare). F6.0.2; the per-org override tier retired
-// 2026-07-20 (the label is a payer-definition fact, not org config). ----
+// ---- Payer-labeled provider-ID fields (correction-to-Approved only — the
+// Approved close itself renders the expectation-driven rows below). Labels
+// come from the payer's OWN wording via the resolver seams ("Provider ID" for
+// Anthem, "PTAN" for Medicare, "Group PIN" for the Type 2 side); corrections
+// never require either value — the RPC skips the expectation checks for
+// corrections, so both fields stay plain optional inputs. ----
 function ProviderIdFields({
   payer,
   individualId,
@@ -77,10 +89,11 @@ function ProviderIdFields({
   onGroup: (v: string) => void;
 }) {
   const config = resolveIdentifierConfig(payer);
+  const groupConfig = resolveGroupIdentifierConfig(payer);
   return (
     <>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>{config.individualLabel} (required)</Label>
+        <Label className={FIELD_LABEL}>{config.individualLabel}</Label>
         <Input
           value={individualId}
           onChange={(e) => onIndividual(e.target.value)}
@@ -89,7 +102,7 @@ function ProviderIdFields({
         />
       </div>
       <div className="space-y-1.5">
-        <Label className={FIELD_LABEL}>{GROUP_PROVIDER_ID_LABEL}</Label>
+        <Label className={FIELD_LABEL}>{groupConfig.groupLabel}</Label>
         <Input
           value={groupId}
           onChange={(e) => onGroup(e.target.value)}
@@ -162,22 +175,87 @@ export function StatusTransitionDialog({
 
 export interface ApprovedValues {
   effectiveDate: string;
-  individualProviderId: string;
+  individualProviderId: string | null;
   groupProviderId: string | null;
   contractExecutedDate: string | null;
+  /** E6.8 F6.8.3 — the per-ID "Didn't receive" escape. True means the field
+   * was explicitly acknowledged missing; the ID stays NULL and the enrollment
+   * reads Awaiting ID until back-filled via the existing set-later paths. */
+  providerIdMissingAck: boolean;
+  groupIdMissingAck: boolean;
 }
 
-// ---- Approved: the terminal facts are captured at the moment the letter is
-// in hand — effective date AND the payer-labeled ID are REQUIRED (F6.0.2). ----
+// ---- One expectation-driven ID row: the payer's own label + scope hint, a
+// mono value input, and the "Didn't receive" escape (checked → the input is
+// disabled, the value is dropped, and the amber Awaiting-ID note shows). ----
+function IdCaptureRow({
+  label,
+  scope,
+  value,
+  missing,
+  onValue,
+  onMissing,
+}: {
+  label: string;
+  scope: string;
+  value: string;
+  missing: boolean;
+  onValue: (v: string) => void;
+  onMissing: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className={FIELD_LABEL}>
+        {label}{" "}
+        <span className="normal-case tracking-normal font-normal text-muted-foreground">
+          — {scope}
+        </span>
+      </Label>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Input
+          value={value}
+          onChange={(e) => onValue(e.target.value)}
+          placeholder={`Enter the ${label}`}
+          aria-label={label}
+          disabled={missing}
+          className="h-9 min-w-[200px] flex-1 font-mono"
+        />
+        <label className="flex flex-none cursor-pointer items-center gap-1.5 text-[12.5px] text-muted-foreground">
+          <Checkbox
+            checked={missing}
+            onCheckedChange={(v) => onMissing(v === true)}
+            aria-label={`Didn't receive the ${label}`}
+          />
+          Didn&apos;t receive
+        </label>
+      </div>
+      {missing ? (
+        <p className="text-[12px] text-[#B45309]">
+          Flagged as outstanding — the enrollment will show “Awaiting ID” until it&apos;s added.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ---- Approved: the effective date comes from the approval letter (required);
+// the ID fields are EXACTLY what this payer issues per its E6.7 expectation
+// flags, worded the payer's way — both / one / neither. Every ID field has the
+// "Didn't receive" escape (F6.8.3): a missing ID must never block a close, so
+// the confirm is NEVER gated on an ID. An expected ID left empty WITHOUT the
+// ack is the RPC's call to reject (surfaced, not pre-blocked — handoff §2.1).
 export function ApprovedDialog({
   open,
   payer,
+  caseSummary,
   saving,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   payer: Payer | null;
+  /** "Provider · Payer · State" header line, composed by the control. */
+  caseSummary?: string | null;
   saving: boolean;
   onCancel: () => void;
   onConfirm: (values: ApprovedValues) => void;
@@ -185,16 +263,32 @@ export function ApprovedDialog({
   const [effectiveDate, setEffectiveDate] = useState("");
   const [individualId, setIndividualId] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [individualMissing, setIndividualMissing] = useState(false);
+  const [groupMissing, setGroupMissing] = useState(false);
   const [contractExecutedDate, setContractExecutedDate] = useState("");
-  const ready = Boolean(effectiveDate) && individualId.trim().length > 0;
+
+  const providerConfig = resolveIdentifierConfig(payer);
+  const groupConfig = resolveGroupIdentifierConfig(payer);
+  const payerName = payer?.name ?? "This payer";
+  const anyIds = groupConfig.expected || providerConfig.expected;
+  const flagged =
+    (groupConfig.expected && groupMissing ? 1 : 0) +
+    (providerConfig.expected && individualMissing ? 1 : 0);
+  // The one client-side gate is the effective date — never an ID (§2.1).
+  const ready = Boolean(effectiveDate);
+  const footerNote = !anyIds
+    ? "Approving records the effective date."
+    : flagged > 0
+      ? `${flagged} ${flagged === 1 ? "ID" : "IDs"} flagged as outstanding.`
+      : "Leave blank and tick “Didn't receive” if the payer hasn't issued it yet.";
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Mark Approved</DialogTitle>
+          <DialogTitle>Approve case</DialogTitle>
           <DialogDescription>
-            The effective date and the payer's provider ID come from the approval letter — both are
-            required.
+            {caseSummary || "The effective date comes from the approval letter."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -206,14 +300,41 @@ export function ApprovedDialog({
               ariaLabel="Effective date"
             />
           </div>
-          <ProviderIdFields
-            payer={payer}
-            individualId={individualId}
-            groupId={groupId}
-            onIndividual={setIndividualId}
-            onGroup={setGroupId}
-          />
-          <div className="space-y-1.5">
+          {anyIds ? (
+            <div className="space-y-4 border-t border-[#F0EEE9] pt-4">
+              <div>
+                <p className={FIELD_LABEL}>IDs {payerName} issues</p>
+                <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  Read these off the payer&apos;s approval letter. You can approve without them.
+                </p>
+              </div>
+              {groupConfig.expected ? (
+                <IdCaptureRow
+                  label={groupConfig.groupLabel}
+                  scope="one per group"
+                  value={groupId}
+                  missing={groupMissing}
+                  onValue={setGroupId}
+                  onMissing={setGroupMissing}
+                />
+              ) : null}
+              {providerConfig.expected ? (
+                <IdCaptureRow
+                  label={providerConfig.individualLabel}
+                  scope="one per provider"
+                  value={individualId}
+                  missing={individualMissing}
+                  onValue={setIndividualId}
+                  onMissing={setIndividualMissing}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="rounded-md border border-[#E8E5E0] bg-[#FBFBF9] p-3 text-[13px] text-muted-foreground">
+              {payerName} issues no enrollment ID, so there&apos;s nothing else to capture.
+            </p>
+          )}
+          <div className="space-y-1.5 border-t border-[#F0EEE9] pt-4">
             <Label className={FIELD_LABEL}>Contract executed (optional)</Label>
             <DatePicker
               value={contractExecutedDate}
@@ -222,7 +343,8 @@ export function ApprovedDialog({
             />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="sm:items-center">
+          <span className="mr-auto text-[12.5px] text-muted-foreground">{footerNote}</span>
           <Button variant="outline" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
@@ -232,13 +354,19 @@ export function ApprovedDialog({
             onClick={() =>
               onConfirm({
                 effectiveDate,
-                individualProviderId: individualId.trim(),
-                groupProviderId: groupId.trim() ? groupId.trim() : null,
+                individualProviderId:
+                  providerConfig.expected && !individualMissing && individualId.trim()
+                    ? individualId.trim()
+                    : null,
+                groupProviderId:
+                  groupConfig.expected && !groupMissing && groupId.trim() ? groupId.trim() : null,
                 contractExecutedDate: contractExecutedDate || null,
+                providerIdMissingAck: providerConfig.expected && individualMissing,
+                groupIdMissingAck: groupConfig.expected && groupMissing,
               })
             }
           >
-            Mark Approved
+            Approve
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -291,18 +419,22 @@ export function DeniedDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className={FIELD_LABEL}>Context{needsContext ? " (required)" : ""}</Label>
+            <Label className={FIELD_LABEL}>
+              Context{" "}
+              <span
+                className={`normal-case tracking-normal font-normal ${
+                  needsContext ? "text-[#B45309]" : "text-muted-foreground"
+                }`}
+              >
+                — {needsContext ? "required for “Other”" : "optional"}
+              </span>
+            </Label>
             <Textarea
               value={context}
               onChange={(e) => setContext(e.target.value)}
               rows={2}
               placeholder="e.g. panel closed for the county"
             />
-            {needsContext ? (
-              <p className="text-[12px] text-muted-foreground">
-                A short context is required when the reason is “Other”.
-              </p>
-            ) : null}
           </div>
         </div>
         <DialogFooter>
@@ -344,7 +476,7 @@ export function NotPursuingDialog({
         <DialogHeader>
           <DialogTitle>Mark Not Pursuing</DialogTitle>
           <DialogDescription>
-            A note is required — say why this combination is being dropped.
+            The deliberate opt-out — say why this combination is being dropped.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
