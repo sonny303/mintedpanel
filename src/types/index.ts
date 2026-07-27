@@ -561,10 +561,50 @@ export interface Payer {
   resolutionIdLabel?: string | null;
   resolutionIdExpected?: boolean | null;
   // E6.5 F6.5.5 — delegation as a curated catalog fact ("this payer delegates
-  // credentialing to X — submit via Y"). Platform-written ONLY (no app writer;
-  // payers has had no org write path since 20260718120000). Rendered in the
-  // catalog browser; workflow detail belongs in SOP content, not routing rules.
+  // credentialing to X — submit via Y"). Since E6.7 it is user-entered through
+  // the create_payer/update_payer RPCs (the manual-setup enabler); direct
+  // table writes stay revoked.
   delegationNote?: string | null;
+  // E6.7 F6.7.1a — the ID-expectation SPLIT: a payer may issue a GROUP ID, a
+  // PROVIDER ID, both, or neither. The legacy resolutionIdLabel/-Expected pair
+  // above meant the INDIVIDUAL identifier and deprecates in place (stop-write;
+  // the payerResolutionIdentifier seam reads the provider pair first, then the
+  // legacy pair, then the generic default).
+  groupIdLabel?: string | null;
+  groupIdExpected?: boolean | null;
+  providerIdLabel?: string | null;
+  providerIdExpected?: boolean | null;
+  // E6.7 F6.7.1a provenance — stamped by the RPCs; pre-E6.7 rows backfilled
+  // source 'sync'.
+  createdBy?: string | null;
+  source?: PayerSource | null;
+  updatedAt?: string | null;
+}
+
+// E6.7 F6.7.1a — where a payer row came from. Pre-E6.7 rows are 'sync'
+// (the retired catalog pipeline); manual rows come from create_payer.
+export type PayerSource = "seed" | "sync" | "manual";
+
+// E6.7 F6.7.2a — governed purpose domain for payer contacts (the Payer
+// Detail design's list; mirrored by payer_contacts_purpose_check).
+export type PayerContactPurpose = "credentialing" | "enrollment" | "escalation" | "general";
+
+// E6.7 F6.7.2a — operational contact on a payer (child table, purpose grain).
+// At most one default per (payer, purpose) — the future template email-step
+// resolution target. Reads ride the parent payer's visibility; writes go
+// through the upsert/delete RPCs only.
+export interface PayerContact {
+  id: string;
+  payerId: string;
+  purpose: PayerContactPurpose;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  note: string | null;
+  isDefault: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // E4.2 payer governance — the org × payer configuration grain. Global payer

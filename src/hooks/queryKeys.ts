@@ -16,6 +16,9 @@ export const queryKeys = {
   task: (orgId: string, id: string) => ["task", orgId, id] as const,
   payers: (orgId: string) => ["payers", orgId] as const,
   payer: (orgId: string, id: string) => ["payer", orgId, id] as const,
+  // E6.7 F6.7.2a — contacts on one payer. Org-scoped like every read whose
+  // RLS visibility depends on the active org's assignments.
+  payerContacts: (orgId: string, payerId: string) => ["payer-contacts", orgId, payerId] as const,
   orgPayerAssignments: (orgId: string) => ["org-payer-assignments", orgId] as const,
   payerNetworkTargets: (orgId: string) => ["payer-network-targets", orgId] as const,
   // E6.2 — enrollment facts (F6.2.5). The denial-entries read deliberately

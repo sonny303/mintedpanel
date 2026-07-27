@@ -1898,6 +1898,56 @@ export type Database = {
           },
         ];
       };
+      payer_contacts: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          email: string | null;
+          id: string;
+          is_default: boolean;
+          name: string | null;
+          note: string | null;
+          payer_id: string;
+          phone: string | null;
+          purpose: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          email?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name?: string | null;
+          note?: string | null;
+          payer_id: string;
+          phone?: string | null;
+          purpose: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          email?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name?: string | null;
+          note?: string | null;
+          payer_id?: string;
+          phone?: string | null;
+          purpose?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_contacts_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payer_network_targets: {
         Row: {
           created_at: string;
@@ -2019,7 +2069,10 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          created_by: string | null;
           delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -2028,16 +2081,23 @@ export type Database = {
           org_id: string | null;
           payer_kind: string;
           payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
           resolution_id_expected: boolean | null;
           resolution_id_label: string | null;
+          source: string | null;
           states: string[] | null;
           status: string;
+          updated_at: string | null;
         };
         Insert: {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          created_by?: string | null;
           delegation_note?: string | null;
+          group_id_expected?: boolean | null;
+          group_id_label?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -2046,16 +2106,23 @@ export type Database = {
           org_id?: string | null;
           payer_kind?: string;
           payer_slug?: string | null;
+          provider_id_expected?: boolean | null;
+          provider_id_label?: string | null;
           resolution_id_expected?: boolean | null;
           resolution_id_label?: string | null;
+          source?: string | null;
           states?: string[] | null;
           status?: string;
+          updated_at?: string | null;
         };
         Update: {
           aliases?: string[] | null;
           avg_decision_days?: number | null;
           created_at?: string | null;
+          created_by?: string | null;
           delegation_note?: string | null;
+          group_id_expected?: boolean | null;
+          group_id_label?: string | null;
           id?: string;
           is_active?: boolean | null;
           last_synced_at?: string | null;
@@ -2064,10 +2131,14 @@ export type Database = {
           org_id?: string | null;
           payer_kind?: string;
           payer_slug?: string | null;
+          provider_id_expected?: boolean | null;
+          provider_id_label?: string | null;
           resolution_id_expected?: boolean | null;
           resolution_id_label?: string | null;
+          source?: string | null;
           states?: string[] | null;
           status?: string;
+          updated_at?: string | null;
         };
         Relationships: [
           {
@@ -3572,6 +3643,13 @@ export type Database = {
         };
         Returns: undefined;
       };
+      _payer_assert_name_available: {
+        Args: { p_exclude_id: string; p_keys: string[] };
+        Returns: undefined;
+      };
+      _payer_norm_aliases: { Args: { p_aliases: string[] }; Returns: string[] };
+      _payer_norm_name: { Args: { p_value: string }; Returns: string };
+      _payer_norm_states: { Args: { p_states: string[] }; Returns: string[] };
       _ssn_decrypt: { Args: { p_ciphertext: string }; Returns: string };
       _ssn_digits: { Args: { p_raw: string }; Returns: string };
       _ssn_encrypt: { Args: { p_plaintext: string }; Returns: string };
@@ -3687,6 +3765,51 @@ export type Database = {
             };
             Returns: string;
           };
+      create_payer: {
+        Args: {
+          p_aliases?: string[];
+          p_delegation_note?: string;
+          p_group_id_expected?: boolean;
+          p_group_id_label?: string;
+          p_name: string;
+          p_org_id: string;
+          p_payer_kind: string;
+          p_provider_id_expected?: boolean;
+          p_provider_id_label?: string;
+          p_states: string[];
+        };
+        Returns: {
+          aliases: string[] | null;
+          avg_decision_days: number | null;
+          created_at: string | null;
+          created_by: string | null;
+          delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          source: string | null;
+          states: string[] | null;
+          status: string;
+          updated_at: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       create_report_share: {
         Args: {
           p_recipient_email: string;
@@ -3704,6 +3827,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      delete_payer_contact: {
+        Args: { p_id: string; p_org_id: string };
+        Returns: undefined;
+      };
       document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
       insert_contact_party: {
@@ -3716,7 +3843,10 @@ export type Database = {
           aliases: string[] | null;
           avg_decision_days: number | null;
           created_at: string | null;
+          created_by: string | null;
           delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
           id: string;
           is_active: boolean | null;
           last_synced_at: string | null;
@@ -3725,10 +3855,14 @@ export type Database = {
           org_id: string | null;
           payer_kind: string;
           payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
           resolution_id_expected: boolean | null;
           resolution_id_label: string | null;
+          source: string | null;
           states: string[] | null;
           status: string;
+          updated_at: string | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -3862,6 +3996,52 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      update_payer: {
+        Args: {
+          p_aliases?: string[];
+          p_delegation_note?: string;
+          p_group_id_expected?: boolean;
+          p_group_id_label?: string;
+          p_name: string;
+          p_org_id: string;
+          p_payer_id: string;
+          p_payer_kind: string;
+          p_provider_id_expected?: boolean;
+          p_provider_id_label?: string;
+          p_states: string[];
+        };
+        Returns: {
+          aliases: string[] | null;
+          avg_decision_days: number | null;
+          created_at: string | null;
+          created_by: string | null;
+          delegation_note: string | null;
+          group_id_expected: boolean | null;
+          group_id_label: string | null;
+          id: string;
+          is_active: boolean | null;
+          last_synced_at: string | null;
+          merged_into_id: string | null;
+          name: string;
+          org_id: string | null;
+          payer_kind: string;
+          payer_slug: string | null;
+          provider_id_expected: boolean | null;
+          provider_id_label: string | null;
+          resolution_id_expected: boolean | null;
+          resolution_id_label: string | null;
+          source: string | null;
+          states: string[] | null;
+          status: string;
+          updated_at: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "payers";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       upsert_global_portal: {
         Args: {
           p_form_url?: string;
@@ -3891,6 +4071,38 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      upsert_payer_contact: {
+        Args: {
+          p_email?: string;
+          p_id: string;
+          p_is_default?: boolean;
+          p_name?: string;
+          p_note?: string;
+          p_org_id: string;
+          p_payer_id: string;
+          p_phone?: string;
+          p_purpose: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string | null;
+          email: string | null;
+          id: string;
+          is_default: boolean;
+          name: string | null;
+          note: string | null;
+          payer_id: string;
+          phone: string | null;
+          purpose: string;
+          updated_at: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "payer_contacts";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };
@@ -3914,12 +4126,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3939,12 +4151,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3963,12 +4176,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -3987,12 +4201,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -4003,12 +4218,13 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

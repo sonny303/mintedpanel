@@ -2055,6 +2055,62 @@ NOT NULL` column on `credential_cases` — a globally-sequential (ONE
   rebuilt; `next-best-action-queue.spec.ts` deleted with its component;
   `unified-case-status` TS-104 retargeted to Flat + the Case# link.
 
+- **E6.7 PR 1 — Payer Manual Setup Enabler (backend only, zero rendered UI).**
+  The PM is retiring the precanned catalog browse; this PR ships the write
+  path the future "+ Set up payer" dialog calls. THREE additive migrations
+  (repo + hosted, `20260727120000`–`120200`; behavior verified by
+  rollback-wrapped hosted probes impersonating a live admin member).
+  **`20260727120000` (F6.7.1/1a/1b):** payers gains the ID-expectation split
+  (`group_id_label`/`group_id_expected` + `provider_id_label`/
+  `provider_id_expected`; provider pair backfilled from the legacy
+  `resolution_id_*` pair, which deprecates in place — STOP-WRITE), provenance
+  (`created_by`/`source seed|sync|manual` — existing rows backfilled `sync` —
+  /`updated_at`), a `source` CHECK (kind/status CHECKs already existed from
+  E1.6 — re-asserted + VALIDATEd), and the dup backstop partial unique
+  `uq_payers_global_normalized_name` on `lower(btrim(name)) WHERE org_id IS
+NULL AND status <> 'merged'` (live data verified collision-free first).
+  **`create_payer`/`update_payer`** are the ONLY payers write path (SECURITY
+  DEFINER, authenticated, anon rejected in-body, writer-member of the caller
+  org, audited under it; the 20260718120000 table lockdown STANDS): rows are
+  GLOBAL (`org_id NULL`, PM decision), `states[]` required ≥1 `^[A-Z]{2}$`
+  (attach/generation/CSV-scan all intersect it), in-body dup guard =
+  normalized name+aliases vs every non-retired global row's name/aliases →
+  `payer_duplicate` (merged match names its successor); create also upserts
+  the caller org's `org_payer_assignments` row in the SAME transaction
+  (creating = adding); update edits ACTIVE global rows only — status/merge
+  stay platform-side. Shared SQL helpers `_payer_norm_name`/`_payer_norm_
+states`/`_payer_norm_aliases`/`_payer_assert_name_available` (no client
+  EXECUTE). **`set_case_status` reissued** (same signature): Approved now
+  requires EXACTLY the expected IDs — individual when `provider_id_expected`
+  (→ legacy → TRUE default), group when `group_id_expected` (→ FALSE) — new
+  error `case_status_approved_needs_group_provider_id` (mapped in cases.ts).
+  **`20260727120100` (F6.7.2):** `author_global_sop` +
+  `publish_sop_template_version` reissued — the fallback SOP's blanket
+  authenticated lock is GONE (content publishes like any global SOP);
+  structural guards stay under the same `fallback_sop_locked` name (no
+  archive, no payer/state/group, still the only payerless global row).
+  **`20260727120200` (F6.7.2a):** `payer_contacts` child table (purpose grain
+  CHECK credentialing|enrollment|escalation|general, email-or-phone CHECK,
+  partial unique ONE default per (payer, purpose)); member SELECT via the
+  restated parent-payer visibility disjunct; writes ONLY via the audited
+  `upsert_payer_contact`/`delete_payer_contact` RPCs (in-RPC default swap;
+  hard delete allowed — operational data). **Frontend seam (F6.7.3, no UI):**
+  `payers.ts` gained `createPayer`/`updatePayer` (RPC-bound — still zero
+  direct INSERT/UPDATE) + typed `PayerDuplicateError`; `payerContacts.ts` +
+  `usePayerContacts.ts`; `useAdmin.ts` `useCreatePayer`/`useUpdatePayer`
+  (invalidate payers/payer/assignments/catalog); pure
+  `src/lib/payerNearMatch.ts` (`normalizePayerName` mirrors `_payer_norm_name`
+  — keep in lockstep; `findPayerNearMatches` exact-name/exact-alias/partial +
+  merged-successor surfacing; tested); `payerResolutionIdentifier.ts` chain is
+  now provider pair → legacy pair → generic + the new
+  `resolveGroupIdentifierConfig` (group default NOT expected). Types
+  regenerated (hosted in sync); `Payer` widened + `PayerContact`/
+  `PayerSource`/`PayerContactPurpose` added. `payerGovernance.test.ts`
+  re-anchored: payer writes are RPC-ONLY at the service boundary, the enabler
+  migration never re-grants table DML, payer_contacts is client-SELECT-only,
+  and `delegation_note`'s single writer is the payers RPC seam. PR 2 (sync
+  retirement + avg_decision_days stop-render) follows separately.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
