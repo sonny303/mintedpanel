@@ -24,6 +24,7 @@ const AETNA_AZ_ID = "00000000-0000-4000-a000-0000000000ab";
 const OLD_BCBS_ID = "00000000-0000-4000-a000-0000000000ac";
 const NEW_BCBS_ID = "00000000-0000-4000-a000-0000000000ad";
 const NO_ID_PAYER_ID = "00000000-0000-4000-a000-0000000000ae";
+const NULL_COLUMN_PAYER_ID = "00000000-0000-4000-a000-0000000000af";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -103,8 +104,20 @@ function buildDb(): Record<string, Row[]> {
         merged_into_id: NEW_BCBS_ID,
       }),
       payerRow(NEW_BCBS_ID, "Blue Cross Blue Shield of Arizona"),
-      // The #editnone fixture: a payer that issues no enrollment ID at all.
+      // The #editnone fixture: a payer that GENUINELY issues no enrollment ID
+      // — EXPLICIT false in both expectation columns (the payerRow base), not
+      // NULL: NULL columns resolve provider-EXPECTED through the default chain.
       payerRow(NO_ID_PAYER_ID, "Kaiser Permanente Colorado", { states: ["CO"] }),
+      // The pre-E6.7 fixture: NULL in BOTH expectation columns AND the legacy
+      // pair — the shape of every seeded catalog row. The resolver chain
+      // treats it as provider-EXPECTED with the generic label.
+      payerRow(NULL_COLUMN_PAYER_ID, "Cigna Healthcare", {
+        states: ["CO"],
+        provider_id_expected: null,
+        provider_id_label: null,
+        group_id_expected: null,
+        group_id_label: null,
+      }),
     ],
     org_payer_assignments: [
       { id: "as-1", org_id: ORG_ID, payer_id: AETNA_ID, starter: false, status: "active" },
@@ -314,9 +327,7 @@ test("details — new: required fields, aliases, ID expectations → create_paye
   await page.getByRole("button", { name: "Create payer" }).click();
   await expect(page.getByText("Name the provider-level ID the way this payer does.")).toBeVisible();
   expect(rpcCalls.filter((c) => c.path === "create_payer")).toEqual([]);
-  await page
-    .getByLabel("Provider-level ID — the payer's name for it")
-    .fill("Banner Provider Number");
+  await page.getByLabel("Provider-level ID — payer's name for it").fill("Banner Provider Number");
 
   await page.getByLabel("Delegation note").fill("Roster adds process in 30 days.");
   await page.getByRole("button", { name: "Create payer" }).click();
@@ -384,15 +395,13 @@ test("edit payer — hydrated from the record, catalog-wide, saved through updat
   await expect(
     page.getByRole("button", { name: "Remove alias Aetna Signature Administrators" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Group-level ID — the payer's name for it")).toHaveValue(
-    "Group PIN",
-  );
-  await expect(page.getByLabel("Provider-level ID — the payer's name for it")).toHaveValue(
+  await expect(page.getByLabel("Group-level ID — payer's name for it")).toHaveValue("Group PIN");
+  await expect(page.getByLabel("Provider-level ID — payer's name for it")).toHaveValue(
     "Provider Number",
   );
 
   // Edit the payer's wording + drop the group ID entirely.
-  await page.getByLabel("Provider-level ID — the payer's name for it").fill("Aetna PIN");
+  await page.getByLabel("Provider-level ID — payer's name for it").fill("Aetna PIN");
   await page.getByLabel("Group-level ID", { exact: false }).first().uncheck();
   await expect(page.getByText("Not issued")).toBeVisible();
   await page.getByRole("button", { name: "Save changes" }).click();
@@ -422,11 +431,48 @@ test("edit — a payer that issues no enrollment ID", async ({ page }) => {
 
   // Both rows are off, both read "Not issued", and the consequence is stated.
   await expect(page.getByText("Not issued")).toHaveCount(2);
-  await expect(page.getByLabel("Group-level ID — the payer's name for it")).toHaveCount(0);
-  await expect(page.getByLabel("Provider-level ID — the payer's name for it")).toHaveCount(0);
+  await expect(page.getByLabel("Group-level ID — payer's name for it")).toHaveCount(0);
+  await expect(page.getByLabel("Provider-level ID — payer's name for it")).toHaveCount(0);
   await expect(
     page.getByText(/This payer issues no enrollment ID. Approving a case will just confirm/),
   ).toBeVisible();
+});
+
+test("edit — a NULL-column payer hydrates provider-EXPECTED; an unrelated save never regresses it", async ({
+  page,
+}) => {
+  await page.goto(`/admin/payers/${NULL_COLUMN_PAYER_ID}/edit`);
+  await expect(page.getByRole("heading", { name: "Edit payer" })).toBeVisible({ timeout: 30000 });
+
+  // The form shows what the close dialog will actually require: provider ID
+  // EXPECTED (the chain's default) with the generic label seeded; the group
+  // side defaults off.
+  await expect(page.getByLabel("Provider-level ID — payer's name for it")).toHaveValue(
+    "Payer-issued ID",
+  );
+  await expect(page.getByText("Not issued")).toHaveCount(1);
+
+  // Edit ONLY the states — nothing ID-related is touched.
+  await page.getByLabel("States this payer operates in").click();
+  await page.getByRole("option", { name: "UT", exact: true }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect
+    .poll(() => rpcCalls.filter((c) => c.path === "update_payer").length, { timeout: 15000 })
+    .toBe(1);
+  const body = rpcCalls.find((c) => c.path === "update_payer")?.body ?? {};
+  // The save MATERIALIZES the resolved config — never a flip to false, never
+  // a dropped label (which would kill the Approved-close ID requirement and
+  // the Awaiting-ID derivation for every org on the global row).
+  expect(body).toMatchObject({
+    p_payer_id: NULL_COLUMN_PAYER_ID,
+    p_states: ["CO", "UT"],
+    p_provider_id_expected: true,
+    p_provider_id_label: "Payer-issued ID",
+    p_group_id_expected: false,
+  });
+  expect(body.p_group_id_label ?? null).toBeNull();
 });
 
 test("the payer detail carries the Edit entry for admins", async ({ page }) => {

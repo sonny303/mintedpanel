@@ -12,6 +12,10 @@
 // an unnamed expected ID would surface as the generic "Payer-issued ID" on the
 // close dialog, which is exactly what these columns exist to replace.
 import { normalizeStateCode } from "@/lib/stateCode";
+import {
+  resolveGroupIdentifierConfig,
+  resolveIdentifierConfig,
+} from "@/lib/payerResolutionIdentifier";
 import type { PayerWriteInput } from "@/services/payers";
 import type { Payer, PayerKind } from "@/types";
 
@@ -53,30 +57,35 @@ export const EMPTY_PAYER_FORM: PayerFormDraft = {
 };
 
 /**
- * Hydrate the edit form from a catalog row. The ID expectations read through
- * the SAME chain the close dialog will (E6.7 provider pair → deprecated legacy
- * pair → default), so editing a pre-E6.7 payer shows what the app actually
- * resolves today instead of a blank box that would silently drop the legacy
- * label on save.
+ * Hydrate the edit form from a catalog row — through the SAME resolvers the
+ * close dialog and set_case_status consume (payerResolutionIdentifier.ts),
+ * never a re-implemented chain. That matters because the provider side
+ * DEFAULTS TO EXPECTED: every pre-E6.7 row carries NULL in both expectation
+ * columns, yet the system treats it as "issues a provider ID" (generic
+ * "Payer-issued ID" label, required at Approved). The form must show that
+ * truth, and saving an untouched form must MATERIALIZE it verbatim
+ * (expected=true + the resolved label) rather than silently flipping the
+ * catalog-wide requirement off. The group side defaults NOT expected
+ * (resolveGroupIdentifierConfig), so it hydrates off with no label.
+ *
+ * Seeding the resolved label (rather than exempting defaulted rows from the
+ * tick-⇒-name rule) keeps ONE uniform validation rule and shows the user the
+ * exact wording the close dialog uses today, ready to be replaced with the
+ * payer's own term. A label is only seeded while its side is expected —
+ * an off row never smuggles a label into the draft.
  */
 export function payerDraftFromPayer(payer: Payer): PayerFormDraft {
-  const legacyLabel = payer.resolutionIdLabel?.trim() ?? "";
-  const providerLabel = payer.providerIdLabel?.trim() ?? "";
-  const providerExpected =
-    typeof payer.providerIdExpected === "boolean"
-      ? payer.providerIdExpected
-      : typeof payer.resolutionIdExpected === "boolean"
-        ? payer.resolutionIdExpected
-        : false;
+  const provider = resolveIdentifierConfig(payer);
+  const group = resolveGroupIdentifierConfig(payer);
   return {
     name: payer.name,
     payerKind: payer.payerKind ?? "commercial",
     states: normalizeStates(payer.states ?? []),
     aliases: (payer.aliases ?? []).filter((a) => a.trim() !== ""),
-    groupIdExpected: payer.groupIdExpected === true,
-    groupIdLabel: payer.groupIdLabel?.trim() ?? "",
-    providerIdExpected: providerExpected,
-    providerIdLabel: providerLabel || legacyLabel,
+    groupIdExpected: group.expected,
+    groupIdLabel: group.expected ? group.groupLabel : "",
+    providerIdExpected: provider.expected,
+    providerIdLabel: provider.expected ? provider.individualLabel : "",
     delegationNote: payer.delegationNote ?? "",
   };
 }

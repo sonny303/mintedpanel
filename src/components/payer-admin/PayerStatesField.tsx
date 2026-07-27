@@ -84,7 +84,14 @@ export function PayerStatesField({
             className="h-8"
           />
         </div>
-        <div className="max-h-[240px] overflow-y-auto py-1">
+        {/* Distinct from the trigger's label so accessible-name lookups stay
+            unambiguous; the option container carries the multiselect role. */}
+        <div
+          role="listbox"
+          aria-label="State options"
+          aria-multiselectable="true"
+          className="max-h-[240px] overflow-y-auto py-1"
+        >
           {options.length === 0 ? (
             <p className="px-3 py-3.5 text-center text-[13px] text-muted-foreground">
               No states match

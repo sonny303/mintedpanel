@@ -143,6 +143,9 @@ export function PayerNameStep({
           <Button
             type="button"
             onClick={onContinue}
+            // Disabled while the catalog read is in flight — a fast click must
+            // never slip past the near-match check before it has data.
+            disabled={loadingMatches}
             variant={hasMatches ? "outline" : "default"}
             className={hasMatches ? undefined : "bg-[#1B4D3E] text-white hover:bg-[#163F33]"}
           >

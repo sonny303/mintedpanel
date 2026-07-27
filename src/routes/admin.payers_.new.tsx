@@ -9,7 +9,7 @@
 // Un-nested with the `payers_` idiom (the admin.payers_.$id.scorecard
 // precedent) so the /admin/payers redirect shell never hijacks it.
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PayerDetailsForm } from "@/components/payer-admin/PayerDetailsForm";
@@ -56,6 +56,32 @@ function SetUpPayerPage() {
     setNameError(null);
     setStep("details");
   };
+
+  // The near-match check IS the duplicate guardrail — a failed catalog read
+  // must never degrade to "no matches" and wave the user past it. Retriable
+  // error panel instead (the edit route's posture).
+  if (catalogQ.isError) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <Link
+          to="/admin/payer-admin/catalog"
+          className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
+        >
+          ← Back to Payer Setup
+        </Link>
+        <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-4 text-[13px] text-[#B91C1C]">
+          Couldn&apos;t load the payer catalog, so the duplicate check can&apos;t run.{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => catalogQ.refetch()}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleCreate = () => {
     setShowErrors(true);

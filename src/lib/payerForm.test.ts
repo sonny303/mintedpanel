@@ -135,6 +135,52 @@ describe("payerDraftFromPayer", () => {
     });
   });
 
+  it("a NULL-column payer hydrates provider-EXPECTED with the generic label (the resolver default)", () => {
+    // Every pre-E6.7 catalog row carries NULL in both expectation columns,
+    // and the system-wide chain (resolveIdentifierConfig, mirrored by
+    // set_case_status's COALESCE) treats that as EXPECTED. The form must
+    // show what the close dialog will actually require.
+    const draft = payerDraftFromPayer(
+      payer({
+        providerIdExpected: null,
+        providerIdLabel: null,
+        groupIdExpected: null,
+        groupIdLabel: null,
+        resolutionIdExpected: null,
+        resolutionIdLabel: null,
+      }),
+    );
+    expect(draft.providerIdExpected).toBe(true);
+    expect(draft.providerIdLabel).toBe("Payer-issued ID");
+    // The group chain defaults NOT expected — off, with no seeded label.
+    expect(draft.groupIdExpected).toBe(false);
+    expect(draft.groupIdLabel).toBe("");
+  });
+
+  it("round-trip: hydrate a NULL-column payer, change nothing, save — the effective expectation never regresses", () => {
+    const draft = payerDraftFromPayer(
+      payer({
+        providerIdExpected: null,
+        providerIdLabel: null,
+        groupIdExpected: null,
+        groupIdLabel: null,
+        resolutionIdExpected: null,
+        resolutionIdLabel: null,
+      }),
+    );
+    // Valid as-hydrated: the seeded label satisfies the tick-⇒-name rule, so
+    // the first edit of a legacy row is never blocked.
+    expect(payerFormErrors(draft)).toEqual({});
+    const input = toPayerWriteInput(draft);
+    // The save MATERIALIZES the resolved config verbatim — never a flip to
+    // false, never a dropped label (which would regress Approved-close +
+    // Awaiting-ID for every org on the global row).
+    expect(input.providerIdExpected).toBe(true);
+    expect(input.providerIdLabel).toBe("Payer-issued ID");
+    expect(input.groupIdExpected).toBe(false);
+    expect(input.groupIdLabel).toBeNull();
+  });
+
   it("falls back to the deprecated legacy pair for a pre-E6.7 payer", () => {
     const draft = payerDraftFromPayer(
       payer({ resolutionIdLabel: "Aetna PIN", resolutionIdExpected: true }),
@@ -145,10 +191,16 @@ describe("payerDraftFromPayer", () => {
     expect(draft.groupIdExpected).toBe(false);
   });
 
-  it("a payer that issues nothing hydrates both rows off", () => {
+  it("a payer that GENUINELY issues nothing (explicit false, not NULL) hydrates both rows off", () => {
     const draft = payerDraftFromPayer(payer({ providerIdExpected: false, groupIdExpected: false }));
     expect(draft.groupIdExpected).toBe(false);
     expect(draft.providerIdExpected).toBe(false);
+    // An off row never smuggles a label into the draft, even if columns
+    // carry one.
+    const off = payerDraftFromPayer(
+      payer({ providerIdExpected: false, providerIdLabel: "Stale", groupIdExpected: false }),
+    );
+    expect(off.providerIdLabel).toBe("");
   });
 
   it("missing kind/states/aliases degrade to safe defaults", () => {

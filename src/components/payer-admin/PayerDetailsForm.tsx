@@ -91,7 +91,7 @@ function IdExpectationRow({
             value={label}
             onChange={(e) => onLabelChange(e.target.value)}
             placeholder={placeholder}
-            aria-label={`${title} — the payer's name for it`}
+            aria-label={`${title} — payer's name for it`}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? `${labelId}-error` : undefined}
             className="h-8"
