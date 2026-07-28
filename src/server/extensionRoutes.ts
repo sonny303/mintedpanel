@@ -3,6 +3,7 @@
 // authenticated server context into the service layer, never duplicate query
 // logic here.
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
+import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
@@ -205,6 +206,20 @@ export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): 
   const response = ok({ ssn: result.ssn, ssnLast4: result.ssnLast4 });
   response.headers.set("cache-control", "no-store");
   return response;
+}
+
+// GET /api/portals[?portal_key=...] — the payer-portal registry the extension
+// matches the current tab against, so portal identity is DB-driven rather than
+// a hardcoded list baked into the extension bundle. Own-org rows plus global
+// (org_id NULL) registry rows; another org's rows can never appear.
+//
+// Read-only and not PHI (portal names/URLs and their verification state), so
+// no audit row and no role gate — billing may read, mirroring the field-maps
+// route it pairs with.
+export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Response> {
+  const portalKey = url.searchParams.get("portal_key") ?? undefined;
+  const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  return ok(rows, { total: rows.length });
 }
 
 // GET /api/portal-field-maps[?portal_key=...] — global catalog rows (org NULL)

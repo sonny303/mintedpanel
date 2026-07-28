@@ -1,7 +1,14 @@
-// Portals registry (org-scoped) — the payer-portal rows behind every fill.
-// Browser path (RLS-guarded), mirroring payers.ts: requireActiveOrg() scopes
-// every query, writes are audited, snake<->camel at the boundary.
+// Portals registry — the payer-portal rows behind every fill.
+//
+// DUAL surface (the portalFieldMaps.ts pattern):
+//   - browser path (RLS-guarded), mirroring payers.ts: requireActiveOrg()
+//     scopes every query, writes are audited, snake<->camel at the boundary;
+//   - server ctx path (listPortalsForApi), injected by GET /api/portals with
+//     the service-role client and the guard-resolved org.
+// Both read own-org rows plus GLOBAL registry rows (org_id NULL, E6.5).
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
+import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizePortalKey } from "@/lib/tokenFormat";
@@ -9,6 +16,43 @@ import type { Portal } from "@/types";
 
 const PORTAL_COLUMNS =
   "id, org_id, portal_key, name, payer_id, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
+
+export interface PortalServiceCtx {
+  db: SupabaseClient<Database>;
+  orgId: string;
+}
+
+/** GET /api/portals — the registry the extension matches the current tab
+ * against, so portal identity is DB-driven instead of a hardcoded list shipped
+ * in the extension bundle.
+ *
+ * Own-org rows plus global (org_id NULL) registry rows; another org's rows can
+ * never match the filter. `portal_key` is the join key the whole system already
+ * uses (SOP online_form steps, portal_field_maps, fill_sessions), folded to its
+ * canonical form on write — so the extension's page -> portal match is a
+ * literal compare, like the token join.
+ *
+ * Not PHI (a registry of payer portals and their URLs) — no audit row, and no
+ * role gate: billing may read, matching the field-maps route. */
+export async function listPortalsForApi(
+  ctx: PortalServiceCtx,
+  filters: { portalKey?: string } = {},
+): Promise<Portal[]> {
+  let query = ctx.db
+    .from("portals")
+    .select(PORTAL_COLUMNS)
+    .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
+  if (filters.portalKey) {
+    // Fold the caller's key the same way the write boundary does, so a
+    // hand-typed mixed-case/whitespace key still matches.
+    query = query.eq("portal_key", normalizePortalKey(filters.portalKey) ?? "");
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return camelizeRow<Portal[]>(data ?? []);
+}
 
 export interface PortalInput {
   name: string;

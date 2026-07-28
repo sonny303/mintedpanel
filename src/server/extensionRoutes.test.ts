@@ -4,6 +4,7 @@ import type { AuthContext, UserContext } from "./guard";
 import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
 vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
+vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 vi.mock("@/services/providerCases", () => ({
@@ -22,6 +23,7 @@ vi.mock("@/services/extensionViewPrefs", () => ({
 }));
 
 import { listPortalFieldMaps } from "@/services/portalFieldMaps";
+import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
@@ -38,6 +40,7 @@ import {
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
+  handleListPortals,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -50,6 +53,7 @@ import {
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
+const listPortalsMock = vi.mocked(listPortalsForApi);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
@@ -354,6 +358,49 @@ describe("portal field maps handler", () => {
     expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
     });
+  });
+});
+
+describe("portals registry handler", () => {
+  const url = (qs = "") => new URL(`https://x.test/api/portals${qs}`);
+
+  it("returns the registry rows with meta.total", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }, { id: "p2" }] as never);
+    const res = await handleListPortals(url(), ctx());
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual([{ id: "p1" }, { id: "p2" }]);
+    expect(b.meta).toEqual({ total: 2 });
+  });
+
+  it("scopes the read to the guard-resolved org", async () => {
+    listPortalsMock.mockResolvedValue([] as never);
+    await handleListPortals(url(), ctx());
+    expect(listPortalsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      expect.anything(),
+    );
+  });
+
+  it("forwards ?portal_key to the service", async () => {
+    listPortalsMock.mockResolvedValue([] as never);
+    await handleListPortals(url("?portal_key=availity"), ctx());
+    expect(listPortalsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+      portalKey: "availity",
+    });
+  });
+
+  it("is readable by billing (read-only registry, no role gate)", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }] as never);
+    const res = await handleListPortals(url(), ctx("billing"));
+    expect(res.status).toBe(200);
+  });
+
+  it("writes no audit row (a portal registry is not PHI)", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }] as never);
+    const c = ctx();
+    await handleListPortals(url(), c);
+    expect(c.writeAudit).not.toHaveBeenCalled();
   });
 });
 

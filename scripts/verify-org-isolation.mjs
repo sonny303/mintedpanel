@@ -660,6 +660,36 @@ function looksLikeVercelGate(r) {
     console.log("SKIP  17b. cross-org document download — SOUTHPARK_DOCUMENT_ID not set");
   }
 
+  // 18. Portals registry (shared catalog, same model as field maps): Kansas
+  //     sees global (org NULL) rows plus its OWN org rows, and never another
+  //     org's org-scoped portal. 18a first proves South Park actually holds an
+  //     org-scoped portal, so 18b can't pass vacuously against an empty table —
+  //     an 18a failure is a fixture gap, not a leak (register a South Park
+  //     portal), and it downgrades to a SKIP rather than a false red.
+  const portals = await apiGet("/api/portals", { token: kansasTok });
+  const portalRows = portals.body?.data ?? [];
+  check(
+    "18. Kansas portals registry reads",
+    portals.status === 200 && Array.isArray(portalRows),
+    `status=${portals.status} rows=${portalRows.length}` +
+      (portals.status !== 200 ? ` body=${(portals.raw || "").slice(0, 100)}` : ""),
+  );
+  const spPortals = await apiGet("/api/portals", { token: spTok });
+  const spOwnPortals = (spPortals.body?.data ?? []).filter((r) => r.orgId === env.SOUTHPARK_ORG);
+  if (spPortals.status === 200 && spOwnPortals.length >= 1) {
+    check(
+      "18b. Kansas portals exclude every South Park org-scoped portal",
+      !portalRows.some((r) => r.orgId === env.SOUTHPARK_ORG),
+      `southParkOrgRows=${portalRows.filter((r) => r.orgId === env.SOUTHPARK_ORG).length}` +
+        ` (South Park holds ${spOwnPortals.length})`,
+      { leak: true },
+    );
+  } else {
+    console.log(
+      "SKIP  18b. cross-org portal isolation — South Park holds no org-scoped portal fixture",
+    );
+  }
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

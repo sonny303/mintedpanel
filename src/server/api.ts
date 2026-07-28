@@ -26,6 +26,9 @@ const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
+// `/api/portals` — the DB-driven payer-portal registry the extension matches
+// the current tab against.
+const PORTALS_ROUTE = /^\/api\/portals\/?$/;
 const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
 // `/api/cases?providerId=` — the extension popup's case dropdown.
 const CASES_ROUTE = /^\/api\/cases\/?$/;
@@ -95,6 +98,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const ssnReleaseMatch = pathname.match(SSN_RELEASE_ROUTE);
   const providersMatch = profileMatch || ssnReleaseMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
+  const isPortals = PORTALS_ROUTE.test(pathname);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
@@ -111,6 +115,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !ssnReleaseMatch &&
     !providersMatch &&
     !isFieldMaps &&
+    !isPortals &&
     !isFillEvents &&
     !isCases &&
     !caseTouchesMatch &&
@@ -176,6 +181,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleListPortalFieldMaps(url, ctx);
+    }
+    if (isPortals) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleListPortals(url, ctx);
     }
     if (isFillEvents) {
       if (method !== "POST") return fail(405, "Method not allowed");

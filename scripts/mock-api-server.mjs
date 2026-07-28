@@ -28,6 +28,7 @@
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
+//   portals     another org's registry portals leak into the catalog  (18b)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -69,6 +70,7 @@ export const LEAK_MODES = [
   "facility",
   "ssnrelease",
   "documentdownload",
+  "portals",
 ];
 
 const USERS = {
@@ -258,6 +260,41 @@ const FIELD_MAPS = [
     "sp_test_portal",
     "#sp-test-field",
   ),
+];
+
+// Portals registry fixture: global (org NULL) rows every org sees, plus one
+// South Park org-scoped portal so the gate's 18b has something real to exclude.
+const PORTALS = [
+  {
+    id: "portal-global-1",
+    orgId: null,
+    portalKey: "bcbs_ks_enrollment",
+    name: "BCBS Kansas Enrollment",
+    payerId: null,
+    formUrl: "https://example.test/bcbs/enroll",
+    isVerified: true,
+    provenAt: null,
+  },
+  {
+    id: "portal-global-2",
+    orgId: null,
+    portalKey: "availity",
+    name: "Availity",
+    payerId: null,
+    formUrl: "https://example.test/availity",
+    isVerified: false,
+    provenAt: null,
+  },
+  {
+    id: "portal-sp-1",
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    portalKey: "sp_test_portal",
+    name: "South Park Test Portal",
+    payerId: null,
+    formUrl: "https://example.test/sp",
+    isVerified: false,
+    provenAt: null,
+  },
 ];
 
 function envelope(res, status, data, error = null, meta = null) {
@@ -721,6 +758,15 @@ export async function createMockApiServer(options = {}) {
         latestNote: c.latestNote ?? null,
         latestTouch: c.latestTouch ?? null,
       });
+    }
+
+    // --- /api/portals (DB-driven registry: global rows + own-org rows) ---
+    if (/^\/api\/portals\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const portalKey = url.searchParams.get("portal_key");
+      let rows = PORTALS.filter((r) => r.orgId === null || r.orgId === orgId || leak === "portals");
+      if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
+      return envelope(res, 200, rows, null, { total: rows.length });
     }
 
     // --- /api/portal-field-maps ---
