@@ -145,6 +145,14 @@ const PROPOSE_FIELD_TYPES: ReadonlySet<string> = new Set([
   "file",
 ]);
 
+// The note stamped on an extension-proposed row. See the notes_required
+// discussion below — this is a schema requirement, not decoration.
+export const PROPOSED_BY_EXTENSION_NOTE =
+  "Proposed by the extension — seen on the form, not yet mapped to a token.";
+
+// Same constraint, from the trainer's "Manual" button. See markFieldMapManual.
+export const MARKED_MANUAL_NOTE = "Marked manual in the trainer — filled by hand.";
+
 // PROPOSE-ONLY: the extension reports a field it saw on a portal page that
 // nothing maps yet. It can never approve one.
 //
@@ -154,11 +162,15 @@ const PROPOSE_FIELD_TYPES: ReadonlySet<string> = new Set([
 //     SOP editor's trainer (E6.5 FormStepPanel), where a person sees the field
 //     in context and picks the token; a client that could write 'approved'
 //     would be able to silently redirect what autofills into a payer form.
-//     Note the extension fills proposed AND approved maps (only 'retired' is
-//     skipped), so this row does become live — but with source 'manual' and no
-//     token it fills nothing until a human maps it. That is the point: it
-//     surfaces the field in the trainer queue and in mappingCoverage, and
-//     changes no existing behaviour.
+//     Since S5.1 the fill path uses ONLY 'approved' maps, so this row is inert
+//     on the form until a human maps it. What it does do is surface the field
+//     in the trainer queue and in mappingCoverage — both of which key on
+//     status 'proposed', not on source.
+//   - `source` is forced to 'manual' by the schema, not by preference: a row
+//     with a null token and no hardcoded value fails token_required under
+//     'token'/'manual_partial' and hardcoded_required under 'hardcoded'. The
+//     price of 'manual' is notes_required (manual ⇒ notes NOT NULL), so the
+//     note below is mandatory — omitting it made every propose call 23514.
 //   - org_id comes from the guard, never the body, and is ALWAYS set: a global
 //     (org_id NULL) row is a platform catalog entry and is not the extension's
 //     to mint. RLS would block it from a browser client anyway, but this route
@@ -227,6 +239,11 @@ export async function proposeFieldMap(
       map_type: "web",
       status: "proposed",
       source: "manual",
+      // Required by portal_field_maps_notes_required (source 'manual' ⇒ notes
+      // NOT NULL). Also the honest answer to "why is this row here with no
+      // token" for whoever opens the trainer queue. No page content: the label
+      // the extension observed is its own column.
+      notes: PROPOSED_BY_EXTENSION_NOTE,
       token: null,
     } as never)
     .select(PORTAL_FIELD_MAP_COLUMNS)
@@ -321,15 +338,30 @@ export async function approveFieldMap(
 
 // Approve a proposed row as manual: the extension skips it, and it is counted
 // out of auto-fill coverage.
+//
+// Moving a row TO source 'manual' brings it under notes_required (manual ⇒
+// notes NOT NULL), and most rows reach the trainer with null notes — 11 of the
+// 18 live 'token' rows do, and any of them can be sent back to proposed by
+// Undo. Without a note this update is a 23514, so supply one when the row has
+// none. An existing note is a human's and is never overwritten.
 export async function markFieldMapManual(
   id: string,
   fieldLabel?: string | null,
 ): Promise<PortalFieldMap> {
   const orgId = requireActiveOrg();
+  const { data: current, error: readError } = await supabase
+    .from("portal_field_maps")
+    .select("notes")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readError) throw readError;
+  const existingNote = (current?.notes ?? "").trim();
   const row = await updateFieldMapRow(orgId, id, {
     status: "approved",
     source: "manual",
     token: null,
+    ...(existingNote ? {} : { notes: MARKED_MANUAL_NOTE }),
   });
   await writeAudit({
     actionType: "UPDATE",

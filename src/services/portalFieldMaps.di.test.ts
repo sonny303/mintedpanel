@@ -10,6 +10,7 @@ vi.mock("@/integrations/supabase/externalClient", () => ({ supabase: {} }));
 import {
   listPortalFieldMaps,
   proposeFieldMap,
+  PROPOSED_BY_EXTENSION_NOTE,
   type PortalFieldMapServiceCtx,
 } from "./portalFieldMaps";
 
@@ -244,6 +245,22 @@ describe("proposeFieldMap — propose-only write", () => {
     expect(payload?.source).toBe("manual");
     expect(payload?.token).toBeNull();
     expect(JSON.stringify(payload)).not.toContain("ssnLast4");
+  });
+
+  // Regression: the first cut of this write omitted `notes`, and every call
+  // 23514'd on portal_field_maps_notes_required (source 'manual' ⇒ notes NOT
+  // NULL) — verified against the live DB. The fake DB below speaks PostgREST,
+  // not Postgres, so it cannot enforce a CHECK; this asserts the payload
+  // instead. Keep `notes` non-empty here or the route is dead on arrival.
+  it("stamps the note the schema requires for a source 'manual' row", async () => {
+    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    await proposeFieldMap(proposeCtx(db), input);
+    const payload = inserted(captures);
+    expect(payload?.source).toBe("manual");
+    expect(typeof payload?.notes).toBe("string");
+    expect((payload?.notes as string).trim()).not.toBe("");
+    // The note explains the row; it never carries scraped page content.
+    expect(payload?.notes).toBe(PROPOSED_BY_EXTENSION_NOTE);
   });
 
   it("always writes the caller's org, never a global row or a body-supplied org", async () => {

@@ -54,9 +54,6 @@ export interface SubmissionTouchServiceCtx {
   orgId: string;
   userId: string;
   writeAudit: (input: AuditInput) => Promise<void>;
-  // The caller-JWT-bound client (RLS + auth.uid()), for the opt-in status bump
-  // only — see bumpCaseToSubmitted. Every other write here stays on `db`.
-  asUser: () => SupabaseClient<Database>;
 }
 
 // Wire shape of POST /api/cases/:id/touches — snake_case body keys per the
@@ -123,65 +120,57 @@ export type RecordSubmissionTouchResult =
  * extension name an arbitrary target would hand it the transition machine. */
 const BUMP_TARGET_STATUS = "submitted";
 
-// set_case_status raises named errors; these are the ones a bump can plausibly
-// hit. Mirrors the browser map in services/cases.ts — kept short on purpose:
-// anything unrecognized degrades to a generic line rather than echoing SQL.
-const BUMP_ERROR_MESSAGES: Record<string, string> = {
-  case_status_invalid_transition: "The case was not in a status that can move to Submitted.",
-  case_status_not_authorized: "Your role cannot change the case status.",
-  case_status_case_not_found: "Case not found.",
-  case_status_evidence_invalid: "The evidencing touch doesn't belong to this case.",
-};
+// The case was already past Submitted, so the auto-transition deliberately left
+// it alone (a human's later decision stands). Not an error — the submission was
+// still logged.
+const BUMP_ALREADY_ADVANCED_REASON =
+  "The case is already past Submitted, so its status was left as it is.";
 
-function bumpErrorReason(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("case_status_conflict")) {
-    return "The case status changed while the touch was being logged.";
-  }
-  // Longest key first: case_status_invalid prefixes case_status_invalid_transition.
-  const key = Object.keys(BUMP_ERROR_MESSAGES)
-    .sort((a, b) => b.length - a.length)
-    .find((k) => trimmed.startsWith(k));
-  return key ? BUMP_ERROR_MESSAGES[key] : "The case status could not be updated.";
-}
+const BUMP_UNKNOWN_REASON = "The case status could not be confirmed.";
 
-/** Move the case to Submitted, evidenced by the touch just written.
+/** Report whether the case is now Submitted, after the anchor touch landed.
  *
- * Routed through the CALLER'S JWT (ctx.asUser), never the service-role client:
- * set_case_status is SECURITY INVOKER and leans on RLS to scope its
- * `SELECT ... FOR UPDATE` to the caller's org, on user_role() to authorize, and
- * on auth.uid() to stamp the actor into case_status_history. Under the service
- * key all three break at once — the lock would reach any org's case, the actor
- * would be NULL, and user_role() would deny. Using the caller's own token keeps
- * every transition rule where it already lives.
+ * This does NOT perform the transition, because the database already did. The
+ * E6.0 trigger `trg_case_status_on_touch` fires AFTER INSERT on every
+ * touchpoint and, for the exact shape this endpoint writes
+ * (source 'extension' + outcome 'submitted'), calls
+ * `_apply_case_status_auto(case, 'submitted', touch.id)` — same transaction,
+ * same evidencing touch, no opt-in required.
  *
- * expectedStatus is null (an auto-transition trigger may have just moved the
- * case — the E6.6 Add-touch bump does the same), and a FAILED bump never
- * unwinds the touch: the touch is the durable record of what the human did,
- * and losing it because a transition was illegal would be the worse outcome.
+ * The first cut of this function called `set_case_status(to => 'submitted')`
+ * afterwards. That can never succeed: the RPC opens with
+ * `IF p_to_status = v_from THEN RAISE case_status_invalid_transition`, and the
+ * trigger has already made from = 'submitted'. Every submission therefore came
+ * back applied:false with "The case was not in a status that can move to
+ * Submitted." — a warning on a submission that had in fact worked perfectly.
+ *
+ * When the case sits in a LATER state (in_review, approved, …) the trigger
+ * deliberately no-ops: `_apply_case_status_auto` returns early because
+ * "anything else was set by a person and stands". Forcing it would be wrong,
+ * so the honest report there is applied:false with the reason.
+ *
+ * Read on `ctx.db`: the case's ownership was validated against ctx.orgId before
+ * any write in this request.
  */
-async function bumpCaseToSubmitted(
+async function reportCaseStatusAfterTouch(
   ctx: SubmissionTouchServiceCtx,
   caseId: string,
-  evidenceTouchId: string,
 ): Promise<StatusBumpOutcome> {
-  const rpc = ctx.asUser().rpc.bind(ctx.asUser()) as unknown as (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: { message: string } | null }>;
   try {
-    const { error } = await rpc("set_case_status", {
-      p_case_id: caseId,
-      p_to_status: BUMP_TARGET_STATUS,
-      p_expected_status: null,
-      p_evidence_touch_id: evidenceTouchId,
-    });
-    if (error) return { applied: false, reason: bumpErrorReason(error.message ?? "") };
-    return { applied: true };
+    const { data, error } = await ctx.db
+      .from("credential_cases")
+      .select("case_status")
+      .eq("id", caseId)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle();
+    if (error || !data) return { applied: false, reason: BUMP_UNKNOWN_REASON };
+    const status = (data as { case_status: string | null }).case_status;
+    if (status === BUMP_TARGET_STATUS) return { applied: true };
+    return { applied: false, reason: BUMP_ALREADY_ADVANCED_REASON };
   } catch {
-    // A transport failure is not a reason to fail the whole request — the touch
-    // already landed and the human's submission is recorded.
-    return { applied: false, reason: "The case status could not be updated." };
+    // The touch already landed and is the durable record of what the human
+    // did; not being able to read the status back is not a reason to fail it.
+    return { applied: false, reason: BUMP_UNKNOWN_REASON };
   }
 }
 
@@ -478,12 +467,13 @@ export async function recordSubmissionTouch(
     description: text,
   });
 
-  // ---- Opt-in status bump (In Progress -> Submitted). ----
-  // Runs LAST, only on a first create: a replay short-circuits at the anchor
-  // above, so a retried POST can never double-bump. The touch is already
-  // durable at this point — a rejected transition is reported in the response
-  // meta, never rolled back onto the human's submission record.
-  const bump = input.bump_status ? await bumpCaseToSubmitted(ctx, caseId, touch.id) : undefined;
+  // ---- Status report (the DB already moved the case). ----
+  // The anchor insert above fired trg_case_status_on_touch, which advanced the
+  // case to Submitted in the same transaction with this touch as evidence. All
+  // that is left is to tell the caller what happened. `bump_status` is kept in
+  // the wire contract so an older panel still gets its confirmation line; it no
+  // longer gates anything, because the transition is not opt-in at the DB.
+  const bump = input.bump_status ? await reportCaseStatusAfterTouch(ctx, caseId) : undefined;
 
   return { kind: "created", touch, bump };
 }

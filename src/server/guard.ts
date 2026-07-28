@@ -37,21 +37,17 @@ export interface AuthContext {
   // A client bound to the CALLER'S JWT (anon key + their Authorization header),
   // so RLS applies and auth.uid() resolves — the opposite of `db`.
   //
-  // Use this, not `db`, for SECURITY INVOKER RPCs that rely on RLS for tenant
-  // scoping and on auth.uid() for the actor: set_case_status is the case in
-  // point. It locks its row with a bare `SELECT ... FOR UPDATE` and documents
-  // "RLS scopes this to the caller's org, so a cross-org id is simply NOT
-  // FOUND", then authorizes via user_role(org) and stamps auth.uid() into
-  // case_status_history. Called through the service-role client all three
-  // break at once: RLS is off (so the lock finds ANY org's case), auth.uid()
-  // is NULL (so the actor is NULL), and user_role() returns NULL (so the call
-  // fails not_authorized). Routing it through the caller's own JWT keeps every
-  // rule exactly where it already lives instead of reimplementing the
-  // transition logic behind the service key.
-  //
-  // Lazily created — most requests never need it.
-  asUser: () => SupabaseClient<Database>;
 }
+
+// WARNING for anyone adding a route that calls a SECURITY INVOKER RPC: do NOT
+// call it on ctx.db. Those RPCs lean on RLS for tenant scoping, on user_role()
+// to authorize, and on auth.uid() for the actor — set_case_status does all
+// three. Under the service-role client all three break at once: RLS is off (so
+// its `SELECT ... FOR UPDATE` reaches ANY org's row), user_role() returns NULL
+// (so the call fails not_authorized), and auth.uid() is NULL (so the actor is
+// unattributed). Bind the caller's own JWT with getAuthClient(getBearerToken(
+// request)) instead, and keep the transition rules where they already live.
+// No current route needs this, which is why no such client is built here.
 
 export class GuardError extends Error {
   constructor(
@@ -106,8 +102,6 @@ export async function authenticate(
   requestedOrgId?: string | null,
 ): Promise<AuthContext> {
   const { userId, email, userMetadata, db } = await authenticateUser(request);
-  // Retained for asUser() below. Never logged, never returned in a response.
-  const token = getBearerToken(request);
 
   let membershipQuery = db.from("memberships").select("org_id, role").eq("user_id", userId);
   if (requestedOrgId) membershipQuery = membershipQuery.eq("org_id", requestedOrgId);
@@ -154,13 +148,7 @@ export async function authenticate(
     if (error) throw error;
   };
 
-  let cachedUserClient: SupabaseClient<Database> | undefined;
-  const asUser = (): SupabaseClient<Database> => {
-    cachedUserClient ??= getAuthClient(token);
-    return cachedUserClient;
-  };
-
-  return { userId, orgId, role, userName, email, userMetadata, db, writeAudit, asUser };
+  return { userId, orgId, role, userName, email, userMetadata, db, writeAudit };
 }
 
 // Writers = specialist or admin, mirroring the RLS write policies. billing is

@@ -2680,24 +2680,29 @@ payerReferenceId, payerPipelineState }` — never beyond the list projections). 
   gate assertions **8c** (own portalTasks reference only own-org tasks) + **8d**
   (cross-org request never leaks a South Park task id via portalTasks, red under
   the `cases` leak mode). (`src/services/providerCases.ts`)
-- `POST /api/cases/:id/touches` — the "Mark submitted" business log. **Opt-in
-  status bump (2026-07-28):** `bump_status: true` on a `portal_submission` also
-  moves the case to Submitted via `set_case_status`, evidenced by the touch just
-  written (422 on `structured_touch` — no single target). The R2 rule that the
-  extension never changes status IMPLICITLY still holds; this is explicit and
-  off by default. **It rides `ctx.asUser()`, NOT the service-role `ctx.db`** —
-  `set_case_status` is SECURITY INVOKER and leans on RLS to scope its
-  `SELECT … FOR UPDATE`, on `user_role()` to authorize, and on `auth.uid()` to
-  stamp the actor; under the service key all three break at once (the lock
-  reaches any org's case, the actor is NULL, `user_role()` denies). `asUser()` is
-  the new `AuthContext` member: a lazily-created client bound to the caller's own
-  JWT (`getAuthClient`), so every transition rule stays where it lives instead of
-  being reimplemented behind the service key. Use it for ANY SECURITY INVOKER RPC
-  added later. Semantics mirror the E6.6 Add-touch bump: target always Submitted
-  (never caller-supplied), `expectedStatus` null, runs last and only on a first
-  create (a replay can't double-apply), and a REJECTED transition never unwinds
-  the touch — the outcome rides `meta.status_bump`/`status_bump_reason` (errors
-  mapped to safe text, never raw SQL) so `data` stays exactly the touch. R2 core:
+- `POST /api/cases/:id/touches` — the "Mark submitted" business log. **Status is
+  moved by the DATABASE, not this route (corrected 2026-07-28).** The E6.0
+  trigger `trg_case_status_on_touch` fires AFTER INSERT on every touchpoint and,
+  for the exact shape this endpoint writes (`source 'extension'` + `outcome
+'submitted'`), calls `_apply_case_status_auto(case, 'submitted', touch.id)` —
+  same transaction, this touch as evidence, no opt-in. `bump_status: true`
+  therefore does not perform a transition; it only asks the route to READ the
+  case back and report what the trigger did (`meta.status_bump` /
+  `status_bump_reason`, `data` stays exactly the touch). It stays in the wire
+  contract so an older panel still gets its confirmation line, and is still a
+  422 on `structured_touch`. **The first cut called `set_case_status` here and
+  could never succeed:** that RPC opens with `IF p_to_status = v_from THEN RAISE
+case_status_invalid_transition`, and the trigger had already made
+  `from = 'submitted'` — so every real submission returned applied:false with
+  "not in a status that can move to Submitted" on a submission that had worked.
+  The unit fake speaks PostgREST and has no triggers, which is why it passed
+  while the feature was 100% broken; the suite now pins that NO RPC is issued.
+  When the case sits past Submitted the trigger deliberately no-ops ("set by a
+  person stands") and the honest report is applied:false. `ctx.asUser()` was
+  added for that doomed call and has been REMOVED with it — but the trap it
+  documented is real and is now a warning comment in `guard.ts`: never call a
+  SECURITY INVOKER RPC on `ctx.db`, because RLS, `user_role()` and `auth.uid()`
+  all break at once under the service key. R2 core:
   ONE append-only anchor touchpoint (`touch_type 'portal'`, `outcome
 'submitted'`, `source 'extension'`, text "Application submitted via <portal
   label>"); `idempotency_id` is its PK (same replay semantics as fill-events).
@@ -2854,13 +2859,16 @@ the E4.3 both-repos-attached rule. Panel-side highlights:
 - **New /api surfaces:** `GET /api/portals` (S3.2 registry),
   `POST /api/portal-field-maps` (S5.1 propose-only, S5.3 learned suggestion),
   `PATCH /api/tasks/:id/steps` (S4.3 — the ONE task-state write),
-  `POST /api/providers/:id/caqh-attestation` (S6.2), `bump_status` on the
-  touches POST (S4.4), and a ranked `items` list on `/api/next-best-action`
-  (S3.3). Gate assertions 18-21 + `portals`/`taskstep` leak modes; 16 modes.
-- **`ctx.asUser()`** (`src/server/guard.ts`) — a client bound to the CALLER'S
-  JWT. Required for any SECURITY INVOKER RPC on an /api route: under the
-  service key, RLS, `auth.uid()` and `user_role()` all break at once. The
-  S4.4 status bump rides it.
+  `POST /api/providers/:id/caqh-attestation` (S6.2), the `bump_status` status
+  REPORT on the touches POST (S4.4 — the DB trigger does the transition), and a
+  ranked `items` list on `/api/next-best-action` (S3.3). Gate assertions 18-21 +
+  `portals`/`taskstep` leak modes; 16 modes.
+- **SECURITY INVOKER RPCs on /api** — never call one on `ctx.db`: under the
+  service key RLS, `auth.uid()` and `user_role()` all break at once. Bind the
+  caller's JWT (`getAuthClient(getBearerToken(request))`) instead. A
+  `ctx.asUser()` helper was added for the S4.4 bump and removed with it when
+  that call turned out to be unreachable (see the touches bullet); the warning
+  lives in `guard.ts`. No current route needs such a client.
 - **Shared pure modules** so the two products can't disagree:
   `sopStepCompletion.ts` (S4.3 ordering + rollup, shared with the webapp task
   drawer), `labelLearning.ts` (S5.3 suggestion + payer-count evidence),

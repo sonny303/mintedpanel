@@ -66,21 +66,9 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
   return { db: db as unknown as SupabaseClient<Database>, captures };
 }
 
-function ctxWith(
-  db: SupabaseClient<Database>,
-  writeAudit = vi.fn().mockResolvedValue(undefined),
-  userRpc = vi.fn().mockResolvedValue({ data: {}, error: null }),
-) {
-  // asUser() is the caller-JWT-bound client the status bump uses; every other
-  // write in the service stays on `db`, so the two stay distinguishable here.
-  const ctx: SubmissionTouchServiceCtx = {
-    db,
-    orgId: "org-1",
-    userId: "user-1",
-    writeAudit,
-    asUser: () => ({ rpc: userRpc }) as unknown as SupabaseClient<Database>,
-  };
-  return { ctx, writeAudit, userRpc };
+function ctxWith(db: SupabaseClient<Database>, writeAudit = vi.fn().mockResolvedValue(undefined)) {
+  const ctx: SubmissionTouchServiceCtx = { db, orgId: "org-1", userId: "user-1", writeAudit };
+  return { ctx, writeAudit };
 }
 
 const TOUCH_ID = "11111111-2222-4333-8444-555555555555";
@@ -482,111 +470,111 @@ describe("recordSubmissionTouch — Stories 5/6/7 write-back", () => {
   });
 });
 
-describe("recordSubmissionTouch — opt-in status bump (In Progress -> Submitted)", () => {
-  // Sequence for a plain portal submission: case lookup, idempotency miss,
-  // anchor insert, then the system_event insert.
-  const okSequence = () => [{ data: { id: CASE_ID } }, { data: null }, { data: storedRow }];
+// The transition itself is NOT performed here. trg_case_status_on_touch fires
+// AFTER INSERT on the anchor touch and, for this endpoint's exact shape
+// (source 'extension' + outcome 'submitted'), already moved the case via
+// _apply_case_status_auto — same transaction, this touch as evidence.
+//
+// This suite exists because the first cut DID call set_case_status afterwards,
+// which can never succeed: the RPC opens with
+// `IF p_to_status = v_from THEN RAISE case_status_invalid_transition`, and the
+// trigger had just made from = 'submitted'. Every real submission came back
+// applied:false. Verified against the live DB (trigger body + RPC body), which
+// is the only place that interaction is visible — a PostgREST-shaped fake has
+// no triggers, which is exactly why the original suite passed while the feature
+// was 100% broken in production. So these tests assert the READ-BACK contract
+// and pin that no RPC is issued at all.
+describe("recordSubmissionTouch — status report after the DB's auto-transition", () => {
+  // Results are consumed only by maybeSingle()/single(), so the bare
+  // system_event insert takes no slot: case lookup, idempotency miss, anchor
+  // insert, then the status read-back.
+  const okSequence = (caseStatus: string | null = "submitted") => [
+    { data: { id: CASE_ID } },
+    { data: null },
+    { data: storedRow },
+    { data: { case_status: caseStatus } },
+  ];
 
-  it("does not touch the status machine when bump_status is absent", async () => {
-    const { db } = makeFakeDb(okSequence());
-    const { ctx, userRpc } = ctxWith(db);
+  it("reads nothing back when bump_status is absent", async () => {
+    const { db, captures } = makeFakeDb(okSequence());
+    const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, baseInput);
     expect(result.kind).toBe("created");
     if (result.kind !== "created") throw new Error("expected a created result");
-    expect(userRpc).not.toHaveBeenCalled();
-    // No bump requested -> nothing to report.
     expect(result.bump).toBeUndefined();
+    expect(captures.some((c) => c.selectCols === "case_status")).toBe(false);
   });
 
-  it("calls set_case_status through the CALLER'S client, never the service-role one", async () => {
+  it("never calls the status RPC — the trigger already did the transition", async () => {
     const { db, captures } = makeFakeDb(okSequence());
-    const { ctx, userRpc } = ctxWith(db);
+    const { ctx } = ctxWith(db);
     await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
-
-    // THE isolation property: set_case_status is SECURITY INVOKER and leans on
-    // RLS to scope its row lock, on user_role() to authorize, and on auth.uid()
-    // to stamp the actor. Routed through the service-role client all three
-    // break at once. The RPC must therefore ride ctx.asUser().
-    expect(userRpc).toHaveBeenCalledTimes(1);
+    // A set_case_status call here is unconditionally a same-state edge and
+    // would 100% raise case_status_invalid_transition. There must be none.
     expect(captures.every((c) => c.op !== "rpc")).toBe(true);
   });
 
-  it("targets Submitted, evidences the touch, and passes no expected status", async () => {
-    const { db } = makeFakeDb(okSequence());
-    const { ctx, userRpc } = ctxWith(db);
-    await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
-
-    expect(userRpc).toHaveBeenCalledWith("set_case_status", {
-      p_case_id: CASE_ID,
-      p_to_status: "submitted",
-      // null on purpose: an auto-transition trigger may have just moved the
-      // case, and the extension never had a rendered status to be stale about.
-      p_expected_status: null,
-      p_evidence_touch_id: TOUCH_ID,
-    });
-  });
-
-  it("reports an applied bump without changing the response data", async () => {
-    const { db } = makeFakeDb(okSequence());
+  it("reports applied when the trigger left the case Submitted, org-scoping the read", async () => {
+    const { db, captures } = makeFakeDb(okSequence("submitted"));
     const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
     if (result.kind !== "created") throw new Error("expected a created result");
     expect(result.bump).toEqual({ applied: true });
     expect(result.touch.id).toBe(TOUCH_ID);
+
+    const read = captures.find((c) => c.selectCols === "case_status");
+    expect(read?.table).toBe("credential_cases");
+    expect(read?.filters).toEqual(
+      expect.arrayContaining([
+        ["id", CASE_ID],
+        ["org_id", "org-1"],
+      ]),
+    );
   });
 
-  it("keeps the touch when the transition is rejected, and explains why", async () => {
-    const { db } = makeFakeDb(okSequence());
-    const rpc = vi
-      .fn()
-      .mockResolvedValue({ data: null, error: { message: "case_status_invalid_transition" } });
-    const { ctx } = ctxWith(db, undefined, rpc);
+  it("reports not-applied when the case was already past Submitted", async () => {
+    // _apply_case_status_auto returns early for anything outside
+    // {not_started, in_progress}: a human's later decision stands.
+    const { db } = makeFakeDb(okSequence("approved"));
+    const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
-
-    // The touch is the durable record of what the human did; an illegal edge
-    // must not discard it.
-    expect(result.kind).toBe("created");
     if (result.kind !== "created") throw new Error("expected a created result");
-    expect(result.touch.id).toBe(TOUCH_ID);
     expect(result.bump?.applied).toBe(false);
-    expect(result.bump?.reason).toMatch(/status that can move to Submitted/);
+    expect(result.bump?.reason).toMatch(/already past Submitted/);
+    // The touch is the durable record of what the human did and stands either way.
+    expect(result.touch.id).toBe(TOUCH_ID);
   });
 
   it("never echoes a raw SQL error to the caller", async () => {
-    const { db } = makeFakeDb(okSequence());
-    const rpc = vi.fn().mockResolvedValue({
-      data: null,
-      error: { message: 'relation "credential_cases" does not exist at character 42' },
-    });
-    const { ctx } = ctxWith(db, undefined, rpc);
+    const { db } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: storedRow },
+      {
+        data: null,
+        error: { message: 'relation "credential_cases" does not exist at character 42' },
+      },
+    ]);
+    const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
     if (result.kind !== "created") throw new Error("expected a created result");
-    expect(result.bump?.reason).toBe("The case status could not be updated.");
+    expect(result.bump?.applied).toBe(false);
+    expect(result.bump?.reason).toBe("The case status could not be confirmed.");
     expect(result.bump?.reason).not.toContain("relation");
   });
 
-  it("survives a transport failure without failing the request", async () => {
-    const { db } = makeFakeDb(okSequence());
-    const rpc = vi.fn().mockRejectedValue(new Error("socket hang up"));
-    const { ctx } = ctxWith(db, undefined, rpc);
-    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
-    expect(result.kind).toBe("created");
-    if (result.kind !== "created") throw new Error("expected a created result");
-    expect(result.bump?.applied).toBe(false);
-  });
-
-  it("never double-bumps on a replay (the retry path short-circuits first)", async () => {
+  it("does not report on a replay (the retry path short-circuits first)", async () => {
     // Case lookup, then the idempotency lookup HITS -> duplicate.
-    const { db } = makeFakeDb([{ data: { id: CASE_ID } }, { data: storedRow }]);
-    const { ctx, userRpc } = ctxWith(db);
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: storedRow }]);
+    const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
     expect(result.kind).toBe("duplicate");
-    expect(userRpc).not.toHaveBeenCalled();
+    expect(captures.some((c) => c.selectCols === "case_status")).toBe(false);
   });
 
   it("rejects bump_status on a structured touch before any DB call", async () => {
     const { db, captures } = makeFakeDb([]);
-    const { ctx, userRpc } = ctxWith(db);
+    const { ctx } = ctxWith(db);
     const result = await recordSubmissionTouch(ctx, CASE_ID, {
       kind: "structured_touch",
       touch_type: "call",
@@ -595,7 +583,6 @@ describe("recordSubmissionTouch — opt-in status bump (In Progress -> Submitted
     } as SubmissionTouchInput);
     expectRejected(result, 422);
     expect(captures).toHaveLength(0);
-    expect(userRpc).not.toHaveBeenCalled();
   });
 });
 

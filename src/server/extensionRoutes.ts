@@ -351,7 +351,6 @@ export async function handleCreateCaseTouch(
       orgId: ctx.orgId,
       userId: ctx.userId,
       writeAudit: ctx.writeAudit,
-      asUser: ctx.asUser,
     },
     caseId,
     body as SubmissionTouchInput,

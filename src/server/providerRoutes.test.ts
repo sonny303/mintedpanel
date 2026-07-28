@@ -37,7 +37,6 @@ function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
     userMetadata: null,
     db: {} as AuthContext["db"],
     writeAudit: vi.fn().mockResolvedValue(undefined),
-    asUser: () => ({}) as AuthContext["db"],
   };
 }
 

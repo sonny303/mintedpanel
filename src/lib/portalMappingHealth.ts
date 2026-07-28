@@ -7,9 +7,10 @@ import type { PortalFieldMap } from "@/types";
 // usable value source: not manual (manual is a deliberate "fill by hand",
 // counted out of auto-fill — a choice, not a gap), no token to resolve, and no
 // hardcoded value. Such a mapping is live on the form yet always fills blank
-// until someone links it. Proposed rows count too: the extension fills proposed
-// maps (only retired is skipped), so a proposed row with no token silently
-// leaves its field empty on every fill.
+// until someone links it. Proposed rows count too — not because they fill (S5.1
+// flipped the fill path to approved-only, so they no longer do) but because an
+// approved-with-no-token row is the blank-fill case this predicate exists to
+// name, and a proposed one is the same row a click away from being approved.
 export function isUnlinkedFieldMap(m: PortalFieldMap): boolean {
   return (
     m.status !== "retired" &&

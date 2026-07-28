@@ -103,9 +103,6 @@ function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
     userMetadata: { full_name: "Tess Tester" },
     db: {} as AuthContext["db"],
     writeAudit: vi.fn().mockResolvedValue(undefined),
-    // Bound to the caller's JWT in production (RLS + auth.uid()); the tests
-    // that exercise the status bump swap in a controllable rpc stub.
-    asUser: () => ({ rpc: userRpcMock }) as unknown as AuthContext["db"],
   };
 }
 
@@ -411,15 +408,19 @@ describe("case touch handler — opt-in status bump", () => {
     expect((await body(res)).meta).toBeNull();
   });
 
-  it("passes the caller-JWT client through to the service", async () => {
+  it("passes the org-scoped service context through, and no caller-JWT client", async () => {
     recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH });
     const c = ctx();
     await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, c);
     expect(recordTouchMock).toHaveBeenCalledWith(
-      expect.objectContaining({ asUser: c.asUser, orgId: "org-1" }),
+      expect.objectContaining({ orgId: "org-1", db: c.db }),
       CASE,
       expect.anything(),
     );
+    // The status report is a plain read on the service-role client now: the
+    // DB trigger performs the transition, so no SECURITY INVOKER RPC is called
+    // and there is nothing to bind the caller's JWT for.
+    expect(recordTouchMock.mock.calls[0][0]).not.toHaveProperty("asUser");
   });
 
   it("still refuses billing before anything runs", async () => {
