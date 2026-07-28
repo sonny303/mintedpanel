@@ -36,11 +36,18 @@ export interface AssignmentRowInput {
   providerId: string;
   facilityId: string;
   isPrimary?: boolean;
-  startDate?: string | null;
+  /** REQUIRED, and deliberately not nullable. `provider_facility_assignments
+   * _start_date_check` (migration 20260712150000) is `CHECK (start_date IS NOT
+   * NULL) NOT VALID` — NOT VALID exempts pre-existing rows, but every new
+   * INSERT is still checked. This was optional, and createProviderWithDetails
+   * omitted it, so every facility ticked on the provider-create form 23514'd
+   * and was swallowed into a warning toast. Making it a required string moves
+   * that from a runtime surprise to a compile error. */
+  startDate: string;
 }
 
-/** Shared bulk insert used by the legacy callers (provider create, launch
- * assign). Duplicate (provider, facility) pairs are ignored, matching the
+/** Shared bulk insert used by the legacy callers (provider create, CSV import,
+ * batch assign). Duplicate (provider, facility) pairs are ignored, matching the
  * old launch upsert semantics. */
 export async function insertAssignmentRows(rows: AssignmentRowInput[]): Promise<void> {
   if (rows.length === 0) return;
@@ -51,7 +58,7 @@ export async function insertAssignmentRows(rows: AssignmentRowInput[]): Promise<
       provider_id: r.providerId,
       facility_id: r.facilityId,
       is_primary: r.isPrimary ?? false,
-      start_date: r.startDate ?? null,
+      start_date: r.startDate,
     })),
     { onConflict: "provider_id,facility_id", ignoreDuplicates: true },
   );

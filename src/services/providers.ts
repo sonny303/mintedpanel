@@ -367,8 +367,19 @@ export async function createProviderWithDetails(
   let insertedFacilityIds: string[] = [];
   if (facilityIds.length > 0) {
     try {
+      // start_date is REQUIRED by the pfa CHECK. This call omitted it, so every
+      // ticked facility 23514'd and the catch below turned a total failure into
+      // a warning nobody read. The provider's own start date is the honest
+      // answer to "when did they start at this location" at creation time;
+      // today is the fallback, matching the CSV-import precedent.
+      const assignmentStart =
+        input.provider.startDate?.trim() || new Date().toISOString().slice(0, 10);
       await insertAssignmentRows(
-        facilityIds.map((facilityId) => ({ providerId: created.id, facilityId })),
+        facilityIds.map((facilityId) => ({
+          providerId: created.id,
+          facilityId,
+          startDate: assignmentStart,
+        })),
       );
       insertedFacilityIds = facilityIds;
     } catch (facErr) {
