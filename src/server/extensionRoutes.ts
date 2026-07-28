@@ -16,6 +16,7 @@ import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
+import { completeTaskStep } from "@/services/taskSteps";
 import {
   getExtensionViewPrefs,
   getQuickCardCatalog,
@@ -360,6 +361,40 @@ export async function handleCreateCaseTouch(
         }
       : null;
   return ok(result.touch, meta, result.kind === "created" ? 201 : 200);
+}
+
+// PATCH /api/tasks/:id/steps — tick one SOP step complete (S4.3, the
+// extension's Progress tab). The ONE /api write that touches task state.
+//
+// Body: { stepId }. Writer roles only. The ordering rule ("finish the earlier
+// step first") and the all-done -> task completed rollup come from the pure
+// module shared with the webapp path, so the two surfaces can never disagree
+// about which step may be ticked. A blocked step is a 409 naming the blocker,
+// which the panel renders verbatim rather than inventing its own rule; a
+// re-tick of an already-complete step is an idempotent success so a retry
+// converges. Cross-org task id -> 404 before any write.
+export async function handleCompleteTaskStep(
+  taskId: string,
+  body: unknown,
+  ctx: AuthContext,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot complete task steps");
+  if (!UUID_RE.test(taskId)) return fail(404, "Task not found");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const stepId = (body as { stepId?: unknown }).stepId;
+  if (typeof stepId !== "string" || stepId.trim() === "") {
+    return fail(422, "stepId is required");
+  }
+  const result = await completeTaskStep(
+    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+    taskId,
+    stepId,
+    new Date().toISOString(),
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok({ task: result.task, allDone: result.allDone });
 }
 
 // POST /api/fill-events — log one fill session, idempotent on the

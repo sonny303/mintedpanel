@@ -15,13 +15,26 @@
 // opens and the caller shows a one-line non-blocking notice — the degraded
 // path is first-class UX, never an error (F4.3.1).
 
-/** The locked SET_ACTIVE_CASE message (TE-1). Identifiers + portal URL only. */
+/** The SET_ACTIVE_CASE message. Identifiers + portal URL only.
+ *
+ * S3.5 widened it ADDITIVELY with `portalKey` and `facilityId` (doc 06 C1's
+ * {org, provider, location, case, portal_key}). Both are optional: the
+ * extension strict-parses and drops unknowns, so an older extension ignores
+ * them and a newer one degrades when a case carries neither. Still
+ * identifiers + URL ONLY — no profile or token value has ever ridden this
+ * channel and none does now. */
 export interface SetActiveCaseMessage {
   type: "SET_ACTIVE_CASE";
   caseId: string;
   providerId: string;
   orgId: string;
   portalUrl: string;
+  // The registry key of the portal being launched — lets the panel bind the
+  // right portal without re-deriving it from the URL.
+  portalKey?: string;
+  // The case's location, when it has one: the facility.* / assignment.*
+  // tokens resolve from it, so passing it here saves the user a picker.
+  facilityId?: string;
 }
 
 export interface SetActiveCaseInput {
@@ -29,18 +42,25 @@ export interface SetActiveCaseInput {
   providerId: string;
   orgId: string;
   portalUrl: string;
+  portalKey?: string | null;
+  facilityId?: string | null;
 }
 
-/** Build the locked message from the case context. Pure — no side effects, so
- * it is unit-testable without a Chrome environment. */
+/** Build the message from the case context. Pure — no side effects, so it is
+ * unit-testable without a Chrome environment. Optional fields are OMITTED when
+ * absent rather than sent as null, so the wire shape stays minimal and the
+ * extension's strict parser sees exactly what it can use. */
 export function buildSetActiveCaseMessage(input: SetActiveCaseInput): SetActiveCaseMessage {
-  return {
+  const message: SetActiveCaseMessage = {
     type: "SET_ACTIVE_CASE",
     caseId: input.caseId,
     providerId: input.providerId,
     orgId: input.orgId,
     portalUrl: input.portalUrl,
   };
+  if (input.portalKey) message.portalKey = input.portalKey;
+  if (input.facilityId) message.facilityId = input.facilityId;
+  return message;
 }
 
 // The minimal shape of `chrome.runtime.sendMessage` we depend on, so this file

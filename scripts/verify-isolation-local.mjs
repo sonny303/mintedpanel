@@ -98,6 +98,7 @@ const EXPECTED_FAILS = {
   // The document-download leak serves a cross-org signed URL (assertion 17b).
   documentdownload: ["17b"],
   portals: ["18b"],
+  taskstep: ["21"],
 };
 
 function failedAssertions(output) {

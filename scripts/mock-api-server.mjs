@@ -31,6 +31,7 @@
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
 //   portals     another org's registry portals leak into the catalog  (18b)
+//   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -73,6 +74,7 @@ export const LEAK_MODES = [
   "ssnrelease",
   "documentdownload",
   "portals",
+  "taskstep",
 ];
 
 const USERS = {
@@ -811,6 +813,28 @@ export async function createMockApiServer(options = {}) {
         id: target.id,
         caqhLastAttestedDate: attestedOn,
         currentThroughDays: 120,
+      });
+    }
+
+    // --- /api/tasks/:id/steps (S4.3 step tick; org-checked before write) ---
+    const taskStepMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/steps\/?$/);
+    if (taskStepMatch) {
+      if (method !== "PATCH") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot complete task steps");
+      }
+      const body = (await readBody(req)) ?? {};
+      if (typeof body.stepId !== "string" || body.stepId.trim() === "") {
+        return envelope(res, 422, null, "stepId is required");
+      }
+      // Real contract: a task outside the caller's org is a 404 BEFORE any
+      // write. Leak "taskstep": the org check is skipped (assertion 21).
+      const task = TASKS.find((t) => t.id === taskStepMatch[1]);
+      const visible = task && (task.orgId === orgId || leak === "taskstep");
+      if (!visible) return envelope(res, 404, null, "Task not found");
+      return envelope(res, 200, {
+        task: { id: task.id, orgId: task.orgId, status: "in_progress" },
+        allDone: false,
       });
     }
 

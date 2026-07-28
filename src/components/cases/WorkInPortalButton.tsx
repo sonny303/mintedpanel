@@ -16,6 +16,7 @@ export function WorkInPortalButton({
   caseId,
   providerId,
   target,
+  facilityId,
   size = "sm",
   variant = "outline",
   className,
@@ -23,6 +24,9 @@ export function WorkInPortalButton({
   caseId: string;
   providerId: string;
   target: CasePortalTarget;
+  // S3.5: the case's location, when it has one — the extension resolves the
+  // facility.*/assignment.* tokens from it instead of asking the user.
+  facilityId?: string | null;
   size?: "sm" | "default";
   variant?: "outline" | "default";
   className?: string;
@@ -34,7 +38,16 @@ export function WorkInPortalButton({
     // next tab opened to the portal origin (TE-1). orgId is required so a
     // multi-org user can never be filled from the wrong org.
     const handedOff = orgId
-      ? sendSetActiveCase({ caseId, providerId, orgId, portalUrl: target.url })
+      ? sendSetActiveCase({
+          caseId,
+          providerId,
+          orgId,
+          portalUrl: target.url,
+          // S3.5 (doc 06 C1): carry the portal key and the case's location so
+          // the panel lands with zero dropdowns.
+          portalKey: target.portalKey,
+          facilityId,
+        })
       : false;
     if (!handedOff) {
       toast("Extension not detected — use its case search", {

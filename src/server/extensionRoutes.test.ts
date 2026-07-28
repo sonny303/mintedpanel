@@ -19,6 +19,7 @@ vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
 vi.mock("@/services/nextBestAction", () => ({ getNextBestAction: vi.fn() }));
+vi.mock("@/services/taskSteps", () => ({ completeTaskStep: vi.fn() }));
 vi.mock("@/services/extensionViewPrefs", () => ({
   getExtensionViewPrefs: vi.fn(),
   getQuickCardCatalog: vi.fn(),
@@ -35,6 +36,7 @@ import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { getNextBestAction } from "@/services/nextBestAction";
+import { completeTaskStep } from "@/services/taskSteps";
 import {
   getExtensionViewPrefs,
   getQuickCardCatalog,
@@ -45,6 +47,7 @@ import {
   handleListPortalFieldMaps,
   handleListPortals,
   handleProposeFieldMap,
+  handleCompleteTaskStep,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -68,6 +71,7 @@ const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 const getNbaMock = vi.mocked(getNextBestAction);
+const completeStepMock = vi.mocked(completeTaskStep);
 const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
 const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
 const catalogMock = vi.mocked(getQuickCardCatalog);
@@ -480,6 +484,66 @@ describe("propose field map handler (propose-only)", () => {
     const res = await handleProposeFieldMap({ portal_key: "availity" }, ctx());
     expect(res.status).toBe(422);
     expect((await body(res)).error).toBe("selector is required");
+  });
+});
+
+describe("task step handler (S4.3 — the one /api task-state write)", () => {
+  const TASK = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  it("ticks a step and returns the task + allDone", async () => {
+    completeStepMock.mockResolvedValue({
+      kind: "ok",
+      task: { id: TASK } as never,
+      allDone: true,
+    });
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ task: { id: TASK }, allDone: true });
+  });
+
+  it("passes the org-scoped ctx and the actor through", async () => {
+    completeStepMock.mockResolvedValue({ kind: "ok", task: {} as never, allDone: false });
+    await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
+    expect(completeStepMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      TASK,
+      "s1",
+      expect.any(String),
+    );
+  });
+
+  it("surfaces a blocked step as 409 with the blocker named", async () => {
+    completeStepMock.mockResolvedValue({
+      kind: "rejected",
+      status: 409,
+      message: 'Complete "Upload W-9" first',
+    });
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s2" }, ctx());
+    expect(res.status).toBe(409);
+    expect((await body(res)).error).toBe('Complete "Upload W-9" first');
+  });
+
+  it("404s a non-UUID task id before touching the service", async () => {
+    const res = await handleCompleteTaskStep("nope", { stepId: "s1" }, ctx());
+    expect(res.status).toBe(404);
+    expect(completeStepMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a missing stepId", {}],
+    ["a blank stepId", { stepId: "   " }],
+    ["a non-string stepId", { stepId: 5 }],
+    ["a non-object body", "nope"],
+  ])("422s %s before touching the service", async (_n, bad) => {
+    const res = await handleCompleteTaskStep(TASK, bad, ctx());
+    expect(res.status).toBe(422);
+    expect(completeStepMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses billing before touching the service", async () => {
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(completeStepMock).not.toHaveBeenCalled();
   });
 });
 

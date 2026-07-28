@@ -759,6 +759,29 @@ function looksLikeVercelGate(r) {
     console.log("SKIP  20/20a. propose-only field-map write — KANSAS_ORG not set");
   }
 
+  // 21. Task-step WRITE isolation (S4.3): a Kansas writer ticking a step on a
+  //     South Park task must 404 BEFORE any write, like every other cross-org
+  //     write path. Safe against production for the same reason as 12/19 —
+  //     the org check precedes the update, so no task state is mutated. Uses
+  //     a nonsense stepId so even a hypothetical org-check bypass would fail
+  //     to find a step to tick.
+  if (env.SOUTHPARK_TASK_ID) {
+    const stepX = await apiPatch(
+      `/api/tasks/${env.SOUTHPARK_TASK_ID}/steps`,
+      { stepId: "gate-probe-step-does-not-exist" },
+      { token: kansasTok },
+    );
+    const stepLeaked = stepX.status < 400 || stepX.body?.data != null;
+    check(
+      "21. Kansas ticking a step on a South Park task -> 404, no cross-org write",
+      stepX.status === 404 && !stepLeaked,
+      `status=${stepX.status} (expect 404) dataPresent=${stepX.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  21. cross-org task-step write — SOUTHPARK_TASK_ID not set");
+  }
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

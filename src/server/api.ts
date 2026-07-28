@@ -29,6 +29,8 @@ const CAQH_ATTESTATION_ROUTE = /^\/api\/providers\/([^/]+)\/caqh-attestation\/?$
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 // GET lists the shared catalog; POST proposes an unmapped field (propose-only).
+// `/api/tasks/:id/steps` — the S4.3 step tick (the one /api task-state write).
+const TASK_STEPS_ROUTE = /^\/api\/tasks\/([^/]+)\/steps\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
 // `/api/portals` — the DB-driven payer-portal registry the extension matches
 // the current tab against.
@@ -105,6 +107,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     profileMatch || ssnReleaseMatch || caqhMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
   const isPortals = PORTALS_ROUTE.test(pathname);
+  const taskStepsMatch = pathname.match(TASK_STEPS_ROUTE);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
@@ -123,6 +126,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !providersMatch &&
     !isFieldMaps &&
     !isPortals &&
+    !taskStepsMatch &&
     !isFillEvents &&
     !isCases &&
     !caseTouchesMatch &&
@@ -205,6 +209,15 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleListPortals(url, ctx);
+    }
+    if (taskStepsMatch) {
+      if (method !== "PATCH") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleCompleteTaskStep(
+        taskStepsMatch[1],
+        await readJsonBody(request),
+        ctx,
+      );
     }
     if (isFillEvents) {
       if (method !== "POST") return fail(405, "Method not allowed");

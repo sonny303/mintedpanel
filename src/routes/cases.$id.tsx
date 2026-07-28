@@ -212,6 +212,7 @@ function CaseDetailPage() {
                     caseId={c.id}
                     providerId={c.providerId}
                     target={target}
+                    facilityId={c.facilityId}
                   />
                 ))}
                 <span className="text-[12px] text-muted-foreground">
