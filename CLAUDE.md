@@ -2891,7 +2891,26 @@ the E4.3 both-repos-attached rule. Panel-side highlights:
   drawer), `labelLearning.ts` (S5.3 suggestion + payer-count evidence),
   `fieldVerification.ts` (S6.1 freshness — window IS `CAQH_CURRENT_DAYS`),
   `referenceProvenance.ts` (S4.5), and `formDrift.ts`'s S6.4 additions
-  (`lastWorkingAt`, `fragileMapIds`, `buildDriftReport`).
+  (`lastWorkingAt`, `fragileMapIds`, `buildDriftReport`). **`lastWorkingAt` is
+  INFERRED and has to be:** `fill_sessions.fields_filled` is an int4 COUNT and
+  nothing records WHICH selectors succeeded, so a mapping counts as having
+  worked in a fill when the fill is real (non-dry-run) on its portal, landed
+  ≥1 field, ran at or after the mapping's `createdAt`, and did NOT report it
+  not-found in `fields_skipped`. That makes it a floor on staleness, not a
+  precise last-success time — a mapping on a page the fill never reached reads
+  as "worked". The first cut read `fields_filled` as an array of labels, which
+  silently made it always null (and `fragileMapIds` always empty); the tests
+  encoded the same wrong shape, which is why it shipped green.
+- **`attestedOnFor`** (extension `src/shared/caqh.ts`) — the CAQH attestation
+  date comes from the ROSTER ROW (`caqhLastAttestedDate`, carried by
+  `PROVIDER_LIST_COLUMNS`), never a panel-local variable. The first cut held one
+  assigned only after a successful attestation POST, so the panel read "Never
+  attested" for everyone, the S6.2 de-emphasis never fired, and the value
+  outlived a provider switch. **S6.3's exception strip is UNFINISHED** —
+  `findCaqhGaps` + `PULL_CAQH_FIELD` + the rendering all exist, but nothing
+  populates `caqhGapRows`, because doing so means reading VALUES off the CAQH
+  page and the S5.2 capture scan is deliberately shape-only (labels/selectors,
+  never values — a PHI boundary). Documented in-code as a known gap.
 - **`provider_field_verifications`** (S6.1, migrations `20260728120000` +
   `20260728160041`) — per-field verification stamps, one narrow table not N
   columns. **APPLIED TO HOSTED 2026-07-28**, so types regen is safe again.
