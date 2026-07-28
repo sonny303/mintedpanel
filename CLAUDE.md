@@ -2784,11 +2784,18 @@ the E4.3 both-repos-attached rule. Panel-side highlights:
   `fieldVerification.ts` (S6.1 freshness — window IS `CAQH_CURRENT_DAYS`),
   `referenceProvenance.ts` (S4.5), and `formDrift.ts`'s S6.4 additions
   (`lastWorkingAt`, `fragileMapIds`, `buildDriftReport`).
-- **`provider_field_verifications`** (S6.1, migration `20260728120000`) —
-  per-field verification stamps, one narrow table not N columns. **REPO-ONLY:
-  hosted apply is an OPERATOR step**; shape was verified live in a
-  rolled-back transaction and types were hand-added, so regenerate types only
-  after the operator applies it.
+- **`provider_field_verifications`** (S6.1, migrations `20260728120000` +
+  `20260728160041`) — per-field verification stamps, one narrow table not N
+  columns. **APPLIED TO HOSTED 2026-07-28**, so types regen is safe again.
+  The follow-up migration fixes a real cross-tenant hole worth remembering:
+  `exists (select 1 from providers p where p.id = provider_id and p.org_id =
+org_id)` inside a policy is a TAUTOLOGY — the unqualified `org_id` binds to
+  the innermost scope (`providers.org_id`), so Postgres stores it as
+  `p.org_id = p.org_id`. A live rollback-wrapped probe caught it: a real admin
+  in org A stamped a provider from org B. Every shape check passed. Use the
+  scalar form `(select p.org_id from providers p where p.id = provider_id) =
+org_id`, where the comparison happens in the outer scope and cannot be
+  captured. A sweep of all other RLS policies for `x.y = x.y` found none.
 
 Extension-side (in `sonny303/minted-extension`, branch
 `claude/workbench-full-rebuild`): icons + header/avatar (S1.x), the searchable

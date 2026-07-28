@@ -58,11 +58,18 @@ create policy provider_field_verifications_select
   on public.provider_field_verifications for select
   using (org_id in (select public.user_org_ids()));
 
+-- NOTE: the provider-org clause below is BUGGY and is corrected by
+-- 20260728160041_s61_fix_provider_org_match_ambiguity.sql. Kept as-applied so
+-- a fresh rebuild reproduces hosted's history exactly.
 drop policy if exists provider_field_verifications_insert on public.provider_field_verifications;
 create policy provider_field_verifications_insert
   on public.provider_field_verifications for insert
   with check (
-    public.user_role(org_id) in ('admin', 'specialist')
+    org_id in (select public.user_org_ids())
+    and public.user_role(org_id) in ('admin', 'specialist')
+    -- The stamped provider must live in the SAME org as the row: without
+    -- this, a writer could stamp another tenant's provider under their own
+    -- org_id and the row would pass every other check.
     and exists (
       select 1 from public.providers p
       where p.id = provider_id and p.org_id = org_id
@@ -72,8 +79,18 @@ create policy provider_field_verifications_insert
 drop policy if exists provider_field_verifications_update on public.provider_field_verifications;
 create policy provider_field_verifications_update
   on public.provider_field_verifications for update
-  using (public.user_role(org_id) in ('admin', 'specialist'))
-  with check (public.user_role(org_id) in ('admin', 'specialist'));
+  using (
+    org_id in (select public.user_org_ids())
+    and public.user_role(org_id) in ('admin', 'specialist')
+  )
+  with check (
+    org_id in (select public.user_org_ids())
+    and public.user_role(org_id) in ('admin', 'specialist')
+    and exists (
+      select 1 from public.providers p
+      where p.id = provider_id and p.org_id = org_id
+    )
+  );
 
 revoke all on public.provider_field_verifications from anon, authenticated;
 grant select, insert, update on public.provider_field_verifications to authenticated;
