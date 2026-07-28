@@ -291,16 +291,103 @@ describe("lastWorkingAt (S6.4)", () => {
     expect(lastWorkingAt(S64_MAP, legacy)).toBeNull();
   });
 
-  it("ignores a skip for a DIFFERENT reason — only not-found is a break", () => {
-    const otherReason: FillHistoryEntry[] = [
+  // THE case an earlier cut got wrong. fields_skipped carries BOTH the drift
+  // entries (kind "skipped") and everything the extension never attempted
+  // (kind "manual" — file uploads, no_value, unmapped). Matching only the
+  // not-found reason made the commonest non-fill outcome read as success.
+  it("a mapping the fill never ATTEMPTED did not work — 'manual' counts too", () => {
+    const notAttempted: FillHistoryEntry[] = [
       {
         portalKey: "availity",
         startedAt: "2026-07-20T00:00:00Z",
         fieldsFilled: 3,
-        fieldsSkipped: [{ kind: "skipped", reason: "no value", mapId: "m-npi", label: "#npi" }],
+        fieldsSkipped: [
+          { kind: "manual", reason: "no value for this field", mapId: "m-npi", label: "#npi" },
+        ],
       },
     ];
-    expect(lastWorkingAt(S64_MAP, otherReason)).toBe("2026-07-20T00:00:00Z");
+    expect(lastWorkingAt(S64_MAP, notAttempted)).toBeNull();
+  });
+
+  it("a file-upload skip is not success either", () => {
+    const fileSkip: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [
+          { kind: "file", reason: "file upload - attach manually", mapId: "m-npi", label: "#npi" },
+        ],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, fileSkip)).toBeNull();
+  });
+
+  it("only SILENCE is success — a fill naming other fields still counts", () => {
+    const otherFieldsSkipped: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [{ kind: "manual", reason: "no value", mapId: "m-other", label: "#other" }],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, otherFieldsSkipped)).toBe("2026-07-20T00:00:00Z");
+  });
+
+  it("matches by mapId in preference to label — a renamed selector still joins", () => {
+    // Entry carries this map's id but a stale label: the id must win.
+    const byId: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [{ kind: "manual", reason: "no value", mapId: "m-npi", label: "#was" }],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, byId)).toBeNull();
+    // And an entry for a DIFFERENT id must not match on a colliding label.
+    const otherId: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [{ kind: "manual", reason: "no value", mapId: "m-other", label: "#npi" }],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, otherId)).toBe("2026-07-20T00:00:00Z");
+  });
+
+  it("an undatable startedAt is no evidence, and is never returned as the answer", () => {
+    const undatable: FillHistoryEntry[] = [
+      { portalKey: "availity", startedAt: "not-a-date", fieldsFilled: 3, fieldsSkipped: [] },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, undatable)).toBe("2026-07-10T00:00:00Z");
+  });
+
+  it("returns the NEWEST qualifying fill, not merely the first success found", () => {
+    // Newest qualifies, so an older one must never win.
+    const ordered: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 2,
+        fieldsSkipped: [],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 9,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, ordered)).toBe("2026-07-20T00:00:00Z");
   });
 
   it("ignores dry runs — they never touched the live DOM", () => {

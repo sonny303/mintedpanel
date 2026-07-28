@@ -1,6 +1,11 @@
 // S4.5 / doc 06 C3 — where the case's payer reference came from, so the Case
-// Close approval dialog can pre-fill it WITH its provenance instead of making
-// the coordinator retype a number they captured weeks earlier.
+// Close approval dialog can OFFER it with its provenance instead of making the
+// coordinator retype a number they captured weeks earlier.
+//
+// Offered, not pre-filled: the reference is a submission tracking number and
+// the field it feeds is the payer-ISSUED enrollment ID. They are frequently
+// different, and nothing downstream can tell a wrong value from a right one,
+// so the dialog renders a "Use as <label>" button rather than typing it in.
 //
 // Pure: the caller passes the case's stored reference and its touchlog.
 import type { Touch } from "@/types";
@@ -19,7 +24,7 @@ export interface ReferenceProvenance {
  * The reference itself is the case column (latest-wins). The touchlog only
  * supplies WHERE it came from: the newest submission touch is taken as the
  * recording event. Returns null when the case has no reference — there is
- * nothing to pre-fill and nothing to attribute. */
+ * nothing to offer and nothing to attribute. */
 export function resolveReferenceProvenance(
   payerReferenceId: string | null | undefined,
   touches: readonly Touch[] | null | undefined,

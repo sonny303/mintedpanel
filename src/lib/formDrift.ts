@@ -161,28 +161,36 @@ export interface FillHistoryEntry {
   isTest?: boolean | null;
 }
 
-/** Did this fill report THIS mapping as not-found? Same join as
- * brokenMapsForFill (mapId first, report label for pre-mapId telemetry), but
- * without the repaired-since filter: here we are asking a historical question
- * — "did it break in that fill" — and a later repair does not change the past. */
-function fillReportsBroken(
+/** Did this fill leave THIS mapping unfilled, for ANY reason?
+ *
+ * Deliberately not limited to the not-found (drift) reason. `fields_skipped`
+ * is the extension's COMPLETE record of what it did not fill: minted-extension
+ * src/background/fill.ts:286-289 posts
+ *   [...pageResult.skipped (kind "skipped"), ...manual (kind "manual")]
+ * where `manual` collects everything it never attempted — file uploads, fields
+ * with no value to write (`no_value`), unmapped fields. Those entries carry a
+ * mapId just like drift entries do.
+ *
+ * An earlier cut of this matched only kind "skipped" + FIELD_NOT_FOUND_REASON,
+ * which meant a mapping the fill never even attempted read as "worked" — the
+ * most common non-fill outcome silently becoming positive evidence. Anything
+ * named in this array did not fill; only silence means it did. */
+function fillLeftUnfilled(
   fill: FillHistoryEntry,
   map: Pick<PortalFieldMap, "id" | "selector">,
 ): boolean {
   const label = reportLabelOf(map);
-  return parseSkippedEntries(fill.fieldsSkipped).some(
-    (e) =>
-      e.kind === "skipped" &&
-      e.reason === FIELD_NOT_FOUND_REASON &&
-      (e.mapId ? e.mapId === map.id : e.label === label),
+  return parseSkippedEntries(fill.fieldsSkipped).some((e) =>
+    e.mapId ? e.mapId === map.id : e.label === label,
   );
 }
 
-function isBefore(a: string, b: string): boolean {
+/** True only when both timestamps parse AND a is strictly before b. An
+ * undatable timestamp returns false from BOTH orderings, so callers must treat
+ * "not before" as "no usable evidence" rather than as a positive. */
+function isStrictlyBefore(a: string, b: string): boolean {
   const ta = Date.parse(a);
   const tb = Date.parse(b);
-  // Unparseable timestamps must not silently order as "before" — treat an
-  // undatable fill as no evidence rather than as evidence of working.
   if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
   return ta < tb;
 }
@@ -191,20 +199,25 @@ function isBefore(a: string, b: string): boolean {
  * work, which is itself worth saying: a selector that never worked is a bad
  * mapping, not drift.
  *
- * This is INFERRED, and it has to be. `fields_filled` is a count, and the
- * extension never reports which selectors succeeded — only which were skipped
- * (fields_skipped). So a mapping counts as having worked in a fill when all of
- * these hold:
+ * This is INFERRED, by elimination, because no column records which selectors
+ * succeeded: `fields_filled` is an int4 count. (The extension DOES compute the
+ * list — minted-extension fill.ts posts `fieldsFilled: pageResult.filled
+ * .length` — so the honest long-term fix is to widen that wire contract and
+ * read the real thing. Until then, this.)
+ *
+ * A mapping counts as having worked in a fill when ALL hold:
  *   - the fill is a REAL one on this mapping's portal (dry runs never touched
  *     the live DOM, same reason drift excludes them);
- *   - the fill landed at least one field, so "no skip report" means something;
- *   - the mapping already existed when the fill ran — otherwise its absence
- *     from the skip list says nothing about it;
- *   - and the fill did NOT report it not-found.
+ *   - the fill landed at least one field, so silence means something;
+ *   - the fill is datable and ran at or after the mapping's createdAt —
+ *     otherwise its silence about the mapping says nothing;
+ *   - and the fill did not name the mapping in fields_skipped AT ALL, for any
+ *     reason (see fillLeftUnfilled: "never attempted" lives in that same array
+ *     and must not read as success).
  *
- * The weak link is a mapping that existed but was never attempted (a page the
- * fill did not reach). That would read as "worked", so this is a floor on
- * staleness, not a precise last-success timestamp. It is presented that way. */
+ * Residual imprecision, stated rather than hidden: a mapping on a page the
+ * fill never reached is neither filled nor reported, so it reads as "worked".
+ * This is a floor on staleness, not a precise last-success timestamp. */
 export function lastWorkingAt(
   map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
   history: readonly FillHistoryEntry[],
@@ -213,8 +226,11 @@ export function lastWorkingAt(
     if (fill.isTest || fill.portalKey !== map.portalKey) continue;
     if (!fill.startedAt) continue;
     if ((fill.fieldsFilled ?? 0) <= 0) continue;
-    if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
-    if (fillReportsBroken(fill, map)) continue;
+    // Undatable fills are no evidence: without a usable timestamp we can
+    // neither order them against createdAt nor return them as an answer.
+    if (Number.isNaN(Date.parse(fill.startedAt))) continue;
+    if (map.createdAt && isStrictlyBefore(fill.startedAt, map.createdAt)) continue;
+    if (fillLeftUnfilled(fill, map)) continue;
     return fill.startedAt;
   }
   return null;

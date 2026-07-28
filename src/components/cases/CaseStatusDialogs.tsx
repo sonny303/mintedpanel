@@ -259,23 +259,24 @@ export function ApprovedDialog({
   payer: Payer | null;
   /** "Provider · Payer · State" header line, composed by the control. */
   caseSummary?: string | null;
-  /** S4.5 / C3 — the case's stored payer reference and where it came from,
-   * shown for reference only. It is deliberately NOT pre-filled into the
-   * issued-ID field: see the individualId state below. */
+  /** S4.5 / C3 — the case's stored payer reference and where it came from.
+   * Offered as a one-click fill for the issued-ID field rather than pre-typed
+   * into it: see the individualId state below. */
   referenceProvenance?: ReferenceProvenance | null;
   saving: boolean;
   onCancel: () => void;
   onConfirm: (values: ApprovedValues) => void;
 }) {
   const [effectiveDate, setEffectiveDate] = useState("");
-  // Starts EMPTY on purpose. The stored reference is a SUBMISSION tracking
-  // number; this field is the ID the payer ISSUES on approval. They are
-  // different facts and only sometimes the same string, so pre-filling one
-  // with the other writes a wrong identifier for anyone who clicks straight
-  // through — and, worse, makes E6.8's "Awaiting ID" unreachable, since the
-  // "Didn't receive" ack only applies to a field left blank. The reference is
-  // still shown above (C3) so it can be copied when it IS the issued ID; that
-  // has to be a decision, not a default.
+  // Starts EMPTY, with the reference offered as a one-click fill above rather
+  // than pre-typed. The stored reference is a SUBMISSION tracking number; this
+  // field is the ID the payer ISSUES on approval. They are different facts —
+  // payer_reference_id is explicitly non-unique and resubmissions share it,
+  // while this ID is the billing-facing enrollment identifier — and nothing
+  // downstream can tell a wrong one from a right one, so a click-through must
+  // not silently store the tracking number. S4.5/C3's intent (don't retype a
+  // number we already hold) is preserved by the "Use as …" button; only the
+  // silent default is gone.
   const [individualId, setIndividualId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [individualMissing, setIndividualMissing] = useState(false);
@@ -319,9 +320,21 @@ export function ApprovedDialog({
                 {referenceProvenance.capturedAt
                   ? ` on ${fmtDate(referenceProvenance.capturedAt)}`
                   : ""}
-                . This is the submission tracking number, not the payer&rsquo;s issued ID — enter
-                the ID from the approval letter below, or leave it blank if none was issued.
+                . That is the submission tracking number. If the payer issued this same number as
+                the {providerConfig.individualLabel}, use it — otherwise enter the ID from the
+                approval letter.
               </p>
+              {providerConfig.expected && !individualMissing ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-7 px-2 text-[12px]"
+                  onClick={() => setIndividualId(referenceProvenance.reference)}
+                >
+                  Use as {providerConfig.individualLabel}
+                </Button>
+              ) : null}
             </div>
           ) : null}
           <div className="space-y-1.5">
