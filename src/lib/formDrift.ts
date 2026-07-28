@@ -247,28 +247,35 @@ export interface DriftReportRow {
   knownFragile: boolean;
 }
 
-/** Mappings that have drifted in ANY fill in the history, not just the latest.
- * A field that breaks, gets repaired, and breaks again is a different problem
- * from one that broke once — the next coverage check should treat it with
- * suspicion (S6.4: "repair marks fields known-fragile"). */
+/** Mappings that DECAYED: broken in one of the supplied fills, and with
+ * evidence they worked before. That distinguishes a mapping that rotted from
+ * one that never fitted the form (S6.4: "repair marks fields known-fragile").
+ *
+ * Scope note, because the obvious reading is wrong: this counts breaks across
+ * whatever `fills` it is GIVEN, and today the only producer of that argument
+ * is latestRealFillPerPortal, which reduces to ONE fill per portal. So "broke
+ * repeatedly over time" is not currently computable — the break count can
+ * never exceed 1 — and callers should read this as "drifted in the latest fill
+ * AND has worked before", nothing stronger. Making it a true repeat-offender
+ * signal means passing several fills per portal, which no caller does yet. */
 export function fragileMapIds(
   history: readonly FillHistoryEntry[],
   fills: readonly DriftFill[],
   fieldMaps: readonly PortalFieldMap[],
 ): Set<string> {
-  const counts = new Map<string, number>();
+  const broken = new Set<string>();
   for (const fill of fills) {
-    for (const map of brokenMapsForFill(fill, fieldMaps)) {
-      counts.set(map.id, (counts.get(map.id) ?? 0) + 1);
-    }
+    for (const map of brokenMapsForFill(fill, fieldMaps)) broken.add(map.id);
   }
-  // A mapping is fragile once it has broken at least once AND we have
-  // evidence it worked before — i.e. it decayed, rather than never working.
   const fragile = new Set<string>();
-  for (const [mapId, breaks] of counts) {
+  for (const mapId of broken) {
     const map = fieldMaps.find((m) => m.id === mapId);
     if (!map) continue;
-    if (breaks >= 1 && lastWorkingAt(map, history) != null) fragile.add(mapId);
+    // The "worked before" half is the whole signal: without it this would just
+    // be drift again. (The old `breaks >= 1` guard was vacuous — every entry in
+    // the count map is >= 1 by construction — so it is gone rather than kept
+    // as decoration.)
+    if (lastWorkingAt(map, history) != null) fragile.add(mapId);
   }
   return fragile;
 }
