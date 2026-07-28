@@ -66,9 +66,11 @@ export function PayerCasesTab({ payer }: { payer: Payer }) {
         </p>
       </div>
       <div className="p-5">
-        {casesQ.isError ? (
+        {/* providersQ resolves the provider names these rows render, so it
+            gates the same way casesQ does — see PayerEnrollmentsTab. */}
+        {casesQ.isError || providersQ.isError ? (
           <p className="text-[13px] text-[#B91C1C]">Couldn&apos;t load cases.</p>
-        ) : casesQ.data === undefined ? (
+        ) : casesQ.data === undefined || providersQ.data === undefined ? (
           <Skeleton className="h-20 w-full rounded-[6px]" />
         ) : rows.length === 0 ? (
           <div className="rounded-[6px] border border-dashed border-[#DCDAD4] px-4 py-10 text-center">
@@ -92,7 +94,15 @@ export function PayerCasesTab({ payer }: { payer: Payer }) {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-[#F0EEEA] last:border-b-0">
+                  <tr
+                    key={row.id}
+                    // Action Required is the one stage where the ball is in our
+                    // court, so the whole row carries the warn tint rather than
+                    // leaving the signal to the pill alone.
+                    className={`border-b border-[#F0EEEA] last:border-b-0 ${
+                      row.pipelineState === "action_required" ? "bg-[var(--mp-warn-tint)]" : ""
+                    }`}
+                  >
                     <td className="px-3 py-2.5 text-[13px]">
                       <Link
                         to="/cases/$id"

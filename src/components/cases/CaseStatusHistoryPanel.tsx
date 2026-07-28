@@ -43,7 +43,13 @@ export function CaseStatusHistoryPanel({
             {sorted.map((h) => {
               const evidence = h.evidenceTouchId ? touchById.get(h.evidenceTouchId) : undefined;
               return (
-                <li key={h.id} className="flex justify-between gap-3">
+                // The anchor the touchlog's "Evidence for" marker scrolls to —
+                // the reverse of the evidence link rendered below.
+                <li
+                  key={h.id}
+                  id={`status-${h.id}`}
+                  className="flex justify-between gap-3 scroll-mt-24"
+                >
                   <div className="min-w-0 space-y-0.5">
                     <div className="flex flex-wrap items-center gap-1.5 text-foreground">
                       <span className="text-muted-foreground">

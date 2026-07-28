@@ -33,7 +33,8 @@ import {
 import { followUpStatus } from "@/lib/followUps";
 import { buildTouchesCsv } from "@/lib/touchesExport";
 import { downloadCsvText } from "@/lib/csv";
-import type { CaseStatus } from "@/lib/caseStatus";
+import { caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
+import { evidencedTransitionsByTouch, type EvidencedTransition } from "@/lib/caseDetailView";
 import { AddTouchForm } from "@/components/cases/AddTouchForm";
 import type { TouchInput } from "@/services/touches";
 import {
@@ -43,6 +44,7 @@ import {
   FileCheck,
   Filter,
   Globe,
+  History,
   Info,
   Mail,
   MessageSquare,
@@ -56,7 +58,7 @@ import {
   User,
   Users,
 } from "lucide-react";
-import type { Profile, Touch, TouchOutcome, TouchType } from "@/types";
+import type { CaseStatusHistoryEntry, Profile, Touch, TouchOutcome, TouchType } from "@/types";
 
 const TOUCH_TYPE_ICON: Record<TouchType, typeof Phone> = {
   call: Phone,
@@ -85,6 +87,7 @@ export function CaseTouchesPanel({
   onCorrectTouch,
   currentStatus,
   onStatusBump,
+  history,
   today = format(new Date(), "yyyy-MM-dd"),
 }: {
   touches: Touch[];
@@ -103,6 +106,9 @@ export function CaseTouchesPanel({
   /** Accepting the bump records touch + transition together, the touch
    * linked as evidence. Declining logs the touch alone. */
   onStatusBump?: (toStatus: CaseStatus, evidenceTouchId: string) => Promise<void> | void;
+  /** The case's status-history embed (already loaded by getCase) — used ONLY
+   * to mark which touches evidenced a transition. No second fetch. */
+  history?: CaseStatusHistoryEntry[];
   today?: string;
 }) {
   const [openForm, setOpenForm] = useState<"none" | "touch" | "note">("none");
@@ -146,6 +152,11 @@ export function CaseTouchesPanel({
       null
     );
   }, [touches]);
+
+  // Reverse evidence link: which transitions each touch was cited for. Derived
+  // from the FULL history, so filtering the timeline never changes a row's
+  // marker — a hidden row simply isn't looked up.
+  const evidencedBy = useMemo(() => evidencedTransitionsByTouch(history), [history]);
 
   const filterActive =
     typeFilter !== ALL ||
@@ -353,6 +364,7 @@ export function CaseTouchesPanel({
                 authorName={coordName(t.coordinatorId)}
                 correctedBy={correctedByOf.get(t.id) ?? null}
                 correctionTargetDate={correctionTargetDate.get(t.id) ?? null}
+                evidencedFor={evidencedBy.get(t.id) ?? null}
                 canEdit={canEdit}
                 today={today}
                 onCorrect={() => {
@@ -499,6 +511,7 @@ function TouchlogRow({
   authorName,
   correctedBy,
   correctionTargetDate,
+  evidencedFor,
   canEdit,
   today,
   onCorrect,
@@ -508,6 +521,8 @@ function TouchlogRow({
   authorName: string;
   correctedBy: Touch | null;
   correctionTargetDate: string | null;
+  /** Transitions this touch was recorded as evidence for; null = none. */
+  evidencedFor: EvidencedTransition[] | null;
   canEdit: boolean;
   today: string;
   onCorrect: () => void;
@@ -580,6 +595,22 @@ function TouchlogRow({
                 : "Correction"}
             </Badge>
           ) : null}
+          {/* Reverse of the Status history panel's evidence link: a touch that
+              moved the case says so on its own row and links back to the
+              transition it evidenced. A touch evidencing nothing renders
+              nothing. The target lives in the unfiltered history panel, so
+              this anchor always resolves. */}
+          {(evidencedFor ?? []).map((ev) => (
+            <a
+              key={ev.historyId}
+              href={`#status-${ev.historyId}`}
+              className="inline-flex h-5 items-center gap-1 rounded-[4px] border border-[#E8E5E0] bg-[var(--mp-brand-tint)] px-1.5 text-[11px] font-medium text-[var(--mp-brand-ink)] no-underline hover:underline"
+            >
+              <History className="w-3 h-3" />
+              Evidence for {ev.fromStatus ? `${caseStatusLabel(ev.fromStatus)} → ` : ""}
+              {caseStatusLabel(ev.toStatus)}
+            </a>
+          ))}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[12px] text-muted-foreground flex items-center gap-1">

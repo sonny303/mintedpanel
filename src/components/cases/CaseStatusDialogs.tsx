@@ -143,7 +143,7 @@ export function StatusTransitionDialog({
           </DialogTitle>
           <DialogDescription>
             {isReapply
-              ? "Reapply reopens this SAME case with a fresh task cycle — the prior denial stays visible in its history."
+              ? "Reapply reopens this SAME case — the prior denial stays visible in its history. This records the status change only; to also regenerate the checklist from the current SOP, use the Reapply button on this case."
               : "Record what you learned; the change is appended to the case's history."}
           </DialogDescription>
         </DialogHeader>

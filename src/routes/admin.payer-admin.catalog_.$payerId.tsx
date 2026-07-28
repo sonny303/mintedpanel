@@ -20,10 +20,17 @@ export const Route = createFileRoute("/admin/payer-admin/catalog_/$payerId")({
     return out;
   },
   beforeLoad: ({ params, search }) => {
+    // The search FUNCTION form is required: passing the validated object
+    // through carries the raw query string verbatim, so a legacy `?edit=1`
+    // would propagate into the new URL space forever. Returning a fresh
+    // object makes the router serialize the canonical spelling.
     throw redirect({
       to: "/admin/payer-admin/setup/$payerId",
       params: { payerId: params.payerId },
-      search,
+      search: () => ({
+        ...(search.tab ? { tab: search.tab } : {}),
+        ...(search.edit ? { edit: true } : {}),
+      }),
       replace: true,
     });
   },

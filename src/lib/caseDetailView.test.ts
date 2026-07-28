@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   currentStepPointer,
+  evidencedTransitionsByTouch,
   facilityAddressLine,
   orderedSteps,
   summarizeTasks,
 } from "./caseDetailView";
-import type { SOPStep, Task } from "@/types";
+import type { CaseStatusHistoryEntry, SOPStep, Task } from "@/types";
 
 const step = (over: Partial<SOPStep> & { id: string }): SOPStep => ({
   order: 1,
@@ -132,5 +133,63 @@ describe("facilityAddressLine", () => {
     expect(facilityAddressLine(null)).toBeNull();
     expect(facilityAddressLine({ street: null, city: null, state: null, zip: null })).toBeNull();
     expect(facilityAddressLine({ street: "  " })).toBeNull();
+  });
+});
+
+describe("evidencedTransitionsByTouch", () => {
+  const entry = (over: Partial<CaseStatusHistoryEntry>): CaseStatusHistoryEntry =>
+    ({
+      id: "h1",
+      orgId: "o1",
+      caseId: "c1",
+      fromStatus: "in_progress",
+      toStatus: "submitted",
+      actorKind: "user",
+      reasonCodeId: null,
+      evidenceTouchId: null,
+      isCorrection: false,
+      note: null,
+      changedBy: null,
+      changedAt: "2026-07-01T00:00:00Z",
+      ...over,
+    }) as CaseStatusHistoryEntry;
+
+  it("keys each transition by the touch that evidenced it", () => {
+    const map = evidencedTransitionsByTouch([
+      entry({ id: "h1", evidenceTouchId: "t1", toStatus: "submitted" }),
+    ]);
+    expect(map.get("t1")).toEqual([
+      { historyId: "h1", fromStatus: "in_progress", toStatus: "submitted" },
+    ]);
+  });
+
+  it("omits transitions with no evidence touch", () => {
+    const map = evidencedTransitionsByTouch([entry({ id: "h1", evidenceTouchId: null })]);
+    expect(map.size).toBe(0);
+  });
+
+  it("returns nothing for a touch that evidenced nothing", () => {
+    const map = evidencedTransitionsByTouch([entry({ evidenceTouchId: "t1" })]);
+    expect(map.get("t-other")).toBeUndefined();
+  });
+
+  it("orders a touch's transitions oldest first", () => {
+    const map = evidencedTransitionsByTouch([
+      entry({ id: "late", evidenceTouchId: "t1", changedAt: "2026-07-09T00:00:00Z" }),
+      entry({ id: "early", evidenceTouchId: "t1", changedAt: "2026-07-02T00:00:00Z" }),
+    ]);
+    expect(map.get("t1")?.map((t) => t.historyId)).toEqual(["early", "late"]);
+  });
+
+  it("tolerates an absent history embed", () => {
+    expect(evidencedTransitionsByTouch(undefined).size).toBe(0);
+    expect(evidencedTransitionsByTouch([]).size).toBe(0);
+  });
+
+  it("carries a null fromStatus (case creation) through", () => {
+    const map = evidencedTransitionsByTouch([
+      entry({ evidenceTouchId: "t1", fromStatus: null, toStatus: "not_started" }),
+    ]);
+    expect(map.get("t1")?.[0].fromStatus).toBeNull();
   });
 });
