@@ -617,28 +617,34 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, p);
     }
 
-    // --- /api/next-best-action (E4.3 TE-6: org-scoped queue-top read) ---
+    // --- /api/next-best-action (org-scoped ranked queue; S3.3 added items) ---
     if (/^\/api\/next-best-action\/?$/.test(url.pathname)) {
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
-      // Org-scoped: the queue-top of the caller's own org. Stable fixture item
-      // for the caller's first case; { item: null } when the org has none.
-      const own = CASES.find((c) => c.orgId === orgId);
-      if (!own) return envelope(res, 200, { item: null });
-      const p = PROVIDERS.find((row) => row.id === own.providerId);
-      return envelope(res, 200, {
-        item: {
-          caseId: own.id,
-          providerId: own.providerId,
+      // Org-scoped: the caller's OWN cases only, ranked. `item` stays the top
+      // for the pre-S3.3 consumer; `items` is the same ranking, capped by
+      // ?limit= (default 20).
+      const raw = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+      const limit = Number.isFinite(raw) && raw >= 1 && raw <= 100 ? raw : 20;
+      const own = CASES.filter((c) => c.orgId === orgId);
+      const items = own.slice(0, limit).map((c) => {
+        const p = PROVIDERS.find((row) => row.id === c.providerId);
+        return {
+          caseId: c.id,
+          providerId: c.providerId,
           providerName: p ? `${p.firstName} ${p.lastName}`.trim() : "",
-          payerName: own.payerName,
+          payerName: c.payerName,
           groupName: "Demo Group",
-          state: own.state,
+          state: c.state,
           actionKind: "review",
-          action: "Review case — no open tasks",
-          reason: "No deadline signal on this case — ranked after dated work.",
+          action: "Review case — no open task",
+          reason: "No deadline signal on this case.",
           deadline: null,
-          deepLink: `/cases/${own.id}`,
-        },
+          payerPipelineState: c.payerPipelineState ?? "not_started",
+          deepLink: `/cases/${c.id}`,
+        };
+      });
+      return envelope(res, 200, { item: items[0] ?? null, items }, null, {
+        total: items.length,
       });
     }
 

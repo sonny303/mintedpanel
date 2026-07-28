@@ -96,14 +96,20 @@ export async function handlePutViewPrefs(body: unknown, user: UserContext): Prom
 // GET /api/next-best-action — the extension's log-and-advance loop (F4.3.4 /
 // TE-6): assemble the org-scoped queue inputs, rank via the SAME pure
 // E2.3/E4.1 reducer under the org's F4.2.5 ranking config, and return the
-// QUEUE TOP — exactly one item, or { item: null } for an honest "queue clear"
-// state. Read-only, no persisted queue rows (the E2.3 queue is fully derived);
+// ranked queue: `items` (bounded by ?limit=, default 20) plus `item` = the
+// TOP, kept bit-for-bit for the pre-S3.3 single-item consumer.
+// Read-only, no persisted queue rows (the E2.3 queue is fully derived);
 // the returned item is a case pointer + display label/reason + a webapp deep
 // link, never a token value or PHI. No role gate: billing may read the queue
 // (the /work surface is admin/billing-visible), and the reducer writes nothing.
-export async function handleNextBestAction(ctx: AuthContext): Promise<Response> {
-  const result = await getNextBestAction({ db: ctx.db, orgId: ctx.orgId }, todayIso());
-  return ok(result);
+export async function handleNextBestAction(url: URL, ctx: AuthContext): Promise<Response> {
+  // S3.3: ?limit= bounds the ranked list (1..100, default 20). Out-of-range or
+  // non-numeric falls back to the default rather than erroring — the queue is
+  // a read, and a bad param shouldn't cost the caller their queue.
+  const raw = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const limit = Number.isFinite(raw) && raw >= 1 && raw <= 100 ? raw : 20;
+  const result = await getNextBestAction({ db: ctx.db, orgId: ctx.orgId }, todayIso(), limit);
+  return ok(result, { total: result.items.length });
 }
 
 // GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the

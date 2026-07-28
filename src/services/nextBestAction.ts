@@ -54,6 +54,10 @@ export interface NextBestActionItem {
 
 export interface NextBestActionResult {
   item: NextBestActionItem | null;
+  // S3.3 — the ranked queue (same reducer, same order; `item` is items[0]).
+  // ADDITIVE: the existing single-item consumer is untouched. Bounded by the
+  // route's ?limit= (default 20) so a large org can't return its whole queue.
+  items: NextBestActionItem[];
 }
 
 // Reduce a task's sop_content jsonb to its smallest positive step cadence —
@@ -142,6 +146,10 @@ interface ReadinessFactsRow {
 export async function getNextBestAction(
   ctx: NextBestActionServiceCtx,
   today: string,
+  // S3.3: how many ranked entries to return. The default keeps a big org's
+  // queue from becoming an unbounded payload; the reducer still ranks the
+  // whole set, so items[0] is the true top regardless of the cap.
+  limit = 20,
 ): Promise<NextBestActionResult> {
   const { db, orgId } = ctx;
 
@@ -433,22 +441,21 @@ export async function getNextBestAction(
     readiness,
   });
 
-  const top = entries[0];
-  if (!top) return { item: null };
-  return {
-    item: {
-      caseId: top.caseId,
-      providerId: top.providerId,
-      providerName: top.providerName,
-      payerName: top.payerName,
-      groupName: top.groupName,
-      state: top.state,
-      actionKind: top.actionKind,
-      action: top.action,
-      reason: top.reason,
-      deadline: top.deadline,
-      payerPipelineState: top.payerPipelineState,
-      deepLink: `/cases/${top.caseId}`,
-    },
-  };
+  const items = entries.slice(0, limit).map((entry): NextBestActionItem => ({
+    caseId: entry.caseId,
+    providerId: entry.providerId,
+    providerName: entry.providerName,
+    payerName: entry.payerName,
+    groupName: entry.groupName,
+    state: entry.state,
+    actionKind: entry.actionKind,
+    action: entry.action,
+    reason: entry.reason,
+    deadline: entry.deadline,
+    payerPipelineState: entry.payerPipelineState,
+    deepLink: `/cases/${entry.caseId}`,
+  }));
+  // `item` stays the queue TOP so the pre-S3.3 consumer is bit-for-bit
+  // unchanged; `items` is the same ranking, just not truncated to one.
+  return { item: items[0] ?? null, items };
 }

@@ -233,7 +233,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     if (isNextBestAction) {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
-      return await routes.handleNextBestAction(ctx);
+      return await routes.handleNextBestAction(url, ctx);
     }
     if (isDocumentUploadIntent) {
       if (method !== "POST") return fail(405, "Method not allowed");

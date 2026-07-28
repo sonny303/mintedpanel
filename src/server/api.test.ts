@@ -265,7 +265,10 @@ describe("handleApiRequest — /api/next-best-action (org-guarded read)", () => 
     const res = await handleApiRequest(GET("/api/next-best-action"));
     expect(res.status).toBe(200);
     expect(authenticateMock).toHaveBeenCalledTimes(1);
-    expect(nbaMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }));
+    expect(nbaMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ orgId: "org-1" }),
+    );
   });
 
   it("POST /api/next-best-action is 405", async () => {

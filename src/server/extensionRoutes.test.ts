@@ -620,36 +620,54 @@ describe("provider cases handler", () => {
 
 describe("next-best-action handler", () => {
   it("returns the queue-top item, forwarding the org-scoped ctx (billing may read)", async () => {
-    const result = {
-      item: {
-        caseId: "c1",
-        providerId: "p1",
-        providerName: "Kay One",
-        payerName: "BCBS of Kansas",
-        groupName: "KFP Group",
-        state: "KS",
-        actionKind: "task" as const,
-        action: "Enroll on BCBS portal",
-        reason: "Follow-up overdue since Jul 1, 2026 — surfaced ahead of deadline-only cases.",
-        deadline: { date: "2026-07-01", source: "follow_up" as const, overdue: true },
-        deepLink: "/cases/c1",
-      },
+    const top = {
+      caseId: "c1",
+      providerId: "p1",
+      providerName: "Kay One",
+      payerName: "BCBS of Kansas",
+      groupName: "KFP Group",
+      state: "KS",
+      actionKind: "task" as const,
+      action: "Enroll on BCBS portal",
+      reason: "Follow-up overdue since Jul 1, 2026 — surfaced ahead of deadline-only cases.",
+      deadline: { date: "2026-07-01", source: "follow_up" as const, overdue: true },
+      deepLink: "/cases/c1",
     };
+    const result = { item: top, items: [top] };
     getNbaMock.mockResolvedValue(result);
-    const res = await handleNextBestAction(ctx("billing"));
+    const res = await handleNextBestAction(
+      new URL("https://x.test/api/next-best-action"),
+      ctx("billing"),
+    );
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual(result);
     expect(getNbaMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      20,
     );
   });
 
   it("returns an explicit empty result for a clear queue", async () => {
-    getNbaMock.mockResolvedValue({ item: null });
-    const res = await handleNextBestAction(ctx());
+    getNbaMock.mockResolvedValue({ item: null, items: [] });
+    const res = await handleNextBestAction(new URL("https://x.test/api/next-best-action"), ctx());
     expect(res.status).toBe(200);
-    expect((await body(res)).data).toEqual({ item: null });
+    expect((await body(res)).data).toEqual({ item: null, items: [] });
+  });
+
+  it("bounds the ranked list with ?limit=, falling back to 20 on a bad value", async () => {
+    getNbaMock.mockResolvedValue({ item: null, items: [] });
+    const call = (qs: string) =>
+      handleNextBestAction(new URL(`https://x.test/api/next-best-action${qs}`), ctx());
+
+    await call("?limit=5");
+    expect(getNbaMock).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 5);
+    // Out of range / non-numeric never errors — the queue is a read, and a bad
+    // param shouldn't cost the caller their queue.
+    for (const bad of ["?limit=0", "?limit=999", "?limit=abc", ""]) {
+      await call(bad);
+      expect(getNbaMock).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 20);
+    }
   });
 });
 
