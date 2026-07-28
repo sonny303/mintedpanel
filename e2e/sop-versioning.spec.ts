@@ -270,13 +270,14 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
   test("TS-47 (#edit-default): the default template is content-editable with its match key locked, and exits to Payer Setup", async ({
     page,
   }) => {
-    await page.goto("/admin/templates");
-    const fallbackRow = page.locator("tr", { hasText: "General Enrollment (fallback)" });
-    await expect(fallbackRow).toBeVisible({ timeout: 30000 });
-    await expect(
-      fallbackRow.getByText("Default template — used when no payer template matches"),
-    ).toBeVisible();
-
+    // Slice G retired the standalone Templates LIST: TemplatesList.tsx is
+    // deleted and /admin/templates now redirects to /admin/payer-admin/setup
+    // (a payer's templates live on its detail tab, the payerless default on
+    // the Payer Setup card). This test used to assert the fallback's row on
+    // that list; the assertion outlived the surface. The redirect itself is
+    // pinned by legacy-routes.spec.ts, so nothing is lost by dropping it —
+    // and the editor behaviour below, which is what TS-47 is actually about,
+    // is unchanged.
     await page.goto(`/admin/templates/${FALLBACK_ID}`);
     await expect(page.getByRole("heading", { name: "Edit default template" })).toBeVisible({
       timeout: 30000,
