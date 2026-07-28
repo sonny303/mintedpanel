@@ -2759,6 +2759,46 @@ x-org-id`.
    schema change.
 5. **The extension never submits portal forms. Unchanged, forever.**
 
+## Workbench epic (2026-07-28) — Phases 1-6, both repos
+
+The `docs/redesign/design-reference/workbench/` package (doc 08's S1.1-S6.4),
+built across `mintedpanel` and `sonny303/minted-extension` in one session per
+the E4.3 both-repos-attached rule. Panel-side highlights:
+
+- **Schema-derived quick-card catalog** (S2.1) — see the view-prefs bullet in
+  the Server API layer. 75 hand-listed keys -> 117 derived; the drift test in
+  `quickCardCatalog.test.ts` is what makes the deny-list safe.
+- **New /api surfaces:** `GET /api/portals` (S3.2 registry),
+  `POST /api/portal-field-maps` (S5.1 propose-only, S5.3 learned suggestion),
+  `PATCH /api/tasks/:id/steps` (S4.3 — the ONE task-state write),
+  `POST /api/providers/:id/caqh-attestation` (S6.2), `bump_status` on the
+  touches POST (S4.4), and a ranked `items` list on `/api/next-best-action`
+  (S3.3). Gate assertions 18-21 + `portals`/`taskstep` leak modes; 16 modes.
+- **`ctx.asUser()`** (`src/server/guard.ts`) — a client bound to the CALLER'S
+  JWT. Required for any SECURITY INVOKER RPC on an /api route: under the
+  service key, RLS, `auth.uid()` and `user_role()` all break at once. The
+  S4.4 status bump rides it.
+- **Shared pure modules** so the two products can't disagree:
+  `sopStepCompletion.ts` (S4.3 ordering + rollup, shared with the webapp task
+  drawer), `labelLearning.ts` (S5.3 suggestion + payer-count evidence),
+  `fieldVerification.ts` (S6.1 freshness — window IS `CAQH_CURRENT_DAYS`),
+  `referenceProvenance.ts` (S4.5), and `formDrift.ts`'s S6.4 additions
+  (`lastWorkingAt`, `fragileMapIds`, `buildDriftReport`).
+- **`provider_field_verifications`** (S6.1, migration `20260728120000`) —
+  per-field verification stamps, one narrow table not N columns. **REPO-ONLY:
+  hosted apply is an OPERATOR step**; shape was verified live in a
+  rolled-back transaction and types were hand-added, so regenerate types only
+  after the operator applies it.
+
+Extension-side (in `sonny303/minted-extension`, branch
+`claude/workbench-full-rebuild`): icons + header/avatar (S1.x), the searchable
+grouped field picker and grouped details card (S2.2/S2.3), registry-driven
+portal recognition and the tab-aware case list (S3.2/S3.4), the pickup queue
+(S3.3), the offer card + duplicate guard (S4.1/S4.2), the Progress tab
+(S4.3), capture (S5.2/S5.4), and the CAQH push/pull surfaces (S6.2/S6.3).
+**The fill now uses ONLY `approved` field maps** (S5.1's invariant, which was
+false while proposed rows also filled).
+
 ## Domain model in one breath
 
 `organizations` ← `memberships` (user+role) · `provider_groups` ·
