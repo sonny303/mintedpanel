@@ -260,7 +260,14 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
     body as ProposeFieldMapInput,
   );
   if (result.kind === "rejected") return fail(result.status, result.message);
-  return ok(result.map, null, result.kind === "created" ? 201 : 200);
+  // S5.3: the row PLUS what the org already learned about this label, so the
+  // capture UI can offer a suggestion with its evidence instead of a blank
+  // grid. The suggestion is advisory only — nothing is approved by proposing.
+  return ok(
+    { map: result.map, suggestion: result.suggestion },
+    null,
+    result.kind === "created" ? 201 : 200,
+  );
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:

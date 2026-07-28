@@ -13,6 +13,12 @@ import type { Database } from "@/integrations/supabase/types";
 import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
 import { normalizeFieldLabel, normalizePortalKey, normalizeTokenKey } from "@/lib/tokenFormat";
+import {
+  suggestTokenForLabel,
+  type DictionaryEntry,
+  type LabelSuggestion,
+  type ObservedMapping,
+} from "@/lib/labelLearning";
 import type { PortalFieldMap } from "@/types";
 
 export interface PortalFieldMapServiceCtx {
@@ -63,9 +69,69 @@ export interface ProposeFieldMapInput {
 }
 
 export type ProposeFieldMapResult =
-  | { kind: "created"; map: PortalFieldMap }
-  | { kind: "existing"; map: PortalFieldMap }
+  | { kind: "created"; map: PortalFieldMap; suggestion: LabelSuggestion | null }
+  | { kind: "existing"; map: PortalFieldMap; suggestion: LabelSuggestion | null }
   | { kind: "rejected"; status: 422; message: string };
+
+/** S5.3 — what this org has already learned about a field label, from its
+ * dictionary and from approved mappings on OTHER portals. Read alongside the
+ * propose write so a captured field arrives with a suggestion and the evidence
+ * behind it, instead of a blank grid. Never a write: approving stays human. */
+async function learnedSuggestion(
+  ctx: PortalFieldMapServiceCtx,
+  label: string,
+  portalKey: string,
+): Promise<LabelSuggestion | null> {
+  if (!label) return null;
+  const [dictRes, observedRes] = await Promise.all([
+    ctx.db
+      .from("field_dictionary")
+      .select("label_normalized, token, status")
+      .eq("org_id", ctx.orgId)
+      .eq("label_normalized", label),
+    // Approved, tokened maps carrying this label — global catalog rows plus
+    // the org's own, the same shared-catalog read as the list.
+    ctx.db
+      .from("portal_field_maps")
+      .select("portal_key, token, field_label, status")
+      .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+      .eq("field_label", label)
+      .eq("status", "approved")
+      .not("token", "is", null),
+  ]);
+  if (dictRes.error) throw dictRes.error;
+  if (observedRes.error) throw observedRes.error;
+
+  const dictionary: DictionaryEntry[] = (
+    (dictRes.data ?? []) as Array<{
+      label_normalized: string;
+      token: string | null;
+      status: string;
+    }>
+  )
+    .filter((d) => d.token)
+    .map((d) => ({
+      label: d.label_normalized,
+      token: normalizeTokenKey(d.token) ?? "",
+      status: d.status,
+    }));
+
+  const observed: ObservedMapping[] = (
+    (observedRes.data ?? []) as Array<{
+      portal_key: string;
+      token: string | null;
+      field_label: string | null;
+    }>
+  )
+    .filter((r) => r.token && r.field_label)
+    .map((r) => ({
+      label: r.field_label as string,
+      token: normalizeTokenKey(r.token) ?? "",
+      portalKey: normalizePortalKey(r.portal_key) ?? "",
+    }));
+
+  return suggestTokenForLabel(label, dictionary, observed, portalKey);
+}
 
 const PROPOSE_FIELD_TYPES: ReadonlySet<string> = new Set([
   "text",
@@ -132,9 +198,14 @@ export async function proposeFieldMap(
     .eq("selector", selector)
     .limit(1);
   if (lookupError) throw lookupError;
+  const fieldLabel = normalizeFieldLabel(input.field_label ?? "") || null;
   if (existing && existing.length > 0) {
     const row = camelizeRow<PortalFieldMap>(existing[0]);
-    return { kind: "existing", map: { ...row, token: normalizeTokenKey(row.token) } };
+    return {
+      kind: "existing",
+      map: { ...row, token: normalizeTokenKey(row.token) },
+      suggestion: fieldLabel ? await learnedSuggestion(ctx, fieldLabel, portalKey) : null,
+    };
   }
 
   const { data, error } = await ctx.db
@@ -145,7 +216,7 @@ export async function proposeFieldMap(
       selector,
       // Normalized at the write boundary, the same key the field_dictionary
       // learns on — so a proposal joins the dictionary's suggestions.
-      field_label: normalizeFieldLabel(input.field_label ?? "") || null,
+      field_label: fieldLabel,
       form_section: input.form_section?.trim() || null,
       url_pattern: input.url_pattern?.trim() || null,
       page_step: input.page_step?.trim() || null,
@@ -167,7 +238,12 @@ export async function proposeFieldMap(
     after: { portalKey, selector, fieldLabel: map.fieldLabel, status: "proposed" },
     description: `Field proposed by extension on ${portalKey}`,
   });
-  return { kind: "created", map: { ...map, token: normalizeTokenKey(map.token) } };
+  return {
+    kind: "created",
+    map: { ...map, token: normalizeTokenKey(map.token) },
+    // S5.3: what the org already knows about this label, with its evidence.
+    suggestion: fieldLabel ? await learnedSuggestion(ctx, fieldLabel, portalKey) : null,
+  };
 }
 
 // ---------------------------------------------------------------------------

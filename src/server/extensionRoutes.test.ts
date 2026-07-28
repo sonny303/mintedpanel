@@ -437,20 +437,47 @@ describe("propose field map handler (propose-only)", () => {
   const INPUT = { portal_key: "availity", selector: "#npi", field_label: "NPI" };
 
   it("201s a newly proposed field", async () => {
-    proposeMapMock.mockResolvedValue({ kind: "created", map: { id: "m1" } as never });
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
     const res = await handleProposeFieldMap(INPUT, ctx());
     expect(res.status).toBe(201);
-    expect((await body(res)).data).toEqual({ id: "m1" });
+    expect((await body(res)).data).toEqual({ map: { id: "m1" }, suggestion: null });
+  });
+
+  it("carries the learned suggestion + evidence so the capture UI isn't a blank grid", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: { token: "provider.npi", portalCount: 3, fromDictionary: false },
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    const data = (await body(res)).data as { suggestion: unknown };
+    expect(data.suggestion).toEqual({
+      token: "provider.npi",
+      portalCount: 3,
+      fromDictionary: false,
+    });
   });
 
   it("200s (not 201) when the selector is already known — idempotent re-observation", async () => {
-    proposeMapMock.mockResolvedValue({ kind: "existing", map: { id: "m1" } as never });
+    proposeMapMock.mockResolvedValue({
+      kind: "existing",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
     const res = await handleProposeFieldMap(INPUT, ctx());
     expect(res.status).toBe(200);
   });
 
   it("scopes the write to the guard-resolved org and passes the audit closure", async () => {
-    proposeMapMock.mockResolvedValue({ kind: "created", map: { id: "m1" } as never });
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
     const c = ctx();
     await handleProposeFieldMap(INPUT, c);
     expect(proposeMapMock).toHaveBeenCalledWith(

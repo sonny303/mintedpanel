@@ -739,7 +739,8 @@ function looksLikeVercelGate(r) {
       },
       { token: kansasTok },
     );
-    const proposedRow = proposed.body?.data ?? null;
+    // S5.3 widened the response to { map, suggestion } — the row is data.map.
+    const proposedRow = proposed.body?.data?.map ?? null;
     check(
       "20. Kansas can propose a field mapping",
       (proposed.status === 201 || proposed.status === 200) && proposedRow != null,

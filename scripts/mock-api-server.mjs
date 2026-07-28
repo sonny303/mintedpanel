@@ -865,7 +865,7 @@ export async function createMockApiServer(options = {}) {
         if (!selector) return envelope(res, 422, null, "selector is required");
         const key = `${orgId}:${portalKey}:${selector}`;
         const existing = proposedMaps.get(key);
-        if (existing) return envelope(res, 200, existing);
+        if (existing) return envelope(res, 200, { map: existing, suggestion: null });
         const row = {
           id: `fm-proposed-${proposedMaps.size + 1}`,
           orgId: leak === "fieldmaps" ? null : orgId,
@@ -880,7 +880,9 @@ export async function createMockApiServer(options = {}) {
           status: "proposed",
         };
         proposedMaps.set(key, row);
-        return envelope(res, 201, row);
+        // S5.3: the learned suggestion rides the same response (null here —
+        // the mock carries no dictionary; the gate only checks org scoping).
+        return envelope(res, 201, { map: row, suggestion: null });
       }
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       const portalKey = url.searchParams.get("portal_key");
