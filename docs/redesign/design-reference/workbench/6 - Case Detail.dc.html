@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+    input::placeholder { color: #9CA3AF; }
+  </style>
+</helmet>
+
+<div style="display:flex;align-items:flex-start;min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5">
+  <aside data-screen-label="Sidebar" style="width:236px;flex:none;background:#0C2A1D;padding:14px 12px 12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 8px 0">
+      <img src="assets/logo-mark-white.png" alt="Minted Panel" style="height:20px;width:auto;display:block;flex:none"><span style="font-size:15.5px;font-weight:600;color:#FFFFFF;white-space:nowrap;letter-spacing:-.01em">Minted Panel</span>
+    </div>
+    <div style="height:22px"></div>
+    <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#6E8478;padding:0 10px;margin-bottom:6px">Workspace</div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="6 - Case Detail.dc.html" aria-current="page" style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:rgba(255,255,255,.10);color:#FFFFFF;font-weight:500;text-decoration:none;box-shadow:inset 2px 0 0 #C8DBD4"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="3.5" y="6.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M8 6.5v-2a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 16 4.5v2" stroke="currentColor" stroke-width="1.7"></path></svg><span>Cases</span></span><span style="min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.08);color:#8FA398;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">5</span></a>
+      <a href="1 - Payer Setup.dc.html" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="3.5" y="5.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M3.5 10h17" stroke="currentColor" stroke-width="1.7"></path></svg><span>Payer Setup</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 19v-6M12 19V9M18 19V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg><span>Reporting Center</span></span></a>
+    </nav>
+    <div style="height:1px;background:rgba(255,255,255,.08);margin:20px 10px 18px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:6px;cursor:pointer;margin:0 2px 10px" style-hover="background:rgba(255,255,255,.10)">
+      <div style="min-width:0">
+        <div style="font-size:9.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#6E8478;margin-bottom:2px">Organization</div>
+        <div style="font-size:13.5px;font-weight:600;color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">New Org Workflow</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 9l6 6 6-6" stroke="#8FA398" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="currentColor" stroke-width="1.7"></rect><circle cx="12" cy="10" r="2.2" stroke="currentColor" stroke-width="1.7"></circle><path d="M8.5 16.8c.8-1.7 2-2.5 3.5-2.5s2.7.8 3.5 2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Org Detail</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><circle cx="9" cy="8.8" r="2.7" stroke="currentColor" stroke-width="1.7"></circle><path d="M4.4 18.2c.7-2.5 2.5-3.8 4.6-3.8s3.9 1.3 4.6 3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><circle cx="17.4" cy="10.4" r="1.9" stroke="currentColor" stroke-width="1.7"></circle></svg><span>Groups</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><circle cx="9.5" cy="8" r="3" stroke="currentColor" stroke-width="1.7"></circle><path d="M4 19c.9-3 3.1-4.5 5.5-4.5S14.1 16 15 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><path d="M16.4 5.6a3 3 0 0 1 0 4.8M18.6 14.6c.9.8 1.5 1.9 1.9 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Providers</span></span></a>
+    </nav>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:8px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:6px;cursor:pointer;margin-left:2px;margin-right:2px" style-hover="background:rgba(255,255,255,.10)">
+      <div style="width:26px;height:26px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">S</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;color:#FFFFFF;font-weight:500;line-height:1.25">Sowmya</div><div style="font-size:11px;color:#8FA398">Admin</div></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 9l6 6 6-6" stroke="#8FA398" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh">
+    <div data-screen-label="Top bar" style="height:56px;flex:none;border-bottom:1px solid #E8E5E0;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 24px;gap:16px;position:sticky;top:0;z-index:20">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;min-width:0">
+        <a href="#" style="color:#6B7280;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">Cases</a>
+        <span style="color:#C9C5BE">/</span>
+        <span style="color:#1F2937;font-weight:600;font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px">C-1046</span>
+      </div>
+      
+    </div>
+
+    <div style="flex:1;min-width:0;padding:24px 32px 64px">
+      <div style="max-width:1200px;margin:0 auto">
+
+        <!-- Header -->
+        <section data-screen-label="Case header" style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:20px 22px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:280px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px">
+              <a href="#" style="font-size:20px;font-weight:600;letter-spacing:-.01em;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">Jim Apple, PT</a>
+              <span style="display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:4px;font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280">Initial credentialing</span>
+            </div>
+            <div style="font-size:14px;color:#6B7280;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <a href="3 - Payer Detail.dc.html" style="color:#6B7280;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">Banner Health Plans</a>
+              <span style="color:#C9C5BE">·</span><span>AZ</span>
+              <span style="color:#C9C5BE">·</span><span>Physical Therapy</span>
+              <span style="color:#C9C5BE">·</span><span style="color:#9CA3AF">under YC PT</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px">
+              <span style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Tracking ID</span>
+              <input type="text" aria-label="Tracking ID" defaultValue="BH-20441" style="width:130px;height:30px;padding:0 9px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:12.5px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+              <button type="button" style="height:30px;padding:0 10px;border-radius:4px;border:1px solid #E8E5E0;background:#FFFFFF;font-family:inherit;font-size:12px;font-weight:500;color:#1F2937;cursor:pointer" style-hover="background:#F5F4F1">Copy</button>
+            </div>
+          </div>
+          <div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:4px;font-size:12.5px;font-weight:600;white-space:nowrap;background:{{ stBg }};color:{{ stColor }}">{{ status }}</span>
+              <div style="position:relative">
+                <button type="button" onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}" aria-haspopup="menu" style="height:34px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">Update status</button>
+                <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+                  <div role="menu" style="position:absolute;top:38px;right:0;z-index:50;width:300px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:5px 0;box-sizing:border-box">
+                    <sc-for list="{{ moves }}" as="m" hint-placeholder-count="3">
+                      <button type="button" data-move="{{ m.label }}" onClick="{{ doMove }}" role="menuitem" style="width:100%;display:flex;flex-direction:column;gap:1px;padding:8px 14px;border:none;background:transparent;font-family:inherit;cursor:pointer;text-align:left" style-hover="background:#F5F4F1">
+                        <span style="font-size:13.5px;font-weight:500;color:#1F2937">{{ m.label }}</span>
+                        <span style="font-size:12px;color:#9CA3AF">{{ m.hint }}</span>
+                      </button>
+                    </sc-for>
+                    <div style="height:1px;background:#F0EEEA;margin:5px 0"></div>
+                    <sc-for list="{{ closes }}" as="m" hint-placeholder-count="3">
+                      <a href="5 - Case Close and IDs.dc.html" role="menuitem" style="display:flex;flex-direction:column;gap:1px;padding:8px 14px;text-decoration:none" style-hover="background:#F5F4F1">
+                        <span style="font-size:13.5px;font-weight:500;color:{{ m.color }}">{{ m.label }}</span>
+                        <span style="font-size:12px;color:#9CA3AF">{{ m.hint }}</span>
+                      </a>
+                    </sc-for>
+                    <div style="height:1px;background:#F0EEEA;margin:5px 0"></div>
+                    <button type="button" onClick="{{ toggleMenu }}" role="menuitem" style="width:100%;display:flex;flex-direction:column;gap:1px;padding:8px 14px;border:none;background:transparent;font-family:inherit;cursor:pointer;text-align:left" style-hover="background:#F5F4F1">
+                      <span style="font-size:13.5px;font-weight:500;color:#1F2937">Correct status…</span>
+                      <span style="font-size:12px;color:#9CA3AF">Admin · any direction, note required, kept in history</span>
+                    </button>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+            <span style="font-size:12px;color:#9CA3AF">{{ attribution }}</span>
+          </div>
+        </section>
+
+        <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;margin-top:16px;align-items:start">
+          <!-- LEFT -->
+          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+
+            <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+              <div style="padding:14px 18px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <h2 style="margin:0;font-size:15px;font-weight:600;color:#1F2937">Tasks</h2>
+                <span style="font-size:12.5px;color:#9CA3AF">{{ taskSummary }}</span>
+                <span style="margin-left:auto;font-size:12px;color:#9CA3AF">From <a href="4 - Template Editor.dc.html#edit">Banner Health Plans — MA enrollment</a> <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;background:#F5F4F1;border:1px solid #E8E5E0;border-radius:4px;padding:1px 6px">v2</span></span>
+              </div>
+              <div style="padding:4px 18px 10px">
+                <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="4">
+                  <div style="padding:13px 0;border-top:1px solid #F0EEEA">
+                    <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+                      <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;background:{{ t.dotBg }};border:1px solid {{ t.dotBorder }}">
+                        <sc-if value="{{ t.done }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#047857" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if>
+                        <sc-if value="{{ t.pending }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.dotInner }}"></span></sc-if>
+                      </span>
+                      <span style="font-size:14px;font-weight:{{ t.weight }};color:{{ t.titleColor }}">{{ t.title }}</span>
+                      <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font-size:11px;font-weight:500;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280;white-space:nowrap">{{ t.exec }}</span>
+                      <span style="margin-left:auto;font-size:12px;color:#9CA3AF;white-space:nowrap;font-family:'Geist Mono',ui-monospace,monospace">{{ t.due }}</span>
+                    </div>
+                    <sc-if value="{{ t.hasSteps }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin:9px 0 0 33px;display:flex;flex-direction:column;gap:6px">
+                        <sc-for list="{{ t.steps }}" as="s" hint-placeholder-count="2">
+                          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                            <span style="width:6px;height:6px;border-radius:50%;background:{{ s.dot }};flex:none"></span>
+                            <span style="font-size:13px;color:{{ s.color }}">{{ s.label }}</span>
+                            <sc-if value="{{ s.current }}" hint-placeholder-val="{{ false }}">
+                              <button type="button" onClick="{{ openDrawer }}" style="height:26px;padding:0 10px;border-radius:4px;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1B4D3E" style-hover="background:#F5F4F1">Open step</button>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+
+            <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+              <div style="padding:14px 18px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <h2 style="margin:0;font-size:15px;font-weight:600;color:#1F2937">Touchlog</h2>
+                <span style="margin-left:auto;display:flex;gap:8px">
+                  <button type="button" onClick="{{ openNote }}" style="height:32px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Add note</button>
+                  <button type="button" onClick="{{ openTouch }}" style="height:32px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">+ Add touch</button>
+                </span>
+              </div>
+              <sc-if value="{{ touchOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 18px;border-bottom:1px solid #F0EEEA;background:#FBFBF9">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div style="display:flex;flex-direction:column;gap:5px"><label for="tDate" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Date</label><input id="tDate" type="text" defaultValue="07/26/2026" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></div>
+                    <div style="display:flex;flex-direction:column;gap:5px"><label for="tType" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Type</label><div style="position:relative"><select id="tType" aria-label="Touch type" value="{{ touchType }}" onChange="{{ setTouchType }}" style="height:34px;width:100%;padding:0 28px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="Call">Call</option><option value="Portal Check">Portal Check</option><option value="Email">Email</option><option value="Fax">Fax</option><option value="CAQH Update">CAQH Update</option><option value="Provider Outreach">Provider Outreach</option><option value="Internal Sync">Internal Sync</option></select><span style="position:absolute;right:11px;top:14px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div></div>
+                    <div style="display:flex;flex-direction:column;gap:5px"><label for="tRec" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Recipient</label><input id="tRec" type="text" placeholder="Who you contacted" value="{{ touchRec }}" onChange="{{ setTouchRec }}" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></div>
+                    <div style="display:flex;flex-direction:column;gap:5px"><label for="tRecC" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Recipient contact</label><input id="tRecC" type="text" placeholder="Phone, email, portal…" value="{{ touchRecC }}" onChange="{{ setTouchRecC }}" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px"><label for="tOut" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Outcome <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF">(optional)</span></label><div style="position:relative"><select id="tOut" aria-label="Outcome" value="{{ touchOut }}" onChange="{{ setTouchOut }}" style="height:34px;width:100%;padding:0 28px 0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="">— No outcome —</option><option value="Reached">Reached</option><option value="Left voicemail">Left voicemail</option><option value="Info received">Info received</option><option value="Escalated">Escalated</option></select><span style="position:absolute;right:11px;top:14px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div></div>
+                  <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px"><label for="tCtx" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Context</label><textarea id="tCtx" value="{{ touchText }}" onChange="{{ setTouchText }}" placeholder="What happened on this touch…" style="width:100%;min-height:64px;padding:8px 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;resize:vertical" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></textarea></div>
+                  <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px;max-width:280px"><label for="tFup" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Next follow-up</label><input id="tFup" type="text" placeholder="mm/dd/yyyy" value="{{ touchFup }}" onChange="{{ setTouchFup }}" style="height:34px;padding:0 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;width:100%" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><span style="font-size:12px;color:#9CA3AF">Leaving this blank keeps any existing follow-up (it carries forward).</span></div>
+                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+                    <button type="button" onClick="{{ closeTouch }}" style="height:32px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Cancel</button>
+                    <button type="button" onClick="{{ saveTouch }}" style="height:32px;padding:0 14px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">Save touch</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ noteOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:16px 18px;border-bottom:1px solid #F0EEEA;background:#FBFBF9">
+                  <div style="display:flex;flex-direction:column;gap:5px"><label for="nNote" style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Note</label><textarea id="nNote" value="{{ noteText }}" onChange="{{ setNoteText }}" placeholder="Add an internal note…" style="width:100%;min-height:64px;padding:8px 10px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13px;color:#1F2937;font-family:inherit;resize:vertical" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></textarea></div>
+                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+                    <button type="button" onClick="{{ closeNote }}" style="height:32px;padding:0 13px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Cancel</button>
+                    <button type="button" onClick="{{ saveNote }}" disabled="{{ noteBlocked }}" style="height:32px;padding:0 14px;border-radius:4px;font-size:12.5px;font-weight:500;font-family:inherit;border:1px solid {{ noteBtnBorder }};background:{{ noteBtnBg }};color:{{ noteBtnColor }};cursor:{{ noteBtnCursor }}">Save note</button>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="padding:2px 18px 8px">
+                <sc-for list="{{ feed }}" as="a" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:11px;padding:12px 0;border-top:1px solid #F0EEEA">
+                    <span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font-size:11px;font-weight:600;background:{{ a.tagBg }};color:{{ a.tagColor }};flex:none;margin-top:1px">{{ a.tag }}</span>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:13.5px;color:#1F2937">{{ a.text }}</div>
+                      <div style="font-size:12px;color:#9CA3AF;margin-top:2px">{{ a.meta }}<sc-if value="{{ a.evidence }}" hint-placeholder-val="{{ false }}"><span style="color:#B45309"> · evidence for {{ a.evidence }}</span></sc-if></div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="padding:10px 0 8px;border-top:1px solid #F0EEEA;font-size:12px;color:#9CA3AF">Logging a touch that implies progress offers a status bump — the touch is saved as the transition's evidence.</div>
+              </div>
+            </section>
+          </div>
+
+          <!-- RIGHT -->
+          <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+            <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+              <div style="padding:14px 18px;border-bottom:1px solid #E8E5E0"><h2 style="margin:0;font-size:15px;font-weight:600;color:#1F2937">Details</h2></div>
+              <div style="padding:12px 18px 16px">
+                <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;padding:4px 0 3px">Case</div>
+                <sc-for list="{{ facts }}" as="f" hint-placeholder-count="8">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #F7F6F3">
+                    <span style="font-size:12.5px;color:#6B7280">{{ f.label }}</span>
+                    <span style="text-align:right;min-width:0">
+                      <span style="font-size:13px;color:#1F2937;font-family:{{ f.font }}">{{ f.value }}</span>
+                      <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:11.5px;color:#9CA3AF;margin-top:1px">{{ f.sub }}</span></sc-if>
+                    </span>
+                  </div>
+                </sc-for>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;border-top:1px solid #F0EEEA;margin-top:12px;padding:12px 0 3px">Identifiers</div>
+                <sc-for list="{{ idents }}" as="f" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #F7F6F3">
+                    <span style="font-size:12.5px;color:#6B7280;flex:1">{{ f.label }}</span>
+                    <span style="font-size:13px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace">{{ f.value }}</span>
+                    <button type="button" style="height:24px;padding:0 8px;border-radius:4px;border:1px solid #E8E5E0;background:#FFFFFF;font-family:inherit;font-size:11px;font-weight:500;color:#6B7280;cursor:pointer;flex:none" style-hover="background:#F5F4F1;color:#1F2937">Copy</button>
+                  </div>
+                </sc-for>
+                <div style="font-size:12px;color:#9CA3AF;padding:7px 0 0">Payer-issued IDs appear here after approval.</div>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;border-top:1px solid #F0EEEA;margin-top:12px;padding:12px 0 3px">Provenance</div>
+                <div style="font-size:12.5px;color:#6B7280;padding:4px 0 0;line-height:1.6">Generated from <a href="4 - Template Editor.dc.html#edit">Banner Health Plans — MA enrollment</a> <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;background:#F5F4F1;border:1px solid #E8E5E0;border-radius:4px;padding:1px 6px">v2</span> · run #418<br>Jul 20, 2026 by Devin · reapply cycle 1</div>
+              </div>
+            </section>
+
+            <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+              <div style="padding:14px 18px;border-bottom:1px solid #E8E5E0"><h2 style="margin:0;font-size:15px;font-weight:600;color:#1F2937">Status timeline</h2></div>
+              <div style="padding:6px 18px 12px">
+                <sc-for list="{{ timeline }}" as="h" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid #F7F6F3">
+                    <span style="width:8px;height:8px;border-radius:50%;background:{{ h.dot }};flex:none;margin-top:5px"></span>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:13px;color:#1F2937"><span style="color:#9CA3AF">{{ h.from }} →</span> <span style="font-weight:600">{{ h.to }}</span></div>
+                      <div style="font-size:12px;color:#9CA3AF;margin-top:1px">{{ h.when }} · {{ h.who }}<sc-if value="{{ h.evidence }}" hint-placeholder-val="{{ false }}"> · <a href="#" style="font-size:12px">{{ h.evidence }}</a></sc-if></div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step drawer -->
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;background:rgba(12,42,29,.2);z-index:90"></div>
+    <div role="dialog" aria-label="Step details" style="position:fixed;top:0;right:0;bottom:0;width:420px;max-width:94vw;background:#FFFFFF;border-left:1px solid #E8E5E0;z-index:91;display:flex;flex-direction:column">
+      <div style="padding:16px 20px;border-bottom:1px solid #E8E5E0;display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:15px;font-weight:600;color:#1F2937">Fill Banner PNM enrollment</div>
+          <div style="font-size:12.5px;color:#9CA3AF;margin-top:2px">Task 2 · Complete the enrollment form in the portal</div>
+        </div>
+        <button type="button" onClick="{{ closeDrawer }}" aria-label="Close" style="width:26px;height:26px;border:none;background:transparent;border-radius:4px;color:#9CA3AF;font-size:18px;line-height:1;cursor:pointer;font-family:inherit" style-hover="background:#F5F4F1;color:#1F2937">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:500;background:#E8EEFD;color:#1D4ED8">Online form</span>
+          <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#6B7280;background:#F5F4F1;border-radius:4px;padding:2px 7px">banner_pnm_enrollment</span>
+          <span style="display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:500;background:#E7F5EF;color:#047857">Proven</span>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280;margin-bottom:8px">Fields — resolved for Jim Apple</div>
+          <div style="border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+            <sc-for list="{{ drawerFields }}" as="f" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid #F7F6F3;background:#FFFFFF">
+                <span style="flex:1;font-size:13px;color:#1F2937">{{ f.label }}</span>
+                <span style="font-size:12.5px;color:{{ f.vColor }};font-family:'Geist Mono',ui-monospace,monospace">{{ f.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:7px">Values resolve from the provider record in the browser — nothing is stored in the portal until the fill.</div>
+        </div>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #E8E5E0;display:flex;justify-content:flex-end;gap:8px">
+        <button type="button" onClick="{{ closeDrawer }}" style="height:34px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Close</button>
+        <button type="button" onClick="{{ closeDrawer }}" style="height:34px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33">Mark step done</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { menu: false, drawer: false, status: "Action Required", byYou: false };
+  renderVals() {
+    const tone = (t) => ({
+      green: { bg: "#E7F5EF", color: "#047857" }, amber: { bg: "#FBF0E1", color: "#B45309" },
+      blue: { bg: "#E8EEFD", color: "#1D4ED8" }, teal: { bg: "#E4F3F7", color: "#0E7490" },
+      red: { bg: "#FBEAEA", color: "#B91C1C" }, gray: { bg: "#F1F1EF", color: "#6B7280" }
+    }[t] || { bg: "#F1F1EF", color: "#6B7280" });
+    const STATUS_TONE = { "Not Started": "gray", "In Progress": "blue", "Submitted": "teal", "In Review": "teal", "Action Required": "amber", "Approved": "green", "Denied": "red", "Not Pursuing": "gray" };
+    const status = this.state.status;
+    const st = tone(STATUS_TONE[status]);
+
+    const moves = [
+      { label: "In Progress", hint: "Back to rework — optional note" },
+      { label: "Submitted", hint: "Resubmitted to the payer — optional note" }
+    ];
+    const closes = [
+      { label: "Approved…", hint: "Effective date + the IDs this payer issues", color: "#047857" },
+      { label: "Denied…", hint: "Reason from the governed list", color: "#B91C1C" },
+      { label: "Not Pursuing…", hint: "Deliberate opt-out — note required", color: "#1F2937" }
+    ];
+
+    const t = (title, exec, due, state, steps) => ({
+      title, exec, due, steps: steps || [], hasSteps: (steps || []).length > 0,
+      done: state === "done", pending: state !== "done",
+      dotBg: state === "done" ? "#E7F5EF" : "#FFFFFF",
+      dotBorder: state === "done" ? "#E7F5EF" : "#DCDAD4",
+      dotInner: state === "current" ? "#B45309" : "#C9C5BE",
+      weight: state === "current" ? "600" : "500",
+      titleColor: state === "pending" ? "#6B7280" : "#1F2937"
+    });
+    const tasks = [
+      t("Confirm the provider is enrollment-ready", "Manual", "+0d", "done"),
+      t("Complete the enrollment form in the portal", "Auto-fill", "+7d", "current", [
+        { label: "Complete Banner PNM enrollment", current: true, dot: "#B45309", color: "#1F2937" },
+        { label: "Capture the confirmation number", current: false, dot: "#C9C5BE", color: "#6B7280" }
+      ]),
+      t("Submit and capture the confirmation", "Manual", "+10d", "pending"),
+      t("Record the approved effective date", "Manual", "+30d", "pending")
+    ];
+
+    const tag = (k) => ({ Portal: tone("blue"), "Portal Check": tone("blue"), Call: tone("teal"), "Provider Outreach": tone("teal"), "CAQH Update": tone("amber"), Email: tone("gray"), Fax: tone("gray"), "Internal Sync": tone("gray"), Workbench: tone("green"), Note: tone("amber") }[k] || tone("gray"));
+    const feed = (this.state.extra || []).concat([
+      { tag: "Portal Check", text: "Resubmitted the PNM application with the corrected TIN.", who: "Sowmya", when: "2d ago", recipient: "Banner PNM portal", contact: "", outcome: "Info received", followUp: "Jul 31", evidence: "→ Action Required" },
+      { tag: "Call", text: "Banner rep confirmed the TIN mismatch was the only hold.", who: "Sowmya", when: "2d ago", recipient: "Banner provider relations", contact: "555-555-0102", outcome: "Reached", followUp: "", evidence: "" },
+      { tag: "Note", text: "Waiting on Banner callback — chase Thursday if silent.", who: "Sowmya", when: "1d ago", recipient: "", contact: "", outcome: "", followUp: "", evidence: "" },
+      { tag: "Workbench", text: "Filled and submitted the PNM enrollment from the panel — 17 of 18 fields filled, Group NPI skipped.", who: "Sowmya", when: "6d ago", recipient: "Banner PNM portal", contact: "", outcome: "Ref 2201-4471", followUp: "", evidence: "→ Submitted" },
+      { tag: "Email", text: "Submission confirmation received from the portal.", who: "system", when: "6d ago", recipient: "case inbox", contact: "c1046@in.minted.dev", outcome: "", followUp: "", evidence: "→ In Review" }
+    ]).map((x) => {
+      const c = tag(x.tag);
+      const parts = [x.who + " · " + x.when];
+      if (x.recipient) parts.push(x.recipient + (x.contact ? " (" + x.contact + ")" : ""));
+      if (x.outcome) parts.push(x.outcome);
+      if (x.followUp) parts.push("follow-up " + x.followUp);
+      return Object.assign({}, x, { tagBg: c.bg, tagColor: c.color, meta: parts.join(" · ") });
+    });
+
+    const mono = "'Geist Mono',ui-monospace,monospace";
+    const facts = [
+      { label: "Submitted", value: "Jul 21, 2026" }, { label: "Expected effective", value: "Sep 1, 2026" },
+      { label: "Confirmed effective", value: "—" }, { label: "Contract executed", value: "—" },
+      { label: "Days open", value: "6d", font: mono }, { label: "Coordinator", value: "Sowmya" },
+      { label: "Group", value: "YC PT" }, { label: "Facility", value: "Boulder Main St Clinic" },
+      { label: "Forwarding ID", value: "c1046@in.minted.dev", font: mono }
+    ].map((f) => Object.assign({ font: "inherit", sub: "", hasSub: !!f.sub }, f));
+    const idents = [
+      { label: "Provider NPI", value: "1234567890" }, { label: "CAQH ID", value: "123456678" },
+      { label: "Taxonomy", value: "2251X0800X" }, { label: "Group NPI", value: "1770001112" },
+      { label: "Group TIN", value: "84-1234567" }
+    ];
+    const timeline = [
+      { from: "In Review", to: "Action Required", when: "Jul 24", who: "Sowmya", evidence: "portal touch", dot: "#B45309" },
+      { from: "Submitted", to: "In Review", when: "Jul 22", who: "system", evidence: "email touch", dot: "#0E7490" },
+      { from: "In Progress", to: "Submitted", when: "Jul 21", who: "Sowmya", evidence: "workbench touch", dot: "#0E7490" },
+      { from: "Not Started", to: "In Progress", when: "Jul 20", who: "auto — first work logged", evidence: "", dot: "#1D4ED8" }
+    ];
+    const drawerFields = [
+      { label: "Provider NPI", value: "1234567890", vColor: "#1F2937" },
+      { label: "CAQH ID", value: "123456678", vColor: "#1F2937" },
+      { label: "License number", value: "PT-45872", vColor: "#1F2937" },
+      { label: "Requested effective date", value: "manual at fill", vColor: "#9CA3AF" }
+    ];
+
+    const noteReady = (this.state.noteText || "").trim().length > 0;
+    return {
+      status, stBg: st.bg, stColor: st.color,
+      touchOpen: !!this.state.touchForm, noteOpen: !!this.state.noteForm,
+      touchType: this.state.touchType || "Call",
+      touchText: this.state.touchText || "",
+      touchRec: this.state.touchRec || "", setTouchRec: (e) => this.setState({ touchRec: e.target.value }),
+      touchRecC: this.state.touchRecC || "", setTouchRecC: (e) => this.setState({ touchRecC: e.target.value }),
+      touchOut: this.state.touchOut || "", setTouchOut: (e) => this.setState({ touchOut: e.target.value }),
+      touchFup: this.state.touchFup || "", setTouchFup: (e) => this.setState({ touchFup: e.target.value }),
+      noteText: this.state.noteText || "",
+      noteBlocked: !noteReady,
+      noteBtnBorder: noteReady ? "#1B4D3E" : "#E8E5E0", noteBtnBg: noteReady ? "#1B4D3E" : "#F5F4F1",
+      noteBtnColor: noteReady ? "#FFFFFF" : "#9CA3AF", noteBtnCursor: noteReady ? "pointer" : "not-allowed",
+      openTouch: () => this.setState({ touchForm: true, noteForm: false }),
+      closeTouch: () => this.setState({ touchForm: false }),
+      setTouchType: (e) => this.setState({ touchType: e.target.value }),
+      setTouchText: (e) => this.setState({ touchText: e.target.value }),
+      saveTouch: () => this.setState({
+        touchForm: false, touchText: "", touchRec: "", touchRecC: "", touchOut: "", touchFup: "",
+        extra: [{
+          tag: this.state.touchType || "Call",
+          text: (this.state.touchText || "").trim() || "Touch logged.",
+          who: "you", when: "just now",
+          recipient: (this.state.touchRec || "").trim(), contact: (this.state.touchRecC || "").trim(),
+          outcome: this.state.touchOut || "", followUp: (this.state.touchFup || "").trim(),
+          evidence: ""
+        }].concat(this.state.extra || [])
+      }),
+      openNote: () => this.setState({ noteForm: true, touchForm: false }),
+      closeNote: () => this.setState({ noteForm: false }),
+      setNoteText: (e) => this.setState({ noteText: e.target.value }),
+      saveNote: () => {
+        if (!noteReady) return;
+        this.setState({ noteForm: false, noteText: "", extra: [{ tag: "Note", text: (this.state.noteText || "").trim(), who: "you", when: "just now", evidence: "" }].concat(this.state.extra || []) });
+      },
+      attribution: this.state.byYou ? (status + " · just now by you") : "Action Required · 2d ago by Sowmya — evidence: portal touch",
+      menuOpen: this.state.menu,
+      toggleMenu: () => this.setState({ menu: !this.state.menu }),
+      doMove: (e) => this.setState({ status: e.currentTarget.getAttribute("data-move"), byYou: true, menu: false }),
+      moves, closes,
+      taskSummary: "1 of 4 done · next due in 3 days",
+      tasks, feed, facts, idents, timeline, drawerFields,
+      drawerOpen: this.state.drawer,
+      openDrawer: () => this.setState({ drawer: true }),
+      closeDrawer: () => this.setState({ drawer: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

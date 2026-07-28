@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #F1EFEA; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+    input { font-family: inherit; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#F1EFEA;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:26px 30px 60px">
+  <div style="max-width:1220px;margin:0 auto">
+
+    <div data-screen-label="Header" style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:18px">
+      <div style="min-width:280px">
+        <h1 style="margin:0 0 4px;font-size:22px;font-weight:600;letter-spacing:-.015em">Workbench prototype — the full loop</h1>
+        <div style="font-size:13.5px;color:#6B7280;max-width:640px;text-wrap:pretty">All six journeys, clickable. The panel reads the active browser tab and changes its offer — switch tabs below to see the same case in three contexts. Assumes the backend in motion ships.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px;flex:none">
+        <div style="display:flex;gap:3px;padding:3px;background:#FFFFFF;border:1px solid #DDD9D2;border-radius:6px">
+          <button type="button" onClick="{{ w320 }}" style="{{ tab320 }}">320</button>
+          <button type="button" onClick="{{ w380 }}" style="{{ tab380 }}">380</button>
+          <button type="button" onClick="{{ w530 }}" style="{{ tab530 }}">530</button>
+        </div>
+        <div style="font-size:11.5px;color:#9CA3AF;text-align:right">Chrome sets the width — the user drags it</div>
+      </div>
+    </div>
+
+    <div data-screen-label="Series ribbon" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px"><span style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;flex:none">Workbench series</span><a href="7 - Workbench Panel.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">7 · Panel conformance</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="8 - Index - Workbench Journeys.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">8 · Journey map</a><span style="color:#C9C5BE;font-size:11px">→</span><span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;background:#0C2A1D;color:#FFFFFF;font-size:12px;font-weight:500;white-space:nowrap">9 · Full-loop prototype</span><span style="color:#C9C5BE;font-size:11px">→</span><a href="10 - Consolidated Vision.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">10 · Consolidated vision</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="11 - Handoff Map.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">11 · Handoff map</a><span style="color:#9CA3AF;font-size:12px;margin-left:6px">Returns land in the app: <a href="6 - Case Detail.dc.html">Case Detail</a> · <a href="4 - Template Editor.dc.html">Template Editor</a> · <a href="5 - Case Close and IDs.dc.html">Case Close</a> · <a href="1 - Payer Setup.dc.html">Payer Setup</a></span></div>
+
+    <div data-screen-label="Active tab switcher" style="margin-bottom:14px">
+      <div style="font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px">Active browser tab</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" onClick="{{ ctxNewtab }}" style="{{ ctab_newtab }}"><span style="width:7px;height:7px;border-radius:50%;background:#9CA3AF;flex:none"></span>New tab</button>
+        <button type="button" onClick="{{ ctxBanner }}" style="{{ ctab_banner }}"><span style="width:7px;height:7px;border-radius:50%;background:#1B4D3E;flex:none"></span>banner.com/pnm/enrollment</button>
+        <button type="button" onClick="{{ ctxCaqh }}" style="{{ ctab_caqh }}"><span style="width:7px;height:7px;border-radius:50%;background:#1D4ED8;flex:none"></span>proview.caqh.org</button>
+        <button type="button" onClick="{{ ctxUnknown }}" style="{{ ctab_unknown }}"><span style="width:7px;height:7px;border-radius:50%;background:#C69A3F;flex:none"></span>somepayer.com/credentialing</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">
+
+      <div data-screen-label="Panel" style="flex:none;border:1px solid #DDD9D2;border-radius:10px;overflow:hidden;background:#FDF6F4;box-shadow:0 1px 3px rgba(0,0,0,.06);width:{{ panelW }}">
+        <div style="height:38px;display:flex;align-items:center;gap:9px;padding:0 13px;border-bottom:1px solid rgba(0,0,0,.05)">
+          <img src="assets/icons/icon-32.png" alt="" style="width:17px;height:17px;display:block;flex:none">
+          <span style="flex:1;font-size:12.5px;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Minted Panel Workbench</span>
+          <span style="color:#9CA3AF;font-size:13px">✕</span>
+        </div>
+
+        <div style="background:#FDFDFC;min-height:660px;display:flex;flex-direction:column">
+
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 8px;flex:none">
+            <div style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;margin-left:-8px;border-radius:4px;cursor:pointer;min-width:0" style-hover="background:#F5F4F1">
+              <span style="font-size:13.5px;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">New Org Workflow</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 9l6 6 6-6" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <span style="flex:1"></span>
+            <span style="width:26px;height:26px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer" style-hover="background:#F5F4F1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="10.5" r="6.5" stroke="#6B7280" stroke-width="1.8"></circle><path d="M15.5 15.5L20 20" stroke="#6B7280" stroke-width="1.8" stroke-linecap="round"></path></svg></span>
+            <span style="width:26px;height:26px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer" title="Sowmya — Sign out">S</span>
+          </div>
+
+          <sc-if value="{{ noCase }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:4px 14px 14px">
+              <div style="display:flex;align-items:flex-start;gap:9px;padding:10px 11px;background:{{ ctxCardBg }};border:1px solid {{ ctxCardBorder }};border-radius:6px;margin-top:4px">
+                <span style="width:7px;height:7px;border-radius:50%;background:{{ ctxDot }};flex:none;margin-top:6px"></span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;font-weight:600;color:#1F2937">{{ ctxTitle }}</div>
+                  <div style="font-size:12px;color:#6B7280;margin-top:1px;text-wrap:pretty">{{ ctxSub }}</div>
+                </div>
+              </div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin:14px 0 7px">{{ queueLabel }}</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ queue }}" as="qc" hint-placeholder-count="3">
+                  <div onClick="{{ qc.pick }}" style="padding:10px 11px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;cursor:pointer" style-hover="border-color:#1B4D3E">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ qc.name }}</span>
+                      <sc-if value="{{ qc.matches }}" hint-placeholder-val="{{ false }}"><span style="height:19px;padding:0 6px;border-radius:4px;background:#E7F5EF;color:#047857;font-size:10px;font-weight:600;display:inline-flex;align-items:center;flex:none;white-space:nowrap">THIS PAGE</span></sc-if>
+                      <span style="height:19px;padding:0 7px;border-radius:4px;background:#F5F4F1;color:#6B7280;font-size:10.5px;font-weight:500;display:inline-flex;align-items:center;flex:none;white-space:nowrap">{{ qc.status }}</span>
+                    </div>
+                    <div style="font-size:12px;color:#6B7280;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ qc.sub }}</div>
+                    <div style="font-size:11.5px;color:#9CA3AF;margin-top:3px">{{ qc.reason }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:11.5px;color:#9CA3AF;margin-top:10px;text-wrap:pretty">Opening a case from the web app lands here too — org, provider, location and case already resolved.</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasCase }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;flex:1;min-height:0">
+              <div style="padding:0 14px;flex:none">
+                <div style="display:flex;align-items:flex-start;gap:9px;padding:9px 11px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;font-weight:600;color:#1F2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ caseName }}</div>
+                    <div style="font-size:12px;color:#6B7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ caseSub }}</div>
+                  </div>
+                  <span style="height:19px;padding:0 7px;border-radius:4px;background:{{ statusBg }};color:{{ statusInk }};font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none;white-space:nowrap">{{ caseStatus }}</span>
+                  <span onClick="{{ releaseCase }}" title="Put back — pick another case" style="width:22px;height:22px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;margin:-2px -4px 0 0" style-hover="background:#F5F4F1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round"></path></svg></span>
+                </div>
+              </div>
+
+              <sc-if value="{{ showDup }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:9px 14px 0;flex:none">
+                  <div style="display:flex;align-items:flex-start;gap:9px;padding:9px 11px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:1px"><path d="M12 4.5l8.5 15h-17l8.5-15z" stroke="#92400E" stroke-width="1.8" stroke-linejoin="round"></path><path d="M12 10v4M12 16.6v.4" stroke="#92400E" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:12.5px;color:#92400E;text-wrap:pretty"><span style="font-weight:600">Submitted 6 days ago.</span> A PNM enrollment was logged on this case on Jul 21.</div>
+                      <div style="display:flex;gap:12px;margin-top:6px">
+                        <span onClick="{{ dismissDup }}" style="font-size:12.5px;font-weight:500;color:#92400E;text-decoration:underline;cursor:pointer">Continue anyway</span>
+                        <span style="font-size:12.5px;color:#92400E;text-decoration:underline;cursor:pointer">See the touchlog</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isNewtabCase }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:11px 14px 0;flex:none">
+                  <div onClick="{{ ctxBanner }}" style="display:flex;align-items:center;gap:10px;padding:11px 12px;background:#0C2A1D;border-radius:6px;cursor:pointer">
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:13px;font-weight:600;color:#FFFFFF">Open Banner PNM</div>
+                      <div style="font-size:11.5px;color:#A7B5AD;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Next step needs banner.com/pnm — proven form</div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M9 6l6 6-6 6" stroke="#C8DBD4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isBannerMismatch }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:11px 14px 0;flex:none">
+                  <div style="padding:10px 12px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+                    <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">This page belongs to <span style="font-weight:600;color:#1F2937">Jim Apple · Banner Health Plans</span>, not the case in hand.</div>
+                    <span onClick="{{ switchToBanner }}" style="display:inline-flex;margin-top:7px;font-size:12.5px;font-weight:500;color:#1B4D3E;text-decoration:underline;cursor:pointer">Switch to that case</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isBannerOffer }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:11px 14px 0;flex:none">
+                  <sc-if value="{{ fillReady }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:11px 12px;background:#0C2A1D;border-radius:6px">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;min-width:0">
+                          <div style="font-size:13.5px;font-weight:600;color:#FFFFFF">{{ fillCta }}</div>
+                          <div style="font-size:11.5px;color:#A7B5AD;text-wrap:pretty">{{ fillNote }}</div>
+                        </div>
+                        <span style="height:19px;padding:0 7px;border-radius:4px;background:rgba(255,255,255,.12);color:#C8DBD4;font-size:10px;font-weight:600;display:inline-flex;align-items:center;flex:none">PROVEN</span>
+                      </div>
+                      <button type="button" onClick="{{ runFill }}" style="margin-top:10px;width:100%;height:34px;background:#C8DBD4;border:none;border-radius:4px;color:#0C2A1D;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Fill this page</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ fillDone }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:11px 12px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px">
+                      <div style="font-size:13px;font-weight:600;color:#1B4D3E">{{ fillReport }}</div>
+                      <div style="font-size:12px;color:#33463C;margin-top:2px;text-wrap:pretty">{{ fillReportSub }}</div>
+                      <sc-if value="{{ confirmPending }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+                          <button type="button" onClick="{{ confirmStep }}" style="height:30px;padding:0 12px;background:#1B4D3E;border:none;border-radius:4px;color:#FFFFFF;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer">Mark form step done</button>
+                          <span style="font-size:12.5px;color:#6B7280;cursor:pointer">Not yet</span>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ confirmed }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1B4D3E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                          <span style="font-size:12px;color:#33463C">Recorded on the case timeline — nothing to re-enter in the app.</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isCaqhOffer }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:11px 14px 0;flex:none">
+                  <sc-if value="{{ caqhFillReady }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:11px 12px;background:#0C2A1D;border-radius:6px">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;min-width:0">
+                          <div style="font-size:13.5px;font-weight:600;color:#FFFFFF">Update CAQH — 12 fields</div>
+                          <div style="font-size:11.5px;color:#A7B5AD;text-wrap:pretty">Fills from our record, then attest. Last attested Mar 14, 2026.</div>
+                        </div>
+                        <span style="height:19px;padding:0 7px;border-radius:4px;background:rgba(255,255,255,.12);color:#C8DBD4;font-size:10px;font-weight:600;display:inline-flex;align-items:center;flex:none">ATTEST</span>
+                      </div>
+                      <button type="button" onClick="{{ runCaqhFill }}" style="margin-top:10px;width:100%;height:34px;background:#C8DBD4;border:none;border-radius:4px;color:#0C2A1D;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">Fill this page</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ caqhFillDone }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:11px 12px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px">
+                      <div style="font-size:13px;font-weight:600;color:#1B4D3E">12 filled · 0 skipped</div>
+                      <div style="font-size:12px;color:#33463C;margin-top:2px;text-wrap:pretty">Review on the page, complete CAQH's attestation, then record it here.</div>
+                      <sc-if value="{{ attestPending }}" hint-placeholder-val="{{ true }}">
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+                          <button type="button" onClick="{{ markAttested }}" style="height:30px;padding:0 12px;background:#1B4D3E;border:none;border-radius:4px;color:#FFFFFF;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer">Record attestation</button>
+                          <span style="font-size:12.5px;color:#6B7280;cursor:pointer">Not yet</span>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ attested }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1B4D3E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                          <span style="font-size:12px;color:#33463C">CAQH last attested date set to today on the provider record.</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ showGap }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin-top:9px;padding:10px 11px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+                      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Only CAQH has this</div>
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="flex:1;min-width:80px;font-size:12.5px;color:#6B7280">Group NPI</span>
+                        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#1F2937">9876543210</span>
+                        <span onClick="{{ pullGap }}" style="font-size:11.5px;font-weight:500;color:#1B4D3E;text-decoration:underline;cursor:pointer;flex:none">Pull into our record</span>
+                      </div>
+                      <div style="font-size:11.5px;color:#9CA3AF;margin-top:5px;text-wrap:pretty">Rare — only surfaces when CAQH holds a value we have blank.</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ gapPulled }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:9px;padding:10px 11px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px;font-size:12px;color:#33463C;text-wrap:pretty">Group NPI added to our record and stamped verified. The next Banner fill is 18 of 18 instead of 17.</div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ isUnknownOffer }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:11px 14px 0;flex:none">
+                  <sc-if value="{{ capReady }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:11px 12px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                        <span style="flex:1;min-width:0;font-size:13.5px;font-weight:600">We recognise 14 of 19 fields</span>
+                        <span style="height:19px;padding:0 7px;border-radius:4px;background:#FBF0E1;color:#B45309;font-size:10px;font-weight:600;display:inline-flex;align-items:center;flex:none">NEW</span>
+                      </div>
+                      <div style="font-size:12px;color:#6B7280;margin-bottom:10px;text-wrap:pretty">Matched from labels seen on other payers. Confirm and this form is set up for everyone.</div>
+                      <div style="border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                        <sc-for list="{{ mappings }}" as="m" hint-placeholder-count="4">
+                          <div style="padding:8px 10px;border-bottom:1px solid #F5F4F1">
+                            <div style="font-size:12px;color:#1F2937">{{ m.theirs }}</div>
+                            <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+                              <sc-if value="{{ m.matched }}" hint-placeholder-val="{{ true }}">
+                                <span style="font-size:11.5px;color:#047857;font-weight:500">{{ m.ours }}</span>
+                                <span style="font-size:10.5px;color:#9CA3AF">· {{ m.ev }}</span>
+                              </sc-if>
+                              <sc-if value="{{ m.unmatched }}" hint-placeholder-val="{{ false }}">
+                                <span onClick="{{ m.assign }}" style="font-size:11.5px;color:#B45309;font-weight:500;text-decoration:underline;cursor:pointer">{{ m.assignLabel }}</span>
+                              </sc-if>
+                            </div>
+                          </div>
+                        </sc-for>
+                        <div style="padding:8px 10px;font-size:11.5px;color:#9CA3AF">+ 10 more matched with high confidence</div>
+                      </div>
+                      <button type="button" onClick="{{ sendMappings }}" style="margin-top:10px;height:32px;padding:0 13px;background:{{ sendBg }};border:none;border-radius:4px;color:{{ sendInk }};font-family:inherit;font-size:12.5px;font-weight:500;cursor:{{ sendCursor }}">{{ sendLabel }}</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ capSent }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:11px 12px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px">
+                      <div style="font-size:13px;font-weight:600;color:#1B4D3E">19 proposed mappings sent for review</div>
+                      <div style="font-size:12px;color:#33463C;margin-top:2px;text-wrap:pretty">Nothing fills from a proposed row. Approve them here — you are the same person who captured them — or in the Template Editor if you would rather review the whole form at once. Each approval also teaches the next payer.</div>
+                      <div style="display:flex;align-items:center;gap:11px;margin-top:9px;flex-wrap:wrap"><span style="height:30px;padding:0 12px;background:#1B4D3E;border-radius:4px;color:#FFFFFF;font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;cursor:pointer">Approve all 19</span><a href="4 - Template Editor.dc.html" style="font-size:12.5px;font-weight:500">Open in Template Editor →</a></div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <div style="display:flex;gap:2px;padding:12px 14px 0;flex:none">
+                <button type="button" onClick="{{ goCopy }}" style="{{ segCopy }}">Details</button>
+                <button type="button" onClick="{{ goProgress }}" style="{{ segProgress }}">Progress</button>
+              </div>
+              <div style="height:1px;background:#E8E5E0;margin:0 14px;flex:none"></div>
+
+              <div style="flex:1;min-width:0;padding:14px">
+
+                <sc-if value="{{ isCopy }}" hint-placeholder-val="{{ true }}">
+                  <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px">
+                      <span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;min-width:0">{{ copiedLabel }}</span>
+                      <div style="display:flex;align-items:center;gap:9px;flex:none">
+                        <span onClick="{{ resetCopied }}" style="font-size:11.5px;color:#1B4D3E;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(27,77,62,.3)">Reset</span>
+                        <span onClick="{{ goCustom }}" title="Choose fields" style="width:26px;height:26px;border-radius:4px;border:1px solid #E8E5E0;background:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;cursor:pointer" style-hover="background:#F5F4F1">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        </span>
+                      </div>
+                    </div>
+                    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+                      <div style="margin-bottom:14px">
+                        <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">{{ g.name }}</div>
+                        <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                            <div onClick="{{ r.copy }}" style="display:flex;align-items:center;gap:9px;min-height:34px;padding:6px 11px;border-bottom:1px solid #F5F4F1;cursor:{{ r.cursor }};background:{{ r.bg }};flex-wrap:wrap" style-hover="background:#F7FAF8">
+                              <span style="flex:1;min-width:88px;font-size:12.5px;color:#6B7280">{{ r.label }}</span>
+                              <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:{{ r.valColor }};word-break:break-word">{{ r.value }}</span>
+                              <span style="flex:none;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center">{{ r.icon }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <sc-if value="{{ g.hasWarn }}" hint-placeholder-val="{{ false }}">
+                          <div style="display:flex;align-items:flex-start;gap:7px;margin-top:6px;padding:7px 10px;background:#F5F4F1;border-radius:4px">
+                            <span style="font-size:12px;color:#6B7280;text-wrap:pretty">{{ g.warn }}</span>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isProgress }}" hint-placeholder-val="{{ false }}">
+                  <div>
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px">
+                      <span style="font-size:14px;font-weight:600">PNM enrollment</span>
+                      <span style="font-size:12px;color:#6B7280">{{ doneLabel }}</span>
+                    </div>
+                    <div style="height:4px;border-radius:2px;background:#E8E5E0;overflow:hidden;margin-bottom:14px">
+                      <div style="height:4px;background:#1B4D3E;width:{{ donePct }}"></div>
+                    </div>
+                    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                      <sc-for list="{{ steps }}" as="t" hint-placeholder-count="4">
+                        <div onClick="{{ t.toggle }}" style="display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border-bottom:1px solid #F5F4F1;cursor:pointer;background:{{ t.rowBg }}" style-hover="background:#F7FAF8">
+                          <span style="width:16px;height:16px;border-radius:4px;flex:none;margin-top:1px;display:inline-flex;align-items:center;justify-content:center;background:{{ t.boxBg }};border:1px solid {{ t.boxBorder }}">{{ t.check }}</span>
+                          <div style="flex:1;min-width:0">
+                            <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                              <span style="font-size:13px;color:{{ t.color }};text-decoration:{{ t.strike }};text-wrap:pretty">{{ t.label }}</span>
+                              <sc-if value="{{ t.here }}" hint-placeholder-val="{{ false }}"><span style="height:17px;padding:0 6px;border-radius:3px;background:#E7F5EF;color:#047857;font-size:10px;font-weight:600;display:inline-flex;align-items:center;flex:none">THIS PAGE</span></sc-if>
+                            </div>
+                            <div style="font-size:11.5px;color:#9CA3AF;margin-top:1px">{{ t.meta }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="margin-top:12px;padding:11px 12px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+                      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px">Payer reference</div>
+                      <input type="text" value="{{ refNum }}" onInput="{{ onRef }}" placeholder="Confirmation or tracking #" style="width:100%;height:32px;padding:0 10px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:4px;font-size:13px;color:#1F2937;outline:none">
+                      <div style="font-size:11.5px;color:#9CA3AF;margin-top:6px">Overwrites the case's current reference. Latest wins.</div>
+                    </div>
+                    <sc-if value="{{ allDone }}" hint-placeholder-val="{{ false }}">
+                      <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
+                        <button type="button" onClick="{{ recordSubmission }}" style="margin-top:12px;width:100%;height:36px;background:#1B4D3E;border:none;border-radius:4px;color:#FFFFFF;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Record submission — case to Submitted</button>
+                      </sc-if>
+                      <sc-if value="{{ submitted }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:12px;padding:11px 12px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px">
+                          <div style="font-size:13px;font-weight:500;color:#1B4D3E;margin-bottom:2px">Submitted — reference {{ refShown }}</div>
+                          <div style="font-size:12.5px;color:#33463C;text-wrap:pretty">Touch logged, task closed, fill report attached. Nothing is re-recorded in the web app.</div>
+                        </div>
+                      </sc-if>
+                    </sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isCustom }}" hint-placeholder-val="{{ false }}">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+                      <span onClick="{{ goCopy }}" style="width:24px;height:24px;margin-left:-4px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none" style-hover="background:#F5F4F1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#6B7280" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                      <span style="flex:1;min-width:0;font-size:14px;font-weight:600">Fields on the card</span>
+                      <span style="font-size:11.5px;color:#6B7280;flex:none">{{ pickedLabel }}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:4px;margin-bottom:12px">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><circle cx="10.5" cy="10.5" r="6.5" stroke="#9CA3AF" stroke-width="1.8"></circle><path d="M15.5 15.5L20 20" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round"></path></svg>
+                      <input type="text" value="{{ query }}" onInput="{{ onQuery }}" placeholder="Search 127 fields…" style="flex:1;min-width:0;height:30px;border:none;outline:none;background:transparent;font-size:13px;color:#1F2937">
+                      <sc-if value="{{ hasQuery }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearQuery }}" style="flex:none;cursor:pointer;font-size:13px;color:#9CA3AF">✕</span></sc-if>
+                    </div>
+                    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                      <sc-for list="{{ catalog }}" as="c" hint-placeholder-count="7">
+                        <div>
+                          <div onClick="{{ c.toggleGroup }}" style="display:flex;align-items:center;gap:9px;height:34px;padding:0 12px;background:#FDFDFC;border-bottom:1px solid #E8E5E0;cursor:pointer" style-hover="background:#F5F4F1">
+                            <span style="flex:none;width:11px;display:inline-flex;justify-content:center">{{ c.caret }}</span>
+                            <span style="flex:1;min-width:0;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</span>
+                            <span style="font-size:11px;color:{{ c.countColor }};font-weight:500">{{ c.count }}</span>
+                          </div>
+                          <sc-for list="{{ c.fields }}" as="f" hint-placeholder-count="0">
+                            <div onClick="{{ f.toggle }}" style="display:flex;align-items:center;gap:10px;min-height:32px;padding:5px 12px 5px 32px;border-bottom:1px solid #F5F4F1;cursor:pointer" style-hover="background:#F5F4F1">
+                              <span style="width:15px;height:15px;border-radius:3px;flex:none;display:inline-flex;align-items:center;justify-content:center;background:{{ f.boxBg }};border:1px solid {{ f.boxBorder }}">{{ f.check }}</span>
+                              <span style="flex:1;min-width:0;font-size:12.5px;color:{{ f.color }};word-break:break-word">{{ f.label }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:10px;padding:12px;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;font-size:12.5px;color:#6B7280">Nothing matches “{{ query }}”.</div>
+                    </sc-if>
+                    <div style="display:flex;align-items:center;gap:10px;margin-top:13px">
+                      <button type="button" onClick="{{ goCopy }}" style="height:32px;padding:0 14px;background:#1B4D3E;border:none;border-radius:4px;color:#FFFFFF;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">Save layout</button>
+                      <span onClick="{{ goCopy }}" style="font-size:13px;color:#6B7280;cursor:pointer">Cancel</span>
+                    </div>
+                  </div>
+                </sc-if>
+
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div data-screen-label="Explainer" style="flex:1;min-width:320px;display:flex;flex-direction:column;gap:16px">
+        <div style="background:#0C2A1D;border-radius:6px;padding:16px">
+          <div style="font-size:14px;font-weight:600;color:#FFFFFF;margin-bottom:3px">Run the loop — the demo script</div>
+          <div style="font-size:12.5px;color:#A7B5AD;margin-bottom:12px">Seven clicks, six journeys. This is the walkthrough for business.</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">1</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">On <span style="font-weight:600;color:#FFFFFF">New tab</span>, pick up Jim Apple · Banner — the duplicate warning fires here, on pickup. <span style="color:#8FA398">(J1, J4)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">2</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">Follow <span style="font-weight:600;color:#FFFFFF">Open Banner PNM</span> — the launch handoff, no four dropdowns. <span style="color:#8FA398">(J1)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">3</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty"><span style="font-weight:600;color:#FFFFFF">Fill this page</span>, then mark the step done from the report — progress is inferred, confirmed in one tap. <span style="color:#8FA398">(J3, J4)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">4</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">Copy a value from Details while you're there — the card remembers what you pulled. <span style="color:#8FA398">(J2)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">5</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">Tick the rest under Progress, add a reference, <span style="font-weight:600;color:#FFFFFF">Record submission</span>. <span style="color:#8FA398">(J4)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">6</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">Switch to <span style="font-weight:600;color:#FFFFFF">proview.caqh.org</span> — fill CAQH from our record and record the attestation. Then pull the one value only CAQH has; the next Banner fill becomes 18 for 18. <span style="color:#8FA398">(J6)</span></span></div>
+            <div style="display:flex;gap:9px"><span style="width:18px;height:18px;border-radius:4px;background:rgba(255,255,255,.1);color:#C8DBD4;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">7</span><span style="font-size:12.5px;color:#D7E2DC;text-wrap:pretty">Switch to <span style="font-weight:600;color:#FFFFFF">somepayer.com</span> — an unknown form arrives pre-matched from other payers; assign the one gap and send the proposal. <span style="color:#8FA398">(J5)</span></span></div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:6px;padding:16px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">Where each journey touches the app</div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+            <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;flex:none;width:20px">J1</span><span style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Launch from <a href="6 - Case Detail.dc.html">Case Detail</a> resolves the whole context.</span></div>
+            <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;flex:none;width:20px">J4</span><span style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Submission lands on the case timeline and pre-fills <a href="5 - Case Close and IDs.dc.html">Case Close</a> IDs.</span></div>
+            <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;flex:none;width:20px">J5</span><span style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Proposed mappings queue for approval in the <a href="4 - Template Editor.dc.html">Template Editor</a>; repairs feed the drift KPI on <a href="1 - Payer Setup.dc.html">Payer Setup</a>.</span></div>
+            <div style="display:flex;gap:8px;align-items:baseline"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;flex:none;width:20px">J6</span><span style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Attestation stamps CAQH last attested date; a pulled gap writes the field with a verified-at stamp.</span></div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:6px;padding:16px">
+          <div style="font-size:14px;font-weight:600;margin-bottom:3px">Honest about what's faked</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Copy writes to your real clipboard; everything else is local state. The fill runs and field recognition are simulated results, not real page reads — they show the contract, not the parser. Capture stays propose-then-approve — a proposed row never fills until someone approves it, even though the same person does both (enabler 1).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:940}}">
+const CATALOG = [
+  { name: "Provider", fields: ["First name", "Last name", "Credentials", "SSN last 4", "Email", "Phone", "Home street", "Home city", "Home state", "Home ZIP", "NPI number", "CAQH #", "CAQH last attested date", "Dea number", "Taxonomy code", "Specialty", "Start date", "Terminated date", "Degree", "School name", "Graduation date", "Malpractice carrier", "Malpractice policy number", "Malpractice coverage start", "Malpractice coverage end", "License number", "License state", "License issue date", "License expiration date", "Middle initial", "Suffix", "Gender", "Ethnicity", "Dea expiration date", "Board certified", "Sub specialty", "Languages", "Medicaid attested", "Cultural competency training", "Additional certifications", "Age groups served", "Launch ID", "Reference only", "Verification state", "Is test provider"] },
+  { name: "Group", fields: ["Name", "TIN / EIN", "Group NPI", "States", "Billing street", "Billing city", "Billing state", "Billing ZIP", "Correspondence street", "Correspondence city", "Correspondence state", "Correspondence ZIP", "Billing suite", "Billing contact name", "Billing phone", "Billing fax", "Billing email", "Correspondence suite", "Correspondence contact name", "Correspondence phone", "Correspondence fax", "Correspondence email", "Credentialing street", "Credentialing suite", "Credentialing city", "Credentialing state", "Credentialing ZIP", "Credentialing contact name", "Credentialing phone", "Credentialing fax", "Credentialing email", "Contracting contact name", "Contracting contact title", "Contracting contact email", "Website URL", "Tax ID type", "Preferred contact method", "Contract signer name", "Contract signer email"] },
+  { name: "Location", fields: ["Name", "Street", "City", "State", "ZIP", "Suite", "County", "Phone", "Fax", "Email", "Appointment phone", "Contact name", "Accepting new patients", "Language line", "Languages offered", "Interpreter languages", "Hours", "Ada compliance", "Service types", "Treating categories", "Status ID", "Effective date", "Reference only"] },
+  { name: "License", fields: ["State", "License number", "License type", "License issue date", "License Expiration Date", "Verified status", "Verified at", "Verified by", "Verification source URL"] },
+  { name: "Location assignment", fields: ["Is primary", "Start date", "Practice frequency"] },
+  { name: "Group insurance", fields: ["Insurance type", "Insurer name", "Policy number", "Policy start date", "Policy end date", "Notes"] },
+  { name: "User", fields: ["Name", "Email"] }
+];
+
+const VALUES = {
+  "First name": "Jim", "Last name": "Apple",
+  "NPI number": "1234567890", "CAQH #": "123456678", "Dea number": "BA1234567",
+  "Specialty": "Physical Therapy",
+  "License number": "1234", "License state": "AZ", "License expiration date": "Feb 1, 2030",
+  "TIN / EIN": "123456789", "Group NPI": ""
+};
+
+const CASES = [
+  { id: "banner", name: "Jim Apple · Banner Health Plans", sub: "AZ Test Gym · AZ", status: "Not Started", reason: "Task 2 due Jul 28 · from the case workflow" },
+  { id: "aetna", name: "Maria Chen · Aetna (CVS Health)", sub: "Scottsdale Clinic · AZ", status: "Action Required", reason: "Payer asked for a signed W-9 · overdue 2d" },
+  { id: "bcbs", name: "Jim Apple · BCBS Kansas", sub: "AZ Test Gym · KS", status: "In Progress", reason: "Task 2 due Aug 4 · from the case workflow" }
+];
+
+const MAPPINGS = [
+  { theirs: "Individual Practitioner ID", ours: "NPI number", ev: "seen on 9 payers" },
+  { theirs: "Fed. Tax Identification", ours: "TIN / EIN", ev: "seen on 11 payers" },
+  { theirs: "Practitioner License No.", ours: "License number", ev: "seen on 7 payers" },
+  { theirs: "Svc Loc Effective Dt", ours: null, suggest: "Effective date (Location)" }
+];
+
+class Component extends DCLogic {
+  state = {
+    context: "newtab", caseId: null, view: "copy", width: 380,
+    showDup: false, copied: {}, query: "", open: { Provider: true },
+    picked: ["First name", "Last name", "NPI number", "CAQH #", "Dea number", "Specialty", "License number", "License state", "License expiration date", "TIN / EIN", "Group NPI"],
+    done: { register: false, forms: false, upload: false, submit: false },
+    fillState: "ready", fillRan: null, confirmState: "none", submitted: false, refNum: "",
+    caqhFill: "ready", attestState: "pending", gapPulled: false,
+    gapAssigned: false, capState: "ready"
+  };
+
+  seg(name) {
+    const on = this.state.view === name;
+    return "height:30px;padding:0 13px;border:none;border-radius:4px 4px 0 0;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;color:" +
+      (on ? "#1B4D3E" : "#9CA3AF") + (on ? ";box-shadow:inset 0 -2px 0 #1B4D3E" : "");
+  }
+
+  wtab(px) {
+    const on = this.state.width === px;
+    return "height:26px;padding:0 11px;border:none;border-radius:4px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;background:" +
+      (on ? "#1B4D3E" : "transparent") + ";color:" + (on ? "#FFFFFF" : "#6B7280");
+  }
+
+  ctab(name) {
+    const on = this.state.context === name;
+    return "display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:6px 6px 0 0;font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;cursor:pointer;border:1px solid " +
+      (on ? "#DDD9D2;border-bottom-color:#FDFDFC;background:#FDFDFC;color:#1F2937;font-weight:500" : "transparent;background:rgba(255,255,255,.55);color:#6B7280");
+  }
+
+  copyValue(label, value) {
+    if (!value) return;
+    try { navigator.clipboard.writeText(value); } catch (e) {}
+    this.setState((s) => ({ copied: Object.assign({}, s.copied, { [label]: true }) }));
+  }
+
+  tick(done) {
+    if (!done) return null;
+    return React.createElement("svg", { width: 13, height: 13, viewBox: "0 0 24 24", fill: "none" },
+      React.createElement("path", { d: "M5 12.5l4.5 4.5L19 7", stroke: "#FFFFFF", strokeWidth: 3, strokeLinecap: "round", strokeLinejoin: "round" }));
+  }
+
+  values() {
+    const v = Object.assign({}, VALUES);
+    if (this.state.gapPulled) v["Group NPI"] = "9876543210";
+    return v;
+  }
+
+  renderVals() {
+    const st = this.state;
+    const q = st.query.trim().toLowerCase();
+    const vals = this.values();
+    const cs = CASES.filter((c) => c.id === st.caseId)[0] || null;
+    const isBannerCase = st.caseId === "banner";
+
+    const bannerStatus = st.submitted ? "Submitted"
+      : (st.fillState === "done" || st.done.register || st.done.forms || st.done.upload || st.done.submit) ? "In Progress" : "Not Started";
+    const caseStatus = cs ? (isBannerCase ? bannerStatus : cs.status) : "";
+    const statusBg = caseStatus === "Submitted" ? "#E7F5EF" : caseStatus === "In Progress" ? "#E8EEFD" : caseStatus === "Action Required" ? "#FEF3C7" : "#F5F4F1";
+    const statusInk = caseStatus === "Submitted" ? "#047857" : caseStatus === "In Progress" ? "#1D4ED8" : caseStatus === "Action Required" ? "#92400E" : "#6B7280";
+
+    // With no case in hand the panel still reads the tab: a recognised page
+    // surfaces the cases that use it, so switching tabs visibly changes the queue.
+    const CTX = {
+      newtab: { dot: "#9CA3AF", bg: "#F5F4F1", border: "#E8E5E0", match: null,
+        title: "No page to work from", sub: "Pick a case, then open the payer's portal — or open a portal first and the panel will surface the cases that use it." },
+      banner: { dot: "#1B4D3E", bg: "#F7FAF8", border: "#C8DBD4", match: "banner",
+        title: "Banner PNM enrollment", sub: "Proven form. One case in your queue fills from this page." },
+      caqh: { dot: "#1D4ED8", bg: "#F6F8FE", border: "#CBD9F7", match: null,
+        title: "CAQH ProView", sub: "Pick a case and the panel fills CAQH from our record, then records the attestation." },
+      unknown: { dot: "#C69A3F", bg: "#FCFBF7", border: "#EADFC4", match: null,
+        title: "We don't know this form yet", sub: "Pick a case and the panel proposes matches for its fields from labels seen on other payers." }
+    };
+    const cx = CTX[st.context] || CTX.newtab;
+    const matchId = cx.match;
+    const ranked = matchId ? CASES.filter((c) => c.id === matchId).concat(CASES.filter((c) => c.id !== matchId)) : CASES;
+    const queue = ranked.map((c) => ({
+      name: c.name, sub: c.sub, status: c.status,
+      matches: c.id === matchId,
+      reason: c.id === matchId ? "Fills from the page you're on" : c.reason,
+      pick: () => this.setState({ caseId: c.id, showDup: c.id === "banner", view: "copy" })
+    }));
+
+    // Details card
+    const groupOf = {};
+    for (const g of CATALOG) for (const f of g.fields) if (!groupOf[f]) groupOf[f] = g.name;
+    const order = ["Provider", "Group", "Location", "License", "Location assignment", "Group insurance", "User"];
+    const groups = order.map((name) => {
+      const rows = st.picked.filter((label) => groupOf[label] === name).map((label) => {
+        const value = vals[label];
+        const empty = !value;
+        const wasCopied = !!st.copied[label];
+        const justVerified = label === "Group NPI" && st.gapPulled;
+        return {
+          label,
+          value: empty ? "Not on file" : value,
+          valColor: empty ? "#9CA3AF" : justVerified ? "#047857" : "#1F2937",
+          bg: wasCopied ? "#F7FAF8" : "#FFFFFF",
+          cursor: empty ? "default" : "pointer",
+          copy: empty ? () => {} : () => this.copyValue(label, value),
+          icon: empty
+            ? React.createElement("svg", { width: 13, height: 13, viewBox: "0 0 24 24", fill: "none" },
+                React.createElement("path", { d: "M12 8v5M12 15.6v.4", stroke: "#C69A3F", strokeWidth: 2, strokeLinecap: "round" }),
+                React.createElement("circle", { cx: 12, cy: 12, r: 8.5, stroke: "#C69A3F", strokeWidth: 1.6 }))
+            : wasCopied
+              ? React.createElement("svg", { width: 13, height: 13, viewBox: "0 0 24 24", fill: "none" },
+                  React.createElement("path", { d: "M5 12.5l4.5 4.5L19 7", stroke: "#1B4D3E", strokeWidth: 3, strokeLinecap: "round", strokeLinejoin: "round" }))
+              : React.createElement("svg", { width: 13, height: 13, viewBox: "0 0 24 24", fill: "none" },
+                  React.createElement("rect", { x: 9, y: 9, width: 11, height: 11, rx: 2, stroke: "#9CA3AF", strokeWidth: 1.8 }),
+                  React.createElement("path", { d: "M15 5.5H6A1.5 1.5 0 0 0 4.5 7v9", stroke: "#9CA3AF", strokeWidth: 1.8, strokeLinecap: "round" }))
+        };
+      });
+      const missing = rows.filter((r) => r.value === "Not on file").map((r) => r.label);
+      return {
+        name, rows,
+        hasWarn: missing.length > 0,
+        warn: missing.length ? missing.join(" and ") + " has no value on this provider — check CAQH or open the provider record." : ""
+      };
+    }).filter((g) => g.rows.length > 0);
+
+    const copiedCount = Object.keys(st.copied).length;
+    const copyable = st.picked.filter((l) => vals[l]).length;
+
+    // Progress
+    const filled = st.gapPulled ? 18 : 17;
+    const stepDefs = [
+      { key: "register", label: "Confirm Banner PNM registration is current", meta: "Portal step · proven" },
+      { key: "forms", label: "Complete the PNM enrollment form", meta: st.fillRan ? "Online form · filled " + st.fillRan.filled + " of 18 just now" : "Online form · Banner PNM enrollment", here: st.context === "banner" },
+      { key: "upload", label: "Attach the signed W-9", meta: "Upload · required by payer" },
+      { key: "submit", label: "Submit and record the confirmation number", meta: "Portal step" }
+    ];
+    const steps = stepDefs.map((d) => {
+      const done = !!st.done[d.key];
+      return {
+        label: d.label, meta: done && st.fillState !== "done" ? d.meta + " · done" : d.meta,
+        here: !!d.here && !done,
+        rowBg: d.here && !done ? "#FBFDFC" : "#FFFFFF",
+        boxBg: done ? "#1B4D3E" : "#FFFFFF",
+        boxBorder: done ? "#1B4D3E" : "#C9C5BE",
+        check: this.tick(done),
+        color: done ? "#9CA3AF" : "#1F2937",
+        strike: done ? "line-through" : "none",
+        toggle: () => this.setState((s) => ({ done: Object.assign({}, s.done, { [d.key]: !s.done[d.key] }) }))
+      };
+    });
+    const doneN = stepDefs.filter((d) => st.done[d.key]).length;
+
+    // Catalog picker
+    const catalog = CATALOG.map((g) => {
+      const matched = q ? g.fields.filter((f) => f.toLowerCase().indexOf(q) !== -1) : g.fields;
+      const expanded = q ? matched.length > 0 : !!st.open[g.name];
+      const pickedN = g.fields.filter((f) => st.picked.indexOf(f) !== -1).length;
+      return {
+        name: g.name,
+        count: pickedN ? pickedN + " of " + g.fields.length : "of " + g.fields.length,
+        countColor: pickedN ? "#1B4D3E" : "#9CA3AF",
+        caret: React.createElement("svg", { width: 11, height: 11, viewBox: "0 0 24 24", fill: "none" },
+          React.createElement("path", { d: expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6", stroke: "#6B7280", strokeWidth: 2.6, strokeLinecap: "round", strokeLinejoin: "round" })),
+        toggleGroup: () => this.setState((s) => ({ open: Object.assign({}, s.open, { [g.name]: !s.open[g.name] }) })),
+        fields: expanded ? matched.map((f) => {
+          const on = st.picked.indexOf(f) !== -1;
+          return {
+            label: f,
+            boxBg: on ? "#1B4D3E" : "#FFFFFF",
+            boxBorder: on ? "#1B4D3E" : "#C9C5BE",
+            check: this.tick(on),
+            color: on ? "#1F2937" : "#6B7280",
+            toggle: () => this.setState((s) => ({
+              picked: s.picked.indexOf(f) !== -1 ? s.picked.filter((x) => x !== f) : s.picked.concat([f])
+            }))
+          };
+        }) : []
+      };
+    }).filter((g) => !q || g.fields.length > 0);
+
+    // Capture
+    const mappings = MAPPINGS.map((m) => {
+      if (m.ours) return { theirs: m.theirs, ours: m.ours, ev: m.ev, matched: true, unmatched: false, assign: () => {}, assignLabel: "" };
+      return {
+        theirs: m.theirs, ours: "", ev: "", matched: st.gapAssigned, unmatched: !st.gapAssigned,
+        assign: () => this.setState({ gapAssigned: true }),
+        assignLabel: "No match — assign " + m.suggest
+      };
+    }).map((m) => (m.matched && !m.ev) ? Object.assign({}, m, { ours: "Effective date", ev: "assigned by you just now" }) : m);
+
+    const ctx = st.context;
+    const hasCase = !!cs;
+
+    return {
+      panelW: st.width + "px",
+      tab320: this.wtab(320), tab380: this.wtab(380), tab530: this.wtab(530),
+      w320: () => this.setState({ width: 320 }),
+      w380: () => this.setState({ width: 380 }),
+      w530: () => this.setState({ width: 530 }),
+
+      ctab_newtab: this.ctab("newtab"), ctab_banner: this.ctab("banner"),
+      ctab_caqh: this.ctab("caqh"), ctab_unknown: this.ctab("unknown"),
+      ctxNewtab: () => this.setState({ context: "newtab" }),
+      ctxBanner: () => this.setState({ context: "banner" }),
+      ctxCaqh: () => this.setState({ context: "caqh" }),
+      ctxUnknown: () => this.setState({ context: "unknown" }),
+
+      noCase: !hasCase, hasCase,
+      queue,
+      ctxTitle: cx.title, ctxSub: cx.sub, ctxDot: cx.dot,
+      ctxCardBg: cx.bg, ctxCardBorder: cx.border,
+      queueLabel: matchId ? "Cases that use this page" : "Next up",
+      caseName: cs ? cs.name : "", caseSub: cs ? cs.sub : "",
+      caseStatus, statusBg, statusInk,
+      releaseCase: () => this.setState({ caseId: null, showDup: false }),
+
+      showDup: st.showDup && hasCase,
+      dismissDup: () => this.setState({ showDup: false }),
+
+      isNewtabCase: hasCase && ctx === "newtab" && isBannerCase && !st.submitted,
+      isBannerOffer: hasCase && ctx === "banner" && isBannerCase,
+      isBannerMismatch: hasCase && ctx === "banner" && !isBannerCase,
+      switchToBanner: () => this.setState({ caseId: "banner", showDup: true }),
+      isCaqhOffer: hasCase && ctx === "caqh",
+      isUnknownOffer: hasCase && ctx === "unknown",
+
+      fillReady: st.fillState === "ready",
+      fillDone: st.fillState === "done",
+      fillCta: "Fill " + filled + " of 18 fields",
+      fillNote: st.gapPulled ? "Every mapped field has a value. Nothing will be skipped." : "Group NPI has no value and will be skipped.",
+      runFill: () => this.setState({
+        fillState: "done", confirmState: "pending",
+        fillRan: {
+          filled,
+          sub: filled === 18 ? "Every mapped field filled. Verify on the page, then confirm." : "Group NPI skipped — not on file. Verify on the page, then confirm."
+        }
+      }),
+      fillReport: st.fillRan ? st.fillRan.filled + " filled · " + (18 - st.fillRan.filled) + " skipped" : "",
+      fillReportSub: st.fillRan ? st.fillRan.sub : "",
+      confirmPending: st.confirmState === "pending",
+      confirmed: st.confirmState === "confirmed",
+      confirmStep: () => this.setState((s) => ({ confirmState: "confirmed", done: Object.assign({}, s.done, { forms: true }) })),
+
+      caqhFillReady: st.caqhFill === "ready",
+      caqhFillDone: st.caqhFill === "done",
+      runCaqhFill: () => this.setState({ caqhFill: "done" }),
+      attestPending: st.attestState === "pending",
+      attested: st.attestState === "done",
+      markAttested: () => this.setState({ attestState: "done" }),
+      showGap: !st.gapPulled, gapPulled: st.gapPulled,
+      pullGap: () => this.setState({ gapPulled: true }),
+
+      capReady: st.capState === "ready",
+      capSent: st.capState === "sent",
+      mappings,
+      sendLabel: st.gapAssigned ? "Send 19 proposed mappings" : "Send 18 — assign the gap first",
+      sendBg: st.gapAssigned ? "#1B4D3E" : "#F5F4F1",
+      sendInk: st.gapAssigned ? "#FFFFFF" : "#9CA3AF",
+      sendCursor: st.gapAssigned ? "pointer" : "default",
+      sendMappings: () => { if (this.state.gapAssigned) this.setState({ capState: "sent" }); },
+
+      isCopy: st.view === "copy", isProgress: st.view === "progress", isCustom: st.view === "custom",
+      segCopy: this.seg("copy"), segProgress: this.seg("progress"),
+      goCopy: () => this.setState({ view: "copy" }),
+      goProgress: () => this.setState({ view: "progress" }),
+      goCustom: () => this.setState({ view: "custom" }),
+
+      groups,
+      copiedLabel: copiedCount ? copiedCount + " of " + copyable + " copied" : "Tap a value to copy it",
+      resetCopied: () => this.setState({ copied: {} }),
+
+      steps,
+      doneLabel: doneN + " of 4 done",
+      donePct: Math.round((doneN / 4) * 100) + "%",
+      allDone: doneN === 4,
+      notSubmitted: !st.submitted, submitted: st.submitted,
+      refNum: st.refNum,
+      onRef: (e) => this.setState({ refNum: e.target.value }),
+      refShown: st.refNum || "—",
+      recordSubmission: () => this.setState({ submitted: true, showDup: false }),
+
+      catalog,
+      query: st.query,
+      hasQuery: st.query.length > 0,
+      noResults: q.length > 0 && catalog.length === 0,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      clearQuery: () => this.setState({ query: "" }),
+      pickedLabel: st.picked.length + " of 127"
+    };
+  }
+}
+</script>
+</body>
+</html>

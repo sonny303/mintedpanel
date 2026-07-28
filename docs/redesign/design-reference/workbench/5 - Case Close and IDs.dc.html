@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+    input::placeholder { color: #9CA3AF; }
+  </style>
+</helmet>
+
+<div style="display:flex;align-items:flex-start;min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5">
+  <aside data-screen-label="Sidebar" style="width:236px;flex:none;background:#0C2A1D;padding:14px 12px 12px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 8px 0">
+      <img src="assets/logo-mark-white.png" alt="Minted Panel" style="height:20px;width:auto;display:block;flex:none"><span style="font-size:15.5px;font-weight:600;color:#FFFFFF;white-space:nowrap;letter-spacing:-.01em">Minted Panel</span>
+    </div>
+    <div style="height:22px"></div>
+    <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#6E8478;padding:0 10px;margin-bottom:6px">Workspace</div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="6 - Case Detail.dc.html" aria-current="page" style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:rgba(255,255,255,.10);color:#FFFFFF;font-weight:500;text-decoration:none;box-shadow:inset 2px 0 0 #C8DBD4"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="3.5" y="6.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M8 6.5v-2a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 16 4.5v2" stroke="currentColor" stroke-width="1.7"></path></svg><span>Cases</span></span><span style="min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.08);color:#8FA398;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">5</span></a>
+      <a href="1 - Payer Setup.dc.html" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="3.5" y="5.5" width="17" height="13" rx="2" stroke="currentColor" stroke-width="1.7"></rect><path d="M3.5 10h17" stroke="currentColor" stroke-width="1.7"></path></svg><span>Payer Setup</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 19v-6M12 19V9M18 19V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg><span>Reporting Center</span></span></a>
+    </nav>
+    <div style="height:1px;background:rgba(255,255,255,.08);margin:20px 10px 18px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:6px;cursor:pointer;margin:0 2px 10px" style-hover="background:rgba(255,255,255,.10)">
+      <div style="min-width:0">
+        <div style="font-size:9.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#6E8478;margin-bottom:2px">Organization</div>
+        <div style="font-size:13.5px;font-weight:600;color:#FFFFFF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">New Org Workflow</div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 9l6 6 6-6" stroke="#8FA398" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="currentColor" stroke-width="1.7"></rect><circle cx="12" cy="10" r="2.2" stroke="currentColor" stroke-width="1.7"></circle><path d="M8.5 16.8c.8-1.7 2-2.5 3.5-2.5s2.7.8 3.5 2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Org Detail</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><circle cx="9" cy="8.8" r="2.7" stroke="currentColor" stroke-width="1.7"></circle><path d="M4.4 18.2c.7-2.5 2.5-3.8 4.6-3.8s3.9 1.3 4.6 3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><circle cx="17.4" cy="10.4" r="1.9" stroke="currentColor" stroke-width="1.7"></circle></svg><span>Groups</span></span></a>
+      <a href="#" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:4px;font-size:13px;background:transparent;color:#A7B5AD;text-decoration:none" style-hover="background:rgba(255,255,255,.06);color:#FFFFFF"><span style="display:flex;align-items:center;gap:10px;min-width:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex:none"><circle cx="9.5" cy="8" r="3" stroke="currentColor" stroke-width="1.7"></circle><path d="M4 19c.9-3 3.1-4.5 5.5-4.5S14.1 16 15 19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path><path d="M16.4 5.6a3 3 0 0 1 0 4.8M18.6 14.6c.9.8 1.5 1.9 1.9 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg><span>Providers</span></span></a>
+    </nav>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:9px;padding:8px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:6px;cursor:pointer;margin-left:2px;margin-right:2px" style-hover="background:rgba(255,255,255,.10)">
+      <div style="width:26px;height:26px;border-radius:50%;background:#1B4D3E;color:#FFFFFF;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">S</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;color:#FFFFFF;font-weight:500;line-height:1.25">Sowmya</div><div style="font-size:11px;color:#8FA398">Admin</div></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none"><path d="M6 9l6 6 6-6" stroke="#8FA398" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh">
+
+    <div style="border-bottom:1px solid #E8E5E0;background:#F5F4F1;padding:10px 24px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6B7280">Screen</span>
+      <div style="display:inline-flex;gap:3px;padding:3px;background:#E7E5E0;border-radius:6px;flex-wrap:wrap">
+        <sc-for list="{{ screens }}" as="s" hint-placeholder-count="5">
+          <button type="button" data-screen="{{ s.key }}" onClick="{{ setScreen }}" style="height:28px;padding:0 12px;border-radius:4px;border:1px solid {{ s.border }};background:{{ s.bg }};color:{{ s.color }};font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap">{{ s.label }}</button>
+        </sc-for>
+      </div>
+      <span style="font-size:12px;color:#9CA3AF">{{ screenNote }}</span>
+    </div>
+
+    <div data-screen-label="Top bar" style="height:56px;flex:none;border-bottom:1px solid #E8E5E0;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 24px;gap:16px">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;min-width:0">
+        <span style="color:#6B7280">{{ crumbRoot }}</span><span style="color:#C9C5BE">/</span><span style="color:#1F2937;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ crumbLeaf }}</span>
+      </div>
+      
+    </div>
+
+    <div style="flex:1;min-width:0;padding:24px 32px 64px">
+      <div style="max-width:1100px;margin:0 auto">
+
+        <!-- ========== CASE (close flow) ========== -->
+        <sc-if value="{{ isCase }}" hint-placeholder-val="{{ true }}">
+          <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:20px 22px;margin-bottom:16px;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+                <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#6B7280">C-1042</span>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:500;background:#E4F3F7;color:#0E7490">In Review</span>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:500;background:#F5F4F1;border:1px solid #E8E5E0;color:#6B7280">Payer pipeline · In Review</span>
+              </div>
+              <h1 style="margin:0 0 6px;font-size:20px;font-weight:600;letter-spacing:-.01em;color:#1F2937">Jim Apple <span style="color:#6B7280;font-weight:500">· {{ payerName }}</span></h1>
+              <div style="font-size:13px;color:#6B7280">PT · CO · under YC PT · submitted Jul 21, 2026</div>
+            </div>
+            <button type="button" onClick="{{ openApprove }}" style="display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;flex:none;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF" style-hover="background:#163F33;border-color:#163F33">{{ closeCta }}</button>
+          </div>
+
+          <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:20px 22px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:12px">What this payer issues</div>
+            <sc-if value="{{ noIds }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:13.5px;color:#6B7280">{{ payerName }} issues no enrollment ID. Approving will confirm the effective date only.</div>
+            </sc-if>
+            <sc-for list="{{ expects }}" as="x" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #F0EEEA;flex-wrap:wrap">
+                <span style="font-size:14px;font-weight:500;color:#1F2937;min-width:150px">{{ x.label }}</span>
+                <span style="font-size:12.5px;color:#9CA3AF">{{ x.scope }}</span>
+                <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#9CA3AF;margin-left:auto">{{ x.expected }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:12.5px;color:#9CA3AF;margin-top:14px;padding-top:12px;border-top:1px solid #F0EEEA">Set on the payer record, so the close dialog asks for exactly these — using the payer's own wording. <a href="2 - Add or Edit Payer.dc.html#edit">Edit payer</a></div>
+          </div>
+        </sc-if>
+
+        <!-- ========== GROUP PAYER BOARD ========== -->
+        <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:20px">
+            <h1 style="margin:0 0 4px;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#1F2937">YC PT — Payer network</h1>
+            <div style="font-size:14px;color:#6B7280">Group-level IDs this group holds with each payer. Captured when a case is approved; read-only here.</div>
+          </div>
+          <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+            <div style="overflow-x:auto">
+              <table style="width:100%;min-width:760px;border-collapse:collapse">
+                <thead>
+                  <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+                    <th scope="col" style="text-align:left;padding:11px 20px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Payer</th>
+                    <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Group ID</th>
+                    <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Captured</th>
+                    <th scope="col" style="text-align:left;padding:11px 20px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">From</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ boardRows }}" as="b" hint-placeholder-count="4">
+                    <tr style="border-top:1px solid #F0EEEA">
+                      <td style="padding:12px 20px;vertical-align:middle"><a href="3 - Payer Detail.dc.html" style="font-size:14px;font-weight:500;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ b.payer }}</a></td>
+                      <td style="padding:12px 14px;vertical-align:middle">
+                        <sc-if value="{{ b.hasId }}" hint-placeholder-val="{{ true }}"><span style="font-size:12.5px;color:#9CA3AF">{{ b.label }}</span> <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#1F2937;margin-left:4px">{{ b.value }}</span></sc-if>
+                        <sc-if value="{{ b.pending }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;font-size:12px;font-weight:500;background:{{ b.stBg }};color:{{ b.stColor }}">{{ b.stLabel }}</span></sc-if>
+                      </td>
+                      <td style="padding:12px 14px;vertical-align:middle;font-size:13px;color:#9CA3AF">{{ b.when }}</td>
+                      <td style="padding:12px 20px;vertical-align:middle"><sc-if value="{{ b.caseNo }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px">{{ b.caseNo }}</a></sc-if></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== PROVIDER ENROLLMENTS ========== -->
+        <sc-if value="{{ isProvider }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:20px">
+            <h1 style="margin:0 0 4px;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#1F2937">Jim Apple, PT — Enrollments</h1>
+            <div style="font-size:14px;color:#6B7280">Provider-level IDs, one per payer. Captured when a case is approved; read-only here.</div>
+          </div>
+          <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+            <div style="overflow-x:auto">
+              <table style="width:100%;min-width:820px;border-collapse:collapse">
+                <thead>
+                  <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+                    <th scope="col" style="text-align:left;padding:11px 20px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Payer</th>
+                    <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">State</th>
+                    <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Provider ID</th>
+                    <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Effective</th>
+                    <th scope="col" style="text-align:left;padding:11px 20px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">From</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{ enrollRows }}" as="e" hint-placeholder-count="3">
+                    <tr style="border-top:1px solid #F0EEEA">
+                      <td style="padding:12px 20px;vertical-align:middle"><a href="3 - Payer Detail.dc.html" style="font-size:14px;font-weight:500;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ e.payer }}</a></td>
+                      <td style="padding:12px 14px;vertical-align:middle;font-size:13px;color:#6B7280">{{ e.state }}</td>
+                      <td style="padding:12px 14px;vertical-align:middle">
+                        <sc-if value="{{ e.hasId }}" hint-placeholder-val="{{ true }}"><span style="font-size:12.5px;color:#9CA3AF">{{ e.label }}</span> <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#1F2937;margin-left:4px">{{ e.value }}</span></sc-if>
+                        <sc-if value="{{ e.pending }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;font-size:12px;font-weight:500;background:{{ e.stBg }};color:{{ e.stColor }}">{{ e.stLabel }}</span></sc-if>
+                      </td>
+                      <td style="padding:12px 14px;vertical-align:middle;font-size:13px;color:#6B7280">{{ e.effective }}</td>
+                      <td style="padding:12px 20px;vertical-align:middle"><sc-if value="{{ e.caseNo }}" hint-placeholder-val="{{ true }}"><a href="#" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px">{{ e.caseNo }}</a></sc-if></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== APPROVE DIALOG ========== -->
+  <sc-if value="{{ approveOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeApprove }}" style="position:fixed;inset:0;background:rgba(12,42,29,.34);z-index:90"></div>
+    <div role="dialog" aria-label="Approve case" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;max-width:94vw;max-height:88vh;overflow:auto;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;z-index:91;display:flex;flex-direction:column">
+      <div style="padding:18px 22px;border-bottom:1px solid #E8E5E0">
+        <h2 style="margin:0 0 3px;font-size:18px;font-weight:600;color:#1F2937">Approve case</h2>
+        <div style="font-size:13px;color:#6B7280">Jim Apple · {{ payerName }} · CO</div>
+      </div>
+
+      <div style="padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label for="effDate" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Effective date</label>
+          <input id="effDate" type="text" defaultValue="Aug 1, 2026" style="height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:220px" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+        </div>
+
+        <div style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:#F7FAF8;border:1px solid #C8DBD4;border-radius:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex:none;margin-top:2px"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1B4D3E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg><div style="font-size:12.5px;color:#33463C;text-wrap:pretty">Payer reference <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#1B4D3E">2201-4471</span> arrived with the Workbench submission on Jul 21 — saved with this approval unless you change it.</div></div>
+
+        <sc-if value="{{ noIds }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid #E8E5E0;border-radius:6px;background:#FBFBF9;padding:13px 15px;font-size:13px;color:#6B7280">{{ payerName }} issues no enrollment ID, so there's nothing else to capture.</div>
+        </sc-if>
+
+        <sc-if value="{{ anyIds }}" hint-placeholder-val="{{ true }}">
+          <div style="border-top:1px solid #F0EEEA;padding-top:18px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:3px">IDs {{ payerName }} issues</div>
+              <div style="font-size:12.5px;color:#9CA3AF">Read these off the payer's approval letter. You can approve without them.</div>
+            </div>
+            <sc-for list="{{ expects }}" as="x" hint-placeholder-count="2">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">{{ x.label }} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF">— {{ x.scope }}</span></label>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <input type="text" aria-label="{{ x.label }}" data-id="{{ x.key }}" placeholder="{{ x.expected }}" disabled="{{ x.missing }}" style="flex:1;min-width:200px;height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:{{ x.inputBg }};font-size:14px;color:#1F2937;font-family:'Geist Mono',ui-monospace,monospace" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+                  <label style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#6B7280;cursor:pointer;flex:none">
+                    <input type="checkbox" checked="{{ x.missing }}" data-id="{{ x.key }}" onChange="{{ toggleMissing }}" style="width:15px;height:15px;accent-color:#1B4D3E;cursor:pointer">Didn't receive
+                  </label>
+                </div>
+                <sc-if value="{{ x.missing }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:12px;color:#B45309">Flagged as outstanding — the enrollment will show “Awaiting ID” until it's added.</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #F0EEEA;padding-top:16px">
+          <label for="cexDate" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Contract executed <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF">— optional</span></label>
+          <input id="cexDate" type="text" placeholder="Pick a date" style="height:36px;padding:0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;width:220px" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)">
+        </div>
+      </div>
+
+      <div style="padding:16px 22px;border-top:1px solid #E8E5E0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="flex:1;min-width:180px;font-size:12.5px;color:#9CA3AF">{{ dialogFooter }}</span>
+        <button type="button" onClick="{{ closeApprove }}" style="height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937;flex:none" style-hover="background:#F5F4F1">Cancel</button>
+        <button type="button" onClick="{{ closeApprove }}" style="height:36px;padding:0 18px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #1B4D3E;background:#1B4D3E;color:#FFFFFF;flex:none" style-hover="background:#163F33;border-color:#163F33">Approve</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ deniedOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeApprove }}" style="position:fixed;inset:0;background:rgba(12,42,29,.34);z-index:90"></div>
+    <div role="dialog" aria-label="Mark Denied" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:480px;max-width:94vw;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;z-index:91">
+      <div style="padding:18px 22px;border-bottom:1px solid #E8E5E0"><h2 style="margin:0 0 3px;font-size:18px;font-weight:600;color:#1F2937">Mark Denied</h2><div style="font-size:13px;color:#6B7280">A reason from the fixed list is required — the denial is reportable the moment it exists.</div></div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label for="denyReason" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Denial reason <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#B45309">— required</span></label>
+          <div style="position:relative"><select id="denyReason" aria-label="Denial reason" value="{{ deniedReason }}" onChange="{{ setDeniedReason }}" style="height:36px;width:100%;padding:0 30px 0 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:14px;color:#1F2937;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"><option value="">Select a reason</option><sc-for list="{{ denialReasons }}" as="d" hint-placeholder-count="5"><option value="{{ d }}">{{ d }}</option></sc-for></select><span style="position:absolute;right:12px;top:15px;width:6px;height:6px;border-right:1.5px solid #6B7280;border-bottom:1.5px solid #6B7280;transform:rotate(45deg);pointer-events:none"></span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label for="denyCtx" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Context <sc-if value="{{ deniedNeedsContext }}" hint-placeholder-val="{{ false }}"><span style="font-weight:400;text-transform:none;letter-spacing:0;color:#B45309">— required for “Other”</span></sc-if><sc-if value="{{ deniedContextOptional }}" hint-placeholder-val="{{ true }}"><span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF">— optional</span></sc-if></label>
+          <textarea id="denyCtx" value="{{ deniedContext }}" onChange="{{ setDeniedContext }}" placeholder="e.g. panel closed for the county" style="width:100%;min-height:60px;padding:9px 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13.5px;color:#1F2937;font-family:inherit;resize:vertical" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></textarea>
+        </div>
+      </div>
+      <div style="padding:16px 22px;border-top:1px solid #E8E5E0;display:flex;justify-content:flex-end;gap:8px">
+        <button type="button" onClick="{{ closeApprove }}" style="height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Cancel</button>
+        <button type="button" onClick="{{ closeApprove }}" disabled="{{ deniedDisabled }}" style="height:36px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;border:1px solid {{ denyBtnBorder }};background:{{ denyBtnBg }};color:{{ denyBtnColor }};cursor:{{ denyBtnCursor }}">Mark Denied</button>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ npOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeApprove }}" style="position:fixed;inset:0;background:rgba(12,42,29,.34);z-index:90"></div>
+    <div role="dialog" aria-label="Mark Not Pursuing" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:460px;max-width:94vw;background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;z-index:91">
+      <div style="padding:18px 22px;border-bottom:1px solid #E8E5E0"><h2 style="margin:0 0 3px;font-size:18px;font-weight:600;color:#1F2937">Mark Not Pursuing</h2><div style="font-size:13px;color:#6B7280">The deliberate opt-out — say why this combination is being dropped.</div></div>
+      <div style="padding:20px 22px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label for="npNote" style="font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#6B7280">Note <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#B45309">— required</span></label>
+          <textarea id="npNote" value="{{ npNote }}" onChange="{{ setNpNote }}" placeholder="e.g. group decided against this payer in SC" style="width:100%;min-height:60px;padding:9px 11px;border:1px solid #E8E5E0;border-radius:4px;background:#FFFFFF;font-size:13.5px;color:#1F2937;font-family:inherit;resize:vertical" style-focus="border-color:#1B4D3E;outline:2px solid rgba(27,77,62,.18)"></textarea>
+        </div>
+      </div>
+      <div style="padding:16px 22px;border-top:1px solid #E8E5E0;display:flex;justify-content:flex-end;gap:8px">
+        <button type="button" onClick="{{ closeApprove }}" style="height:36px;padding:0 14px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid #E8E5E0;background:#FFFFFF;color:#1F2937" style-hover="background:#F5F4F1">Cancel</button>
+        <button type="button" onClick="{{ closeApprove }}" disabled="{{ npDisabled }}" style="height:36px;padding:0 16px;border-radius:4px;font-size:13px;font-weight:500;font-family:inherit;border:1px solid {{ npBtnBorder }};background:{{ npBtnBg }};color:{{ npBtnColor }};cursor:{{ npBtnCursor }}">Mark Not Pursuing</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;case-both&quot;, &quot;case-one&quot;, &quot;case-none&quot;, &quot;case-denied&quot;, &quot;case-np&quot;, &quot;board&quot;, &quot;provider&quot;], &quot;default&quot;: &quot;case-both&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;State&quot;}}">
+class Component extends DCLogic {
+  state = { screen: null, dialog: false, missing: {} };
+  renderVals() {
+    const screen = this.state.screen || this.props.screen || "case-both";
+    const tone = (t) => ({
+      green: { bg: "#E7F5EF", color: "#047857" }, amber: { bg: "#FBF0E1", color: "#B45309" },
+      gray: { bg: "#F1F1EF", color: "#6B7280" }
+    }[t] || { bg: "#F1F1EF", color: "#6B7280" });
+
+    const SCREENS = [
+      { key: "case-both", label: "Close · both IDs" },
+      { key: "case-one", label: "Close · one ID" },
+      { key: "case-none", label: "Close · no IDs" },
+      { key: "case-denied", label: "Close · Denied" },
+      { key: "case-np", label: "Close · Not pursuing" },
+      { key: "board", label: "Group payer board" },
+      { key: "provider", label: "Provider enrollments" }
+    ];
+    const screens = SCREENS.map((s) => {
+      const on = s.key === screen;
+      return { key: s.key, label: s.label, bg: on ? "#FFFFFF" : "transparent", color: on ? "#1B4D3E" : "#6B7280", border: on ? "#D8D5CE" : "transparent" };
+    });
+    const NOTE = {
+      "case-both": "Payer issues a group ID and a provider ID.",
+      "case-one": "Payer issues a provider ID only.",
+      "case-none": "Payer issues no enrollment ID.",
+      "case-denied": "Reason from the governed list; “Other” needs context.",
+      "case-np": "Deliberate opt-out — note required.",
+      board: "Where captured group IDs land.",
+      provider: "Where captured provider IDs land."
+    };
+
+    const isCase = screen.indexOf("case-") === 0;
+    const closeKind = screen === "case-denied" ? "denied" : screen === "case-np" ? "np" : "approve";
+    const payerName = screen === "case-one" ? "Kaiser Permanente Colorado"
+      : screen === "case-none" ? "Humana" : "Aetna (CVS Health)";
+
+    // Driven by the payer record's ID expectations — group ID is per group,
+    // provider ID is per provider.
+    const ALL = [
+      { key: "group", label: "Group PIN", scope: "one per group", expected: "Enter the Group PIN" },
+      { key: "provider", label: "Provider Number", scope: "one per provider", expected: "Enter the Provider Number" }
+    ];
+    const keep = screen === "case-none" ? [] : screen === "case-one" ? ["provider"] : ["group", "provider"];
+    const missing = this.state.missing || {};
+    const expects = ALL.filter((x) => keep.indexOf(x.key) !== -1).map((x) => {
+      const m = !!missing[x.key];
+      return Object.assign({}, x, { missing: m, inputBg: m ? "#F5F4F1" : "#FFFFFF" });
+    });
+    const flagged = expects.filter((x) => x.missing).length;
+    const dr = this.state.deniedReason || "";
+    const deniedReady = !!dr && (dr !== "Other" || (this.state.deniedContext || "").trim().length > 0);
+    const npReady = (this.state.npNote || "").trim().length > 0;
+    const btnVM = (ok, dangerBg) => ({
+      disabled: !ok,
+      border: ok ? dangerBg : "#E8E5E0", bg: ok ? dangerBg : "#F5F4F1",
+      color: ok ? "#FFFFFF" : "#9CA3AF", cursor: ok ? "pointer" : "not-allowed"
+    });
+    const denyBtn = btnVM(deniedReady, "#B91C1C");
+    const npBtn = btnVM(npReady, "#1B4D3E");
+
+    const row = (o) => {
+      const t = tone(o.t || "amber");
+      return Object.assign({ hasId: !!o.value, pending: !o.value, stBg: t.bg, stColor: t.color }, o);
+    };
+    const boardRows = [
+      row({ payer: "Aetna (CVS Health)", label: "Group PIN", value: "GP-448210", when: "Jul 24, 2026", caseNo: "C-1042" }),
+      row({ payer: "UnitedHealthcare", label: "Group PIN", value: "GP-771034", when: "Jun 2, 2026", caseNo: "C-0981" }),
+      row({ payer: "Cigna Healthcare", label: "Group PIN", value: "", stLabel: "Awaiting ID", t: "amber", when: "—", caseNo: "C-1055" }),
+      row({ payer: "Humana", label: "", value: "", stLabel: "No ID issued", t: "gray", when: "—", caseNo: "" })
+    ];
+    const enrollRows = [
+      row({ payer: "Aetna (CVS Health)", state: "CO", label: "Provider Number", value: "A1234567", effective: "Aug 1, 2026", caseNo: "C-1042" }),
+      row({ payer: "Kaiser Permanente Colorado", state: "CO", label: "Provider Number", value: "", stLabel: "Awaiting ID", t: "amber", effective: "Jul 1, 2026", caseNo: "C-1048" }),
+      row({ payer: "Humana", state: "CO", label: "", value: "", stLabel: "No ID issued", t: "gray", effective: "May 12, 2026", caseNo: "C-0902" })
+    ];
+
+    // Same shell as the payer pages, but the active item follows the section
+    // you're actually in — these are case and provider surfaces, not payer ones.
+    const navItem = (on) => ({
+      bg: on ? "rgba(255,255,255,.10)" : "transparent",
+      color: on ? "#FFFFFF" : "#A7B5AD",
+      weight: on ? "500" : "400"
+    });
+    const navProviders = navItem(screen === "provider");
+    const navCases = navItem(isCase);
+
+    return {
+      screens, screenNote: NOTE[screen], navProviders, navCases,
+      isCase, isBoard: screen === "board", isProvider: screen === "provider",
+      crumbRoot: isCase ? "Cases" : screen === "board" ? "Groups" : "Providers",
+      crumbLeaf: isCase ? "C-1042" : screen === "board" ? "YC PT · Payer network" : "Jim Apple, PT",
+      payerName, expects, noIds: expects.length === 0, anyIds: expects.length > 0,
+      boardRows, enrollRows,
+      closeCta: closeKind === "denied" ? "Mark Denied" : closeKind === "np" ? "Mark Not Pursuing" : "Approve case",
+      approveOpen: this.state.dialog && closeKind === "approve",
+      deniedOpen: this.state.dialog && closeKind === "denied",
+      npOpen: this.state.dialog && closeKind === "np",
+      denialReasons: ["Panel closed", "Missing or expired credential", "Provider ineligible", "Duplicate application", "Other"],
+      deniedReason: this.state.deniedReason || "",
+      deniedContext: this.state.deniedContext || "",
+      deniedNeedsContext: (this.state.deniedReason || "") === "Other",
+      deniedContextOptional: (this.state.deniedReason || "") !== "Other",
+      setDeniedReason: (e) => this.setState({ deniedReason: e.target.value }),
+      setDeniedContext: (e) => this.setState({ deniedContext: e.target.value }),
+      npNote: this.state.npNote || "",
+      deniedDisabled: denyBtn.disabled, denyBtnBorder: denyBtn.border, denyBtnBg: denyBtn.bg, denyBtnColor: denyBtn.color, denyBtnCursor: denyBtn.cursor,
+      npDisabled: npBtn.disabled, npBtnBorder: npBtn.border, npBtnBg: npBtn.bg, npBtnColor: npBtn.color, npBtnCursor: npBtn.cursor,
+      setNpNote: (e) => this.setState({ npNote: e.target.value }),
+      dialogFooter: expects.length === 0
+        ? "Approving records the effective date."
+        : flagged > 0
+          ? flagged + (flagged === 1 ? " ID" : " IDs") + " flagged as outstanding."
+          : "Leave blank and tick “Didn't receive” if the payer hasn't issued it yet.",
+      setScreen: (e) => this.setState({ screen: e.currentTarget.getAttribute("data-screen"), dialog: false, missing: {}, deniedReason: "", deniedContext: "", npNote: "" }),
+      openApprove: () => this.setState({ dialog: true }),
+      closeApprove: () => this.setState({ dialog: false }),
+      toggleMissing: (e) => {
+        const k = e.currentTarget.getAttribute("data-id");
+        this.setState({ missing: Object.assign({}, missing, { [k]: !missing[k] }) });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

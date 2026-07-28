@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #F1EFEA; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#F1EFEA;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:26px 30px 70px">
+  <div style="max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:22px">
+
+    <div>
+      <h1 style="margin:0 0 5px;font-size:24px;font-weight:600;letter-spacing:-.015em">How the panel and the app connect</h1>
+      <div style="font-size:14px;color:#6B7280;max-width:720px;text-wrap:pretty">Six seams. For each one: where it happens in the panel, what crosses, and exactly which app screen shows it. Every right-hand card links to the screen where you can see it.</div>
+
+      <div data-screen-label="Series ribbon" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <span style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;flex:none">Workbench series</span>
+        <a href="7 - Workbench Panel.dc.html" style="display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">7 · Panel conformance</a>
+        <span style="color:#C9C5BE;font-size:11px">→</span>
+        <a href="8 - Index - Workbench Journeys.dc.html" style="display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">8 · Journey map</a>
+        <span style="color:#C9C5BE;font-size:11px">→</span>
+        <a href="9 - Workbench Prototype.dc.html" style="display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">9 · Full-loop prototype</a>
+        <span style="color:#C9C5BE;font-size:11px">→</span>
+        <a href="10 - Consolidated Vision.dc.html" style="display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">10 · Consolidated vision</a>
+        <span style="color:#C9C5BE;font-size:11px">→</span>
+        <span style="display:inline-flex;align-items:center;height:26px;padding:0 11px;border-radius:4px;background:#0C2A1D;color:#FFFFFF;font-size:12px;font-weight:500;white-space:nowrap">11 · Handoff map</span>
+      </div>
+    </div>
+
+    <div data-screen-label="Column headers" style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:center">
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;background:#0C2A1D;border-radius:6px">
+        <img src="assets/logo-mark-white.png" alt="" style="height:15px;width:auto;display:block;flex:none">
+        <span style="font-size:13px;font-weight:600;color:#FFFFFF">Workbench panel</span>
+        <span style="font-size:11.5px;color:#8FA398;margin-left:auto">Chrome side panel</span>
+      </div>
+      <div style="text-align:center;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF">What crosses</div>
+      <div style="display:flex;align-items:center;gap:9px;padding:10px 14px;background:#FFFFFF;border:1px solid #DDD9D2;border-radius:6px">
+        <img src="assets/logo-mark.png" alt="" style="height:15px;width:auto;display:block;flex:none">
+        <span style="font-size:13px;font-weight:600">Minted Panel app</span>
+        <span style="font-size:11.5px;color:#9CA3AF;margin-left:auto">Screens 1–6</span>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 1" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">1</span>
+        <span style="font-size:15px;font-weight:600">Getting to work</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C1</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#FEF3C7;color:#92400E;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">Spike the launch first</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#FBFDFC;border:1px solid #C8DBD4;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6E8478;margin-bottom:5px">Panel · queue or pickup</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">The case arrives already resolved</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Org, provider, location and case are set. No dropdowns. On a recognised portal the queue reorders and the matching case carries a <span style="font-weight:500;color:#047857">THIS PAGE</span> chip.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1D4ED8">App → panel</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M78 7H5" stroke="#1D4ED8" stroke-width="1.6" stroke-linecap="round"></path><path d="M11 2L5 7l6 5" stroke="#1D4ED8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">org · provider<br>location · case<br>portal_key</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Where it comes from</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px"><a href="6 - Case Detail.dc.html">Case Detail</a> · launch button</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Also the case's task due dates — they are what ranks the queue. The panel never invents its own priority.</div>
+          <div style="margin-top:8px;padding:8px 10px;background:#FEF3C7;border-radius:4px;font-size:11.5px;color:#92400E;text-wrap:pretty">A web page can't open a Chrome side panel. If the gesture doesn't forward, the app opens the portal URL and the panel picks up context on focus.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 2" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">2</span>
+        <span style="font-size:15px;font-weight:600">Recording a submission</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C2</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#E7F5EF;color:#047857;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">Endpoints exist</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#FBFDFC;border:1px solid #C8DBD4;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6E8478;margin-bottom:5px">Panel · Progress tab</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">Record submission</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Steps ticked, reference typed, one button. The panel confirms: "Touch logged, task closed, fill report attached."</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1B4D3E">Panel → app</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M2 7h73" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round"></path><path d="M69 2l6 5-6 5" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">portal_submission<br>payer_reference<br>fill_report</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Three things land</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty"><a href="6 - Case Detail.dc.html">Case Detail</a> touchlog gains a green <span style="font-weight:500;color:#047857">Workbench</span> entry naming the fill result and reference; the status timeline records <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px">workbench touch</span> as evidence for → Submitted; the linked task closes.</div>
+          <div style="margin-top:8px;padding:8px 10px;background:#F5F4F1;border-radius:4px;font-size:11.5px;color:#6B7280;text-wrap:pretty">Open: the panel has no task source yet, so v1 sends no <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px">task_id</span> and task completion stays in the app.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 3" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">3</span>
+        <span style="font-size:15px;font-weight:600">Closing the case</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C3</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#E7F5EF;color:#047857;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">No new endpoint</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#F5F4F1;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Panel · nothing new</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">Reuses seam 2</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">The reference captured at submission is already stored. This seam is app-side only — it just stops the coordinator retyping it weeks later.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">Stored → reused</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M2 7h73" stroke="#C9C5BE" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="4 4"></path><path d="M69 2l6 5-6 5" stroke="#C9C5BE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">payer_reference</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Where it shows</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px"><a href="5 - Case Close and IDs.dc.html">Case Close</a> · approval dialog</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">A green provenance strip: reference <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px">2201-4471</span> arrived with the Workbench submission on Jul 21, saved with this approval unless changed.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 4" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">4</span>
+        <span style="font-size:15px;font-weight:600">Teaching a new form</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C4</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#FBF0E1;color:#B45309;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">New write path</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#FBFDFC;border:1px solid #C8DBD4;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6E8478;margin-bottom:5px">Panel · unknown form</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">Capture, then approve — both here</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Arrives pre-matched from labels seen on other payers, with the payer count as evidence. Assign any gap, send, then <span style="font-weight:500;color:#1F2937">Approve all</span> without leaving the panel.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1B4D3E">Panel → app</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M2 7h73" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round"></path><path d="M69 2l6 5-6 5" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">portal_field_maps<br>status: proposed<br>evidence</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">The other way in</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px"><a href="4 - Template Editor.dc.html">Template Editor</a> · online-form step</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">"Check for captured fields" pulls proposals into the mapping table for whole-form review. Secondary by design — the same two people do both jobs, so the panel path keeps them on cases.</div>
+          <div style="margin-top:8px;padding:8px 10px;background:#F5F4F1;border-radius:4px;font-size:11.5px;color:#6B7280;text-wrap:pretty">A proposed row never fills. The gate stays even though one person captures and approves.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 5" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">5</span>
+        <span style="font-size:15px;font-weight:600">When a form changes under us</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C5</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#FEF3C7;color:#92400E;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">Confirm what writes drift</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#FBFDFC;border:1px solid #C8DBD4;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6E8478;margin-bottom:5px">Panel · during a fill</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">A field that used to fill, doesn't</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">The coordinator isn't asked to diagnose it. The fill report names the skipped field and the panel reports the dead selector on its own.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1B4D3E">Panel → app</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M2 7h73" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round"></path><path d="M69 2l6 5-6 5" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">portal_key · field<br>last_working_at</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Two screens react</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty"><a href="1 - Payer Setup.dc.html">Payer Setup</a>'s drift banner names the source — "reported by a Workbench fill on Jul 24" — and its <span style="font-weight:500">Drift detected</span> KPI counts it. The link lands in <a href="4 - Template Editor.dc.html">Template Editor</a> repair mode with the broken rows flagged.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Seam 6" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap">
+        <span style="width:22px;height:22px;border-radius:5px;background:#0C2A1D;color:#FFFFFF;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none">6</span>
+        <span style="font-size:15px;font-weight:600">Keeping CAQH current</span>
+        <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF">C6</span>
+        <span style="margin-left:auto;height:21px;padding:0 9px;border-radius:4px;background:#FBF0E1;color:#B45309;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">New write path</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 148px 1fr;gap:14px;align-items:stretch">
+        <div style="padding:13px 14px;background:#FBFDFC;border:1px solid #C8DBD4;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#6E8478;margin-bottom:5px">Panel · on CAQH</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">Fill CAQH, then record the attestation</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">CAQH is a destination, not a source. Pulling a value back happens only when CAQH holds something we have blank — rare, and shown as a small exception strip.</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1B4D3E">Panel → record</div>
+          <svg width="80" height="14" viewBox="0 0 80 14" fill="none"><path d="M2 7h73" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round"></path><path d="M69 2l6 5-6 5" stroke="#1B4D3E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#6B7280;line-height:1.45;word-break:break-word">caqh_last_attested<br>verified_at</div>
+        </div>
+        <div style="padding:13px 14px;background:#FBFBF9;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:5px">Where it shows</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:3px">The provider record</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Attesting stamps every field the fill carried, so freshness becomes a real state instead of a guess. A pulled gap writes that one field — and the next payer fill goes from 17 of 18 to 18 of 18.</div>
+        </div>
+      </div>
+    </div>
+
+    <div data-screen-label="Read this if nothing else" style="background:#0C2A1D;border-radius:8px;padding:20px 22px">
+      <div style="font-size:15px;font-weight:600;color:#FFFFFF;margin-bottom:4px">If you read one thing</div>
+      <div style="font-size:13.5px;color:#A7B5AD;max-width:820px;text-wrap:pretty;margin-bottom:15px">Seams 1–3 are the loop that pays for itself: work arrives resolved, gets done, and records itself — no re-entry in the app. They need almost no new backend. Seams 4–6 are what stop the system getting more expensive with every payer, and they need the two new write paths.</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="9 - Workbench Prototype.dc.html" style="display:inline-flex;align-items:center;height:34px;padding:0 15px;border-radius:4px;background:#C8DBD4;color:#0C2A1D;font-size:13px;font-weight:600;text-decoration:none">Run the loop in the prototype</a>
+        <a href="8 - Index - Workbench Journeys.dc.html" style="display:inline-flex;align-items:center;height:34px;padding:0 15px;border-radius:4px;border:1px solid rgba(255,255,255,.22);color:#FFFFFF;font-size:13px;font-weight:500;text-decoration:none">See what each seam blocks on</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1300,&quot;height&quot;:1000}}"></script>
+</body>
+</html>
