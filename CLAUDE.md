@@ -2869,6 +2869,23 @@ the E4.3 both-repos-attached rule. Panel-side highlights:
   `ctx.asUser()` helper was added for the S4.4 bump and removed with it when
   that call turned out to be unreachable (see the touches bullet); the warning
   lives in `guard.ts`. No current route needs such a client.
+- **The `portals` registry is now a DEPLOY PREREQUISITE, not just config.**
+  S3.2 deleted the extension's bundled `PORTALS` list, so recognition is
+  `matchPortalByUrl(url, rowsFromGetApiPortals)` — over an empty table that
+  returns null for every page, which is indistinguishable from "not a portal":
+  Fill disabled, capture hidden, and the panel telling you to open the form you
+  are already looking at. The table had **0 rows** in production. Seeded
+  2026-07-28 (service-role, the sanctioned catalog channel): ONE global
+  (`org_id NULL`) row `bcbs_ks_enrollment` — "BCBS KS network enrollment",
+  payer `Blue Cross and Blue Shield of Kansas`, `form_url` exactly the
+  manifest's content-script match
+  (`…/facelets/allUsers/form/NetworkEnrollmentForm.faces`), `is_verified false`
+  until a real fill proves it. Global because all 24 of that key's
+  `portal_field_maps` are global. Registering a portal for a NEW payer is a
+  registry row (E6.5 register-portal UI / `upsert_global_portal`) — but note
+  the extension manifest is still pinned to `provider.bcbsks.com`, so a second
+  portal would be recognized and then dead-end at the content-script pre-flight
+  until the manifest moves to `chrome.scripting.registerContentScripts`.
 - **Shared pure modules** so the two products can't disagree:
   `sopStepCompletion.ts` (S4.3 ordering + rollup, shared with the webapp task
   drawer), `labelLearning.ts` (S5.3 suggestion + payer-count evidence),
