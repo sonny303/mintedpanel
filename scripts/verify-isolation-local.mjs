@@ -75,7 +75,7 @@ function runGate(baseUrl) {
 const EXPECTED_FAILS = {
   // The "providers" leak also lets a cross-org PATCH land (assertion 12). The
   // list is sorted lexicographically to match failedAssertions()'s .sort().
-  providers: ["1", "12", "1b", "2c", "3"],
+  providers: ["1", "12", "19", "1b", "2c", "3"],
   spoof: ["4"],
   fieldmaps: ["5b", "5c"],
   profile: ["6"],

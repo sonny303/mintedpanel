@@ -14,7 +14,8 @@
 //                scripts/verify-isolation-local.mjs).
 //
 // Leak modes (each makes specific gate assertions fail):
-//   providers   cross-org provider rows leak into lists, GET-by-id, and PATCH (1, 1b, 2c, 3, 12)
+//   providers   cross-org provider rows leak into lists, GET-by-id, PATCH, and
+//               the CAQH attestation write               (1, 1b, 2c, 3, 12, 19)
 //   spoof       x-org-id honored without a membership check          (4)
 //   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
 //   profile     cross-org provider profile served instead of 404     (6)
@@ -768,6 +769,37 @@ export async function createMockApiServer(options = {}) {
           : null,
         latestNote: c.latestNote ?? null,
         latestTouch: c.latestTouch ?? null,
+      });
+    }
+
+    // --- /api/providers/:id/caqh-attestation (writer-only, org-scoped) ---
+    const caqhMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/caqh-attestation\/?$/);
+    if (caqhMatch) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot record a CAQH attestation");
+      }
+      const body = (await readBody(req)) ?? {};
+      const target = [...PROVIDERS, ...createdProviders].find((p) => p.id === caqhMatch[1]);
+      // Real contract: a cross-org (or missing) provider is a 404 BEFORE any
+      // write. Leak "providers": the org check is skipped and the cross-org
+      // write is accepted (assertion 19).
+      const visible = target && (target.orgId === orgId || leak === "providers");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      const today = new Date().toISOString().slice(0, 10);
+      const attestedOn =
+        body.attested_on == null || body.attested_on === "" ? today : body.attested_on;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(attestedOn)) {
+        return envelope(res, 422, null, "attested_on must be a YYYY-MM-DD date string");
+      }
+      if (attestedOn > today) {
+        return envelope(res, 422, null, "attested_on cannot be in the future");
+      }
+      // Narrow response: the date + the shared freshness window, never the row.
+      return envelope(res, 200, {
+        id: target.id,
+        caqhLastAttestedDate: attestedOn,
+        currentThroughDays: 120,
       });
     }
 

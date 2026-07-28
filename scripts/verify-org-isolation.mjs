@@ -690,6 +690,30 @@ function looksLikeVercelGate(r) {
     );
   }
 
+  // 19. CAQH attestation WRITE isolation: a Kansas writer recording an
+  //     attestation on a South Park provider must 404 like the PATCH
+  //     (assertion 12) — never 200, never a cross-org write. Safe against
+  //     production for the same reason: the cross-org id is rejected BEFORE
+  //     any write (getProvider -> null -> 404), so no date is stamped.
+  //
+  //     The own-org write is deliberately NOT asserted: it would mutate a live
+  //     provider's caqh_last_attested_date and move that provider's E1.8
+  //     readiness. The happy path is covered by the handler unit tests and the
+  //     mock server instead — the same reasoning that keeps POST /api/providers
+  //     out of the gate.
+  const caqhX = await apiPost(
+    `/api/providers/${env.SOUTHPARK_PROVIDER_ID}/caqh-attestation`,
+    {},
+    { token: kansasTok },
+  );
+  const caqhLeaked = caqhX.status < 400 || caqhX.body?.data != null;
+  check(
+    "19. Kansas CAQH attestation on a South Park provider -> 404, no cross-org write",
+    caqhX.status === 404 && !caqhLeaked,
+    `status=${caqhX.status} (expect 404) dataPresent=${caqhX.body?.data != null}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

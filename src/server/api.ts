@@ -23,6 +23,9 @@ const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
 // `/api/providers/:id/ssn-release?caseId=` — E4.4 fill-only SSN release. Must be
 // matched before the generic :id route.
 const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
+// `/api/providers/:id/caqh-attestation` — record a CAQH re-attestation. Must
+// be matched before the generic :id route.
+const CAQH_ATTESTATION_ROUTE = /^\/api\/providers\/([^/]+)\/caqh-attestation\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
@@ -96,7 +99,9 @@ async function routeApiRequest(request: Request): Promise<Response> {
 
   const profileMatch = pathname.match(PROVIDER_PROFILE_ROUTE);
   const ssnReleaseMatch = pathname.match(SSN_RELEASE_ROUTE);
-  const providersMatch = profileMatch || ssnReleaseMatch ? null : pathname.match(PROVIDERS_ROUTE);
+  const caqhMatch = pathname.match(CAQH_ATTESTATION_ROUTE);
+  const providersMatch =
+    profileMatch || ssnReleaseMatch || caqhMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
   const isPortals = PORTALS_ROUTE.test(pathname);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
@@ -113,6 +118,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   if (
     !profileMatch &&
     !ssnReleaseMatch &&
+    !caqhMatch &&
     !providersMatch &&
     !isFieldMaps &&
     !isPortals &&
@@ -176,6 +182,16 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleSsnRelease(ssnReleaseMatch[1], url, ctx);
+    }
+    if (caqhMatch) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadProviderRoutes();
+      return await routes.handleRecordCaqhAttestation(
+        caqhMatch[1],
+        await readJsonBody(request),
+        ctx,
+        new Date().toISOString().slice(0, 10),
+      );
     }
     if (isFieldMaps) {
       if (method !== "GET") return fail(405, "Method not allowed");
