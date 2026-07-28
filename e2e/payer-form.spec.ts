@@ -420,7 +420,13 @@ test("edit payer — hydrated from the record, catalog-wide, saved through updat
   // Unticking CLEARS the stored label instead of leaving a stale one.
   expect(body.p_group_id_label ?? null).toBeNull();
   expect(tableWrites.filter((w) => w.table === "payers")).toEqual([]);
-  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}$`), {
+  // Slice C §2.11: editing happens IN PLACE on the payer detail (this legacy
+  // URL redirects into it with ?edit=1), so a save returns to the read card on
+  // the same page instead of navigating.
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}`), {
+    timeout: 15000,
+  });
+  await expect(page.getByRole("heading", { name: "Identity & enrollment ID" })).toBeVisible({
     timeout: 15000,
   });
 });
@@ -475,12 +481,18 @@ test("edit — a NULL-column payer hydrates provider-EXPECTED; an unrelated save
   expect(body.p_group_id_label ?? null).toBeNull();
 });
 
-test("the payer detail carries the Edit entry for admins", async ({ page }) => {
+test("the payer detail carries the Edit entry for admins — in place, same form", async ({
+  page,
+}) => {
+  // Slice C §2.11: the entry is a BUTTON that swaps this same form onto the
+  // detail (no second edit page, no navigation) — the standalone /edit URL
+  // stays alive as a redirect into exactly this state.
   await page.goto(`/admin/payer-admin/catalog/${AETNA_ID}`);
   await expect(page.getByRole("heading", { name: "Aetna (CVS Health)" })).toBeVisible({
     timeout: 30000,
   });
-  await page.getByRole("link", { name: "Edit payer" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/payers/${AETNA_ID}/edit$`), { timeout: 15000 });
+  await page.getByRole("button", { name: "Edit payer" }).click();
   await expect(page.getByRole("heading", { name: "Edit payer" })).toBeVisible();
+  await expect(page.getByLabel("Payer name", { exact: true })).toHaveValue("Aetna (CVS Health)");
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}`));
 });

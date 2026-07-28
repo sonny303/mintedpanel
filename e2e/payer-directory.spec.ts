@@ -354,12 +354,22 @@ test("payer detail drill-in behind the name link; long state lists truncate to t
   // (the assertion this line replaced was missed by the F6.7.5 retarget).
   await expect(page.getByText("45 days")).toHaveCount(0);
   await expect(page.getByText("State coverage (1)")).toBeVisible();
+
+  // Slice C: the detail is TABBED — this payer's SOPs live on Templates.
+  await page.getByRole("tab", { name: "Templates", exact: true }).click();
   await expect(page.getByRole("link", { name: "BCBS NC — Standard Enrollment" })).toBeVisible();
-  await expect(page.getByText("BCBS NC Enrollment Portal")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Remove from my network" })).toBeVisible();
+  // The portals list is deliberately gone with the redesign: since E6.5 a
+  // portal is registered and trained INSIDE the SOP step that uses it, and the
+  // Templates tab's next-step CTA is the way there.
+
+  // §2.2: removal collapsed into ONE verb, and it lives on Manage.
+  await expect(page.getByRole("button", { name: "Remove from my network" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Manage", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Archive payer" })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
 
   // Back to the catalog list from the detail.
-  await page.getByRole("link", { name: "← Back to catalog" }).click();
+  await page.getByRole("link", { name: "← Back to Payer Setup" }).click();
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible();
 });
 

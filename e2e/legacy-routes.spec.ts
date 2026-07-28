@@ -118,10 +118,10 @@ const RENDERING_ROUTES = [
   "/providers",
   "/reports",
   "/admin/templates/new",
-  // Slice B — the manual payer-setup doors (create + edit; a stale id renders
-  // an honest "Payer not found", never a dead end).
+  // Slice B — the manual payer-setup create door (a stale id renders an honest
+  // "Payer not found", never a dead end). The edit door moved to the payer
+  // detail in Slice C, so /admin/payers/$id/edit is now in the redirect set.
   "/admin/payers/new",
-  "/admin/payers/pay-1/edit",
   "/onboarding",
   "/onboarding/wizard",
 ];
@@ -160,6 +160,17 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/payer-directory", to: /\/admin\/payer-admin\/catalog$/ },
   { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\/sops$/ },
   { from: "/admin/payers", to: /\/admin\/payer-admin\/catalog$/ },
+  // Slice C — payer editing is IN PLACE on the detail (§2.11) and the payer
+  // scorecard folded into its tab (§2.10); both old URLs redirect into the
+  // exact state they used to render.
+  {
+    from: "/admin/payers/pay-1/edit",
+    to: /\/admin\/payer-admin\/catalog\/pay-1\?.*edit=true/,
+  },
+  {
+    from: "/admin/payers/pay-1/scorecard",
+    to: /\/admin\/payer-admin\/catalog\/pay-1\?tab=scorecard/,
+  },
   // Generation re-homes on the group's Payer Network (E6.2/E6.3).
   // Pre-E6.1 stubs, retargeted or preserved.
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },
