@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #FDFDFC; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#FDFDFC;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:28px 32px 64px">
+  <div style="max-width:1120px;margin:0 auto">
+
+    <div>
+      <h1 style="margin:0 0 4px 0;font-size:24px;font-weight:600;letter-spacing:-.015em;color:#1F2937">Workbench — user journeys</h1>
+      <div style="font-size:14px;color:#6B7280;max-width:760px;text-wrap:pretty">Every surface in the Minted Panel Workbench, and where each journey starts and ends. Read the series left to right: <a href="7 - Workbench Panel.dc.html">7</a> makes the panel brand-true, this map names the journeys, <a href="9 - Workbench Prototype.dc.html">9</a> makes them clickable, and <a href="10 - Consolidated Vision.dc.html">10</a> is where they collapse to once the backend ships. The return trips are wired into app screens 1–6 — Case Detail’s touchlog, the Template Editor’s proposed mappings, Case Close’s pre-filled reference, and Payer Setup’s drift banner all now show Workbench provenance.</div>
+
+    <div data-screen-label="Series ribbon" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px"><span style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;flex:none">Workbench series</span><a href="7 - Workbench Panel.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">7 · Panel conformance</a><span style="color:#C9C5BE;font-size:11px">→</span><span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;background:#0C2A1D;color:#FFFFFF;font-size:12px;font-weight:500;white-space:nowrap">8 · Journey map</span><span style="color:#C9C5BE;font-size:11px">→</span><a href="9 - Workbench Prototype.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">9 · Full-loop prototype</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="10 - Consolidated Vision.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">10 · Consolidated vision</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="11 - Handoff Map.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">11 · Handoff map</a><span style="color:#9CA3AF;font-size:12px;margin-left:6px">Returns land in the app: <a href="6 - Case Detail.dc.html">Case Detail</a> · <a href="4 - Template Editor.dc.html">Template Editor</a> · <a href="5 - Case Close and IDs.dc.html">Case Close</a> · <a href="1 - Payer Setup.dc.html">Payer Setup</a></span></div>
+    </div>
+
+    <div style="height:1px;background:#E8E5E0;margin:20px 0"></div>
+
+    <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border:1px solid #E8E5E0;border-left:3px solid #C69A3F;border-radius:6px;background:#FCFBF7;margin-bottom:14px">
+      <div style="font-size:13px;color:#6B5A33"><span style="font-weight:600;color:#5A4B27">Scope, corrected.</span> MVP is the tech debt plus copy and customize — not filling. At a few submissions a week, with every field verified before submit and a spreadsheet as today's method, the win is <span style="font-weight:600">never retyping a value</span>, not automating a keystroke. Auto-fill moves to phase 2 because a coordinator checks each field either way, which caps what automation can save. The metric is time per submission.</div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border:1px solid #E8E5E0;border-left:3px solid #1B4D3E;border-radius:6px;background:#F7FAF8;margin-bottom:24px">
+      <div style="font-size:13px;color:#33463C"><span style="font-weight:600;color:#1B4D3E">Structural correction.</span> Capture is <span style="font-weight:600">not an undesigned screen</span> — it is a capability the extension does not have. The panel is read-only by locked decision: it never writes mappings, and a field gap routes <em>out</em> to the app's train flow instead. Confirmed in the repo: <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">src/shared/fixit.ts</span> — "the extension NEVER writes mappings (R6 read-only boundary)" — partitions gaps to <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">/portals/&lt;key&gt;/train</span> and <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">/providers/:id</span>. Journey 5 below cannot be built until that boundary moves. Journeys 1–4 already exist in code.</div>
+    </div>
+
+    <h2 style="margin:0 0 4px;font-size:17px;font-weight:600;color:#1F2937">Surfaces</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:14px">Verified against <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#1F2937">sidepanel.html</span> and <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:#1F2937">src/sidepanel/main.ts</span>. The panel is one document — these are its views and sections, not routes. Chrome owns the window; there is no navigation and no back button, so every state has to resolve in place.</div>
+    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden;margin-bottom:32px">
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:860px;border-collapse:collapse">
+          <thead>
+            <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+              <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Surface</th>
+              <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Its job</th>
+              <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Contains</th>
+              <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Build</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ surfaces }}" as="s" hint-placeholder-count="6">
+              <tr style="border-top:1px solid #F0EEEA">
+                <td style="padding:13px 18px;vertical-align:top">
+                  <sc-if value="{{ s.hasHref }}" hint-placeholder-val="{{ true }}"><a href="{{ s.href }}" style="font-size:14px;font-weight:600;color:#1F2937;text-decoration:none" style-hover="color:#1B4D3E;text-decoration:underline">{{ s.name }}</a></sc-if>
+                  <sc-if value="{{ s.noHref }}" hint-placeholder-val="{{ false }}"><span style="font-size:14px;font-weight:600;color:#1F2937">{{ s.name }}</span></sc-if>
+                  <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#9CA3AF;margin-top:2px">{{ s.route }}</div>
+                </td>
+                <td style="padding:13px 14px;vertical-align:top;font-size:13px;color:#4B5563;max-width:250px">{{ s.job }}</td>
+                <td style="padding:13px 14px;vertical-align:top;font-size:13px;color:#6B7280;max-width:290px">{{ s.contains }}</td>
+                <td style="padding:13px 18px;vertical-align:top"><span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;background:{{ s.stBg }};color:{{ s.stColor }}">{{ s.status }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h2 style="margin:0 0 4px;font-size:17px;font-weight:600;color:#1F2937">Not surfaces</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:14px">Things in the flow that we don't design, so nothing looks unaccounted for.</div>
+    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:6px 18px;margin-bottom:32px">
+      <sc-for list="{{ others }}" as="o" hint-placeholder-count="4">
+        <div style="display:flex;align-items:flex-start;gap:14px;padding:12px 0;border-top:1px solid #F0EEEA;flex-wrap:wrap">
+          <div style="width:230px;flex:none;min-width:180px">
+            <div style="font-size:13.5px;font-weight:500;color:#1F2937">{{ o.name }}</div>
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#9CA3AF;margin-top:2px">{{ o.route }}</div>
+          </div>
+          <div style="flex:1;min-width:240px;font-size:13px;color:#6B7280">{{ o.why }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <h2 style="margin:0 0 4px;font-size:17px;font-weight:600;color:#1F2937">Journeys</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:16px">Six journeys, down from fourteen — the earlier list was mostly sub-states of these, and journey 6 is new. One person does all of it, so nothing here splits by role. Steps marked <span style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B45309">Ext</span> happen on the payer's portal, outside anything we control.</div>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <sc-for list="{{ journeys }}" as="j" hint-placeholder-count="5">
+        <section style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="padding:15px 18px;border-bottom:1px solid #E8E5E0;display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap">
+            <span style="width:24px;height:24px;border-radius:50%;background:{{ j.dotBg }};color:#FFFFFF;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-top:1px">{{ j.n }}</span>
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:15px;font-weight:600;color:#1F2937">{{ j.title }}</div>
+              <div style="font-size:13px;color:#6B7280;margin-top:2px">{{ j.who }}</div>
+            </div>
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:500;white-space:nowrap;flex:none;background:{{ j.stBg }};color:{{ j.stColor }}">{{ j.status }}</span>
+            <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:4px;font-size:12px;font-weight:600;white-space:nowrap;flex:none;background:{{ j.phBg }};color:{{ j.phColor }}">{{ j.freq }}</span>
+          </div>
+
+          <div style="padding:16px 18px">
+            <div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:12px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#047857;width:44px;flex:none;padding-top:3px">Start</span>
+              <div style="flex:1;min-width:0;font-size:13.5px;color:#1F2937">{{ j.start }}</div>
+            </div>
+
+            <div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:12px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;width:44px;flex:none;padding-top:3px">Path</span>
+              <div style="flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+                <sc-for list="{{ j.steps }}" as="st" hint-placeholder-count="4">
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:4px;background:{{ st.bg }};border:1px solid {{ st.border }};font-size:12.5px;color:#1F2937;white-space:nowrap">
+                    <sc-if value="{{ st.external }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B45309">Ext</span></sc-if>
+                    {{ st.label }}
+                  </span>
+                  <sc-if value="{{ st.sep }}" hint-placeholder-val="{{ true }}"><span style="color:#C9C5BE;font-size:13px">→</span></sc-if>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:flex-start;gap:11px">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1B4D3E;width:44px;flex:none;padding-top:3px">End</span>
+              <div style="flex:1;min-width:0;font-size:13.5px;color:#1F2937">{{ j.end }}</div>
+            </div>
+
+            <sc-if value="{{ j.hasNote }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:13px;padding-top:12px;border-top:1px solid #F0EEEA;font-size:12.5px;color:#8A6420">{{ j.note }}</div>
+            </sc-if>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+
+    <h2 style="margin:32px 0 4px;font-size:17px;font-weight:600;color:#1F2937">Inside the capture loop</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:14px">Journey 5 is one ladder, and it lives on the Template Editor's online-form step — not on a page of its own. Only <span style="font-weight:500;color:#1F2937">capture</span> leaves the app, and that step is the seam that doesn't exist.</div>
+    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;padding:20px 22px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:16px">
+        <sc-for list="{{ panelModes }}" as="m" hint-placeholder-count="5">
+          <span style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:4px;background:{{ m.bg }};border:1px solid {{ m.border }};font-size:13px;color:#1F2937;white-space:nowrap">
+            <sc-if value="{{ m.external }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#B45309">Ext</span></sc-if>
+            {{ m.label }}
+          </span>
+          <sc-if value="{{ m.sep }}" hint-placeholder-val="{{ true }}"><span style="color:#C9C5BE;font-size:13px">→</span></sc-if>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #E8D9B5;border-radius:6px;background:#FCFBF7;padding:15px 17px">
+        <div style="font-size:14px;font-weight:600;color:#1F2937;margin-bottom:4px">The capture step is a placeholder with no actor</div>
+        <div style="font-size:13px;color:#6B5A33;text-wrap:pretty">Today it reads "Capture this form's fields" and names nobody. Whoever performs it needs to be on the live portal page, which means the extension — and the extension can't write what it finds. That single unresolved sentence is what blocks journey 5.</div>
+      </div>
+    </div>
+
+    <h2 style="margin:32px 0 4px;font-size:17px;font-weight:600;color:#1F2937">Enablers, in blocking order</h2>
+    <div style="font-size:13.5px;color:#6B7280;margin-bottom:14px">Engineering work the journeys above assume. Read against the repo, not remembered — but confirm each before treating it as fact.</div>
+    <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:800px;border-collapse:collapse">
+          <thead>
+            <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+              <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF;width:34px">#</th>
+              <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Enabler</th>
+              <th scope="col" style="text-align:left;padding:11px 14px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Why it blocks</th>
+              <th scope="col" style="text-align:left;padding:11px 18px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Blocks</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ enablers }}" as="e" hint-placeholder-count="7">
+              <tr style="border-top:1px solid #F0EEEA">
+                <td style="padding:13px 18px;vertical-align:top;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:#9CA3AF">{{ e.n }}</td>
+                <td style="padding:13px 14px;vertical-align:top;font-size:13.5px;font-weight:500;color:#1F2937;max-width:220px">{{ e.name }}</td>
+                <td style="padding:13px 14px;vertical-align:top;font-size:13px;color:#6B7280;max-width:340px">{{ e.why }}</td>
+                <td style="padding:13px 18px;vertical-align:top;font-size:12.5px;color:#6B7280;white-space:nowrap">{{ e.blocks }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border:1px solid #E8E5E0;border-left:3px solid #C69A3F;border-radius:6px;background:#FCFBF7;margin-top:20px">
+      <div style="font-size:13px;color:#6B5A33"><span style="font-weight:600;color:#5A4B27">Recommended order of attack.</span> <span style="font-weight:600">Journey 2 first</span> — fix the picker and the copy card. It is the whole MVP value, it needs nothing from engineering beyond enabler 7, and it replaces retyping from a spreadsheet. Then <span style="font-weight:600">journey 4</span>, because losing track of what was already submitted is a named failure and today’s guard fires too late to prevent it. Then <span style="font-weight:600">journey 1</span>, whose two undrawn handoff branches are what make arriving reliable. Journey 3 (fill) is phase 2 — coordinators verify every field regardless, so it saves less than it looks like it does. Journey 5 waits on enabler 1; designing it before the row shape is settled means designing it twice.</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const tone = (t) => ({
+      green: { bg: "#E7F5EF", color: "#047857" },
+      amber: { bg: "#FBF0E1", color: "#B45309" },
+      red: { bg: "#FEF2F2", color: "#B91C1C" },
+      blue: { bg: "#E8EEFD", color: "#1D4ED8" },
+      gray: { bg: "#F1F1EF", color: "#6B7280" }
+    }[t]);
+
+    const mkSurface = (name, route, href, job, contains, status, t) => {
+      const s = tone(t);
+      return { name, route, href, hasHref: !!href, noHref: !href, job, contains, status, stBg: s.bg, stColor: s.color };
+    };
+
+    const surfaces = [
+      mkSurface("Sign in", "#view-signin", "7 - Workbench Panel.dc.html",
+        "Authenticate as the same user as the web app.",
+        "Email + password against Supabase auth · a handoff hint when a case is already waiting · session lives in chrome.storage.session and refreshes on demand",
+        "Built", "green"),
+      mkSurface("Organization", "#org-select", "7 - Workbench Panel.dc.html",
+        "Establish which org the panel operates as.",
+        "Single-org users see it read-only and send no header; multi-org users must pick before anything loads. Switching clears provider, case, location and reports.",
+        "Built", "green"),
+      mkSurface("Standalone search", "#search-section", "",
+        "Find a case or provider cold, with no handoff.",
+        "One input querying cases and providers concurrently, each half degrading independently",
+        "Built", "green"),
+      mkSurface("Provider quick cards", "#provider-card", "7 - Workbench Panel.dc.html",
+        "Read and copy the identifiers a portal form asks for.",
+        "Name + DOB header · monospace hover-copy ID rows · license and malpractice with expiry badges · em-dash empties carrying the unresolved reason · the provider's active cases below",
+        "Built", "green"),
+      mkSurface("Customize view", "#view-settings", "7 - Workbench Panel.dc.html",
+        "Choose which values sit on the card.",
+        "127 fields across 7 groups. Ships with labels right-aligned outside their rows, inconsistent widths, and no reachable Save.",
+        "Built — broken", "red"),
+      mkSurface("Fill ladder", "#fill-section", "7 - Workbench Panel.dc.html",
+        "Assemble enough context to fill, then fill.",
+        "Location and case selectors · case context · portal-detection banner · coverage panel with gaps · the Fill button and its hard gate",
+        "Built", "green"),
+      mkSurface("Fill report", "#fill-results", "",
+        "Show what filled, what didn't, and why.",
+        "Filled count · skipped with reasons · needs-manual list · gap flag · payer reference and note · Mark submitted with its duplicate guard",
+        "Built", "green"),
+      mkSurface("Log a touch", "#touch-section", "",
+        "Record an interaction with no fill involved.",
+        "Typed touch with outcome, follow-up date, recipient and tracking ID; retry reuses the idempotency id so it can't double-log",
+        "Built", "green"),
+      mkSurface("Next best action", "#nba-section", "",
+        "Hand the coordinator their next case after a log.",
+        "One server-ranked item or an honest Queue clear, with a work-this-case handback and a webapp deep link. No ranking logic in the extension.",
+        "Built", "green"),
+      mkSurface("Work-in-portal launcher", "WorkInPortalButton (E4.3)", "6 - Case Detail.dc.html",
+        "Hand a case from the web app to the panel.",
+        "One launcher per resolvable portal, derived from the case's open tasks' portal steps, hidden when the case has none. Sends identifiers and URL only.",
+        "Needs a home", "amber"),
+      mkSurface("Online-form step", "Tasks & steps → online-form step", "4 - Template Editor.dc.html",
+        "Own the form's whole lifecycle for one payer.",
+        "Register · capture · map · repair · prove, inline as five modes on the step",
+        "Designed", "green"),
+      mkSurface("Capture surface", "—", "",
+        "Read a live portal form's fields and propose mappings.",
+        "Nothing. The extension cannot write mappings, so there is no code and no design.",
+        "Greenfield", "blue")
+    ];
+
+    const others = [
+      { name: "Chrome's panel header", route: "browser chrome", why: "The bar with the extension name, pin and close is Chrome's. Not restylable, not removable — it is the brand surface, which is why the icons have to be declared in the manifest." },
+      { name: "The payer's portal page", route: "provider.bcbsks.com/…", why: "Someone else's product. We read and write form fields through the content script and never automate its submit — the human presses submit themselves." },
+      { name: "Train flow", route: "/portals/$portalKey/train", why: "A web-app route the panel deep-links to with the field carried in the URL. It is where mapping gaps actually get fixed today." },
+      { name: "Content script", route: "src/content/", why: "No UI. Resolves selectors, sets values through native setters, fires input/change so the page's own validation runs, and reports what it couldn't apply." },
+      { name: "Portal registry", route: "src/shared/portals.ts", why: "One hardcoded portal (bcbs_ks_enrollment). Not a surface, but it caps every journey at a single payer form until it becomes DB-driven." }
+    ];
+
+    const step = (label, external) => ({ label, external: !!external });
+    const phaseTone = (p) => p === "MVP"
+      ? { bg: "#1B4D3E", color: "#FFFFFF" }
+      : p === "Phase 2" ? { bg: "#E8EEFD", color: "#1D4ED8" }
+      : { bg: "#F1F1EF", color: "#6B7280" };
+    const mkJourney = (n, title, who, freq, status, t, start, steps, end, note) => {
+      const s = tone(t);
+      const p = phaseTone(freq);
+      return {
+        n, title, who, freq, status, start, end,
+        stBg: s.bg, stColor: s.color, phBg: p.bg, phColor: p.color,
+        dotBg: t === "green" ? "#1B4D3E" : t === "red" ? "#B91C1C" : t === "amber" ? "#B45309" : "#6B7280",
+        note: note || "", hasNote: !!note,
+        steps: steps.map((x, i) => ({
+          label: x.label, external: x.external, sep: i < steps.length - 1,
+          bg: x.external ? "#FCFBF7" : "#FFFFFF",
+          border: x.external ? "#E8D9B5" : "#E8E5E0"
+        }))
+      };
+    };
+
+    const journeys = [
+      mkJourney(1, "Get to work", "One coordinator — the same person does setup and filling", "MVP", "Built", "green",
+        "Clicking the toolbar icon opens the side panel.",
+        [step("Sign in"), step("Org resolves or is picked"), step("Handoff, search, or browse"), step("A case is active")],
+        "The panel names the org it is operating as and has a case in hand.",
+        "Four entries into one journey, not four journeys: single-org resolve, multi-org pick, a handoff from Case Detail, and cold search. Two branches still need drawing — a handoff arriving while signed out, and a handoff for an org the user isn't a member of, which is discarded with an explicit notice. Search must stay a visible input while no case is active; it can collapse to an icon after."),
+
+      mkJourney(2, "Copy the values a form needs", "One coordinator, on the portal", "MVP", "Built — picker broken", "red",
+        "A case is active and the portal form is open in the tab.",
+        [step("Grouped card"), step("Click a value to copy"), step("Paste into the portal", true), step("Customize what's on the card")],
+        "Every value the form asked for was copied from Minted Panel, and nothing was retyped.",
+        "This is the MVP. It replaces retyping from a spreadsheet, which is what actually happens today. Three things make or break it: the card carries every field the form needs (127 available, grouped, searchable), a copy is one click with unmistakable feedback, and an empty or stale value says so and offers the fix rather than reading as blank. The picker is unusable as shipped — that fix is the release."),
+
+      mkJourney(3, "Fill a form", "One coordinator, on the portal", "Phase 2", "Built", "green",
+        "A case is active, the portal form is detected, and the form is proven.",
+        [step("Context resolved"), step("Fill this page"), step("Portal validates", true), step("Review the report"), step("Fix a gap if one blocks")],
+        "Fields are filled, and the report names everything that wasn't.",
+        "Phase 2 because coordinators verify every field before submitting, so the saving is bounded. Walk-up and handoff are the same journey with different entry context — designing them separately means designing the fill twice. A gap found mid-fill is an interruption of this journey, not its own: a missing mapping routes to the train flow, a missing value to the provider record, and “I fixed it — re-check” improves the live session."),
+
+      mkJourney(4, "Keep the case honest about its progress", "One coordinator", "MVP", "Built — progress is one-way", "amber",
+        "Picking a case up, or finishing something in a portal.",
+        [step("What is already done"), step("Do the thing", true), step("Mark it done"), step("What is left")],
+        "The case reflects what has actually happened, and the coordinator can see what remains without leaving the panel.",
+        "Reframed after the CAQH point: the failure is not only duplicate submissions, it is that progress made outside the app never comes back, so the case stops describing reality. Three consequences. Protection is reactive today — the duplicate guard warns at Mark submitted, after the work is done; it belongs on pickup, “submitted 6 days ago,” before they start. The panel renders the case’s open tasks read-only and cannot complete them, so a step finished in a portal has to be re-recorded in the web app later or is lost — that is enabler 5, and it is what makes progress one-way. And Mark submitted, Log a touch and Next best action are one moment rather than three composers: what happened → what is the reference → what is next."),
+
+      mkJourney(5, "Make a form work", "One coordinator, wearing the ops hat", "Phase 3", "Blocked", "gray",
+        "A template has an online-form step and a portal, and the form isn't proven.",
+        [step("Register portal"), step("Capture fields", true), step("Translate to our fields"), step("Repair drift"), step("Check coverage")],
+        "The form is proven and cases can rely on it.",
+        "One loop, not five journeys — repair is capture again with a filter, partial failure is a state of capture, and prove is the exit condition. The stated pain is translation, not mechanics: payer nomenclature and metadata fields have to be manually interpreted, so the coordinator is “picking fields and hoping it goes well.” A blank mapping grid does not solve that. Whatever gets built should propose a match, show why it proposed it, and reuse decisions already made for other payers with similar labels. Blocked on the write path either way.")
+,
+
+      mkJourney(6, "Check our data against a source", "One coordinator, on a reference site", "Phase 2", "Greenfield", "blue",
+        "A case needs a value confirmed before a step can proceed — CAQH attestation, a license lookup, NPPES.",
+        [step("Case in hand"), step("Open the source", true), step("Compare against our record"), step("Confirm or correct"), step("Logged on the case")],
+        "Our record and the source agree, and the case shows that someone checked.",
+        "New, and it breaks an assumption baked into the whole design: not every portal is a form. CAQH is somewhere you go to read and verify, not to fill — there is nothing to capture and nothing to map, so the register/capture/map/prove ladder does not apply. It needs the registry to model two kinds of portal, form and reference, and it is the honest answer to stale provider data: the panel can show our value beside theirs and let the coordinator correct ours in place. CAQH last attested date already exists in the field catalog.")
+    ];
+
+    const modes = [
+      { label: "Register portal" },
+      { label: "Capture fields", external: true },
+      { label: "Map / train" },
+      { label: "Repair drift" },
+      { label: "Check coverage" }
+    ];
+    const panelModes = modes.map((m, i) => ({
+      label: m.label, external: !!m.external, sep: i < modes.length - 1,
+      bg: m.external ? "#FCFBF7" : "#FFFFFF",
+      border: m.external ? "#E8D9B5" : "#E8E5E0"
+    }));
+
+    const enablers = [
+      { n: 1, name: "portal_field_maps write path", why: "The extension is read-only by locked decision. For it to propose rows as \"proposed\", the boundary has to move — confirm the row shape and who may write.", blocks: "5" },
+      { n: 2, name: "Capture session handshake", why: "How a capture is tied to a template step and a portal key. Does the app mint a token the extension presents back?", blocks: "5" },
+      { n: 3, name: "Portals resolve from the template, not a hardcoded list", why: "Hardcoded in three places: PORTALS is a one-element array, matchPortal() does startsWith() against that literal urlPrefix, and manifest.json names the BCBS KS URL in content_scripts.matches and host_permissions — so even a correctly-resolved second portal gets no content script. A case's portals come from its open tasks' portal steps, which the API already returns, so the launcher is plural: one per resolvable portal, each with its own readiness.", blocks: "1, 3, 5" },
+      { n: 4, name: "Return notification", why: "Poll, subscribe, or refresh-on-revisit. This shapes the return-trip UX more than any visual decision, so it needs answering before design.", blocks: "5" },
+      { n: 5, name: "Task source in the panel", why: "task_id plumbing is ready and the server closes a linked task, but v1 sends none — so the panel can't complete a task.", blocks: "4" },
+      { n: 6, name: "Drift ingestion", why: "formDrift.ts exists and lights the Drift detected KPI. Confirm what actually writes to it before repair depends on it.", blocks: "5" },
+      { n: 7, name: "Quick-card catalog reconcile", why: "The README describes a closed catalog with SSN structurally absent; production exposes 127 fields including SSN last 4. One is wrong.", blocks: "2 — the MVP" },
+      { n: 8, name: "Manifest icons, self-hosted Geist", why: "No icons block and no action.default_icon, hence Chrome's generated \"M\". MV3 CSP blocks the Google Fonts CDN, so Geist ships as woff2 like Instrument Sans does.", blocks: "brand, all" },
+      { n: 9, name: "Payer record gaps", why: "Carried over and still open: no in-app payer-create API, no payer_contacts table, no archive flag or merge, no ID-expectation columns.", blocks: "upstream of all" }
+    ];
+
+    return { surfaces, others, journeys, panelModes, enablers };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #F1EFEA; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    a { color: #1B4D3E; }
+    a:hover { color: #0C2A1D; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;background:#F1EFEA;color:#1F2937;font-family:'Geist',system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums;font-size:14px;line-height:1.5;padding:28px 32px 72px">
+  <div style="max-width:1300px;margin:0 auto;display:flex;flex-direction:column;gap:26px">
+
+    <div>
+      <h1 style="margin:0 0 5px;font-size:24px;font-weight:600;letter-spacing:-.015em">The consolidated vision</h1>
+      <div style="font-size:14px;color:#6B7280;max-width:740px;text-wrap:pretty">Assumes every API and schema change ships first. No blockers, no phasing — this is what the Workbench is when nothing is in the way. Six journeys become one loop, and the product gets cheaper to run the more it is used.</div>
+    </div>
+
+    <div data-screen-label="Series ribbon" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 0px"><span style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;flex:none">Workbench series</span><a href="7 - Workbench Panel.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">7 · Panel conformance</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="8 - Index - Workbench Journeys.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">8 · Journey map</a><span style="color:#C9C5BE;font-size:11px">→</span><a href="9 - Workbench Prototype.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">9 · Full-loop prototype</a><span style="color:#C9C5BE;font-size:11px">→</span><span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;background:#0C2A1D;color:#FFFFFF;font-size:12px;font-weight:500;white-space:nowrap">10 · Consolidated vision</span><span style="color:#C9C5BE;font-size:11px">→</span><a href="11 - Handoff Map.dc.html" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:4px;border:1px solid #DDD9D2;background:#FFFFFF;font-size:12px;text-decoration:none;white-space:nowrap">11 · Handoff map</a><span style="color:#9CA3AF;font-size:12px;margin-left:6px">Returns land in the app: <a href="6 - Case Detail.dc.html">Case Detail</a> · <a href="4 - Template Editor.dc.html">Template Editor</a> · <a href="5 - Case Close and IDs.dc.html">Case Close</a> · <a href="1 - Payer Setup.dc.html">Payer Setup</a></span></div>
+
+    <section data-screen-label="The loop" style="background:#0C2A1D;border-radius:8px;padding:22px 24px">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6E8478;margin-bottom:14px">One journey</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:14.5px;font-weight:500;color:#FFFFFF;white-space:nowrap">Pick up work</span>
+        <span style="color:#5C7A6C;font-size:16px">→</span>
+        <span style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:14.5px;font-weight:500;color:#FFFFFF;white-space:nowrap">See what this page needs</span>
+        <span style="color:#5C7A6C;font-size:16px">→</span>
+        <span style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:14.5px;font-weight:500;color:#FFFFFF;white-space:nowrap">Do it</span>
+        <span style="color:#5C7A6C;font-size:16px">→</span>
+        <span style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:14.5px;font-weight:500;color:#FFFFFF;white-space:nowrap">It records itself</span>
+        <span style="color:#5C7A6C;font-size:16px">→</span>
+        <span style="display:inline-flex;align-items:center;height:38px;padding:0 16px;border-radius:6px;background:#C8DBD4;font-size:14.5px;font-weight:600;color:#0C2A1D;white-space:nowrap">Next</span>
+      </div>
+      <div style="font-size:13.5px;color:#A7B5AD;margin-top:16px;max-width:820px;text-wrap:pretty">A coordinator in a browser only ever does three things: read a value, write a value, or record that something happened. The panel reads the active tab and offers the right one. That removes tabs, modes, and the Progress section as a place you go visit.</div>
+    </section>
+
+    <section data-screen-label="Adaptive surface">
+      <div style="margin-bottom:4px;font-size:17px;font-weight:600">One surface, three contexts</div>
+      <div style="font-size:13.5px;color:#6B7280;margin-bottom:16px;max-width:820px;text-wrap:pretty">Same panel, same case in hand. What changes is the offer, because the panel knows what page you are on. Nobody picks a mode.</div>
+
+      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+
+        <div style="width:340px;flex:none">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#1B4D3E;flex:none"></span>
+            <span style="font-size:12.5px;font-weight:600">On a form we know</span>
+          </div>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#9CA3AF;margin-bottom:9px">banner.com/pnm/enrollment</div>
+          <div style="background:#FDFDFC;border:1px solid #DDD9D2;border-radius:8px;overflow:hidden;min-height:400px">
+            <div style="padding:11px 13px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:8px">
+              <span style="flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Jim Apple · Banner AZ</span>
+              <span style="height:20px;padding:0 7px;border-radius:4px;background:#E7F5EF;color:#047857;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">PROVEN</span>
+            </div>
+            <div style="padding:13px">
+              <div style="padding:11px 12px;background:#0C2A1D;border-radius:6px;margin-bottom:11px">
+                <div style="font-size:13.5px;font-weight:600;color:#FFFFFF;margin-bottom:2px">Fill 18 fields</div>
+                <div style="font-size:12px;color:#A7B5AD">Every field has a value. Nothing will be skipped.</div>
+              </div>
+              <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px">Or copy one</div>
+              <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:9px;height:31px;padding:0 11px;border-bottom:1px solid #F5F4F1"><span style="flex:1;font-size:12px;color:#6B7280">NPI</span><span style="font-family:'Geist Mono',monospace;font-size:12.5px">1234567890</span></div>
+                <div style="display:flex;align-items:center;gap:9px;height:31px;padding:0 11px;border-bottom:1px solid #F5F4F1"><span style="flex:1;font-size:12px;color:#6B7280">CAQH</span><span style="font-family:'Geist Mono',monospace;font-size:12.5px">123456678</span></div>
+                <div style="display:flex;align-items:center;gap:9px;height:31px;padding:0 11px"><span style="flex:1;font-size:12px;color:#6B7280">TIN / EIN</span><span style="font-family:'Geist Mono',monospace;font-size:12.5px">123456789</span></div>
+              </div>
+              <div style="margin-top:13px;padding:10px 11px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;font-size:12px;color:#92400E;text-wrap:pretty">Submitted 6 days ago. Continue anyway?</div>
+            </div>
+          </div>
+          <div style="font-size:12.5px;color:#6B7280;margin-top:9px;text-wrap:pretty">The verb is <span style="color:#1F2937;font-weight:500">write</span>. Fill leads; copying single values stays available because coordinators verify anyway.</div>
+        </div>
+
+        <div style="width:340px;flex:none">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#1D4ED8;flex:none"></span>
+            <span style="font-size:12.5px;font-weight:600">On CAQH</span>
+          </div>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#9CA3AF;margin-bottom:9px">proview.caqh.org</div>
+          <div style="background:#FDFDFC;border:1px solid #DDD9D2;border-radius:8px;overflow:hidden;min-height:400px">
+            <div style="padding:11px 13px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:8px">
+              <span style="flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Jim Apple · Banner AZ</span>
+              <span style="height:20px;padding:0 7px;border-radius:4px;background:#E8EEFD;color:#1D4ED8;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">ATTEST</span>
+            </div>
+            <div style="padding:13px">
+              <div style="font-size:13.5px;font-weight:600;margin-bottom:2px">Update CAQH — 12 fields</div>
+              <div style="font-size:12px;color:#6B7280;margin-bottom:12px;text-wrap:pretty">Fills from our record, then records the attestation. Last attested Mar 14.</div>
+              <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                <div style="padding:9px 11px;border-bottom:1px solid #F5F4F1">
+                  <div style="font-size:11px;color:#9CA3AF;margin-bottom:3px">Specialty</div>
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;text-decoration:line-through;color:#9CA3AF">Physical Therapy</span>
+                    <span style="color:#C9C5BE;font-size:11px">→</span>
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;color:#1F2937">Physical Therapy, Ortho</span>
+                  </div>
+                </div>
+                <div style="padding:9px 11px;border-bottom:1px solid #F5F4F1">
+                  <div style="font-size:11px;color:#9CA3AF;margin-bottom:3px">Malpractice coverage end</div>
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;text-decoration:line-through;color:#9CA3AF">Mar 1, 2026</span>
+                    <span style="color:#C9C5BE;font-size:11px">→</span>
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;color:#1F2937">Mar 1, 2027</span>
+                  </div>
+                </div>
+                <div style="padding:9px 11px">
+                  <div style="font-size:11px;color:#9CA3AF;margin-bottom:3px">Group NPI</div>
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-size:12px;color:#B45309">Not on file</span>
+                    <span style="color:#C9C5BE;font-size:11px">→</span>
+                    <span style="font-family:'Geist Mono',monospace;font-size:12px;color:#1F2937">9876543210</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:12px">
+                <span style="height:32px;padding:0 13px;background:#1B4D3E;border-radius:4px;color:#FFFFFF;font-size:12.5px;font-weight:500;display:inline-flex;align-items:center">Fill this page</span>
+                <span style="font-size:12.5px;color:#6B7280">Then attest</span>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:12.5px;color:#6B7280;margin-top:9px;text-wrap:pretty">The verb is <span style="color:#1F2937;font-weight:500">write</span> — coordinators keep CAQH current and attest, so CAQH is a destination like any form. Pulling a value back is the exception, not the flow.</div>
+        </div>
+
+        <div style="width:340px;flex:none">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#C69A3F;flex:none"></span>
+            <span style="font-size:12.5px;font-weight:600">On a form we don't know</span>
+          </div>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:#9CA3AF;margin-bottom:9px">somepayer.com/credentialing</div>
+          <div style="background:#FDFDFC;border:1px solid #DDD9D2;border-radius:8px;overflow:hidden;min-height:400px">
+            <div style="padding:11px 13px;border-bottom:1px solid #E8E5E0;display:flex;align-items:center;gap:8px">
+              <span style="flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Jim Apple · Banner AZ</span>
+              <span style="height:20px;padding:0 7px;border-radius:4px;background:#FBF0E1;color:#B45309;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;flex:none">NEW</span>
+            </div>
+            <div style="padding:13px">
+              <div style="padding:11px 12px;background:#FFFFFF;border:1px solid #C8DBD4;border-radius:6px;margin-bottom:12px">
+                <div style="font-size:13.5px;font-weight:600;margin-bottom:2px">We recognise 14 of 19 fields</div>
+                <div style="font-size:12px;color:#6B7280;text-wrap:pretty">Matched from labels seen on 11 other payers. Confirm and this form is set up for everyone.</div>
+                <div style="display:flex;align-items:center;gap:9px;margin-top:10px">
+                  <span style="height:30px;padding:0 12px;background:#1B4D3E;border-radius:4px;color:#FFFFFF;font-size:12.5px;font-weight:500;display:inline-flex;align-items:center">Review 19 matches</span>
+                </div>
+              </div>
+              <div style="font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px">Their label → ours</div>
+              <div style="background:#FFFFFF;border:1px solid #E8E5E0;border-radius:6px;overflow:hidden">
+                <div style="padding:8px 11px;border-bottom:1px solid #F5F4F1">
+                  <div style="font-size:12px;color:#1F2937">Individual Practitioner ID</div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span style="font-size:11.5px;color:#047857;font-weight:500">NPI number</span><span style="font-size:10.5px;color:#9CA3AF">· seen on 9 payers</span></div>
+                </div>
+                <div style="padding:8px 11px;border-bottom:1px solid #F5F4F1">
+                  <div style="font-size:12px;color:#1F2937">Fed. Tax Identification</div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span style="font-size:11.5px;color:#047857;font-weight:500">TIN / EIN</span><span style="font-size:10.5px;color:#9CA3AF">· seen on 11 payers</span></div>
+                </div>
+                <div style="padding:8px 11px">
+                  <div style="font-size:12px;color:#1F2937">Svc Loc Effective Dt</div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span style="font-size:11.5px;color:#B45309;font-weight:500">No match — pick one</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:12.5px;color:#6B7280;margin-top:9px;text-wrap:pretty">The verb is <span style="color:#1F2937;font-weight:500">record</span>. This is capture, but it never shows a blank grid — it proposes, and says why.</div>
+        </div>
+      </div>
+    </section>
+
+    <section data-screen-label="The spine" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:22px 24px">
+      <div style="margin-bottom:4px;font-size:17px;font-weight:600">The field catalog is the spine</div>
+      <div style="font-size:13.5px;color:#6B7280;margin-bottom:18px;max-width:860px;text-wrap:pretty">One row per field. Every feature is a column on the same list rather than a separate product — which is why mapping stops feeling like a second job. A coordinator lives in this list all day; “what does this payer call it” is one more column, not a different screen.</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:860px;border-collapse:collapse">
+          <thead>
+            <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Field</th>
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#1B4D3E">Our value</th>
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#B45309">Banner calls it</th>
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#1D4ED8">Sent to CAQH</th>
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Verified</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px;font-weight:500">NPI number</td>
+              <td style="padding:11px 14px;font-family:'Geist Mono',monospace;font-size:12.5px">1234567890</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#6B7280">Individual NPI</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#047857">attested</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#6B7280">4 days ago</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px;font-weight:500">Specialty</td>
+              <td style="padding:11px 14px;font-family:'Geist Mono',monospace;font-size:12.5px">Physical Therapy</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#6B7280">Primary Taxonomy</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#047857">attested</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#6B7280">4 days ago</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px;font-weight:500">Group NPI</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#B45309">Not on file</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#6B7280">Billing Group NPI</td>
+              <td style="padding:11px 14px;font-family:'Geist Mono',monospace;font-size:12.5px;color:#1D4ED8">9876543210 · gap</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#9CA3AF">never</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px;font-weight:500">Malpractice coverage end</td>
+              <td style="padding:11px 14px;font-family:'Geist Mono',monospace;font-size:12.5px">Mar 1, 2026</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#9CA3AF">not asked</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#9CA3AF">not sent</td>
+              <td style="padding:11px 14px;font-size:12.5px;color:#B45309">11 months ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:20px">
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px">Details is a view on it</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Field + our value, filtered to what the coordinator chose.</div>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px">Mapping is a view on it</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Field + what this payer calls it. Same list, one column over.</div>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px">Attestation is a view on it</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Field + what CAQH last received, so attesting is a review, not a re-entry.</div>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:2px">Freshness is a view on it</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Field + when it was last confirmed. Stale becomes a real state.</div>
+        </div>
+      </div>
+    </section>
+
+    <section data-screen-label="Compounding" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:22px 24px">
+      <div style="margin-bottom:4px;font-size:17px;font-weight:600">Where the continuous improvement comes from</div>
+      <div style="font-size:13.5px;color:#6B7280;margin-bottom:18px;max-width:860px;text-wrap:pretty">Today payer 60 costs the same as payer 6 — every setup starts from a blank grid, and the coordinator is the only place the knowledge lives. If labels live on the spine, each payer makes the next one cheaper. This is the part nothing in the current product does.</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:250px;padding:15px 16px;background:#FDFDFC;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;margin-bottom:7px">01</div>
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:3px">Every mapping teaches the next</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">"Individual Practitioner ID" resolved to NPI once. The next payer that says something similar arrives pre-matched, with the count of payers it was learned from as the reason.</div>
+        </div>
+        <div style="flex:1;min-width:250px;padding:15px 16px;background:#FDFDFC;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;margin-bottom:7px">02</div>
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:3px">Every drift repair hardens the form</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">A selector that broke once and was fixed becomes a known-fragile field. Coverage checks watch it first instead of finding it again on a real submission.</div>
+        </div>
+        <div style="flex:1;min-width:250px;padding:15px 16px;background:#FDFDFC;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;margin-bottom:7px">03</div>
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:3px">Every attestation dates the data</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">Pushing our record to CAQH and attesting stamps every field it carried. Stale stops being invisible without anyone running a cleanup project.</div>
+        </div>
+        <div style="flex:1;min-width:250px;padding:15px 16px;background:#FDFDFC;border:1px solid #E8E5E0;border-radius:6px">
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#9CA3AF;margin-bottom:7px">04</div>
+          <div style="font-size:13.5px;font-weight:600;margin-bottom:3px">Every submission proves the path</div>
+          <div style="font-size:12.5px;color:#6B7280;text-wrap:pretty">A form that filled cleanly and was accepted is evidence, not a guess. First-pass rate per payer becomes the number that tells you which payers to trust unattended.</div>
+        </div>
+      </div>
+    </section>
+
+    <section data-screen-label="What this replaces" style="background:#FFFFFF;border:1px solid #DDD9D2;border-radius:8px;padding:22px 24px">
+      <div style="margin-bottom:14px;font-size:17px;font-weight:600">What collapses</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:760px;border-collapse:collapse">
+          <thead>
+            <tr style="background:#FBFBF9;border-bottom:1px solid #E8E5E0">
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Was</th>
+              <th scope="col" style="text-align:left;padding:10px 14px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#9CA3AF">Becomes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px">Journey 1 — get to work</td>
+              <td style="padding:11px 14px;font-size:13px;color:#6B7280">The panel opens on what is next. Handoff, search and the queue are three ways of changing what is in hand, not three journeys.</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px">Journeys 2 and 3 — copy, fill</td>
+              <td style="padding:11px 14px;font-size:13px;color:#6B7280">One offer that scales to the page. A proven form leads with fill; anything else leads with the values.</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px">Journey 4 — progress</td>
+              <td style="padding:11px 14px;font-size:13px;color:#6B7280">No tab. Finishing the work <em>is</em> the progress — the panel infers it and asks for one confirmation.</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px">Journey 5 — the capture ladder</td>
+              <td style="padding:11px 14px;font-size:13px;color:#6B7280">Register, capture, map, repair and prove stop being five modes. An unknown form proposes its own matches; a broken one proposes its repairs.</td>
+            </tr>
+            <tr style="border-top:1px solid #F0EEEA">
+              <td style="padding:11px 14px;font-size:13px">Journey 6 — keep CAQH current</td>
+              <td style="padding:11px 14px;font-size:13px;color:#6B7280">CAQH is a destination, not a source: fill it from our record and attest. A gap only CAQH holds can be pulled back, which is rare.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:11px;padding:13px 16px;border:1px solid #E8E5E0;border-left:3px solid #C69A3F;border-radius:6px;background:#FCFBF7;margin-top:18px">
+        <div style="font-size:13px;color:#6B5A33"><span style="font-weight:600;color:#5A4B27">What this asks of the backend, beyond what's in motion.</span> Three things the current API set does not cover: a label-to-field learning store so a mapping made on one payer can be proposed on another (with the payer count as its evidence); a per-field last-verified timestamp so freshness is a real state rather than an inference; and an attestation write, so recording a CAQH attestation stamps the fields it carried and sets CAQH last attested date. Everything else in this vision rides what you already have in flight.</div>
+      </div>
+    </section>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+      <a href="8 - Index - Workbench Journeys.dc.html" style="text-decoration:none;font-weight:500">← Journey index</a>
+      <a href="9 - Workbench Prototype.dc.html" style="text-decoration:none;font-weight:500">MVP prototype →</a>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:1000}}"></script>
+</body>
+</html>
