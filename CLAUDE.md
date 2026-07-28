@@ -2428,16 +2428,40 @@ built only when a real consumer pulls them. The current surface:
   user across orgs), stored in `user_table_prefs` under
   `page_key 'extension.quickCards'` keyed by the JWT-verified user id (never a
   client-supplied id — that scoping IS the isolation under the service-role
-  client). GET returns `{ fields: string[] | null }` (null = nothing saved; the
-  envelope's `data` is never null so the extension never treats it as an error).
-  PUT accepts `{ fields: string[] }` validated to a bounded (≤32), deduplicated,
-  ORDERED array of CLOSED-catalog keys (`src/lib/quickCardCatalog.ts`
-  `validateQuickCardFields`) — anything else (unknown/excluded key, duplicate,
-  non-string, over-length) is a 422. The catalog is a server-owned allowlist of
-  the BARE profile-exposed token keys; `provider.ssnLast4` and the E4.4
-  fill-only/vault category are STRUCTURALLY excluded (absent from the list, so a
-  hand-crafted PUT naming one 422s). Not a PHI read/write (a list of field
-  KEYS, no values) — no audit row.
+  client). **SCHEMA-DERIVED since 2026-07-28** (supersedes the TE-16 hand-written
+  allowlist): GET returns `{ fields: string[] | null, catalog: QuickCardField[] }`
+  — the saved layout (null = nothing saved; the envelope's `data` is never null
+  so the extension never treats it as an error) PLUS the selectable fields, so
+  the picker and the PUT validator read one source in one round trip. PUT accepts
+  `{ fields: string[] }` validated to a deduplicated, ORDERED array of keys drawn
+  from that same derived catalog; a duplicate, non-string, or out-of-catalog key
+  is a 422. The **32-field cap is gone** (the picker groups by section, so length
+  stopped mattering; the closed key set already bounds the body).
+  `getQuickCardCatalog` (`extensionViewPrefs.ts`) calls **the same
+  `get_sop_field_tokens()` the profile endpoint resolves values from**, then the
+  pure `buildQuickCardCatalog` (`src/lib/quickCardCatalog.ts`) applies TWO
+  exclusion rules: case-scoped tables (payers/msos/contracts — never resolve on a
+  profile) and eleven named internal/audit tokens (`provider.launchId`,
+  `verificationState`, `isTestProvider`, `referenceOnly`, `terminatedDate`,
+  `facility.referenceOnly`/`statusId`, the `license.verified*` PSV trail,
+  `groupInsurance.notes`). **75 offered keys → 117.** The old hand-list had made
+  the group's ENTIRE correspondence block, `provider.home{Street,City,Zip}`, and
+  facility `email`/`hours`/`effectiveDate` unreachable on a card even though the
+  profile resolved them. `provider.ssnLast4` is now OFFERED (product decision);
+  the FULL SSN stays structurally unreachable — it lives in `provider_ssn_vault`,
+  which `get_sop_field_tokens()` does not sweep, so no token can name it.
+  **`get_sop_field_tokens()` is NOT curated** — it reads
+  `information_schema.columns` over nine tables and drops only keys/FKs/status
+  columns, so any new column on the six card-eligible tables becomes a token
+  automatically. `quickCardCatalog.test.ts` is what makes a deny-list safe here:
+  it reconstructs the RPC's output from the checked-in `types.ts` (verified
+  byte-identical to the live 126 non-case-scoped tokens) and diffs it against a
+  pinned `ACKNOWLEDGED_TOKENS` snapshot — a new column fails the suite BY NAME
+  until someone classifies it. Do not delete that test to make a build pass.
+  Not a PHI read/write (field KEYS + schema metadata, no values) — no audit row.
+  NB the extension still ships a stale verbatim mirror of the old 75-key list in
+  `src/shared/quickCards.ts`; it must be deleted and the picker driven from the
+  served `catalog` (extension-repo work, not done here).
 - `GET /api/next-best-action` — the extension's log-and-advance queue-top read
   (E4.3 F4.3.4/TE-6, `src/services/nextBestAction.ts`). A guarded, org-scoped
   read that ASSEMBLES the same ~17 org caches the browser My Cases queue
@@ -2486,6 +2510,42 @@ built only when a real consumer pulls them. The current surface:
   fails the request) — R2 locked decision 4, 2026-07-05, superseding the
   same-day rely-on-fill_sessions decision (both recorded in
   `docs/minted-panel-release-plan.md`).
+- `POST /api/portal-field-maps` — **propose-only** field-map write (2026-07-28).
+  The extension reports a field the fill engine met that nothing maps. The row is
+  ALWAYS written `status 'proposed'`, `source 'manual'`, `token null`, under the
+  CALLER'S org — never global (`org_id NULL` rows are platform catalog entries),
+  whatever the body says. Approving stays a human act in the E6.5 SOP-editor
+  trainer: a client that could write `approved` with a token would silently
+  redirect what autofills into a payer form. Blast radius worth knowing: the
+  extension fills proposed AND approved maps (only `retired` is skipped), so the
+  row IS live — but with no token it fills nothing; it just surfaces in the
+  trainer queue and `mappingCoverage`. Idempotent on `(portal_key, selector)` —
+  the dedupe lookup spans GLOBAL rows too (the shared catalog is authoritative
+  for portal truths), so a covered selector returns the existing row (200) and a
+  first sighting 201. `portal_key`/`field_label` fold through
+  `normalizePortalKey`/`normalizeFieldLabel` at the write boundary, so a proposal
+  joins the `field_dictionary`'s learned suggestions. Writer roles only; audited
+  on create only. `proposeFieldMap` in `src/services/portalFieldMaps.ts`.
+- `GET /api/portals[?portal_key=...]` — the DB-driven payer-portal registry
+  (2026-07-28), so portal identity stops being a hardcoded list in the extension
+  bundle. Own-org rows + GLOBAL registry rows (the E6.5 tier), the shared-catalog
+  read pattern; `?portal_key` folds through `normalizePortalKey`. Read-only, not
+  PHI — no audit row, no role gate (billing may read), mirroring the field-maps
+  route it pairs with. `listPortalsForApi` in `src/services/portals.ts` (a server
+  ctx path beside the browser path, the `portalFieldMaps.ts` dual-surface idiom).
+- `POST /api/providers/:id/caqh-attestation` — record a CAQH re-attestation
+  (2026-07-28). The column + its 120-day freshness rule shipped in E1.8; only the
+  write was missing, so a coordinator who re-attested in the CAQH portal had to
+  reopen the webapp or leave every readiness row red on a stale date. Body
+  `{ attested_on?: "YYYY-MM-DD" }` defaulting to today; a FUTURE date is a 422 (an
+  attestation records what already happened, and accepting one would silently
+  extend the E1.8 window past what a payer honours). Writes through the existing
+  `updateProvider` DI path, so org scoping / the cross-tenant org strip / the
+  UPDATE audit row all come from there. The response is deliberately NARROW —
+  `{ id, caqhLastAttestedDate, currentThroughDays }` (the last imported from
+  `enrollmentReadiness.CAQH_CURRENT_DAYS`, so the extension never hardcodes a
+  second window) — never the PHI-dense row PATCH returns; pinned by a test.
+  Writer roles only; cross-org id 404s before any write.
 - `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
   rows (global, selectors are portal truths) + the caller's org overrides
   (`src/services/portalFieldMaps.ts`).
@@ -2537,7 +2597,24 @@ payerReferenceId, payerPipelineState }` — never beyond the list projections). 
   gate assertions **8c** (own portalTasks reference only own-org tasks) + **8d**
   (cross-org request never leaks a South Park task id via portalTasks, red under
   the `cases` leak mode). (`src/services/providerCases.ts`)
-- `POST /api/cases/:id/touches` — the "Mark submitted" business log. R2 core:
+- `POST /api/cases/:id/touches` — the "Mark submitted" business log. **Opt-in
+  status bump (2026-07-28):** `bump_status: true` on a `portal_submission` also
+  moves the case to Submitted via `set_case_status`, evidenced by the touch just
+  written (422 on `structured_touch` — no single target). The R2 rule that the
+  extension never changes status IMPLICITLY still holds; this is explicit and
+  off by default. **It rides `ctx.asUser()`, NOT the service-role `ctx.db`** —
+  `set_case_status` is SECURITY INVOKER and leans on RLS to scope its
+  `SELECT … FOR UPDATE`, on `user_role()` to authorize, and on `auth.uid()` to
+  stamp the actor; under the service key all three break at once (the lock
+  reaches any org's case, the actor is NULL, `user_role()` denies). `asUser()` is
+  the new `AuthContext` member: a lazily-created client bound to the caller's own
+  JWT (`getAuthClient`), so every transition rule stays where it lives instead of
+  being reimplemented behind the service key. Use it for ANY SECURITY INVOKER RPC
+  added later. Semantics mirror the E6.6 Add-touch bump: target always Submitted
+  (never caller-supplied), `expectedStatus` null, runs last and only on a first
+  create (a replay can't double-apply), and a REJECTED transition never unwinds
+  the touch — the outcome rides `meta.status_bump`/`status_bump_reason` (errors
+  mapped to safe text, never raw SQL) so `data` stays exactly the touch. R2 core:
   ONE append-only anchor touchpoint (`touch_type 'portal'`, `outcome
 'submitted'`, `source 'extension'`, text "Application submitted via <portal
   label>"); `idempotency_id` is its PK (same replay semantics as fill-events).
