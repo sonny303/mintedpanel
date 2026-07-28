@@ -1,17 +1,37 @@
-// 2026-07-20 catalog UX pass (item 8) — the read-only payer drill-in behind
-// the Payer Setup catalog list. Un-nested from the catalog segment (the
-// `catalog_` idiom, like generation_.runs) so it renders as its own page, not
-// inside the tab layout. Renders for ALL roles like the catalog itself (E6.1
-// interim posture); the network actions inside self-gate to admin and the
-// RLS/RPC layer backstops every write.
-import { createFileRoute } from "@tanstack/react-router";
-import { PayerDetailContent } from "@/components/payers/PayerDetailContent";
+// Slice G — the payer drill-in moved with its parent segment (catalog →
+// setup). This shell keeps every bookmarked /admin/payer-admin/catalog/
+// $payerId link alive AND carries its state through: `?tab=` (the Slice C
+// shareable tab, also how the folded scorecard route lands) and `?edit=1`
+// (the retired standalone edit page's intent). Dropping either would break
+// those two redirects, so both are re-validated here and forwarded.
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { parsePayerDetailTab, type PayerDetailTab } from "@/lib/payerDetailView";
+
+interface LegacyPayerDetailSearch {
+  tab?: PayerDetailTab;
+  edit?: boolean;
+}
 
 export const Route = createFileRoute("/admin/payer-admin/catalog_/$payerId")({
-  component: PayerDetailPage,
+  validateSearch: (search: Record<string, unknown>): LegacyPayerDetailSearch => {
+    const out: LegacyPayerDetailSearch = {};
+    if (search.tab !== undefined) out.tab = parsePayerDetailTab(search.tab);
+    if (search.edit === true || search.edit === "true" || search.edit === "1") out.edit = true;
+    return out;
+  },
+  beforeLoad: ({ params, search }) => {
+    // The search FUNCTION form is required: passing the validated object
+    // through carries the raw query string verbatim, so a legacy `?edit=1`
+    // would propagate into the new URL space forever. Returning a fresh
+    // object makes the router serialize the canonical spelling.
+    throw redirect({
+      to: "/admin/payer-admin/setup/$payerId",
+      params: { payerId: params.payerId },
+      search: () => ({
+        ...(search.tab ? { tab: search.tab } : {}),
+        ...(search.edit ? { edit: true } : {}),
+      }),
+      replace: true,
+    });
+  },
 });
-
-function PayerDetailPage() {
-  const { payerId } = Route.useParams();
-  return <PayerDetailContent payerId={payerId} />;
-}

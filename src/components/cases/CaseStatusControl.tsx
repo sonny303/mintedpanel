@@ -4,6 +4,11 @@
 // dialogs (Approved / Denied / Not Pursuing) + the admin-only append-only
 // correction (F6.0.4). Replaces both the E4.0 PayerPipelineControl and the
 // internal ChangeStatusDialog — one status, one control.
+//
+// Slice E (payer-and-cases screen 6): the trigger reads "Update status", every
+// menu entry carries the one-line hint that says what the move demands, and
+// the attribution sentence beneath names the current status, the actor, and —
+// when the transition was evidenced by a touch — that evidence.
 import { useMemo, useState } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { ChevronDown } from "lucide-react";
@@ -35,7 +40,8 @@ import {
   isTerminalCaseStatus,
   type CaseStatus,
 } from "@/lib/caseStatus";
-import type { CaseDetail, DenialReasonCode } from "@/types";
+import { touchTypeLabel } from "@/lib/touchTypes";
+import type { CaseDetail, DenialReasonCode, TouchType } from "@/types";
 
 type DialogState =
   | { kind: "transition"; to: CaseStatus }
@@ -44,6 +50,44 @@ type DialogState =
   | { kind: "not_pursuing" }
   | { kind: "correct" }
   | null;
+
+// One menu entry: the move on top, its demand underneath (screen 6).
+function MenuMove({
+  label,
+  hint,
+  onSelect,
+}: {
+  label: string;
+  hint: string;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenuItem onSelect={onSelect} className="flex flex-col items-start gap-0.5 py-2">
+      <span className="text-[13.5px] font-medium text-foreground">{label}</span>
+      <span className="text-[12px] text-muted-foreground">{hint}</span>
+    </DropdownMenuItem>
+  );
+}
+
+// Screen 6's menu hints: what each move demands, in one line.
+const MOVE_HINTS: Partial<Record<CaseStatus, string>> = {
+  not_started: "Back to the start — optional note",
+  in_progress: "Back to rework — optional note",
+  submitted: "Sent to the payer — optional note",
+  in_review: "The payer is reviewing — optional note",
+  action_required: "The payer needs something — optional note",
+};
+
+const CLOSE_HINTS: Record<string, string> = {
+  approved: "Effective date + the IDs this payer issues",
+  denied: "Reason from the governed list",
+  not_pursuing: "Deliberate opt-out — note required",
+};
+
+// Copy is deliberately narrow: this menu path runs set_case_status ONLY. Task
+// regeneration lives in ReapplyCaseAction (appendCaseTasks) — promising "a
+// fresh task cycle" here would describe work this path never does.
+const REAPPLY_HINT = "Reopens this same case — the prior denial stays in its history";
 
 export function CaseStatusControl({
   c,
@@ -78,6 +122,14 @@ export function CaseStatusControl({
       .slice()
       .sort((a, b) => parseISO(b.changedAt).getTime() - parseISO(a.changedAt).getTime())[0];
   }, [c.caseStatusHistory]);
+
+  // Screen 6's attribution sentence: "Action Required · 2d ago by Sowmya —
+  // evidence: portal touch". The evidence clause appears only when the
+  // transition carried one (F6.0.3).
+  const evidenceTouch = useMemo(() => {
+    if (!latest?.evidenceTouchId) return null;
+    return (c.touches ?? []).find((t) => t.id === latest.evidenceTouchId) ?? null;
+  }, [latest?.evidenceTouchId, c.touches]);
 
   function handleError(e: unknown) {
     if (e instanceof CaseStatusError && e.code === "case_status_conflict") {
@@ -116,28 +168,32 @@ export function CaseStatusControl({
       <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
         Status
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <CaseStatusPill status={status} />
         {hasMenu ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-6 text-[11px] px-2">
-                Update <ChevronDown className="ml-1 h-3 w-3" />
+              <Button size="sm" className="h-8 bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+                Update status <ChevronDown className="ml-1 h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-[300px]">
               {openTargets.length > 0 ? (
                 <>
                   <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Move to
                   </DropdownMenuLabel>
-                  {openTargets.map((t) => (
-                    <DropdownMenuItem key={t} onSelect={() => openTargetDialog(t)}>
-                      {isReapplyCaseTransition(status, t)
-                        ? "Reapply (back to In Progress)"
-                        : caseStatusLabel(t)}
-                    </DropdownMenuItem>
-                  ))}
+                  {openTargets.map((t) => {
+                    const reapply = isReapplyCaseTransition(status, t);
+                    return (
+                      <MenuMove
+                        key={t}
+                        label={reapply ? "Reapply (back to In Progress)" : caseStatusLabel(t)}
+                        hint={reapply ? REAPPLY_HINT : (MOVE_HINTS[t] ?? "Optional note")}
+                        onSelect={() => openTargetDialog(t)}
+                      />
+                    );
+                  })}
                 </>
               ) : null}
               {closeTargets.length > 0 ? (
@@ -146,9 +202,12 @@ export function CaseStatusControl({
                     Close as
                   </DropdownMenuLabel>
                   {closeTargets.map((t) => (
-                    <DropdownMenuItem key={t} onSelect={() => openTargetDialog(t)}>
-                      {caseStatusLabel(t)}
-                    </DropdownMenuItem>
+                    <MenuMove
+                      key={t}
+                      label={`${caseStatusLabel(t)}…`}
+                      hint={CLOSE_HINTS[t] ?? "Close this case"}
+                      onSelect={() => openTargetDialog(t)}
+                    />
                   ))}
                 </>
               ) : null}
@@ -160,9 +219,11 @@ export function CaseStatusControl({
               {isAdmin ? (
                 <>
                   {targets.length > 0 ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuItem onSelect={() => setDialog({ kind: "correct" })}>
-                    Correct status…
-                  </DropdownMenuItem>
+                  <MenuMove
+                    label="Correct status…"
+                    hint="Admin · any direction, note required, kept in history"
+                    onSelect={() => setDialog({ kind: "correct" })}
+                  />
                 </>
               ) : null}
             </DropdownMenuContent>
@@ -171,10 +232,16 @@ export function CaseStatusControl({
       </div>
       {latest ? (
         <span className="text-[11px] text-muted-foreground">
-          {latest.actorKind === "system"
-            ? "Set by system"
-            : `Updated by ${latest.changedByName ?? "someone"}`}{" "}
-          · {formatDistanceToNow(parseISO(latest.changedAt), { addSuffix: true })}
+          {caseStatusLabel(status)} ·{" "}
+          {formatDistanceToNow(parseISO(latest.changedAt), { addSuffix: true })}{" "}
+          {latest.actorKind === "system" ? "by system" : `by ${latest.changedByName ?? "someone"}`}
+          {latest.evidenceTouchId
+            ? ` — evidence: ${
+                evidenceTouch
+                  ? `${touchTypeLabel(evidenceTouch.touchType as TouchType | null)} touch`
+                  : "logged touch"
+              }`
+            : ""}
         </span>
       ) : null}
 

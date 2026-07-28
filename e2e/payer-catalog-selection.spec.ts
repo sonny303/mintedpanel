@@ -223,7 +223,7 @@ test("admin adds a canonical payer from its detail → In my network + it joins 
   await expect(page.getByText("No payers yet")).toBeVisible();
 
   // The subscription action lives on the payer detail.
-  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
+  await page.goto("/admin/payer-admin/setup/gp-bcbsnc");
   await expect(
     page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
   ).toBeVisible({ timeout: 30000 });
@@ -239,7 +239,7 @@ test("admin adds a canonical payer from its detail → In my network + it joins 
 
   // Back on the list, the payer now renders as an org payer row (visible
   // across surfaces without a manual refresh).
-  await page.getByRole("link", { name: "← Back to catalog" }).click();
+  await page.getByRole("link", { name: "← Back to Payer Setup" }).click();
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible();
   await expect(
     page.locator("tbody tr", { hasText: "Blue Cross and Blue Shield of North Carolina" }),
@@ -280,7 +280,7 @@ test("retired and merged payers cannot be newly added; the successor is named", 
 
   // Slice A: the browse rows are gone — the unavailable state renders on the
   // payer detail, which stays reachable by URL for history/links.
-  await page.goto("/admin/payer-admin/catalog/gp-merged");
+  await page.goto("/admin/payer-admin/setup/gp-merged");
   await expect(page.getByRole("heading", { name: "Old BCBS of NC" })).toBeVisible({
     timeout: 30000,
   });
@@ -288,7 +288,7 @@ test("retired and merged payers cannot be newly added; the successor is named", 
   await expect(page.getByText("BCBS-NC (new entity)")).toBeVisible(); // canonical successor
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
-  await page.goto("/admin/payer-admin/catalog/gp-retired");
+  await page.goto("/admin/payer-admin/setup/gp-retired");
   await expect(page.getByRole("heading", { name: "Defunct Health Plan" })).toBeVisible({
     timeout: 30000,
   });
@@ -324,10 +324,15 @@ test("a non-admin browses list + detail but sees no mutation controls", async ({
   await expect(page.getByRole("button", { name: "Remove from my network" })).toHaveCount(0);
 });
 
-test("Remove archives the subscription + active targets; Reactivate never recreates scope", async ({
+test("§2.2 the assignment-remove verb is gone; re-adding never recreates archived scope", async ({
   context,
   page,
 }) => {
+  // Slice C collapsed the two removal verbs into ONE — Archive, on the payer
+  // detail's Manage tab (payers.archived_at via archive_payer). The E4.2
+  // assignment archive keeps its service/hook and is still reached from the
+  // group Payer Network board's "remove payer", so the RE-ADD half of that
+  // lifecycle stays live here: it must never resurrect archived scope.
   const fixtures = makeFixtures("admin", {
     org_payer_assignments: [
       {
@@ -335,8 +340,8 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
         org_id: ORG,
         payer_id: "gp-bcbsnc",
         starter: false,
-        status: "active",
-        archived_at: null,
+        status: "archived",
+        archived_at: "2026-07-20T00:00:00Z",
         created_at: "2026-07-14T00:00:00Z",
       },
     ],
@@ -347,7 +352,7 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
         payer_id: "gp-bcbsnc",
         group_id: "g-1",
         state: "NC",
-        status: "active",
+        status: "archived",
         created_at: "2026-07-14T00:00:00Z",
       },
     ],
@@ -357,29 +362,26 @@ test("Remove archives the subscription + active targets; Reactivate never recrea
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  // The subscription actions live on the payer detail now.
-  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
-  await expect(page.getByText("In my network")).toBeVisible({ timeout: 30000 });
+  await page.goto("/admin/payer-admin/setup/gp-bcbsnc");
+  await expect(
+    page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
+  ).toBeVisible({ timeout: 30000 });
 
-  // Remove → confirm → the subscription AND its active target archive (cascade),
-  // and NOTHING is deleted (status flips only).
-  await page.getByRole("button", { name: "Remove from my network" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Remove Blue Cross and Blue Shield of North Carolina");
-  await dialog.getByRole("button", { name: "Remove" }).click();
+  // There is no second removal verb anywhere on the payer page — Archive on
+  // the Manage tab is the one way out.
+  await expect(page.getByRole("button", { name: "Remove from my network" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Manage", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Archive payer" })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
 
-  await expect(page.getByRole("button", { name: "Reactivate" })).toBeVisible({ timeout: 15000 });
+  // Re-adding flips the subscription back on WITHOUT recreating the archived
+  // scope (the target stays archived for the existing restore/review flow),
+  // and NOTHING is ever deleted.
+  await page.getByRole("button", { name: "Add back to my network" }).click();
+  await expect(page.getByText("In my network")).toBeVisible({ timeout: 15000 });
   const assigns = fixtures.org_payer_assignments as Array<Record<string, unknown>>;
   const targets = fixtures.payer_network_targets as Array<Record<string, unknown>>;
-  expect(assigns[0].status).toBe("archived");
-  expect(targets[0].status).toBe("archived");
-  expect(deletes).toHaveLength(0); // history preserved — never a DELETE
-
-  // Reactivate flips the subscription back on WITHOUT recreating the archived
-  // scope (the target stays archived for the existing restore/review flow).
-  await page.getByRole("button", { name: "Reactivate" }).click();
-  await expect(page.getByText("In my network")).toBeVisible({ timeout: 15000 });
   expect(assigns[0].status).toBe("active");
   expect(targets[0].status).toBe("archived");
-  expect(deletes).toHaveLength(0);
+  expect(deletes).toHaveLength(0); // history preserved — never a DELETE
 });

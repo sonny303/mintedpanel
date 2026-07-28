@@ -424,7 +424,7 @@ export function PayerSetupPage() {
                       <td className="px-4 py-3">
                         {/* The payer name is the ONLY link in the row. */}
                         <Link
-                          to="/admin/payer-admin/catalog/$payerId"
+                          to="/admin/payer-admin/setup/$payerId"
                           params={{ payerId: row.payerId }}
                           className="text-[14px] font-semibold text-foreground underline-offset-2 hover:text-[#1B4D3E] hover:underline"
                         >

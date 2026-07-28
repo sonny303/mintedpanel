@@ -387,7 +387,7 @@ test.beforeEach(async ({ context }) => {
 test("populated list — table columns, live count, KPI cards filter and toggle", async ({
   page,
 }) => {
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   // Live count includes the archived row (it is still a payer in the network).
   await expect(page.getByText("5 payers in your network")).toBeVisible();
@@ -435,7 +435,7 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
   // The payer name is the only link — it drills into the payer detail.
   await page.getByRole("button", { name: /All payers/ }).click();
   await page.getByRole("link", { name: "Aetna (CVS Health)" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}$`), {
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${AETNA_ID}$`), {
     timeout: 15000,
   });
 });
@@ -443,7 +443,7 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
 test("search + State + Kind filters; filtered-to-none offers Clear filters, never add", async ({
   page,
 }) => {
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // Name search narrows (alias search went with the catalog).
@@ -474,7 +474,7 @@ test("search + State + Kind filters; filtered-to-none offers Clear filters, neve
 test("archived rows — hidden by default; Show archived reveals badge + Reactivate on the wire", async ({
   page,
 }) => {
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("Anthem Legacy CO")).toHaveCount(0);
 
@@ -513,11 +513,11 @@ test("archived rows — hidden by default; Show archived reveals badge + Reactiv
   expect(calls.filter((c) => c.kind === "rest" && c.path === "payers")).toEqual([]);
 });
 
-test("zero payers — three-step orientation; Add your first payer lands on the set-up stub", async ({
+test("zero payers — three-step orientation; Add your first payer opens the create flow", async ({
   page,
 }) => {
   scenario = "empty";
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("0 payers in your network")).toBeVisible();
 
@@ -526,15 +526,17 @@ test("zero payers — three-step orientation; Add your first payer lands on the 
   await expect(page.getByText("Author a template", { exact: true })).toBeVisible();
   await expect(page.getByText("Generate cases", { exact: true })).toBeVisible();
 
+  // Slice B: the CTA lands on step 1 of the guided create flow (name +
+  // near-match), whose Cancel returns to this page.
   await page.getByRole("link", { name: "+ Add your first payer" }).click();
   await expect(page).toHaveURL(/\/admin\/payers\/new$/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Set up payer" })).toBeVisible();
-  await page.getByRole("link", { name: "Back to Payer Setup" }).click();
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Add a payer" })).toBeVisible();
+  await page.getByRole("link", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 15000 });
 });
 
 test("default template card — payerless fallback, edit-only, below the list", async ({ page }) => {
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   await expect(page.getByText("Default template", { exact: true })).toBeVisible();
@@ -547,7 +549,7 @@ test("default template card — payerless fallback, edit-only, below the list", 
 
 test("pagination — 5–100 rows per page with an honest range", async ({ page }) => {
   scenario = "many";
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   await expect(page.locator("tbody tr")).toHaveCount(10);

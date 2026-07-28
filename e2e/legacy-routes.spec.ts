@@ -7,6 +7,11 @@ import { test, expect, type Route } from "@playwright/test";
 // reports), and no legacy URL dead-ends (the E0.4 rule). Param preservation
 // is pinned for the named set (?section=, the ?payerId/state/groupId match
 // key, ?draftId) per TS-120. Supersedes the E0.9 TS-23 sweep's route sets.
+//
+// payer-and-cases Slice G extends the table: the stale `catalog` segment was
+// renamed to `setup` and the `/sops` authoring tab folded, so the six SOPs-tab
+// redirect sources land on /setup and BOTH retired spellings still redirect —
+// the payer drill-in carrying its ?tab= / ?edit= state through the rename.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -118,6 +123,10 @@ const RENDERING_ROUTES = [
   "/providers",
   "/reports",
   "/admin/templates/new",
+  // Slice B — the manual payer-setup create door (a stale id renders an honest
+  // "Payer not found", never a dead end). The edit door moved to the payer
+  // detail in Slice C, so /admin/payers/$id/edit is now in the redirect set.
+  "/admin/payers/new",
   "/onboarding",
   "/onboarding/wizard",
 ];
@@ -144,18 +153,47 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/admin/audit", to: /\/reporting\/audit-log\/?$/ },
   // Imports live with data (E6.4 carries them; wizard uploads meanwhile).
   { from: "/admin/import", to: /\/providers\/?$/ },
-  // Payer Setup consolidations (E6.5 finalizes the module).
-  { from: "/fix-it", to: /\/admin\/payer-admin\/sops$/ },
-  { from: "/admin/mso-routing", to: /\/admin\/payer-admin\/catalog$/ },
-  { from: "/admin/portals", to: /\/admin\/payer-admin\/sops$/ },
+  // Payer Setup consolidations (E6.5 built the module; Slice G finalized it —
+  // the stale `catalog` segment was RENAMED to `setup` and the `/sops`
+  // authoring tab FOLDED, so all six of its redirect sources now land on
+  // /setup directly instead of chaining through a retired segment).
+  { from: "/fix-it", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/mso-routing", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/portals", to: /\/admin\/payer-admin\/setup$/ },
   // E6.5: the Forms-tab payer context retired with the tab — registration
-  // lives in the SOP editor, so the param is deliberately dropped.
-  { from: "/admin/portals?payerId=pay-77", to: /\/admin\/payer-admin\/sops$/ },
-  { from: "/admin/templates", to: /\/admin\/payer-admin\/sops$/ },
-  { from: "/admin/sops", to: /\/admin\/payer-admin\/sops$/ },
-  { from: "/payer-directory", to: /\/admin\/payer-admin\/catalog$/ },
-  { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\/sops$/ },
-  { from: "/admin/payers", to: /\/admin\/payer-admin\/catalog$/ },
+  // lives in the Template Editor, so the param is deliberately dropped.
+  { from: "/admin/portals?payerId=pay-77", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/templates", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/sops", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/payer-admin/forms/pay-1", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/payer-directory", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/portals/bcbs_ks/train", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/payers", to: /\/admin\/payer-admin\/setup$/ },
+  // Slice G — the folded SOPs segment and the renamed `catalog` segment both
+  // stay reachable, and the payer drill-in carries its ?tab= / ?edit= state
+  // across the rename (dropping either would break the Slice C redirects).
+  { from: "/admin/payer-admin/sops", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/payer-admin/catalog", to: /\/admin\/payer-admin\/setup$/ },
+  { from: "/admin/payer-admin/catalog/pay-1", to: /\/admin\/payer-admin\/setup\/pay-1$/ },
+  {
+    from: "/admin/payer-admin/catalog/pay-1?tab=scorecard",
+    to: /\/admin\/payer-admin\/setup\/pay-1\?tab=scorecard/,
+  },
+  {
+    from: "/admin/payer-admin/catalog/pay-1?edit=1",
+    to: /\/admin\/payer-admin\/setup\/pay-1\?.*edit=true/,
+  },
+  // Slice C — payer editing is IN PLACE on the detail (§2.11) and the payer
+  // scorecard folded into its tab (§2.10); both old URLs redirect into the
+  // exact state they used to render.
+  {
+    from: "/admin/payers/pay-1/edit",
+    to: /\/admin\/payer-admin\/setup\/pay-1\?.*edit=true/,
+  },
+  {
+    from: "/admin/payers/pay-1/scorecard",
+    to: /\/admin\/payer-admin\/setup\/pay-1\?tab=scorecard/,
+  },
   // Generation re-homes on the group's Payer Network (E6.2/E6.3).
   // Pre-E6.1 stubs, retargeted or preserved.
   { from: "/portfolio", to: /\/reporting\/portfolio\/?$/ },

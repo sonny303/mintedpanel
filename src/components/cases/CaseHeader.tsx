@@ -1,9 +1,14 @@
-// Case detail header: provider name, submeta, the ONE unified status control
-// (E6.0 — the dual credentialing + payer-pipeline pills and the separate
-// contract pill are gone), and the tracking ID. The forwarding ID lives in
-// the Case Facts card, not here.
+// Case detail header (Slice E / payer-and-cases screen 6): one bordered card
+// carrying the case's identity — provider name (links to the record), the
+// case-type badge, the payer (links to its catalog detail) · state · specialty
+// · owning group, and the inline-editable tracking ID — with the ONE unified
+// status control + its attribution on the right. The dual credentialing +
+// payer-pipeline pills and the separate contract pill are long gone (E6.0);
+// the duplicate tracking-ID warning is deliberately not surfaced here
+// (handoff §2.7 — a collision is only ever a data-entry error).
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import type { CaseDetail } from "@/types";
 
 export function CaseHeader({
@@ -23,35 +28,53 @@ export function CaseHeader({
     : "Unknown provider";
 
   return (
-    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-[20px] font-semibold text-foreground flex items-center gap-2 flex-wrap">
-          {c.provider ? (
-            <Link to="/providers/$id" params={{ id: c.provider.id }} className="hover:underline">
-              {providerName}
-            </Link>
-          ) : (
-            providerName
-          )}
-          <Badge variant="secondary" className="font-normal text-[11px] uppercase tracking-wide">
-            Initial Credentialing
-          </Badge>
-        </h1>
-        <p className="text-[14px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-          {c.payer?.name ?? "—"}
-          <span className="text-border">·</span>
-          {c.state}
-          {c.specialty ? (
-            <>
-              <span className="text-border">·</span>
-              {c.specialty}
-            </>
-          ) : null}
-        </p>
-        {trackingId ? <div className="mt-2">{trackingId}</div> : null}
-      </div>
+    <Card className="shadow-none border-border">
+      <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="flex flex-wrap items-center gap-2 text-[20px] font-semibold text-foreground">
+            {c.provider ? (
+              <Link to="/providers/$id" params={{ id: c.provider.id }} className="hover:underline">
+                {providerName}
+              </Link>
+            ) : (
+              providerName
+            )}
+            <Badge variant="secondary" className="font-normal text-[11px] uppercase tracking-wide">
+              Initial Credentialing
+            </Badge>
+          </h1>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-[14px] text-muted-foreground">
+            {c.payer ? (
+              <Link
+                to="/admin/payer-admin/setup/$payerId"
+                params={{ payerId: c.payer.id }}
+                className="hover:text-[#1B4D3E] hover:underline"
+              >
+                {c.payer.name}
+              </Link>
+            ) : (
+              "—"
+            )}
+            <span className="text-border">·</span>
+            {c.state}
+            {c.specialty ? (
+              <>
+                <span className="text-border">·</span>
+                {c.specialty}
+              </>
+            ) : null}
+            {c.group?.name ? (
+              <>
+                <span className="text-border">·</span>
+                <span className="text-[#9CA3AF]">under {c.group.name}</span>
+              </>
+            ) : null}
+          </p>
+          {trackingId ? <div className="mt-3">{trackingId}</div> : null}
+        </div>
 
-      <div className="flex items-center gap-6">{statusControl}</div>
-    </div>
+        <div className="flex flex-none items-start">{statusControl}</div>
+      </CardContent>
+    </Card>
   );
 }

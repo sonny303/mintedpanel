@@ -56,6 +56,17 @@ on E6.8. Screens 4 and 6 have no new backend dependencies.
    membership KPIs, catalog fixture, required-documents card, work-in-portal launcher,
    duplicate-tracking-ID warning (backend guardrail stays), the two legacy history ledgers,
    merged-payer redirect on Add/Edit (merge lives on Payer Detail → Manage).
+
+   > **Amendment — next-step CTA reinstated on screen 3 (2026-07-28, PM-ratified).**
+   > Slice C put the next-step CTA back on Payer Detail → **Templates tab**, and it
+   > stays as built. Slice F shipped the Template Editor's `?intent=` consumer
+   > (`TEMPLATE_EDITOR_INTENTS`), and with the CTA removed everywhere that consumer
+   > would have had **no producer** — the deep links it was built to receive could
+   > never be emitted. The removal in this item still stands **for screen 1 (Payer
+   > Setup)**, which is what it was written about; it does not extend to screen 3.
+   > `templateNextStep` / `templateIntentForNextAction` (`src/lib/payerDetailView.ts`)
+   > map the E6.5 funnel's next action to Slice F's shipped intent spellings.
+
 8. **Terminology:** "Template" everywhere in the UI; internal identifiers may keep "sop".
 9. **`design_handoff_payer_setup/`** references in the bundle refer to the design tool's own
    project folder, not this repo. Nothing to delete here (#235 was closed unmerged).

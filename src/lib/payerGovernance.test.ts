@@ -142,14 +142,43 @@ describe("payer writes are RPC-only at the service boundary (E6.7)", () => {
     expect(route).toContain("/admin/payer-admin");
   });
 
-  it("the Payer Setup funnel keeps its read-only posture (no creation, no identity edit)", () => {
-    // E6.5: PayerSetupList retired; the module head is PayerReadinessFunnel.
-    const funnel = stripComments(
-      readFileSync(join(SRC, "components/payer-admin/PayerReadinessFunnel.tsx"), "utf8"),
+  it("the Slice B payer form writes ONLY through the hooks (never Supabase directly)", () => {
+    // Payer create/edit UI now EXISTS (payer-and-cases screen 2) — its posture
+    // is the layering rule: components → hooks → the RPC-bound service. No
+    // component may import the Supabase client or name a payers table write.
+    const surfaces = [
+      "components/payer-admin/PayerDetailsForm.tsx",
+      "components/payer-admin/PayerNameStep.tsx",
+      "components/payer-admin/PayerStatesField.tsx",
+      "routes/admin.payers_.new.tsx",
+      "routes/admin.payers_.$id.edit.tsx",
+    ];
+    for (const file of surfaces) {
+      const src = stripComments(readFileSync(join(SRC, file), "utf8"));
+      expect(src, `${file} must not import the Supabase client`).not.toContain(
+        "integrations/supabase",
+      );
+      expect(src, `${file} must not query the payers table`).not.toContain('from("payers")');
+    }
+  });
+
+  it("the Payer Setup list never mutates a payer identity (writes live off the list)", () => {
+    // Slice G re-anchor. E6.5's read-only PayerReadinessFunnel WAS the module
+    // head and is now deleted (render-orphaned by Slice A); the head is the
+    // Slice A PayerSetupPage. Its governance posture is no longer "no
+    // creation" — Slice B shipped a real "+ Set up payer" door — but the LIST
+    // still never mutates identity itself: creating is a LINK out to
+    // /admin/payers/new and editing lives on the payer detail, so no payer
+    // create/update mutation may be wired into this surface, and it may never
+    // reach past the hook layer to the client or the payers table.
+    const page = stripComments(
+      readFileSync(join(SRC, "components/payer-admin/PayerSetupPage.tsx"), "utf8"),
     );
-    expect(funnel).not.toContain("Add payer");
-    expect(funnel).not.toContain("useCreatePayer");
-    expect(funnel).not.toContain("updatePayer");
+    expect(page).not.toContain("integrations/supabase");
+    expect(page).not.toContain('from("payers")');
+    expect(page).not.toContain("useCreatePayer");
+    expect(page).not.toContain("useUpdatePayer");
+    expect(page).toContain("/admin/payers/new");
   });
 
   it("delegation_note is written ONLY through the payers RPC seam", () => {

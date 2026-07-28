@@ -43,7 +43,13 @@ export function CaseStatusHistoryPanel({
             {sorted.map((h) => {
               const evidence = h.evidenceTouchId ? touchById.get(h.evidenceTouchId) : undefined;
               return (
-                <li key={h.id} className="flex justify-between gap-3">
+                // The anchor the touchlog's "Evidence for" marker scrolls to —
+                // the reverse of the evidence link rendered below.
+                <li
+                  key={h.id}
+                  id={`status-${h.id}`}
+                  className="flex justify-between gap-3 scroll-mt-24"
+                >
                   <div className="min-w-0 space-y-0.5">
                     <div className="flex flex-wrap items-center gap-1.5 text-foreground">
                       <span className="text-muted-foreground">
@@ -64,9 +70,18 @@ export function CaseStatusHistoryPanel({
                     {h.evidenceTouchId ? (
                       <div className="text-[11px] text-muted-foreground">
                         Evidence:{" "}
-                        {evidence
-                          ? `${touchTypeLabel(evidence.touchType as TouchType | null)} touch`
-                          : "logged touch"}
+                        {/* Screen 6 — each entry links to its evidence: the
+                            touchlog row is on the same page (left column). */}
+                        {evidence ? (
+                          <a
+                            href={`#touch-${evidence.id}`}
+                            className="font-medium text-[#1B4D3E] underline underline-offset-2"
+                          >
+                            {touchTypeLabel(evidence.touchType as TouchType | null)} touch
+                          </a>
+                        ) : (
+                          "logged touch"
+                        )}
                       </div>
                     ) : null}
                     <div className="text-[11px] text-muted-foreground">
