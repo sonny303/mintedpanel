@@ -266,6 +266,66 @@ extension's "SOP tasks" strings remain.
 > reference. S1.1 is blocked on committing them; source them from the Design
 > project's `assets/icons/` + `uploads/MPC-Logo-Final.png`.
 
+#### PR #29 code review (2026-07-28) — **approve and merge**
+
+Reviewed at `d813a48`, with all four gates run locally on the branch:
+`typecheck` ✅ · `lint` ✅ · `test` ✅ 85/85 across 8 files (including the two
+new suites) · `build` ✅.
+
+**It conforms against the right source.** The `:root` block is a faithful
+application of the extension repo's own
+`docs/design-system/targets/minted-extension-tokens.css` — the file doc 07
+E1.2 step 1 names — and, more importantly, every canonical value matches the
+app's live `src/styles/tokens.css` **exactly**: `--mp-ok-tint #E7F5EF` ·
+`--mp-info-tint #E8EEFD` · `--mp-warn-tint #FBF0E1` · `--mp-danger-tint
+#FBEAEA` · `--mp-pending-tint #E4F3F7` · `--mp-neutral-tint #F1F1EF`, plus
+primary `#1B4D3E`/`#163F33`, warm `#FDFDFC`/`#E8E5E0`/`#F5F4F1`, and the
+`#1F2937`/`#6B7280`/`#9CA3AF` ink ramp. Matching the app is the actual goal
+("the two products finally look like one"), and it does.
+
+Verified against doc 08 S1.2/S1.3's criteria: legacy aliases all still
+resolve (no selector churn) · `--mp-shadow-sm: none` removes control shadows
+without touching a rule · `.pill` is 4px, with a scoped `.bucket .pill`
+exception keeping _count chips_ round — a correct reading of doc 09's
+control-vs-chip distinction, not an oversight · six self-hosted woff2 (incl.
+Geist Mono), zero Google Fonts references anywhere, Instrument Sans fully
+removed from CSS and `public/fonts` · focus on inputs/selects is
+`border-color: primary` + the 2px soft ring, which _is_ doc 09's "1px solid
+primary + focus ring" (the 1px comes from the existing border).
+
+The sign-out fix is a root-cause fix, not a band-aid: `button.link` (0,1,1)
+was beating `.header-link` (0,1,0), so the link rendered primary-green on the
+forest bar. Matching specificity plus a white-alpha focus ring is right.
+
+**Findings — none blocking:**
+
+1. **S1.6's acceptance criterion is wrong and the PR is right.** Doc 07 E1.3
+   says the suffix "is appended twice in the profile projection." It isn't:
+   `credentials` and `specialty` are independent provider columns that
+   legitimately both read `PT`, and the panel concatenates them. "Fixed in
+   the projection, not patched at render" is therefore unsatisfiable — the
+   shared `providerDisplayName()` used by both render paths is the correct
+   fix. **Rewrite the criterion.** (Nit: it also splits the _name_ on commas,
+   so "Jim Apple, Jr." gets tokenized; harmless with exact-match dedupe, but
+   splitting only the qualifier arguments would be tighter.)
+2. **Doc 02 §2.1's pill palette disagrees with the app** — it gives Denied
+   `#FEF2F2`, where the app's `--mp-danger-tint` is `#FBEAEA` (same for warn:
+   `#FEF3C7` vs `#FBF0E1`). Doc 09 lists those as _banner/surface_ colors, so
+   this reads as doc 02 borrowing the banner value for a pill. The PR
+   correctly followed the app. **Design should correct doc 02's pill table to
+   the app values** — or say explicitly that the panel's pills are meant to
+   differ from the app's, which would work against the one-product goal.
+3. **`--mp-label` still uses `color-mix`** — the single survivor; the app
+   removed `color-mix` entirely in E0.9. One-line cleanup for exactness.
+4. **`button.primary` / `button.secondary` have no `:focus-visible`.**
+   Pre-existing (buttons never consumed `--mp-focus` on `main` either), so
+   not a regression — but the 44px "Fill this page" CTA is the panel's
+   primary action and currently relies on the UA default ring. Worth a small
+   a11y story alongside S1.5.
+5. Scope is honestly stated in the PR body: it does **not** do S1.1 (icons —
+   still blocked on the assets above), S1.4 (remove the second header), or
+   S1.5's avatar _menu_ (it ships the text greeting instead).
+
 ### 2.6 · E5.1 label-learning is not greenfield — two of its three parts exist
 
 The package scopes the label-learning store as new design. The foundation
