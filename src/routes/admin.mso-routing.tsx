@@ -7,6 +7,6 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/admin/mso-routing")({
   beforeLoad: () => {
-    throw redirect({ to: "/admin/payer-admin/catalog", replace: true });
+    throw redirect({ to: "/admin/payer-admin/setup", replace: true });
   },
 });

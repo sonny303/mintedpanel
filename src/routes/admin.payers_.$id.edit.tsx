@@ -9,7 +9,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 export const Route = createFileRoute("/admin/payers_/$id/edit")({
   beforeLoad: ({ params }) => {
     throw redirect({
-      to: "/admin/payer-admin/catalog/$payerId",
+      to: "/admin/payer-admin/setup/$payerId",
       params: { payerId: params.id },
       search: { tab: "overview", edit: true },
       replace: true,

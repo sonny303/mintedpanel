@@ -140,7 +140,7 @@ test("old /admin/payers deep link redirects into Payer Setup with the governance
   currentRole = "admin";
   await page.goto("/admin/payers");
   // The old URL still lands on the catalog segment (rename is Slice G's).
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // Slice A: creation is the guided "+ Set up payer" entry (admin-only) —
@@ -171,7 +171,7 @@ test("specialist following the old URL lands on the workspace — all roles for 
 }) => {
   currentRole = "specialist";
   await page.goto("/admin/payers");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   // E6.1 interim posture: Payer Setup renders for ALL roles (two trusted
   // users; revisit at the third hire) — the old admin-only denial is gone.
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({

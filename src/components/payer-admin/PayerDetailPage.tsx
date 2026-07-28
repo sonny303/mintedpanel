@@ -66,7 +66,7 @@ export interface PayerDetailPageProps {
 function BackLink() {
   return (
     <Link
-      to="/admin/payer-admin/catalog"
+      to="/admin/payer-admin/setup"
       className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
     >
       ← Back to Payer Setup
@@ -183,7 +183,7 @@ export function PayerDetailPage({
               Merged into{" "}
               {mergedInto ? (
                 <Link
-                  to="/admin/payer-admin/catalog/$payerId"
+                  to="/admin/payer-admin/setup/$payerId"
                   params={{ payerId: mergedInto.id }}
                   className="font-medium underline underline-offset-2"
                 >

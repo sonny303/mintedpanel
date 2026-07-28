@@ -429,7 +429,7 @@ test("Slice E: the case screen is header + two columns — identity, the ONE sta
   );
   await expect(page.getByRole("link", { name: "Banner Health Plans" })).toHaveAttribute(
     "href",
-    "/admin/payer-admin/catalog/pay-banner",
+    "/admin/payer-admin/setup/pay-banner",
   );
   await expect(page.getByText("under YC PT")).toBeVisible();
   await expect(page.getByText("Tracking ID")).toBeVisible();

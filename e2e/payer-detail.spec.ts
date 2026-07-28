@@ -417,7 +417,7 @@ async function seed(context: import("@playwright/test").BrowserContext, role = "
 }
 
 async function openDetail(page: import("@playwright/test").Page, payerId = AETNA_ID, search = "") {
-  await page.goto(`/admin/payer-admin/catalog/${payerId}${search}`);
+  await page.goto(`/admin/payer-admin/setup/${payerId}${search}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30000 });
 }
 
@@ -506,7 +506,7 @@ test("§2.11 editable in place — Edit swaps in the SAME form, and /edit redire
 
   // The retired standalone edit page keeps its URL AND its intent.
   await page.goto(`/admin/payers/${AETNA_ID}/edit`);
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog\//, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\//, { timeout: 15000 });
   await expect(page.getByRole("heading", { name: "Edit payer" })).toBeVisible({ timeout: 30000 });
 });
 
@@ -596,7 +596,7 @@ test("§2.10 scorecard fold — the standalone route redirects into the tab, and
 }) => {
   await seed(context);
   await page.goto(`/admin/payers/${AETNA_ID}/scorecard`);
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog\/.*tab=scorecard/, {
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\/.*tab=scorecard/, {
     timeout: 15000,
   });
   await expect(page.getByRole("heading", { name: "Scorecard" })).toHaveCount(1, {

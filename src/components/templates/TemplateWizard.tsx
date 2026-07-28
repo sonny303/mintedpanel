@@ -759,9 +759,9 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const exitPayerId = isEdit ? initial?.payerId : (prefill?.payerId ?? null);
   function exitEditor() {
     if (isFallback) {
-      navigate({ to: "/admin/payer-admin/catalog" });
+      navigate({ to: "/admin/payer-admin/setup" });
     } else if (exitPayerId) {
-      navigate({ to: "/admin/payer-admin/catalog/$payerId", params: { payerId: exitPayerId } });
+      navigate({ to: "/admin/payer-admin/setup/$payerId", params: { payerId: exitPayerId } });
     } else {
       navigate({ to: "/admin/templates" });
     }

@@ -302,7 +302,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
 
     // The default template belongs to no payer — it exits to Payer Setup.
     await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+    await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   });
 
   test("TS-47 (#edit-default): default-template content publishes through the publish RPC", async ({
