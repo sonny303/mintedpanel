@@ -12,11 +12,12 @@ slices A/F merged; slices B/E open as PRs #245/#246) and
 grounded in the platform constraints (panel width, MV3 restarts, PHI-in-memory,
 no styled overflow). The package's picture of the _backend_, however, is roughly
 two weeks stale — it was written against a pre-E6.0/E6.7/E6.8/Phase-4 reading of
-the repos. That staleness is good news in every case but one: several things the
-package treats as blockers or new work **already shipped**, and one thing it
-treats as a settled decision (the 127-field catalog) was decided on a premise
-that is false on `main`. Nothing in the visual design needs to change; the epic
-in doc 08 needs the retargets below before it is written into the tracker.
+the repos. That staleness is good news almost everywhere: several things the
+package treats as blockers or new work **already shipped**. The one place the
+package is _more_ right than the code is the field catalog: its 127 fields are
+the live schema, and the app's hand-maintained 75-key allowlist is the artifact
+that drifted (finding 2.1). Nothing in the visual design needs to change; the
+epic in doc 08 needs the retargets below before it is written into the tracker.
 
 ---
 
@@ -92,34 +93,113 @@ C). Neither blocks any Workbench seam.
 
 ## 2 · Package claims vs. `main` — the corrections that change the epic
 
-### 2.1 · The catalog decision (doc 07 §4) was made on a false premise — re-confirm it
+### 2.1 · The catalog: the design's 127 IS the schema — the hand-maintained allowlist is the artifact to retire
 
-The package: "Production does not match [the closed catalog] — the shipping
-Customize view exposes **127 fields across 7 groups**, SSN last 4 among them.
-**Production wins.** Update the README and `quickCards.ts` to match."
+**PM direction, 2026-07-28: the picker's fields must come from our schema
+(provider, group, facility, …). We do not want a hand-maintained list.** This
+supersedes an earlier reading in this review that treated the package's "127
+fields" as a stale screenshot; verified against the live database, it is not.
 
-On both repos' `main` this is inverted. The Customize view iterates
-`QUICK_CARD_FIELD_CATALOG` (`minted-extension` `src/sidepanel/main.ts:436`),
-which is a verbatim mirror of the app's **closed ~70-key allowlist**
-(`mintedpanel` `src/lib/quickCardCatalog.ts`: provider 34 · group 15 · facility
-11 · license 6 · assignment 3 · groupInsurance… — `ssnLast4` and the E4.4
-vault category **structurally absent**, `MAX_QUICK_CARD_FIELDS = 32`), and
-`PUT /api/me/view-prefs` 422s any key outside it. There is no 127-field picker
-and no SSN on `main`. The "127 across 7 groups" figure matches the **profile
-endpoint's full token set** — almost certainly sampled from a screenshot of a
-pre-E4.3 build (the old Devin customize-view branches).
+There are two field lists on `main`, and only one of them is real:
 
-This doesn't mean the _product_ answer is wrong — widening the card catalog to
-the full profile-exposed set may well be right, and §7.3 records it as a PM
-answer. But it must be re-confirmed knowing what it actually is: **not a README
-fix, but a deliberate reversal of the E4.3 TE-16 structural exclusion** (a
-recorded PHI decision), implemented app-side first (widen
-`quickCardCatalog.ts`, raise/drop the 32 cap, decide `ssnLast4` explicitly,
-update validator tests and the extension mirror). S2.1's acceptance criteria
-("127 fields," "SSN present and selectable," "group counts match doc 01")
-should be rewritten to name the app-side catalog change as the story's
-substance — and if the PM balks at SSN-on-card after seeing it framed as a
-reversal, everything else in Phase 2 still stands.
+- **`get_sop_field_tokens()` — genuinely schema-derived.** The function body
+  reads `information_schema.columns` over nine source tables and emits
+  `{table, token, column}`, excluding only join keys and audit columns
+  (`id`, `org_id`, `created_at`, `updated_at`, the FK columns, `status`,
+  `is_active`, …). Add a column to `providers` and a token appears with no
+  code change. It currently returns **151 tokens**; dropping the three
+  case-scoped tables (payers 18 · contracts 5 · msos 2, which never resolve on
+  a provider profile) leaves **126**, plus the two `{{user.*}}` tokens the API
+  route appends = **128**. The profile endpoint already resolves exactly this
+  set.
+- **`src/lib/quickCardCatalog.ts` — a hand-copied subset, 75 keys**, mirrored
+  a second time by hand into `minted-extension` `src/shared/quickCards.ts`,
+  and enforced as an allowlist by `PUT /api/me/view-prefs` (422 outside it).
+
+The package's group counts are the schema's, not an invention:
+
+| Doc 01 group      | Package | Schema-derived (live)             |
+| ----------------- | ------- | --------------------------------- |
+| Group             | 39      | `provider_groups` 39              |
+| Location          | 23      | `facilities` 23                   |
+| License           | 9       | `state_licenses` 9                |
+| Location assignm. | 3       | `provider_facility_assignments` 3 |
+| Group insurance   | 6       | `group_insurance_policies` 6      |
+| User              | 2       | `user.*` family 2                 |
+| Provider          | 45      | `providers` 46                    |
+| **Total**         | **127** | **128**                           |
+
+Six of seven match exactly; Provider is off by one (the schema has gained a
+column since the design's read). So doc 07 §4 and doc 01's catalog table are
+**right**, and the allowlist is the drifted copy.
+
+**The drift is material, not cosmetic.** The allowlist is missing **51 tokens**
+the schema exposes, and they are not obscure — they are fields payer forms
+routinely demand:
+
+- **`group` (23 missing):** the _entire_ correspondence address and contact
+  block (`correspondenceStreet/Suite/City/State/Zip`, `correspondenceContactName`,
+  `correspondenceEmail/Phone/Fax`), most of the credentialing block
+  (`credentialingStreet/Suite/City/State/Zip`, `credentialingFax`), billing
+  `Street/Suite/City/Zip/Fax`, plus `states`, `preferredContactMethod`,
+  `contractingContactTitle`.
+- **`provider` (12 missing):** `homeStreet/homeCity/homeZip` (the card has
+  `homeState` but not the rest of the address), `additionalCertifications`,
+  `ageGroupsServed`, `culturalCompetencyTraining`, `ssnLast4`, and five
+  internal columns.
+- **`facility` (12 missing):** `email`, `hours`, `effectiveDate`,
+  `acceptingNewPatients`, `adaCompliance`, the three language fields,
+  `serviceTypes`, `treatingCategories`, and two internal columns.
+- **`license` (3)** and **`groupInsurance` (1 — `notes`).**
+
+Copy-the-values is the MVP (doc 08 Phase 2). A coordinator on a form asking for
+the group's correspondence address cannot serve it from the card today, and no
+amount of picker redesign fixes that — the field isn't in the list.
+
+**Recommended shape — invert the maintenance burden.** Derive the picker from
+`get_sop_field_tokens()` (the same call the profile endpoint already makes, so
+picker and values can never disagree) and replace the hand-written allowlist
+with a **short, stable exclusion set**:
+
+1. **Case-scoped tables** (`payer.*`, `contract.*`, `mso.*`) — excluded
+   structurally; they never resolve without a case, and the profile endpoint
+   already returns them null with a reason.
+2. **Internal/audit columns** — `provider.launchId`, `provider.isTestProvider`,
+   `provider.verificationState`, `provider.terminatedDate`,
+   `provider.referenceOnly`, `facility.referenceOnly`, `facility.statusId`,
+   `license.verifiedBy/verifiedAt/verificationSourceUrl`. Roughly ten keys,
+   and the honest place for them is the RPC's own exclusion list (where
+   `id`/`org_id`/`created_at` already live), so every consumer benefits rather
+   than each one re-filtering.
+3. **The PHI decision** — `provider.ssnLast4` is the single genuine product
+   call (doc 07 §4 and §7.3 say include it; E4.3 TE-16 excluded it
+   structurally). Whichever way it goes, it is now one entry in an exclusion
+   set rather than the reason the whole list is hand-written. The E4.4 vault
+   values are not in the catalog at all — they are not columns on these
+   tables — so they stay structurally unreachable either way.
+
+**Name the posture change honestly:** allow-list → deny-list is weaker by
+default. A future sensitive column added to `providers` would auto-appear on
+the picker unless someone excludes it. Mitigate with a **catalog-drift test**:
+pin the known token set in a fixture and fail when the schema introduces a
+token that is in neither the offered set nor the exclusion set — turning a
+silent widening into a build failure that demands an explicit decision. That
+keeps the safety property the allowlist was actually providing while removing
+the hand-maintenance that made it wrong.
+
+**Extension side:** `quickCards.ts`'s catalog mirror stops being a hand-copy.
+The panel already receives every resolvable token _with its value_ in the
+profile response, so the picker can derive its rows from that payload (or from
+a small catalog read) — the "never add a key here that the panel catalog lacks"
+comment becomes unnecessary because there is no second list to keep in sync.
+`MAX_QUICK_CARD_FIELDS = 32` should also go: doc 02 §2.7 groups the card by
+section precisely so length stops mattering.
+
+S2.1 is therefore a **real app-side story, and the highest-leverage one in
+Phase 2** — not the README edit the package describes. Its acceptance criteria
+should read: picker offers the schema-derived catalog; the exclusion set is
+named in one place and tested; the drift test exists; the extension mirror is
+deleted rather than updated; `ssnLast4` is an explicit, recorded decision.
 
 ### 2.2 · Doc 01's status-machine invariant is one epic out of date
 
@@ -274,33 +354,34 @@ URL matching driven by the field-map rows' `url_pattern` and/or `form_url`.
 
 ## 3 · Doc 08, sharpened — deltas to apply before writing the epic
 
-| Story              | Delta                                                                                                                                                                                                                                                                                            |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S1.2 / S1.3 / S1.6 | Collapse to "review + merge extension PR #29"; keep the acceptance criteria as the review checklist.                                                                                                                                                                                             |
-| S1.1               | Add: commit the icon PNGs (not in repo). Blocked only on assets.                                                                                                                                                                                                                                 |
-| S1.5               | Rescope to the avatar _menu_ on top of #29's greeting.                                                                                                                                                                                                                                           |
-| S1.7               | Extension-side only; app side shipped in Slice F.                                                                                                                                                                                                                                                |
-| S2.1               | Rewrite as the app-side catalog widening (allowlist + cap + explicit `ssnLast4` decision + tests + extension mirror). **Needs PM re-confirmation first** (finding 2.1).                                                                                                                          |
-| S2.2 / S2.3        | Sound as written. Verify at 320 stands.                                                                                                                                                                                                                                                          |
-| S3.1               | Keep (spike first). Add: reuse the locked `SET_ACTIVE_CASE` builder.                                                                                                                                                                                                                             |
-| S3.2               | Add the `GET /api/portals` read + gate assertions; name the MV3 host-permission decision as its own checkbox.                                                                                                                                                                                    |
-| S3.3 / S3.4        | Sound. Queue ranking source = the E2.3 deadline reducer the server already exposes via `GET /api/next-best-action` (extend to a ranked _list_ — today it returns only the top item).                                                                                                             |
-| S3.5               | Depends on the Slice-E launcher re-home (finding 2.8).                                                                                                                                                                                                                                           |
-| S4.1 / S4.2        | Sound. Fill-report snapshot rule is well specified — pin it in a test.                                                                                                                                                                                                                           |
-| S4.3               | Unblock per §1a; replace the blocker line with the step-tick endpoint decision.                                                                                                                                                                                                                  |
-| S4.4               | Add the server half: opt-in status bump through `set_case_status` with touch evidence (finding 2.3). Offline/no-false-success criteria stand.                                                                                                                                                    |
-| S4.5               | Sound; Slice D's dialog is the target surface, provenance strip is additive.                                                                                                                                                                                                                     |
-| S5.1               | The propose-only write is a **new `/api` write route** with gate assertions + the `fixit.ts` boundary-comment update. "Enforced server-side" = fill path ignores `proposed` rows (extension fill currently fills proposed AND approved — flip that at the same time, or the invariant is false). |
-| S5.2–S5.4          | Sound; S5.3 builds on `field_dictionary` + `mappingConfidence` (finding 2.6).                                                                                                                                                                                                                    |
-| S6.1               | The real schema design of the epic (per-field `verified_at` home).                                                                                                                                                                                                                               |
-| S6.2               | Smaller: column exists; the write route is the work. Reuse `CAQH_CURRENT_DAYS`.                                                                                                                                                                                                                  |
-| S6.4               | Rescope to presentational + known-fragile derivation; no new ingestion (finding 2.4).                                                                                                                                                                                                            |
-| Cut order          | Unchanged and still right — except S4.3 no longer belongs in it for the stated reason; if it's cut now, that's a scope choice, not a dependency failure.                                                                                                                                         |
+| Story              | Delta                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1.2 / S1.3 / S1.6 | Collapse to "review + merge extension PR #29"; keep the acceptance criteria as the review checklist.                                                                                                                                                                                                                                                                                                                                    |
+| S1.1               | Add: commit the icon PNGs (not in repo). Blocked only on assets.                                                                                                                                                                                                                                                                                                                                                                        |
+| S1.5               | Rescope to the avatar _menu_ on top of #29's greeting.                                                                                                                                                                                                                                                                                                                                                                                  |
+| S1.7               | Extension-side only; app side shipped in Slice F.                                                                                                                                                                                                                                                                                                                                                                                       |
+| S2.1               | Rewrite as the schema-derived catalog story: the picker reads `get_sop_field_tokens()`, the hand-written allowlist is retired in favour of a named exclusion set, a drift test is added, the 32-cap is dropped, the extension mirror is deleted, and `ssnLast4` is decided explicitly (finding 2.1). Highest-leverage story in Phase 2 — the card is missing 51 schema fields today, including the group's entire correspondence block. |
+| S2.2 / S2.3        | Sound as written. Verify at 320 stands.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| S3.1               | Keep (spike first). Add: reuse the locked `SET_ACTIVE_CASE` builder.                                                                                                                                                                                                                                                                                                                                                                    |
+| S3.2               | Add the `GET /api/portals` read + gate assertions; name the MV3 host-permission decision as its own checkbox.                                                                                                                                                                                                                                                                                                                           |
+| S3.3 / S3.4        | Sound. Queue ranking source = the E2.3 deadline reducer the server already exposes via `GET /api/next-best-action` (extend to a ranked _list_ — today it returns only the top item).                                                                                                                                                                                                                                                    |
+| S3.5               | Depends on the Slice-E launcher re-home (finding 2.8).                                                                                                                                                                                                                                                                                                                                                                                  |
+| S4.1 / S4.2        | Sound. Fill-report snapshot rule is well specified — pin it in a test.                                                                                                                                                                                                                                                                                                                                                                  |
+| S4.3               | Unblock per §1a; replace the blocker line with the step-tick endpoint decision.                                                                                                                                                                                                                                                                                                                                                         |
+| S4.4               | Add the server half: opt-in status bump through `set_case_status` with touch evidence (finding 2.3). Offline/no-false-success criteria stand.                                                                                                                                                                                                                                                                                           |
+| S4.5               | Sound; Slice D's dialog is the target surface, provenance strip is additive.                                                                                                                                                                                                                                                                                                                                                            |
+| S5.1               | The propose-only write is a **new `/api` write route** with gate assertions + the `fixit.ts` boundary-comment update. "Enforced server-side" = fill path ignores `proposed` rows (extension fill currently fills proposed AND approved — flip that at the same time, or the invariant is false).                                                                                                                                        |
+| S5.2–S5.4          | Sound; S5.3 builds on `field_dictionary` + `mappingConfidence` (finding 2.6).                                                                                                                                                                                                                                                                                                                                                           |
+| S6.1               | The real schema design of the epic (per-field `verified_at` home).                                                                                                                                                                                                                                                                                                                                                                      |
+| S6.2               | Smaller: column exists; the write route is the work. Reuse `CAQH_CURRENT_DAYS`.                                                                                                                                                                                                                                                                                                                                                         |
+| S6.4               | Rescope to presentational + known-fragile derivation; no new ingestion (finding 2.4).                                                                                                                                                                                                                                                                                                                                                   |
+| Cut order          | Unchanged and still right — except S4.3 no longer belongs in it for the stated reason; if it's cut now, that's a scope choice, not a dependency failure.                                                                                                                                                                                                                                                                                |
 
 **Decisions to put in front of the PM before the epic is written:**
 
-1. Catalog widening re-confirmed as an E4.3-posture reversal — and SSN last 4
-   on the card, yes or no (finding 2.1).
+1. `provider.ssnLast4` on the card, yes or no — the one genuine product call
+   left once the catalog is schema-derived (finding 2.1). _(The schema-derived
+   direction itself is decided: PM, 2026-07-28.)_
 2. Step-tick endpoint vs. task-level-only Progress (finding §1a).
 3. Who owns "Check coverage" (the package's open question — still open).
 4. MV3 host-permission strategy for the DB-driven registry (finding 2.9).
