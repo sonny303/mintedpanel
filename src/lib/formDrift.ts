@@ -138,3 +138,103 @@ export function totalDriftCount(drift: ReadonlyMap<string, PortalFieldMap[]>): n
   for (const rows of drift.values()) n += rows.length;
   return n;
 }
+
+// ---------------------------------------------------------------------------
+// S6.4 — the two facts the drift report was missing: WHEN a dead selector last
+// worked, and which mappings have a history of breaking.
+//
+// Both are DERIVED from fill history. No new column, no new ingestion — the
+// review's rescoping (finding 2.4) was explicit that drift ingestion already
+// works end-to-end and only the reporting was thin.
+// ---------------------------------------------------------------------------
+
+/** A historical fill, newest-first, reduced to what dating a break needs. */
+export interface FillHistoryEntry {
+  portalKey: string;
+  startedAt: string | null;
+  /** fill_sessions.fields_filled — the labels that actually landed. */
+  fieldsFilled: unknown;
+  isTest?: boolean | null;
+}
+
+function filledLabels(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === "string");
+}
+
+/** When this mapping last filled successfully — the newest REAL fill whose
+ * fields_filled carried its report label. null when we have never seen it
+ * work, which is itself worth saying: a selector that never worked is a bad
+ * mapping, not drift. Dry runs are excluded for the same reason they are
+ * excluded from drift: they never touched the live DOM. */
+export function lastWorkingAt(
+  map: Pick<PortalFieldMap, "portalKey" | "selector">,
+  history: readonly FillHistoryEntry[],
+): string | null {
+  const label = reportLabelOf(map);
+  for (const fill of history) {
+    if (fill.isTest || fill.portalKey !== map.portalKey) continue;
+    if (filledLabels(fill.fieldsFilled).includes(label)) return fill.startedAt ?? null;
+  }
+  return null;
+}
+
+/** One row of the S6.4 report: what broke, where, and when it last worked.
+ * The coordinator reads this; they are never asked to diagnose it. */
+export interface DriftReportRow {
+  portalKey: string;
+  mapId: string;
+  field: string;
+  lastWorkingAt: string | null;
+  /** True when this mapping has broken before — see fragileMapIds. */
+  knownFragile: boolean;
+}
+
+/** Mappings that have drifted in ANY fill in the history, not just the latest.
+ * A field that breaks, gets repaired, and breaks again is a different problem
+ * from one that broke once — the next coverage check should treat it with
+ * suspicion (S6.4: "repair marks fields known-fragile"). */
+export function fragileMapIds(
+  history: readonly FillHistoryEntry[],
+  fills: readonly DriftFill[],
+  fieldMaps: readonly PortalFieldMap[],
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const fill of fills) {
+    for (const map of brokenMapsForFill(fill, fieldMaps)) {
+      counts.set(map.id, (counts.get(map.id) ?? 0) + 1);
+    }
+  }
+  // A mapping is fragile once it has broken at least once AND we have
+  // evidence it worked before — i.e. it decayed, rather than never working.
+  const fragile = new Set<string>();
+  for (const [mapId, breaks] of counts) {
+    const map = fieldMaps.find((m) => m.id === mapId);
+    if (!map) continue;
+    if (breaks >= 1 && lastWorkingAt(map, history) != null) fragile.add(mapId);
+  }
+  return fragile;
+}
+
+/** Assemble the drift report rows for one portal's broken mappings. */
+export function buildDriftReport(
+  drift: ReadonlyMap<string, PortalFieldMap[]>,
+  history: readonly FillHistoryEntry[],
+  fragile: ReadonlySet<string>,
+): DriftReportRow[] {
+  const rows: DriftReportRow[] = [];
+  for (const [portalKey, maps] of drift) {
+    for (const map of maps) {
+      rows.push({
+        portalKey,
+        mapId: map.id,
+        field: map.fieldLabel ?? reportLabelOf(map),
+        lastWorkingAt: lastWorkingAt(map, history),
+        knownFragile: fragile.has(map.id),
+      });
+    }
+  }
+  // Oldest break first: the field that has been broken longest is the one
+  // costing the most fills.
+  return rows.sort((a, b) => (a.lastWorkingAt ?? "").localeCompare(b.lastWorkingAt ?? ""));
+}
