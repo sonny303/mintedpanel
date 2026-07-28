@@ -152,29 +152,70 @@ export function totalDriftCount(drift: ReadonlyMap<string, PortalFieldMap[]>): n
 export interface FillHistoryEntry {
   portalKey: string;
   startedAt: string | null;
-  /** fill_sessions.fields_filled — the labels that actually landed. */
-  fieldsFilled: unknown;
+  /** fill_sessions.fields_filled — a COUNT of fields that landed. It is an
+   * int4 column, NOT a list of labels: nothing anywhere records WHICH fields
+   * filled, which is why lastWorkingAt has to infer success below. */
+  fieldsFilled: number | null;
+  /** fill_sessions.fields_skipped — the per-field skip reports, verbatim. */
+  fieldsSkipped: unknown;
   isTest?: boolean | null;
 }
 
-function filledLabels(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((v): v is string => typeof v === "string");
+/** Did this fill report THIS mapping as not-found? Same join as
+ * brokenMapsForFill (mapId first, report label for pre-mapId telemetry), but
+ * without the repaired-since filter: here we are asking a historical question
+ * — "did it break in that fill" — and a later repair does not change the past. */
+function fillReportsBroken(
+  fill: FillHistoryEntry,
+  map: Pick<PortalFieldMap, "id" | "selector">,
+): boolean {
+  const label = reportLabelOf(map);
+  return parseSkippedEntries(fill.fieldsSkipped).some(
+    (e) =>
+      e.kind === "skipped" &&
+      e.reason === FIELD_NOT_FOUND_REASON &&
+      (e.mapId ? e.mapId === map.id : e.label === label),
+  );
 }
 
-/** When this mapping last filled successfully — the newest REAL fill whose
- * fields_filled carried its report label. null when we have never seen it
+function isBefore(a: string, b: string): boolean {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  // Unparseable timestamps must not silently order as "before" — treat an
+  // undatable fill as no evidence rather than as evidence of working.
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
+  return ta < tb;
+}
+
+/** When this mapping last filled successfully. null when we have never seen it
  * work, which is itself worth saying: a selector that never worked is a bad
- * mapping, not drift. Dry runs are excluded for the same reason they are
- * excluded from drift: they never touched the live DOM. */
+ * mapping, not drift.
+ *
+ * This is INFERRED, and it has to be. `fields_filled` is a count, and the
+ * extension never reports which selectors succeeded — only which were skipped
+ * (fields_skipped). So a mapping counts as having worked in a fill when all of
+ * these hold:
+ *   - the fill is a REAL one on this mapping's portal (dry runs never touched
+ *     the live DOM, same reason drift excludes them);
+ *   - the fill landed at least one field, so "no skip report" means something;
+ *   - the mapping already existed when the fill ran — otherwise its absence
+ *     from the skip list says nothing about it;
+ *   - and the fill did NOT report it not-found.
+ *
+ * The weak link is a mapping that existed but was never attempted (a page the
+ * fill did not reach). That would read as "worked", so this is a floor on
+ * staleness, not a precise last-success timestamp. It is presented that way. */
 export function lastWorkingAt(
-  map: Pick<PortalFieldMap, "portalKey" | "selector">,
+  map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
   history: readonly FillHistoryEntry[],
 ): string | null {
-  const label = reportLabelOf(map);
   for (const fill of history) {
     if (fill.isTest || fill.portalKey !== map.portalKey) continue;
-    if (filledLabels(fill.fieldsFilled).includes(label)) return fill.startedAt ?? null;
+    if (!fill.startedAt) continue;
+    if ((fill.fieldsFilled ?? 0) <= 0) continue;
+    if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
+    if (fillReportsBroken(fill, map)) continue;
+    return fill.startedAt;
   }
   return null;
 }
