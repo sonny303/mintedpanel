@@ -259,18 +259,24 @@ export function ApprovedDialog({
   payer: Payer | null;
   /** "Provider · Payer · State" header line, composed by the control. */
   caseSummary?: string | null;
-  /** S4.5 / C3 — the case's stored payer reference and where it came from.
-   * Pre-fills the expected provider ID so the number captured at submission
-   * isn't retyped weeks later; the strip states its origin so the value is
-   * never mistaken for something read off the approval letter. */
+  /** S4.5 / C3 — the case's stored payer reference and where it came from,
+   * shown for reference only. It is deliberately NOT pre-filled into the
+   * issued-ID field: see the individualId state below. */
   referenceProvenance?: ReferenceProvenance | null;
   saving: boolean;
   onCancel: () => void;
   onConfirm: (values: ApprovedValues) => void;
 }) {
   const [effectiveDate, setEffectiveDate] = useState("");
-  // Pre-filled from the stored reference (C3) — overridable like any field.
-  const [individualId, setIndividualId] = useState(referenceProvenance?.reference ?? "");
+  // Starts EMPTY on purpose. The stored reference is a SUBMISSION tracking
+  // number; this field is the ID the payer ISSUES on approval. They are
+  // different facts and only sometimes the same string, so pre-filling one
+  // with the other writes a wrong identifier for anyone who clicks straight
+  // through — and, worse, makes E6.8's "Awaiting ID" unreachable, since the
+  // "Didn't receive" ack only applies to a field left blank. The reference is
+  // still shown above (C3) so it can be copied when it IS the issued ID; that
+  // has to be a decision, not a default.
+  const [individualId, setIndividualId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [individualMissing, setIndividualMissing] = useState(false);
   const [groupMissing, setGroupMissing] = useState(false);
@@ -313,8 +319,8 @@ export function ApprovedDialog({
                 {referenceProvenance.capturedAt
                   ? ` on ${fmtDate(referenceProvenance.capturedAt)}`
                   : ""}
-                . It pre-fills below — check it against the approval letter and change it if the
-                payer issued a different ID.
+                . This is the submission tracking number, not the payer&rsquo;s issued ID — enter
+                the ID from the approval letter below, or leave it blank if none was issued.
               </p>
             </div>
           ) : null}

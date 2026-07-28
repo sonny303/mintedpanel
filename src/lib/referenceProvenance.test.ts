@@ -14,7 +14,7 @@ function touch(over: Partial<Touch>): Touch {
 }
 
 describe("resolveReferenceProvenance (S4.5 / C3)", () => {
-  it("returns null when the case has no reference — nothing to pre-fill", () => {
+  it("returns null when the case has no reference — nothing to show", () => {
     expect(resolveReferenceProvenance(null, [touch({})])).toBeNull();
     expect(resolveReferenceProvenance("   ", [touch({})])).toBeNull();
   });
@@ -53,9 +53,10 @@ describe("resolveReferenceProvenance (S4.5 / C3)", () => {
     expect(result?.capturedAt).toBe("2026-07-10");
   });
 
-  it("still pre-fills when the reference has no identifiable recording touch", () => {
+  it("still resolves when the reference has no identifiable recording touch", () => {
     // A reference set by a path that logged no submission touch is still the
-    // number to pre-fill — it just carries no date or attribution.
+    // number to show — it just carries no date or attribution. (The Approve
+    // dialog displays this; it never pre-fills the payer's issued ID with it.)
     const result = resolveReferenceProvenance("REF-1001", []);
     expect(result).toEqual({ reference: "REF-1001", capturedAt: null, fromWorkbench: false });
   });
