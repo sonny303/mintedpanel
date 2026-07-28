@@ -271,7 +271,7 @@ test("name + near match — existing payers surface before any other field", asy
   await expect(page.getByText(/merged into Blue Cross Blue Shield of Arizona/)).toBeVisible();
   await expect(page.getByRole("link", { name: "Use this one" })).toHaveAttribute(
     "href",
-    `/admin/payer-admin/catalog/${NEW_BCBS_ID}`,
+    `/admin/payer-admin/setup/${NEW_BCBS_ID}`,
   );
 
   // A genuinely new name clears the panel and restores Continue.
@@ -352,7 +352,7 @@ test("details — new: required fields, aliases, ID expectations → create_paye
   expect(tableWrites.filter((w) => w.table === "payers")).toEqual([]);
 
   // Creating lands on the new payer, already in the org's network.
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog\/payer-new-/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\/payer-new-/, { timeout: 15000 });
   await expect(page.getByRole("heading", { name: "Banner Health Plans" })).toBeVisible();
   await expect(page.getByText("In my network")).toBeVisible();
 });
@@ -423,7 +423,7 @@ test("edit payer — hydrated from the record, catalog-wide, saved through updat
   // Slice C §2.11: editing happens IN PLACE on the payer detail (this legacy
   // URL redirects into it with ?edit=1), so a save returns to the read card on
   // the same page instead of navigating.
-  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}`), {
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${AETNA_ID}`), {
     timeout: 15000,
   });
   await expect(page.getByRole("heading", { name: "Identity & enrollment ID" })).toBeVisible({
@@ -487,12 +487,12 @@ test("the payer detail carries the Edit entry for admins — in place, same form
   // Slice C §2.11: the entry is a BUTTON that swaps this same form onto the
   // detail (no second edit page, no navigation) — the standalone /edit URL
   // stays alive as a redirect into exactly this state.
-  await page.goto(`/admin/payer-admin/catalog/${AETNA_ID}`);
+  await page.goto(`/admin/payer-admin/setup/${AETNA_ID}`);
   await expect(page.getByRole("heading", { name: "Aetna (CVS Health)" })).toBeVisible({
     timeout: 30000,
   });
   await page.getByRole("button", { name: "Edit payer" }).click();
   await expect(page.getByRole("heading", { name: "Edit payer" })).toBeVisible();
   await expect(page.getByLabel("Payer name", { exact: true })).toHaveValue("Aetna (CVS Health)");
-  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/catalog/${AETNA_ID}`));
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${AETNA_ID}`));
 });

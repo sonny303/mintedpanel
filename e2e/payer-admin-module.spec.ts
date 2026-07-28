@@ -1,11 +1,12 @@
 import { test, expect, type Route } from "@playwright/test";
 
 // E4.2 TS-76/TS-78/TS-91, restructured by E6.5 F6.5.1, E6.6 F6.6.6, and the
-// payer-and-cases Slice A retarget — the module head at /admin/payer-admin/
-// catalog is now the SINGLE-VIEW Payer Setup page (screen 1: KPI filter cards
-// + payer table; the tab strip and Ready-for-business funnel are superseded;
-// /admin/payer-admin/sops stays a shareable legacy URL until Slice G folds
-// it, and the old ?tab= spellings still redirect via the index mapper).
+// payer-and-cases Slice A retarget, finished by Slice G — the module head at
+// /admin/payer-admin/setup (Slice G RENAMED the stale `catalog` segment) is
+// the SINGLE-VIEW Payer Setup page (screen 1: KPI filter cards + payer table;
+// the tab strip and Ready-for-business funnel are superseded). Slice G also
+// FOLDED /admin/payer-admin/sops, so it, /admin/payer-admin/catalog and the
+// old ?tab= spellings all redirect into the setup segment.
 // Covers: the single nav entry (all roles under the E6.1 interim posture);
 // keyboard operability of the new page's KPI filter cards (TE-20c successor);
 // the E6.6 fixed-default NEGATIVE pins (TS-78/TS-91 flipped: no reason-code
@@ -167,9 +168,9 @@ test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry; the module h
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
-  // The bare module URL still maps to the catalog segment (shareable URL; the
-  // segment RENAME is Slice G's).
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  // The bare module URL maps to the setup segment (Slice G's rename of the
+  // stale `catalog` name); every legacy spelling still lands.
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // Slice A: ONE view — no tab strip, no funnel; the assigned payer renders
@@ -180,12 +181,11 @@ test("TS-76 / TE-18 — P4/admin sees the single Payer Setup entry; the module h
   await expect(row).toBeVisible();
   await expect(row.getByText("Needs template")).toBeVisible();
 
-  // The legacy SOPs segment keeps the F6.5.6 interim-governance note until
-  // Slice G folds it.
+  // Slice G folded the legacy SOPs segment — its URL still resolves, landing
+  // on Payer Setup rather than dead-ending.
   await page.goto("/admin/payer-admin/sops");
-  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible({
-    timeout: 30000,
-  });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
+  await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 });
 
 test("TE-20c — the nav entry and the KPI filter cards are keyboard-operable", async ({ page }) => {
@@ -197,7 +197,7 @@ test("TE-20c — the nav entry and the KPI filter cards are keyboard-operable", 
   await navEntry.focus();
   await expect(navEntry).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 15000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 15000 });
 
   // Slice A: the KPI cards are real buttons — focus + Enter toggles the
   // filter and aria-pressed reports it.
@@ -224,7 +224,7 @@ test("P2/specialist sees the Payer Setup entry and reaches the workspace (E6.1 F
   await expect(rail.getByRole("link", { name: "Payer & SOP Setup" })).toHaveCount(0);
 
   await page.goto("/admin/payer-admin");
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/catalog$/, { timeout: 30000 });
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });

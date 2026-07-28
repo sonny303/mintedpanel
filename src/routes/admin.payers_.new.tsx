@@ -64,7 +64,7 @@ function SetUpPayerPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Link
-          to="/admin/payer-admin/catalog"
+          to="/admin/payer-admin/setup"
           className="text-[12px] font-medium text-[#1B4D3E] underline underline-offset-2"
         >
           ← Back to Payer Setup
@@ -90,7 +90,7 @@ function SetUpPayerPage() {
     createMut.mutate(toPayerWriteInput(draft), {
       onSuccess: (payer) => {
         toast.success(`${payer.name} added to your network`);
-        void navigate({ to: "/admin/payer-admin/catalog/$payerId", params: { payerId: payer.id } });
+        void navigate({ to: "/admin/payer-admin/setup/$payerId", params: { payerId: payer.id } });
       },
       onError: (e) => setSubmitError(e instanceof Error ? e.message : "Couldn't create the payer."),
     });

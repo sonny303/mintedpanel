@@ -46,7 +46,7 @@ export function CaseHeader({
           <p className="mt-1 flex flex-wrap items-center gap-2 text-[14px] text-muted-foreground">
             {c.payer ? (
               <Link
-                to="/admin/payer-admin/catalog/$payerId"
+                to="/admin/payer-admin/setup/$payerId"
                 params={{ payerId: c.payer.id }}
                 className="hover:text-[#1B4D3E] hover:underline"
               >

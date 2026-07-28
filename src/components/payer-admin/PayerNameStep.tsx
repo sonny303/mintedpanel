@@ -126,7 +126,7 @@ export function PayerNameStep({
                     size="sm"
                     className="h-8 flex-none bg-[#1B4D3E] px-3 text-white hover:bg-[#163F33]"
                   >
-                    <Link to="/admin/payer-admin/catalog/$payerId" params={{ payerId: target.id }}>
+                    <Link to="/admin/payer-admin/setup/$payerId" params={{ payerId: target.id }}>
                       Use this one
                     </Link>
                   </Button>
@@ -138,7 +138,7 @@ export function PayerNameStep({
 
         <div className="flex items-center justify-end gap-2 border-t border-[#F0EEEA] pt-4">
           <Button asChild variant="outline">
-            <Link to="/admin/payer-admin/catalog">Cancel</Link>
+            <Link to="/admin/payer-admin/setup">Cancel</Link>
           </Button>
           <Button
             type="button"

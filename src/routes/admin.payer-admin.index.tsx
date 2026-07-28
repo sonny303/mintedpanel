@@ -1,9 +1,10 @@
-// E6.5 F6.5.1 — the ?tab= workspace is superseded by two REAL URL segments
-// (/admin/payer-admin/catalog + /admin/payer-admin/sops). This index is now a
-// redirect mapper so every legacy ?tab= deep link (and the bare module URL)
-// lands on its successor (legacy URLs never dead-end):
-//   (none) | setup | catalog          → /admin/payer-admin/catalog
-//   templates | forms | needs-attention → /admin/payer-admin/sops
+// E6.5 F6.5.1 → Slice G — the ?tab= workspace was superseded by real URL
+// segments, and Slice G folded /sops away and renamed the stale `catalog`
+// segment to `setup`. This index is the redirect mapper so every legacy
+// ?tab= deep link (and the bare module URL) lands on its successor — legacy
+// URLs never dead-end:
+//   (none) | setup | catalog | templates | forms | needs-attention
+//                                      → /admin/payer-admin/setup
 //   org-settings                       → /org-detail (org data left the module)
 // The old ?payerId= Forms-tab context (register-portal preselect) is dropped:
 // portal registration lives inside the SOP form step since E6.5.
@@ -33,9 +34,6 @@ export const Route = createFileRoute("/admin/payer-admin/")({
     if (search.tab === "org-settings") {
       throw redirect({ to: "/org-detail", replace: true });
     }
-    if (search.tab === "templates" || search.tab === "forms" || search.tab === "needs-attention") {
-      throw redirect({ to: "/admin/payer-admin/sops", replace: true });
-    }
-    throw redirect({ to: "/admin/payer-admin/catalog", replace: true });
+    throw redirect({ to: "/admin/payer-admin/setup", replace: true });
   },
 });

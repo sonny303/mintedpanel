@@ -462,11 +462,11 @@ test.beforeEach(async ({ context }) => {
   );
 });
 
-test("TS-114a — the single-view Payer Setup page heads the module; the SOPs segment stays shareable", async ({
+test("TS-114a — the single-view Payer Setup page heads the module; the folded SOPs segment redirects in", async ({
   page,
 }) => {
   scenario = "form-setup";
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // Screen 1 is ONE view: no tab strip and no Ready-for-business funnel —
@@ -478,36 +478,40 @@ test("TS-114a — the single-view Payer Setup page heads the module; the SOPs se
   const bcbsRow = page.locator("tbody tr", { hasText: "BCBS Kansas" }).first();
   await expect(bcbsRow.getByText("Published")).toBeVisible();
 
-  // The SOPs segment is its own shareable URL with the templates list + the
-  // F6.5.6 interim-governance note (the authoring machinery lives there
-  // until Slice G folds the segment).
+  // Slice G FOLDED the SOPs segment (the design removes the tab outright): its
+  // URL still resolves, redirecting into Payer Setup — never a dead end.
   await page.goto("/admin/payer-admin/sops");
+  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup$/, { timeout: 30000 });
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText(/authored once and inherited by every organization/i)).toBeVisible();
-  await expect(page.getByText("BCBS Kansas NC Enrollment")).toBeVisible();
-  await expect(page.getByRole("button", { name: "New global SOP" })).toBeVisible();
+
+  // The templates list moved WITH the fold: a payer's templates are on its
+  // detail's Templates tab, which is where authoring is entered from now.
+  await page.goto(`/admin/payer-admin/setup/${BCBS_ID}?tab=templates`);
+  await expect(page.getByText("BCBS Kansas NC Enrollment").first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByRole("link", { name: "+ New template" })).toBeVisible();
 });
 
 test("TS-114b — authoring a global SOP writes through author_global_sop (org_id NULL head)", async ({
   page,
 }) => {
   scenario = "authoring";
-  // Slice A retarget: the funnel's per-row author CTA is gone (screen 1 keeps
-  // one Template-status badge); a payer needing a template shows the honest
-  // badge, and authoring enters through the SOPs segment's New-global-SOP.
-  await page.goto("/admin/payer-admin/catalog");
+  // Slice A retired the funnel's per-row author CTA (screen 1 keeps one
+  // Template-status badge) and Slice G folded the SOPs segment, so authoring
+  // now enters from the payer's OWN Templates tab — the payer needing a
+  // template shows the honest badge on the list, then you open it.
+  await page.goto("/admin/payer-admin/setup");
   const aetnaRow = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" }).first();
   await expect(aetnaRow.getByText("Needs template")).toBeVisible({ timeout: 30000 });
-  await page.goto("/admin/payer-admin/sops");
-  const newSopButton = page.getByRole("button", { name: "New global SOP" });
-  await expect(newSopButton).toBeVisible({ timeout: 30000 });
-  await newSopButton.click();
+  await page.goto(`/admin/payer-admin/setup/${AETNA_ID}?tab=templates`);
+  const authorCta = page.getByRole("link", { name: "+ Author template" });
+  await expect(authorCta).toBeVisible({ timeout: 30000 });
+  await authorCta.click();
 
   // The wizard opens in GLOBAL mode with the shared-blast banner visible.
-  // Slice F: this entry carries NO payer context (Slice A retired the funnel's
-  // per-row author CTA), so Basics renders the payer PICKER — the fixed-payer
-  // display is the deep-linked-with-?payerId path.
+  // Entering from the payer detail CARRIES payer context (?payerId), so Basics
+  // renders the payer FIXED rather than the picker — the state is still chosen.
   await expect(page).toHaveURL(/\/admin\/templates\/new\?.*tier=global/, { timeout: 30000 });
+  await expect(page).toHaveURL(new RegExp(`payerId=${AETNA_ID}`), { timeout: 30000 });
   await expect(page.getByText(/Global template — authored once and inherited/i)).toBeVisible();
 
   await page
@@ -515,9 +519,7 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
     .first()
     .locator("input")
     .fill("Aetna NC Enrollment");
-  // Match-key selects: Payer / State / Group — pick Aetna + NC.
-  await page.locator('div:has(> label:text-is("Payer"))').first().getByRole("combobox").click();
-  await page.getByRole("option", { name: "Aetna (CVS Health)" }).click();
+  // Match key: the payer arrived fixed from the detail; pick the state.
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
@@ -586,23 +588,26 @@ test("TS-132 — drift: badge + banner + in-editor repair clears it; never block
   page,
 }) => {
   scenario = "drift";
-  await page.goto("/admin/payer-admin/sops");
+  await page.goto("/admin/payer-admin/setup");
 
   // The Sidebar chip is DRIFT-ONLY (one broken mapping).
   await expect(page.getByLabel("1 broken form mappings").first()).toBeVisible({
     timeout: 30000,
   });
 
-  // Queue-first banner names the portal + the field and deep-links the OWNING
-  // SOP editor; the tab stays fully operable (warn, never block).
-  const banner = page.getByText(/1 mapping broke on the last real fill of BCBS KS Enrollment/);
-  await expect(banner).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "BCBS Kansas NC Enrollment", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "New global SOP" })).toBeEnabled();
+  // Slice G: the standalone repair banner is gone (the design's "do not
+  // re-add" list) — drift surfaces as the "Drift detected" KPI filter card,
+  // which stays a filter and never blocks the page.
+  const driftCard = page.getByRole("button", { name: /Drift detected/ });
+  await expect(driftCard).toBeVisible();
+  await expect(driftCard).toContainText("1");
+  await driftCard.click();
+  await expect(driftCard).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("tbody tr", { hasText: "BCBS Kansas" }).first()).toBeVisible();
 
-  await page.getByRole("link", { name: /Open BCBS Kansas NC Enrollment/ }).click();
+  // Repair is entered from the payer's own Templates tab → the OWNING editor.
+  await page.goto(`/admin/payer-admin/setup/${BCBS_ID}?tab=templates`);
+  await page.getByRole("link", { name: "BCBS Kansas NC Enrollment", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/templates/${BCBS_TPL_ID}$`), { timeout: 30000 });
 
   // Step 3 → the form panel queues the broken mapping FIRST, labeled.
@@ -641,7 +646,7 @@ test("TS-133 — delegation renders as a catalog fact; the MSO routing engine is
   page,
 }) => {
   scenario = "form-setup";
-  await page.goto("/admin/payer-admin/catalog");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
 
   // Slice A retarget: the list keeps the four browse columns; the curated
@@ -654,7 +659,7 @@ test("TS-133 — delegation renders as a catalog fact; the MSO routing engine is
   ).toBeVisible({ timeout: 30000 });
 
   // The retired routing engine is never consulted anywhere in the module.
-  await page.goto("/admin/payer-admin/sops");
+  await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
   const msoCalls = calls.filter(
     (c) => c.path.includes("mso_routing_rules") || c.path === "msos" || c.path.includes("/msos"),

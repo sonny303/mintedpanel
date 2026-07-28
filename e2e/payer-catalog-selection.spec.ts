@@ -223,7 +223,7 @@ test("admin adds a canonical payer from its detail → In my network + it joins 
   await expect(page.getByText("No payers yet")).toBeVisible();
 
   // The subscription action lives on the payer detail.
-  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
+  await page.goto("/admin/payer-admin/setup/gp-bcbsnc");
   await expect(
     page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
   ).toBeVisible({ timeout: 30000 });
@@ -280,7 +280,7 @@ test("retired and merged payers cannot be newly added; the successor is named", 
 
   // Slice A: the browse rows are gone — the unavailable state renders on the
   // payer detail, which stays reachable by URL for history/links.
-  await page.goto("/admin/payer-admin/catalog/gp-merged");
+  await page.goto("/admin/payer-admin/setup/gp-merged");
   await expect(page.getByRole("heading", { name: "Old BCBS of NC" })).toBeVisible({
     timeout: 30000,
   });
@@ -288,7 +288,7 @@ test("retired and merged payers cannot be newly added; the successor is named", 
   await expect(page.getByText("BCBS-NC (new entity)")).toBeVisible(); // canonical successor
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
-  await page.goto("/admin/payer-admin/catalog/gp-retired");
+  await page.goto("/admin/payer-admin/setup/gp-retired");
   await expect(page.getByRole("heading", { name: "Defunct Health Plan" })).toBeVisible({
     timeout: 30000,
   });
@@ -362,7 +362,7 @@ test("§2.2 the assignment-remove verb is gone; re-adding never recreates archiv
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  await page.goto("/admin/payer-admin/catalog/gp-bcbsnc");
+  await page.goto("/admin/payer-admin/setup/gp-bcbsnc");
   await expect(
     page.getByRole("heading", { name: "Blue Cross and Blue Shield of North Carolina" }),
   ).toBeVisible({ timeout: 30000 });
