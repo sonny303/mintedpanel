@@ -315,6 +315,22 @@ export async function createMockApiServer(options = {}) {
   // In-memory extension quick-card layout prefs, keyed by userId (the route is
   // USER-scoped — prefs follow the user across orgs, so never org-keyed).
   const viewPrefs = new Map();
+  // A representative slice of the schema-derived quick-card catalog the real
+  // GET serves. Only needs to exercise the contract: an offered field, the
+  // now-offered ssnLast4, and (by absence) an excluded internal column and a
+  // case-scoped payer token, both of which must 422 on PUT.
+  const QUICK_CARD_CATALOG = [
+    { key: "provider.npi", label: "NPI (Type 1)", group: "provider", groupLabel: "Provider" },
+    { key: "provider.firstName", label: "First name", group: "provider", groupLabel: "Provider" },
+    { key: "provider.ssnLast4", label: "SSN (last 4)", group: "provider", groupLabel: "Provider" },
+    { key: "group.tin", label: "Tax ID (TIN)", group: "group", groupLabel: "Provider group" },
+    {
+      key: "license.licenseNumber",
+      label: "License number",
+      group: "license",
+      groupLabel: "State license",
+    },
+  ];
   // Per-server provider creates from POST /api/providers, so a create lands in
   // the caller's org (and is only visible to that org). Kept separate from the
   // shared PROVIDERS fixture so it never drifts the count assertions across runs.
@@ -368,22 +384,29 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, rows, null, { total: rows.length });
     }
 
-    // --- /api/me/view-prefs (E4.3 TE-15: user-scoped, BEFORE org resolution,
-    // like /api/me/orgs — the layout follows the user across orgs) ---
+    // --- /api/me/view-prefs (user-scoped, BEFORE org resolution, like
+    // /api/me/orgs — the layout follows the user across orgs) ---
     if (/^\/api\/me\/view-prefs\/?$/.test(url.pathname)) {
       if (method === "GET") {
-        return envelope(res, 200, { fields: viewPrefs.get(user.userId) ?? null });
+        // GET serves the layout AND the schema-derived catalog the picker
+        // renders (one round trip; same set the PUT validates against).
+        return envelope(res, 200, {
+          fields: viewPrefs.get(user.userId) ?? null,
+          catalog: QUICK_CARD_CATALOG,
+        });
       }
       if (method === "PUT") {
         const body = await readBody(req);
         const fields = body?.fields;
-        // Contract mirror: a bounded, deduped, ordered array of catalog keys;
-        // ssnLast4 / any excluded key is a 422 (the catalog excludes it).
+        // Contract mirror: a deduped, ordered array of DERIVED catalog keys.
+        // ssnLast4 is a legitimate field now; case-scoped payer/mso/contract
+        // tokens and internal/audit columns are not in the catalog, so naming
+        // one is a 422. No length cap — the closed key set bounds the body.
+        const allowed = new Set(QUICK_CARD_CATALOG.map((f) => f.key));
         if (
           !Array.isArray(fields) ||
-          fields.length > 32 ||
           new Set(fields).size !== fields.length ||
-          fields.some((f) => typeof f !== "string" || f === "provider.ssnLast4")
+          fields.some((f) => typeof f !== "string" || !allowed.has(f))
         ) {
           return envelope(res, 422, null, "invalid fields");
         }

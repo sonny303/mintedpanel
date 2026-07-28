@@ -11,7 +11,11 @@ import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
-import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
+import {
+  getExtensionViewPrefs,
+  getQuickCardCatalog,
+  putExtensionViewPrefs,
+} from "@/services/extensionViewPrefs";
 import { validateQuickCardFields } from "@/lib/quickCardCatalog";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
@@ -35,27 +39,47 @@ export async function handleListMyOrgs(user: UserContext): Promise<Response> {
   return ok(rows, { total: rows.length });
 }
 
-// GET /api/me/view-prefs — the caller's saved extension quick-card layout.
+// GET /api/me/view-prefs — the caller's saved quick-card layout AND the
+// catalog of fields they may choose from.
+//
 // USER-scoped like /api/me/orgs (runs on authenticateUser): the layout follows
-// the user across orgs, so the org guard deliberately does not apply. Not a
-// PHI read (a list of field KEYS, no provider values) — no audit. Returns
-// { fields: string[] | null } (null = nothing saved); the envelope data itself
-// is never null so the extension never treats "no saved layout" as an error.
+// the user across orgs, so the org guard deliberately does not apply. Not a PHI
+// read — the layout is a list of field KEYS and the catalog is schema metadata
+// (which fields exist, with labels); no provider values pass through either.
+// No audit row.
+//
+// Returns { fields: string[] | null, catalog: QuickCardField[] }. `fields` null
+// = nothing saved (the client falls back to its default layout); the envelope's
+// `data` is never null, so "no saved layout" is never read as an error. The
+// catalog rides along because the picker needs both at the same moment — one
+// round trip, and the offered set is guaranteed consistent with the set the PUT
+// below validates against.
 export async function handleGetViewPrefs(user: UserContext): Promise<Response> {
-  const prefs = await getExtensionViewPrefs({ db: user.db, userId: user.userId });
-  return ok(prefs);
+  const [prefs, catalog] = await Promise.all([
+    getExtensionViewPrefs({ db: user.db, userId: user.userId }),
+    getQuickCardCatalog({ db: user.db }),
+  ]);
+  return ok({ ...prefs, catalog });
 }
 
 // PUT /api/me/view-prefs — save the caller's quick-card layout. Body:
-// { fields: string[] }, validated to a bounded (<=32), deduplicated, ORDERED
-// array of closed-catalog keys (TE-15/TE-16) — anything else is a 422, incl. a
-// hand-crafted key for ssnLast4 or any vault/excluded field (they are absent
-// from the catalog). user_id comes from the verified JWT, never the body.
+// { fields: string[] }, validated to a deduplicated, ORDERED array of keys
+// drawn from the live schema-derived catalog — anything else is a 422.
+//
+// The allowed set is derived from get_sop_field_tokens() on every request, not
+// from a hand-written list, so the validator and the picker are the same
+// source. Excluded keys (case-scoped payer/mso/contract tokens, internal/audit
+// columns) can never validate. A full-SSN key can never validate either: the
+// vault lives in provider_ssn_vault, which the token catalog does not sweep, so
+// no such token exists to name. user_id comes from the verified JWT, never the
+// body.
 export async function handlePutViewPrefs(body: unknown, user: UserContext): Promise<Response> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return fail(422, "Request body must be a JSON object");
   }
-  const validation = validateQuickCardFields((body as { fields?: unknown }).fields);
+  const catalog = await getQuickCardCatalog({ db: user.db });
+  const allowed = new Set(catalog.map((f) => f.key));
+  const validation = validateQuickCardFields((body as { fields?: unknown }).fields, allowed);
   if (!validation.ok) return fail(422, validation.message);
   const prefs = await putExtensionViewPrefs(
     { db: user.db, userId: user.userId },

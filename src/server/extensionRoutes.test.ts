@@ -17,6 +17,7 @@ vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() })
 vi.mock("@/services/nextBestAction", () => ({ getNextBestAction: vi.fn() }));
 vi.mock("@/services/extensionViewPrefs", () => ({
   getExtensionViewPrefs: vi.fn(),
+  getQuickCardCatalog: vi.fn(),
   putExtensionViewPrefs: vi.fn(),
 }));
 
@@ -29,7 +30,11 @@ import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { getNextBestAction } from "@/services/nextBestAction";
-import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
+import {
+  getExtensionViewPrefs,
+  getQuickCardCatalog,
+  putExtensionViewPrefs,
+} from "@/services/extensionViewPrefs";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
@@ -56,6 +61,22 @@ const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 const getNbaMock = vi.mocked(getNextBestAction);
 const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
 const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
+const catalogMock = vi.mocked(getQuickCardCatalog);
+
+// A small stand-in for the schema-derived catalog. The real derivation is
+// covered in lib/quickCardCatalog.test.ts (incl. the drift guard); here it only
+// needs to be the set the handlers validate against.
+const CATALOG = [
+  { key: "provider.npi", label: "NPI (Type 1)", group: "provider", groupLabel: "Provider" },
+  { key: "provider.ssnLast4", label: "SSN (last 4)", group: "provider", groupLabel: "Provider" },
+  { key: "group.tin", label: "Tax ID (TIN)", group: "group", groupLabel: "Provider group" },
+  {
+    key: "license.licenseNumber",
+    label: "License number",
+    group: "license",
+    groupLabel: "State license",
+  },
+];
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -74,7 +95,10 @@ async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  catalogMock.mockResolvedValue(CATALOG);
+});
 
 describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
@@ -465,19 +489,24 @@ describe("view-prefs handlers (user-scoped)", () => {
     return { userId, email: "t@minted.com", userMetadata: null, db: {} as UserContext["db"] };
   }
 
-  it("GET returns { fields } scoped by the JWT user id, no audit", async () => {
+  it("GET returns the saved layout AND the derived catalog, scoped by the JWT user id", async () => {
     getViewPrefsMock.mockResolvedValue({ fields: ["provider.npi", "license.licenseNumber"] });
     const res = await handleGetViewPrefs(userCtx("uA"));
     expect(res.status).toBe(200);
-    expect((await body(res)).data).toEqual({ fields: ["provider.npi", "license.licenseNumber"] });
+    const data = (await body(res)).data as { fields: string[] | null; catalog: unknown };
+    expect(data.fields).toEqual(["provider.npi", "license.licenseNumber"]);
+    // The picker and the PUT validator read the same derived catalog, so it
+    // rides along on the read the picker already makes.
+    expect(data.catalog).toEqual(CATALOG);
     expect(getViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "uA" }));
   });
 
   it("GET returns { fields: null } when nothing is saved (never a null envelope data)", async () => {
     getViewPrefsMock.mockResolvedValue({ fields: null });
     const res = await handleGetViewPrefs(userCtx());
-    const b = await body(res);
-    expect(b.data).toEqual({ fields: null });
+    const data = (await body(res)).data as { fields: string[] | null; catalog: unknown };
+    expect(data.fields).toBeNull();
+    expect(data.catalog).toEqual(CATALOG);
   });
 
   it.each([
@@ -490,8 +519,25 @@ describe("view-prefs handlers (user-scoped)", () => {
     expect(putViewPrefsMock).not.toHaveBeenCalled();
   });
 
-  it("PUT rejects an excluded/unknown key (ssnLast4) with 422 before writing", async () => {
+  // ssnLast4 is OFFERED as of 2026-07-28 (product decision) — the profile
+  // endpoint already returns it and payer forms ask for it. The full SSN stays
+  // unreachable structurally: it lives in provider_ssn_vault, which the token
+  // catalog does not sweep, so no token can name it.
+  it("PUT accepts ssnLast4 (now a catalog field)", async () => {
+    putViewPrefsMock.mockResolvedValue({ fields: ["provider.ssnLast4"] });
     const res = await handlePutViewPrefs({ fields: ["provider.ssnLast4"] }, userCtx());
+    expect(res.status).toBe(200);
+    expect(putViewPrefsMock).toHaveBeenCalled();
+  });
+
+  it("PUT rejects a key outside the derived catalog with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["provider.launchId"] }, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects a case-scoped payer token with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["payer.name"] }, userCtx());
     expect(res.status).toBe(422);
     expect(putViewPrefsMock).not.toHaveBeenCalled();
   });
