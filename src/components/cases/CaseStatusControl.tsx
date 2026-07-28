@@ -83,7 +83,10 @@ const CLOSE_HINTS: Record<string, string> = {
   not_pursuing: "Deliberate opt-out — note required",
 };
 
-const REAPPLY_HINT = "Reopens this same case with a fresh task cycle";
+// Copy is deliberately narrow: this menu path runs set_case_status ONLY. Task
+// regeneration lives in ReapplyCaseAction (appendCaseTasks) — promising "a
+// fresh task cycle" here would describe work this path never does.
+const REAPPLY_HINT = "Reopens this same case — the prior denial stays in its history";
 
 export function CaseStatusControl({
   c,

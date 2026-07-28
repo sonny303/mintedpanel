@@ -40,6 +40,13 @@ export function CaseDetailsPanel({
   const providerIdBadge = approved ? enrollmentIdBadge(c.payer, c.payerIndividualProviderId) : null;
   const groupConfig = resolveGroupIdentifierConfig(c.payer);
   const groupIdValue = (c.payerGroupProviderId ?? "").trim();
+  // A payer may expect neither ID. Both rows below are independently
+  // conditional, so their divider has to be too — otherwise an approved case
+  // on such a payer renders a separator with nothing under it.
+  const showsProviderIdRow =
+    providerIdBadge?.kind === "value" || providerIdBadge?.kind === "awaiting";
+  const showsGroupIdRow = Boolean(groupIdValue) || groupConfig.expected;
+  const showsIssuedIdRows = showsProviderIdRow || showsGroupIdRow;
 
   return (
     <Card role="region" aria-label="Details" className="shadow-none border-border">
@@ -87,7 +94,7 @@ export function CaseDetailsPanel({
           <IdRow label="Group TIN" value={c.group?.tin ?? null} />
           {approved ? (
             <>
-              <Separator className="my-2" />
+              {showsIssuedIdRows ? <Separator className="my-2" /> : null}
               {/* The payer's own wording for each ID; an expected-but-acked
                   ID reads Awaiting ID until it is back-filled. */}
               {providerIdBadge?.kind === "value" ? (

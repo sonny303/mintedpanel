@@ -11,7 +11,7 @@
 //
 // Tab bodies mount lazily — each owns its own hooks, so opening Overview never
 // fetches the scorecard's fill/status-history caches.
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,10 @@ export interface PayerDetailPageProps {
   startEditing?: boolean;
 }
 
+// Paired ids wiring each tab to its panel (aria-controls / aria-labelledby).
+const tabButtonId = (tab: PayerDetailTab) => `payer-tab-${tab}`;
+const tabPanelId = (tab: PayerDetailTab) => `payer-panel-${tab}`;
+
 function BackLink() {
   return (
     <Link
@@ -83,6 +87,33 @@ export function PayerDetailPage({
   const payersQ = useGlobalPayers();
   const assignmentsQ = useOrgPayerAssignments();
   const isAdmin = useIsAdmin();
+  // WAI-ARIA tabs: one tab stop for the whole strip (roving tabindex), arrows
+  // move between tabs, and focus follows selection so the stop stays coherent.
+  const tabRefs = useRef<Partial<Record<PayerDetailTab, HTMLButtonElement | null>>>({});
+  const selectTab = (key: PayerDetailTab) => {
+    onTabChange(key);
+    tabRefs.current[key]?.focus();
+  };
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = PAYER_DETAIL_TABS.length - 1;
+    const next =
+      e.key === "ArrowRight"
+        ? index === last
+          ? 0
+          : index + 1
+        : e.key === "ArrowLeft"
+          ? index === 0
+            ? last
+            : index - 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    selectTab(PAYER_DETAIL_TABS[next]);
+  };
   const addMut = useAddAssignment();
   const reactivateMut = useReactivateAssignment();
 
@@ -241,14 +272,21 @@ export function PayerDetailPage({
         aria-label="Payer sections"
         className="flex flex-wrap items-center gap-0.5 border-b border-[#E8E5E0]"
       >
-        {PAYER_DETAIL_TABS.map((key) => {
+        {PAYER_DETAIL_TABS.map((key, index) => {
           const selected = key === tab;
           return (
             <button
               key={key}
               type="button"
               role="tab"
+              id={tabButtonId(key)}
               aria-selected={selected}
+              aria-controls={tabPanelId(key)}
+              tabIndex={selected ? 0 : -1}
+              ref={(el) => {
+                tabRefs.current[key] = el;
+              }}
+              onKeyDown={(e) => handleTabKeyDown(e, index)}
               onClick={() => onTabChange(key)}
               className={cn(
                 "-mb-px border-b-2 px-3 py-2.5 text-[13px] font-medium",
@@ -263,7 +301,15 @@ export function PayerDetailPage({
         })}
       </div>
 
-      <TabBody tab={tab} payer={payer} onTabChange={onTabChange} startEditing={startEditing} />
+      <div
+        role="tabpanel"
+        id={tabPanelId(tab)}
+        aria-labelledby={tabButtonId(tab)}
+        tabIndex={0}
+        className="focus-visible:outline-none"
+      >
+        <TabBody tab={tab} payer={payer} onTabChange={onTabChange} startEditing={startEditing} />
+      </div>
     </div>
   );
 }

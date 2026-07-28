@@ -126,6 +126,13 @@ export function PayerOverviewTab({
   // Alias edits ride a freshly hydrated draft so nothing else can drift.
   const saveAliases = (aliases: string[]) => {
     const next = { ...payerDraftFromPayer(payer), aliases };
+    // Same gate handleSave applies. The hydrated draft carries the payer's own
+    // fields, so a row that would fail validation must be repaired through Edit
+    // payer rather than rejected by update_payer after a pointless round trip.
+    if (hasPayerFormErrors(payerFormErrors(next))) {
+      toast.error("Fix this payer's details before editing aliases.");
+      return;
+    }
     updateMut.mutate(
       { id: payer.id, input: toPayerWriteInput(next) },
       {
@@ -223,7 +230,7 @@ export function PayerOverviewTab({
                   className="inline-flex h-7 items-center gap-1.5 rounded-[4px] border border-[#E8E5E0] bg-white pl-2.5 pr-1 text-[13px] text-foreground"
                 >
                   {alias}
-                  {isAdmin ? (
+                  {canEdit ? (
                     <button
                       type="button"
                       aria-label={`Remove alias ${alias}`}
@@ -239,7 +246,7 @@ export function PayerOverviewTab({
               {aliases.length === 0 && !aliasFormOpen ? (
                 <span className="text-[13px] text-muted-foreground">No aliases yet.</span>
               ) : null}
-              {isAdmin && aliasFormOpen ? (
+              {canEdit && aliasFormOpen ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Input
                     value={aliasDraft}
@@ -277,7 +284,7 @@ export function PayerOverviewTab({
                   </Button>
                 </span>
               ) : null}
-              {isAdmin && !aliasFormOpen ? (
+              {canEdit && !aliasFormOpen ? (
                 <Button
                   type="button"
                   variant="outline"

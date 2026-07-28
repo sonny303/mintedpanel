@@ -1758,53 +1758,58 @@ effective_date`) resolved to ids AT SCAN TIME via the E6.2
   via `auth.role()`, explicit grant floor closing the `20260715140300`
   default-grant hole). Global publishes/writes have NO audit rows
   (`audit_log.org_id` NOT NULL — version rows/timestamps are the trail).
-  **Module:** `/admin/payer-admin/catalog` + `/admin/payer-admin/sops` are
-  REAL segments (index = redirect mapper for every legacy `?tab=`;
-  org-settings → `/org-detail`; since E6.6 only
-  ResolutionIdSettingsSection + PayerResolutionIdDialog remain under
-  `components/settings/` — the reason-code and queue-ranking editors are
-  deleted, F6.6.6). Catalog tab = **`PayerReadinessFunnel`**
-  (pure `src/lib/payerReadinessFunnel.ts` + `usePayerReadinessFunnel` over
-  `activeOrgPayers`: per-payer sopPublished/formState(none|registered|
-  trained|proven)/driftCount + ONE next action author_sop→register_portal→
-  train_mappings/repair_drift→run_dry_test→ready; no-online-form SOP =
-  ready-with-note) over `PayerCatalogBrowser` (+delegation fact). SOPs tab =
-  drift banners (deep-link the owning SOP) + `TemplatesList` (+"New global
-  SOP" → `/admin/templates/new?tier=global`). **In-editor form machinery
-  (`src/components/templates/FormStepPanel.tsx`):** mounted under every
-  online_form step (collapsed by default — the TemplateTaskRow memo/latency
-  contract holds; ONE new primitive prop `isGlobalAuthoring`): register/pick
-  portal (tier by template), inline trainer (broken-first; org rows via the
-  audited RLS mutations + dictionary learning, global rows via the RPC),
-  and the **mock-data dry run** — `src/lib/mockFillProfile.ts` (versioned
-  synthetic token map, never PHI/provider reads; supersedes
-  `resolveTestProviderTokens`, deleted) through `computeTestRun` →
-  `recordTestFillFromApp` (`providerId` now nullable) → pass = zero
-  unmatched → proven flip. **Wizard global authoring:** `TemplateWizard`
-  gained `globalTier`; global rows are editable (fallback stays read-only —
-  sop-versioning TS-47 narrowed), create/duplicate/match-key/archive route
-  through `authorGlobalSop`, content publishes through the RPC (blast-radius
-  ack), payer+state required for global keys. **Drift (F6.5.4):**
-  `src/lib/formDrift.ts` (+suite) carries the E4.3a contract standalone
-  (parseSkippedEntries/FIELD_NOT_FOUND_REASON/mapId-then-label join,
-  latest-REAL-fill reduction, buildDriftByPortal, **repaired-since rule** —
-  a map edited after the reporting fill drops out until the next real fill)
-  → `useFormDrift` (2 caches) feeds the Sidebar badge (drift-only now),
-  funnel column, and editor queue. **Retired outright:** FixitDeck/
-  `useFixit`/`fixitQueue.ts`/`fixitFields`/`goodCatches`, `PayerSetupList`/
-  `usePayerSetup` (payerSetup.ts slims to `activeOrgPayers`/
-  `resolutionIdSource`), `FormOnboardingPanel` + its route (redirect), and
-  the **MSO routing engine app-side** (`getMsoRoutingRule`/`useMsoRoutingRule`/
-  msos service+hooks/keys + the case-detail callout; tables stay dormant —
-  live-verified 0 rows; delegation renders from the catalog fact).
-  Legacy redirects retargeted (fix-it/admin-portals/payer-directory/
-  portals-train/mso-routing/admin-payers/admin-templates → the segments).
-  e2e: NEW `e2e/payer-setup-module.spec.ts` (TS-114/131/132/133/134,
-  stateful RPC write-through harness) supersedes `fix-it.spec.ts` +
-  `payer-setup-funnel.spec.ts` (deleted); payer-admin-module/admin-payers/
-  legacy-routes retargeted; template-typing-latency stays green.
-  `payerGovernance.test.ts` re-anchored (funnel posture + delegation_note
-  no-app-writer pin).
+  **Module (SUPERSEDED by the Payer & Cases program — see that entry; kept
+  for the derivations, which are all still live):** `/admin/payer-admin/catalog`
+  - `/admin/payer-admin/sops` were REAL segments here (index = redirect mapper
+    for every legacy `?tab=`; org-settings → `/org-detail`; since E6.6 only
+    ResolutionIdSettingsSection + PayerResolutionIdDialog remain under
+    `components/settings/` — the reason-code and queue-ranking editors are
+    deleted, F6.6.6). **Both segments are now redirect shells → the Slice G
+    `setup` segment**, and the three components that composed them
+    (`PayerReadinessFunnel`, `PayerCatalogBrowser`, `TemplatesList`) are
+    DELETED. What survives is the derivation: **pure
+    `src/lib/payerReadinessFunnel.ts` + `usePayerReadinessFunnel`** over
+    `activeOrgPayers` (per-payer sopPublished/formState(none|registered|
+    trained|proven)/driftCount + ONE next action author_sop→register_portal→
+    train_mappings/repair_drift→run_dry_test→ready; no-online-form SOP =
+    ready-with-note) — now consumed by Slice A's Payer Setup page and Slice C's
+    Templates tab. Drift is a Payer Setup KPI card (the standalone repair
+    banner is on the bundle's do-not-re-add list; `useFormDrift` is untouched);
+    the delegation fact renders on Payer Detail. **In-editor form machinery
+    (`src/components/templates/FormStepPanel.tsx`):** mounted under every
+    online_form step (collapsed by default — the TemplateTaskRow memo/latency
+    contract holds; ONE new primitive prop `isGlobalAuthoring`): register/pick
+    portal (tier by template), inline trainer (broken-first; org rows via the
+    audited RLS mutations + dictionary learning, global rows via the RPC),
+    and the **mock-data dry run** — `src/lib/mockFillProfile.ts` (versioned
+    synthetic token map, never PHI/provider reads; supersedes
+    `resolveTestProviderTokens`, deleted) through `computeTestRun` →
+    `recordTestFillFromApp` (`providerId` now nullable) → pass = zero
+    unmatched → proven flip. **Wizard global authoring:** `TemplateWizard`
+    gained `globalTier`; global rows are editable (fallback stays read-only —
+    sop-versioning TS-47 narrowed), create/duplicate/match-key/archive route
+    through `authorGlobalSop`, content publishes through the RPC (blast-radius
+    ack), payer+state required for global keys. **Drift (F6.5.4):**
+    `src/lib/formDrift.ts` (+suite) carries the E4.3a contract standalone
+    (parseSkippedEntries/FIELD_NOT_FOUND_REASON/mapId-then-label join,
+    latest-REAL-fill reduction, buildDriftByPortal, **repaired-since rule** —
+    a map edited after the reporting fill drops out until the next real fill)
+    → `useFormDrift` (2 caches) feeds the Sidebar badge (drift-only now),
+    funnel column, and editor queue. **Retired outright:** FixitDeck/
+    `useFixit`/`fixitQueue.ts`/`fixitFields`/`goodCatches`, `PayerSetupList`/
+    `usePayerSetup` (payerSetup.ts slims to `activeOrgPayers`/
+    `resolutionIdSource`), `FormOnboardingPanel` + its route (redirect), and
+    the **MSO routing engine app-side** (`getMsoRoutingRule`/`useMsoRoutingRule`/
+    msos service+hooks/keys + the case-detail callout; tables stay dormant —
+    live-verified 0 rows; delegation renders from the catalog fact).
+    Legacy redirects retargeted (fix-it/admin-portals/payer-directory/
+    portals-train/mso-routing/admin-payers/admin-templates → the segments).
+    e2e: NEW `e2e/payer-setup-module.spec.ts` (TS-114/131/132/133/134,
+    stateful RPC write-through harness) supersedes `fix-it.spec.ts` +
+    `payer-setup-funnel.spec.ts` (deleted); payer-admin-module/admin-payers/
+    legacy-routes retargeted; template-typing-latency stays green.
+    `payerGovernance.test.ts` re-anchored (funnel posture + delegation_note
+    no-app-writer pin).
 - **E6.6 — Reporting Center Organization & Touch Unification (CLOSES the E6
   wave).** NO migration — pure derivations + a presentation/verb
   consolidation. **Grouped index (F6.6.1):** `src/lib/reports.ts` gained
@@ -2056,6 +2061,84 @@ NOT NULL` column on `credential_cases` — a globally-sequential (ONE
   `?ids`/`?runId`/`?run` + the `/work` redirect. e2e: `cases-pivots.spec.ts`
   rebuilt; `next-best-action-queue.spec.ts` deleted with its component;
   `unified-case-status` TS-104 retargeted to Flat + the Case# link.
+
+- **Payer & Cases UI program (2026-07-27/28) — the design bundle's six
+  screens, seven slices, all merged: A #244 · B #245 · C #248 · D #242 ·
+  E #246 · F #243 · G #249 (+ its follow-up).** The build handoff is
+  `docs/redesign/payer-cases-ui-build-handoff.md` — its **§2 is the binding
+  record** of the conflicts and their resolutions (§2.1: the design's
+  "Didn't receive" escape beats #237's strict Approved rule, which is why
+  E6.8 F6.8.3 exists; §2.7: the deliberate-removals list, **amended
+  2026-07-28** — the next-step CTA was reinstated on screen 3, see below).
+  **NO migration in any slice** — every write rides the E6.7/E6.8 RPCs
+  (`create_payer`/`update_payer`/`archive_payer`/`reactivate_payer`/
+  `merge_payer`/`set_case_status`), so the payers table lockdown and the
+  RPC-only governance pin hold unchanged.
+  - **Slice A — Payer Setup (screen 1), `/admin/payer-admin/setup`.** ONE
+    list, no tabs: `payer-admin/PayerSetupPage.tsx` over pure
+    `src/lib/payerSetupView.ts` (+tests) — the shared `activeOrgPayers`
+    inclusion rule with archived rows opt-in behind "Show archived" (the
+    E6.8 seam), FOUR KPI filter cards, search · State · Kind toolbar,
+    pagination. Template/form/drift facts are CONSUMED from the E6.5
+    readiness funnel rows, never re-derived.
+  - **Slice B — Add / Edit Payer (screen 2).** `PayerNameStep` (name +
+    `findPayerNearMatches`, duplicates surfaced BEFORE anything is written)
+    → `PayerDetailsForm` + `PayerStatesField`. ID expectations hydrate
+    through the SHARED `payerResolutionIdentifier.ts` resolvers — never a
+    local default (the review fix: NULL columns resolve provider-EXPECTED).
+  - **Slice D — Case Close & IDs (screen 5).** The close dialogs against
+    E6.8's ack flags + **Awaiting ID**: pure `src/lib/payerIssuedIds.ts`
+    `enrollmentIdBadge` — a payer that EXPECTS an ID whose case closed
+    Approved with it still NULL reads "Awaiting ID", DERIVED at render,
+    never stored; back-fill rides the existing set-later paths.
+  - **Slice F — Template Editor (screen 4).** Five inline online-form modes
+    (register · capture · map · repair · prove) + the derived context banner
+    a readiness CTA deep-links into via `?intent=`
+    (`src/lib/templateEditorIntent.ts` `TEMPLATE_EDITOR_INTENTS`). The
+    banner describes a CONDITION, so it clears itself when the work is done.
+  - **Slice E — Case Detail (screen 6).** Pure `src/lib/caseDetailView.ts`
+    (task/step progress, `facilityAddressLine`, and the follow-up's
+    `evidencedTransitionsByTouch`); `CaseDetailsPanel` · `CaseStatusControl`
+    - `CaseStatusDialogs` · `CaseStatusHistoryPanel`. **The status-history
+      timeline and the touchlog cross-link both ways:** a transition links its
+      evidence touch (`#touch-<id>`) and that touch marks the transition back
+      (`#status-<id>`), derived from the FULL history so filtering the
+      touchlog never changes a row's marker. NB the Update-status menu's
+      reapply runs `set_case_status` ONLY — **task regeneration lives in
+      `ReapplyCaseAction`** (`appendCaseTasks`), and the copy on both paths is
+      written to keep that distinction honest.
+  - **Slice C — Payer Detail (screen 3), `/admin/payer-admin/setup/$payerId`.**
+    TABBED (Overview · Enrollments · Cases · Templates · Scorecard · Manage)
+    and identity is EDITABLE in place, reusing Slice B's `PayerDetailsForm`
+    — never a second form. Pure `src/lib/payerDetailView.ts` reads EXISTING
+    modules rather than re-deriving them (IDs → Slice D's `enrollmentIdBadge`;
+    template readiness → the E6.5 funnel; case openness →
+    `OPEN_CASE_STATUSES`). Archive/Merge live on the Manage tab over the E6.8
+    RPCs. **Editable affordances gate on `canEdit` (admin AND status active)**,
+    not bare `isAdmin` — `update_payer` raises `payer_not_editable` on a
+    merged/retired row, so an admin must not be shown controls that can only
+    error. The payer resolves from the GLOBAL catalog read
+    (`list_global_payers`), not `getPayer`: the RLS or-filter can't see an
+    UNASSIGNED global row and this page must render for a payer the org
+    hasn't adopted yet.
+  - **Slice G — route cleanup + program close-out.** The stale `catalog`
+    segment (named for a tab Slice A superseded) is renamed **`setup`**;
+    `/admin/payer-admin/catalog`, its `$payerId` child, and
+    `/admin/payer-admin/sops` are **redirect shells** (the child
+    re-validates and forwards `?tab=` and `?edit=1` — dropping either would
+    silently break the folded scorecard/edit redirects), and eleven legacy
+    sources repoint at the new segment. `admin.payer-admin.index.tsx` stays
+    the `?tab=` mapper. **Deleted (render-orphaned, importers grepped to
+    zero): `PayerReadinessFunnel`, `PayerCatalogBrowser`, `PayerAdminTabs`,
+    `TemplatesList`** — `payerGovernance.test.ts`'s `readFileSync` pin was
+    RE-ANCHORED off the funnel (it asserts the read-only governance posture,
+    not that component). The pure `payerReadinessFunnel.ts` derivation
+    SURVIVES — Slices A and C consume it. Case Detail gained the `C-<n>`
+    case number (the /cases row click-through had no confirmation at the
+    destination). **§2.7 amendment (PM-ratified 2026-07-28):** the
+    next-step CTA is BACK on screen 3's Templates tab, because Slice F's
+    shipped `?intent=` consumer would otherwise have no producer; §2.7's
+    removal still stands for screen 1.
 
 - **E6.7 PR 1 — Payer Manual Setup Enabler (backend only, zero rendered UI).**
   The PM is retiring the precanned catalog browse; this PR ships the write

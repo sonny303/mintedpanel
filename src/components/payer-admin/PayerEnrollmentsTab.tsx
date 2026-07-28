@@ -49,7 +49,11 @@ export function PayerEnrollmentsTab({ payer }: { payer: Payer }) {
   );
 
   const idLabel = resolveIdentifierConfig(payer).individualLabel;
-  const loading = factsQ.data === undefined || casesQ.data === undefined;
+  // providersQ feeds the provider-name map above, so it belongs in BOTH guards
+  // — omitting it from `loading` renders rows with unresolved names that pop in
+  // a moment later. `failed` already accounted for it.
+  const loading =
+    factsQ.data === undefined || casesQ.data === undefined || providersQ.data === undefined;
   const failed = factsQ.isError || casesQ.isError || providersQ.isError;
 
   return (

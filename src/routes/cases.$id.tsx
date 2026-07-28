@@ -172,6 +172,9 @@ function CaseDetailPage() {
               // the touch implies one; accepting logs touch + transition
               // together, the touch linked as the transition's evidence.
               currentStatus={c.caseStatus}
+              // Same embed the Status history panel below renders — passed so a
+              // touch can mark the transition it evidenced. No second fetch.
+              history={c.caseStatusHistory ?? []}
               onSaveTouch={async (input) => {
                 try {
                   const touch = await logTouchM.mutateAsync({ caseId: c.id, input });

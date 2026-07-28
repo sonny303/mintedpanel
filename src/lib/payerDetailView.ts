@@ -250,7 +250,8 @@ export interface PayerCaseRow {
    * never merged into one label. */
   pipelineState: string;
   submittedDate: string | null;
-  approvedDate: string | null;
+  // No approvedDate: these rows are filtered to OPEN cases and `approved` is
+  // terminal, so the field could only ever be null here.
   effectiveDate: string | null;
 }
 
@@ -261,11 +262,7 @@ export type PayerCaseSlice = Pick<
   Partial<
     Pick<
       CredentialCase,
-      | "caseNumber"
-      | "payerPipelineState"
-      | "submittedDate"
-      | "approvedDate"
-      | "confirmedEffectiveDate"
+      "caseNumber" | "payerPipelineState" | "submittedDate" | "confirmedEffectiveDate"
     >
   >;
 
@@ -286,7 +283,6 @@ export function buildPayerCaseRows(
       state: c.state,
       pipelineState: c.payerPipelineState ?? "not_started",
       submittedDate: c.submittedDate ?? null,
-      approvedDate: c.approvedDate ?? null,
       effectiveDate: c.confirmedEffectiveDate ?? null,
     }))
     .sort((a, b) => (b.caseNumber ?? 0) - (a.caseNumber ?? 0));
