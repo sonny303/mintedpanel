@@ -411,3 +411,27 @@ Email replies on a case thread are forwarded to a public webhook that appends a 
 - Insert one `touches` row: `touch_type = 'inbound_email'`, `outcome = subject`, `notes = bodyText`, `source = 'email'`, `touch_date = receivedAt`.
 - Never trust `fromAddress` for authorization — token alone resolves the case.
 - Return `200 ok` on success, `401` on bad signature, `404` on unknown token.
+
+## provider_field_verifications (S6.1, 2026-07-28 — repo migration, OPERATOR APPLY pending)
+
+Per-field verification stamps: "this provider's NPI was confirmed on Jul 12,
+via CAQH". One row per `(provider_id, field_key)`; `field_key` is the BARE
+catalog token key (`provider.npi`) the profile endpoint, portal field maps and
+quick-card catalog already speak, so nothing translates. Deliberately NOT an FK
+— the token catalog is derived from `information_schema`, not a table.
+
+Shape decision: one narrow table, not N `*_verified_at` columns on `providers`.
+Columns would mean a migration every time a field became verifiable, would sit
+overwhelmingly NULL, and would widen the row every readiness read carries.
+
+Re-verifying UPDATES the row (unique on the pair) rather than accumulating —
+"when was this last confirmed" has exactly one answer, and the audit log
+carries the history. Member SELECT / writer INSERT+UPDATE; **no DELETE policy
+and no delete grant** — un-verifying is a re-verification with a new source,
+never a quiet erasure. `verified_source` ∈ manual | caqh | extension.
+
+Written by `POST /api/providers/:id/caqh-attestation` (`verified_fields`, the
+C6 push) via `src/services/fieldVerifications.ts`; freshness is derived by the
+pure `src/lib/fieldVerification.ts`, whose window is `CAQH_CURRENT_DAYS` — the
+SAME 120 days attestation uses, so the Details card and the readiness matrix
+can never disagree about one field.

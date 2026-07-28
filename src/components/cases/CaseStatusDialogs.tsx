@@ -38,6 +38,8 @@ import {
   resolveIdentifierConfig,
 } from "@/lib/payerResolutionIdentifier";
 import type { DenialReasonCode, Payer } from "@/types";
+import type { ReferenceProvenance } from "@/lib/referenceProvenance";
+import { fmtDate } from "@/lib/format";
 
 const FIELD_LABEL = "text-[11px] uppercase tracking-wide text-muted-foreground";
 
@@ -248,6 +250,7 @@ export function ApprovedDialog({
   open,
   payer,
   caseSummary,
+  referenceProvenance,
   saving,
   onCancel,
   onConfirm,
@@ -256,11 +259,23 @@ export function ApprovedDialog({
   payer: Payer | null;
   /** "Provider · Payer · State" header line, composed by the control. */
   caseSummary?: string | null;
+  /** S4.5 / C3 — the case's stored payer reference and where it came from,
+   * shown for reference only. It is deliberately NOT pre-filled into the
+   * issued-ID field: see the individualId state below. */
+  referenceProvenance?: ReferenceProvenance | null;
   saving: boolean;
   onCancel: () => void;
   onConfirm: (values: ApprovedValues) => void;
 }) {
   const [effectiveDate, setEffectiveDate] = useState("");
+  // Starts EMPTY on purpose. The stored reference is a SUBMISSION tracking
+  // number; this field is the ID the payer ISSUES on approval. They are
+  // different facts and only sometimes the same string, so pre-filling one
+  // with the other writes a wrong identifier for anyone who clicks straight
+  // through — and, worse, makes E6.8's "Awaiting ID" unreachable, since the
+  // "Didn't receive" ack only applies to a field left blank. The reference is
+  // still shown above (C3) so it can be copied when it IS the issued ID; that
+  // has to be a decision, not a default.
   const [individualId, setIndividualId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [individualMissing, setIndividualMissing] = useState(false);
@@ -292,6 +307,23 @@ export function ApprovedDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {referenceProvenance ? (
+            <div className="rounded-md border border-[#E8E5E0] bg-[#FBFBF9] p-3">
+              <p className="text-[12.5px] font-medium text-foreground">
+                Reference {referenceProvenance.reference}
+              </p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
+                {referenceProvenance.fromWorkbench
+                  ? "Captured by the Workbench at submission"
+                  : "Recorded on this case"}
+                {referenceProvenance.capturedAt
+                  ? ` on ${fmtDate(referenceProvenance.capturedAt)}`
+                  : ""}
+                . This is the submission tracking number, not the payer&rsquo;s issued ID — enter
+                the ID from the approval letter below, or leave it blank if none was issued.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label className={FIELD_LABEL}>Effective date (required)</Label>
             <DatePicker

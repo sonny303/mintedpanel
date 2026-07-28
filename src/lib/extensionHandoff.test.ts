@@ -70,3 +70,43 @@ describe("sendSetActiveCase", () => {
     expect(sendSetActiveCase(INPUT)).toBe(false);
   });
 });
+
+describe("S3.5 — the widened C1 payload", () => {
+  const base = {
+    caseId: "c1",
+    providerId: "p1",
+    orgId: "o1",
+    portalUrl: "https://portal.test/form",
+  };
+
+  it("carries portalKey and facilityId when the case has them", () => {
+    const message = buildSetActiveCaseMessage({
+      ...base,
+      portalKey: "bcbs_ks_enrollment",
+      facilityId: "f1",
+    });
+    expect(message.portalKey).toBe("bcbs_ks_enrollment");
+    expect(message.facilityId).toBe("f1");
+  });
+
+  it("OMITS the optional fields rather than sending null", () => {
+    // The extension strict-parses; a null would be dropped anyway, but keeping
+    // the wire shape minimal means an older extension sees exactly the locked
+    // TE-1 message it already understands.
+    const message = buildSetActiveCaseMessage({ ...base, portalKey: null, facilityId: null });
+    expect("portalKey" in message).toBe(false);
+    expect("facilityId" in message).toBe(false);
+    expect(message).toEqual({ type: "SET_ACTIVE_CASE", ...base });
+  });
+
+  it("still carries IDENTIFIERS + URL only — no profile or token value", () => {
+    const message = buildSetActiveCaseMessage({
+      ...base,
+      portalKey: "k",
+      facilityId: "f1",
+    });
+    expect(Object.keys(message).sort()).toEqual(
+      ["caseId", "facilityId", "orgId", "portalKey", "portalUrl", "providerId", "type"].sort(),
+    );
+  });
+});

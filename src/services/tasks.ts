@@ -3,6 +3,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { planStepCompletion, stepCompletionPatch } from "@/lib/sopStepCompletion";
 import { translateDbError } from "@/lib/dbErrors";
 import type { SOPStep, Task, TaskStatus } from "@/types";
 
@@ -212,33 +213,18 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
   if (!existing) throw new Error("Task not found");
 
   const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
-
-  const target = currentSteps.find((step) => step.id === stepId);
-  if (!target) throw new Error("Step not found on task");
-
-  const blocker = currentSteps.find((step) => step.order < target.order && !step.isCompleted);
-  if (blocker) {
-    throw new Error(`Complete "${blocker.label}" first`);
-  }
-
-  const userId = currentUserId();
   const now = new Date().toISOString();
-  const nextSteps: SOPStep[] = currentSteps.map((step) =>
-    step.id === stepId
-      ? { ...step, isCompleted: true, completedAt: now, completedBy: userId }
-      : step,
-  );
-
-  const allDone = nextSteps.every((s) => s.isCompleted);
-  const patch: Record<string, unknown> = {
-    sop_content: nextSteps as unknown as never,
-  };
-  if (allDone) {
-    patch.status = "completed";
-    patch.completed_date = now.slice(0, 10);
-  } else if (existing.status === "not_started") {
-    patch.status = "in_progress";
+  // The order rule + all-done rollup live in the pure module, shared with the
+  // server path (PATCH /api/tasks/:id/steps) so the two can't drift.
+  const plan = planStepCompletion(currentSteps, stepId, currentUserId(), now);
+  if (!plan.ok) {
+    throw new Error(
+      plan.reason === "not_found" ? "Step not found on task" : `Complete "${plan.blockedBy}" first`,
+    );
   }
+  const nextSteps = plan.nextSteps;
+  const allDone = plan.allDone;
+  const patch = stepCompletionPatch(plan, existing.status, now);
 
   const { data, error } = await supabase
     .from("tasks")
@@ -266,7 +252,7 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
     entityId: taskId,
     before: { stepId, isCompleted: false },
     after: { stepId, isCompleted: true, taskStatus: after.status },
-    description: `Completed SOP step "${target.label}"`,
+    description: `Completed SOP step "${nextSteps.find((st) => st.id === stepId)?.label ?? stepId}"`,
   });
   return after;
 }

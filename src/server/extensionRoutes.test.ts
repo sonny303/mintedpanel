@@ -3,7 +3,11 @@ import type { ApiEnvelope } from "./envelope";
 import type { AuthContext, UserContext } from "./guard";
 import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
-vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
+vi.mock("@/services/portalFieldMaps", () => ({
+  listPortalFieldMaps: vi.fn(),
+  proposeFieldMap: vi.fn(),
+}));
+vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
 vi.mock("@/services/providerCases", () => ({
@@ -15,12 +19,15 @@ vi.mock("@/services/ssnRelease", () => ({ releaseSsnForFill: vi.fn() }));
 vi.mock("@/services/submissionTouches", () => ({ recordSubmissionTouch: vi.fn() }));
 vi.mock("@/services/orgMemberships", () => ({ listUserOrgMemberships: vi.fn() }));
 vi.mock("@/services/nextBestAction", () => ({ getNextBestAction: vi.fn() }));
+vi.mock("@/services/taskSteps", () => ({ completeTaskStep: vi.fn() }));
 vi.mock("@/services/extensionViewPrefs", () => ({
   getExtensionViewPrefs: vi.fn(),
+  getQuickCardCatalog: vi.fn(),
   putExtensionViewPrefs: vi.fn(),
 }));
 
-import { listPortalFieldMaps } from "@/services/portalFieldMaps";
+import { listPortalFieldMaps, proposeFieldMap } from "@/services/portalFieldMaps";
+import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { listOpenProviderCases, searchOrgCases } from "@/services/providerCases";
@@ -29,10 +36,18 @@ import { releaseSsnForFill } from "@/services/ssnRelease";
 import { recordSubmissionTouch } from "@/services/submissionTouches";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { getNextBestAction } from "@/services/nextBestAction";
-import { getExtensionViewPrefs, putExtensionViewPrefs } from "@/services/extensionViewPrefs";
+import { completeTaskStep } from "@/services/taskSteps";
+import {
+  getExtensionViewPrefs,
+  getQuickCardCatalog,
+  putExtensionViewPrefs,
+} from "@/services/extensionViewPrefs";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
+  handleListPortals,
+  handleProposeFieldMap,
+  handleCompleteTaskStep,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -45,6 +60,8 @@ import {
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
+const proposeMapMock = vi.mocked(proposeFieldMap);
+const listPortalsMock = vi.mocked(listPortalsForApi);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
 const listCasesMock = vi.mocked(listOpenProviderCases);
@@ -54,8 +71,27 @@ const releaseSsnMock = vi.mocked(releaseSsnForFill);
 const recordTouchMock = vi.mocked(recordSubmissionTouch);
 const listMyOrgsMock = vi.mocked(listUserOrgMemberships);
 const getNbaMock = vi.mocked(getNextBestAction);
+const completeStepMock = vi.mocked(completeTaskStep);
 const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
 const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
+const catalogMock = vi.mocked(getQuickCardCatalog);
+// Stands in for the caller-JWT-bound client's .rpc() (set_case_status).
+const userRpcMock = vi.fn();
+
+// A small stand-in for the schema-derived catalog. The real derivation is
+// covered in lib/quickCardCatalog.test.ts (incl. the drift guard); here it only
+// needs to be the set the handlers validate against.
+const CATALOG = [
+  { key: "provider.npi", label: "NPI (Type 1)", group: "provider", groupLabel: "Provider" },
+  { key: "provider.ssnLast4", label: "SSN (last 4)", group: "provider", groupLabel: "Provider" },
+  { key: "group.tin", label: "Tax ID (TIN)", group: "group", groupLabel: "Provider group" },
+  {
+    key: "license.licenseNumber",
+    label: "License number",
+    group: "license",
+    groupLabel: "State license",
+  },
+];
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -74,7 +110,10 @@ async function body(res: Response): Promise<ApiEnvelope<unknown>> {
   return (await res.json()) as ApiEnvelope<unknown>;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  catalogMock.mockResolvedValue(CATALOG);
+});
 
 describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
@@ -333,6 +372,252 @@ describe("portal field maps handler", () => {
   });
 });
 
+describe("case touch handler — opt-in status bump", () => {
+  const CASE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const TOUCH = { id: "t1" } as never;
+
+  it("reports an applied bump in meta, leaving data as the touch", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH, bump: { applied: true } });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    expect(res.status).toBe(201);
+    const b = await body(res);
+    expect(b.data).toEqual({ id: "t1" });
+    expect(b.meta).toEqual({ status_bump: "applied" });
+  });
+
+  it("reports a skipped bump with its reason and still returns 201", async () => {
+    recordTouchMock.mockResolvedValue({
+      kind: "created",
+      touch: TOUCH,
+      bump: { applied: false, reason: "The case was not in a status that can move to Submitted." },
+    });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    // The touch landed; a rejected transition is not a failed request.
+    expect(res.status).toBe(201);
+    const b = await body(res);
+    expect(b.data).toEqual({ id: "t1" });
+    expect(b.meta).toEqual({
+      status_bump: "skipped",
+      status_bump_reason: "The case was not in a status that can move to Submitted.",
+    });
+  });
+
+  it("omits meta entirely when no bump was requested (unchanged wire shape)", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    expect((await body(res)).meta).toBeNull();
+  });
+
+  it("passes the org-scoped service context through, and no caller-JWT client", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH });
+    const c = ctx();
+    await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, c);
+    expect(recordTouchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", db: c.db }),
+      CASE,
+      expect.anything(),
+    );
+    // The status report is a plain read on the service-role client now: the
+    // DB trigger performs the transition, so no SECURITY INVOKER RPC is called
+    // and there is nothing to bind the caller's JWT for.
+    expect(recordTouchMock.mock.calls[0][0]).not.toHaveProperty("asUser");
+  });
+
+  it("still refuses billing before anything runs", async () => {
+    const res = await handleCreateCaseTouch(
+      CASE,
+      { kind: "portal_submission", bump_status: true },
+      ctx("billing"),
+    );
+    expect(res.status).toBe(403);
+    expect(recordTouchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("propose field map handler (propose-only)", () => {
+  const INPUT = { portal_key: "availity", selector: "#npi", field_label: "NPI" };
+
+  it("201s a newly proposed field", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    expect(res.status).toBe(201);
+    expect((await body(res)).data).toEqual({ map: { id: "m1" }, suggestion: null });
+  });
+
+  it("carries the learned suggestion + evidence so the capture UI isn't a blank grid", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: { token: "provider.npi", portalCount: 3, fromDictionary: false },
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    const data = (await body(res)).data as { suggestion: unknown };
+    expect(data.suggestion).toEqual({
+      token: "provider.npi",
+      portalCount: 3,
+      fromDictionary: false,
+    });
+  });
+
+  it("200s (not 201) when the selector is already known — idempotent re-observation", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "existing",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    expect(res.status).toBe(200);
+  });
+
+  it("scopes the write to the guard-resolved org and passes the audit closure", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "created",
+      map: { id: "m1" } as never,
+      suggestion: null,
+    });
+    const c = ctx();
+    await handleProposeFieldMap(INPUT, c);
+    expect(proposeMapMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", writeAudit: c.writeAudit }),
+      INPUT,
+    );
+  });
+
+  it("refuses billing before touching the service", async () => {
+    const res = await handleProposeFieldMap(INPUT, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(proposeMapMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "nope"],
+    ["an array", []],
+  ])("422s %s body before touching the service", async (_n, bad) => {
+    const res = await handleProposeFieldMap(bad, ctx());
+    expect(res.status).toBe(422);
+    expect(proposeMapMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the service's validation rejection", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "rejected",
+      status: 422,
+      message: "selector is required",
+    });
+    const res = await handleProposeFieldMap({ portal_key: "availity" }, ctx());
+    expect(res.status).toBe(422);
+    expect((await body(res)).error).toBe("selector is required");
+  });
+});
+
+describe("task step handler (S4.3 — the one /api task-state write)", () => {
+  const TASK = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+  it("ticks a step and returns the task + allDone", async () => {
+    completeStepMock.mockResolvedValue({
+      kind: "ok",
+      task: { id: TASK } as never,
+      allDone: true,
+    });
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toEqual({ task: { id: TASK }, allDone: true });
+  });
+
+  it("passes the org-scoped ctx and the actor through", async () => {
+    completeStepMock.mockResolvedValue({ kind: "ok", task: {} as never, allDone: false });
+    await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx());
+    expect(completeStepMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      TASK,
+      "s1",
+      expect.any(String),
+    );
+  });
+
+  it("surfaces a blocked step as 409 with the blocker named", async () => {
+    completeStepMock.mockResolvedValue({
+      kind: "rejected",
+      status: 409,
+      message: 'Complete "Upload W-9" first',
+    });
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s2" }, ctx());
+    expect(res.status).toBe(409);
+    expect((await body(res)).error).toBe('Complete "Upload W-9" first');
+  });
+
+  it("404s a non-UUID task id before touching the service", async () => {
+    const res = await handleCompleteTaskStep("nope", { stepId: "s1" }, ctx());
+    expect(res.status).toBe(404);
+    expect(completeStepMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a missing stepId", {}],
+    ["a blank stepId", { stepId: "   " }],
+    ["a non-string stepId", { stepId: 5 }],
+    ["a non-object body", "nope"],
+  ])("422s %s before touching the service", async (_n, bad) => {
+    const res = await handleCompleteTaskStep(TASK, bad, ctx());
+    expect(res.status).toBe(422);
+    expect(completeStepMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses billing before touching the service", async () => {
+    const res = await handleCompleteTaskStep(TASK, { stepId: "s1" }, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(completeStepMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("portals registry handler", () => {
+  const url = (qs = "") => new URL(`https://x.test/api/portals${qs}`);
+
+  it("returns the registry rows with meta.total", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }, { id: "p2" }] as never);
+    const res = await handleListPortals(url(), ctx());
+    expect(res.status).toBe(200);
+    const b = await body(res);
+    expect(b.data).toEqual([{ id: "p1" }, { id: "p2" }]);
+    expect(b.meta).toEqual({ total: 2 });
+  });
+
+  it("scopes the read to the guard-resolved org", async () => {
+    listPortalsMock.mockResolvedValue([] as never);
+    await handleListPortals(url(), ctx());
+    expect(listPortalsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1" }),
+      expect.anything(),
+    );
+  });
+
+  it("forwards ?portal_key to the service", async () => {
+    listPortalsMock.mockResolvedValue([] as never);
+    await handleListPortals(url("?portal_key=availity"), ctx());
+    expect(listPortalsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
+      portalKey: "availity",
+    });
+  });
+
+  it("is readable by billing (read-only registry, no role gate)", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }] as never);
+    const res = await handleListPortals(url(), ctx("billing"));
+    expect(res.status).toBe(200);
+  });
+
+  it("writes no audit row (a portal registry is not PHI)", async () => {
+    listPortalsMock.mockResolvedValue([{ id: "p1" }] as never);
+    const c = ctx();
+    await handleListPortals(url(), c);
+    expect(c.writeAudit).not.toHaveBeenCalled();
+  });
+});
+
 describe("provider cases handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const url = (qs: string) => new URL(`https://x.test/api/cases${qs}`);
@@ -427,36 +712,54 @@ describe("provider cases handler", () => {
 
 describe("next-best-action handler", () => {
   it("returns the queue-top item, forwarding the org-scoped ctx (billing may read)", async () => {
-    const result = {
-      item: {
-        caseId: "c1",
-        providerId: "p1",
-        providerName: "Kay One",
-        payerName: "BCBS of Kansas",
-        groupName: "KFP Group",
-        state: "KS",
-        actionKind: "task" as const,
-        action: "Enroll on BCBS portal",
-        reason: "Follow-up overdue since Jul 1, 2026 — surfaced ahead of deadline-only cases.",
-        deadline: { date: "2026-07-01", source: "follow_up" as const, overdue: true },
-        deepLink: "/cases/c1",
-      },
+    const top = {
+      caseId: "c1",
+      providerId: "p1",
+      providerName: "Kay One",
+      payerName: "BCBS of Kansas",
+      groupName: "KFP Group",
+      state: "KS",
+      actionKind: "task" as const,
+      action: "Enroll on BCBS portal",
+      reason: "Follow-up overdue since Jul 1, 2026 — surfaced ahead of deadline-only cases.",
+      deadline: { date: "2026-07-01", source: "follow_up" as const, overdue: true },
+      deepLink: "/cases/c1",
     };
+    const result = { item: top, items: [top] };
     getNbaMock.mockResolvedValue(result);
-    const res = await handleNextBestAction(ctx("billing"));
+    const res = await handleNextBestAction(
+      new URL("https://x.test/api/next-best-action"),
+      ctx("billing"),
+    );
     expect(res.status).toBe(200);
     expect((await body(res)).data).toEqual(result);
     expect(getNbaMock).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: "org-1" }),
       expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      20,
     );
   });
 
   it("returns an explicit empty result for a clear queue", async () => {
-    getNbaMock.mockResolvedValue({ item: null });
-    const res = await handleNextBestAction(ctx());
+    getNbaMock.mockResolvedValue({ item: null, items: [] });
+    const res = await handleNextBestAction(new URL("https://x.test/api/next-best-action"), ctx());
     expect(res.status).toBe(200);
-    expect((await body(res)).data).toEqual({ item: null });
+    expect((await body(res)).data).toEqual({ item: null, items: [] });
+  });
+
+  it("bounds the ranked list with ?limit=, falling back to 20 on a bad value", async () => {
+    getNbaMock.mockResolvedValue({ item: null, items: [] });
+    const call = (qs: string) =>
+      handleNextBestAction(new URL(`https://x.test/api/next-best-action${qs}`), ctx());
+
+    await call("?limit=5");
+    expect(getNbaMock).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 5);
+    // Out of range / non-numeric never errors — the queue is a read, and a bad
+    // param shouldn't cost the caller their queue.
+    for (const bad of ["?limit=0", "?limit=999", "?limit=abc", ""]) {
+      await call(bad);
+      expect(getNbaMock).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), 20);
+    }
   });
 });
 
@@ -465,19 +768,24 @@ describe("view-prefs handlers (user-scoped)", () => {
     return { userId, email: "t@minted.com", userMetadata: null, db: {} as UserContext["db"] };
   }
 
-  it("GET returns { fields } scoped by the JWT user id, no audit", async () => {
+  it("GET returns the saved layout AND the derived catalog, scoped by the JWT user id", async () => {
     getViewPrefsMock.mockResolvedValue({ fields: ["provider.npi", "license.licenseNumber"] });
     const res = await handleGetViewPrefs(userCtx("uA"));
     expect(res.status).toBe(200);
-    expect((await body(res)).data).toEqual({ fields: ["provider.npi", "license.licenseNumber"] });
+    const data = (await body(res)).data as { fields: string[] | null; catalog: unknown };
+    expect(data.fields).toEqual(["provider.npi", "license.licenseNumber"]);
+    // The picker and the PUT validator read the same derived catalog, so it
+    // rides along on the read the picker already makes.
+    expect(data.catalog).toEqual(CATALOG);
     expect(getViewPrefsMock).toHaveBeenCalledWith(expect.objectContaining({ userId: "uA" }));
   });
 
   it("GET returns { fields: null } when nothing is saved (never a null envelope data)", async () => {
     getViewPrefsMock.mockResolvedValue({ fields: null });
     const res = await handleGetViewPrefs(userCtx());
-    const b = await body(res);
-    expect(b.data).toEqual({ fields: null });
+    const data = (await body(res)).data as { fields: string[] | null; catalog: unknown };
+    expect(data.fields).toBeNull();
+    expect(data.catalog).toEqual(CATALOG);
   });
 
   it.each([
@@ -490,8 +798,25 @@ describe("view-prefs handlers (user-scoped)", () => {
     expect(putViewPrefsMock).not.toHaveBeenCalled();
   });
 
-  it("PUT rejects an excluded/unknown key (ssnLast4) with 422 before writing", async () => {
+  // ssnLast4 is OFFERED as of 2026-07-28 (product decision) — the profile
+  // endpoint already returns it and payer forms ask for it. The full SSN stays
+  // unreachable structurally: it lives in provider_ssn_vault, which the token
+  // catalog does not sweep, so no token can name it.
+  it("PUT accepts ssnLast4 (now a catalog field)", async () => {
+    putViewPrefsMock.mockResolvedValue({ fields: ["provider.ssnLast4"] });
     const res = await handlePutViewPrefs({ fields: ["provider.ssnLast4"] }, userCtx());
+    expect(res.status).toBe(200);
+    expect(putViewPrefsMock).toHaveBeenCalled();
+  });
+
+  it("PUT rejects a key outside the derived catalog with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["provider.launchId"] }, userCtx());
+    expect(res.status).toBe(422);
+    expect(putViewPrefsMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT rejects a case-scoped payer token with 422 before writing", async () => {
+    const res = await handlePutViewPrefs({ fields: ["payer.name"] }, userCtx());
     expect(res.status).toBe(422);
     expect(putViewPrefsMock).not.toHaveBeenCalled();
   });
@@ -559,6 +884,7 @@ describe("case context handler", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          steps: [],
         },
       ],
       latestNote: {

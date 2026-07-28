@@ -195,3 +195,199 @@ describe("buildDriftByPortal / totalDriftCount", () => {
     expect(totalDriftCount(drift)).toBe(2);
   });
 });
+
+// --- S6.4: dating a break, and remembering which fields decay ---------------
+
+import { buildDriftReport, fragileMapIds, lastWorkingAt, type FillHistoryEntry } from "./formDrift";
+
+// fields_filled is an int4 COUNT (baseline migration: `fields_filled integer
+// NOT NULL`), and fields_skipped is the only per-field record. The first cut of
+// these tests passed arrays of selector strings as fieldsFilled, so every
+// assertion below was checking a shape the database cannot produce — which is
+// exactly how lastWorkingAt shipped returning null for every input. Fixtures
+// here mirror the live column types.
+const S64_MAP = {
+  id: "m-npi",
+  portalKey: "availity",
+  selector: "#npi",
+  fieldLabel: "NPI",
+  createdAt: "2026-01-01T00:00:00Z",
+} as unknown as PortalFieldMap;
+
+// Reuses the notFound(label, mapId?) helper declared at the top of this file.
+const S64_HISTORY: FillHistoryEntry[] = [
+  // Newest: the field broke here.
+  {
+    portalKey: "availity",
+    startedAt: "2026-07-20T00:00:00Z",
+    fieldsFilled: 4,
+    fieldsSkipped: [notFound("#npi", "m-npi")],
+  },
+  // It last worked here — landed fields, no not-found report for this map.
+  {
+    portalKey: "availity",
+    startedAt: "2026-07-10T00:00:00Z",
+    fieldsFilled: 6,
+    fieldsSkipped: [],
+  },
+  {
+    portalKey: "availity",
+    startedAt: "2026-06-01T00:00:00Z",
+    fieldsFilled: 6,
+    fieldsSkipped: [],
+  },
+];
+
+describe("lastWorkingAt (S6.4)", () => {
+  it("dates the break from the NEWEST fill that did not report it broken", () => {
+    expect(lastWorkingAt(S64_MAP, S64_HISTORY)).toBe("2026-07-10T00:00:00Z");
+  });
+
+  it("returns null when every fill reported it broken — a bad mapping, not drift", () => {
+    const never: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [notFound("#npi", "m-npi")],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, never)).toBeNull();
+  });
+
+  it("does not count a fill that landed nothing — silence there means nothing", () => {
+    const emptyFill: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 0,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, emptyFill)).toBeNull();
+  });
+
+  it("does not count a fill that predates the mapping — it wasn't there to work", () => {
+    const beforeCreation: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2025-12-01T00:00:00Z",
+        fieldsFilled: 6,
+        fieldsSkipped: [],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, beforeCreation)).toBeNull();
+  });
+
+  it("joins a pre-mapId skip report by its label", () => {
+    const legacy: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [{ kind: "skipped", reason: FIELD_NOT_FOUND_REASON, label: "#npi" }],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, legacy)).toBeNull();
+  });
+
+  it("ignores a skip for a DIFFERENT reason — only not-found is a break", () => {
+    const otherReason: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [{ kind: "skipped", reason: "no value", mapId: "m-npi", label: "#npi" }],
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, otherReason)).toBe("2026-07-20T00:00:00Z");
+  });
+
+  it("ignores dry runs — they never touched the live DOM", () => {
+    const dryOnly: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-25T00:00:00Z",
+        fieldsFilled: 6,
+        fieldsSkipped: [],
+        isTest: true,
+      },
+    ];
+    expect(lastWorkingAt(S64_MAP, dryOnly)).toBeNull();
+  });
+
+  it("ignores fills on a different portal", () => {
+    const other: FillHistoryEntry[] = [
+      { portalKey: "cigna", startedAt: "2026-07-25T00:00:00Z", fieldsFilled: 6, fieldsSkipped: [] },
+    ];
+    expect(lastWorkingAt(S64_MAP, other)).toBeNull();
+  });
+});
+
+describe("fragileMapIds / buildDriftReport (S6.4)", () => {
+  const brokenFill = {
+    portalKey: "availity",
+    startedAt: "2026-07-21T00:00:00Z",
+    fieldsSkipped: [
+      { kind: "skipped", reason: FIELD_NOT_FOUND_REASON, mapId: "m-npi", label: "#npi" },
+    ],
+  };
+
+  it("marks a mapping fragile once it has broken AND previously worked", () => {
+    const fragile = fragileMapIds(S64_HISTORY, [brokenFill], [S64_MAP]);
+    expect(fragile.has("m-npi")).toBe(true);
+  });
+
+  it("does NOT mark a mapping that never worked — that's a bad map, not decay", () => {
+    const noHistory: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-20T00:00:00Z",
+        fieldsFilled: 3,
+        fieldsSkipped: [notFound("#npi", "m-npi")],
+      },
+    ];
+    expect(fragileMapIds(noHistory, [brokenFill], [S64_MAP]).has("m-npi")).toBe(false);
+  });
+
+  it("reports portal, field, when it last worked, and the fragile flag", () => {
+    const drift = new Map([["availity", [S64_MAP]]]);
+    const rows = buildDriftReport(drift, S64_HISTORY, new Set(["m-npi"]));
+    expect(rows).toEqual([
+      {
+        portalKey: "availity",
+        mapId: "m-npi",
+        field: "NPI",
+        lastWorkingAt: "2026-07-10T00:00:00Z",
+        knownFragile: true,
+      },
+    ]);
+  });
+
+  it("sorts the longest-broken field first — it's costing the most fills", () => {
+    const older = {
+      ...S64_MAP,
+      id: "m-old",
+      selector: "#old",
+      fieldLabel: "Old",
+    } as PortalFieldMap;
+    // The newer fill carried #npi but reported #old not-found, so #old's last
+    // success is the older fill — it has been broken longer.
+    const history: FillHistoryEntry[] = [
+      {
+        portalKey: "availity",
+        startedAt: "2026-07-10T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [notFound("#old", "m-old")],
+      },
+      {
+        portalKey: "availity",
+        startedAt: "2026-01-01T00:00:00Z",
+        fieldsFilled: 5,
+        fieldsSkipped: [],
+      },
+    ];
+    const rows = buildDriftReport(new Map([["availity", [S64_MAP, older]]]), history, new Set());
+    expect(rows.map((r) => r.mapId)).toEqual(["m-old", "m-npi"]);
+  });
+});

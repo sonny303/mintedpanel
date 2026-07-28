@@ -33,6 +33,7 @@ function runGate(baseUrl) {
         SPVIEW_EMAIL: FIXTURES.SPVIEW_EMAIL,
         SPVIEW_PASSWORD: "mock",
         SOUTHPARK_ORG: FIXTURES.SOUTHPARK_ORG,
+        KANSAS_ORG: FIXTURES.KANSAS_ORG,
         SOUTHPARK_PROVIDER_ID: FIXTURES.SOUTHPARK_PROVIDER_ID,
         KANSAS_PROVIDER_ID: FIXTURES.KANSAS_PROVIDER_ID,
         SOUTHPARK_FIELDMAP_ID: FIXTURES.SOUTHPARK_FIELDMAP_ID,
@@ -75,9 +76,11 @@ function runGate(baseUrl) {
 const EXPECTED_FAILS = {
   // The "providers" leak also lets a cross-org PATCH land (assertion 12). The
   // list is sorted lexicographically to match failedAssertions()'s .sort().
-  providers: ["1", "12", "1b", "2c", "3"],
+  providers: ["1", "12", "19", "1b", "2c", "3"],
   spoof: ["4"],
-  fieldmaps: ["5b", "5c"],
+  // The field-map leak breaks both the shared-catalog reads and the
+  // propose-only write's org scoping (20a).
+  fieldmaps: ["20a", "5b", "5c"],
   profile: ["6"],
   fillevents: ["7", "7b"],
   cases: ["8b", "8d"],
@@ -94,6 +97,8 @@ const EXPECTED_FAILS = {
   ssnrelease: ["16"],
   // The document-download leak serves a cross-org signed URL (assertion 17b).
   documentdownload: ["17b"],
+  portals: ["18b"],
+  taskstep: ["21"],
 };
 
 function failedAssertions(output) {

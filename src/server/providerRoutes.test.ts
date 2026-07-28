@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ApiEnvelope } from "./envelope";
 import type { AuthContext } from "./guard";
 
+vi.mock("@/services/fieldVerifications", () => ({ recordFieldVerifications: vi.fn() }));
 vi.mock("@/services/providers", () => ({
   listProviders: vi.fn(),
   getProvider: vi.fn(),
@@ -10,17 +11,21 @@ vi.mock("@/services/providers", () => ({
 }));
 
 import { listProviders, getProvider, createProvider, updateProvider } from "@/services/providers";
+import { recordFieldVerifications } from "@/services/fieldVerifications";
+import { CAQH_CURRENT_DAYS } from "@/lib/enrollmentReadiness";
 import {
   handleListProviders,
   handleGetProvider,
   handleCreateProvider,
   handleUpdateProvider,
+  handleRecordCaqhAttestation,
 } from "./providerRoutes";
 
 const listProvidersMock = vi.mocked(listProviders);
 const getProviderMock = vi.mocked(getProvider);
 const createProviderMock = vi.mocked(createProvider);
 const updateProviderMock = vi.mocked(updateProvider);
+const recordVerificationsMock = vi.mocked(recordFieldVerifications);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -127,6 +132,164 @@ describe("provider route handlers", () => {
     expect(res.status).toBe(404);
     expect((await body(res)).error).toBe("Provider not found");
     // The update never runs once the row is absent (no cross-org write attempt).
+    expect(updateProviderMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleRecordCaqhAttestation", () => {
+  const ID = "prov-1";
+  const TODAY = "2026-07-28";
+
+  function attested(date: string) {
+    return { id: ID, caqhLastAttestedDate: date } as never;
+  }
+
+  it("defaults to today when no date is sent", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    const res = await handleRecordCaqhAttestation(ID, {}, ctx(), TODAY);
+    expect(res.status).toBe(200);
+    expect(updateProviderMock).toHaveBeenCalledWith(
+      ID,
+      { caqhLastAttestedDate: TODAY },
+      expect.objectContaining({ orgId: "org-1" }),
+    );
+  });
+
+  it("accepts a null body (the common 'attested just now' call)", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    const res = await handleRecordCaqhAttestation(ID, null, ctx(), TODAY);
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts an explicit past date", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested("2026-07-01"));
+    const res = await handleRecordCaqhAttestation(ID, { attested_on: "2026-07-01" }, ctx(), TODAY);
+    expect(res.status).toBe(200);
+    expect(updateProviderMock).toHaveBeenCalledWith(
+      ID,
+      { caqhLastAttestedDate: "2026-07-01" },
+      expect.anything(),
+    );
+  });
+
+  it("returns only the date and the shared freshness window, never the PHI row", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue({
+      id: ID,
+      caqhLastAttestedDate: TODAY,
+      ssnLast4: "6789",
+      dateOfBirth: "1980-01-01",
+      homeStreet: "1 Main St",
+    } as never);
+    const res = await handleRecordCaqhAttestation(ID, {}, ctx(), TODAY);
+    const data = (await body(res)).data as Record<string, unknown>;
+    expect(data).toEqual({
+      id: ID,
+      caqhLastAttestedDate: TODAY,
+      currentThroughDays: CAQH_CURRENT_DAYS,
+      verifiedFields: 0,
+    });
+    // The PATCH handler returns the whole provider; this one must not.
+    expect(JSON.stringify(data)).not.toContain("6789");
+    expect(JSON.stringify(data)).not.toContain("1980-01-01");
+  });
+
+  it("stamps the fields the fill carried (S6.2/C6)", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    recordVerificationsMock.mockResolvedValue(2);
+    const res = await handleRecordCaqhAttestation(
+      ID,
+      { verified_fields: ["provider.npi", "provider.caqhId"] },
+      ctx(),
+      TODAY,
+    );
+    expect(res.status).toBe(200);
+    expect(recordVerificationsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      ID,
+      ["provider.npi", "provider.caqhId"],
+      "caqh",
+      expect.any(String),
+    );
+    expect(((await body(res)).data as { verifiedFields: number }).verifiedFields).toBe(2);
+  });
+
+  it("ignores malformed field entries rather than losing the attestation", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    recordVerificationsMock.mockResolvedValue(1);
+    const res = await handleRecordCaqhAttestation(
+      ID,
+      { verified_fields: ["provider.npi", 42, "", null] },
+      ctx(),
+      TODAY,
+    );
+    expect(res.status).toBe(200);
+    expect(recordVerificationsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ID,
+      ["provider.npi"],
+      "caqh",
+      expect.any(String),
+    );
+  });
+
+  it("does not touch the verification table when no fields were carried", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    await handleRecordCaqhAttestation(ID, {}, ctx(), TODAY);
+    expect(recordVerificationsMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a future date before writing", async () => {
+    const res = await handleRecordCaqhAttestation(ID, { attested_on: "2026-07-29" }, ctx(), TODAY);
+    expect(res.status).toBe(422);
+    expect((await body(res)).error).toMatch(/future/);
+    expect(updateProviderMock).not.toHaveBeenCalled();
+  });
+
+  it.each([["28-07-2026"], ["2026-7-1"], ["yesterday"]])(
+    "rejects a malformed date %s before writing",
+    async (value) => {
+      const res = await handleRecordCaqhAttestation(ID, { attested_on: value }, ctx(), TODAY);
+      expect(res.status).toBe(422);
+      expect(updateProviderMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("treats an empty string as 'no date sent' and falls back to today", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    const res = await handleRecordCaqhAttestation(ID, { attested_on: "" }, ctx(), TODAY);
+    expect(res.status).toBe(200);
+    expect(updateProviderMock).toHaveBeenCalledWith(
+      ID,
+      { caqhLastAttestedDate: TODAY },
+      expect.anything(),
+    );
+  });
+
+  it("rejects a non-string date before writing", async () => {
+    const res = await handleRecordCaqhAttestation(ID, { attested_on: 20260728 }, ctx(), TODAY);
+    expect(res.status).toBe(422);
+    expect(updateProviderMock).not.toHaveBeenCalled();
+  });
+
+  it("404s a cross-org or nonexistent provider before writing", async () => {
+    getProviderMock.mockResolvedValue(null);
+    const res = await handleRecordCaqhAttestation(ID, {}, ctx(), TODAY);
+    expect(res.status).toBe(404);
+    expect(updateProviderMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses billing with 403 before touching the service", async () => {
+    const res = await handleRecordCaqhAttestation(ID, {}, ctx("billing"), TODAY);
+    expect(res.status).toBe(403);
+    expect(getProviderMock).not.toHaveBeenCalled();
     expect(updateProviderMock).not.toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@ import {
 // builder itself, so `{ error }` is undefined and they consume no result.
 interface Captured {
   table?: string;
-  op: "select" | "insert" | "update";
+  op: "select" | "insert" | "update" | "rpc";
   selectCols?: string;
   payload?: Record<string, unknown>;
   filters: Array<[string, unknown]>;
@@ -29,6 +29,12 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
   const take = () => results[Math.min(cursor++, results.length - 1)] ?? { data: null };
 
   const db = {
+    // Present so a stray ctx.db.rpc(...) is captured rather than throwing —
+    // that distinction is what makes the "bump rides asUser, not db" test real.
+    rpc(fn: string, args: Record<string, unknown>) {
+      captures.push({ table: fn, op: "rpc", payload: args, filters: [] });
+      return Promise.resolve({ data: null, error: null });
+    },
     from(table: string) {
       const cap: Captured = { table, op: "select", filters: [] };
       captures.push(cap);
@@ -461,6 +467,122 @@ describe("recordSubmissionTouch — Stories 5/6/7 write-back", () => {
     expect(captures.some((c) => c.table === "tasks" && c.op === "update")).toBe(false);
     expect(touchInserts(captures).some((c) => c.payload?.entry_type === "task_update")).toBe(false);
     expect(writeAudit).not.toHaveBeenCalledWith(expect.objectContaining({ entityType: "task" }));
+  });
+});
+
+// The transition itself is NOT performed here. trg_case_status_on_touch fires
+// AFTER INSERT on the anchor touch and, for this endpoint's exact shape
+// (source 'extension' + outcome 'submitted'), already moved the case via
+// _apply_case_status_auto — same transaction, this touch as evidence.
+//
+// This suite exists because the first cut DID call set_case_status afterwards,
+// which can never succeed: the RPC opens with
+// `IF p_to_status = v_from THEN RAISE case_status_invalid_transition`, and the
+// trigger had just made from = 'submitted'. Every real submission came back
+// applied:false. Verified against the live DB (trigger body + RPC body), which
+// is the only place that interaction is visible — a PostgREST-shaped fake has
+// no triggers, which is exactly why the original suite passed while the feature
+// was 100% broken in production. So these tests assert the READ-BACK contract
+// and pin that no RPC is issued at all.
+describe("recordSubmissionTouch — status report after the DB's auto-transition", () => {
+  // Results are consumed only by maybeSingle()/single(), so the bare
+  // system_event insert takes no slot: case lookup, idempotency miss, anchor
+  // insert, then the status read-back.
+  const okSequence = (caseStatus: string | null = "submitted") => [
+    { data: { id: CASE_ID } },
+    { data: null },
+    { data: storedRow },
+    { data: { case_status: caseStatus } },
+  ];
+
+  it("reads nothing back when bump_status is absent", async () => {
+    const { db, captures } = makeFakeDb(okSequence());
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, baseInput);
+    expect(result.kind).toBe("created");
+    if (result.kind !== "created") throw new Error("expected a created result");
+    expect(result.bump).toBeUndefined();
+    expect(captures.some((c) => c.selectCols === "case_status")).toBe(false);
+  });
+
+  it("never calls the status RPC — the trigger already did the transition", async () => {
+    const { db, captures } = makeFakeDb(okSequence());
+    const { ctx } = ctxWith(db);
+    await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
+    // A set_case_status call here is unconditionally a same-state edge and
+    // would 100% raise case_status_invalid_transition. There must be none.
+    expect(captures.every((c) => c.op !== "rpc")).toBe(true);
+  });
+
+  it("reports applied when the trigger left the case Submitted, org-scoping the read", async () => {
+    const { db, captures } = makeFakeDb(okSequence("submitted"));
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
+    if (result.kind !== "created") throw new Error("expected a created result");
+    expect(result.bump).toEqual({ applied: true });
+    expect(result.touch.id).toBe(TOUCH_ID);
+
+    const read = captures.find((c) => c.selectCols === "case_status");
+    expect(read?.table).toBe("credential_cases");
+    expect(read?.filters).toEqual(
+      expect.arrayContaining([
+        ["id", CASE_ID],
+        ["org_id", "org-1"],
+      ]),
+    );
+  });
+
+  it("reports not-applied when the case was already past Submitted", async () => {
+    // _apply_case_status_auto returns early for anything outside
+    // {not_started, in_progress}: a human's later decision stands.
+    const { db } = makeFakeDb(okSequence("approved"));
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
+    if (result.kind !== "created") throw new Error("expected a created result");
+    expect(result.bump?.applied).toBe(false);
+    expect(result.bump?.reason).toMatch(/already past Submitted/);
+    // The touch is the durable record of what the human did and stands either way.
+    expect(result.touch.id).toBe(TOUCH_ID);
+  });
+
+  it("never echoes a raw SQL error to the caller", async () => {
+    const { db } = makeFakeDb([
+      { data: { id: CASE_ID } },
+      { data: null },
+      { data: storedRow },
+      {
+        data: null,
+        error: { message: 'relation "credential_cases" does not exist at character 42' },
+      },
+    ]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
+    if (result.kind !== "created") throw new Error("expected a created result");
+    expect(result.bump?.applied).toBe(false);
+    expect(result.bump?.reason).toBe("The case status could not be confirmed.");
+    expect(result.bump?.reason).not.toContain("relation");
+  });
+
+  it("does not report on a replay (the retry path short-circuits first)", async () => {
+    // Case lookup, then the idempotency lookup HITS -> duplicate.
+    const { db, captures } = makeFakeDb([{ data: { id: CASE_ID } }, { data: storedRow }]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, { ...baseInput, bump_status: true });
+    expect(result.kind).toBe("duplicate");
+    expect(captures.some((c) => c.selectCols === "case_status")).toBe(false);
+  });
+
+  it("rejects bump_status on a structured touch before any DB call", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const result = await recordSubmissionTouch(ctx, CASE_ID, {
+      kind: "structured_touch",
+      touch_type: "call",
+      idempotency_id: TOUCH_ID,
+      bump_status: true,
+    } as SubmissionTouchInput);
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
   });
 });
 

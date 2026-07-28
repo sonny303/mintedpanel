@@ -11,6 +11,13 @@ export interface ApiMeta {
   // — the client must ask the user to pick; the server never guesses.
   // snake_case is the wire contract (see ProviderProfile in providerProfile.ts).
   needs_facility?: boolean;
+  // POST /api/cases/:id/touches with bump_status only: whether the opt-in
+  // In Progress -> Submitted transition landed. "skipped" means the touch was
+  // written but the transition was rejected (illegal edge, role, concurrency);
+  // status_bump_reason carries the caller-facing why. The touch itself is
+  // always in `data` regardless — a skipped bump is never an error.
+  status_bump?: "applied" | "skipped";
+  status_bump_reason?: string;
 }
 
 export interface ApiEnvelope<T> {

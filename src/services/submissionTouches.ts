@@ -80,6 +80,12 @@ export interface SubmissionTouchInput {
   // Story 7: the filename of the PDF the human attached, if any → a second
   // `system_event`.
   pdf_filename?: string | null;
+  // Opt-in: also move the case to Submitted, evidenced by this touch. Accepted
+  // on portal_submission ONLY — "the human submitted the portal form" has one
+  // unambiguous target, whereas a structured touch of any of the seven types
+  // does not. Off by default, preserving the R2 rule that the extension never
+  // changes case status unless explicitly asked to for this one transition.
+  bump_status?: boolean;
   // --- E4.3 structured touch (kind 'structured_touch' only; E4.1 contract,
   // snake_case per this endpoint's locked idiom) ---
   // REQUIRED for structured_touch: one of the seven canonical E4.1 types.
@@ -95,10 +101,78 @@ export interface SubmissionTouchInput {
   clears_follow_up?: boolean;
 }
 
+/** Outcome of an opt-in status bump, reported in the response meta. The touch
+ * is the deliverable; the bump is a best-effort follow-on. */
+export interface StatusBumpOutcome {
+  applied: boolean;
+  /** Populated only when applied === false: why the bump did not land. Safe,
+   * caller-facing text (the mapped set_case_status message), never raw SQL. */
+  reason?: string;
+}
+
 export type RecordSubmissionTouchResult =
-  | { kind: "created"; touch: Touch }
+  | { kind: "created"; touch: Touch; bump?: StatusBumpOutcome }
   | { kind: "duplicate"; touch: Touch }
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
+
+/** The one status a portal submission may bump a case to. Not caller-supplied:
+ * "the human submitted the form" has exactly one meaning, and letting the
+ * extension name an arbitrary target would hand it the transition machine. */
+const BUMP_TARGET_STATUS = "submitted";
+
+// The case was already past Submitted, so the auto-transition deliberately left
+// it alone (a human's later decision stands). Not an error — the submission was
+// still logged.
+const BUMP_ALREADY_ADVANCED_REASON =
+  "The case is already past Submitted, so its status was left as it is.";
+
+const BUMP_UNKNOWN_REASON = "The case status could not be confirmed.";
+
+/** Report whether the case is now Submitted, after the anchor touch landed.
+ *
+ * This does NOT perform the transition, because the database already did. The
+ * E6.0 trigger `trg_case_status_on_touch` fires AFTER INSERT on every
+ * touchpoint and, for the exact shape this endpoint writes
+ * (source 'extension' + outcome 'submitted'), calls
+ * `_apply_case_status_auto(case, 'submitted', touch.id)` — same transaction,
+ * same evidencing touch, no opt-in required.
+ *
+ * The first cut of this function called `set_case_status(to => 'submitted')`
+ * afterwards. That can never succeed: the RPC opens with
+ * `IF p_to_status = v_from THEN RAISE case_status_invalid_transition`, and the
+ * trigger has already made from = 'submitted'. Every submission therefore came
+ * back applied:false with "The case was not in a status that can move to
+ * Submitted." — a warning on a submission that had in fact worked perfectly.
+ *
+ * When the case sits in a LATER state (in_review, approved, …) the trigger
+ * deliberately no-ops: `_apply_case_status_auto` returns early because
+ * "anything else was set by a person and stands". Forcing it would be wrong,
+ * so the honest report there is applied:false with the reason.
+ *
+ * Read on `ctx.db`: the case's ownership was validated against ctx.orgId before
+ * any write in this request.
+ */
+async function reportCaseStatusAfterTouch(
+  ctx: SubmissionTouchServiceCtx,
+  caseId: string,
+): Promise<StatusBumpOutcome> {
+  try {
+    const { data, error } = await ctx.db
+      .from("credential_cases")
+      .select("case_status")
+      .eq("id", caseId)
+      .eq("org_id", ctx.orgId)
+      .maybeSingle();
+    if (error || !data) return { applied: false, reason: BUMP_UNKNOWN_REASON };
+    const status = (data as { case_status: string | null }).case_status;
+    if (status === BUMP_TARGET_STATUS) return { applied: true };
+    return { applied: false, reason: BUMP_ALREADY_ADVANCED_REASON };
+  } catch {
+    // The touch already landed and is the durable record of what the human
+    // did; not being able to read the status back is not a reason to fail it.
+    return { applied: false, reason: BUMP_UNKNOWN_REASON };
+  }
+}
 
 const TOUCH_COLUMNS =
   "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at, clears_follow_up, recipient_name, recipient_contact";
@@ -174,6 +248,12 @@ export async function recordSubmissionTouch(
   if (!UUID_RE.test(caseId ?? "")) return reject(404, "Case not found");
   if (input.kind !== "portal_submission" && input.kind !== "structured_touch") {
     return reject(422, "kind must be 'portal_submission' or 'structured_touch'");
+  }
+  // The bump target is only meaningful for a portal submission; a structured
+  // touch of any of the seven types has no single obvious destination, so a
+  // bump there is a client error rather than a silently ignored field.
+  if (input.bump_status && input.kind !== "portal_submission") {
+    return reject(422, "bump_status is only accepted on kind 'portal_submission'");
   }
   if (!UUID_RE.test(input.idempotency_id ?? "")) {
     return reject(422, "idempotency_id must be a client-generated UUID");
@@ -387,7 +467,15 @@ export async function recordSubmissionTouch(
     description: text,
   });
 
-  return { kind: "created", touch };
+  // ---- Status report (the DB already moved the case). ----
+  // The anchor insert above fired trg_case_status_on_touch, which advanced the
+  // case to Submitted in the same transaction with this touch as evidence. All
+  // that is left is to tell the caller what happened. `bump_status` is kept in
+  // the wire contract so an older panel still gets its confirmation line; it no
+  // longer gates anything, because the transition is not opt-in at the DB.
+  const bump = input.bump_status ? await reportCaseStatusAfterTouch(ctx, caseId) : undefined;
+
+  return { kind: "created", touch, bump };
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

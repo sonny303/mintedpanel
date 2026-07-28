@@ -10,6 +10,8 @@ import {
   type ProviderServiceCtx,
 } from "@/services/providers";
 import type { ProviderStatus } from "@/types";
+import { CAQH_CURRENT_DAYS } from "@/lib/enrollmentReadiness";
+import { recordFieldVerifications } from "@/services/fieldVerifications";
 import { ok, fail } from "./envelope";
 import { isWriter, type AuthContext } from "./guard";
 
@@ -85,4 +87,90 @@ export async function handleUpdateProvider(
   if (!existing) return fail(404, "Provider not found");
   const updated = await updateProvider(id, body as Partial<ProviderInput>, svc);
   return ok(updated);
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// POST /api/providers/:id/caqh-attestation — record that the human just
+// re-attested this provider's CAQH profile.
+//
+// The column (providers.caqh_last_attested_date) and its freshness rule have
+// existed since E1.8; only the write was missing, so a coordinator who
+// re-attested in the CAQH portal had to reopen the webapp to say so — and
+// until they did, every readiness row for that provider stayed red.
+//
+// Body: { attested_on?: "YYYY-MM-DD", verified_fields?: string[] }, the date
+// defaulting to today. A FUTURE date is rejected: an attestation is a record of
+// something that already happened, and accepting one would silently extend the
+// E1.8 freshness window past what the payer would honour. Writes go through
+// updateProvider, so org scoping, the cross-tenant org strip, and the UPDATE
+// audit row all come from the existing path rather than a second copy.
+//
+// S6.2/C6: `verified_fields` are the bare catalog token keys the fill actually
+// carried into CAQH. Stamping them here is what lets the Details card show a
+// per-field freshness treatment (S6.1) — attesting the profile without
+// recording WHICH fields it covered would leave every field equally unproven.
+// Unknown-shaped entries are ignored rather than rejected: a partial stamp is
+// better than losing the attestation over one malformed key.
+//
+// The response is deliberately narrow — the attested date and the derived
+// freshness horizon, never the PHI-dense provider row a PATCH returns.
+export async function handleRecordCaqhAttestation(
+  id: string,
+  body: unknown,
+  ctx: AuthContext,
+  today: string,
+): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot record a CAQH attestation");
+  if (body != null && (typeof body !== "object" || Array.isArray(body))) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const raw = (body as { attested_on?: unknown } | null)?.attested_on;
+  if (raw != null && typeof raw !== "string") {
+    return fail(422, "attested_on must be a YYYY-MM-DD date string");
+  }
+  const attestedOn = raw == null || raw === "" ? today : raw;
+  if (!ISO_DATE_RE.test(attestedOn)) {
+    return fail(422, "attested_on must be a YYYY-MM-DD date string");
+  }
+  // Date-only string compare is safe for ISO dates and avoids a timezone-
+  // dependent Date round-trip (the E1.8 evaluator's convention).
+  if (attestedOn > today) {
+    return fail(422, "attested_on cannot be in the future");
+  }
+
+  const svc = serviceCtx(ctx);
+  // Same not-found contract as PATCH: a cross-org or nonexistent id is a 404,
+  // never the 500 that updateProvider's .single() would raise on zero rows.
+  const existing = await getProvider(id, svc);
+  if (!existing) return fail(404, "Provider not found");
+
+  const updated = await updateProvider(id, { caqhLastAttestedDate: attestedOn }, svc);
+
+  // S6.2/C6 — stamp the fields the fill carried. Best-effort by design: the
+  // attestation itself is the durable fact, and losing the per-field detail
+  // must not fail a write the coordinator already performed in CAQH.
+  const rawFields = (body as { verified_fields?: unknown } | null)?.verified_fields;
+  const fieldKeys = Array.isArray(rawFields)
+    ? rawFields.filter((f): f is string => typeof f === "string" && f.trim() !== "")
+    : [];
+  let verifiedFields = 0;
+  if (fieldKeys.length > 0) {
+    verifiedFields = await recordFieldVerifications(
+      { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+      id,
+      fieldKeys,
+      "caqh",
+      new Date().toISOString(),
+    );
+  }
+
+  return ok({
+    id: updated.id,
+    caqhLastAttestedDate: updated.caqhLastAttestedDate ?? null,
+    // The single source for "still current" (E1.8), so the extension never
+    // hardcodes a second window that could drift from readiness.
+    currentThroughDays: CAQH_CURRENT_DAYS,
+    verifiedFields,
+  });
 }

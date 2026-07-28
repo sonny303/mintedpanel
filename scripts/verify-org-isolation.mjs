@@ -37,6 +37,13 @@
 //                          target) + a South Park task id (the cross-org task_id
 //                          that must 404). Both must be set or assertion 13 is
 //                          skipped; the in-sandbox mock run always sets them.
+//   KANSAS_ORG             the Kansas org id, for the propose-only field-map
+//                          write pair (20/20a): the created row must be scoped
+//                          to it. Skipped when unset; the mock run always sets
+//                          it. This is the ONE gate assertion that writes for
+//                          real — a proposed row is inert (no token, fills
+//                          nothing) and idempotent on (portal_key, selector),
+//                          so repeat runs converge rather than accumulate.
 //   KANSAS_DOCUMENT_ID + SOUTHPARK_DOCUMENT_ID
 //                          Fixtures for the E4.5 signed-download pair (17/17b):
 //                          an own-org document (positive) + a cross-org document
@@ -658,6 +665,122 @@ function looksLikeVercelGate(r) {
     );
   } else {
     console.log("SKIP  17b. cross-org document download — SOUTHPARK_DOCUMENT_ID not set");
+  }
+
+  // 18. Portals registry (shared catalog, same model as field maps): Kansas
+  //     sees global (org NULL) rows plus its OWN org rows, and never another
+  //     org's org-scoped portal. 18a first proves South Park actually holds an
+  //     org-scoped portal, so 18b can't pass vacuously against an empty table —
+  //     an 18a failure is a fixture gap, not a leak (register a South Park
+  //     portal), and it downgrades to a SKIP rather than a false red.
+  const portals = await apiGet("/api/portals", { token: kansasTok });
+  const portalRows = portals.body?.data ?? [];
+  check(
+    "18. Kansas portals registry reads",
+    portals.status === 200 && Array.isArray(portalRows),
+    `status=${portals.status} rows=${portalRows.length}` +
+      (portals.status !== 200 ? ` body=${(portals.raw || "").slice(0, 100)}` : ""),
+  );
+  const spPortals = await apiGet("/api/portals", { token: spTok });
+  const spOwnPortals = (spPortals.body?.data ?? []).filter((r) => r.orgId === env.SOUTHPARK_ORG);
+  if (spPortals.status === 200 && spOwnPortals.length >= 1) {
+    check(
+      "18b. Kansas portals exclude every South Park org-scoped portal",
+      !portalRows.some((r) => r.orgId === env.SOUTHPARK_ORG),
+      `southParkOrgRows=${portalRows.filter((r) => r.orgId === env.SOUTHPARK_ORG).length}` +
+        ` (South Park holds ${spOwnPortals.length})`,
+      { leak: true },
+    );
+  } else {
+    console.log(
+      "SKIP  18b. cross-org portal isolation — South Park holds no org-scoped portal fixture",
+    );
+  }
+
+  // 19. CAQH attestation WRITE isolation: a Kansas writer recording an
+  //     attestation on a South Park provider must 404 like the PATCH
+  //     (assertion 12) — never 200, never a cross-org write. Safe against
+  //     production for the same reason: the cross-org id is rejected BEFORE
+  //     any write (getProvider -> null -> 404), so no date is stamped.
+  //
+  //     The own-org write is deliberately NOT asserted: it would mutate a live
+  //     provider's caqh_last_attested_date and move that provider's E1.8
+  //     readiness. The happy path is covered by the handler unit tests and the
+  //     mock server instead — the same reasoning that keeps POST /api/providers
+  //     out of the gate.
+  const caqhX = await apiPost(
+    `/api/providers/${env.SOUTHPARK_PROVIDER_ID}/caqh-attestation`,
+    {},
+    { token: kansasTok },
+  );
+  const caqhLeaked = caqhX.status < 400 || caqhX.body?.data != null;
+  check(
+    "19. Kansas CAQH attestation on a South Park provider -> 404, no cross-org write",
+    caqhX.status === 404 && !caqhLeaked,
+    `status=${caqhX.status} (expect 404) dataPresent=${caqhX.body?.data != null}`,
+    { leak: true },
+  );
+
+  // 20. Propose-only field-map WRITE isolation: whatever a Kansas caller
+  //     proposes must land under KANSAS. This is the one write the gate can
+  //     safely exercise for real — a proposed row is inert (source 'manual',
+  //     no token, fills nothing) and idempotent on (portal_key, selector), so
+  //     re-running the gate converges on the same row instead of accumulating.
+  //     20a is the isolation half: the created row is org-scoped to the caller
+  //     and never global, so an x-org-id-less caller cannot mint a shared
+  //     catalog entry or write into another tenant.
+  if (env.KANSAS_ORG) {
+    const proposed = await apiPost(
+      "/api/portal-field-maps",
+      {
+        portal_key: "gate_probe_portal",
+        selector: "#gate-isolation-probe",
+        field_label: "Gate isolation probe",
+      },
+      { token: kansasTok },
+    );
+    // S5.3 widened the response to { map, suggestion } — the row is data.map.
+    const proposedRow = proposed.body?.data?.map ?? null;
+    check(
+      "20. Kansas can propose a field mapping",
+      (proposed.status === 201 || proposed.status === 200) && proposedRow != null,
+      `status=${proposed.status} (expect 200/201) dataPresent=${proposedRow != null}`,
+    );
+    check(
+      "20a. The proposed row is scoped to Kansas, never global, never approved",
+      proposedRow != null &&
+        proposedRow.orgId === env.KANSAS_ORG &&
+        proposedRow.status === "proposed" &&
+        proposedRow.token == null,
+      `orgId=${proposedRow?.orgId ?? "-"} (expect ${env.KANSAS_ORG}) ` +
+        `status=${proposedRow?.status ?? "-"} token=${proposedRow?.token ?? "null"}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  20/20a. propose-only field-map write — KANSAS_ORG not set");
+  }
+
+  // 21. Task-step WRITE isolation (S4.3): a Kansas writer ticking a step on a
+  //     South Park task must 404 BEFORE any write, like every other cross-org
+  //     write path. Safe against production for the same reason as 12/19 —
+  //     the org check precedes the update, so no task state is mutated. Uses
+  //     a nonsense stepId so even a hypothetical org-check bypass would fail
+  //     to find a step to tick.
+  if (env.SOUTHPARK_TASK_ID) {
+    const stepX = await apiPatch(
+      `/api/tasks/${env.SOUTHPARK_TASK_ID}/steps`,
+      { stepId: "gate-probe-step-does-not-exist" },
+      { token: kansasTok },
+    );
+    const stepLeaked = stepX.status < 400 || stepX.body?.data != null;
+    check(
+      "21. Kansas ticking a step on a South Park task -> 404, no cross-org write",
+      stepX.status === 404 && !stepLeaked,
+      `status=${stepX.status} (expect 404) dataPresent=${stepX.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  21. cross-org task-step write — SOUTHPARK_TASK_ID not set");
   }
 
   // ---- Pass/fail table ----

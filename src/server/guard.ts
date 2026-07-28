@@ -34,7 +34,20 @@ export interface AuthContext {
   userMetadata: Record<string, unknown> | null;
   db: SupabaseClient<Database>; // service-role; already org-scoped by callers
   writeAudit: (input: AuditInput) => Promise<void>;
+  // A client bound to the CALLER'S JWT (anon key + their Authorization header),
+  // so RLS applies and auth.uid() resolves — the opposite of `db`.
+  //
 }
+
+// WARNING for anyone adding a route that calls a SECURITY INVOKER RPC: do NOT
+// call it on ctx.db. Those RPCs lean on RLS for tenant scoping, on user_role()
+// to authorize, and on auth.uid() for the actor — set_case_status does all
+// three. Under the service-role client all three break at once: RLS is off (so
+// its `SELECT ... FOR UPDATE` reaches ANY org's row), user_role() returns NULL
+// (so the call fails not_authorized), and auth.uid() is NULL (so the actor is
+// unattributed). Bind the caller's own JWT with getAuthClient(getBearerToken(
+// request)) instead, and keep the transition rules where they already live.
+// No current route needs this, which is why no such client is built here.
 
 export class GuardError extends Error {
   constructor(

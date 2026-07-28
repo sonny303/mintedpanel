@@ -138,3 +138,144 @@ export function totalDriftCount(drift: ReadonlyMap<string, PortalFieldMap[]>): n
   for (const rows of drift.values()) n += rows.length;
   return n;
 }
+
+// ---------------------------------------------------------------------------
+// S6.4 — the two facts the drift report was missing: WHEN a dead selector last
+// worked, and which mappings have a history of breaking.
+//
+// Both are DERIVED from fill history. No new column, no new ingestion — the
+// review's rescoping (finding 2.4) was explicit that drift ingestion already
+// works end-to-end and only the reporting was thin.
+// ---------------------------------------------------------------------------
+
+/** A historical fill, newest-first, reduced to what dating a break needs. */
+export interface FillHistoryEntry {
+  portalKey: string;
+  startedAt: string | null;
+  /** fill_sessions.fields_filled — a COUNT of fields that landed. It is an
+   * int4 column, NOT a list of labels: nothing anywhere records WHICH fields
+   * filled, which is why lastWorkingAt has to infer success below. */
+  fieldsFilled: number | null;
+  /** fill_sessions.fields_skipped — the per-field skip reports, verbatim. */
+  fieldsSkipped: unknown;
+  isTest?: boolean | null;
+}
+
+/** Did this fill report THIS mapping as not-found? Same join as
+ * brokenMapsForFill (mapId first, report label for pre-mapId telemetry), but
+ * without the repaired-since filter: here we are asking a historical question
+ * — "did it break in that fill" — and a later repair does not change the past. */
+function fillReportsBroken(
+  fill: FillHistoryEntry,
+  map: Pick<PortalFieldMap, "id" | "selector">,
+): boolean {
+  const label = reportLabelOf(map);
+  return parseSkippedEntries(fill.fieldsSkipped).some(
+    (e) =>
+      e.kind === "skipped" &&
+      e.reason === FIELD_NOT_FOUND_REASON &&
+      (e.mapId ? e.mapId === map.id : e.label === label),
+  );
+}
+
+function isBefore(a: string, b: string): boolean {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  // Unparseable timestamps must not silently order as "before" — treat an
+  // undatable fill as no evidence rather than as evidence of working.
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
+  return ta < tb;
+}
+
+/** When this mapping last filled successfully. null when we have never seen it
+ * work, which is itself worth saying: a selector that never worked is a bad
+ * mapping, not drift.
+ *
+ * This is INFERRED, and it has to be. `fields_filled` is a count, and the
+ * extension never reports which selectors succeeded — only which were skipped
+ * (fields_skipped). So a mapping counts as having worked in a fill when all of
+ * these hold:
+ *   - the fill is a REAL one on this mapping's portal (dry runs never touched
+ *     the live DOM, same reason drift excludes them);
+ *   - the fill landed at least one field, so "no skip report" means something;
+ *   - the mapping already existed when the fill ran — otherwise its absence
+ *     from the skip list says nothing about it;
+ *   - and the fill did NOT report it not-found.
+ *
+ * The weak link is a mapping that existed but was never attempted (a page the
+ * fill did not reach). That would read as "worked", so this is a floor on
+ * staleness, not a precise last-success timestamp. It is presented that way. */
+export function lastWorkingAt(
+  map: Pick<PortalFieldMap, "id" | "portalKey" | "selector" | "createdAt">,
+  history: readonly FillHistoryEntry[],
+): string | null {
+  for (const fill of history) {
+    if (fill.isTest || fill.portalKey !== map.portalKey) continue;
+    if (!fill.startedAt) continue;
+    if ((fill.fieldsFilled ?? 0) <= 0) continue;
+    if (map.createdAt && isBefore(fill.startedAt, map.createdAt)) continue;
+    if (fillReportsBroken(fill, map)) continue;
+    return fill.startedAt;
+  }
+  return null;
+}
+
+/** One row of the S6.4 report: what broke, where, and when it last worked.
+ * The coordinator reads this; they are never asked to diagnose it. */
+export interface DriftReportRow {
+  portalKey: string;
+  mapId: string;
+  field: string;
+  lastWorkingAt: string | null;
+  /** True when this mapping has broken before — see fragileMapIds. */
+  knownFragile: boolean;
+}
+
+/** Mappings that have drifted in ANY fill in the history, not just the latest.
+ * A field that breaks, gets repaired, and breaks again is a different problem
+ * from one that broke once — the next coverage check should treat it with
+ * suspicion (S6.4: "repair marks fields known-fragile"). */
+export function fragileMapIds(
+  history: readonly FillHistoryEntry[],
+  fills: readonly DriftFill[],
+  fieldMaps: readonly PortalFieldMap[],
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const fill of fills) {
+    for (const map of brokenMapsForFill(fill, fieldMaps)) {
+      counts.set(map.id, (counts.get(map.id) ?? 0) + 1);
+    }
+  }
+  // A mapping is fragile once it has broken at least once AND we have
+  // evidence it worked before — i.e. it decayed, rather than never working.
+  const fragile = new Set<string>();
+  for (const [mapId, breaks] of counts) {
+    const map = fieldMaps.find((m) => m.id === mapId);
+    if (!map) continue;
+    if (breaks >= 1 && lastWorkingAt(map, history) != null) fragile.add(mapId);
+  }
+  return fragile;
+}
+
+/** Assemble the drift report rows for one portal's broken mappings. */
+export function buildDriftReport(
+  drift: ReadonlyMap<string, PortalFieldMap[]>,
+  history: readonly FillHistoryEntry[],
+  fragile: ReadonlySet<string>,
+): DriftReportRow[] {
+  const rows: DriftReportRow[] = [];
+  for (const [portalKey, maps] of drift) {
+    for (const map of maps) {
+      rows.push({
+        portalKey,
+        mapId: map.id,
+        field: map.fieldLabel ?? reportLabelOf(map),
+        lastWorkingAt: lastWorkingAt(map, history),
+        knownFragile: fragile.has(map.id),
+      });
+    }
+  }
+  // Oldest break first: the field that has been broken longest is the one
+  // costing the most fills.
+  return rows.sort((a, b) => (a.lastWorkingAt ?? "").localeCompare(b.lastWorkingAt ?? ""));
+}

@@ -23,9 +23,18 @@ const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
 // `/api/providers/:id/ssn-release?caseId=` — E4.4 fill-only SSN release. Must be
 // matched before the generic :id route.
 const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
+// `/api/providers/:id/caqh-attestation` — record a CAQH re-attestation. Must
+// be matched before the generic :id route.
+const CAQH_ATTESTATION_ROUTE = /^\/api\/providers\/([^/]+)\/caqh-attestation\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
+// GET lists the shared catalog; POST proposes an unmapped field (propose-only).
+// `/api/tasks/:id/steps` — the S4.3 step tick (the one /api task-state write).
+const TASK_STEPS_ROUTE = /^\/api\/tasks\/([^/]+)\/steps\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
+// `/api/portals` — the DB-driven payer-portal registry the extension matches
+// the current tab against.
+const PORTALS_ROUTE = /^\/api\/portals\/?$/;
 const FILL_EVENTS_ROUTE = /^\/api\/fill-events\/?$/;
 // `/api/cases?providerId=` — the extension popup's case dropdown.
 const CASES_ROUTE = /^\/api\/cases\/?$/;
@@ -93,8 +102,12 @@ async function routeApiRequest(request: Request): Promise<Response> {
 
   const profileMatch = pathname.match(PROVIDER_PROFILE_ROUTE);
   const ssnReleaseMatch = pathname.match(SSN_RELEASE_ROUTE);
-  const providersMatch = profileMatch || ssnReleaseMatch ? null : pathname.match(PROVIDERS_ROUTE);
+  const caqhMatch = pathname.match(CAQH_ATTESTATION_ROUTE);
+  const providersMatch =
+    profileMatch || ssnReleaseMatch || caqhMatch ? null : pathname.match(PROVIDERS_ROUTE);
   const isFieldMaps = PORTAL_FIELD_MAPS_ROUTE.test(pathname);
+  const isPortals = PORTALS_ROUTE.test(pathname);
+  const taskStepsMatch = pathname.match(TASK_STEPS_ROUTE);
   const isFillEvents = FILL_EVENTS_ROUTE.test(pathname);
   const isCases = CASES_ROUTE.test(pathname);
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
@@ -109,8 +122,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
   if (
     !profileMatch &&
     !ssnReleaseMatch &&
+    !caqhMatch &&
     !providersMatch &&
     !isFieldMaps &&
+    !isPortals &&
+    !taskStepsMatch &&
     !isFillEvents &&
     !isCases &&
     !caseTouchesMatch &&
@@ -172,10 +188,36 @@ async function routeApiRequest(request: Request): Promise<Response> {
       const routes = await loadExtensionRoutes();
       return await routes.handleSsnRelease(ssnReleaseMatch[1], url, ctx);
     }
+    if (caqhMatch) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadProviderRoutes();
+      return await routes.handleRecordCaqhAttestation(
+        caqhMatch[1],
+        await readJsonBody(request),
+        ctx,
+        new Date().toISOString().slice(0, 10),
+      );
+    }
     if (isFieldMaps) {
+      if (method !== "GET" && method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return method === "GET"
+        ? await routes.handleListPortalFieldMaps(url, ctx)
+        : await routes.handleProposeFieldMap(await readJsonBody(request), ctx);
+    }
+    if (isPortals) {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
-      return await routes.handleListPortalFieldMaps(url, ctx);
+      return await routes.handleListPortals(url, ctx);
+    }
+    if (taskStepsMatch) {
+      if (method !== "PATCH") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleCompleteTaskStep(
+        taskStepsMatch[1],
+        await readJsonBody(request),
+        ctx,
+      );
     }
     if (isFillEvents) {
       if (method !== "POST") return fail(405, "Method not allowed");
@@ -204,7 +246,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     if (isNextBestAction) {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
-      return await routes.handleNextBestAction(ctx);
+      return await routes.handleNextBestAction(url, ctx);
     }
     if (isDocumentUploadIntent) {
       if (method !== "POST") return fail(405, "Method not allowed");

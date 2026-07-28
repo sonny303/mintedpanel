@@ -14,9 +14,11 @@
 //                scripts/verify-isolation-local.mjs).
 //
 // Leak modes (each makes specific gate assertions fail):
-//   providers   cross-org provider rows leak into lists, GET-by-id, and PATCH (1, 1b, 2c, 3, 12)
+//   providers   cross-org provider rows leak into lists, GET-by-id, PATCH, and
+//               the CAQH attestation write               (1, 1b, 2c, 3, 12, 19)
 //   spoof       x-org-id honored without a membership check          (4)
-//   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
+//   fieldmaps   another org's field-map rows leak into the catalog, and a
+//               proposed row lands global instead of org-scoped (5b, 5c, 20a)
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
@@ -28,6 +30,8 @@
 //   facility    cross-org profile facilityId honored instead of 404  (11)
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
+//   portals     another org's registry portals leak into the catalog  (18b)
+//   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -69,6 +73,8 @@ export const LEAK_MODES = [
   "facility",
   "ssnrelease",
   "documentdownload",
+  "portals",
+  "taskstep",
 ];
 
 const USERS = {
@@ -260,6 +266,41 @@ const FIELD_MAPS = [
   ),
 ];
 
+// Portals registry fixture: global (org NULL) rows every org sees, plus one
+// South Park org-scoped portal so the gate's 18b has something real to exclude.
+const PORTALS = [
+  {
+    id: "portal-global-1",
+    orgId: null,
+    portalKey: "bcbs_ks_enrollment",
+    name: "BCBS Kansas Enrollment",
+    payerId: null,
+    formUrl: "https://example.test/bcbs/enroll",
+    isVerified: true,
+    provenAt: null,
+  },
+  {
+    id: "portal-global-2",
+    orgId: null,
+    portalKey: "availity",
+    name: "Availity",
+    payerId: null,
+    formUrl: "https://example.test/availity",
+    isVerified: false,
+    provenAt: null,
+  },
+  {
+    id: "portal-sp-1",
+    orgId: FIXTURES.SOUTHPARK_ORG,
+    portalKey: "sp_test_portal",
+    name: "South Park Test Portal",
+    payerId: null,
+    formUrl: "https://example.test/sp",
+    isVerified: false,
+    provenAt: null,
+  },
+];
+
 function envelope(res, status, data, error = null, meta = null) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify({ data, error, meta }));
@@ -315,6 +356,26 @@ export async function createMockApiServer(options = {}) {
   // In-memory extension quick-card layout prefs, keyed by userId (the route is
   // USER-scoped — prefs follow the user across orgs, so never org-keyed).
   const viewPrefs = new Map();
+  // Proposed field maps from POST /api/portal-field-maps, keyed
+  // `${orgId}:${portal_key}:${selector}` — the idempotency grain the real
+  // service dedupes on.
+  const proposedMaps = new Map();
+  // A representative slice of the schema-derived quick-card catalog the real
+  // GET serves. Only needs to exercise the contract: an offered field, the
+  // now-offered ssnLast4, and (by absence) an excluded internal column and a
+  // case-scoped payer token, both of which must 422 on PUT.
+  const QUICK_CARD_CATALOG = [
+    { key: "provider.npi", label: "NPI (Type 1)", group: "provider", groupLabel: "Provider" },
+    { key: "provider.firstName", label: "First name", group: "provider", groupLabel: "Provider" },
+    { key: "provider.ssnLast4", label: "SSN (last 4)", group: "provider", groupLabel: "Provider" },
+    { key: "group.tin", label: "Tax ID (TIN)", group: "group", groupLabel: "Provider group" },
+    {
+      key: "license.licenseNumber",
+      label: "License number",
+      group: "license",
+      groupLabel: "State license",
+    },
+  ];
   // Per-server provider creates from POST /api/providers, so a create lands in
   // the caller's org (and is only visible to that org). Kept separate from the
   // shared PROVIDERS fixture so it never drifts the count assertions across runs.
@@ -368,22 +429,29 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, rows, null, { total: rows.length });
     }
 
-    // --- /api/me/view-prefs (E4.3 TE-15: user-scoped, BEFORE org resolution,
-    // like /api/me/orgs — the layout follows the user across orgs) ---
+    // --- /api/me/view-prefs (user-scoped, BEFORE org resolution, like
+    // /api/me/orgs — the layout follows the user across orgs) ---
     if (/^\/api\/me\/view-prefs\/?$/.test(url.pathname)) {
       if (method === "GET") {
-        return envelope(res, 200, { fields: viewPrefs.get(user.userId) ?? null });
+        // GET serves the layout AND the schema-derived catalog the picker
+        // renders (one round trip; same set the PUT validates against).
+        return envelope(res, 200, {
+          fields: viewPrefs.get(user.userId) ?? null,
+          catalog: QUICK_CARD_CATALOG,
+        });
       }
       if (method === "PUT") {
         const body = await readBody(req);
         const fields = body?.fields;
-        // Contract mirror: a bounded, deduped, ordered array of catalog keys;
-        // ssnLast4 / any excluded key is a 422 (the catalog excludes it).
+        // Contract mirror: a deduped, ordered array of DERIVED catalog keys.
+        // ssnLast4 is a legitimate field now; case-scoped payer/mso/contract
+        // tokens and internal/audit columns are not in the catalog, so naming
+        // one is a 422. No length cap — the closed key set bounds the body.
+        const allowed = new Set(QUICK_CARD_CATALOG.map((f) => f.key));
         if (
           !Array.isArray(fields) ||
-          fields.length > 32 ||
           new Set(fields).size !== fields.length ||
-          fields.some((f) => typeof f !== "string" || f === "provider.ssnLast4")
+          fields.some((f) => typeof f !== "string" || !allowed.has(f))
         ) {
           return envelope(res, 422, null, "invalid fields");
         }
@@ -551,28 +619,34 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, p);
     }
 
-    // --- /api/next-best-action (E4.3 TE-6: org-scoped queue-top read) ---
+    // --- /api/next-best-action (org-scoped ranked queue; S3.3 added items) ---
     if (/^\/api\/next-best-action\/?$/.test(url.pathname)) {
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
-      // Org-scoped: the queue-top of the caller's own org. Stable fixture item
-      // for the caller's first case; { item: null } when the org has none.
-      const own = CASES.find((c) => c.orgId === orgId);
-      if (!own) return envelope(res, 200, { item: null });
-      const p = PROVIDERS.find((row) => row.id === own.providerId);
-      return envelope(res, 200, {
-        item: {
-          caseId: own.id,
-          providerId: own.providerId,
+      // Org-scoped: the caller's OWN cases only, ranked. `item` stays the top
+      // for the pre-S3.3 consumer; `items` is the same ranking, capped by
+      // ?limit= (default 20).
+      const raw = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+      const limit = Number.isFinite(raw) && raw >= 1 && raw <= 100 ? raw : 20;
+      const own = CASES.filter((c) => c.orgId === orgId);
+      const items = own.slice(0, limit).map((c) => {
+        const p = PROVIDERS.find((row) => row.id === c.providerId);
+        return {
+          caseId: c.id,
+          providerId: c.providerId,
           providerName: p ? `${p.firstName} ${p.lastName}`.trim() : "",
-          payerName: own.payerName,
+          payerName: c.payerName,
           groupName: "Demo Group",
-          state: own.state,
+          state: c.state,
           actionKind: "review",
-          action: "Review case — no open tasks",
-          reason: "No deadline signal on this case — ranked after dated work.",
+          action: "Review case — no open task",
+          reason: "No deadline signal on this case.",
           deadline: null,
-          deepLink: `/cases/${own.id}`,
-        },
+          payerPipelineState: c.payerPipelineState ?? "not_started",
+          deepLink: `/cases/${c.id}`,
+        };
+      });
+      return envelope(res, 200, { item: items[0] ?? null, items }, null, {
+        total: items.length,
       });
     }
 
@@ -646,7 +720,14 @@ export async function createMockApiServer(options = {}) {
         const taskOk = TASKS.some((t) => t.id === body.task_id && t.orgId === orgId);
         if (!taskOk) return envelope(res, 404, null, "Task not found");
       }
+      // The opt-in status bump rides portal_submission only; on a structured
+      // touch it is a client error, not a silently ignored field.
+      if (body.bump_status && body.kind !== "portal_submission") {
+        return envelope(res, 422, null, "bump_status is only accepted on kind 'portal_submission'");
+      }
       const key = `${orgId}:${body.idempotency_id}`;
+      // A replay returns the stored row and re-runs nothing — including the
+      // bump, so a retry can never double-apply it (hence no meta here).
       if (touches.has(key)) return envelope(res, 200, touches.get(key));
       const touch = {
         id: body.idempotency_id,
@@ -662,7 +743,11 @@ export async function createMockApiServer(options = {}) {
         createdAt: "2026-07-05T00:00:00Z",
       };
       touches.set(key, touch);
-      return envelope(res, 201, touch);
+      // Bump outcome rides meta so `data` stays exactly the touch. The real
+      // server routes set_case_status through the caller's own JWT (RLS +
+      // auth.uid()); the mock just mirrors the response contract.
+      const bumpMeta = body.bump_status ? { status_bump: "applied" } : null;
+      return envelope(res, 201, touch, null, bumpMeta);
     }
 
     // --- /api/cases/:id/context (Workbench post-selection read) ---
@@ -700,8 +785,105 @@ export async function createMockApiServer(options = {}) {
       });
     }
 
+    // --- /api/providers/:id/caqh-attestation (writer-only, org-scoped) ---
+    const caqhMatch = url.pathname.match(/^\/api\/providers\/([^/]+)\/caqh-attestation\/?$/);
+    if (caqhMatch) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot record a CAQH attestation");
+      }
+      const body = (await readBody(req)) ?? {};
+      const target = [...PROVIDERS, ...createdProviders].find((p) => p.id === caqhMatch[1]);
+      // Real contract: a cross-org (or missing) provider is a 404 BEFORE any
+      // write. Leak "providers": the org check is skipped and the cross-org
+      // write is accepted (assertion 19).
+      const visible = target && (target.orgId === orgId || leak === "providers");
+      if (!visible) return envelope(res, 404, null, "Provider not found");
+      const today = new Date().toISOString().slice(0, 10);
+      const attestedOn =
+        body.attested_on == null || body.attested_on === "" ? today : body.attested_on;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(attestedOn)) {
+        return envelope(res, 422, null, "attested_on must be a YYYY-MM-DD date string");
+      }
+      if (attestedOn > today) {
+        return envelope(res, 422, null, "attested_on cannot be in the future");
+      }
+      // Narrow response: the date + the shared freshness window, never the row.
+      return envelope(res, 200, {
+        id: target.id,
+        caqhLastAttestedDate: attestedOn,
+        currentThroughDays: 120,
+      });
+    }
+
+    // --- /api/tasks/:id/steps (S4.3 step tick; org-checked before write) ---
+    const taskStepMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/steps\/?$/);
+    if (taskStepMatch) {
+      if (method !== "PATCH") return envelope(res, 405, null, "Method not allowed");
+      if (user.role === "billing") {
+        return envelope(res, 403, null, "Your role cannot complete task steps");
+      }
+      const body = (await readBody(req)) ?? {};
+      if (typeof body.stepId !== "string" || body.stepId.trim() === "") {
+        return envelope(res, 422, null, "stepId is required");
+      }
+      // Real contract: a task outside the caller's org is a 404 BEFORE any
+      // write. Leak "taskstep": the org check is skipped (assertion 21).
+      const task = TASKS.find((t) => t.id === taskStepMatch[1]);
+      const visible = task && (task.orgId === orgId || leak === "taskstep");
+      if (!visible) return envelope(res, 404, null, "Task not found");
+      return envelope(res, 200, {
+        task: { id: task.id, orgId: task.orgId, status: "in_progress" },
+        allDone: false,
+      });
+    }
+
+    // --- /api/portals (DB-driven registry: global rows + own-org rows) ---
+    if (/^\/api\/portals\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const portalKey = url.searchParams.get("portal_key");
+      let rows = PORTALS.filter((r) => r.orgId === null || r.orgId === orgId || leak === "portals");
+      if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
     // --- /api/portal-field-maps ---
     if (/^\/api\/portal-field-maps\/?$/.test(url.pathname)) {
+      // POST = the propose-only write. The row is always status 'proposed',
+      // source 'manual', token null, under the CALLER'S org. Leak "fieldmaps":
+      // it lands as a global (org_id null) row, which 20a must catch.
+      if (method === "POST") {
+        if (user.role === "billing") {
+          return envelope(res, 403, null, "Your role cannot propose field mappings");
+        }
+        const body = (await readBody(req)) ?? {};
+        const portalKey = String(body.portal_key ?? "")
+          .trim()
+          .toLowerCase();
+        const selector = String(body.selector ?? "").trim();
+        if (!portalKey) return envelope(res, 422, null, "portal_key is required");
+        if (!selector) return envelope(res, 422, null, "selector is required");
+        const key = `${orgId}:${portalKey}:${selector}`;
+        const existing = proposedMaps.get(key);
+        if (existing) return envelope(res, 200, { map: existing, suggestion: null });
+        const row = {
+          id: `fm-proposed-${proposedMaps.size + 1}`,
+          orgId: leak === "fieldmaps" ? null : orgId,
+          portalKey,
+          selector,
+          fieldLabel:
+            String(body.field_label ?? "")
+              .trim()
+              .toLowerCase() || null,
+          source: "manual",
+          token: null,
+          status: "proposed",
+        };
+        proposedMaps.set(key, row);
+        // S5.3: the learned suggestion rides the same response (null here —
+        // the mock carries no dictionary; the gate only checks org scoping).
+        return envelope(res, 201, { map: row, suggestion: null });
+      }
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       const portalKey = url.searchParams.get("portal_key");
       let rows = FIELD_MAPS.filter(

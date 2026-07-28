@@ -14,11 +14,52 @@
 // Server-only surface (no browser-default ctx) — see caseContext.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { EXTENSION_QUICK_CARDS_PAGE_KEY } from "@/lib/quickCardCatalog";
+import {
+  EXTENSION_QUICK_CARDS_PAGE_KEY,
+  buildQuickCardCatalog,
+  type QuickCardField,
+  type TokenCatalogEntry,
+} from "@/lib/quickCardCatalog";
 
 export interface ViewPrefsServiceCtx {
   db: SupabaseClient<Database>;
   userId: string;
+}
+
+/** The selectable quick-card fields, derived from the live schema via the SAME
+ * get_sop_field_tokens() catalog the provider profile endpoint resolves values
+ * from — so the picker can never offer a field the resolver won't fill, and can
+ * never omit one it would.
+ *
+ * Not user- or org-scoped: the catalog is schema metadata (which fields exist
+ * and where), never a value, so it is safe on the user-only auth step alongside
+ * the layout read. Malformed catalog rows are skipped rather than thrown on —
+ * the picker degrades to fewer fields, never to a 500. */
+export async function getQuickCardCatalog(ctx: {
+  db: SupabaseClient<Database>;
+}): Promise<QuickCardField[]> {
+  const { data, error } = await ctx.db.rpc("get_sop_field_tokens");
+  if (error) throw error;
+  if (!Array.isArray(data)) {
+    throw new Error("get_sop_field_tokens() returned a non-array token catalog");
+  }
+  const entries: TokenCatalogEntry[] = [];
+  for (const item of data) {
+    if (
+      item !== null &&
+      typeof item === "object" &&
+      !Array.isArray(item) &&
+      typeof (item as Record<string, unknown>).table === "string" &&
+      typeof (item as Record<string, unknown>).token === "string" &&
+      typeof (item as Record<string, unknown>).column === "string"
+    ) {
+      entries.push(item as unknown as TokenCatalogEntry);
+    }
+  }
+  if (entries.length === 0) {
+    throw new Error("get_sop_field_tokens() returned an empty token catalog");
+  }
+  return buildQuickCardCatalog(entries);
 }
 
 /** The saved quick-card layout, or null when nothing has been saved. The

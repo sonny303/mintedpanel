@@ -189,6 +189,7 @@ describe("getCaseContext — projection", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          steps: [],
         },
         {
           id: "task-2",
@@ -197,6 +198,7 @@ describe("getCaseContext — projection", () => {
           executionType: "manual",
           sortOrder: 2,
           dueDate: "2026-07-20",
+          steps: [],
         },
       ],
       latestNote: {

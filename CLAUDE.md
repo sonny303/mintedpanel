@@ -2511,16 +2511,40 @@ built only when a real consumer pulls them. The current surface:
   user across orgs), stored in `user_table_prefs` under
   `page_key 'extension.quickCards'` keyed by the JWT-verified user id (never a
   client-supplied id — that scoping IS the isolation under the service-role
-  client). GET returns `{ fields: string[] | null }` (null = nothing saved; the
-  envelope's `data` is never null so the extension never treats it as an error).
-  PUT accepts `{ fields: string[] }` validated to a bounded (≤32), deduplicated,
-  ORDERED array of CLOSED-catalog keys (`src/lib/quickCardCatalog.ts`
-  `validateQuickCardFields`) — anything else (unknown/excluded key, duplicate,
-  non-string, over-length) is a 422. The catalog is a server-owned allowlist of
-  the BARE profile-exposed token keys; `provider.ssnLast4` and the E4.4
-  fill-only/vault category are STRUCTURALLY excluded (absent from the list, so a
-  hand-crafted PUT naming one 422s). Not a PHI read/write (a list of field
-  KEYS, no values) — no audit row.
+  client). **SCHEMA-DERIVED since 2026-07-28** (supersedes the TE-16 hand-written
+  allowlist): GET returns `{ fields: string[] | null, catalog: QuickCardField[] }`
+  — the saved layout (null = nothing saved; the envelope's `data` is never null
+  so the extension never treats it as an error) PLUS the selectable fields, so
+  the picker and the PUT validator read one source in one round trip. PUT accepts
+  `{ fields: string[] }` validated to a deduplicated, ORDERED array of keys drawn
+  from that same derived catalog; a duplicate, non-string, or out-of-catalog key
+  is a 422. The **32-field cap is gone** (the picker groups by section, so length
+  stopped mattering; the closed key set already bounds the body).
+  `getQuickCardCatalog` (`extensionViewPrefs.ts`) calls **the same
+  `get_sop_field_tokens()` the profile endpoint resolves values from**, then the
+  pure `buildQuickCardCatalog` (`src/lib/quickCardCatalog.ts`) applies TWO
+  exclusion rules: case-scoped tables (payers/msos/contracts — never resolve on a
+  profile) and eleven named internal/audit tokens (`provider.launchId`,
+  `verificationState`, `isTestProvider`, `referenceOnly`, `terminatedDate`,
+  `facility.referenceOnly`/`statusId`, the `license.verified*` PSV trail,
+  `groupInsurance.notes`). **75 offered keys → 117.** The old hand-list had made
+  the group's ENTIRE correspondence block, `provider.home{Street,City,Zip}`, and
+  facility `email`/`hours`/`effectiveDate` unreachable on a card even though the
+  profile resolved them. `provider.ssnLast4` is now OFFERED (product decision);
+  the FULL SSN stays structurally unreachable — it lives in `provider_ssn_vault`,
+  which `get_sop_field_tokens()` does not sweep, so no token can name it.
+  **`get_sop_field_tokens()` is NOT curated** — it reads
+  `information_schema.columns` over nine tables and drops only keys/FKs/status
+  columns, so any new column on the six card-eligible tables becomes a token
+  automatically. `quickCardCatalog.test.ts` is what makes a deny-list safe here:
+  it reconstructs the RPC's output from the checked-in `types.ts` (verified
+  byte-identical to the live 126 non-case-scoped tokens) and diffs it against a
+  pinned `ACKNOWLEDGED_TOKENS` snapshot — a new column fails the suite BY NAME
+  until someone classifies it. Do not delete that test to make a build pass.
+  Not a PHI read/write (field KEYS + schema metadata, no values) — no audit row.
+  NB the extension still ships a stale verbatim mirror of the old 75-key list in
+  `src/shared/quickCards.ts`; it must be deleted and the picker driven from the
+  served `catalog` (extension-repo work, not done here).
 - `GET /api/next-best-action` — the extension's log-and-advance queue-top read
   (E4.3 F4.3.4/TE-6, `src/services/nextBestAction.ts`). A guarded, org-scoped
   read that ASSEMBLES the same ~17 org caches the browser My Cases queue
@@ -2569,6 +2593,42 @@ built only when a real consumer pulls them. The current surface:
   fails the request) — R2 locked decision 4, 2026-07-05, superseding the
   same-day rely-on-fill_sessions decision (both recorded in
   `docs/minted-panel-release-plan.md`).
+- `POST /api/portal-field-maps` — **propose-only** field-map write (2026-07-28).
+  The extension reports a field the fill engine met that nothing maps. The row is
+  ALWAYS written `status 'proposed'`, `source 'manual'`, `token null`, under the
+  CALLER'S org — never global (`org_id NULL` rows are platform catalog entries),
+  whatever the body says. Approving stays a human act in the E6.5 SOP-editor
+  trainer: a client that could write `approved` with a token would silently
+  redirect what autofills into a payer form. Blast radius worth knowing: the
+  extension fills proposed AND approved maps (only `retired` is skipped), so the
+  row IS live — but with no token it fills nothing; it just surfaces in the
+  trainer queue and `mappingCoverage`. Idempotent on `(portal_key, selector)` —
+  the dedupe lookup spans GLOBAL rows too (the shared catalog is authoritative
+  for portal truths), so a covered selector returns the existing row (200) and a
+  first sighting 201. `portal_key`/`field_label` fold through
+  `normalizePortalKey`/`normalizeFieldLabel` at the write boundary, so a proposal
+  joins the `field_dictionary`'s learned suggestions. Writer roles only; audited
+  on create only. `proposeFieldMap` in `src/services/portalFieldMaps.ts`.
+- `GET /api/portals[?portal_key=...]` — the DB-driven payer-portal registry
+  (2026-07-28), so portal identity stops being a hardcoded list in the extension
+  bundle. Own-org rows + GLOBAL registry rows (the E6.5 tier), the shared-catalog
+  read pattern; `?portal_key` folds through `normalizePortalKey`. Read-only, not
+  PHI — no audit row, no role gate (billing may read), mirroring the field-maps
+  route it pairs with. `listPortalsForApi` in `src/services/portals.ts` (a server
+  ctx path beside the browser path, the `portalFieldMaps.ts` dual-surface idiom).
+- `POST /api/providers/:id/caqh-attestation` — record a CAQH re-attestation
+  (2026-07-28). The column + its 120-day freshness rule shipped in E1.8; only the
+  write was missing, so a coordinator who re-attested in the CAQH portal had to
+  reopen the webapp or leave every readiness row red on a stale date. Body
+  `{ attested_on?: "YYYY-MM-DD" }` defaulting to today; a FUTURE date is a 422 (an
+  attestation records what already happened, and accepting one would silently
+  extend the E1.8 window past what a payer honours). Writes through the existing
+  `updateProvider` DI path, so org scoping / the cross-tenant org strip / the
+  UPDATE audit row all come from there. The response is deliberately NARROW —
+  `{ id, caqhLastAttestedDate, currentThroughDays }` (the last imported from
+  `enrollmentReadiness.CAQH_CURRENT_DAYS`, so the extension never hardcodes a
+  second window) — never the PHI-dense row PATCH returns; pinned by a test.
+  Writer roles only; cross-org id 404s before any write.
 - `GET /api/portal-field-maps?portal_key=...` — shared catalog: `org_id NULL`
   rows (global, selectors are portal truths) + the caller's org overrides
   (`src/services/portalFieldMaps.ts`).
@@ -2620,7 +2680,29 @@ payerReferenceId, payerPipelineState }` — never beyond the list projections). 
   gate assertions **8c** (own portalTasks reference only own-org tasks) + **8d**
   (cross-org request never leaks a South Park task id via portalTasks, red under
   the `cases` leak mode). (`src/services/providerCases.ts`)
-- `POST /api/cases/:id/touches` — the "Mark submitted" business log. R2 core:
+- `POST /api/cases/:id/touches` — the "Mark submitted" business log. **Status is
+  moved by the DATABASE, not this route (corrected 2026-07-28).** The E6.0
+  trigger `trg_case_status_on_touch` fires AFTER INSERT on every touchpoint and,
+  for the exact shape this endpoint writes (`source 'extension'` + `outcome
+'submitted'`), calls `_apply_case_status_auto(case, 'submitted', touch.id)` —
+  same transaction, this touch as evidence, no opt-in. `bump_status: true`
+  therefore does not perform a transition; it only asks the route to READ the
+  case back and report what the trigger did (`meta.status_bump` /
+  `status_bump_reason`, `data` stays exactly the touch). It stays in the wire
+  contract so an older panel still gets its confirmation line, and is still a
+  422 on `structured_touch`. **The first cut called `set_case_status` here and
+  could never succeed:** that RPC opens with `IF p_to_status = v_from THEN RAISE
+case_status_invalid_transition`, and the trigger had already made
+  `from = 'submitted'` — so every real submission returned applied:false with
+  "not in a status that can move to Submitted" on a submission that had worked.
+  The unit fake speaks PostgREST and has no triggers, which is why it passed
+  while the feature was 100% broken; the suite now pins that NO RPC is issued.
+  When the case sits past Submitted the trigger deliberately no-ops ("set by a
+  person stands") and the honest report is applied:false. `ctx.asUser()` was
+  added for that doomed call and has been REMOVED with it — but the trap it
+  documented is real and is now a warning comment in `guard.ts`: never call a
+  SECURITY INVOKER RPC on `ctx.db`, because RLS, `user_role()` and `auth.uid()`
+  all break at once under the service key. R2 core:
   ONE append-only anchor touchpoint (`touch_type 'portal'`, `outcome
 'submitted'`, `source 'extension'`, text "Application submitted via <portal
   label>"); `idempotency_id` is its PK (same replay semantics as fill-events).
@@ -2764,6 +2846,92 @@ x-org-id`.
 4. **`{{user.name}}`/`{{user.email}}` resolve from auth/JWT metadata.** No
    schema change.
 5. **The extension never submits portal forms. Unchanged, forever.**
+
+## Workbench epic (2026-07-28) — Phases 1-6, both repos
+
+The `docs/redesign/design-reference/workbench/` package (doc 08's S1.1-S6.4),
+built across `mintedpanel` and `sonny303/minted-extension` in one session per
+the E4.3 both-repos-attached rule. Panel-side highlights:
+
+- **Schema-derived quick-card catalog** (S2.1) — see the view-prefs bullet in
+  the Server API layer. 75 hand-listed keys -> 117 derived; the drift test in
+  `quickCardCatalog.test.ts` is what makes the deny-list safe.
+- **New /api surfaces:** `GET /api/portals` (S3.2 registry),
+  `POST /api/portal-field-maps` (S5.1 propose-only, S5.3 learned suggestion),
+  `PATCH /api/tasks/:id/steps` (S4.3 — the ONE task-state write),
+  `POST /api/providers/:id/caqh-attestation` (S6.2), the `bump_status` status
+  REPORT on the touches POST (S4.4 — the DB trigger does the transition), and a
+  ranked `items` list on `/api/next-best-action` (S3.3). Gate assertions 18-21 +
+  `portals`/`taskstep` leak modes; 16 modes.
+- **SECURITY INVOKER RPCs on /api** — never call one on `ctx.db`: under the
+  service key RLS, `auth.uid()` and `user_role()` all break at once. Bind the
+  caller's JWT (`getAuthClient(getBearerToken(request))`) instead. A
+  `ctx.asUser()` helper was added for the S4.4 bump and removed with it when
+  that call turned out to be unreachable (see the touches bullet); the warning
+  lives in `guard.ts`. No current route needs such a client.
+- **The `portals` registry is now a DEPLOY PREREQUISITE, not just config.**
+  S3.2 deleted the extension's bundled `PORTALS` list, so recognition is
+  `matchPortalByUrl(url, rowsFromGetApiPortals)` — over an empty table that
+  returns null for every page, which is indistinguishable from "not a portal":
+  Fill disabled, capture hidden, and the panel telling you to open the form you
+  are already looking at. The table had **0 rows** in production. Seeded
+  2026-07-28 (service-role, the sanctioned catalog channel): ONE global
+  (`org_id NULL`) row `bcbs_ks_enrollment` — "BCBS KS network enrollment",
+  payer `Blue Cross and Blue Shield of Kansas`, `form_url` exactly the
+  manifest's content-script match
+  (`…/facelets/allUsers/form/NetworkEnrollmentForm.faces`), `is_verified false`
+  until a real fill proves it. Global because all 24 of that key's
+  `portal_field_maps` are global. Registering a portal for a NEW payer is a
+  registry row (E6.5 register-portal UI / `upsert_global_portal`) — but note
+  the extension manifest is still pinned to `provider.bcbsks.com`, so a second
+  portal would be recognized and then dead-end at the content-script pre-flight
+  until the manifest moves to `chrome.scripting.registerContentScripts`.
+- **Shared pure modules** so the two products can't disagree:
+  `sopStepCompletion.ts` (S4.3 ordering + rollup, shared with the webapp task
+  drawer), `labelLearning.ts` (S5.3 suggestion + payer-count evidence),
+  `fieldVerification.ts` (S6.1 freshness — window IS `CAQH_CURRENT_DAYS`),
+  `referenceProvenance.ts` (S4.5), and `formDrift.ts`'s S6.4 additions
+  (`lastWorkingAt`, `fragileMapIds`, `buildDriftReport`). **`lastWorkingAt` is
+  INFERRED and has to be:** `fill_sessions.fields_filled` is an int4 COUNT and
+  nothing records WHICH selectors succeeded, so a mapping counts as having
+  worked in a fill when the fill is real (non-dry-run) on its portal, landed
+  ≥1 field, ran at or after the mapping's `createdAt`, and did NOT report it
+  not-found in `fields_skipped`. That makes it a floor on staleness, not a
+  precise last-success time — a mapping on a page the fill never reached reads
+  as "worked". The first cut read `fields_filled` as an array of labels, which
+  silently made it always null (and `fragileMapIds` always empty); the tests
+  encoded the same wrong shape, which is why it shipped green.
+- **`attestedOnFor`** (extension `src/shared/caqh.ts`) — the CAQH attestation
+  date comes from the ROSTER ROW (`caqhLastAttestedDate`, carried by
+  `PROVIDER_LIST_COLUMNS`), never a panel-local variable. The first cut held one
+  assigned only after a successful attestation POST, so the panel read "Never
+  attested" for everyone, the S6.2 de-emphasis never fired, and the value
+  outlived a provider switch. **S6.3's exception strip is UNFINISHED** —
+  `findCaqhGaps` + `PULL_CAQH_FIELD` + the rendering all exist, but nothing
+  populates `caqhGapRows`, because doing so means reading VALUES off the CAQH
+  page and the S5.2 capture scan is deliberately shape-only (labels/selectors,
+  never values — a PHI boundary). Documented in-code as a known gap.
+- **`provider_field_verifications`** (S6.1, migrations `20260728120000` +
+  `20260728160041`) — per-field verification stamps, one narrow table not N
+  columns. **APPLIED TO HOSTED 2026-07-28**, so types regen is safe again.
+  The follow-up migration fixes a real cross-tenant hole worth remembering:
+  `exists (select 1 from providers p where p.id = provider_id and p.org_id =
+org_id)` inside a policy is a TAUTOLOGY — the unqualified `org_id` binds to
+  the innermost scope (`providers.org_id`), so Postgres stores it as
+  `p.org_id = p.org_id`. A live rollback-wrapped probe caught it: a real admin
+  in org A stamped a provider from org B. Every shape check passed. Use the
+  scalar form `(select p.org_id from providers p where p.id = provider_id) =
+org_id`, where the comparison happens in the outer scope and cannot be
+  captured. A sweep of all other RLS policies for `x.y = x.y` found none.
+
+Extension-side (in `sonny303/minted-extension`, branch
+`claude/workbench-full-rebuild`): icons + header/avatar (S1.x), the searchable
+grouped field picker and grouped details card (S2.2/S2.3), registry-driven
+portal recognition and the tab-aware case list (S3.2/S3.4), the pickup queue
+(S3.3), the offer card + duplicate guard (S4.1/S4.2), the Progress tab
+(S4.3), capture (S5.2/S5.4), and the CAQH push/pull surfaces (S6.2/S6.3).
+**The fill now uses ONLY `approved` field maps** (S5.1's invariant, which was
+false while proposed rows also filled).
 
 ## Domain model in one breath
 
