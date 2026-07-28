@@ -547,15 +547,19 @@ test("TS-104: every surface renders THE status from the same field; old ledgers 
   await expect(listRow).toContainText("Submitted");
 
   // Case detail: the same value from the same field, attributed system with
-  // the documented migration note; both retained ledgers readable. Case# is
-  // the row click-through (the redesign retired the whole-row/Open affordance).
+  // the documented migration note. Case# is the row click-through (the
+  // redesign retired the whole-row/Open affordance).
   await listRow.getByRole("link").click();
-  await expect(page.getByText("Status", { exact: true })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText("Set by system")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Update status" })).toBeVisible({ timeout: 30000 });
+  // Slice E header attribution: "<status> · <when> by system".
+  await expect(page.getByText(/Submitted · .* by system/)).toBeVisible();
   await expect(page.getByText("Status history", { exact: true })).toBeVisible();
   await expect(page.getByText("Unified case status migration (E6.0)")).toBeVisible();
-  await expect(page.getByText("Payer pipeline history")).toBeVisible();
-  await expect(page.getByText("Legacy status history")).toBeVisible();
+  // Slice E / handoff §2.7 — the unified timeline is the ONE history surface:
+  // the two pre-unification ledgers no longer render on this screen (the
+  // panels + their data are untouched; only this screen stopped showing them).
+  await expect(page.getByText("Payer pipeline history")).toHaveCount(0);
+  await expect(page.getByText("Legacy status history")).toHaveCount(0);
 
   // Provider record (2026-07-21 tabbed record): the Cases panel renders the
   // same canonical value through the shared pill.
@@ -591,7 +595,8 @@ test("TS-105: first recorded work auto-flips to In Progress (system + evidence);
   await page.getByRole("button", { name: "Save touch" }).click();
   await expect(page.getByText("Touch logged")).toBeVisible({ timeout: 30000 });
   await expect(page.getByText("In Progress").first()).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText("Set by system")).toBeVisible();
+  // Slice E attribution sentence: "<status> · <when> by system — evidence: …".
+  await expect(page.getByText(/In Progress · .* by system/)).toBeVisible();
 
   // HUMAN: the fax/mail submission is never presumed — the person marks
   // Submitted from the header control.

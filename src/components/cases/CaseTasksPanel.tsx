@@ -1,5 +1,11 @@
 // Tasks card on the case detail page. Sequential lock: a task is locked
 // until previous tasks are completed. Row click opens the TaskDrawer.
+//
+// Slice E (payer-and-cases screen 6): ONE list — the step-at-a-time wizard is
+// retired. Each task shows its execution type and due date, and its ordered
+// steps render beneath it; the CURRENT step (the first incomplete step of the
+// first unfinished task) carries the "Open step" affordance that opens the
+// drawer, where the step bodies and Mark-step-done live.
 import { useRef, useState } from "react";
 import { differenceInDays, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -21,6 +27,8 @@ import { fmtDate } from "@/lib/format";
 import { useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useCanWrite } from "@/lib/permissions";
 import { TaskDrawer } from "@/components/cases/TaskDrawer";
+import { currentStepPointer, orderedSteps, summarizeTasks } from "@/lib/caseDetailView";
+import { EXECUTION_TYPE_LABELS, resolveExecutionType } from "@/lib/executionTypes";
 import type { Task, TaskStatus } from "@/types";
 
 function taskStatusIcon(status: Task["status"], locked: boolean) {
@@ -45,7 +53,8 @@ export function CaseTasksPanel({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
-  const completedTasks = tasks.filter((t) => t.status === "completed").length;
+  const summary = summarizeTasks(tasks);
+  const currentStep = currentStepPointer(tasks);
 
   const openDrawer = (task: Task, locked: boolean) => {
     setDrawerTask({ task, locked });
@@ -101,10 +110,11 @@ export function CaseTasksPanel({
   return (
     <>
       <Card className="shadow-none border-border">
-        <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between">
+        <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-[14px] font-semibold">Tasks</CardTitle>
           <span className="text-[12px] text-muted-foreground tabular-nums">
-            {completedTasks} of {tasks.length} completed
+            {summary.completed} of {summary.total} completed
+            {summary.nextDueDate ? ` · next due ${fmtDate(summary.nextDueDate)}` : ""}
           </span>
         </CardHeader>
         <CardContent className="p-0">
@@ -176,9 +186,14 @@ export function CaseTasksPanel({
                           : "text-foreground font-medium"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className={t.status === "completed" ? "line-through" : ""}>
                           {t.title}
+                        </span>
+                        {/* Screen 6 — the E4.2 execution type rides every task
+                            row (captured configuration; nothing runs here). */}
+                        <span className="rounded-[4px] border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {EXECUTION_TYPE_LABELS[resolveExecutionType(t.executionType)]}
                         </span>
                         {t.status === "blocked" ? (
                           <StatusPill status="red" label="Blocked" />
@@ -199,15 +214,68 @@ export function CaseTasksPanel({
                     </span>
                   </div>
                 );
+
+                const steps = orderedSteps(t);
+                const body = (
+                  <div>
+                    {row}
+                    {steps.length > 0 && !locked ? (
+                      <ul className="space-y-1.5 px-3 pb-3 pl-11">
+                        {steps.map((s) => {
+                          const isCurrent =
+                            currentStep?.taskId === t.id && currentStep?.stepId === s.id;
+                          return (
+                            <li
+                              key={s.id}
+                              className="flex flex-wrap items-center gap-2 text-[13px]"
+                            >
+                              <span
+                                aria-hidden
+                                className={`h-1.5 w-1.5 flex-none rounded-full ${
+                                  s.isCompleted
+                                    ? "bg-[#059669]"
+                                    : isCurrent
+                                      ? "bg-[#D97706]"
+                                      : "bg-border"
+                                }`}
+                              />
+                              <span
+                                className={
+                                  s.isCompleted ? "text-muted-foreground" : "text-foreground"
+                                }
+                              >
+                                {s.label}
+                              </span>
+                              {isCurrent ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[12px]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDrawer(t, false);
+                                  }}
+                                >
+                                  Open step
+                                </Button>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+
                 return locked ? (
                   <Tooltip key={t.id}>
                     <TooltipTrigger asChild>
-                      <div>{row}</div>
+                      <div>{body}</div>
                     </TooltipTrigger>
                     <TooltipContent>Complete previous task first</TooltipContent>
                   </Tooltip>
                 ) : (
-                  <div key={t.id}>{row}</div>
+                  <div key={t.id}>{body}</div>
                 );
               })}
             </div>

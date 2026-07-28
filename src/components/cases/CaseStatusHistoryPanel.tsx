@@ -64,9 +64,18 @@ export function CaseStatusHistoryPanel({
                     {h.evidenceTouchId ? (
                       <div className="text-[11px] text-muted-foreground">
                         Evidence:{" "}
-                        {evidence
-                          ? `${touchTypeLabel(evidence.touchType as TouchType | null)} touch`
-                          : "logged touch"}
+                        {/* Screen 6 — each entry links to its evidence: the
+                            touchlog row is on the same page (left column). */}
+                        {evidence ? (
+                          <a
+                            href={`#touch-${evidence.id}`}
+                            className="font-medium text-[#1B4D3E] underline underline-offset-2"
+                          >
+                            {touchTypeLabel(evidence.touchType as TouchType | null)} touch
+                          </a>
+                        ) : (
+                          "logged touch"
+                        )}
                       </div>
                     ) : null}
                     <div className="text-[11px] text-muted-foreground">

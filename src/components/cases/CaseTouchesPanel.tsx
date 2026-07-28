@@ -552,7 +552,8 @@ function TouchlogRow({
   const followStatus = followUpStatus(t.nextFollowUpDate, today);
 
   return (
-    <div className="relative pl-6 border-l-2 border-muted pb-2">
+    // The anchor the status timeline's "evidence" link scrolls to (screen 6).
+    <div id={`touch-${t.id}`} className="relative pl-6 border-l-2 border-muted pb-2 scroll-mt-24">
       <div
         className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-background border-2 ${
           isLatest ? "border-primary" : "border-muted"

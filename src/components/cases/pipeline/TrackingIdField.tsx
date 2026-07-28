@@ -5,6 +5,11 @@
 // A non-blocking duplicate warning fires when the same ID sits on another case
 // for the same org + payer (payers reuse/typo IDs; resubmissions share them) —
 // save still proceeds.
+//
+// Slice E (handoff §2.7): the CASE DETAIL screen no longer feeds `siblings` —
+// each submission mints a new ID per provider, so a collision is only ever a
+// data-entry error and the design shows the clean state. The prop is optional
+// and the warning stays intact for any future caller that has a real reason.
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
@@ -28,14 +33,15 @@ export function TrackingIdField({
   value: string | null;
   canEdit: boolean;
   saving: boolean;
-  siblings: TrackingIdSibling[];
+  /** Omitted on case detail — see the §2.7 note above. */
+  siblings?: TrackingIdSibling[];
   onSave: (value: string | null) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
 
   const trimmed = draft.trim();
-  const duplicates = trimmed ? siblings.filter((s) => s.reference.trim() === trimmed) : [];
+  const duplicates = trimmed ? (siblings ?? []).filter((s) => s.reference.trim() === trimmed) : [];
 
   if (!editing) {
     return (
