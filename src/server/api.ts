@@ -28,6 +28,7 @@ const SSN_RELEASE_ROUTE = /^\/api\/providers\/([^/]+)\/ssn-release\/?$/;
 const CAQH_ATTESTATION_ROUTE = /^\/api\/providers\/([^/]+)\/caqh-attestation\/?$/;
 // `/api/providers` and `/api/providers/:id`
 const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
+// GET lists the shared catalog; POST proposes an unmapped field (propose-only).
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
 // `/api/portals` — the DB-driven payer-portal registry the extension matches
 // the current tab against.
@@ -194,9 +195,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       );
     }
     if (isFieldMaps) {
-      if (method !== "GET") return fail(405, "Method not allowed");
+      if (method !== "GET" && method !== "POST") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
-      return await routes.handleListPortalFieldMaps(url, ctx);
+      return method === "GET"
+        ? await routes.handleListPortalFieldMaps(url, ctx)
+        : await routes.handleProposeFieldMap(await readJsonBody(request), ctx);
     }
     if (isPortals) {
       if (method !== "GET") return fail(405, "Method not allowed");

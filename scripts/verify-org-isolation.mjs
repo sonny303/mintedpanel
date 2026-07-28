@@ -37,6 +37,13 @@
 //                          target) + a South Park task id (the cross-org task_id
 //                          that must 404). Both must be set or assertion 13 is
 //                          skipped; the in-sandbox mock run always sets them.
+//   KANSAS_ORG             the Kansas org id, for the propose-only field-map
+//                          write pair (20/20a): the created row must be scoped
+//                          to it. Skipped when unset; the mock run always sets
+//                          it. This is the ONE gate assertion that writes for
+//                          real — a proposed row is inert (no token, fills
+//                          nothing) and idempotent on (portal_key, selector),
+//                          so repeat runs converge rather than accumulate.
 //   KANSAS_DOCUMENT_ID + SOUTHPARK_DOCUMENT_ID
 //                          Fixtures for the E4.5 signed-download pair (17/17b):
 //                          an own-org document (positive) + a cross-org document
@@ -713,6 +720,44 @@ function looksLikeVercelGate(r) {
     `status=${caqhX.status} (expect 404) dataPresent=${caqhX.body?.data != null}`,
     { leak: true },
   );
+
+  // 20. Propose-only field-map WRITE isolation: whatever a Kansas caller
+  //     proposes must land under KANSAS. This is the one write the gate can
+  //     safely exercise for real — a proposed row is inert (source 'manual',
+  //     no token, fills nothing) and idempotent on (portal_key, selector), so
+  //     re-running the gate converges on the same row instead of accumulating.
+  //     20a is the isolation half: the created row is org-scoped to the caller
+  //     and never global, so an x-org-id-less caller cannot mint a shared
+  //     catalog entry or write into another tenant.
+  if (env.KANSAS_ORG) {
+    const proposed = await apiPost(
+      "/api/portal-field-maps",
+      {
+        portal_key: "gate_probe_portal",
+        selector: "#gate-isolation-probe",
+        field_label: "Gate isolation probe",
+      },
+      { token: kansasTok },
+    );
+    const proposedRow = proposed.body?.data ?? null;
+    check(
+      "20. Kansas can propose a field mapping",
+      (proposed.status === 201 || proposed.status === 200) && proposedRow != null,
+      `status=${proposed.status} (expect 200/201) dataPresent=${proposedRow != null}`,
+    );
+    check(
+      "20a. The proposed row is scoped to Kansas, never global, never approved",
+      proposedRow != null &&
+        proposedRow.orgId === env.KANSAS_ORG &&
+        proposedRow.status === "proposed" &&
+        proposedRow.token == null,
+      `orgId=${proposedRow?.orgId ?? "-"} (expect ${env.KANSAS_ORG}) ` +
+        `status=${proposedRow?.status ?? "-"} token=${proposedRow?.token ?? "null"}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  20/20a. propose-only field-map write — KANSAS_ORG not set");
+  }
 
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));

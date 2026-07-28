@@ -15,6 +15,7 @@ vi.mock("./providerRoutes", () => ({
 vi.mock("./extensionRoutes", () => ({
   handleProviderProfile: vi.fn(),
   handleListPortalFieldMaps: vi.fn(),
+  handleProposeFieldMap: vi.fn(),
   handleCreateFillEvent: vi.fn(),
   handleListProviderCases: vi.fn(),
   handleCaseContext: vi.fn(),
@@ -30,6 +31,7 @@ import { handleListProviders, handleGetProvider } from "./providerRoutes";
 import {
   handleProviderProfile,
   handleListPortalFieldMaps,
+  handleProposeFieldMap,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -48,6 +50,7 @@ const listMock = vi.mocked(handleListProviders);
 const getMock = vi.mocked(handleGetProvider);
 const profileMock = vi.mocked(handleProviderProfile);
 const fieldMapsMock = vi.mocked(handleListPortalFieldMaps);
+const proposeFieldMapMock = vi.mocked(handleProposeFieldMap);
 const fillEventsMock = vi.mocked(handleCreateFillEvent);
 const casesMock = vi.mocked(handleListProviderCases);
 const caseContextMock = vi.mocked(handleCaseContext);
@@ -392,12 +395,32 @@ describe("handleApiRequest — extension routes and CORS preflight", () => {
     );
   });
 
+  it("routes POST /api/portal-field-maps to the propose handler, GET to the list", async () => {
+    authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
+    proposeFieldMapMock.mockResolvedValue(new Response("{}", { status: 201 }));
+    const posted = await handleApiRequest(
+      new Request("https://x.test/api/portal-field-maps", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ portal_key: "availity", selector: "#npi" }),
+      }),
+    );
+    expect(posted.status).toBe(201);
+    expect(proposeFieldMapMock).toHaveBeenCalledWith(
+      { portal_key: "availity", selector: "#npi" },
+      expect.anything(),
+    );
+    expect(fieldMapsMock).not.toHaveBeenCalled();
+  });
+
   it("wrong methods on the extension routes are 405", async () => {
     authenticateMock.mockResolvedValue({ orgId: "org-1", role: "admin" } as never);
-    const postMaps = await handleApiRequest(
-      new Request("https://x.test/api/portal-field-maps", { method: "POST" }),
+    // POST /api/portal-field-maps is now the propose-only write, so DELETE
+    // stands in as the wrong method here.
+    const deleteMaps = await handleApiRequest(
+      new Request("https://x.test/api/portal-field-maps", { method: "DELETE" }),
     );
-    expect(postMaps.status).toBe(405);
+    expect(deleteMaps.status).toBe(405);
     const getFills = await handleApiRequest(GET("/api/fill-events"));
     expect(getFills.status).toBe(405);
     const postCases = await handleApiRequest(

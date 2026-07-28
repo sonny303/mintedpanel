@@ -3,7 +3,10 @@ import type { ApiEnvelope } from "./envelope";
 import type { AuthContext, UserContext } from "./guard";
 import type { ProviderProfile, ProviderProfileResult } from "@/services/providerProfile";
 
-vi.mock("@/services/portalFieldMaps", () => ({ listPortalFieldMaps: vi.fn() }));
+vi.mock("@/services/portalFieldMaps", () => ({
+  listPortalFieldMaps: vi.fn(),
+  proposeFieldMap: vi.fn(),
+}));
 vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
@@ -22,7 +25,7 @@ vi.mock("@/services/extensionViewPrefs", () => ({
   putExtensionViewPrefs: vi.fn(),
 }));
 
-import { listPortalFieldMaps } from "@/services/portalFieldMaps";
+import { listPortalFieldMaps, proposeFieldMap } from "@/services/portalFieldMaps";
 import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -41,6 +44,7 @@ import {
   handleProviderProfile,
   handleListPortalFieldMaps,
   handleListPortals,
+  handleProposeFieldMap,
   handleCreateFillEvent,
   handleListProviderCases,
   handleCaseContext,
@@ -53,6 +57,7 @@ import {
 } from "./extensionRoutes";
 
 const listMapsMock = vi.mocked(listPortalFieldMaps);
+const proposeMapMock = vi.mocked(proposeFieldMap);
 const listPortalsMock = vi.mocked(listPortalsForApi);
 const recordFillEventMock = vi.mocked(recordFillEvent);
 const getProfileMock = vi.mocked(getProviderProfile);
@@ -421,6 +426,60 @@ describe("case touch handler — opt-in status bump", () => {
     );
     expect(res.status).toBe(403);
     expect(recordTouchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("propose field map handler (propose-only)", () => {
+  const INPUT = { portal_key: "availity", selector: "#npi", field_label: "NPI" };
+
+  it("201s a newly proposed field", async () => {
+    proposeMapMock.mockResolvedValue({ kind: "created", map: { id: "m1" } as never });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    expect(res.status).toBe(201);
+    expect((await body(res)).data).toEqual({ id: "m1" });
+  });
+
+  it("200s (not 201) when the selector is already known — idempotent re-observation", async () => {
+    proposeMapMock.mockResolvedValue({ kind: "existing", map: { id: "m1" } as never });
+    const res = await handleProposeFieldMap(INPUT, ctx());
+    expect(res.status).toBe(200);
+  });
+
+  it("scopes the write to the guard-resolved org and passes the audit closure", async () => {
+    proposeMapMock.mockResolvedValue({ kind: "created", map: { id: "m1" } as never });
+    const c = ctx();
+    await handleProposeFieldMap(INPUT, c);
+    expect(proposeMapMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", writeAudit: c.writeAudit }),
+      INPUT,
+    );
+  });
+
+  it("refuses billing before touching the service", async () => {
+    const res = await handleProposeFieldMap(INPUT, ctx("billing"));
+    expect(res.status).toBe(403);
+    expect(proposeMapMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null", null],
+    ["a string", "nope"],
+    ["an array", []],
+  ])("422s %s body before touching the service", async (_n, bad) => {
+    const res = await handleProposeFieldMap(bad, ctx());
+    expect(res.status).toBe(422);
+    expect(proposeMapMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the service's validation rejection", async () => {
+    proposeMapMock.mockResolvedValue({
+      kind: "rejected",
+      status: 422,
+      message: "selector is required",
+    });
+    const res = await handleProposeFieldMap({ portal_key: "availity" }, ctx());
+    expect(res.status).toBe(422);
+    expect((await body(res)).error).toBe("selector is required");
   });
 });
 

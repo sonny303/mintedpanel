@@ -172,7 +172,9 @@ export function humanizeTokenField(field: string): string {
     .map((w) => ACRONYMS[w] ?? w);
   if (words.length === 0) return field;
   const [first, ...rest] = words;
-  const head = ACRONYMS[first.toLowerCase()] ? first : first.charAt(0).toUpperCase() + first.slice(1);
+  const head = ACRONYMS[first.toLowerCase()]
+    ? first
+    : first.charAt(0).toUpperCase() + first.slice(1);
   return [head, ...rest].join(" ");
 }
 
@@ -228,8 +230,7 @@ export function buildQuickCardCatalog(entries: readonly TokenCatalogEntry[]): Qu
 }
 
 export type QuickCardFieldsValidation =
-  | { ok: true; fields: string[] }
-  | { ok: false; message: string };
+  { ok: true; fields: string[] } | { ok: false; message: string };
 
 /** Validate a PUT body's `fields` into a deduplicated, ORDERED array of keys
  * drawn from the live catalog. Order is preserved as given (it IS the user's

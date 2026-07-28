@@ -10,9 +10,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
-import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
-import { normalizeTokenKey } from "@/lib/tokenFormat";
+import { normalizeFieldLabel, normalizePortalKey, normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 
 export interface PortalFieldMapServiceCtx {
@@ -47,6 +47,127 @@ export async function listPortalFieldMaps(
   // bare); the endpoint's contract is the bare catalog form so the extension
   // can join token → profile token literally (see lib/tokenFormat.ts).
   return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
+}
+
+// Wire shape of POST /api/portal-field-maps — snake_case per the extension's
+// locked body idiom (the touches contract, not the camelCase row payloads).
+// Deliberately NO token/source/status: see proposeFieldMap.
+export interface ProposeFieldMapInput {
+  portal_key: string;
+  selector: string;
+  field_label?: string | null;
+  form_section?: string | null;
+  field_type?: string | null;
+  url_pattern?: string | null;
+  page_step?: string | null;
+}
+
+export type ProposeFieldMapResult =
+  | { kind: "created"; map: PortalFieldMap }
+  | { kind: "existing"; map: PortalFieldMap }
+  | { kind: "rejected"; status: 422; message: string };
+
+const PROPOSE_FIELD_TYPES: ReadonlySet<string> = new Set([
+  "text",
+  "select",
+  "radio",
+  "checkbox",
+  "date",
+  "file",
+]);
+
+// PROPOSE-ONLY: the extension reports a field it saw on a portal page that
+// nothing maps yet. It can never approve one.
+//
+// Why the write is this narrow:
+//   - status is ALWAYS 'proposed' and source ALWAYS 'manual' with a null
+//     token, whatever the body says. Approving a mapping is a human act in the
+//     SOP editor's trainer (E6.5 FormStepPanel), where a person sees the field
+//     in context and picks the token; a client that could write 'approved'
+//     would be able to silently redirect what autofills into a payer form.
+//     Note the extension fills proposed AND approved maps (only 'retired' is
+//     skipped), so this row does become live — but with source 'manual' and no
+//     token it fills nothing until a human maps it. That is the point: it
+//     surfaces the field in the trainer queue and in mappingCoverage, and
+//     changes no existing behaviour.
+//   - org_id comes from the guard, never the body, and is ALWAYS set: a global
+//     (org_id NULL) row is a platform catalog entry and is not the extension's
+//     to mint. RLS would block it from a browser client anyway, but this route
+//     runs on the service-role client, so the constraint is enforced here.
+//
+// Idempotent on (portal_key, selector) so re-observing the same field on every
+// page load converges instead of piling up duplicates. The dedupe check spans
+// GLOBAL rows too — if the shared catalog already covers this selector there is
+// nothing to propose, and the existing row is returned unchanged.
+export async function proposeFieldMap(
+  ctx: PortalFieldMapServiceCtx & { writeAudit: (input: AuditInput) => Promise<void> },
+  input: ProposeFieldMapInput,
+): Promise<ProposeFieldMapResult> {
+  const portalKey = normalizePortalKey(input?.portal_key ?? "");
+  if (!portalKey) return { kind: "rejected", status: 422, message: "portal_key is required" };
+  const selector = typeof input.selector === "string" ? input.selector.trim() : "";
+  if (!selector) return { kind: "rejected", status: 422, message: "selector is required" };
+  const fieldType = input.field_type ?? "text";
+  if (typeof fieldType !== "string" || !PROPOSE_FIELD_TYPES.has(fieldType)) {
+    return {
+      kind: "rejected",
+      status: 422,
+      message: `field_type must be one of ${[...PROPOSE_FIELD_TYPES].join(", ")}`,
+    };
+  }
+  for (const key of ["field_label", "form_section", "url_pattern", "page_step"] as const) {
+    const value = input[key];
+    if (value != null && typeof value !== "string") {
+      return { kind: "rejected", status: 422, message: `${key} must be a string` };
+    }
+  }
+
+  // Already known? Global rows count: the shared catalog is authoritative for
+  // portal truths, so a selector it already covers needs no org proposal.
+  const { data: existing, error: lookupError } = await ctx.db
+    .from("portal_field_maps")
+    .select(PORTAL_FIELD_MAP_COLUMNS)
+    .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
+    .eq("portal_key", portalKey)
+    .eq("selector", selector)
+    .limit(1);
+  if (lookupError) throw lookupError;
+  if (existing && existing.length > 0) {
+    const row = camelizeRow<PortalFieldMap>(existing[0]);
+    return { kind: "existing", map: { ...row, token: normalizeTokenKey(row.token) } };
+  }
+
+  const { data, error } = await ctx.db
+    .from("portal_field_maps")
+    .insert({
+      org_id: ctx.orgId,
+      portal_key: portalKey,
+      selector,
+      // Normalized at the write boundary, the same key the field_dictionary
+      // learns on — so a proposal joins the dictionary's suggestions.
+      field_label: normalizeFieldLabel(input.field_label ?? "") || null,
+      form_section: input.form_section?.trim() || null,
+      url_pattern: input.url_pattern?.trim() || null,
+      page_step: input.page_step?.trim() || null,
+      field_type: fieldType,
+      map_type: "web",
+      status: "proposed",
+      source: "manual",
+      token: null,
+    } as never)
+    .select(PORTAL_FIELD_MAP_COLUMNS)
+    .single();
+  if (error) throw error;
+  const map = camelizeRow<PortalFieldMap>(data);
+
+  await ctx.writeAudit({
+    actionType: "CREATE",
+    entityType: "portal_field_map",
+    entityId: map.id,
+    after: { portalKey, selector, fieldLabel: map.fieldLabel, status: "proposed" },
+    description: `Field proposed by extension on ${portalKey}`,
+  });
+  return { kind: "created", map: { ...map, token: normalizeTokenKey(map.token) } };
 }
 
 // ---------------------------------------------------------------------------

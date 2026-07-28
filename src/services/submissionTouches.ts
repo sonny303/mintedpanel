@@ -483,9 +483,7 @@ export async function recordSubmissionTouch(
   // above, so a retried POST can never double-bump. The touch is already
   // durable at this point — a rejected transition is reported in the response
   // meta, never rolled back onto the human's submission record.
-  const bump = input.bump_status
-    ? await bumpCaseToSubmitted(ctx, caseId, touch.id)
-    : undefined;
+  const bump = input.bump_status ? await bumpCaseToSubmitted(ctx, caseId, touch.id) : undefined;
 
   return { kind: "created", touch, bump };
 }

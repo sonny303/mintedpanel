@@ -17,7 +17,8 @@
 //   providers   cross-org provider rows leak into lists, GET-by-id, PATCH, and
 //               the CAQH attestation write               (1, 1b, 2c, 3, 12, 19)
 //   spoof       x-org-id honored without a membership check          (4)
-//   fieldmaps   another org's field-map rows leak into the catalog   (5b, 5c)
+//   fieldmaps   another org's field-map rows leak into the catalog, and a
+//               proposed row lands global instead of org-scoped (5b, 5c, 20a)
 //   profile     cross-org provider profile served instead of 404     (6)
 //   fillevents  cross-org fill-event accepted and stored             (7, 7b)
 //   cases       cross-org provider's case list served instead of 404 (8b)
@@ -353,6 +354,10 @@ export async function createMockApiServer(options = {}) {
   // In-memory extension quick-card layout prefs, keyed by userId (the route is
   // USER-scoped — prefs follow the user across orgs, so never org-keyed).
   const viewPrefs = new Map();
+  // Proposed field maps from POST /api/portal-field-maps, keyed
+  // `${orgId}:${portal_key}:${selector}` — the idempotency grain the real
+  // service dedupes on.
+  const proposedMaps = new Map();
   // A representative slice of the schema-derived quick-card catalog the real
   // GET serves. Only needs to exercise the contract: an offered field, the
   // now-offered ssnLast4, and (by absence) an excluded internal column and a
@@ -814,6 +819,39 @@ export async function createMockApiServer(options = {}) {
 
     // --- /api/portal-field-maps ---
     if (/^\/api\/portal-field-maps\/?$/.test(url.pathname)) {
+      // POST = the propose-only write. The row is always status 'proposed',
+      // source 'manual', token null, under the CALLER'S org. Leak "fieldmaps":
+      // it lands as a global (org_id null) row, which 20a must catch.
+      if (method === "POST") {
+        if (user.role === "billing") {
+          return envelope(res, 403, null, "Your role cannot propose field mappings");
+        }
+        const body = (await readBody(req)) ?? {};
+        const portalKey = String(body.portal_key ?? "")
+          .trim()
+          .toLowerCase();
+        const selector = String(body.selector ?? "").trim();
+        if (!portalKey) return envelope(res, 422, null, "portal_key is required");
+        if (!selector) return envelope(res, 422, null, "selector is required");
+        const key = `${orgId}:${portalKey}:${selector}`;
+        const existing = proposedMaps.get(key);
+        if (existing) return envelope(res, 200, existing);
+        const row = {
+          id: `fm-proposed-${proposedMaps.size + 1}`,
+          orgId: leak === "fieldmaps" ? null : orgId,
+          portalKey,
+          selector,
+          fieldLabel:
+            String(body.field_label ?? "")
+              .trim()
+              .toLowerCase() || null,
+          source: "manual",
+          token: null,
+          status: "proposed",
+        };
+        proposedMaps.set(key, row);
+        return envelope(res, 201, row);
+      }
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
       const portalKey = url.searchParams.get("portal_key");
       let rows = FIELD_MAPS.filter(

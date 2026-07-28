@@ -2,7 +2,11 @@
 // maps, fill events. Same composition as providerRoutes.ts — inject the
 // authenticated server context into the service layer, never duplicate query
 // logic here.
-import { listPortalFieldMaps } from "@/services/portalFieldMaps";
+import {
+  listPortalFieldMaps,
+  proposeFieldMap,
+  type ProposeFieldMapInput,
+} from "@/services/portalFieldMaps";
 import { listPortalsForApi } from "@/services/portals";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
@@ -228,6 +232,28 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalFieldMaps({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
   return ok(rows, { total: rows.length });
+}
+
+// POST /api/portal-field-maps — the extension reports an unmapped field it saw
+// on a portal page. PROPOSE-ONLY: the row is always written status 'proposed',
+// source 'manual', token null, whatever the body says, and always under the
+// caller's org (never as a global catalog row). Approving a mapping stays a
+// human act in the SOP editor's trainer — see proposeFieldMap for why.
+//
+// Writer roles only. Idempotent on (portal_key, selector) across global + own
+// org, so a field re-observed on every page load converges on one row: a
+// repeat returns 200 with the existing row, a first sighting 201.
+export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Promise<Response> {
+  if (!isWriter(ctx)) return fail(403, "Your role cannot propose field mappings");
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const result = await proposeFieldMap(
+    { db: ctx.db, orgId: ctx.orgId, writeAudit: ctx.writeAudit },
+    body as ProposeFieldMapInput,
+  );
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok(result.map, null, result.kind === "created" ? 201 : 200);
 }
 
 // GET /api/cases — two additive modes over the same org-scoped route:
