@@ -48,6 +48,11 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           cap.filters.push([col, val]);
           return builder;
         },
+        // S5.3's learned-suggestion read uses .not("token", "is", null).
+        not(col: string, op: string, val: unknown) {
+          cap.filters.push([`not.${col}.${op}`, val]);
+          return builder;
+        },
         order(col: string, opts: { ascending: boolean }) {
           cap.orders.push([col, opts]);
           return builder;

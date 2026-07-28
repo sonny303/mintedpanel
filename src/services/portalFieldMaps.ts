@@ -102,8 +102,11 @@ async function learnedSuggestion(
   if (dictRes.error) throw dictRes.error;
   if (observedRes.error) throw observedRes.error;
 
+  // Defensive: a non-array payload (a degraded read, a shape change) yields no
+  // suggestion rather than throwing — a missing suggestion costs the user a
+  // dropdown, a thrown propose costs them the captured field.
   const dictionary: DictionaryEntry[] = (
-    (dictRes.data ?? []) as Array<{
+    (Array.isArray(dictRes.data) ? dictRes.data : []) as Array<{
       label_normalized: string;
       token: string | null;
       status: string;
@@ -117,7 +120,7 @@ async function learnedSuggestion(
     }));
 
   const observed: ObservedMapping[] = (
-    (observedRes.data ?? []) as Array<{
+    (Array.isArray(observedRes.data) ? observedRes.data : []) as Array<{
       portal_key: string;
       token: string | null;
       field_label: string | null;
