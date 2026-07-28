@@ -706,7 +706,14 @@ export async function createMockApiServer(options = {}) {
         const taskOk = TASKS.some((t) => t.id === body.task_id && t.orgId === orgId);
         if (!taskOk) return envelope(res, 404, null, "Task not found");
       }
+      // The opt-in status bump rides portal_submission only; on a structured
+      // touch it is a client error, not a silently ignored field.
+      if (body.bump_status && body.kind !== "portal_submission") {
+        return envelope(res, 422, null, "bump_status is only accepted on kind 'portal_submission'");
+      }
       const key = `${orgId}:${body.idempotency_id}`;
+      // A replay returns the stored row and re-runs nothing — including the
+      // bump, so a retry can never double-apply it (hence no meta here).
       if (touches.has(key)) return envelope(res, 200, touches.get(key));
       const touch = {
         id: body.idempotency_id,
@@ -722,7 +729,11 @@ export async function createMockApiServer(options = {}) {
         createdAt: "2026-07-05T00:00:00Z",
       };
       touches.set(key, touch);
-      return envelope(res, 201, touch);
+      // Bump outcome rides meta so `data` stays exactly the touch. The real
+      // server routes set_case_status through the caller's own JWT (RLS +
+      // auth.uid()); the mock just mirrors the response contract.
+      const bumpMeta = body.bump_status ? { status_bump: "applied" } : null;
+      return envelope(res, 201, touch, null, bumpMeta);
     }
 
     // --- /api/cases/:id/context (Workbench post-selection read) ---

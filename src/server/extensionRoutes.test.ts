@@ -66,6 +66,8 @@ const getNbaMock = vi.mocked(getNextBestAction);
 const getViewPrefsMock = vi.mocked(getExtensionViewPrefs);
 const putViewPrefsMock = vi.mocked(putExtensionViewPrefs);
 const catalogMock = vi.mocked(getQuickCardCatalog);
+// Stands in for the caller-JWT-bound client's .rpc() (set_case_status).
+const userRpcMock = vi.fn();
 
 // A small stand-in for the schema-derived catalog. The real derivation is
 // covered in lib/quickCardCatalog.test.ts (incl. the drift guard); here it only
@@ -92,6 +94,9 @@ function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
     userMetadata: { full_name: "Tess Tester" },
     db: {} as AuthContext["db"],
     writeAudit: vi.fn().mockResolvedValue(undefined),
+    // Bound to the caller's JWT in production (RLS + auth.uid()); the tests
+    // that exercise the status bump swap in a controllable rpc stub.
+    asUser: () => ({ rpc: userRpcMock }) as unknown as AuthContext["db"],
   };
 }
 
@@ -358,6 +363,64 @@ describe("portal field maps handler", () => {
     expect(listMapsMock).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-1" }), {
       portalKey: "availity",
     });
+  });
+});
+
+describe("case touch handler — opt-in status bump", () => {
+  const CASE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const TOUCH = { id: "t1" } as never;
+
+  it("reports an applied bump in meta, leaving data as the touch", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH, bump: { applied: true } });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    expect(res.status).toBe(201);
+    const b = await body(res);
+    expect(b.data).toEqual({ id: "t1" });
+    expect(b.meta).toEqual({ status_bump: "applied" });
+  });
+
+  it("reports a skipped bump with its reason and still returns 201", async () => {
+    recordTouchMock.mockResolvedValue({
+      kind: "created",
+      touch: TOUCH,
+      bump: { applied: false, reason: "The case was not in a status that can move to Submitted." },
+    });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    // The touch landed; a rejected transition is not a failed request.
+    expect(res.status).toBe(201);
+    const b = await body(res);
+    expect(b.data).toEqual({ id: "t1" });
+    expect(b.meta).toEqual({
+      status_bump: "skipped",
+      status_bump_reason: "The case was not in a status that can move to Submitted.",
+    });
+  });
+
+  it("omits meta entirely when no bump was requested (unchanged wire shape)", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH });
+    const res = await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, ctx());
+    expect((await body(res)).meta).toBeNull();
+  });
+
+  it("passes the caller-JWT client through to the service", async () => {
+    recordTouchMock.mockResolvedValue({ kind: "created", touch: TOUCH });
+    const c = ctx();
+    await handleCreateCaseTouch(CASE, { kind: "portal_submission" }, c);
+    expect(recordTouchMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asUser: c.asUser, orgId: "org-1" }),
+      CASE,
+      expect.anything(),
+    );
+  });
+
+  it("still refuses billing before anything runs", async () => {
+    const res = await handleCreateCaseTouch(
+      CASE,
+      { kind: "portal_submission", bump_status: true },
+      ctx("billing"),
+    );
+    expect(res.status).toBe(403);
+    expect(recordTouchMock).not.toHaveBeenCalled();
   });
 });
 

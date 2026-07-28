@@ -287,7 +287,15 @@ export async function handleCaseContext(caseId: string, ctx: AuthContext): Promi
 // POST /api/cases/:id/touches — the human pressed "Mark submitted" after
 // submitting the portal form themselves. Appends one submission touch
 // (source 'extension'), idempotent on the client-generated idempotency_id.
-// Never changes case status, never touches tasks. Writer roles only.
+// Writer roles only.
+//
+// Status: still never changed IMPLICITLY (the R2 rule stands). An optional
+// `bump_status: true` on a portal_submission additionally moves the case to
+// Submitted through set_case_status, evidenced by the touch just written — the
+// one transition where "the human submitted the form" has an unambiguous
+// meaning. The bump runs after the touch is durable and only on a first create,
+// so a retry can never double-apply it; its outcome rides in meta.status_bump
+// so the response `data` stays exactly the touch it has always been.
 export async function handleCreateCaseTouch(
   caseId: string,
   body: unknown,
@@ -298,12 +306,28 @@ export async function handleCreateCaseTouch(
     return fail(422, "Request body must be a JSON object");
   }
   const result = await recordSubmissionTouch(
-    { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId, writeAudit: ctx.writeAudit },
+    {
+      db: ctx.db,
+      orgId: ctx.orgId,
+      userId: ctx.userId,
+      writeAudit: ctx.writeAudit,
+      asUser: ctx.asUser,
+    },
     caseId,
     body as SubmissionTouchInput,
   );
   if (result.kind === "rejected") return fail(result.status, result.message);
-  return ok(result.touch, null, result.kind === "created" ? 201 : 200);
+  // A rejected bump is reported, not raised: the touch landed, and failing the
+  // request would tell the extension its submission record was lost when it
+  // wasn't.
+  const meta: ApiMeta | null =
+    result.kind === "created" && result.bump
+      ? {
+          status_bump: result.bump.applied ? "applied" : "skipped",
+          ...(result.bump.reason ? { status_bump_reason: result.bump.reason } : {}),
+        }
+      : null;
+  return ok(result.touch, meta, result.kind === "created" ? 201 : 200);
 }
 
 // POST /api/fill-events — log one fill session, idempotent on the

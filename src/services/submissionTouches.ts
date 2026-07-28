@@ -54,6 +54,9 @@ export interface SubmissionTouchServiceCtx {
   orgId: string;
   userId: string;
   writeAudit: (input: AuditInput) => Promise<void>;
+  // The caller-JWT-bound client (RLS + auth.uid()), for the opt-in status bump
+  // only — see bumpCaseToSubmitted. Every other write here stays on `db`.
+  asUser: () => SupabaseClient<Database>;
 }
 
 // Wire shape of POST /api/cases/:id/touches — snake_case body keys per the
@@ -80,6 +83,12 @@ export interface SubmissionTouchInput {
   // Story 7: the filename of the PDF the human attached, if any → a second
   // `system_event`.
   pdf_filename?: string | null;
+  // Opt-in: also move the case to Submitted, evidenced by this touch. Accepted
+  // on portal_submission ONLY — "the human submitted the portal form" has one
+  // unambiguous target, whereas a structured touch of any of the seven types
+  // does not. Off by default, preserving the R2 rule that the extension never
+  // changes case status unless explicitly asked to for this one transition.
+  bump_status?: boolean;
   // --- E4.3 structured touch (kind 'structured_touch' only; E4.1 contract,
   // snake_case per this endpoint's locked idiom) ---
   // REQUIRED for structured_touch: one of the seven canonical E4.1 types.
@@ -95,10 +104,86 @@ export interface SubmissionTouchInput {
   clears_follow_up?: boolean;
 }
 
+/** Outcome of an opt-in status bump, reported in the response meta. The touch
+ * is the deliverable; the bump is a best-effort follow-on. */
+export interface StatusBumpOutcome {
+  applied: boolean;
+  /** Populated only when applied === false: why the bump did not land. Safe,
+   * caller-facing text (the mapped set_case_status message), never raw SQL. */
+  reason?: string;
+}
+
 export type RecordSubmissionTouchResult =
-  | { kind: "created"; touch: Touch }
+  | { kind: "created"; touch: Touch; bump?: StatusBumpOutcome }
   | { kind: "duplicate"; touch: Touch }
   | { kind: "rejected"; status: 404 | 409 | 422; message: string };
+
+/** The one status a portal submission may bump a case to. Not caller-supplied:
+ * "the human submitted the form" has exactly one meaning, and letting the
+ * extension name an arbitrary target would hand it the transition machine. */
+const BUMP_TARGET_STATUS = "submitted";
+
+// set_case_status raises named errors; these are the ones a bump can plausibly
+// hit. Mirrors the browser map in services/cases.ts — kept short on purpose:
+// anything unrecognized degrades to a generic line rather than echoing SQL.
+const BUMP_ERROR_MESSAGES: Record<string, string> = {
+  case_status_invalid_transition: "The case was not in a status that can move to Submitted.",
+  case_status_not_authorized: "Your role cannot change the case status.",
+  case_status_case_not_found: "Case not found.",
+  case_status_evidence_invalid: "The evidencing touch doesn't belong to this case.",
+};
+
+function bumpErrorReason(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("case_status_conflict")) {
+    return "The case status changed while the touch was being logged.";
+  }
+  // Longest key first: case_status_invalid prefixes case_status_invalid_transition.
+  const key = Object.keys(BUMP_ERROR_MESSAGES)
+    .sort((a, b) => b.length - a.length)
+    .find((k) => trimmed.startsWith(k));
+  return key ? BUMP_ERROR_MESSAGES[key] : "The case status could not be updated.";
+}
+
+/** Move the case to Submitted, evidenced by the touch just written.
+ *
+ * Routed through the CALLER'S JWT (ctx.asUser), never the service-role client:
+ * set_case_status is SECURITY INVOKER and leans on RLS to scope its
+ * `SELECT ... FOR UPDATE` to the caller's org, on user_role() to authorize, and
+ * on auth.uid() to stamp the actor into case_status_history. Under the service
+ * key all three break at once — the lock would reach any org's case, the actor
+ * would be NULL, and user_role() would deny. Using the caller's own token keeps
+ * every transition rule where it already lives.
+ *
+ * expectedStatus is null (an auto-transition trigger may have just moved the
+ * case — the E6.6 Add-touch bump does the same), and a FAILED bump never
+ * unwinds the touch: the touch is the durable record of what the human did,
+ * and losing it because a transition was illegal would be the worse outcome.
+ */
+async function bumpCaseToSubmitted(
+  ctx: SubmissionTouchServiceCtx,
+  caseId: string,
+  evidenceTouchId: string,
+): Promise<StatusBumpOutcome> {
+  const rpc = ctx.asUser().rpc.bind(ctx.asUser()) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  try {
+    const { error } = await rpc("set_case_status", {
+      p_case_id: caseId,
+      p_to_status: BUMP_TARGET_STATUS,
+      p_expected_status: null,
+      p_evidence_touch_id: evidenceTouchId,
+    });
+    if (error) return { applied: false, reason: bumpErrorReason(error.message ?? "") };
+    return { applied: true };
+  } catch {
+    // A transport failure is not a reason to fail the whole request — the touch
+    // already landed and the human's submission is recorded.
+    return { applied: false, reason: "The case status could not be updated." };
+  }
+}
 
 const TOUCH_COLUMNS =
   "id, org_id, case_id, touch_date, entry_type, touch_type, outcome, next_follow_up_date, notes, coordinator_id, task_id, communication_event_id, source, created_at, clears_follow_up, recipient_name, recipient_contact";
@@ -174,6 +259,12 @@ export async function recordSubmissionTouch(
   if (!UUID_RE.test(caseId ?? "")) return reject(404, "Case not found");
   if (input.kind !== "portal_submission" && input.kind !== "structured_touch") {
     return reject(422, "kind must be 'portal_submission' or 'structured_touch'");
+  }
+  // The bump target is only meaningful for a portal submission; a structured
+  // touch of any of the seven types has no single obvious destination, so a
+  // bump there is a client error rather than a silently ignored field.
+  if (input.bump_status && input.kind !== "portal_submission") {
+    return reject(422, "bump_status is only accepted on kind 'portal_submission'");
   }
   if (!UUID_RE.test(input.idempotency_id ?? "")) {
     return reject(422, "idempotency_id must be a client-generated UUID");
@@ -387,7 +478,16 @@ export async function recordSubmissionTouch(
     description: text,
   });
 
-  return { kind: "created", touch };
+  // ---- Opt-in status bump (In Progress -> Submitted). ----
+  // Runs LAST, only on a first create: a replay short-circuits at the anchor
+  // above, so a retried POST can never double-bump. The touch is already
+  // durable at this point — a rejected transition is reported in the response
+  // meta, never rolled back onto the human's submission record.
+  const bump = input.bump_status
+    ? await bumpCaseToSubmitted(ctx, caseId, touch.id)
+    : undefined;
+
+  return { kind: "created", touch, bump };
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

@@ -56,6 +56,7 @@ function ctxWith(db: SupabaseClient<Database>): AuthContext {
     email: "tester@minted.com",
     userMetadata: { full_name: "Tess Tester" },
     db,
+    asUser: () => db,
     writeAudit: vi.fn().mockResolvedValue(undefined),
   };
 }
