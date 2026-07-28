@@ -2446,6 +2446,57 @@ export type Database = {
           },
         ];
       };
+      provider_field_verifications: {
+        Row: {
+          created_at: string;
+          field_key: string;
+          id: string;
+          org_id: string;
+          provider_id: string;
+          updated_at: string;
+          verified_at: string;
+          verified_by: string | null;
+          verified_source: string;
+        };
+        Insert: {
+          created_at?: string;
+          field_key: string;
+          id?: string;
+          org_id: string;
+          provider_id: string;
+          updated_at?: string;
+          verified_at?: string;
+          verified_by?: string | null;
+          verified_source?: string;
+        };
+        Update: {
+          created_at?: string;
+          field_key?: string;
+          id?: string;
+          org_id?: string;
+          provider_id?: string;
+          updated_at?: string;
+          verified_at?: string;
+          verified_by?: string | null;
+          verified_source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_field_verifications_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_field_verifications_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       provider_facility_assignments: {
         Row: {
           created_at: string | null;

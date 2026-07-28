@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ApiEnvelope } from "./envelope";
 import type { AuthContext } from "./guard";
 
+vi.mock("@/services/fieldVerifications", () => ({ recordFieldVerifications: vi.fn() }));
 vi.mock("@/services/providers", () => ({
   listProviders: vi.fn(),
   getProvider: vi.fn(),
@@ -10,6 +11,7 @@ vi.mock("@/services/providers", () => ({
 }));
 
 import { listProviders, getProvider, createProvider, updateProvider } from "@/services/providers";
+import { recordFieldVerifications } from "@/services/fieldVerifications";
 import { CAQH_CURRENT_DAYS } from "@/lib/enrollmentReadiness";
 import {
   handleListProviders,
@@ -23,6 +25,7 @@ const listProvidersMock = vi.mocked(listProviders);
 const getProviderMock = vi.mocked(getProvider);
 const createProviderMock = vi.mocked(createProvider);
 const updateProviderMock = vi.mocked(updateProvider);
+const recordVerificationsMock = vi.mocked(recordFieldVerifications);
 
 function ctx(role: AuthContext["role"] = "specialist"): AuthContext {
   return {
@@ -188,10 +191,59 @@ describe("handleRecordCaqhAttestation", () => {
       id: ID,
       caqhLastAttestedDate: TODAY,
       currentThroughDays: CAQH_CURRENT_DAYS,
+      verifiedFields: 0,
     });
     // The PATCH handler returns the whole provider; this one must not.
     expect(JSON.stringify(data)).not.toContain("6789");
     expect(JSON.stringify(data)).not.toContain("1980-01-01");
+  });
+
+  it("stamps the fields the fill carried (S6.2/C6)", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    recordVerificationsMock.mockResolvedValue(2);
+    const res = await handleRecordCaqhAttestation(
+      ID,
+      { verified_fields: ["provider.npi", "provider.caqhId"] },
+      ctx(),
+      TODAY,
+    );
+    expect(res.status).toBe(200);
+    expect(recordVerificationsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: "org-1", userId: "u1" }),
+      ID,
+      ["provider.npi", "provider.caqhId"],
+      "caqh",
+      expect.any(String),
+    );
+    expect(((await body(res)).data as { verifiedFields: number }).verifiedFields).toBe(2);
+  });
+
+  it("ignores malformed field entries rather than losing the attestation", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    recordVerificationsMock.mockResolvedValue(1);
+    const res = await handleRecordCaqhAttestation(
+      ID,
+      { verified_fields: ["provider.npi", 42, "", null] },
+      ctx(),
+      TODAY,
+    );
+    expect(res.status).toBe(200);
+    expect(recordVerificationsMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ID,
+      ["provider.npi"],
+      "caqh",
+      expect.any(String),
+    );
+  });
+
+  it("does not touch the verification table when no fields were carried", async () => {
+    getProviderMock.mockResolvedValue({ id: ID } as never);
+    updateProviderMock.mockResolvedValue(attested(TODAY));
+    await handleRecordCaqhAttestation(ID, {}, ctx(), TODAY);
+    expect(recordVerificationsMock).not.toHaveBeenCalled();
   });
 
   it("rejects a future date before writing", async () => {
