@@ -856,6 +856,7 @@ describe("case context handler", () => {
           executionType: "extension_fill",
           sortOrder: 1,
           dueDate: null,
+          steps: [],
         },
       ],
       latestNote: {

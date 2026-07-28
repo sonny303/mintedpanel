@@ -38,6 +38,8 @@ import {
   resolveIdentifierConfig,
 } from "@/lib/payerResolutionIdentifier";
 import type { DenialReasonCode, Payer } from "@/types";
+import type { ReferenceProvenance } from "@/lib/referenceProvenance";
+import { fmtDate } from "@/lib/format";
 
 const FIELD_LABEL = "text-[11px] uppercase tracking-wide text-muted-foreground";
 
@@ -248,6 +250,7 @@ export function ApprovedDialog({
   open,
   payer,
   caseSummary,
+  referenceProvenance,
   saving,
   onCancel,
   onConfirm,
@@ -256,12 +259,18 @@ export function ApprovedDialog({
   payer: Payer | null;
   /** "Provider · Payer · State" header line, composed by the control. */
   caseSummary?: string | null;
+  /** S4.5 / C3 — the case's stored payer reference and where it came from.
+   * Pre-fills the expected provider ID so the number captured at submission
+   * isn't retyped weeks later; the strip states its origin so the value is
+   * never mistaken for something read off the approval letter. */
+  referenceProvenance?: ReferenceProvenance | null;
   saving: boolean;
   onCancel: () => void;
   onConfirm: (values: ApprovedValues) => void;
 }) {
   const [effectiveDate, setEffectiveDate] = useState("");
-  const [individualId, setIndividualId] = useState("");
+  // Pre-filled from the stored reference (C3) — overridable like any field.
+  const [individualId, setIndividualId] = useState(referenceProvenance?.reference ?? "");
   const [groupId, setGroupId] = useState("");
   const [individualMissing, setIndividualMissing] = useState(false);
   const [groupMissing, setGroupMissing] = useState(false);
@@ -292,6 +301,23 @@ export function ApprovedDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {referenceProvenance ? (
+            <div className="rounded-md border border-[#E8E5E0] bg-[#FBFBF9] p-3">
+              <p className="text-[12.5px] font-medium text-foreground">
+                Reference {referenceProvenance.reference}
+              </p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
+                {referenceProvenance.fromWorkbench
+                  ? "Captured by the Workbench at submission"
+                  : "Recorded on this case"}
+                {referenceProvenance.capturedAt
+                  ? ` on ${fmtDate(referenceProvenance.capturedAt)}`
+                  : ""}
+                . It pre-fills below — check it against the approval letter and change it if the
+                payer issued a different ID.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label className={FIELD_LABEL}>Effective date (required)</Label>
             <DatePicker

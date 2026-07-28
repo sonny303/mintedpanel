@@ -26,6 +26,7 @@ import {
   StatusTransitionDialog,
 } from "@/components/cases/CaseStatusDialogs";
 import { useSetCaseStatus } from "@/hooks/useCases";
+import { resolveReferenceProvenance } from "@/lib/referenceProvenance";
 import { CaseStatusError } from "@/services/cases";
 import {
   allowedCaseStatusTransitions,
@@ -58,6 +59,13 @@ export function CaseStatusControl({
   const status = c.caseStatus;
   const setStatusM = useSetCaseStatus();
   const [dialog, setDialog] = useState<DialogState>(null);
+
+  // S4.5 / C3: the stored payer reference + where it came from, so approving
+  // doesn't mean retyping a number the Workbench already captured.
+  const referenceProvenance = useMemo(
+    () => resolveReferenceProvenance(c.payerReferenceId, c.touches),
+    [c.payerReferenceId, c.touches],
+  );
 
   const targets = allowedCaseStatusTransitions(status);
   const openTargets = targets.filter((t) => !isTerminalCaseStatus(t));
@@ -195,6 +203,7 @@ export function CaseStatusControl({
         <ApprovedDialog
           open
           payer={c.payer}
+          referenceProvenance={referenceProvenance}
           caseSummary={[
             c.provider ? `${c.provider.firstName} ${c.provider.lastName}`.trim() : null,
             c.payer?.name ?? null,

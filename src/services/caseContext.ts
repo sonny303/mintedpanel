@@ -81,6 +81,21 @@ export interface CaseContextParty {
 // One open SOP task with its E4.2 execution type (TE-2). `extension_fill`
 // tasks are the ones the extension offers the fill action on; the rest render
 // as read-only checklist context.
+// S4.3 — one SOP step on an open task, for the extension's Progress tab.
+// LABELS AND STATE ONLY: no dataFields, no resolved values, no email bodies —
+// the step's shape is workflow metadata, and the fill payload stays the
+// profile endpoint's job.
+export interface CaseContextTaskStep {
+  id: string;
+  label: string;
+  order: number;
+  isCompleted: boolean;
+  stepType: string | null;
+  // The portal an online_form step points at (bare key), so the panel can mark
+  // the step for the page in hand.
+  portalKey: string | null;
+}
+
 export interface CaseContextTask {
   id: string;
   title: string;
@@ -88,6 +103,30 @@ export interface CaseContextTask {
   executionType: string;
   sortOrder: number;
   dueDate: string | null;
+  // S4.3: the task's steps, ordered. Empty for a task with no SOP content.
+  steps: CaseContextTaskStep[];
+}
+
+// Reduce a task's sop_content jsonb to the Progress tab's step projection.
+// Defensive: malformed/absent content yields [], never a throw — a broken SOP
+// row must not take out the whole case context.
+function projectTaskSteps(raw: unknown): CaseContextTaskStep[] {
+  if (!Array.isArray(raw)) return [];
+  const steps: CaseContextTaskStep[] = [];
+  for (const item of raw) {
+    if (item == null || typeof item !== "object") continue;
+    const step = item as Record<string, unknown>;
+    if (typeof step.id !== "string" || typeof step.label !== "string") continue;
+    steps.push({
+      id: step.id,
+      label: step.label,
+      order: typeof step.order === "number" ? step.order : steps.length,
+      isCompleted: step.isCompleted === true,
+      stepType: typeof step.stepType === "string" ? step.stepType : null,
+      portalKey: typeof step.portalKey === "string" ? step.portalKey : null,
+    });
+  }
+  return steps.sort((a, b) => a.order - b.order);
 }
 
 export interface CaseContext {
@@ -173,7 +212,7 @@ export async function getCaseContext(
   // other status counts as open (the providerCases.ts idiom).
   const { data: taskRows, error: taskErr } = await db
     .from("tasks")
-    .select("id, title, status, execution_type, sort_order, due_date")
+    .select("id, title, status, execution_type, sort_order, due_date, sop_content")
     .eq("org_id", orgId)
     .eq("case_id", caseId)
     .neq("status", "completed")
@@ -187,6 +226,7 @@ export async function getCaseContext(
       execution_type: string | null;
       sort_order: number;
       due_date: string | null;
+      sop_content: unknown;
     }>
   ).map((t) => ({
     id: t.id,
@@ -195,6 +235,7 @@ export async function getCaseContext(
     executionType: resolveExecutionType(t.execution_type),
     sortOrder: t.sort_order,
     dueDate: t.due_date,
+    steps: projectTaskSteps(t.sop_content),
   }));
 
   // The case's explicit facility relationship is the ONLY facility source —
