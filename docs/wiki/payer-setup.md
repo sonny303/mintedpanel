@@ -19,7 +19,9 @@ Global: authored once, inherited by every org.
   setup" panel): register or pick the portal (global or org tier by the
   template), train captured mappings in place (broken-on-last-fill rows queue
   FIRST), and run the mock dry run — register → capture (extension) → train →
-  prove without leaving the editor.
+  prove. Only capture leaves the editor: "Open form" opens the portal page,
+  where the extension does the capture (granting site access on the first visit
+  to a non-BCBS portal); the proposed mappings then appear back in Form setup.
 - **The dry run uses SYNTHETIC mock data** (versioned profile, never a
   provider row, never PHI), once per payer — a pass means every captured field
   has a decided auto-fill mapping and stamps the portal **Proven**.
