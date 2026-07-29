@@ -2384,8 +2384,37 @@ all 23 hosted migrations. Consequences:
   objects exist); it is for fresh rebuilds — local stacks, new projects, CI.
 - `supabase/seed.sql` is a local fixture with its own two org ids (different
   from the hosted demo orgs) and fixed UUIDs + `ON CONFLICT (id) DO NOTHING`.
-- Hosted demo data: two orgs — "Kansas Fitness Physio" (the rich demo) and
-  "South Park Physician Group".
+- Hosted tenant data: **NONE — the project is at a clean slate (2026-07-29).**
+  All org-scoped rows were cleared at the user's direction: zero
+  `organizations`, `memberships`, `providers`, `provider_groups`, `facilities`,
+  `credential_cases`, `tasks`, `parties`, `status_configs`, `audit_log`,
+  `org_payer_assignments`, and `payer_network_targets`. The signing-in account
+  (`sowmya@minted.com`) is intact but now has zero memberships, so it lands on
+  the E0.0 `NoOrgScreen` first-run flow; the persisted `minted-panel-active-org`
+  id self-heals to null via the E0.4 `selectActiveOrgId` boot validation.
+  **The global catalog was deliberately preserved** — 269 payers, the fallback
+  SOP (`00000000-0000-4000-a000-00000000e17b`, `current_version` 1), the
+  `bcbs_ks_enrollment` portal + its 24 global `portal_field_maps`, the 6 global
+  `denial_reason_codes`, and `party_role_types`. Those are platform
+  infrastructure, not tenant data, and three of them are load-bearing: the
+  payer sync pipeline was deleted in E6.7 PR 2 (no rerun path), the fallback SOP
+  is `pickTemplate`'s third tier, and an empty `portals` table disables
+  extension Fill entirely. A pre-wipe snapshot of all 28 affected tables lives
+  in the `wipe_backup_20260729` schema (same project, no `anon`/`authenticated`
+  grants — it holds DOB/`ssn_last4`, so it must never be exported to disk).
+  The earlier "Kansas Fitness Physio" / "South Park Physician Group" demo orgs
+  were already gone (2026-07-17 wipe).
+- **The production org-isolation gate is non-functional and has been since
+  2026-07-17** — `scripts/verify-org-isolation.mjs` signs in as
+  `testkansas@minted.com` / `testsouthpark@minted.com` and pins Kansas/South
+  Park org, provider, case, task, facility, and document fixture ids in
+  `.github/workflows/verify-org-isolation.yml`. Neither user exists in
+  `auth.users` and neither org exists, so a real gate run against production
+  cannot pass regardless of the code under test. This predates the 2026-07-29
+  clean slate. The in-sandbox mock run (`node scripts/verify-isolation-local.mjs`)
+  is unaffected and remains the working guard. Re-establishing the real gate
+  needs two fresh single-org fixture users + re-pinned ids, in the lane that
+  seeds them.
 
 ### RPCs (hosted-only, not in repo migrations)
 
