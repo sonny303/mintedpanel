@@ -125,7 +125,7 @@ const PROFILE_FACILITY_COLUMNS =
   "hours, ada_compliance, service_types, treating_categories, status_id, effective_date";
 
 const PROFILE_POLICY_COLUMNS =
-  "id, insurance_type, insurer_name, policy_number, policy_start_date, policy_end_date, notes";
+  "id, insurance_type, coverage_level, insurer_name, policy_number, policy_start_date, policy_end_date, notes";
 
 const CASE_SCOPED_TABLES = new Set(["payers", "msos", "contracts"]);
 
@@ -248,9 +248,15 @@ function pickPolicy(policies: Row[], hasGroup: boolean): SourcePick {
       reason: `group has ${policies.length} insurance policies and none is malpractice (${MALPRACTICE_INSURANCE_TYPE}); not resolvable to a single row`,
     };
   }
-  // Newest policy_end_date wins; a date-less policy never beats a dated one.
+  // The group's PRIMARY malpractice policy wins outright (20260729120000 —
+  // at most one per group by partial unique index); secondary policies only
+  // resolve when no primary is on file. Within a level the newest
+  // policy_end_date wins and a date-less policy never beats a dated one.
   // Ties (and all-null dates) break by id so the pick is stable across reads.
   const sorted = [...malpractice].sort((a, b) => {
+    const aPrimary = String(a.coverage_level ?? "primary") === "primary";
+    const bPrimary = String(b.coverage_level ?? "primary") === "primary";
+    if (aPrimary !== bPrimary) return aPrimary ? -1 : 1;
     const aEnd = typeof a.policy_end_date === "string" ? a.policy_end_date : "";
     const bEnd = typeof b.policy_end_date === "string" ? b.policy_end_date : "";
     if (aEnd !== bEnd) return bEnd.localeCompare(aEnd);

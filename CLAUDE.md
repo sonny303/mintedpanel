@@ -2032,6 +2032,42 @@ group/facility/license/enrollment/touch` all via `AddButton`);
   "Provider Info"); no migration, no new deps (`@radix-ui/react-tabs`
   already present).
 
+- **Group malpractice coverage + onboarding/standalone parity (2026-07-29,
+  user handoff).** Malpractice is a LIST beside the group, not fields on it.
+  ONE additive migration (repo + hosted,
+  `20260729120000_group_insurance_coverage_level.sql`):
+  `group_insurance_policies.coverage_level` (`primary|secondary`, default
+  `primary`, CHECK) + partial unique
+  `uq_group_insurance_policies_one_primary (group_id, insurance_type) WHERE
+coverage_level='primary'` — a group must carry a primary policy and may
+  carry secondaries, which the four flat malpractice fields on
+  `ProviderGroupForm` (post-E6 wave #217) could never express, so those
+  fields are GONE: the group form is high-level metadata again.
+  `InsurancePanel` moved `components/settings/` → **`components/groups/`** and
+  is now the ONE coverage surface (coverage select + Primary/Secondary pill,
+  labels wired to inputs via `#policy-*` ids, `translateDbError` on both
+  writes so the one-primary 23505 reads as a sentence). It renders in BOTH
+  places a group is worked: the wizard's `ProviderGroupSection` (per-group
+  disclosure beside Documents — the two Collapsibles became plain
+  aria-expanded buttons so only one opens at a time) and the standalone group
+  hub. **Parity fix:** `GroupFactsCard`'s three-field dialog (name/TIN/states)
+  is replaced by the SAME `ProviderGroupForm` the wizard uses — a group edited
+  outside onboarding previously could not reach its NPI or its address +
+  contact blocks (the card also now shows NPI + the credentialing-else-billing
+  address). NB that also means the hub edit now enforces the wizard's billing
+  address requirement on legacy groups. `providerProfile.pickPolicy` prefers
+  the PRIMARY malpractice row before the newest-end-date rule (refines the
+  E4.3 F4.3.5 Q4 tie-break; no wire change). The new column is a
+  `get_sop_field_tokens()` token, classified as internal in
+  `quickCardCatalog` (excluded from cards; ACKNOWLEDGED_TOKENS updated).
+  **types.ts was hand-edited, not regenerated** — the MCP generator returned a
+  snapshot missing `provider_field_verifications` (live on hosted since
+  2026-07-28), so a full overwrite would have deleted real types; regen only
+  after confirming that table appears. e2e: provider-group TS-29 retargeted
+  (form carries no malpractice; the policy is written through the panel with
+  `coverage_level 'primary'`; the hub opens the full form), groups-hub TS-108
+  updated for the full-form dialog (its GROUP_A fixture gained a billing
+  address).
 - **Cases page redesign (2026-07-22, design handoff — PR #233 to `main`).**
   `/cases` (`src/routes/cases.index.tsx`) rebuilt as ONE surface with three
   VIEWS via a segmented control: **Flat** (default) · **By provider** · **By

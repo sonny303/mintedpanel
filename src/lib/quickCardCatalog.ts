@@ -107,6 +107,9 @@ export const QUICK_CARD_EXCLUDED_FIELDS: readonly string[] = [
   "license.verificationSourceUrl",
   // free-text internal notes
   "groupInsurance.notes",
+  // primary|secondary classification (20260729120000) — it selects WHICH
+  // policy the profile resolves; it is never a value a payer form asks for.
+  "groupInsurance.coverageLevel",
 ];
 
 /** The two {{user.*}} tokens the profile route appends after the catalog (R2

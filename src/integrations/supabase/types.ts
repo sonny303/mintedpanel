@@ -1006,6 +1006,7 @@ export type Database = {
       };
       group_insurance_policies: {
         Row: {
+          coverage_level: string;
           created_at: string | null;
           group_id: string;
           id: string;
@@ -1019,6 +1020,7 @@ export type Database = {
           updated_at: string | null;
         };
         Insert: {
+          coverage_level?: string;
           created_at?: string | null;
           group_id: string;
           id?: string;
@@ -1032,6 +1034,7 @@ export type Database = {
           updated_at?: string | null;
         };
         Update: {
+          coverage_level?: string;
           created_at?: string | null;
           group_id?: string;
           id?: string;

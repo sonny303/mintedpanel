@@ -27,7 +27,7 @@ import { useCreateFacility, useFacilitiesAll, useUpdateFacility } from "@/hooks/
 import { useIsAdmin } from "@/lib/permissions";
 import type { FacilityInput } from "@/services/orgSettings";
 import type { Facility, ProviderGroup } from "@/types";
-import { InsurancePanel } from "./InsurancePanel";
+import { InsurancePanel } from "@/components/groups/InsurancePanel";
 import { US_STATES } from "./shared";
 
 export function FacilitiesPanel() {

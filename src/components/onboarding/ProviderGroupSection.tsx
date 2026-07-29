@@ -18,12 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProviderGroupForm } from "@/components/onboarding/ProviderGroupForm";
 import { SectionUploadCard } from "@/components/onboarding/SectionUploadCard";
 import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
+import { InsurancePanel } from "@/components/groups/InsurancePanel";
 import { useUpdateProviderGroup } from "@/hooks/useOrgSettings";
+import { useCanWrite } from "@/lib/permissions";
 import { formatTin } from "@/lib/providerGroup";
 import type { ProviderGroup } from "@/types";
 import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
@@ -70,11 +71,19 @@ function DeactivateConfirm({ group, onClose }: { group: ProviderGroup; onClose: 
   );
 }
 
+// Which per-group drawer is open. Malpractice/insurance coverage is captured
+// here (2026-07-29) rather than as fields on the group form — same surface the
+// standalone group hub renders, so onboarding and editing are the same job.
+type OpenPanel = { groupId: string; panel: "coverage" | "documents" };
+
 export function ProviderGroupSection({ wizard }: SectionBodyProps) {
+  const canWrite = useCanWrite();
   const [modal, setModal] = useState<{ group: ProviderGroup | null } | null>(null);
   const [deactivating, setDeactivating] = useState<ProviderGroup | null>(null);
-  const [openDocsGroupId, setOpenDocsGroupId] = useState<string | null>(null);
+  const [openPanel, setOpenPanel] = useState<OpenPanel | null>(null);
   const activeGroups = wizard.providerGroups.filter((g) => g.isActive);
+  const isOpen = (groupId: string, panel: OpenPanel["panel"]) =>
+    openPanel?.groupId === groupId && openPanel.panel === panel;
 
   if (activeGroups.length === 0) {
     return (
@@ -134,30 +143,44 @@ export function ProviderGroupSection({ wizard }: SectionBodyProps) {
                 </Button>
               </div>
             </div>
-            {/* E4.5 F4.5.1 — the group record's document table (W-9, COI,
-                CMS-460, Voided Check …), collapsed by default. */}
-            <Collapsible
-              open={openDocsGroupId === g.id}
-              onOpenChange={(o) => setOpenDocsGroupId(o ? g.id : null)}
-            >
-              <CollapsibleTrigger asChild>
+            {/* Malpractice & insurance (primary + any secondary policies) and
+                the E4.5 F4.5.1 document table (W-9, COI, CMS-460, Voided
+                Check …) — both collapsed by default. */}
+            <div className="mt-1.5 flex items-center gap-4">
+              {(
+                [
+                  { panel: "coverage", label: "Malpractice & insurance" },
+                  { panel: "documents", label: "Documents" },
+                ] as const
+              ).map(({ panel, label }) => (
                 <button
+                  key={panel}
                   type="button"
-                  className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
-                  aria-expanded={openDocsGroupId === g.id}
+                  className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                  aria-expanded={isOpen(g.id, panel)}
+                  onClick={() =>
+                    setOpenPanel(isOpen(g.id, panel) ? null : { groupId: g.id, panel })
+                  }
                 >
                   <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${openDocsGroupId === g.id ? "rotate-180" : ""}`}
+                    className={`h-3.5 w-3.5 transition-transform ${isOpen(g.id, panel) ? "rotate-180" : ""}`}
                   />
-                  Documents
+                  {label}
                 </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
+              ))}
+            </div>
+            {isOpen(g.id, "coverage") ? (
+              <div className="mt-2">
+                <InsurancePanel groupId={g.id} canEdit={canWrite} />
+              </div>
+            ) : null}
+            {isOpen(g.id, "documents") ? (
+              <div className="mt-2">
                 <TooltipProvider delayDuration={200}>
                   <DocumentsPanel ownerType="group" ownerId={g.id} ownerName={g.name} />
                 </TooltipProvider>
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
