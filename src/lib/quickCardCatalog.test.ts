@@ -222,6 +222,7 @@ const ACKNOWLEDGED_TOKENS: readonly string[] = [
   "assignment.practiceFrequency",
   "assignment.startDate",
   // group_insurance_policies
+  "groupInsurance.coverageLevel",
   "groupInsurance.insuranceType",
   "groupInsurance.insurerName",
   "groupInsurance.notes",

@@ -346,11 +346,20 @@ export async function updateMembershipRole(id: string, role: AppRole): Promise<M
 
 export type InsuranceType = "professional_liability" | "general_liability";
 
+/**
+ * A group carries ONE primary policy per insurance type (the DB backs that
+ * with a partial unique index) and any number of secondary policies beside
+ * it — 20260729120000. The fill-profile malpractice resolution prefers the
+ * primary row.
+ */
+export type InsuranceCoverageLevel = "primary" | "secondary";
+
 export interface InsurancePolicy {
   id: string;
   orgId: string;
   groupId: string;
   insuranceType: InsuranceType;
+  coverageLevel: InsuranceCoverageLevel;
   insurerName: string;
   policyNumber: string;
   policyStartDate: string;
@@ -361,6 +370,7 @@ export interface InsurancePolicy {
 export interface InsurancePolicyInput {
   groupId: string;
   insuranceType: InsuranceType;
+  coverageLevel?: InsuranceCoverageLevel;
   insurerName: string;
   policyNumber: string;
   policyStartDate: string;
@@ -378,6 +388,7 @@ function toPolicy(row: InsuranceRow): InsurancePolicy {
     orgId: row.org_id,
     groupId: row.group_id,
     insuranceType: row.insurance_type as InsuranceType,
+    coverageLevel: (row.coverage_level as InsuranceCoverageLevel) ?? "primary",
     insurerName: row.insurer_name,
     policyNumber: row.policy_number,
     policyStartDate: row.policy_start_date,
@@ -393,6 +404,8 @@ export async function listGroupInsurancePolicies(groupId: string): Promise<Insur
     .select("*")
     .eq("org_id", orgId)
     .eq("group_id", groupId)
+    // Primary coverage first ("primary" < "secondary"), then newest expiring.
+    .order("coverage_level", { ascending: true })
     .order("policy_end_date", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(toPolicy);
@@ -434,6 +447,7 @@ export async function createGroupInsurancePolicy(
     org_id: orgId,
     group_id: input.groupId,
     insurance_type: input.insuranceType,
+    coverage_level: input.coverageLevel ?? "primary",
     insurer_name: input.insurerName.trim(),
     policy_number: input.policyNumber.trim(),
     policy_start_date: input.policyStartDate,
@@ -445,7 +459,7 @@ export async function createGroupInsurancePolicy(
     .insert(payload)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const created = toPolicy(data);
   await writeAudit({
     actionType: "CREATE",
@@ -467,6 +481,7 @@ export async function updateGroupInsurancePolicy(
   const payload: InsuranceUpdate = {};
   if (patch.groupId !== undefined) payload.group_id = patch.groupId;
   if (patch.insuranceType !== undefined) payload.insurance_type = patch.insuranceType;
+  if (patch.coverageLevel !== undefined) payload.coverage_level = patch.coverageLevel;
   if (patch.insurerName !== undefined) payload.insurer_name = patch.insurerName.trim();
   if (patch.policyNumber !== undefined) payload.policy_number = patch.policyNumber.trim();
   if (patch.policyStartDate !== undefined) payload.policy_start_date = patch.policyStartDate;
@@ -479,7 +494,7 @@ export async function updateGroupInsurancePolicy(
     .eq("org_id", orgId)
     .select("*")
     .single();
-  if (error) throw error;
+  if (error) throw translateDbError(error);
   const after = toPolicy(data);
   await writeAudit({
     actionType: "UPDATE",

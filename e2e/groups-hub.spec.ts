@@ -38,6 +38,12 @@ const GROUP_A = {
   states: ["NC", "SC"],
   is_active: true,
   created_at: "2026-07-01T00:00:00Z",
+  // Billing address: the hub edits through the same full group form the
+  // onboarding wizard uses (2026-07-29), which requires it.
+  billing_street: "1 Ocean Ave",
+  billing_city: "Wilmington",
+  billing_state: "NC",
+  billing_zip: "28401",
 };
 const GROUP_B = {
   id: "g-b",
@@ -312,10 +318,15 @@ test("TS-108: multi-group A→Z list → hub with editable group facts + navigat
   await expect(page.getByText("12-3456789")).toBeVisible();
   await expect(page.getByText("NC, SC")).toBeVisible();
 
-  // Facts are editable inline (admin) through the audited group update.
-  await page.getByRole("button", { name: "Edit" }).click();
+  // Facts are editable (admin) through the audited group update — and it is
+  // the SAME full form the onboarding wizard uses (2026-07-29), so the fields
+  // editable here match the ones captured during onboarding.
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  const editDialog = page.getByRole("dialog", { name: "Edit provider group" });
+  await expect(editDialog.locator("#group-npi")).toBeVisible();
+  await expect(editDialog.getByText("Credentialing address & contact")).toBeVisible();
   await page.getByLabel("Legal name").fill("Carolina Coast Rehab, LLC");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await editDialog.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(() => writes.filter((w) => w.method === "PATCH" && w.table === "provider_groups").length)
     .toBeGreaterThan(0);

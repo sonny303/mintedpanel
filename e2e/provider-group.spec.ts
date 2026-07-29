@@ -260,12 +260,9 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await dialog.locator("#billing-state").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
   await dialog.locator("#billing-zip").fill("27514");
-  // Malpractice rolls up to the GROUP (user request 2026-07-19): the form's
-  // new section writes the group's professional_liability policy row.
-  await dialog.locator("#group-mp-carrier").fill("State Farm");
-  await dialog.locator("#group-mp-policy").fill("SF-12345");
-  await dialog.locator("#group-mp-start").fill("2026-01-01");
-  await dialog.locator("#group-mp-end").fill("2027-01-01");
+  // The group form is high-level metadata ONLY (2026-07-29) — malpractice
+  // coverage is captured in the group's own panel, below.
+  await expect(dialog.getByText("Malpractice coverage")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Save provider group" }).click();
 
   // Derived progress: the section flips to Complete with the saved row listed
@@ -281,10 +278,23 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await expect(page.getByRole("button", { name: "Next: Facilities" })).toHaveCount(1);
   await expect(groupCard.getByRole("button", { name: "Next: Facilities" })).toHaveCount(0);
 
-  // The malpractice section landed as the group's professional_liability
-  // policy row (group_insurance_policies), never provider columns.
+  // Malpractice coverage is captured beside the group as a LIST, so the
+  // primary policy and any secondary coverage can both be tracked. It writes
+  // the group's professional_liability row (group_insurance_policies), never
+  // provider columns.
+  await groupCard.getByRole("button", { name: "Malpractice & insurance" }).click();
+  await groupCard.getByRole("button", { name: "Add policy" }).click();
+  const policyDialog = page.getByRole("dialog", { name: "Add policy" });
+  await policyDialog.locator("#policy-insurer").fill("State Farm");
+  await policyDialog.locator("#policy-number").fill("SF-12345");
+  await policyDialog.locator("#policy-start").fill("2026-01-01");
+  await policyDialog.locator("#policy-end").fill("2027-01-01");
+  await policyDialog.getByRole("button", { name: "Create policy" }).click();
+  await expect(policyDialog).toBeHidden();
+
   const policy = (fixtures.group_insurance_policies![0] ?? {}) as Record<string, unknown>;
   expect(policy.insurance_type).toBe("professional_liability");
+  expect(policy.coverage_level).toBe("primary");
   expect(policy.insurer_name).toBe("State Farm");
   expect(policy.policy_number).toBe("SF-12345");
   expect(policy.policy_start_date).toBe("2026-01-01");
@@ -299,6 +309,14 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   });
   await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible();
   await expect(page.getByText("12-3456789")).toBeVisible();
+
+  // Parity (2026-07-29): editing a group outside onboarding opens the SAME
+  // full form, and the hub carries the same coverage surface.
+  await expect(page.getByText("Malpractice & insurance")).toBeVisible();
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  const hubDialog = page.getByRole("dialog", { name: "Edit provider group" });
+  await expect(hubDialog.locator("#group-npi")).toHaveValue("1234567890");
+  await expect(hubDialog.locator("#billing-street")).toHaveValue("500 River Court");
 });
 
 test("TS-30: second TIN via Add another group — both rows listed, still Complete, no gate", async ({

@@ -52,6 +52,10 @@ const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string
     "status_configs_org_id_track_label_key",
     "A status with this label already exists in this track.",
   ],
+  [
+    "uq_group_insurance_policies_one_primary",
+    "This group already has a primary policy of this type. Mark this one secondary, or change the existing primary first.",
+  ],
   // E4.2 SOP hardening — active-org template match-key uniqueness (20260716120000).
   [
     "uq_sop_templates_active_org_match",
