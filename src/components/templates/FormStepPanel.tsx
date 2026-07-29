@@ -151,7 +151,9 @@ export function FormStepPanel({
       ? { label: "Proven", tone: "green" }
       : approvedCount > 0
         ? { label: "Trained", tone: "blue" }
-        : { label: "Registered", tone: "amber" };
+        : maps.length > 0
+          ? { label: "Captured", tone: "amber" }
+          : { label: "Registered · no fields", tone: "amber" };
 
   const invalidateMaps = () => {
     void qc.invalidateQueries({ queryKey: ["portal-field-maps", orgId] });
@@ -322,10 +324,16 @@ export function FormStepPanel({
             ) : null}
 
             {portal && maps.length === 0 ? (
-              <p className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
-                No form fields captured yet. Open the portal page with the Minted extension and
-                capture the form — proposed mappings appear here to train.
-              </p>
+              <div className="space-y-1.5 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
+                <p className="font-medium">No form fields captured yet.</p>
+                <p>
+                  Capture happens in the Minted browser extension, not here. Open this portal
+                  {portal.formUrl ? " (use “Open form” above)" : ""}, then in the extension side
+                  panel choose <span className="font-medium">“Capture this form”</span> →{" "}
+                  <span className="font-medium">“Send for approval.”</span> The proposed mappings
+                  land here to train. “Open form” only opens the page — it does not capture.
+                </p>
+              </div>
             ) : null}
 
             {portal && trainRows.length > 0 ? (

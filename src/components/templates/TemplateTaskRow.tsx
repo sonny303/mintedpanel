@@ -503,6 +503,13 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                           </Button>
                         ) : null}
                       </div>
+                      {step.stepType === "online_form" ? (
+                        <p className="mb-1 text-[11px] text-muted-foreground">
+                          Reference tokens shown to the operator running this step — separate from
+                          the captured portal field mappings in Form setup above, and not part of
+                          its mapped/train count.
+                        </p>
+                      ) : null}
                       {step.dataFields.length === 0 ? (
                         <EmptyState message="No data fields yet" />
                       ) : (
