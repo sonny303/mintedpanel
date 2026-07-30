@@ -92,8 +92,13 @@ outreach task — so listing them here is what prevents phantom-provider stalls.
 
 _[Portal training + test runner (E4.2 F4.2.7); skip for non-portal payers]_
 
-1. **Capture:** open the live form with the extension in capture mode —
-   observed fields land as proposed field maps.
+1. **Capture:** open the live form (the Template Editor's "Open form" opens the
+   portal only — it does not capture). On the portal page, open the extension
+   side panel; the first time you visit a portal the manifest doesn't statically
+   cover (anything other than BCBS KS — e.g. Aetna) the panel shows **"Enable
+   form capture & fill"** — click it and approve the one-time site-access prompt
+   so the extension can read the form. Then **Capture this form → Send for
+   approval**; observed fields land as proposed field maps in Form setup.
 2. **Train:** resolve proposals at `/portals/$key/train`
    (batch-confirm high-confidence; Approve/Edit/Manual per card).
 3. **Test run:** dry-run fill with the designated test provider; review the
