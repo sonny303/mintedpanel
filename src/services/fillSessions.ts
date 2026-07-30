@@ -24,7 +24,9 @@ export interface FillSessionServiceCtx {
 export interface FillEventInput {
   // Client-generated idempotency id (UUID); becomes fill_sessions.id.
   id: string;
-  caseId: string;
+  /** REQUIRED for a real fill; may be null/absent only when `isTest` — a dry
+   * run proves a portal's mappings and has no case. See recordFillEvent. */
+  caseId?: string | null;
   providerId?: string | null;
   portalKey: string;
   fillMode?: FillMode;
@@ -132,7 +134,24 @@ export async function recordFillEvent(
   if (!UUID_RE.test(input.id ?? "")) {
     return reject(422, "id must be a client-generated UUID (the idempotency key)");
   }
-  if (!UUID_RE.test(input.caseId ?? "")) return reject(422, "caseId must be a UUID");
+  // A DRY RUN has no case by construction: it proves a portal's MAPPINGS
+  // against the live form, before any provider is enrolled anywhere. `case_id`
+  // has been nullable since E4.2 and the app's own dry run already writes
+  // caseless test rows (recordTestFillFromApp), so this only brings the /api
+  // path in line with what the column and the browser path already allow.
+  //
+  // Not an isolation hole: org_id and performed_by come from ctx, never the
+  // body, and is_test rows are excluded from every metric reader. The most a
+  // caller gains by asserting isTest is an unattached test row in their OWN
+  // org. A real fill still REQUIRES a case it owns — checked below.
+  const isTest = input.isTest === true;
+  if (isTest) {
+    if (input.caseId != null && !UUID_RE.test(input.caseId)) {
+      return reject(422, "caseId must be a UUID when supplied");
+    }
+  } else if (!UUID_RE.test(input.caseId ?? "")) {
+    return reject(422, "caseId must be a UUID");
+  }
   if (input.providerId != null && !UUID_RE.test(input.providerId)) {
     return reject(422, "providerId must be a UUID");
   }
@@ -156,7 +175,9 @@ export async function recordFillEvent(
   }
 
   // ---- org validation, all BEFORE any write (the isolation contract) ----
-  if (!(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
+  // A supplied case is ALWAYS ownership-checked, test run or not; only its
+  // absence is tolerated, and only for a test run.
+  if (input.caseId != null && !(await belongsToOrg(ctx, "credential_cases", input.caseId))) {
     return reject(404, "Case not found");
   }
   if (input.providerId != null && !(await belongsToOrg(ctx, "providers", input.providerId))) {
@@ -192,7 +213,7 @@ export async function recordFillEvent(
   const row: Record<string, unknown> = {
     id: input.id,
     org_id: ctx.orgId,
-    case_id: input.caseId,
+    case_id: input.caseId ?? null,
     provider_id: input.providerId ?? null,
     portal_key: input.portalKey,
     fill_mode: fillMode,

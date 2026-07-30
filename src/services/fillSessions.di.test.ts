@@ -417,3 +417,68 @@ describe("recordFillEvent — task completion", () => {
     );
   });
 });
+
+// A DRY RUN proves a portal's mappings against the live form before any provider
+// is enrolled anywhere, so it has no case. The column has been nullable since
+// E4.2 and the app's own dry run already writes caseless test rows; these pin
+// that the /api path allows exactly that much and not one step more.
+describe("recordFillEvent — caseless test runs (extension dry run)", () => {
+  const testRun: FillEventInput = {
+    ...baseInput,
+    caseId: null,
+    providerId: null,
+    isTest: true,
+    portalKey: "aetna-network",
+  };
+
+  it("accepts a test run with NO case and never looks a case up", async () => {
+    const { db, captures } = makeFakeDb([{ data: null }, { data: storedRow }]);
+    const { ctx } = ctxWith(db);
+    const result = await recordFillEvent(ctx, testRun);
+    expect(result.kind).toBe("created");
+    // No credential_cases read at all — there is no case to own.
+    expect(captures.some((c) => c.table === "credential_cases")).toBe(false);
+  });
+
+  it("writes case_id null and is_test true", async () => {
+    const { db, captures } = makeFakeDb([{ data: null }, { data: storedRow }]);
+    const { ctx } = ctxWith(db);
+    await recordFillEvent(ctx, testRun);
+    const insert = captures.find((c) => c.op === "insert");
+    expect(insert?.payload?.case_id).toBeNull();
+    expect(insert?.payload?.is_test).toBe(true);
+    // org/actor still come from ctx, never the body — unchanged by this relaxation.
+    expect(insert?.payload?.org_id).toBe("org-1");
+  });
+
+  it("a REAL fill still requires a case — the relaxation is test-only", async () => {
+    const { db, captures } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const result = await recordFillEvent(ctx, { ...baseInput, caseId: null, isTest: false });
+    expectRejected(result, 422);
+    expect(captures).toHaveLength(0);
+  });
+
+  it("omitting isTest entirely is a real fill, so a missing case is still 422", async () => {
+    const { db } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    const noFlag = { ...baseInput } as FillEventInput;
+    delete (noFlag as { caseId?: unknown }).caseId;
+    expectRejected(await recordFillEvent(ctx, noFlag), 422);
+  });
+
+  it("a test run that DOES name a case still has it ownership-checked", async () => {
+    // isTest must not become a way to attach a row to someone else's case.
+    const { db, captures } = makeFakeDb([{ data: null }]);
+    const { ctx } = ctxWith(db);
+    const result = await recordFillEvent(ctx, { ...testRun, caseId: baseInput.caseId });
+    expectRejected(result, 404);
+    expect(captures.some((c) => c.op === "insert")).toBe(false);
+  });
+
+  it("a malformed caseId on a test run is still a 422", async () => {
+    const { db } = makeFakeDb([]);
+    const { ctx } = ctxWith(db);
+    expectRejected(await recordFillEvent(ctx, { ...testRun, caseId: "nope" }), 422);
+  });
+});
