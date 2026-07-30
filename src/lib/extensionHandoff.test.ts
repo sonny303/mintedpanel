@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  buildOpenPortalMessage,
   buildSetActiveCaseMessage,
   isExtensionMessagingAvailable,
-  sendOpenPortal,
   sendSetActiveCase,
 } from "./extensionHandoff";
 
@@ -110,61 +108,5 @@ describe("S3.5 — the widened C1 payload", () => {
     expect(Object.keys(message).sort()).toEqual(
       ["caseId", "facilityId", "orgId", "portalKey", "portalUrl", "providerId", "type"].sort(),
     );
-  });
-});
-
-// The SETUP intent. Same channel and same never-throw discipline as the case
-// handoff; the point of these tests is that it stays structurally caseless, so
-// a setup launch can capture a form and can never reach the fill path.
-describe("buildOpenPortalMessage / sendOpenPortal — portal setup", () => {
-  const SETUP = {
-    portalUrl: "https://extaz-oci.aetna.com/pocui/join-the-aetna-network",
-    portalKey: "aetna-network",
-    orgId: "org-1",
-  };
-
-  it("carries only the portal + optional context — nothing case-shaped", () => {
-    const msg = buildOpenPortalMessage(SETUP);
-    expect(msg).toEqual({
-      type: "OPEN_PORTAL",
-      portalUrl: SETUP.portalUrl,
-      portalKey: "aetna-network",
-      orgId: "org-1",
-    });
-    // If either of these ever appears here, the extension's parser rejects the
-    // whole message — the two intents are deliberately non-overlapping.
-    expect(msg).not.toHaveProperty("caseId");
-    expect(msg).not.toHaveProperty("providerId");
-  });
-
-  it("OMITS absent optionals rather than sending nulls", () => {
-    const msg = buildOpenPortalMessage({
-      portalUrl: SETUP.portalUrl,
-      portalKey: null,
-      orgId: null,
-    });
-    expect(Object.keys(msg).sort()).toEqual(["portalUrl", "type"]);
-  });
-
-  it("returns false and sends nothing when the extension is absent", () => {
-    expect(sendOpenPortal(SETUP)).toBe(false);
-  });
-
-  it("sends the built message and returns true when available", () => {
-    const sendMessage = vi.fn();
-    (globalThis as { chrome?: unknown }).chrome = { runtime: { sendMessage } };
-    expect(sendOpenPortal(SETUP)).toBe(true);
-    expect(sendMessage).toHaveBeenCalledWith(buildOpenPortalMessage(SETUP));
-  });
-
-  it("never throws — a messaging failure must not block opening the portal tab", () => {
-    (globalThis as { chrome?: unknown }).chrome = {
-      runtime: {
-        sendMessage: () => {
-          throw new Error("Could not establish connection");
-        },
-      },
-    };
-    expect(sendOpenPortal(SETUP)).toBe(false);
   });
 });

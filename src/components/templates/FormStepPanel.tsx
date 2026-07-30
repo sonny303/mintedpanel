@@ -60,7 +60,6 @@ import { buildDictionaryMap, resolvedSuggestionToken } from "@/lib/mappingConfid
 import { buildMockTokenMap, MOCK_FILL_PROFILE_VERSION } from "@/lib/mockFillProfile";
 import { computeTestRun, summarizeTestFill, type DryRunFieldMap } from "@/lib/testRunResults";
 import { normalizePortalKey } from "@/lib/tokenFormat";
-import { sendOpenPortal } from "@/lib/extensionHandoff";
 import { queryKeys } from "@/hooks/queryKeys";
 import type { PortalFieldMap } from "@/types";
 
@@ -301,20 +300,6 @@ export function FormStepPanel({
                     target="_blank"
                     rel="noreferrer"
                     className="underline underline-offset-2"
-                    onClick={() => {
-                      // The SETUP handoff: ask the extension to reveal its side
-                      // panel alongside the portal tab the browser is about to
-                      // open. Best-effort and never preventDefault — if the
-                      // extension is absent the tab still opens, exactly like
-                      // the casework launcher. This is what makes a registered
-                      // portal actually reach the extension instead of leaving
-                      // the user to hunt for the toolbar icon.
-                      sendOpenPortal({
-                        portalUrl: portal.formUrl as string,
-                        portalKey: portal.portalKey,
-                        orgId: portal.orgId,
-                      });
-                    }}
                   >
                     Open form
                   </a>
@@ -342,15 +327,11 @@ export function FormStepPanel({
               <div className="space-y-1.5 rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[12px] text-[#92400E]">
                 <p className="font-medium">No form fields captured yet.</p>
                 <p>
-                  Capture happens in the Minted browser extension, not here.
-                  {portal.formUrl
-                    ? " “Open form” above opens the portal and brings up the extension panel"
-                    : " Open this portal with the extension"}
-                  ; there choose <span className="font-medium">“Capture this form”</span> →{" "}
+                  Capture happens in the Minted browser extension, not here. Open this portal
+                  {portal.formUrl ? " (use “Open form” above)" : ""}, then in the extension side
+                  panel choose <span className="font-medium">“Capture this form”</span> →{" "}
                   <span className="font-medium">“Send for approval.”</span> The proposed mappings
-                  land here to train. First time on a payer&rsquo;s site, the panel asks you to{" "}
-                  <span className="font-medium">Enable form capture &amp; fill</span> — grant it or
-                  the extension cannot read the page.
+                  land here to train. “Open form” only opens the page — it does not capture.
                 </p>
               </div>
             ) : null}
