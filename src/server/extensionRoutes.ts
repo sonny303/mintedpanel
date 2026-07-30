@@ -16,6 +16,7 @@ import { getCaseContext } from "@/services/caseContext";
 import { listUserOrgMemberships } from "@/services/orgMemberships";
 import { recordSubmissionTouch, type SubmissionTouchInput } from "@/services/submissionTouches";
 import { getNextBestAction } from "@/services/nextBestAction";
+import { getMockFillProfile } from "@/services/mockFillProfile";
 import { completeTaskStep } from "@/services/taskSteps";
 import {
   getExtensionViewPrefs,
@@ -111,6 +112,23 @@ export async function handleNextBestAction(url: URL, ctx: AuthContext): Promise<
   const limit = Number.isFinite(raw) && raw >= 1 && raw <= 100 ? raw : 20;
   const result = await getNextBestAction({ db: ctx.db, orgId: ctx.orgId }, todayIso(), limit);
   return ok(result, { total: result.items.length });
+}
+
+// GET /api/mock-fill-profile — the synthetic values an extension DRY RUN fills
+// from, in the same shape as the real profile so planFill() consumes it
+// unchanged. See services/mockFillProfile.ts for why this is served rather than
+// bundled in the extension.
+//
+// Deliberately unlike the profile route it mirrors: no id, no role gate (billing
+// may prove a form), and NO audit row — there is nothing to audit, because no
+// provider, group or facility row is read and every value is visibly fake. It is
+// still Cache-Control: no-store, purely so a stale bundled copy can never be the
+// thing a dry run silently ran against.
+export async function handleMockFillProfile(ctx: AuthContext): Promise<Response> {
+  const profile = await getMockFillProfile({ db: ctx.db });
+  const response = ok(profile, { total: profile.tokens.length });
+  response.headers.set("cache-control", "no-store");
+  return response;
 }
 
 // GET /api/providers/:id/profile[?state=XX&facilityId=<uuid>] — everything the

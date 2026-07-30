@@ -619,6 +619,26 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, p);
     }
 
+    // --- /api/mock-fill-profile (synthetic dry-run values; NOT org data) ---
+    // Deliberately org-INDEPENDENT: the values are curated fakes, identical for
+    // every caller, so there is nothing here to leak and no leak mode for it.
+    // Auth is still required — an unauthenticated caller is rejected upstream.
+    if (/^\/api\/mock-fill-profile\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      const tokens = [
+        { token: "group.tin", value: "123456789" },
+        { token: "provider.firstName", value: "Sample" },
+        { token: "provider.lastName", value: "Provider" },
+        { token: "provider.npi", value: "1999999984" },
+        { token: "user.email", value: "sample.operator@example.com" },
+        { token: "user.name", value: "Sample Operator" },
+      ];
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, { mock_profile_version: 1, tokens, unresolved: [] }, null, {
+        total: tokens.length,
+      });
+    }
+
     // --- /api/next-best-action (org-scoped ranked queue; S3.3 added items) ---
     if (/^\/api\/next-best-action\/?$/.test(url.pathname)) {
       if (method !== "GET") return envelope(res, 405, null, "Method not allowed");

@@ -44,6 +44,10 @@ const CASE_TOUCHES_ROUTE = /^\/api\/cases\/([^/]+)\/touches\/?$/;
 const CASE_CONTEXT_ROUTE = /^\/api\/cases\/([^/]+)\/context\/?$/;
 // `/api/next-best-action` — the extension's queue-top read (log-and-advance).
 const NEXT_BEST_ACTION_ROUTE = /^\/api\/next-best-action\/?$/;
+// `/api/mock-fill-profile` — synthetic token values for an extension DRY RUN,
+// served from the same curated module the app's in-editor dry run uses so the
+// two can never disagree about what a pass means. No PHI, no provider read.
+const MOCK_FILL_PROFILE_ROUTE = /^\/api\/mock-fill-profile\/?$/;
 // `/api/me/orgs` — the caller's own memberships (user-scoped, no org context).
 const ME_ORGS_ROUTE = /^\/api\/me\/orgs\/?$/;
 // `/api/me/view-prefs` — the caller's saved extension quick-card layout
@@ -113,6 +117,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const caseTouchesMatch = pathname.match(CASE_TOUCHES_ROUTE);
   const caseContextMatch = pathname.match(CASE_CONTEXT_ROUTE);
   const isNextBestAction = NEXT_BEST_ACTION_ROUTE.test(pathname);
+  const isMockFillProfile = MOCK_FILL_PROFILE_ROUTE.test(pathname);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   const isDocumentUploadIntent = DOCUMENT_UPLOAD_INTENT_ROUTE.test(pathname);
@@ -132,6 +137,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !caseTouchesMatch &&
     !caseContextMatch &&
     !isNextBestAction &&
+    !isMockFillProfile &&
     !isMeOrgs &&
     !isMeViewPrefs &&
     !isDocumentUploadIntent &&
@@ -242,6 +248,11 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadExtensionRoutes();
       return await routes.handleCaseContext(caseContextMatch[1], ctx);
+    }
+    if (isMockFillProfile) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadExtensionRoutes();
+      return await routes.handleMockFillProfile(ctx);
     }
     if (isNextBestAction) {
       if (method !== "GET") return fail(405, "Method not allowed");
