@@ -12,6 +12,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "lint:epics": "node scripts/check-epic-hygiene.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "format": "prettier --write .",

@@ -1,6 +1,7 @@
 # Reusable build prompt — paste this whole file into a FRESH Claude Code session
 
-You are a BUILD session for `sonny303/mintedpanel` on the `redesign` branch.
+You are a BUILD session for `sonny303/mintedpanel`, branching off and
+targeting `main`.
 
 ## Your assignment
 
@@ -10,10 +11,12 @@ is `queued` AND whose **Depends on** entries are all past `queued`
 `building` in your first commit — parallel sessions may be running; the
 queue file is the lock. Build exactly that epic — nothing from any other
 row. If a dependency is only `in review` (unmerged PR), branch from that
-dependency's PR branch instead of `redesign`, note `Depends on #NNN` in your
-PR body, and open your PR as a **DRAFT** until the dependency merges. If no
-row is claimable, or your epic's file has `reviewed: true` missing or false,
-STOP and report instead of building.
+dependency's PR branch instead of `main`, note `Depends on #NNN` in your
+PR body, and open your PR as a **DRAFT** until the dependency merges.
+
+An epic file that is **merged to `main` is approved** — build it. (There is no
+`reviewed` frontmatter flag; it was retired 2026-08-07.) If no row is
+claimable, STOP and report instead of building.
 
 ## Read first, in this order
 
@@ -22,12 +25,34 @@ STOP and report instead of building.
 3. `docs/redesign/README.md` — build workflow + merge gate
 4. `docs/redesign/DECISION-RECORD-2026-07-19-simplification.md` — the locked
    decisions and cross-cutting rules your epic implements
-5. Your epic file — THE spec; every FR/TE must be traceable in your diff
+5. Your epic file — THE spec; every FR must be traceable in your diff
 6. `docs/redesign/seed-universe.md` — your epic's TS scenarios
+
+## FIRST: spike the epic (≤60 minutes, before any feature code)
+
+The epic is prose written against a moving codebase; assume it is stale
+somewhere. Prove it out before you build on it:
+
+1. **Probe every schema claim** — columns, CHECK constraints, RLS policies,
+   grants — against `supabase/migrations/` and the live DB (Supabase MCP).
+   Read the CHECKs, not just the column list: the most common defect is an
+   acceptance criterion whose write shape violates one.
+2. **Grep every named module** — does the function exist, with that signature
+   and that org-scoping? A criterion that assumes an org-free call on an
+   org-scoped service is unbuildable as written.
+3. **Run `npm run lint:epics`** — TS-id registration, epic frontmatter, and
+   table-register coverage, mechanically.
+4. **Write the findings into your PR description as `## Enablers`** — each one
+   naming the file that grounds it, and flagging any criterion the code says
+   cannot be built as specified.
+
+If a criterion is unbuildable, say so in the PR body and build the nearest
+correct thing under a stated assumption. Never silently reinterpret it. If the
+gap forces a **product** decision, stop and ask in the PR body.
 
 ## Hard constraints (locked for every E6 build)
 
-- Branch off current `origin/redesign`; PR targets `redesign`, titled
+- Branch off current `origin/main`; PR targets `main`, titled
   `EX.X: <epic title>`. One epic per PR.
 - Build sessions never edit epic files, frontmatter, or
   `CLARIFICATIONS_NEEDED.md`. The only docs you touch: your row in
@@ -52,7 +77,8 @@ STOP and report instead of building.
 
 ## Gates before opening the PR
 
-- `npm run lint` (0 errors), `npx tsc --noEmit`, `npm run test` (all green)
+- `npm run lint` (0 errors), `npm run lint:epics`, `npx tsc --noEmit`,
+  `npm run test` (all green)
 - `npx prettier --check` on every touched file
 - Focused e2e for every route you touch (route→spec map) plus specs covering
   your epic's TS scenarios
@@ -60,12 +86,13 @@ STOP and report instead of building.
 
 ## Final step — open the PR yourself
 
-Push the branch and run `gh pr create --base redesign --head <branch>`.
+Push the branch and run `gh pr create --base main --head <branch>`.
 The PR body MUST start with:
 
 > @devin-ai-integration please review and merge
 
 then list `Depends on #NNN` for any stacked dependency (open as DRAFT if
-unmerged), then map each FR/TE to the diff. That mention triggers Devin's independent
+unmerged), then your `## Enablers` section from the spike, then map each FR to
+the diff. That mention triggers Devin's independent
 review automatically — do not wait for a human. If review comments come back,
 push fixes to the SAME branch. Never self-merge.
