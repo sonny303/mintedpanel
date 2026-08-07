@@ -60,6 +60,71 @@ Format per entry:
 
 ## Resolved
 
+## [e6.9] Page identity on SPA wizards — RESOLVED (2026-08-07)
+
+- **Issue:** F6.9.12 derives a captured page's identity from its URL and/or
+  wizard heading, but neither is guaranteed to change between steps on a SPA
+  wizard, leaving pages indistinguishable.
+- **Impact:** PR 3's per-page capture stamping needed a defined behavior for
+  such pages — block, prompt, or degrade.
+- **Options considered:** capture-sequence fallback with admin rename; prompt
+  the trainer to name the page at capture time; block capture until a stable
+  identity exists.
+- **Decision:** **Capture-sequence fallback** (PM Sowmya, 2026-08-07). When
+  neither URL nor heading is distinguishing, stamp `Page 1`, `Page 2`, … by
+  capture sequence and let the admin rename the page in the panel (editable as
+  a section per F6.9.5). Capture never blocks and never prompts.
+
+## [e6.9] Global-vs-org field-map precedence — RESOLVED (2026-08-07)
+
+- **Issue:** The editable registry needed a deterministic winner and mutation
+  target when a global row and an org override share a selector.
+- **Impact:** PR 2 could otherwise edit the wrong tier, hide the effective
+  mapping, or silently change every inheriting org.
+- **Options considered:** show both with org precedence; collapse to one
+  effective row; make global always win.
+- **Decision:** **Org override wins for that org.** Show both rows with tier
+  labels, edit each row in its own tier, and warn that the org row shadows
+  global. A global edit still reaches orgs without an override. No edit
+  implicitly creates, deletes, or switches an override.
+
+## [e6.9] Replacement for Proven in payer readiness — RESOLVED (2026-08-07)
+
+- **Issue:** Proven only meant every captured field was decided, not that the
+  real form was captured completely, but it also defined the funnel's terminal
+  `ready` state, next action/deep link, Payer Setup KPI, Templates copy, and
+  Scorecard behavior.
+- **Impact:** Dropping Proven without a replacement would leave readiness and
+  several consuming surfaces undefined.
+- **Options considered:** remove form readiness; infer it from captured
+  coverage; require an explicit trainer attestation.
+- **Decision:** **Explicit Form setup reviewed attestation.** Coverage remains
+  informational. Attestation stamps `form_setup_reviewed_at` and
+  `form_setup_reviewed_by`; any global capture or global-registry change clears
+  both atomically, while org-override edits do not mutate global readiness.
+  The funnel uses `reviewed`, its next action becomes `review_form_setup`, and
+  the KPI, Templates copy, Scorecard, filters, intents, and tests move together.
+
+## [e6.9] Staff-only training mode vs the locked "no platform roles" decision — RESOLVED (2026-08-07)
+
+- **Issue:** E6.9 D11 (PM, in-session 2026-08-07) gated the Workbench's new
+  training mode, and the global field-map write paths it needs, to internal
+  Minted staff — currently two people. E6.7 records "no platform-role gating"
+  as a concept the PM explicitly rejected, and E6.5 defers platform-role
+  hardening to R7 ("No platform-role/permission system (R7)"). The epic does
+  not silently override a locked decision, so the conflict was raised here.
+- **Impact:** F6.9.2 (global unmap + global propose), F6.9.10 (journey split)
+  and F6.9.11 (org-free global capture) were blocked pending the ruling.
+- **Options considered:** (1) interim capability flag; (2) ungated; (3) defer
+  training mode to R7.
+- **Decision:** **(2) Ungated** (PM Sowmya, 2026-08-07). Anyone signed in can
+  train globally — simplest, and consistent with the letter of the E6.7 "no
+  platform roles" decision. The trade-off is accepted knowingly: every
+  customer inherits whatever any signed-in user captures. D11's staff gate is
+  superseded; no capability flag ships; R7's role model may revisit. E6.9 is
+  updated in the same change (D11, F6.9.2, F6.9.10, F6.9.11,
+  TS-142/143/151/152).
+
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — RESOLVED (2026-07-14)
 
 - **Issue:** E4.4 requires Minted Panel to accept, encrypt, store, reveal, and
