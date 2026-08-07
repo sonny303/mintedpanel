@@ -2,8 +2,22 @@
 
 This is the canonical authoring template for all redesign epics. It reflects
 the structure actually delivered for E0.0–E0.4, plus the authoring rules from
-review feedback. Epics land as `docs/redesign/EX.X-<slug>.md` on the
-`redesign` branch.
+review feedback. Epics land as `docs/redesign/EX.X-<slug>.md`, on a branch, as
+a PR targeting `main` — **the PM merging that PR is what approves the epic.**
+
+Two rules that keep these files short enough to stay true (2026-08-07):
+
+- **One epic = one PR of work.** More than ~8 features, more than one repo, or
+  a PR map inside the epic means it is a stage — split it before approval.
+- **Link, don't restate.** Reference the migration, service, or component by
+  path instead of paraphrasing what it contains. Paraphrase is how an epic and
+  the code drift apart, and it is what a reviewer then spends a session
+  re-verifying line by line.
+
+Technical enablers are **not** authored here — the build session spikes them
+and records them in its PR body, where they can go stale harmlessly. (Epics up
+to E6.9 carry a `## 5. Technical Considerations & Enablers` section from the
+older workflow; those stay as history.)
 
 The template starts here — everything from the `---` below through the end is
 the epic skeleton. The **Authoring Rules** section at the bottom is guidance
@@ -16,9 +30,9 @@ for the author (ChatPRD); do not copy it into delivered epics.
 epic: e0.X # lowercase in frontmatter; filename is EX.X-<slug>.md
 title: <Epic Name>
 stage: 0
-status: draft # reviewer-managed: draft → reviewed → in-build → done
+status: draft # draft → in-build → done. Merging the epic PR is what approves it;
+# there is no `reviewed` flag (retired 2026-08-07).
 owner: chatprd
-reviewed: false # set to true by the reviewing agent only
 ---
 
 # E0.X — [Epic Name]
@@ -42,9 +56,12 @@ reviewed: false # set to true by the reviewing agent only
   [uiux-component-guide.md](./uiux-component-guide.md) (component selection +
   build requirements) and [README.md](./README.md) (workflow + merge gate).
 - Example/demo/test data must use scenario orgs and personas from
-  [seed-universe.md](./seed-universe.md).
+  [seed-universe.md](./seed-universe.md). Claim new TS ids from
+  `node scripts/check-epic-hygiene.mjs --next` — never by reading the end of the
+  table, which is how two workstreams end up on the same number.
 - Any requirement tied to codebase/data model must be explicitly flagged as an
-  implementation dependency (not an assumption).
+  implementation dependency (not an assumption) — and **cited by path**, not
+  paraphrased.
 
 ---
 
@@ -123,8 +140,8 @@ cycle at least once; treat them as hard rules.
    with the frontmatter collapsed into a single heading line. The file must
    START with a fenced block exactly like the template above: `---` on its own
    line, one `key: value` per line, closing `---`, then the `# E0.X — Title`
-   heading. Never inline it into a heading. Always deliver
-   `status: draft` / `reviewed: false` — the reviewer flips them.
+   heading. Never inline it into a heading. Always deliver `status: draft`;
+   there is no `reviewed` key — merging the epic PR is what approves it.
 2. **Feature numbering is epic-prefixed: `F0.X.n`.** E0.2 (F2.x), E0.3 (F3.x),
    and E0.4 (F4.x) all needed renumbering. E0.2's third feature is `F0.2.3`,
    not `F2.3`.

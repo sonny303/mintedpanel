@@ -21,20 +21,45 @@ The product redesign was built epic-by-epic on the long-lived `redesign`
 branch. If you are implementing a redesign epic:
 
 - Epics live at `docs/redesign/EX.X-<slug>.md` (e.g. `E0.0-app-shell.md`).
-  Only build from epics whose frontmatter says `reviewed: true`. From R1
-  onward the roles are: Devin authors the epic; a **dedicated Claude Code
-  review session** independently reviews it per
-  `docs/redesign/REVIEW-HANDOFF.md`, populating its
-  `## 5. Technical Considerations & Enablers` section; the PM flips
-  `reviewed: true`. A **build session** never edits epic files,
-  `CLARIFICATIONS_NEEDED.md`, or their frontmatter — only a review session
-  operating under REVIEW-HANDOFF.md may edit the one epic file under review.
+  **An epic merged to `main` is an approved epic — build it.** The
+  `reviewed: true` frontmatter gate was RETIRED 2026-08-07: it was an
+  out-of-band boolean that silently cost a build session to discover, drifted
+  from `status` (E4.4 shipped at `status: draft, reviewed: true`), and
+  duplicated what the PR state already says. Existing epics keep whatever
+  frontmatter they carry; nothing reads it.
+- **Every build session opens with a ≤60-minute spike** (`BUILD-PROMPT.md`):
+  probe the epic's schema claims against `supabase/migrations/` + the live DB
+  (read the CHECK constraints, not just column lists), grep the named modules
+  for real signatures and org-scoping, run `npm run lint:epics`, and write the
+  findings into the PR body as `## Enablers`. This REPLACES the standalone
+  review session for ordinary epics — three prose-review rounds on E6.9 still
+  left four blockers, and all four were "the code contradicts the epic," which
+  is what the first hour of building finds anyway.
+- **A dedicated review session** (`docs/redesign/REVIEW-HANDOFF.md`) is now
+  reserved for epics crossing a trust boundary — auth, RLS/tenant isolation,
+  PHI, public/anon surfaces, money, or a global cross-org write tier — or when
+  the PM asks. Only such a session may edit the one epic file under review; a
+  **build session still never edits epic files or `CLARIFICATIONS_NEEDED.md`**.
+- **Technical enablers live in the build PR, not the epic.** Epics through E6.9
+  carry a `## 5. Technical Considerations & Enablers` section from the older
+  workflow — history, not a template to copy. New epics stay short: one PR's
+  worth of scope (>~8 features, >1 repo, or a PR map ⇒ split it) and they
+  **link to code by path rather than paraphrasing it**, since paraphrase is
+  what drifts.
+- **`npm run lint:epics`** (`scripts/check-epic-hygiene.mjs`) machine-checks
+  what reading kept missing: TS ids cited by epics/e2e specs are registered in
+  `seed-universe.md`, epic frontmatter is well-formed, and every table a
+  migration creates has a `table-register.md` row (its first run caught
+  `provider_field_verifications` missing one). It CANNOT detect two
+  workstreams meaning different things by the same id — that is what
+  `node scripts/check-epic-hygiene.mjs --next` prevents, by making id
+  allocation one command instead of eyeballing the end of the table.
 - Read `docs/redesign/README.md` (workflow + merge gate) and
   `docs/redesign/uiux-component-guide.md` (component selection + build
   requirements) before writing code. AGENTS.md rules still bind; epics with
   shell changes explicitly authorize touching `src/components/layout/*` via
   their section 5.
-- One epic per PR, branch off `redesign`, PR targets `redesign`, titled
+- One epic per PR, branch off `main`, PR targets `main`, titled
   `EX.X: <title>` and referencing the epic file. Every numbered FR must be
   traceable in the diff.
 - **Open the PR yourself as your final step — do not wait for the user.** When

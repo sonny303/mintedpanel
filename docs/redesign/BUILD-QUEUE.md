@@ -27,8 +27,9 @@ one fresh Claude session, one PR per epic.
 
 Rules: build sessions never edit epic files or frontmatter (this queue file's
 Status/PR columns and the PR body are the only build-session touchpoints
-outside application code and required register updates). Only epics with
-`reviewed: true` may enter this queue.
+outside application code and required register updates). Only epics **merged to
+`main`** may enter this queue — the merge IS the approval (the `reviewed: true`
+frontmatter gate was retired 2026-08-07).
 
 ## Lanes (safe parallelism)
 

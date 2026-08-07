@@ -77,17 +77,20 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 
 ## Who mobilizes (roles)
 
-| Role                  | Who            | Responsibility                                                    |
-| --------------------- | -------------- | ----------------------------------------------------------------- |
-| PM / business owner   | Sowmya (human) | Scope decisions, PM approvals (`reviewed: true`), stage promotion |
-| Author / orchestrator | Devin          | Epic authoring, decision records, PR gating & merges into `main`  |
-| Independent reviewer  | Claude Code    | Per-epic technical review per `REVIEW-HANDOFF.md`                 |
-| Builder               | Claude Code    | One implementation PR per reviewed epic, targeting `main`         |
+| Role                  | Who            | Responsibility                                                        |
+| --------------------- | -------------- | --------------------------------------------------------------------- |
+| PM / business owner   | Sowmya (human) | Scope decisions, epic approval (merging the epic PR), stage promotion |
+| Author / orchestrator | Devin          | Epic authoring, decision records, PR gating & merges into `main`      |
+| Independent reviewer  | Claude Code    | Per-epic technical review per `REVIEW-HANDOFF.md`                     |
+| Builder               | Claude Code    | One implementation PR per reviewed epic, targeting `main`             |
 
 ## Current jobs to be done
 
 1. **Vault master-key provisioning (PM)** — hosted migrations are applied and types regenerated (#187 merged); the remaining operator step is the `app.settings.ssn_vault_key` `ALTER DATABASE`, run by the PM directly in the SQL Editor. Vault RPCs fail closed until then.
-2. **E6 simplification wave (supersedes the R6.5 / E5.x slate)** — PM alignment 2026-07-18/19 produced `DECISION-RECORD-2026-07-19-simplification.md` + five mocks (`mocks/2026-07-simplification/`); the E5.0 epic and its review were closed unmerged (#193/#194). Build order: **E6.0** unified case status → **E6.1** sidebar & surface restructure → **E6.2** Groups + Payer Network board → **E6.3** decoupled generation → **E6.4** providers area → **E6.5** Payer Setup consolidation → **E6.6** reporting + touch unification. Each epic: PM review of the draft → independent review → `reviewed: true` → build. Ships before the production cut.
+2. **E6 simplification wave (supersedes the R6.5 / E5.x slate)** — PM alignment 2026-07-18/19 produced `DECISION-RECORD-2026-07-19-simplification.md` + five mocks (`mocks/2026-07-simplification/`); the E5.0 epic and its review were closed unmerged (#193/#194). Build order: **E6.0** unified case status → **E6.1** sidebar & surface restructure → **E6.2** Groups + Payer Network board → **E6.3** decoupled generation → **E6.4** providers area → **E6.5** Payer Setup consolidation → **E6.6** reporting + touch unification. Each epic: PM review of the draft → independent review → approval → build. (That
+   per-epic independent review is no longer the default — since 2026-08-07 it is
+   reserved for trust-boundary epics and the build session spikes the rest; see
+   `docs/redesign/README.md`.) Ships before the production cut.
 3. **R7 epic authoring** — platform payer-catalog administration + the platform-role hardening deferred from E6.5, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the E6 wave.
 4. **Main promotion — RESOLVED (PM decision 2026-07-21):** the `redesign` staging branch is retired. #220 was the production cut; #231 promoted the post-GA wave (#221–#230). All work now branches off `main` and PRs target `main` directly — there is no separate promotion step anymore.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
