@@ -4,11 +4,16 @@ Interactive HTML mockups for the proposed v1 reporting IA. Open `index.html` in 
 
 **Not a build epic yet.** Numbers on screen are layout placeholders. Metric *names* and grains are constrained to the current schema / existing pure libs.
 
-## Screens
+## Screens (rev 2)
 
 0. **Reporting Center index** — where the two new entries sit beside existing reports  
-1. **Owner Network Health** — CEO / BD, active-org, Share + CSV  
-2. **Ops Pipeline** — tabs: Workload · Turnaround · Provider Network (CSV only)
+1. **Owner Network Health** — CEO / BD, active-org: **enrollment matrix** + this-month Approved/Submitted/Denied + median days; Share + CSV  
+2. **Ops Pipeline** — tabs: **Provider Network · Workload · Turnaround** (CSV only). Holds Active network %, open cases, at-risk launches, standing denials, risk watch, fulfillment bars, provider coverage.
+
+## Status honesty
+
+Matrix cells use only Minted `case_status` labels plus **Active** (= live `enrollment_facts` OR `case_status = approved`).  
+Not shown (not in schema): “Gathering docs”, spreadsheet “PTP”, free-text tentative notes as cell types.
 
 ## Locked product decisions (so far)
 
@@ -17,7 +22,7 @@ Interactive HTML mockups for the proposed v1 reporting IA. Open `index.html` in 
 - Active = `groupPayerFulfillment` union (fact OR approved) (`16C`)  
 - Legacy `/reports` → redirect into Reporting Center (`23A`)  
 - No invented metrics; no sanctions/committee/SLA baselines  
-- Live Supabase probes: **waiting** on desktop MCP auth (`24`)
+- Live Supabase probes: **blocked in this cloud agent** even after desktop connect — need SQL results pasted or MCP tools visible to the run (`28C`)
 
 ## How to review
 

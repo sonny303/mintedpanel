@@ -3,9 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Minted Panel — Reporting Dashboard Mockups (v1 IA)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist@5.2.6/index.min.css" />
+  <title>Minted Panel — Reporting Dashboard Mockups (v1 IA rev 2)</title>
   <style>
     :root {
       --mp-font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -16,7 +14,6 @@
       --mp-border: #E8E5E0;
       --mp-muted: #F5F4F1;
       --mp-primary: #1B4D3E;
-      --mp-primary-hover: #163F33;
       --mp-ink: #1F2937;
       --mp-ink-secondary: #6B7280;
       --mp-ink-faint: #9CA3AF;
@@ -27,6 +24,7 @@
       --mp-pending-tint: #E4F3F7; --mp-pending-ink: #0E7490;
       --mp-neutral-tint: #F1F1EF; --mp-neutral-ink: #6B7280;
       --mp-brand-tint: #E7EFEA; --mp-brand-ink: #1B4D3E;
+      --mp-violet-tint: #F1ECFB; --mp-violet-ink: #6D28D9;
       --mp-radius-sm: 6px;
       --mp-radius-control: 4px;
     }
@@ -47,9 +45,8 @@
       font-size: 12px;
       line-height: 1.45;
     }
-    .banner strong { font-weight: 600; }
     .chooser {
-      max-width: 1100px;
+      max-width: 1180px;
       margin: 0 auto;
       padding: 16px 20px 8px;
       display: flex;
@@ -74,7 +71,7 @@
       border-color: var(--mp-primary);
     }
     .shell {
-      max-width: 1100px;
+      max-width: 1180px;
       margin: 0 auto 40px;
       background: var(--mp-app);
       border: 1px solid var(--mp-border);
@@ -101,7 +98,7 @@
       margin-bottom: 2px;
     }
     .rail a.active { background: rgba(255,255,255,.12); color: #fff; }
-    .main { padding: 20px 24px 28px; }
+    .main { padding: 20px 24px 28px; overflow-x: auto; }
     .page-title { font-size: 16px; font-weight: 600; margin: 0; }
     .page-desc { font-size: 12px; color: var(--mp-ink-secondary); margin: 4px 0 16px; }
     .toolbar {
@@ -124,78 +121,80 @@
       color: var(--mp-ink);
     }
     .btn.primary { background: var(--mp-primary); color: #fff; border-color: var(--mp-primary); }
-    .selectish {
+    .selectish, .group-chip {
       height: 32px;
       padding: 0 10px;
       border: 1px solid var(--mp-border);
-      border-radius: var(--mp-radius-control);
+      border-radius: 999px;
       background: #fff;
       font-size: 13px;
       color: var(--mp-ink-secondary);
       display: inline-flex;
       align-items: center;
+      cursor: default;
     }
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .kpi {
-      background: var(--mp-card);
-      border: 1px solid var(--mp-border);
-      border-radius: var(--mp-radius-sm);
-      padding: 12px 14px;
-      text-align: left;
-    }
-    .kpi .lbl { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mp-ink-secondary); }
-    .kpi .val { font-size: 22px; font-weight: 600; margin-top: 4px; font-family: var(--mp-mono); }
-    .kpi .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
-    .kpi.warn .val { color: var(--mp-warn-ink); }
-    .kpi.danger .val { color: var(--mp-danger-ink); }
-    .kpi.ok .val { color: var(--mp-ok-ink); }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
+    .group-chip[aria-pressed="true"] {
+      border-color: #2563EB;
+      color: var(--mp-ink);
+      box-shadow: 0 0 0 1px #2563EB inset;
     }
     .card {
       background: var(--mp-card);
       border: 1px solid var(--mp-border);
       border-radius: var(--mp-radius-sm);
       padding: 14px;
+      margin-bottom: 12px;
     }
-    .card h2 {
-      margin: 0 0 4px;
-      font-size: 14px;
-      font-weight: 600;
-    }
+    .card h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
     .card .hint { font-size: 12px; color: var(--mp-ink-secondary); margin-bottom: 12px; }
+    .month-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .month-cell {
+      border: 1px solid var(--mp-border);
+      border-radius: var(--mp-radius-sm);
+      background: #fff;
+      padding: 12px 14px;
+    }
+    .month-cell .lbl { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mp-ink-secondary); }
+    .month-cell .val { font-size: 22px; font-weight: 600; margin-top: 4px; font-family: var(--mp-mono); }
+    .month-cell .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
     .pill {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
       height: 20px;
       padding: 0 7px;
       border-radius: var(--mp-radius-control);
       font-size: 11px;
       font-weight: 500;
+      white-space: nowrap;
     }
+    .pill .dot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+    .pill.active { background: var(--mp-ok-tint); color: var(--mp-ok-ink); }
+    .pill.active .dot { background: var(--mp-ok-ink); }
+    .pill.in-review { background: var(--mp-info-tint); color: var(--mp-info-ink); }
+    .pill.in-review .dot { background: var(--mp-info-ink); }
+    .pill.submitted { background: var(--mp-violet-tint); color: var(--mp-violet-ink); }
+    .pill.submitted .dot { background: var(--mp-violet-ink); }
+    .pill.in-progress { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
+    .pill.in-progress .dot { background: var(--mp-warn-ink); }
+    .pill.not-started { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
+    .pill.not-started .dot { background: var(--mp-neutral-ink); }
+    .pill.denied { background: var(--mp-danger-tint); color: var(--mp-danger-ink); }
+    .pill.denied .dot { background: var(--mp-danger-ink); }
+    .pill.action { background: var(--mp-pending-tint); color: var(--mp-pending-ink); }
+    .pill.action .dot { background: var(--mp-pending-ink); }
     .pill.ok { background: var(--mp-ok-tint); color: var(--mp-ok-ink); }
-    .pill.warn { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
+    .pill.neutral { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
     .pill.danger { background: var(--mp-danger-tint); color: var(--mp-danger-ink); }
     .pill.info { background: var(--mp-info-tint); color: var(--mp-info-ink); }
-    .pill.neutral { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
     .pill.brand { background: var(--mp-brand-tint); color: var(--mp-brand-ink); }
+    .pill.warn { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
     .pill.pending { background: var(--mp-pending-tint); color: var(--mp-pending-ink); }
-    .bars { display: flex; flex-direction: column; gap: 8px; }
-    .bar-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 8px; align-items: center; font-size: 12px; }
-    .bar-track { height: 8px; background: var(--mp-muted); border-radius: 2px; overflow: hidden; }
-    .bar-fill { height: 100%; background: var(--mp-primary); border-radius: 2px; }
-    .bar-fill.ok { background: var(--mp-ok-ink); }
-    .bar-fill.warn { background: var(--mp-warn-ink); }
-    .bar-fill.info { background: var(--mp-info-ink); }
-    .bar-fill.pending { background: var(--mp-pending-ink); }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
@@ -206,14 +205,24 @@
       letter-spacing: .05em;
       text-transform: uppercase;
       color: var(--mp-ink-secondary);
+      white-space: nowrap;
     }
     td {
-      padding: 9px 10px;
+      padding: 10px;
       border-bottom: 1px solid #F0EEEA;
       font-size: 13px;
       vertical-align: middle;
     }
     .mono { font-family: var(--mp-mono); font-size: 12px; color: var(--mp-ink-secondary); }
+    .name { font-size: 13px; font-weight: 600; }
+    .subname { font-size: 12px; color: var(--mp-ink-secondary); margin-top: 2px; }
+    .empty { color: var(--mp-ink-faint); }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
     .tabs {
       display: flex;
       gap: 0;
@@ -237,11 +246,53 @@
       border-bottom-color: var(--mp-primary);
       font-weight: 600;
     }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      background: var(--mp-card);
+      border: 1px solid var(--mp-border);
+      border-radius: var(--mp-radius-sm);
+      padding: 12px 14px;
+    }
+    .kpi .lbl { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mp-ink-secondary); }
+    .kpi .val { font-size: 22px; font-weight: 600; margin-top: 4px; font-family: var(--mp-mono); }
+    .kpi .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
+    .kpi.warn .val { color: var(--mp-warn-ink); }
+    .kpi.danger .val { color: var(--mp-danger-ink); }
+    .kpi.ok .val { color: var(--mp-ok-ink); }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .bars { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 8px; align-items: center; font-size: 12px; }
+    .bar-track { height: 8px; background: var(--mp-muted); border-radius: 2px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--mp-primary); }
+    .bar-fill.ok { background: var(--mp-ok-ink); }
+    .bar-fill.warn { background: var(--mp-warn-ink); }
+    .bar-fill.info { background: var(--mp-info-ink); }
+    .bar-fill.pending { background: var(--mp-pending-ink); }
     .footnote {
-      margin-top: 14px;
+      margin-top: 12px;
       font-size: 11px;
       color: var(--mp-ink-faint);
-      line-height: 1.4;
+      line-height: 1.45;
+    }
+    .callout {
+      border: 1px solid #F0D9B0;
+      background: var(--mp-warn-tint);
+      color: var(--mp-warn-ink);
+      border-radius: var(--mp-radius-sm);
+      padding: 10px 12px;
+      font-size: 12px;
+      margin-bottom: 14px;
+      line-height: 1.45;
     }
     .screen { display: none; }
     .screen.active { display: block; }
@@ -259,22 +310,20 @@
     }
     .row-card .title { font-size: 13px; font-weight: 600; }
     .row-card .meta { font-size: 12px; color: var(--mp-ink-secondary); margin-top: 2px; }
+    .matrix-wrap { overflow-x: auto; }
     @media (max-width: 900px) {
       .shell { grid-template-columns: 1fr; }
       .rail { display: none; }
-      .kpis, .grid-2 { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 560px) {
-      .kpis, .grid-2 { grid-template-columns: 1fr; }
+      .kpis, .month-strip, .grid-2 { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="banner">
-    <strong>Layout mockups only.</strong>
-    Metric <em>names</em> and grains are proposed from the live data model.
-    Sample numbers are placeholders for composition review — not targets, not live counts.
-    Active org assumed (Q20A). IA option under review: <strong>Owner Network Health</strong> + <strong>Ops Pipeline</strong> (tabs: Workload · Turnaround · Provider Network).
+    <strong>Layout mockups only (rev 2).</strong>
+    Cell labels use Minted’s real <code>case_status</code> vocabulary (+ Active from live enrollment fact OR approved case).
+    Screenshot labels like “Gathering docs” / spreadsheet “PTP” are <strong>not</strong> in the schema and are not shown.
+    Sample counts are placeholders for composition — not live data. Supabase live probes are still blocked in this cloud agent (see note below).
   </div>
 
   <div class="chooser">
@@ -284,8 +333,8 @@
     <button type="button" class="chip-btn" data-screen="center" aria-pressed="false">0 · Reporting Center index</button>
   </div>
 
-  <div class="shell" id="app">
-    <aside class="rail" aria-label="Sidebar chrome">
+  <div class="shell">
+    <aside class="rail">
       <div class="brand">Minted Panel</div>
       <div class="sec">Workspace</div>
       <a href="#">Cases</a>
@@ -298,150 +347,171 @@
     </aside>
 
     <main class="main">
-      <!-- Reporting Center -->
       <section class="screen" id="screen-center" data-screen="center">
         <h1 class="page-title">Reporting Center</h1>
-        <p class="page-desc">Proposed v1 entries (existing reports kept; legacy /reports redirects here).</p>
-        <div class="stack">
-          <div class="card">
-            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mp-ink-secondary);margin-bottom:10px;">Performance</div>
-            <div class="stack">
-              <div class="row-card">
-                <div>
-                  <div class="title">Owner Network Health <span class="pill brand">NEW</span></div>
-                  <div class="meta">CEO view for the active org — fulfillment, risk, approvals.</div>
-                </div>
-                <span class="mono">→</span>
+        <p class="page-desc">v1 adds two entries; legacy /reports redirects here after build.</p>
+        <div class="card">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mp-ink-secondary);margin-bottom:10px;">Performance</div>
+          <div class="stack">
+            <div class="row-card">
+              <div>
+                <div class="title">Owner Network Health <span class="pill brand">NEW</span></div>
+                <div class="meta">Enrollment matrix + this-month throughput/TAT. Share + CSV.</div>
               </div>
-              <div class="row-card">
-                <div>
-                  <div class="title">Ops Pipeline <span class="pill brand">NEW</span></div>
-                  <div class="meta">Workload · Turnaround · Provider Network (one report, three tabs).</div>
-                </div>
-                <span class="mono">→</span>
-              </div>
-              <div class="row-card">
-                <div>
-                  <div class="title">Portfolio</div>
-                  <div class="meta">Existing — cross-org book of business.</div>
-                </div>
-                <span class="mono">→</span>
-              </div>
-              <div class="row-card">
-                <div>
-                  <div class="title">Launches · Facilities Without Providers · Locations per Group</div>
-                  <div class="meta">Existing performance reports (unchanged).</div>
-                </div>
-                <span class="mono">→</span>
-              </div>
+              <span class="mono">→</span>
             </div>
-          </div>
-          <div class="card">
-            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mp-ink-secondary);margin-bottom:10px;">Credentialing · Compliance · Intake</div>
-            <div class="meta">Denials, Expiring Credentials, Audit Log, Inbound Leads — kept. Denials/Expiring also surface as slices inside the new dashboards so definitions stay single-sourced.</div>
+            <div class="row-card">
+              <div>
+                <div class="title">Ops Pipeline <span class="pill brand">NEW</span></div>
+                <div class="meta">Tabs: Provider Network · Workload · Turnaround.</div>
+              </div>
+              <span class="mono">→</span>
+            </div>
+            <div class="row-card">
+              <div>
+                <div class="title">Portfolio · Launches · count reports</div>
+                <div class="meta">Existing — unchanged.</div>
+              </div>
+              <span class="mono">→</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Owner Network Health -->
+      <!-- OWNER: matrix + this month only -->
       <section class="screen active" id="screen-owner" data-screen="owner">
         <h1 class="page-title">Network Health</h1>
-        <p class="page-desc">Owner / CEO view · active organization only · shareable read-only link + CSV.</p>
+        <p class="page-desc">Owner / CEO · active org · enrollment matrix + this-month outcomes · Share + CSV.</p>
+
+        <div class="callout">
+          <strong>Honest status map (vs your screenshots):</strong>
+          cells use only <em>Not Started · In Progress · Submitted · In Review · Action Required · Active · Denied · Not Pursuing</em>
+          or <em>—</em> (no target / out of scope).
+          “Gathering docs” is not a case status (that’s readiness gaps elsewhere).
+          Spreadsheet “PTP” / free-text notes are not modeled — not shown.
+        </div>
+
         <div class="toolbar">
-          <span class="selectish">Trailing 30 days</span>
-          <span class="selectish">All groups</span>
-          <span class="selectish">All states</span>
+          <span class="group-chip" aria-pressed="true">All groups</span>
+          <span class="group-chip">Outer Banks</span>
+          <span class="group-chip">Dillon Sports</span>
+          <span class="selectish">State: All</span>
           <div class="spacer"></div>
           <button type="button" class="btn">Download CSV</button>
           <button type="button" class="btn primary">Share report</button>
         </div>
 
-        <div class="kpis">
-          <button type="button" class="kpi ok">
-            <div class="lbl">Active network</div>
-            <div class="val">62%</div>
-            <div class="sub">Group×payer Active ÷ attached</div>
-          </button>
-          <button type="button" class="kpi">
-            <div class="lbl">Open cases</div>
-            <div class="val">148</div>
-            <div class="sub">case_status open set</div>
-          </button>
-          <button type="button" class="kpi warn">
-            <div class="lbl">At-risk launches</div>
-            <div class="val">3</div>
-            <div class="sub">Same rule as Launches report</div>
-          </button>
-          <button type="button" class="kpi danger">
-            <div class="lbl">Standing denials</div>
-            <div class="val">7</div>
-            <div class="sub">Denied, not reapplied</div>
-          </button>
-        </div>
-
-        <div class="grid-2">
-          <div class="card">
-            <h2>Payer network fulfillment</h2>
-            <p class="hint">Canonical <code>groupPayerFulfillment</code>: Active = live enrollment fact <strong>OR</strong> approved case.</p>
-            <div class="bars">
-              <div class="bar-row"><span>Active</span><div class="bar-track"><div class="bar-fill ok" style="width:62%"></div></div><span class="mono">41</span></div>
-              <div class="bar-row"><span>In progress</span><div class="bar-track"><div class="bar-fill pending" style="width:28%"></div></div><span class="mono">18</span></div>
-              <div class="bar-row"><span>Targeted</span><div class="bar-track"><div class="bar-fill" style="width:10%"></div></div><span class="mono">7</span></div>
-            </div>
-            <p class="footnote">Grain = group × payer (board grain). Not provider×state coverage.</p>
+        <div class="month-strip" aria-label="This month outcomes">
+          <div class="month-cell">
+            <div class="lbl">Approved (MoM)</div>
+            <div class="val">12</div>
+            <div class="sub">First → Approved in window</div>
           </div>
-          <div class="card">
-            <h2>This month</h2>
-            <p class="hint">From <code>case_status_history</code> (first transition into status).</p>
-            <table>
-              <thead><tr><th>Signal</th><th>Count</th><th></th></tr></thead>
-              <tbody>
-                <tr><td>Approved</td><td class="mono">12</td><td><span class="pill ok">MoM ↑</span></td></tr>
-                <tr><td>Submitted</td><td class="mono">19</td><td><span class="pill neutral">MoM →</span></td></tr>
-                <tr><td>Denied</td><td class="mono">2</td><td><span class="pill danger">MoM ↑</span></td></tr>
-                <tr><td>Median days to approve</td><td class="mono">41d</td><td><span class="pill info">TAT</span></td></tr>
-              </tbody>
-            </table>
-            <p class="footnote">Median days deep-links into Ops → Turnaround tab (same definition).</p>
+          <div class="month-cell">
+            <div class="lbl">Submitted (MoM)</div>
+            <div class="val">19</div>
+            <div class="sub">First → Submitted in window</div>
+          </div>
+          <div class="month-cell">
+            <div class="lbl">Denied (MoM)</div>
+            <div class="val">2</div>
+            <div class="sub">→ Denied in window</div>
+          </div>
+          <div class="month-cell">
+            <div class="lbl">Median days to approve</div>
+            <div class="val">41d</div>
+            <div class="sub">Create → first Approved · history</div>
           </div>
         </div>
 
         <div class="card">
-          <h2>Risk watch</h2>
-          <p class="hint">Only signals already modeled — launches, expirables, awaiting ID, candidate buffer.</p>
-          <table>
-            <thead><tr><th>Item</th><th>Type</th><th>Detail</th></tr></thead>
-            <tbody>
-              <tr>
-                <td>Raleigh Clinic</td>
-                <td><span class="pill warn">Launch</span></td>
-                <td class="meta">Go-live in 12d · 4 open cases</td>
-              </tr>
-              <tr>
-                <td>DEA — B. Hershberger</td>
-                <td><span class="pill danger">Expiring</span></td>
-                <td class="meta">Expires in 18d (documents)</td>
-              </tr>
-              <tr>
-                <td>UHC · NC · M. Bell</td>
-                <td><span class="pill pending">Awaiting ID</span></td>
-                <td class="meta">Approved · provider ID expected, still null</td>
-              </tr>
-              <tr>
-                <td>Generation buffer</td>
-                <td><span class="pill brand">Candidates</span></td>
-                <td class="meta">11 proposed − live facts (generationBuffer)</td>
-              </tr>
-            </tbody>
-          </table>
+          <h2>Enrollment matrix</h2>
+          <p class="hint">
+            Provider × payer at a glance.
+            Proposed cell rule (pending your Q29): for the selected group filter,
+            take the most-advanced standing at provider×payer×(state filter) from
+            cases + live enrollment facts; Active if live fact OR approved case
+            (<code>groupPayerFulfillment</code> / enrollment union).
+            Columns = payers with an active <code>payer_network_targets</code> row for the filtered group(s).
+          </p>
+          <div class="matrix-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Aetna</th>
+                  <th>BCBS</th>
+                  <th>Cigna</th>
+                  <th>UHC</th>
+                  <th>Medicare</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="name">Morgan Apple</div><div class="subname">Orthopedic</div></td>
+                  <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
+                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
+                  <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
+                </tr>
+                <tr>
+                  <td><div class="name">Lydia Carmichael</div><div class="subname">Sports</div></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
+                  <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
+                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
+                  <td><span class="empty">—</span></td>
+                </tr>
+                <tr>
+                  <td><div class="name">Aisha Okafor</div><div class="subname">Ortho</div></td>
+                  <td><span class="pill denied"><span class="dot"></span>Denied</span></td>
+                  <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="pill action"><span class="dot"></span>Action Required</span></td>
+                </tr>
+                <tr>
+                  <td><div class="name">James Thornton</div><div class="subname">PT</div></td>
+                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
+                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
+                </tr>
+                <tr>
+                  <td><div class="name">Sara Whitfield</div><div class="subname">PT</div></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
+                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
+                  <td><span class="empty">—</span></td>
+                  <td><span class="empty">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="legend" aria-label="Status legend">
+            <span class="pill active"><span class="dot"></span>Active</span>
+            <span class="pill in-review"><span class="dot"></span>In Review</span>
+            <span class="pill submitted"><span class="dot"></span>Submitted</span>
+            <span class="pill in-progress"><span class="dot"></span>In Progress</span>
+            <span class="pill action"><span class="dot"></span>Action Required</span>
+            <span class="pill not-started"><span class="dot"></span>Not Started</span>
+            <span class="pill denied"><span class="dot"></span>Denied</span>
+            <span class="empty" style="font-size:12px;">— out of scope / no target</span>
+          </div>
+          <p class="footnote">
+            Optional second matrix (payer × state) can mirror your spreadsheet for a selected group using
+            <code>payer_network_targets</code> + fulfillment — still only Active / In progress / Targeted / denial marker.
+            No PTP column unless we define it as an existing signal (we have not).
+          </p>
         </div>
-        <p class="footnote">Not shown (not in schema): revenue at risk, panel capacity, competitive benchmarks, sanctions, committee votes.</p>
       </section>
 
-      <!-- Ops Pipeline -->
+      <!-- OPS -->
       <section class="screen" id="screen-ops" data-screen="ops">
         <h1 class="page-title">Ops Pipeline</h1>
-        <p class="page-desc">Ops managers · active organization · CSV on each tab · no share token in v1.</p>
+        <p class="page-desc">Ops managers · active org · CSV · tab order: Provider Network → Workload → Turnaround.</p>
         <div class="toolbar">
           <span class="selectish">Trailing 30 days</span>
           <span class="selectish">All groups</span>
@@ -451,99 +521,110 @@
           <button type="button" class="btn">Download CSV</button>
         </div>
 
-        <div class="tabs" role="tablist" aria-label="Ops Pipeline sections">
-          <button type="button" class="tab" role="tab" data-ops-tab="workload" aria-selected="true">Workload</button>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab" role="tab" data-ops-tab="providers" aria-selected="true">Provider Network</button>
+          <button type="button" class="tab" role="tab" data-ops-tab="workload" aria-selected="false">Workload</button>
           <button type="button" class="tab" role="tab" data-ops-tab="tat" aria-selected="false">Turnaround</button>
-          <button type="button" class="tab" role="tab" data-ops-tab="providers" aria-selected="false">Provider Network</button>
         </div>
 
-        <div class="ops-panel active" id="ops-workload" data-ops-tab="workload">
+        <div class="ops-panel active" data-ops-tab="providers">
+          <div class="kpis">
+            <div class="kpi ok"><div class="lbl">Active network</div><div class="val">62%</div><div class="sub">Moved from Owner · group×payer</div></div>
+            <div class="kpi"><div class="lbl">Open cases</div><div class="val">148</div><div class="sub">case_status open set</div></div>
+            <div class="kpi warn"><div class="lbl">At-risk launches</div><div class="val">3</div><div class="sub">Launches report rule</div></div>
+            <div class="kpi danger"><div class="lbl">Standing denials</div><div class="val">7</div><div class="sub">Denied, not reapplied</div></div>
+          </div>
+          <div class="card">
+            <h2>Risk watch</h2>
+            <p class="hint">Moved from Owner — launches, expirables, awaiting ID, candidate buffer.</p>
+            <table>
+              <thead><tr><th>Item</th><th>Type</th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td>Raleigh Clinic</td><td><span class="pill warn">Launch</span></td><td class="mono">Go-live in 12d · open cases</td></tr>
+                <tr><td>DEA — B. Hershberger</td><td><span class="pill danger">Expiring</span></td><td class="mono">Documents · ≤30d rule</td></tr>
+                <tr><td>UHC · NC · M. Bell</td><td><span class="pill pending">Awaiting ID</span></td><td class="mono">Approved + expected ID null</td></tr>
+                <tr><td>Generation buffer</td><td><span class="pill brand">Candidates</span></td><td class="mono">generationBuffer size</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h2>Payer network fulfillment</h2>
+            <p class="hint">Same <code>groupPayerFulfillment</code> as the Groups board — single definition.</p>
+            <div class="bars">
+              <div class="bar-row"><span>Active</span><div class="bar-track"><div class="bar-fill ok" style="width:62%"></div></div><span class="mono">41</span></div>
+              <div class="bar-row"><span>In progress</span><div class="bar-track"><div class="bar-fill pending" style="width:28%"></div></div><span class="mono">18</span></div>
+              <div class="bar-row"><span>Targeted</span><div class="bar-track"><div class="bar-fill" style="width:10%"></div></div><span class="mono">7</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Provider coverage snapshot</h2>
+            <p class="hint">providerCaseProgress + providerGaps + license expirations — existing reducers.</p>
+            <table>
+              <thead><tr><th>Provider</th><th>Progress</th><th>Gaps</th><th>Soonest license</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div class="name">Brian Hershberger, PT</div><div class="mono">1841293756</div></td>
+                  <td class="mono">4 of 6</td>
+                  <td><span class="pill warn">CAQH stale</span></td>
+                  <td class="mono">NC · days left</td>
+                </tr>
+                <tr>
+                  <td><div class="name">Sarah Nguyen, DPT</div><div class="mono">1730495821</div></td>
+                  <td class="mono">6 of 6</td>
+                  <td><span class="pill ok">None</span></td>
+                  <td class="mono">SC · days left</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ops-panel" data-ops-tab="workload">
           <div class="kpis">
             <div class="kpi danger"><div class="lbl">Overdue follow-ups</div><div class="val">9</div><div class="sub">followUps carry-forward</div></div>
             <div class="kpi warn"><div class="lbl">Overdue tasks</div><div class="val">14</div><div class="sub">open tasks past due_date</div></div>
             <div class="kpi"><div class="lbl">Touches (30d)</div><div class="val">226</div><div class="sub">entry_type = touchpoint</div></div>
-            <div class="kpi"><div class="lbl">NBA queue</div><div class="val">148</div><div class="sub">Same reducer as Cases Flat sort</div></div>
+            <div class="kpi"><div class="lbl">NBA queue</div><div class="val">148</div><div class="sub">buildNextBestActions</div></div>
           </div>
           <div class="grid-2">
             <div class="card">
               <h2>Touches by type</h2>
-              <p class="hint">Structured touch_type — not inventing channels.</p>
+              <p class="hint">Structured touch_type only.</p>
               <div class="bars">
-                <div class="bar-row"><span>Portal</span><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><span class="mono">90</span></div>
-                <div class="bar-row"><span>Call</span><div class="bar-track"><div class="bar-fill info" style="width:28%"></div></div><span class="mono">63</span></div>
-                <div class="bar-row"><span>Email</span><div class="bar-track"><div class="bar-fill pending" style="width:18%"></div></div><span class="mono">41</span></div>
-                <div class="bar-row"><span>Other</span><div class="bar-track"><div class="bar-fill warn" style="width:14%"></div></div><span class="mono">32</span></div>
+                <div class="bar-row"><span>Portal</span><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><span class="mono">…</span></div>
+                <div class="bar-row"><span>Call</span><div class="bar-track"><div class="bar-fill info" style="width:28%"></div></div><span class="mono">…</span></div>
+                <div class="bar-row"><span>Email</span><div class="bar-track"><div class="bar-fill pending" style="width:18%"></div></div><span class="mono">…</span></div>
               </div>
             </div>
             <div class="card">
               <h2>Workload by coordinator</h2>
-              <p class="hint">Primary: touches.coordinator_id. Case assigned_to shown only when set (often sparse).</p>
+              <p class="hint">Primary attribution: touches.coordinator_id. assigned_to optional/sparse.</p>
               <table>
                 <thead><tr><th>Person</th><th>Touches</th><th>Overdue FU</th></tr></thead>
                 <tbody>
-                  <tr><td>Alex R.</td><td class="mono">78</td><td class="mono">4</td></tr>
-                  <tr><td>Jordan K.</td><td class="mono">61</td><td class="mono">3</td></tr>
-                  <tr><td>Unattributed</td><td class="mono">22</td><td class="mono">2</td></tr>
+                  <tr><td>Alex R.</td><td class="mono">…</td><td class="mono">…</td></tr>
+                  <tr><td>Unattributed</td><td class="mono">…</td><td class="mono">…</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <div class="ops-panel" id="ops-tat" data-ops-tab="tat">
+        <div class="ops-panel" data-ops-tab="tat">
           <div class="kpis">
-            <div class="kpi"><div class="lbl">Median create→approve</div><div class="val">41d</div><div class="sub">History first Approved</div></div>
-            <div class="kpi"><div class="lbl">Median submit→approve</div><div class="val">27d</div><div class="sub">History Submitted→Approved</div></div>
-            <div class="kpi ok"><div class="lbl">Approved (30d)</div><div class="val">12</div><div class="sub">Cohort count</div></div>
-            <div class="kpi warn"><div class="lbl">Still open &gt;60d</div><div class="val">23</div><div class="sub">Open cases by age</div></div>
+            <div class="kpi"><div class="lbl">Median create→approve</div><div class="val">41d</div><div class="sub">Same definition as Owner strip</div></div>
+            <div class="kpi"><div class="lbl">Median submit→approve</div><div class="val">27d</div><div class="sub">History only</div></div>
+            <div class="kpi ok"><div class="lbl">Approved (30d)</div><div class="val">12</div><div class="sub">Matches Owner</div></div>
+            <div class="kpi warn"><div class="lbl">Still open &gt;60d</div><div class="val">23</div><div class="sub">Open case age</div></div>
           </div>
           <div class="card">
             <h2>By payer (trailing approvals)</h2>
-            <p class="hint">Same history derivation as Owner “median days” — one definition, two surfaces.</p>
+            <p class="hint">Observed only — no expected baseline (<code>avg_decision_days</code> stop-write).</p>
             <table>
               <thead><tr><th>Payer</th><th>Approved</th><th>Median days</th><th>Denied</th></tr></thead>
               <tbody>
-                <tr><td>BCBS NC</td><td class="mono">5</td><td class="mono">36d</td><td class="mono">0</td></tr>
-                <tr><td>UHC</td><td class="mono">3</td><td class="mono">52d</td><td class="mono">1</td></tr>
-                <tr><td>Aetna</td><td class="mono">2</td><td class="mono">44d</td><td class="mono">1</td></tr>
-                <tr><td>Medicaid NC</td><td class="mono">2</td><td class="mono">61d</td><td class="mono">0</td></tr>
-              </tbody>
-            </table>
-            <p class="footnote">No “expected vs actual” column — payers.avg_decision_days is stop-write. Observed only.</p>
-          </div>
-        </div>
-
-        <div class="ops-panel" id="ops-providers" data-ops-tab="providers">
-          <div class="kpis">
-            <div class="kpi"><div class="lbl">Providers (active)</div><div class="val">86</div><div class="sub">Non-terminated · roster</div></div>
-            <div class="kpi warn"><div class="lbl">With gap pills</div><div class="val">19</div><div class="sub">providerGaps rules</div></div>
-            <div class="kpi"><div class="lbl">Ready case-keys</div><div class="val">54%</div><div class="sub">enrollmentReadiness ready%</div></div>
-            <div class="kpi danger"><div class="lbl">Licenses ≤90d</div><div class="val">6</div><div class="sub">state_licenses expiration</div></div>
-          </div>
-          <div class="card">
-            <h2>Provider coverage snapshot</h2>
-            <p class="hint">Progress = approved cases ÷ (cases − not_pursuing). Enrollments = facts ∪ approved (shown separately in drill-in).</p>
-            <table>
-              <thead><tr><th>Provider</th><th>Progress</th><th>Gaps</th><th>Soonest license</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><div style="font-weight:600">Brian Hershberger, PT</div><div class="mono">1841293756</div></td>
-                  <td class="mono">4 of 6</td>
-                  <td><span class="pill warn">CAQH stale</span></td>
-                  <td class="mono">NC · 42d</td>
-                </tr>
-                <tr>
-                  <td><div style="font-weight:600">Sarah Nguyen, DPT</div><div class="mono">1730495821</div></td>
-                  <td class="mono">6 of 6</td>
-                  <td><span class="pill ok">None</span></td>
-                  <td class="mono">SC · 210d</td>
-                </tr>
-                <tr>
-                  <td><div style="font-weight:600">Marcus Bell, PT</div><div class="mono">1902847563</div></td>
-                  <td class="mono">1 of 5</td>
-                  <td><span class="pill danger">No facility</span></td>
-                  <td class="mono">NC · 11d</td>
-                </tr>
+                <tr><td>BCBS NC</td><td class="mono">…</td><td class="mono">…</td><td class="mono">…</td></tr>
+                <tr><td>UHC</td><td class="mono">…</td><td class="mono">…</td><td class="mono">…</td></tr>
               </tbody>
             </table>
           </div>
