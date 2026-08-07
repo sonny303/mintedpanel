@@ -60,6 +60,21 @@ Format per entry:
 
 ## Resolved
 
+## [e6.9] Page identity on SPA wizards — RESOLVED (2026-08-07)
+
+- **Issue:** F6.9.12 derives a captured page's identity from its URL and/or
+  wizard heading, but neither is guaranteed to change between steps on a SPA
+  wizard, leaving pages indistinguishable.
+- **Impact:** PR 3's per-page capture stamping needed a defined behavior for
+  such pages — block, prompt, or degrade.
+- **Options considered:** capture-sequence fallback with admin rename; prompt
+  the trainer to name the page at capture time; block capture until a stable
+  identity exists.
+- **Decision:** **Capture-sequence fallback** (PM Sowmya, 2026-08-07). When
+  neither URL nor heading is distinguishing, stamp `Page 1`, `Page 2`, … by
+  capture sequence and let the admin rename the page in the panel (editable as
+  a section per F6.9.5). Capture never blocks and never prompts.
+
 ## [e6.9] Global-vs-org field-map precedence — RESOLVED (2026-08-07)
 
 - **Issue:** The editable registry needed a deterministic winner and mutation
