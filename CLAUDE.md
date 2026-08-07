@@ -2497,6 +2497,76 @@ TS-143 split-name capture + composed `name` + no reuse door). Types regenerated
 (hosted in sync; `provider_field_verifications` present, so the 2026-07-29
 regen caveat is CLEARED).
 
+### E6.9 — Form Setup Simplification (2026-08-07, cross-repo)
+
+Epic `docs/redesign/E6.9-form-setup-unification.md` (PM decisions D1–D18).
+Panel PR 1 = F6.9.1–F6.9.6; extension PR 2 = F6.9.7–F6.9.9 in
+`sonny303/minted-extension` (branch `claude/e6-9-form-setup-pr-1-1s2g7t`).
+**E6 wave rule applies: the three migrations are REPO-ONLY — hosted apply is
+an operator step**; every behavioural claim below was proven by
+rollback-wrapped hosted probes.
+
+- **`20260807160000_e69_field_registry.sql`** — additive `display_label` /
+  `section` / `sort_order` on `portal_field_maps`, the two PER-TIER partial
+  unique indexes behind propose idempotency (`(portal_key, selector) WHERE
+org_id IS NULL` and `(org_id, portal_key, selector) WHERE org_id IS NOT
+NULL`), and a tier-partitioned `sort_order` backfill. `display_label` is the
+  admin's name and NEVER overwrites the payer's captured `field_label`;
+  `section` likewise never overwrites `form_section`. Live data was verified
+  duplicate-free before the indexes were created.
+- **`20260807160100_e69_shared_registry_rpcs.sql`** — the shared-tier write
+  path: `propose_shared_field_map` (ON CONFLICT DO NOTHING + re-read, so a
+  re-capture returns the existing row with its DECISION intact — that is what
+  makes re-capture drift repair rather than a reset), `train_global_field_map`
+  REISSUED with a 6th `p_hardcoded_value` param (the 5-arg form DROPPED, the
+  E4.2 no-overload precedent; a non-hardcoded transition CLEARS the literal so
+  a row can never keep a stale value behind a token), and
+  `update_shared_field_registry` (batch presentation writer; jsonb `?` so a
+  key present-with-null CLEARS while an absent key leaves the column alone).
+- **`20260807170000_e69_datafields_to_registry.sql`** — DML only. Folds each
+  online-form step's `dataFields` into shared registry rows, after a version
+  SNAPSHOT of every affected template. Re-run safety is mechanical, not
+  best-effort: the snapshot is guarded on the change NOTE (not
+  `ON CONFLICT (template_id, version)` — the first run bumps
+  `current_version`, so a second would compute an unused N+2 and the conflict
+  clause would happily insert a duplicate), and each migrated row's selector
+  is `md5(template, task index, step index, token)` so a re-run recomputes the
+  same selector and the unique index turns the insert into a no-op. Three
+  consecutive runs on live data: identical counts, every head still carrying a
+  version row for its `current_version`.
+- **Pure core `src/lib/fieldRegistry.ts`** (+23 cases) — `classifyFieldMap` is
+  EXHAUSTIVE over `(status, source)` and fails closed. Order matters: `retired`
+  → stale, explicit stale → stale, **`status === 'proposed'` → undecided
+  BEFORE any source check** (capture's canonical shape is `proposed + manual`,
+  and the old source-first filter dropped exactly those rows), then approved ×
+  token/manual_partial (requires a token) / hardcoded (requires a non-empty
+  literal) / manual (decided, human-fills — NOT mapped, NOT a gap). Also
+  `displayNameOf`, `sectionNameOf` (admin section → captured heading → page →
+  "Fields"), `groupRegistryRows`, `registryCoverage`, and the `manual:` manual
+  selector helpers. `src/lib/tokenGroups.ts` owns the grouped token picker
+  (`SopFieldToken`/`TokenGroup` were duplicated verbatim in two components).
+- **`FieldRegistryList.tsx` replaces the E6.5 train QUEUE.** Every row stays
+  visible, keeps its `sort_order` position (a decision never reorders the
+  list), and stays editable: inline rename, the three decisions (token / fixed
+  value / human fills this) plus Unmap, per-section "N of M mapped", and the
+  payer's raw label kept underneath a rename as evidence. **Stale rows keep
+  their controls** — staleness is information, not a lock; locking them would
+  leave a drifted mapping visible and unfixable. `FormStepPanel` routes each
+  decision by tier (shared → the RPCs, org → the existing RLS mutations; a
+  fixed value on an org row is an explicit toast, never a silent DB failure)
+  and gained the "Add field" affordance. On `online_form` steps the step's own
+  Data-fields editor is hidden (fax/phone/mail keep theirs; `draft_email`
+  never had one) — the stored JSON is retained on every step.
+- **`/api` (F6.9.8 seam for the extension):** `POST /api/shared-field-maps`
+  (propose, `org_id` always NULL), `GET /api/shared-field-maps?portal_key=`
+  and `GET /api/shared-portals` — all three on `authenticateUser()`, since
+  training names no org and the org-resolving guard 400s a multi-org caller
+  that sends none. Their isolation property is GLOBAL ONLY (there is no org in
+  scope to widen to): gate assertions **22 / 22b / 23** + the `sharedtier`
+  leak mode. `GET /api/portals` also embeds the payer's display name.
+- e2e `e2e/field-registry.spec.ts` (TS-144…TS-149);
+  `payer-setup-module.spec.ts` TS-132/TS-134 retargeted off the retired queue.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

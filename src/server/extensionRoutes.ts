@@ -4,10 +4,11 @@
 // logic here.
 import {
   listPortalFieldMaps,
+  listSharedFieldMaps,
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
-import { listPortalsForApi } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
@@ -245,6 +246,19 @@ export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Res
   return ok(rows, { total: rows.length });
 }
 
+// GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.
+//
+// Training carries no org, so this runs on the user-scoped guard. It is the
+// read half of the same tier the shared propose path writes: a trainer sees
+// the shared library and adds to it, and never sees another org's private
+// registry rows (there is no org in scope to widen it to).
+export async function handleListSharedPortals(user: UserContext): Promise<Response> {
+  // JWT verification IS the gate (D11) — there is no role model for the shared
+  // library, and E6.7 explicitly rejected inventing a platform role here.
+  const rows = await listSharedPortals(user.db);
+  return ok(rows, { total: rows.length });
+}
+
 // GET /api/portal-field-maps[?portal_key=...] — global catalog rows (org NULL)
 // plus the caller's own org overrides.
 export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Promise<Response> {
@@ -277,6 +291,15 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // label, selector and control type. No field-value key exists in this
 // contract, so a value cannot ride in. No audit row (audit_log.org_id is NOT
 // NULL and there is no org); the row's updated_at is the trail (D14).
+// GET /api/shared-field-maps?portal_key= — the SHARED tier's own rows, for
+// E6.9 Train forms. Pairs with the propose POST below on the same user-scoped
+// guard: a trainer reads what a recognized form already has, then adds to it.
+export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
+  const portalKey = url.searchParams.get("portal_key") ?? undefined;
+  const rows = await listSharedFieldMaps(user.db, portalKey);
+  return ok(rows, { total: rows.length });
+}
+
 export async function handleProposeSharedFieldMap(
   body: unknown,
   user: UserContext,

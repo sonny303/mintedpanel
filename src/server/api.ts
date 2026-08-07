@@ -35,6 +35,9 @@ const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
 // E6.9 F6.9.8: the ORG-FREE shared propose path. A separate route rather than
 // a mode flag on the org one, because the two run on different guards.
 const SHARED_FIELD_MAPS_ROUTE = /^\/api\/shared-field-maps\/?$/;
+// `/api/shared-portals` — the GLOBAL registry read that pairs with it, so a
+// trainer can recognize the open page without ever naming an org.
+const SHARED_PORTALS_ROUTE = /^\/api\/shared-portals\/?$/;
 // `/api/portals` — the DB-driven payer-portal registry the extension matches
 // the current tab against.
 const PORTALS_ROUTE = /^\/api\/portals\/?$/;
@@ -119,6 +122,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   const isSharedFieldMaps = SHARED_FIELD_MAPS_ROUTE.test(pathname);
+  const isSharedPortals = SHARED_PORTALS_ROUTE.test(pathname);
   const isDocumentUploadIntent = DOCUMENT_UPLOAD_INTENT_ROUTE.test(pathname);
   const isDocumentFinalize = DOCUMENT_FINALIZE_ROUTE.test(pathname);
   const documentDownloadMatch =
@@ -139,6 +143,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isMeOrgs &&
     !isMeViewPrefs &&
     !isSharedFieldMaps &&
+    !isSharedPortals &&
     !isDocumentUploadIntent &&
     !isDocumentFinalize &&
     !documentDownloadMatch
@@ -180,11 +185,27 @@ async function routeApiRequest(request: Request): Promise<Response> {
   // which is exactly what training mode sends. Ungated for any signed-in user
   // (D11) — JWT verification is the gate.
   if (isSharedFieldMaps) {
-    if (method !== "POST") return fail(405, "Method not allowed");
+    if (method !== "POST" && method !== "GET") return fail(405, "Method not allowed");
     try {
       const user = await authenticateUser(request);
       const routes = await loadExtensionRoutes();
-      return await routes.handleProposeSharedFieldMap(await readJsonBody(request), user);
+      return method === "GET"
+        ? await routes.handleListSharedFieldMaps(url, user)
+        : await routes.handleProposeSharedFieldMap(await readJsonBody(request), user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
+  }
+
+  // The read half of the same tier, on the same user-scoped guard. Global rows
+  // only — with no org in scope there is nothing to widen it to, which is what
+  // keeps another org's private registry rows unreachable here.
+  if (isSharedPortals) {
+    if (method !== "GET") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      return await routes.handleListSharedPortals(user);
     } catch (error) {
       return toErrorResponse(error);
     }

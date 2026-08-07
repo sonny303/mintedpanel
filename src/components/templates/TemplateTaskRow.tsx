@@ -478,7 +478,16 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                         />
                       </>
                     ) : null}
-                    <div>
+                    {/* E6.9 F6.9.6: on online-form steps the registry in Form
+                        setup IS the field list — a field used to be mapped
+                        twice, with two labels and two pickers over the same
+                        catalog. Fax/phone/mail steps (the other users of this
+                        branch) keep Data fields exactly as before; draft_email
+                        never had them. The stored `dataFields` JSON is retained
+                        on every step (additive-only rule) — it simply stops
+                        being read for online-form steps, so an unmigrated or
+                        rolled-back reader still finds what it expects. */}
+                    <div className={step.stepType === "online_form" ? "hidden" : undefined}>
                       <div className="flex items-center justify-between mb-1">
                         <Label className="text-xs">Data fields</Label>
                         {canEdit ? (
@@ -492,13 +501,6 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                           </Button>
                         ) : null}
                       </div>
-                      {step.stepType === "online_form" ? (
-                        <p className="mb-1 text-[11px] text-muted-foreground">
-                          Reference tokens shown to the operator running this step — separate from
-                          the captured portal field mappings in Form setup above, and not part of
-                          its mapped/train count.
-                        </p>
-                      ) : null}
                       {step.dataFields.length === 0 ? (
                         <EmptyState message="No data fields yet" />
                       ) : (
