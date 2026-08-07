@@ -427,12 +427,9 @@
         <div class="card">
           <h2>Enrollment matrix</h2>
           <p class="hint">
-            Provider × payer at a glance.
-            Proposed cell rule (pending your Q29): for the selected group filter,
-            take the most-advanced standing at provider×payer×(state filter) from
-            cases + live enrollment facts; Active if live fact OR approved case
-            (<code>groupPayerFulfillment</code> / enrollment union).
-            Columns = payers with an active <code>payer_network_targets</code> row for the filtered group(s).
+            Provider × payer at a glance (29A). Group chips + optional state filter.
+            Collapse states with most-advanced status. Columns = payers with an active
+            <code>payer_network_targets</code> row for the filtered group(s).
           </p>
           <div class="matrix-wrap">
             <table>
@@ -452,40 +449,40 @@
                   <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
                   <td><span class="pill active"><span class="dot"></span>Active</span></td>
                   <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                   <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                 </tr>
                 <tr>
                   <td><div class="name">Lydia Carmichael</div><div class="subname">Sports</div></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                   <td><span class="pill active"><span class="dot"></span>Active</span></td>
                   <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
                   <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                 </tr>
                 <tr>
                   <td><div class="name">Aisha Okafor</div><div class="subname">Ortho</div></td>
                   <td><span class="pill denied"><span class="dot"></span>Denied</span></td>
                   <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
                   <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                   <td><span class="pill action"><span class="dot"></span>Action Required</span></td>
                 </tr>
                 <tr>
                   <td><div class="name">James Thornton</div><div class="subname">PT</div></td>
                   <td><span class="pill active"><span class="dot"></span>Active</span></td>
-                  <td><span class="empty">—</span></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                   <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
                   <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
                 </tr>
                 <tr>
                   <td><div class="name">Sara Whitfield</div><div class="subname">PT</div></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                   <td><span class="pill active"><span class="dot"></span>Active</span></td>
                   <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                  <td><span class="empty">—</span></td>
-                  <td><span class="empty">—</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
+                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
                 </tr>
               </tbody>
             </table>
@@ -498,12 +495,11 @@
             <span class="pill action"><span class="dot"></span>Action Required</span>
             <span class="pill not-started"><span class="dot"></span>Not Started</span>
             <span class="pill denied"><span class="dot"></span>Denied</span>
-            <span class="empty" style="font-size:12px;">— out of scope / no target</span>
           </div>
           <p class="footnote">
-            Optional second matrix (payer × state) can mirror your spreadsheet for a selected group using
-            <code>payer_network_targets</code> + fulfillment — still only Active / In progress / Targeted / denial marker.
-            No PTP column unless we define it as an existing signal (we have not).
+            Locked cell rules: columns = payers with active targets for the group filter; every cell has a status
+            (no em-dash). Active if live fact OR approved (even if another open case exists). Else most-advanced
+            case status across states (optional state filter narrows). No case and no fact → Not Started.
           </p>
         </div>
       </section>
