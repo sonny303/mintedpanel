@@ -31,6 +31,9 @@
 //   ssnrelease  cross-org fill-only SSN released instead of 404       (16)
 //   documentdownload cross-org signed document download served instead of 404 (17b)
 //   portals     another org's registry portals leak into the catalog  (18b)
+//   sharedtier  the org-free E6.9 training routes leak an org: the shared
+//               registry read returns a private org row, and the shared
+//               propose writes under the caller's org                (22, 23)
 //   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
 import { createServer } from "node:http";
 
@@ -59,6 +62,7 @@ export const FIXTURES = {
 };
 
 export const LEAK_MODES = [
+  "sharedtier",
   "providers",
   "spoof",
   "fieldmaps",
@@ -427,6 +431,47 @@ export async function createMockApiServer(options = {}) {
         );
       }
       return envelope(res, 200, rows, null, { total: rows.length });
+    }
+
+    // --- E6.9 shared (org-free) training tier. Both routes sit BEFORE org
+    // resolution, like /api/me/*: training has no org, and the org-resolving
+    // guard would 400 a multi-org caller that sends no x-org-id. The isolation
+    // property is therefore not "which org" but "GLOBAL ONLY": the read must
+    // never return another org's private registry row, and the write must land
+    // org_id null rather than under the caller's org. ---
+    if (/^\/api\/shared-portals\/?$/.test(url.pathname)) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      // Leak "sharedtier": a private org row leaks into the shared registry.
+      const rows = PORTALS.filter((r) => r.orgId === null || leak === "sharedtier");
+      return envelope(res, 200, rows, null, { total: rows.length });
+    }
+    if (/^\/api\/shared-field-maps\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const portalKey = String(body.portal_key ?? "")
+        .trim()
+        .toLowerCase();
+      const selector = String(body.selector ?? "").trim();
+      if (!portalKey) return envelope(res, 422, null, "portal_key is required");
+      if (!selector) return envelope(res, 422, null, "selector is required");
+      const key = `shared:${portalKey}:${selector}`;
+      const existing = proposedMaps.get(key);
+      if (existing) return envelope(res, 200, { map: existing });
+      const row = {
+        id: `fm-shared-${proposedMaps.size + 1}`,
+        // Leak "sharedtier": the shared write lands under the caller's org,
+        // which would silently make a trained form private to one tenant.
+        orgId: leak === "sharedtier" ? user.orgId : null,
+        portalKey,
+        selector,
+        pageStep: body.page_step ?? null,
+        sortOrder: body.sort_order ?? null,
+        source: "manual",
+        token: null,
+        status: "proposed",
+      };
+      proposedMaps.set(key, row);
+      return envelope(res, 201, { map: row });
     }
 
     // --- /api/me/view-prefs (user-scoped, BEFORE org resolution, like

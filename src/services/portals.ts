@@ -69,6 +69,30 @@ export async function listPortalsForApi(
   }));
 }
 
+/** GET /api/shared-portals — the GLOBAL registry rows only (`org_id IS NULL`),
+ * for the E6.9 Train-forms module.
+ *
+ * Training has no org (D10) and writes the shared library, so it runs on the
+ * user-scoped guard and cannot use `listPortalsForApi`, which needs a resolved
+ * `orgId` to build its own-org disjunct. Restricting the rows to the global
+ * tier is what makes that safe: there is no org in scope, so no org's private
+ * registry rows can be returned to a caller who never named an org.
+ *
+ * Not PHI (portal names, URLs, verification state) — no audit row, no role
+ * gate, matching the org-scoped route it mirrors. */
+export async function listSharedPortals(db: SupabaseClient<Database>): Promise<PortalApiRow[]> {
+  const { data, error } = await db
+    .from("portals")
+    .select(PORTAL_API_COLUMNS)
+    .is("org_id", null)
+    .order("name", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw error;
+  type EmbeddedRow = Portal & { payers?: { name?: string | null } | null };
+  const rows = camelizeRow<EmbeddedRow[]>(data ?? []);
+  return rows.map(({ payers, ...portal }) => ({ ...portal, payerName: payers?.name ?? null }));
+}
+
 export interface PortalInput {
   name: string;
   portalKey: string;

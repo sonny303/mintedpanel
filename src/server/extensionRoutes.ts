@@ -7,7 +7,7 @@ import {
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
-import { listPortalsForApi } from "@/services/portals";
+import { listPortalsForApi, listSharedPortals } from "@/services/portals";
 import { recordFillEvent, type FillEventInput } from "@/services/fillSessions";
 import { getProviderProfile } from "@/services/providerProfile";
 import { releaseSsnForFill } from "@/services/ssnRelease";
@@ -242,6 +242,19 @@ export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): 
 export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
+  return ok(rows, { total: rows.length });
+}
+
+// GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.
+//
+// Training carries no org, so this runs on the user-scoped guard. It is the
+// read half of the same tier the shared propose path writes: a trainer sees
+// the shared library and adds to it, and never sees another org's private
+// registry rows (there is no org in scope to widen it to).
+export async function handleListSharedPortals(user: UserContext): Promise<Response> {
+  // JWT verification IS the gate (D11) — there is no role model for the shared
+  // library, and E6.7 explicitly rejected inventing a platform role here.
+  const rows = await listSharedPortals(user.db);
   return ok(rows, { total: rows.length });
 }
 

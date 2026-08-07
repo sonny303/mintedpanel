@@ -783,6 +783,46 @@ function looksLikeVercelGate(r) {
     console.log("SKIP  21. cross-org task-step write — SOUTHPARK_TASK_ID not set");
   }
 
+  // 22/23. E6.9 shared (org-free) training tier. These two routes deliberately
+  //        carry NO org — training writes the shared form library every org
+  //        inherits — so the property to hold is GLOBAL ONLY, not "the right
+  //        org". 22: the shared registry read must never hand back a private
+  //        org row (there is no org in scope to widen it to). 23: the shared
+  //        propose must land org_id null; a row written under the caller's org
+  //        would make a trained form silently private to one tenant while
+  //        appearing shared. Safe on production: 23 writes a proposal with a
+  //        gate-marked selector and no token, which fills nothing.
+  const sharedPortals = await apiGet("/api/shared-portals", { token: kansasTok });
+  const sharedRows = sharedPortals.body?.data ?? [];
+  const privateLeak = sharedRows.filter((r) => r.orgId != null);
+  check(
+    "22. Shared portal registry returns GLOBAL rows only (no org's private rows)",
+    sharedPortals.status === 200 && sharedRows.length > 0 && privateLeak.length === 0,
+    `status=${sharedPortals.status} rows=${sharedRows.length} withOrg=${privateLeak.length}`,
+    { leak: true },
+  );
+
+  const sharedProposal = await apiPost(
+    "/api/shared-field-maps",
+    {
+      portal_key: "gate_probe_shared",
+      selector: `#gate-probe-shared-${Date.now()}`,
+      field_label: "Gate probe (shared tier)",
+      page_step: "Page 1",
+      field_type: "text",
+      sort_order: 1,
+    },
+    { token: kansasTok },
+  );
+  const sharedRow = sharedProposal.body?.data?.map ?? null;
+  check(
+    "23. Shared field-map propose lands org_id null, never under the caller's org",
+    sharedProposal.status < 400 && sharedRow != null && sharedRow.orgId == null,
+    `status=${sharedProposal.status} orgId=${sharedRow?.orgId ?? "null"} ` +
+      `token=${sharedRow?.token ?? "null"}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";
