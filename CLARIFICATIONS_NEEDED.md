@@ -16,33 +16,6 @@ Format per entry:
 
 ## Open
 
-## [e6.9] Staff-only training mode vs the locked "no platform roles" decision — OPEN
-
-- **Issue:** E6.9 D11 (PM, in-session 2026-08-07) gates the Workbench's new
-  training mode, and the global field-map write paths it needs, to internal
-  Minted staff — currently two people. E6.7 records "no platform-role gating"
-  as a concept the PM explicitly rejected, and E6.5 defers platform-role
-  hardening to R7 ("No platform-role/permission system (R7)"). The epic does
-  not silently override a locked decision, so the conflict is raised here.
-- **Impact:** F6.9.2 (global unmap + global propose), F6.9.10 (journey split)
-  and F6.9.11 (org-free global capture) are blocked. Ungated, a global mapping
-  written from any signed-in user's browser lands in every customer's account,
-  which is the risk the global tier exists to contain. F6.9.1 and
-  F6.9.3–F6.9.9 (the panel registry work) do not depend on the gate and can
-  proceed either way.
-- **Options:**
-  1. **Interim capability flag (recommended).** One boolean on the user, or an
-     explicit two-entry allowlist, gating only training mode and the global
-     write paths. Not a role model: no new persona, no permission surface on
-     any org-facing screen, deleted when R7's real model lands.
-  2. **Ungated.** Anyone signed in can train globally. Simplest, and consistent
-     with the letter of the E6.7 decision, but every customer inherits whatever
-     any user captures.
-  3. **Defer training mode to R7.** Ship the panel work (F6.9.1,
-     F6.9.3–F6.9.9) now and hold the extension work until the role model
-     exists.
-- **Decision:** pending.
-
 ## [e4.4] Vault key custody and server-only execution boundary — OPEN
 
 - **Issue:** The PM approved the server-only vault and the controlled
@@ -86,6 +59,26 @@ Format per entry:
   major security gaps, so review cannot advance.
 
 ## Resolved
+
+## [e6.9] Staff-only training mode vs the locked "no platform roles" decision — RESOLVED (2026-08-07)
+
+- **Issue:** E6.9 D11 (PM, in-session 2026-08-07) gated the Workbench's new
+ training mode, and the global field-map write paths it needs, to internal
+ Minted staff — currently two people. E6.7 records "no platform-role gating"
+ as a concept the PM explicitly rejected, and E6.5 defers platform-role
+ hardening to R7 ("No platform-role/permission system (R7)"). The epic does
+ not silently override a locked decision, so the conflict was raised here.
+- **Impact:** F6.9.2 (global unmap + global propose), F6.9.10 (journey split)
+ and F6.9.11 (org-free global capture) were blocked pending the ruling.
+- **Options considered:** (1) interim capability flag; (2) ungated; (3) defer
+ training mode to R7.
+- **Decision:** **(2) Ungated** (PM Sowmya, 2026-08-07). Anyone signed in can
+ train globally — simplest, and consistent with the letter of the E6.7 "no
+ platform roles" decision. The trade-off is accepted knowingly: every
+ customer inherits whatever any signed-in user captures. D11's staff gate is
+ superseded; no capability flag ships; R7's role model may revisit. E6.9 is
+ updated in the same change (D11, F6.9.2, F6.9.10, F6.9.11,
+ TS-142/143/151/152).
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — RESOLVED (2026-07-14)
 
