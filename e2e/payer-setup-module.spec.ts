@@ -610,20 +610,18 @@ test("TS-132 — drift: badge + banner + in-editor repair clears it; never block
   await page.getByRole("link", { name: "BCBS Kansas NC Enrollment", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/templates/${BCBS_TPL_ID}$`), { timeout: 30000 });
 
-  // Step 3 → the form panel queues the broken mapping FIRST, labeled.
+  // Step 3 → the form panel lists the drifted mapping, labeled. E6.9 replaced
+  // the train QUEUE with the field REGISTRY: every row stays listed, and a
+  // stale row keeps its controls so the repair path is still one click.
   await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
-  const brokenRow = page
-    .locator("div", { hasText: "NPI Number" })
-    .filter({ has: page.getByRole("button", { name: "Approve" }) })
-    .last();
-  await expect(brokenRow.getByText("Broken")).toBeVisible();
+  const brokenRow = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "NPI Number" }).first();
+  await expect(brokenRow.locator("span.inline-flex", { hasText: "Not on the form" })).toBeVisible();
 
-  // Repair: retrain to a token → train_global_field_map on the wire (global
-  // row) → the repaired-since rule re-derives the drift away.
-  await brokenRow.getByRole("combobox").click();
+  // Repair: re-point it at a token → train_global_field_map on the wire
+  // (global row) → the repaired-since rule re-derives the drift away.
+  await brokenRow.getByRole("combobox", { name: /Map NPI Number to a token/i }).click();
   await page.getByRole("option", { name: "provider.npi", exact: true }).click();
-  await brokenRow.getByRole("button", { name: "Approve" }).click();
 
   await expect
     .poll(
@@ -699,12 +697,11 @@ test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run gre
   expect(calls.filter((c) => c.path === "set_global_portal_flags")).toEqual([]);
   await expect(page.getByText(/Last run: 1 filled.*1 unmatched/)).toBeVisible();
 
-  // Train the unmatched field (suggestion prefilled from the captured token).
-  const trainRow = page
-    .locator("div", { hasText: "CAQH ID" })
-    .filter({ has: page.getByRole("button", { name: "Approve" }) })
-    .last();
-  await trainRow.getByRole("button", { name: "Approve" }).click();
+  // Decide the unmatched field in the registry: picking the token IS the
+  // decision (E6.9 folded the separate Approve step into the picker).
+  const caqhRow = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "CAQH ID" }).first();
+  await caqhRow.getByRole("combobox", { name: /Map CAQH ID to a token/i }).click();
+  await page.getByRole("option", { name: "provider.caqhId", exact: true }).click();
   await expect
     .poll(
       () => calls.filter((c) => c.kind === "rpc" && c.path === "train_global_field_map").length,

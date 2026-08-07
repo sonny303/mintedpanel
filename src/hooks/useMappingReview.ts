@@ -14,12 +14,14 @@ import {
   type BatchApproveItem,
   updateSharedFieldRegistry,
   type SharedRegistryPatch,
+  proposeSharedFieldMap,
 } from "@/services/portalFieldMaps";
 import { listFieldDictionary, upsertDictionaryEntry } from "@/services/fieldDictionary";
 import { listTokenCatalog } from "@/services/tokenCatalog";
 import { markPortalVerified } from "@/services/portals";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
+import { newManualSelector } from "@/lib/fieldRegistry";
 
 const STATIC = { staleTime: Infinity, gcTime: Infinity } as const;
 
@@ -82,6 +84,23 @@ export function useReproposeField() {
       id: string;
       previous: { token: string | null; source: PortalFieldMap["source"] };
     }) => reproposeFieldMap(id, previous),
+  });
+}
+
+// E6.9 F6.9.6 — "Add field" on an online-form step: a reference row the admin
+// adds by hand rather than something capture saw. It carries a deterministic
+// `manual:` selector because portal_field_maps.selector is NOT NULL and stays
+// that way; the fill engine and drift repair both skip that prefix.
+export function useAddSharedRegistryField() {
+  return useMutation({
+    mutationFn: (input: { portalKey: string; label: string; pageStep?: string | null }) =>
+      proposeSharedFieldMap({
+        portalKey: input.portalKey,
+        selector: newManualSelector(),
+        fieldLabel: input.label,
+        pageStep: input.pageStep ?? null,
+        notes: "Added by hand in the form editor",
+      }),
   });
 }
 

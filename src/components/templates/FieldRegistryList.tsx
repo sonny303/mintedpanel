@@ -211,7 +211,12 @@ function RegistryRowEditor({
       ) : null}
       <p className="text-[11px] text-muted-foreground">{classification.reason}</p>
 
-      {canEdit && !stale ? (
+      {/* Stale rows keep their controls. Staleness is INFORMATION — the last
+          capture or fill did not see this field — not a lock: a drifted
+          mapping is repaired by re-pointing it right here, which is the whole
+          E6.5 F6.5.4 repair path. Locking the row would leave a broken mapping
+          with no way to fix it from the editor. */}
+      {canEdit ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
           <Select
             value={classification.decision === "token" ? (row.token ?? "") : ""}

@@ -47,6 +47,7 @@ import {
   useTokenCatalog,
   useReproposeField,
   useUpdateSharedFieldRegistry,
+  useAddSharedRegistryField,
 } from "@/hooks/useMappingReview";
 import {
   useSetGlobalPortalFlags,
@@ -112,6 +113,8 @@ export function FormStepPanel({
   const trainGlobalMut = useTrainGlobalFieldMap();
   const reproposeMut = useReproposeField();
   const renameMut = useUpdateSharedFieldRegistry();
+  const addFieldMut = useAddSharedRegistryField();
+  const [addFieldLabel, setAddFieldLabel] = useState("");
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
   const provenOrgMut = useMarkPortalProven();
@@ -242,6 +245,21 @@ export function FormStepPanel({
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the field");
+    }
+  }
+
+  // F6.9.6 — the Data-fields "Add field" affordance, folded into the registry.
+  // A manual row is a first-class registry row: renameable, sectionable, and
+  // decidable by all three actions.
+  async function addRegistryField() {
+    const label = addFieldLabel.trim();
+    if (!label || !portalKey) return;
+    try {
+      await addFieldMut.mutateAsync({ portalKey, label });
+      setAddFieldLabel("");
+      invalidateMaps();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add the field");
     }
   }
 
@@ -399,6 +417,30 @@ export function FormStepPanel({
             {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
                 queue dropped a field the moment it was approved, so a wrong
                 mapping was unreachable from the editor. */}
+            {portal && canEdit ? (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={addFieldLabel}
+                  onChange={(e) => setAddFieldLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void addRegistryField();
+                  }}
+                  placeholder="Add a field by name…"
+                  aria-label="Add a field to the registry"
+                  className="h-7 w-64 text-[12px]"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[12px]"
+                  disabled={addFieldLabel.trim() === ""}
+                  onClick={() => void addRegistryField()}
+                >
+                  Add field
+                </Button>
+              </div>
+            ) : null}
+
             {portal && maps.length > 0 ? (
               <FieldRegistryList
                 rows={maps}
