@@ -1281,6 +1281,19 @@ export interface PortalFieldMap {
   fieldLabel: string | null;
   formSection: string | null;
   confidence: number | null;
+  // E6.9 field registry. The pairs are deliberate: `displayLabel`/`section` are
+  // the ADMIN's names and `fieldLabel`/`formSection` stay the payer's raw
+  // captured text, so a re-capture can refresh what the page says without ever
+  // clobbering a rename (D6/D7).
+  // Optional because the SERVER projection (PORTAL_FIELD_MAP_COLUMNS, the
+  // extension's fill contract) deliberately does not select them — only the
+  // app/editor projection does. A required field here would be a lie about
+  // every row the fill path loads.
+  displayLabel?: string | null;
+  section?: string | null;
+  /** Position within (tier, portalKey, pageStep); re-derived from live DOM
+   * order on re-capture. */
+  sortOrder?: number | null;
   createdAt: string;
   updatedAt: string;
 }

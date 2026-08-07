@@ -27,6 +27,7 @@ import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
 import { resolveOrgContactProfileTokens } from "@/services/orgContacts";
+import { proposeSharedFieldMap, type SharedProposeBody } from "@/services/sharedFieldMaps";
 
 // Date-only ISO (YYYY-MM-DD) for the pure queue reducer — a server clock read
 // at the route boundary, never inside the pure module.
@@ -261,6 +262,33 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // Writer roles only. Idempotent on (portal_key, selector) across global + own
 // org, so a field re-observed on every page load converges on one row: a
 // repeat returns 200 with the existing row, a first sighting 201.
+// POST /api/shared-field-maps — E6.9 F6.9.2/F6.9.8: propose a SHARED
+// (`org_id IS NULL`) registry row from Train-forms capture.
+//
+// USER-scoped (runs on authenticateUser, like /api/me/*): training a payer
+// form has no org at all (D10), and the org-resolving guard 400s a multi-org
+// caller that sends no x-org-id — which is exactly what training mode sends.
+//
+// Ungated for any signed-in user (D11): there is no role model, and E6.7
+// rejected platform-role gating, so there is deliberately no isWriter check
+// here. JWT verification is the gate.
+//
+// Shape-only: the accepted keys are portal identity, page/section structure,
+// label, selector and control type. No field-value key exists in this
+// contract, so a value cannot ride in. No audit row (audit_log.org_id is NOT
+// NULL and there is no org); the row's updated_at is the trail (D14).
+export async function handleProposeSharedFieldMap(
+  body: unknown,
+  user: UserContext,
+): Promise<Response> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const result = await proposeSharedFieldMap(user.db, body as SharedProposeBody);
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok({ map: result.map });
+}
+
 export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Promise<Response> {
   if (!isWriter(ctx)) return fail(403, "Your role cannot propose field mappings");
   if (!body || typeof body !== "object" || Array.isArray(body)) {

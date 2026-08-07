@@ -32,6 +32,9 @@ const PROVIDERS_ROUTE = /^\/api\/providers(?:\/([^/]+))?\/?$/;
 // `/api/tasks/:id/steps` — the S4.3 step tick (the one /api task-state write).
 const TASK_STEPS_ROUTE = /^\/api\/tasks\/([^/]+)\/steps\/?$/;
 const PORTAL_FIELD_MAPS_ROUTE = /^\/api\/portal-field-maps\/?$/;
+// E6.9 F6.9.8: the ORG-FREE shared propose path. A separate route rather than
+// a mode flag on the org one, because the two run on different guards.
+const SHARED_FIELD_MAPS_ROUTE = /^\/api\/shared-field-maps\/?$/;
 // `/api/portals` — the DB-driven payer-portal registry the extension matches
 // the current tab against.
 const PORTALS_ROUTE = /^\/api\/portals\/?$/;
@@ -115,6 +118,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isNextBestAction = NEXT_BEST_ACTION_ROUTE.test(pathname);
   const isMeOrgs = ME_ORGS_ROUTE.test(pathname);
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
+  const isSharedFieldMaps = SHARED_FIELD_MAPS_ROUTE.test(pathname);
   const isDocumentUploadIntent = DOCUMENT_UPLOAD_INTENT_ROUTE.test(pathname);
   const isDocumentFinalize = DOCUMENT_FINALIZE_ROUTE.test(pathname);
   const documentDownloadMatch =
@@ -134,6 +138,7 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isNextBestAction &&
     !isMeOrgs &&
     !isMeViewPrefs &&
+    !isSharedFieldMaps &&
     !isDocumentUploadIntent &&
     !isDocumentFinalize &&
     !documentDownloadMatch
@@ -164,6 +169,22 @@ async function routeApiRequest(request: Request): Promise<Response> {
       return method === "GET"
         ? await routes.handleGetViewPrefs(user)
         : await routes.handlePutViewPrefs(await readJsonBody(request), user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
+  }
+
+  // E6.9 F6.9.2/F6.9.8 — training the shared form library has NO org (D10), so
+  // this runs on the user-only auth step like /api/me/*. The org-resolving
+  // guard cannot serve it: it 400s a multi-org caller that sends no x-org-id,
+  // which is exactly what training mode sends. Ungated for any signed-in user
+  // (D11) — JWT verification is the gate.
+  if (isSharedFieldMaps) {
+    if (method !== "POST") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      return await routes.handleProposeSharedFieldMap(await readJsonBody(request), user);
     } catch (error) {
       return toErrorResponse(error);
     }

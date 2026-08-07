@@ -272,7 +272,9 @@ export async function proposeFieldMap(
 // and requireActiveOrg(). The SELECT includes the training columns
 // (field_label/form_section/confidence) the server contract does not carry.
 // ---------------------------------------------------------------------------
-const APP_PORTAL_FIELD_MAP_COLUMNS = `${PORTAL_FIELD_MAP_COLUMNS}, field_label, form_section, confidence`;
+// E6.9 adds the registry trio — the editor reads display name, grouping and
+// order off the same row it already loads.
+const APP_PORTAL_FIELD_MAP_COLUMNS = `${PORTAL_FIELD_MAP_COLUMNS}, field_label, form_section, confidence, display_label, section, sort_order`;
 
 // Global catalog rows + the caller's own org rows, tokens normalized to bare
 // form. Same shape as listPortalFieldMaps but org resolved from the store.
@@ -406,6 +408,9 @@ export interface GlobalTrainPatch {
   source: PortalFieldMap["source"];
   token?: string | null;
   fieldLabel?: string | null;
+  /** E6.9 F6.9.4: the fixed-literal decision. Required when
+   * `source === 'hardcoded'`; the RPC rejects an empty one. */
+  hardcodedValue?: string | null;
 }
 
 export async function trainGlobalFieldMap(
@@ -420,10 +425,87 @@ export async function trainGlobalFieldMap(
     p_source: patch.source,
     p_token: (patch.token ? normalizeTokenKey(patch.token) : null) as unknown as string,
     p_field_label: (patch.fieldLabel ?? null) as unknown as string,
+    p_hardcoded_value: (patch.hardcodedValue ?? null) as unknown as string,
   });
   if (error) throw error;
   const row = camelizeRow<PortalFieldMap>(data);
   return { ...row, token: normalizeTokenKey(row.token) };
+}
+
+// ---------------------------------------------------------------------------
+// E6.9 F6.9.2 — the rest of the shared-tier (org_id IS NULL) write surface.
+//
+// Shared rows fail browser RLS for INSERT and UPDATE, so every shared write
+// goes through a SECURITY DEFINER RPC. These are the app-side callers; the
+// extension reaches the same propose RPC through the /api route, which runs on
+// the user-scoped guard because training has no org at all (D10).
+// ---------------------------------------------------------------------------
+
+export interface SharedProposeInput {
+  portalKey: string;
+  selector: string;
+  fieldLabel?: string | null;
+  formSection?: string | null;
+  pageStep?: string | null;
+  fieldType?: string | null;
+  sortOrder?: number | null;
+  notes?: string | null;
+}
+
+/** Create (or resolve, if capture already saw it) a shared registry row.
+ * Idempotent on the F6.9.1 partial unique index — a repeat capture returns the
+ * existing row with its decision intact rather than resetting it. */
+export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<PortalFieldMap> {
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc("propose_shared_field_map", {
+    p_portal_key: input.portalKey,
+    p_selector: input.selector,
+    p_field_label: (input.fieldLabel ?? null) as unknown as string,
+    p_form_section: (input.formSection ?? null) as unknown as string,
+    p_page_step: (input.pageStep ?? null) as unknown as string,
+    p_field_type: (input.fieldType ?? "text") as unknown as string,
+    p_sort_order: (input.sortOrder ?? null) as unknown as number,
+    p_notes: (input.notes ?? null) as unknown as string,
+  });
+  if (error) throw error;
+  const row = camelizeRow<PortalFieldMap>(data);
+  return { ...row, token: normalizeTokenKey(row.token) };
+}
+
+/** A registry metadata edit. A key that is PRESENT and null CLEARS the column;
+ * an ABSENT key leaves it untouched — the RPC distinguishes the two with
+ * jsonb `?`, which `->>` alone cannot. */
+export interface SharedRegistryPatch {
+  id: string;
+  displayLabel?: string | null;
+  section?: string | null;
+  sortOrder?: number | null;
+}
+
+/** Write display name / section / order on shared rows. Takes a BATCH because
+ * re-capture reorders a whole page at once — one transaction, no half-ordered
+ * intermediate state (F6.9.5). */
+export async function updateSharedFieldRegistry(
+  patches: readonly SharedRegistryPatch[],
+): Promise<PortalFieldMap[]> {
+  if (patches.length === 0) return [];
+  const entries = patches.map((patch) => {
+    const entry: Record<string, unknown> = { id: patch.id };
+    if ("displayLabel" in patch) entry.display_label = patch.displayLabel ?? null;
+    if ("section" in patch) entry.section = patch.section ?? null;
+    if ("sortOrder" in patch) entry.sort_order = patch.sortOrder ?? null;
+    return entry;
+  });
+  const rpc = supabase.rpc.bind(supabase);
+  const { data, error } = await rpc("update_shared_field_registry", {
+    p_entries: entries as unknown as string,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as unknown[];
+  return rows.map((raw) => {
+    const row = camelizeRow<PortalFieldMap>(raw);
+    return { ...row, token: normalizeTokenKey(row.token) };
+  });
 }
 
 export interface BatchApproveItem {
