@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { isValidEmail, commonEmailDomainTypo, contactErrors } from "./contactValidation";
-import { DEFAULT_SALES_REP, EMPTY_CONTACT } from "./contacts";
+import { EMPTY_CONTACT } from "./contacts";
+import type { ContactInput } from "@/types";
+
+// A fully-populated contact. Was the shared DEFAULT_SALES_REP fixture until org
+// intake stopped auto-creating a placeholder sales rep and that constant was
+// deleted; this is a local fixture with the same shape.
+const FULL_CONTACT: ContactInput = {
+  name: "Dana Reyes",
+  email: "dana.reyes@example.test",
+  phoneOffice: "704-555-0100",
+  phoneMobile: "",
+  addressLine1: "101 S Tryon St",
+  addressLine2: "Suite 400",
+  city: "Charlotte",
+  state: "NC",
+  postalCode: "28280",
+  country: "US",
+};
 
 describe("isValidEmail", () => {
   it("accepts well-formed addresses", () => {
@@ -39,12 +56,12 @@ describe("contactErrors", () => {
     );
   });
 
-  it("passes the fully-populated Zeb default (line2/country optional)", () => {
-    expect(contactErrors(DEFAULT_SALES_REP)).toEqual({});
+  it("passes a fully-populated contact (line2/country optional)", () => {
+    expect(contactErrors(FULL_CONTACT)).toEqual({});
   });
 
   it("flags a malformed email but accepts a valid one", () => {
-    expect(contactErrors({ ...DEFAULT_SALES_REP, email: "nope" }).email).toBeTruthy();
-    expect(contactErrors({ ...DEFAULT_SALES_REP, email: "a@b.co" }).email).toBeUndefined();
+    expect(contactErrors({ ...FULL_CONTACT, email: "nope" }).email).toBeTruthy();
+    expect(contactErrors({ ...FULL_CONTACT, email: "a@b.co" }).email).toBeUndefined();
   });
 });

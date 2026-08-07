@@ -1,9 +1,12 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E0.7 F0.7.4 TE-5 — Regression coverage for the only-sales-rep removal block
-// (F0.2.2 / F0.3.3). When the org's sole sales rep tries to have their role
-// removed (chip X or full Remove), the app must block it. The server-side check
-// (count of sales_rep assignments == 1) is mocked here.
+// Regression coverage for sales-rep role removal on the People surface.
+//
+// SUPERSEDES the E0.7 F0.7.4 TE-5 test of the F0.2.2 "only sales rep" block:
+// that invariant only held while org intake auto-assigned a placeholder sales
+// rep, and removing that default (migration 20260807120000) removed the guard
+// with it. A sole sales rep is now removable — pinned here because the failure
+// mode is silent (a stray count query re-introducing the block).
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -143,27 +146,19 @@ async function fulfillSupabase(route: Route) {
   const table = url.pathname.split("/rest/v1/")[1] ?? "";
 
   if (table === "party_role_assignments") {
-    const isHead = req.method() === "HEAD";
-    const qs = url.searchParams.toString();
     const selectParam = url.searchParams.get("select") ?? "";
 
-    if (isHead && qs.includes("role_key=eq.sales_rep")) {
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        headers: { "content-range": "0-0/1" },
-        body: "null",
-      });
-    }
-
+    // Write through so the refetch after the mutation reflects the delete —
+    // otherwise the chip would "survive" removal for fixture reasons alone.
     if (req.method() === "DELETE") {
-      return route.fulfill({
-        status: 400,
-        contentType: "application/json",
-        body: JSON.stringify({
-          message: "This is the only sales rep. Add another before removing this role.",
-        }),
-      });
+      const partyEq = url.searchParams.get("party_id") ?? "";
+      const roleEq = url.searchParams.get("role_key") ?? "";
+      const partyId = partyEq.replace("eq.", "");
+      const roleKey = roleEq.replace("eq.", "");
+      FIXTURES.party_role_assignments = (
+        FIXTURES.party_role_assignments as Array<{ party_id: string; role_key: string }>
+      ).filter((a) => !(a.party_id === partyId && (!roleKey || a.role_key === roleKey)));
+      return route.fulfill({ status: 204, contentType: "application/json", body: "" });
     }
 
     if (selectParam.includes("parties")) {
@@ -189,7 +184,7 @@ async function fulfillSupabase(route: Route) {
   return json(rows);
 }
 
-test("removing the only sales rep role is blocked (F0.2.2 / F0.3.3)", async ({ context, page }) => {
+test("the org's only sales rep role can be removed", async ({ context, page }) => {
   await context.route(/\/(rest|auth)\/v1\//, fulfillSupabase);
   await context.addInitScript(
     ([authKey, session, orgId]) => {
@@ -211,7 +206,6 @@ test("removing the only sales rep role is blocked (F0.2.2 / F0.3.3)", async ({ c
   const removeRoleBtn = zebCard.getByLabel("Remove Sales Rep role");
   await removeRoleBtn.click();
 
-  await expect(page.getByText("This is the only sales rep", { exact: false })).toBeVisible({
-    timeout: 10000,
-  });
+  await expect(page.getByText("This is the only sales rep", { exact: false })).toHaveCount(0);
+  await expect(zebCard.getByLabel("Remove Sales Rep role")).toHaveCount(0, { timeout: 10000 });
 });

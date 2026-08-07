@@ -31,9 +31,14 @@ sets `lifecycle_state = 'prospect'`, and writes the owner into the party model
 additive 5-arg overload
 `create_organization(p_name, p_owner_name, p_owner_email, p_customer jsonb, p_sales_rep jsonb DEFAULT NULL)`**
 (migration `20260709130000_create_organization_rpc_v3_contacts.sql`): also
-requires a customer-escalation contact + sales rep (stored as parties with their
-roles; sales rep defaults to Zeb Loewenstine when omitted) via the
-`assert_contact_valid` / `insert_contact_party` helpers. Legacy 1-arg and 3-arg
+requires a customer-escalation contact, stored as a party with its role via the
+`assert_contact_valid` / `insert_contact_party` helpers. The sales rep is
+OPTIONAL — supplied → validated and stored the same way, omitted → no party and
+no assignment (migration `20260807120000_org_intake_no_default_sales_rep.sql`
+dropped E0.2's placeholder "Zeb Loewenstine" default, which had been landing an
+unasked-for Sales Rep on every org since E0.8 removed the intake field; that
+migration also deleted the placeholder rows it had already written). Sales reps
+are added afterwards on the People surface. Legacy 1-arg and 3-arg
 overloads are retained (additive rule) but the redesign app calls only the
 enforced 5-arg form.
 
