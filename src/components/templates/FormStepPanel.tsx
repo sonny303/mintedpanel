@@ -42,10 +42,11 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
 import {
   useApproveField,
-  useFieldDictionary,
   useFinishTraining,
   useManualField,
   useTokenCatalog,
+  useReproposeField,
+  useUpdateSharedFieldRegistry,
 } from "@/hooks/useMappingReview";
 import {
   useSetGlobalPortalFlags,
@@ -56,12 +57,15 @@ import {
 import { useCreatePortal } from "@/hooks/usePortals";
 import { useRecordTestFill, useTestFills } from "@/hooks/useFormOnboarding";
 import { useFormDrift } from "@/hooks/useFormDrift";
-import { buildDictionaryMap, resolvedSuggestionToken } from "@/lib/mappingConfidence";
 import { buildMockTokenMap, MOCK_FILL_PROFILE_VERSION } from "@/lib/mockFillProfile";
 import { computeTestRun, summarizeTestFill, type DryRunFieldMap } from "@/lib/testRunResults";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
 import type { PortalFieldMap } from "@/types";
+import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
+import { classifyFieldMap, registryCoverage, type RegistryRow } from "@/lib/fieldRegistry";
+import { groupTokens } from "@/lib/tokenGroups";
+import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 
 // Hardcoded-source maps auto-fill from their stored value, not a token; a
 // pseudo-token keeps them on computeTestRun's "filled" path (the mock profile
@@ -83,8 +87,6 @@ export interface FormStepPanelProps {
   onPortalKeyChange?: (portalKey: string) => void;
 }
 
-type TrainRow = { map: PortalFieldMap; broken: boolean };
-
 export function FormStepPanel({
   portalKey,
   templatePayerId,
@@ -101,7 +103,6 @@ export function FormStepPanel({
   const qc = useQueryClient();
   const portalsQ = usePortals();
   const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
-  const dictQ = useFieldDictionary();
   const tokensQ = useTokenCatalog();
   const drift = useFormDrift();
   const testFillsQ = useTestFills(portalKey ?? undefined);
@@ -109,6 +110,8 @@ export function FormStepPanel({
   const approveMut = useApproveField();
   const manualMut = useManualField();
   const trainGlobalMut = useTrainGlobalFieldMap();
+  const reproposeMut = useReproposeField();
+  const renameMut = useUpdateSharedFieldRegistry();
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
   const provenOrgMut = useMarkPortalProven();
@@ -133,17 +136,16 @@ export function FormStepPanel({
 
   // Queue-first ordering (F6.5.4): broken mappings lead, then undecided
   // (proposed) captures. Decided, unbroken rows need no attention.
-  const trainRows = useMemo<TrainRow[]>(() => {
-    const broken: TrainRow[] = [];
-    const proposed: TrainRow[] = [];
-    for (const m of maps) {
-      if (brokenIds.has(m.id)) broken.push({ map: m, broken: true });
-      else if (m.status === "proposed") proposed.push({ map: m, broken: false });
-    }
-    return [...broken, ...proposed];
-  }, [maps, brokenIds]);
-
   const approvedCount = useMemo(() => maps.filter((m) => m.status === "approved").length, [maps]);
+
+  // E6.9: ONE derivation for the read-out, shared with the dry run and the list
+  // via the classifier. `brokenIds` doubles as the stale set — a field the
+  // latest capture did not see (D7).
+  const coverage = useMemo(
+    () => registryCoverage(maps as RegistryRow[], brokenIds),
+    [maps, brokenIds],
+  );
+  const groupedTokens = useMemo(() => groupTokens(tokensQ.data ?? []), [tokensQ.data]);
 
   const stateLabel: { label: string; tone: StatusColor } = !portal
     ? { label: "Not registered", tone: "neutral" }
@@ -176,25 +178,70 @@ export function FormStepPanel({
     }
   }
 
-  async function decide(row: TrainRow, token: string | null) {
-    const m = row.map;
+  // E6.9 F6.9.4 — the three decisions, routed by tier. Shared rows
+  // (org_id IS NULL) can only be written through the SECURITY DEFINER RPCs;
+  // org rows keep the existing org-RLS paths.
+  async function decideRegistry(row: RegistryRow, decision: RegistryDecision) {
+    const map = maps.find((m) => m.id === row.id);
+    if (!map) return;
     try {
-      if (m.orgId === null) {
-        await trainGlobalMut.mutateAsync({
-          id: m.id,
-          patch: token
-            ? { status: "approved", source: "token", token }
-            : { status: "approved", source: "manual" },
+      if (map.orgId === null) {
+        const patch: GlobalTrainPatch =
+          decision.kind === "token"
+            ? { status: "approved", source: "token", token: decision.token }
+            : decision.kind === "fixed"
+              ? { status: "approved", source: "hardcoded", hardcodedValue: decision.value }
+              : decision.kind === "human"
+                ? { status: "approved", source: "manual" }
+                : { status: "proposed", source: "manual" };
+        await trainGlobalMut.mutateAsync({ id: map.id, patch });
+      } else if (decision.kind === "token") {
+        await approveMut.mutateAsync({
+          id: map.id,
+          token: decision.token,
+          fieldLabel: map.fieldLabel,
         });
-      } else if (token) {
-        await approveMut.mutateAsync({ id: m.id, token, fieldLabel: m.fieldLabel });
+      } else if (decision.kind === "human") {
+        await manualMut.mutateAsync({ id: map.id, fieldLabel: map.fieldLabel });
+      } else if (decision.kind === "unmap") {
+        await reproposeMut.mutateAsync({
+          id: map.id,
+          previous: { token: map.token, source: map.source },
+        });
       } else {
-        await manualMut.mutateAsync({ id: m.id, fieldLabel: m.fieldLabel });
+        // A fixed value on an ORG row has no RLS-safe write path today — the
+        // shared tier is where trained forms live (D12). Say so rather than
+        // failing silently at the database.
+        toast.error("Fixed values are set on the shared form library, not on an org override.");
+        return;
       }
       invalidateMaps();
-      await maybeFinishTraining(trainRows.length - 1);
+      // Keep the E6.5 verification stamp working: a decision that empties the
+      // attention queue means a human has now reviewed every captured field.
+      // Unmapping ADDS to the queue, so it never finishes training.
+      if (decision.kind !== "unmap") {
+        const wasPending = classifyFieldMap(map, { stale: brokenIds.has(map.id) }).needsDecision;
+        if (wasPending) await maybeFinishTraining(coverage.needsDecision - 1);
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save the mapping");
+      toast.error(err instanceof Error ? err.message : "Could not save the decision");
+    }
+  }
+
+  // F6.9.5 — inline rename writes display_label ONLY; the payer's raw
+  // field_label is never touched, so a re-capture cannot clobber it.
+  async function renameRegistryRow(row: RegistryRow, displayLabel: string | null) {
+    const map = maps.find((m) => m.id === row.id);
+    if (!map) return;
+    if (map.orgId !== null) {
+      toast.error("Renaming applies to the shared form library, not to an org override.");
+      return;
+    }
+    try {
+      await renameMut.mutateAsync([{ id: map.id, displayLabel }]);
+      invalidateMaps();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rename the field");
     }
   }
 
@@ -206,16 +253,30 @@ export function FormStepPanel({
     if (!portal || !portalKey) return;
     setRunning(true);
     try {
-      const included = maps.filter((m) => m.source !== "manual");
-      const dryRunMaps: DryRunFieldMap[] = included.map((m) => ({
-        selector: m.selector,
-        fieldLabel: m.fieldLabel,
-        status: m.status,
-        token:
-          m.status === "approved"
-            ? (m.token ?? (m.hardcodedValue != null ? HARDCODED_PSEUDO_TOKEN : null))
+      // E6.9 F6.9.4: classify the (status, source) PAIR. The old code filtered
+      // `source !== "manual"` BEFORE checking status — and capture writes
+      // (proposed, manual), so every undecided captured row vanished from the
+      // run meant to surface it, which is how this passed at 4 of 23 mapped.
+      // Decided human-fill rows are the ones that legitimately sit out.
+      const included = maps.filter((m) => {
+        const c = classifyFieldMap(m);
+        return c.decision !== "human" && c.decision !== "stale";
+      });
+      const dryRunMaps: DryRunFieldMap[] = included.map((m) => {
+        const c = classifyFieldMap(m);
+        return {
+          selector: m.selector,
+          fieldLabel: m.fieldLabel,
+          status: m.status,
+          // Autofillable rows carry a fillable key; everything else is fed null
+          // so it reports as needing a decision instead of disappearing.
+          token: c.autofillable
+            ? c.decision === "fixed"
+              ? HARDCODED_PSEUDO_TOKEN
+              : m.token
             : null,
-      }));
+        };
+      });
       const tokenMap = buildMockTokenMap(dryRunMaps.map((d) => d.token));
       const run = computeTestRun(dryRunMaps, tokenMap);
       await recordMut.mutateAsync({
@@ -251,12 +312,6 @@ export function FormStepPanel({
     ? summarizeTestFill(latestTest.fieldsFilled, latestTest.fieldsSkipped)
     : null;
 
-  const dict = useMemo(() => buildDictionaryMap(dictQ.data ?? []), [dictQ.data]);
-  const tokenOptions = useMemo(
-    () => (tokensQ.data ?? []).map((t) => t.token).sort(),
-    [tokensQ.data],
-  );
-
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="rounded-md border border-[#E8E5E0] bg-muted/20">
@@ -271,8 +326,8 @@ export function FormStepPanel({
               {brokenIds.size > 0 ? (
                 <StatusPill status="red" label={`${brokenIds.size} broken`} />
               ) : null}
-              {trainRows.length > 0 && brokenIds.size === 0 ? (
-                <StatusPill status="amber" label={`${trainRows.length} to train`} />
+              {coverage.needsDecision > 0 && brokenIds.size === 0 ? (
+                <StatusPill status="amber" label={`${coverage.needsDecision} to decide`} />
               ) : null}
             </span>
             <ChevronDown
@@ -306,8 +361,13 @@ export function FormStepPanel({
                 ) : (
                   <span>No form URL</span>
                 )}
+                {/* Informational only — no readiness semantics (D13). */}
                 <span>
-                  {approvedCount} mapped · {trainRows.filter((r) => !r.broken).length} to train
+                  {coverage.mapped} of {coverage.total} mapped
+                  {coverage.pages > 0
+                    ? ` · ${coverage.pages} page${coverage.pages === 1 ? "" : "s"} captured`
+                    : ""}
+                  {coverage.needsDecision > 0 ? ` · ${coverage.needsDecision} to decide` : ""}
                 </span>
               </div>
             )}
@@ -336,30 +396,23 @@ export function FormStepPanel({
               </div>
             ) : null}
 
-            {portal && trainRows.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-[12px] font-medium">
-                  Train mappings{" "}
-                  {brokenIds.size > 0 ? (
-                    <span className="font-normal text-[#B91C1C]">— broken fields first</span>
-                  ) : null}
-                </p>
-                {trainRows.map((row) => (
-                  <TrainRowEditor
-                    key={row.map.id}
-                    row={row}
-                    suggested={resolvedSuggestionToken(row.map, dict)}
-                    tokenOptions={tokenOptions}
-                    canEdit={canEdit}
-                    onDecide={decide}
-                  />
-                ))}
-              </div>
+            {/* E6.9 F6.9.3: EVERY row, always — decided rows included. The old
+                queue dropped a field the moment it was approved, so a wrong
+                mapping was unreachable from the editor. */}
+            {portal && maps.length > 0 ? (
+              <FieldRegistryList
+                rows={maps}
+                staleIds={brokenIds}
+                canEdit={canEdit}
+                groupedTokens={groupedTokens}
+                onDecide={decideRegistry}
+                onRename={renameRegistryRow}
+              />
             ) : null}
-            {portal && maps.length > 0 && trainRows.length === 0 ? (
+            {portal && maps.length > 0 && coverage.needsDecision === 0 ? (
               <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
                 <CheckCircle2 className="h-3.5 w-3.5 text-[#1B4D3E]" />
-                All {maps.length} captured field{maps.length === 1 ? "" : "s"} decided.
+                Every captured field has a decision.
               </p>
             ) : null}
 
@@ -418,78 +471,6 @@ export function FormStepPanel({
         />
       ) : null}
     </Collapsible>
-  );
-}
-
-function TrainRowEditor({
-  row,
-  suggested,
-  tokenOptions,
-  canEdit,
-  onDecide,
-}: {
-  row: TrainRow;
-  suggested: string | null;
-  tokenOptions: string[];
-  canEdit: boolean;
-  onDecide: (row: TrainRow, token: string | null) => Promise<void>;
-}) {
-  const [token, setToken] = useState<string>(suggested ?? "");
-  const [busy, setBusy] = useState(false);
-  const label = row.map.fieldLabel?.trim() || row.map.selector;
-
-  async function run(t: string | null) {
-    setBusy(true);
-    try {
-      await onDecide(row, t);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E8E5E0] bg-white px-2.5 py-2">
-      <span className="min-w-[140px] flex-1 text-[12px]">
-        {row.broken ? <StatusPill status="red" label="Broken" className="mr-1.5" /> : null}
-        {label}
-        {row.map.orgId === null ? (
-          <span className="ml-1.5 text-[10.5px] text-muted-foreground">(global)</span>
-        ) : null}
-      </span>
-      <Select
-        value={token || "__none__"}
-        onValueChange={(v) => setToken(v === "__none__" ? "" : v)}
-      >
-        <SelectTrigger className="h-7 w-[220px] text-[12px]">
-          <SelectValue placeholder="Pick a token" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">No token</SelectItem>
-          {tokenOptions.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        size="sm"
-        className="h-7 bg-[#1B4D3E] text-white hover:opacity-90"
-        disabled={!canEdit || busy || !token}
-        onClick={() => void run(token)}
-      >
-        Approve
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7"
-        disabled={!canEdit || busy}
-        onClick={() => void run(null)}
-      >
-        Manual
-      </Button>
-    </div>
   );
 }
 

@@ -12,6 +12,8 @@ import {
   reproposeFieldMap,
   batchApproveFieldMaps,
   type BatchApproveItem,
+  updateSharedFieldRegistry,
+  type SharedRegistryPatch,
 } from "@/services/portalFieldMaps";
 import { listFieldDictionary, upsertDictionaryEntry } from "@/services/fieldDictionary";
 import { listTokenCatalog } from "@/services/tokenCatalog";
@@ -80,6 +82,15 @@ export function useReproposeField() {
       id: string;
       previous: { token: string | null; source: PortalFieldMap["source"] };
     }) => reproposeFieldMap(id, previous),
+  });
+}
+
+// E6.9 F6.9.5 — write display_label / section / sort_order on SHARED rows.
+// Batched because re-capture reorders a whole page at once: one RPC call, one
+// transaction, no half-ordered intermediate state.
+export function useUpdateSharedFieldRegistry() {
+  return useMutation({
+    mutationFn: (patches: SharedRegistryPatch[]) => updateSharedFieldRegistry(patches),
   });
 }
 
