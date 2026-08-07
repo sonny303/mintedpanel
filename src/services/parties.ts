@@ -4,7 +4,9 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit, currentUserId } from "@/lib/audit";
+import { translateDbError } from "@/lib/dbErrors";
 import { groupOrgParties } from "@/lib/parties";
+import { composeFullName } from "@/lib/personName";
 import type {
   ContactInput,
   OrgContact,
@@ -23,6 +25,7 @@ const CONTACT_ROLE_KEYS: PartyRoleKey[] = ["owner", "customer_escalation_contact
 
 interface AssignmentWithParty {
   role_key: string;
+  is_default: boolean | null;
   parties: unknown;
 }
 
@@ -30,7 +33,7 @@ export async function listOrgContacts(): Promise<OrgContact[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("party_role_assignments")
-    .select("role_key, parties(*)")
+    .select("role_key, is_default, parties(*)")
     .eq("org_id", orgId)
     .in("role_key", CONTACT_ROLE_KEYS);
   if (error) throw error;
@@ -38,6 +41,7 @@ export async function listOrgContacts(): Promise<OrgContact[]> {
     .filter((row) => row.parties)
     .map((row) => ({
       roleKey: row.role_key as PartyRoleKey,
+      isDefault: Boolean(row.is_default),
       party: camelizeRow<Party>(row.parties),
     }));
 }
@@ -48,27 +52,24 @@ export async function listOrgParties(): Promise<OrgParty[]> {
   const orgId = requireActiveOrg();
   const { data, error } = await supabase
     .from("party_role_assignments")
-    .select("role_key, parties(*)")
+    .select("role_key, is_default, parties(*)")
     .eq("org_id", orgId);
   if (error) throw error;
   const rows = ((data ?? []) as AssignmentWithParty[])
     .filter((row) => row.parties)
     .map((row) => ({
       roleKey: row.role_key as PartyRoleKey,
+      isDefault: Boolean(row.is_default),
       party: camelizeRow<Party>(row.parties),
     }));
   return groupOrgParties(rows);
 }
 
-// Every party the caller can see (created by them OR assigned in one of their
-// orgs) — the pool for reusing an existing party in a new org (F0.3.4). RLS does
-// the scoping; the UI filters out parties already in the active org.
-export async function listVisibleParties(): Promise<Party[]> {
-  requireActiveOrg();
-  const { data, error } = await supabase.from("parties").select("*").order("name");
-  if (error) throw error;
-  return (data ?? []).map((row) => camelizeRow<Party>(row));
-}
+// NB listVisibleParties (the F0.3.4 cross-org reuse pool) is GONE as of the D8
+// decision, 2026-08-07. A party now belongs to exactly one org, so there is no
+// cross-org pool to read: `parties` RLS is org-membership-scoped and the
+// "Add existing person" dialog it fed has been removed. Reusing a person in a
+// second org means entering them there — which is the point.
 
 // Governed role reference list (F0.3.5). Read-only; active + reserved.
 export async function listPartyRoleTypes(): Promise<PartyRoleType[]> {
@@ -82,10 +83,14 @@ export async function listPartyRoleTypes(): Promise<PartyRoleType[]> {
 // Editable contact fields (E0.2 FR-4). Required-ness is enforced by the caller
 // (contactErrors) and RLS/writer policy; this patches only what's provided.
 export interface UpdatePartyInput {
-  name?: string;
+  firstName?: string;
+  lastName?: string;
+  title?: string | null;
   email?: string;
   phoneOffice?: string;
+  phoneExtension?: string | null;
   phoneMobile?: string | null;
+  fax?: string | null;
   addressLine1?: string;
   addressLine2?: string | null;
   city?: string;
@@ -97,6 +102,21 @@ export interface UpdatePartyInput {
 export async function updateParty(partyId: string, input: UpdatePartyInput): Promise<Party> {
   requireActiveOrg();
   const patch = snakeizeRow<PartyUpdate>(input);
+  // `name` is the retained display column and is never edited directly — it is
+  // recomposed whenever either half of the split name is patched, so the two can
+  // never disagree (D6).
+  if (input.firstName !== undefined || input.lastName !== undefined) {
+    const current = await supabase
+      .from("parties")
+      .select("first_name, last_name")
+      .eq("id", partyId)
+      .maybeSingle();
+    if (current.error) throw current.error;
+    patch.name = composeFullName({
+      firstName: input.firstName ?? current.data?.first_name ?? "",
+      lastName: input.lastName ?? current.data?.last_name ?? "",
+    });
+  }
   const { data, error } = await supabase
     .from("parties")
     .update(patch)
@@ -115,15 +135,19 @@ function nullifyEmpty(row: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// Create a person party (F0.3.1). created_by is the caller (RLS insert check).
+// Create a person party (F0.3.1). org_id is the ACTIVE org (D8 — a party belongs
+// to exactly one org, and RLS now requires a writer role in that org);
+// created_by stays as provenance, no longer as a visibility grant.
 export async function createParty(input: ContactInput): Promise<Party> {
-  requireActiveOrg();
+  const orgId = requireActiveOrg();
   const uid = currentUserId();
   if (!uid) throw new Error("Not authenticated");
-  const row = nullifyEmpty(snakeizeRow<Record<string, unknown>>(input)) as PartyInsert;
+  const row = nullifyEmpty(
+    snakeizeRow<Record<string, unknown>>({ ...input, name: composeFullName(input) }),
+  ) as PartyInsert;
   const { data, error } = await supabase
     .from("parties")
-    .insert({ ...row, party_type: "person", created_by: uid })
+    .insert({ ...row, org_id: orgId, party_type: "person", created_by: uid })
     .select("*")
     .single();
   if (error) throw error;
@@ -134,17 +158,72 @@ export async function createParty(input: ContactInput): Promise<Party> {
 
 // Assign an active role to a party at org scope (F0.3.2). The DB trigger rejects
 // reserved roles and the unique constraint rejects a duplicate assignment.
-export async function assignRole(partyId: string, roleKey: PartyRoleKey): Promise<void> {
+export async function assignRole(
+  partyId: string,
+  roleKey: PartyRoleKey,
+  opts: { isDefault?: boolean } = {},
+): Promise<void> {
   const orgId = requireActiveOrg();
-  const { error } = await supabase
-    .from("party_role_assignments")
-    .insert({ org_id: orgId, party_id: partyId, role_key: roleKey, scope_type: "org" });
-  if (error) throw error;
+  // The FIRST holder of a role becomes its default so the contact token family
+  // resolves immediately; a later holder is added non-default and must be
+  // promoted explicitly (setDefaultRole). The partial unique index is the
+  // backstop — this read only decides the sensible default.
+  let isDefault = opts.isDefault;
+  if (isDefault === undefined) {
+    const existing = await supabase
+      .from("party_role_assignments")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("role_key", roleKey)
+      .eq("is_default", true)
+      .limit(1);
+    if (existing.error) throw existing.error;
+    isDefault = (existing.data ?? []).length === 0;
+  }
+  const { error } = await supabase.from("party_role_assignments").insert({
+    org_id: orgId,
+    party_id: partyId,
+    role_key: roleKey,
+    scope_type: "org",
+    is_default: isDefault,
+  });
+  if (error) throw translateDbError(error);
   await writeAudit({
     actionType: "CREATE",
     entityType: "party_role_assignment",
     entityId: partyId,
-    after: { roleKey },
+    after: { roleKey, isDefault },
+  });
+}
+
+// Promote one holder to the org's DEFAULT for a role (D1). Demote-then-promote,
+// because the partial unique index rejects two defaults for the same
+// (org, role) — the two statements are not atomic, so the demote runs first and
+// a failure between them leaves the role temporarily default-less (tokens
+// resolve null with an honest reason) rather than violating the invariant.
+export async function setDefaultRole(partyId: string, roleKey: PartyRoleKey): Promise<void> {
+  const orgId = requireActiveOrg();
+  const demote = await supabase
+    .from("party_role_assignments")
+    .update({ is_default: false })
+    .eq("org_id", orgId)
+    .eq("role_key", roleKey)
+    .eq("is_default", true);
+  if (demote.error) throw demote.error;
+
+  const promote = await supabase
+    .from("party_role_assignments")
+    .update({ is_default: true })
+    .eq("org_id", orgId)
+    .eq("role_key", roleKey)
+    .eq("party_id", partyId);
+  if (promote.error) throw translateDbError(promote.error);
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "party_role_assignment",
+    entityId: partyId,
+    after: { roleKey, isDefault: true },
   });
 }
 

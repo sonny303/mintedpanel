@@ -7,6 +7,7 @@ import {
   QUICK_CARD_TABLE_PREFIXES,
   TOKEN_CATALOG_SKIPPED_COLUMNS,
   USER_TOKEN_FIELDS,
+  CONTACT_TOKEN_FIELDS,
   buildQuickCardCatalog,
   humanizeTokenField,
   isOfferedToken,
@@ -295,7 +296,11 @@ describe("quick-card catalog — exclusion policy", () => {
       { table: "contracts", token: "contract.state", column: "state" },
       { table: "providers", token: "provider.npi", column: "npi" },
     ]);
-    expect(catalog.map((f) => f.key)).toEqual(["provider.npi", ...USER_TOKEN_FIELDS]);
+    expect(catalog.map((f) => f.key)).toEqual([
+      "provider.npi",
+      ...USER_TOKEN_FIELDS,
+      ...CONTACT_TOKEN_FIELDS,
+    ]);
   });
 
   it("offers ssnLast4 (product decision 2026-07-28) but no full-SSN token exists", () => {

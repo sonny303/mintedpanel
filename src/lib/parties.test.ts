@@ -4,11 +4,17 @@ import type { Party, PartyRoleType } from "@/types";
 
 const party = (id: string, name: string): Party => ({
   id,
+  orgId: "org-1",
   partyType: "person",
   name,
+  firstName: name.split(" ")[0] ?? null,
+  lastName: name.split(" ").slice(1).join(" ") || null,
+  title: null,
   email: null,
   phoneOffice: null,
+  phoneExtension: null,
   phoneMobile: null,
+  fax: null,
   addressLine1: null,
   addressLine2: null,
   city: null,

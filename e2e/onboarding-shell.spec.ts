@@ -38,9 +38,14 @@ const party = (over: Record<string, unknown>) => ({
   id: "p",
   party_type: "person",
   name: "",
+  first_name: null,
+  last_name: null,
+  title: null,
   email: null,
   phone_office: null,
+  phone_extension: null,
   phone_mobile: null,
+  fax: null,
   address_line1: null,
   address_line2: null,
   city: null,
@@ -243,7 +248,9 @@ test("TS-17: intake run on the onboarding page lands in the new org's wizard flo
   await inputs.nth(0).fill("Point Place Physical Therapy");
   await inputs.nth(1).fill("Owner Point Place");
   await inputs.nth(2).fill("owner.point-place@example.test");
-  await form.locator("#customer-name").fill("Kitty Forman");
+  // D6: the intake form captures the name SPLIT (payer forms ask for it split).
+  await form.locator("#customer-first-name").fill("Kitty");
+  await form.locator("#customer-last-name").fill("Forman");
   await form.locator("#customer-email").fill("contact.point-place@example.test");
   await form.locator("#customer-phone").fill("414-555-0120");
   await form.locator("#customer-line1").fill("416 Marie Dr");

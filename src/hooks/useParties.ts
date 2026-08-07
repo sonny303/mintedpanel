@@ -9,10 +9,10 @@ import {
   listOrgContacts,
   listOrgParties,
   listPartyRoleTypes,
-  listVisibleParties,
   updateParty,
   createParty,
   assignRole,
+  setDefaultRole,
   unassignRole,
   removePartyFromOrg,
   type UpdatePartyInput,
@@ -47,16 +47,6 @@ export function usePartyRoleTypes() {
   });
 }
 
-export function useVisibleParties() {
-  const orgId = useActiveOrgId();
-  return useQuery({
-    queryKey: ["visible-parties", orgId ?? "none"] as const,
-    queryFn: listVisibleParties,
-    enabled: Boolean(orgId),
-    staleTime: FIVE_MINUTES,
-  });
-}
-
 // One invalidator for every party mutation — contacts + parties both derive from
 // party_role_assignments, so both caches must refresh.
 function useInvalidateParties() {
@@ -66,7 +56,6 @@ function useInvalidateParties() {
     if (!orgId) return;
     queryClient.invalidateQueries({ queryKey: queryKeys.orgContacts(orgId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.orgParties(orgId) });
-    queryClient.invalidateQueries({ queryKey: ["visible-parties", orgId] });
   };
 }
 
@@ -90,8 +79,17 @@ export function useCreateParty() {
 export function useAssignRole() {
   const invalidate = useInvalidateParties();
   return useMutation({
+    mutationFn: (vars: { partyId: string; roleKey: PartyRoleKey; isDefault?: boolean }) =>
+      assignRole(vars.partyId, vars.roleKey, { isDefault: vars.isDefault }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useSetDefaultRole() {
+  const invalidate = useInvalidateParties();
+  return useMutation({
     mutationFn: (vars: { partyId: string; roleKey: PartyRoleKey }) =>
-      assignRole(vars.partyId, vars.roleKey),
+      setDefaultRole(vars.partyId, vars.roleKey),
     onSuccess: invalidate,
   });
 }

@@ -66,20 +66,38 @@ export function OrgCreateFields({ form }: { form: OrgCreateForm }) {
 
       <div className="space-y-3">
         <div className={sectionLabel}>Organization contact</div>
-        <div>
-          <Label className="text-[12px]" htmlFor="customer-name">
-            Name
-          </Label>
-          <Input
-            id="customer-name"
-            value={form.customer.name}
-            onChange={(e) => form.patchCustomer({ name: e.target.value })}
-            aria-invalid={form.customerErrors.name ? true : undefined}
-            className="h-9"
-          />
-          {form.customerErrors.name ? (
-            <div className={fieldError}>{form.customerErrors.name}</div>
-          ) : null}
+        {/* D6: split at capture — payer forms ask for first and last separately. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-first-name">
+              First name
+            </Label>
+            <Input
+              id="customer-first-name"
+              value={form.customer.firstName}
+              onChange={(e) => form.patchCustomer({ firstName: e.target.value })}
+              aria-invalid={form.customerErrors.firstName ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.firstName ? (
+              <div className={fieldError}>{form.customerErrors.firstName}</div>
+            ) : null}
+          </div>
+          <div>
+            <Label className="text-[12px]" htmlFor="customer-last-name">
+              Last name
+            </Label>
+            <Input
+              id="customer-last-name"
+              value={form.customer.lastName}
+              onChange={(e) => form.patchCustomer({ lastName: e.target.value })}
+              aria-invalid={form.customerErrors.lastName ? true : undefined}
+              className="h-9"
+            />
+            {form.customerErrors.lastName ? (
+              <div className={fieldError}>{form.customerErrors.lastName}</div>
+            ) : null}
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>

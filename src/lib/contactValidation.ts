@@ -50,7 +50,8 @@ export function commonEmailDomainTypo(value: string): string | null {
 // assert_contact_valid: name, valid email, phone, and the meaningful split
 // address parts (line2/country optional). Returns per-field messages.
 export interface ContactFieldErrors {
-  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phoneOffice?: string;
   addressLine1?: string;
@@ -61,7 +62,10 @@ export interface ContactFieldErrors {
 
 export function contactErrors(c: ContactInput): ContactFieldErrors {
   const e: ContactFieldErrors = {};
-  if (!c.name.trim()) e.name = "Name is required";
+  // D6: the name is captured split, so it is validated split. The composed
+  // `name` the RPC still requires is derived at the service boundary.
+  if (!c.firstName.trim()) e.firstName = "First name is required";
+  if (!c.lastName.trim()) e.lastName = "Last name is required";
   if (!c.email.trim()) e.email = "Email is required";
   else if (!isValidEmail(c.email)) e.email = "Enter a valid email address";
   if (!c.phoneOffice.trim()) e.phoneOffice = "Phone is required";

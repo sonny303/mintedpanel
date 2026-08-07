@@ -34,6 +34,10 @@ function makeFakeDb(
       const builder: Record<string, unknown> = {
         select: () => builder,
         eq: () => builder,
+        // `in` is what the org-contact-family read uses (party_role_assignments
+        // filtered to the default holder of each contact role); an unstubbed
+        // table falls through to { data: null } like every other one here.
+        in: () => builder,
         or: () => builder,
         order: () => builder,
         maybeSingle: () => Promise.resolve(result()),

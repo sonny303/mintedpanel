@@ -25,6 +25,11 @@ function pgShape(error: unknown): PgErrorLike | null {
 // direct PostgREST errors and RPC-surfaced ones.
 const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]> = [
   [
+    "uq_party_role_assignments_default",
+    "Someone else is already the default for this role. Make them the default instead, or remove that role from them first.",
+  ],
+  ["party_role_assignments_unique", "This person already holds that role in this organization."],
+  [
     "contracts_group_id_payer_id_state_key",
     "A contract already exists for this group, payer, and state.",
   ],

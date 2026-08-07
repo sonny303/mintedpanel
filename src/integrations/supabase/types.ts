@@ -1688,13 +1688,19 @@ export type Database = {
           created_at: string;
           created_by: string;
           email: string | null;
+          fax: string | null;
+          first_name: string | null;
           id: string;
+          last_name: string | null;
           name: string;
+          org_id: string;
           party_type: string;
+          phone_extension: string | null;
           phone_mobile: string | null;
           phone_office: string | null;
           postal_code: string | null;
           state: string | null;
+          title: string | null;
         };
         Insert: {
           address_line1?: string | null;
@@ -1704,13 +1710,19 @@ export type Database = {
           created_at?: string;
           created_by: string;
           email?: string | null;
+          fax?: string | null;
+          first_name?: string | null;
           id?: string;
+          last_name?: string | null;
           name: string;
+          org_id: string;
           party_type?: string;
+          phone_extension?: string | null;
           phone_mobile?: string | null;
           phone_office?: string | null;
           postal_code?: string | null;
           state?: string | null;
+          title?: string | null;
         };
         Update: {
           address_line1?: string | null;
@@ -1720,15 +1732,29 @@ export type Database = {
           created_at?: string;
           created_by?: string;
           email?: string | null;
+          fax?: string | null;
+          first_name?: string | null;
           id?: string;
+          last_name?: string | null;
           name?: string;
+          org_id?: string;
           party_type?: string;
+          phone_extension?: string | null;
           phone_mobile?: string | null;
           phone_office?: string | null;
           postal_code?: string | null;
           state?: string | null;
+          title?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "parties_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       party_capture_links: {
         Row: {
@@ -1788,6 +1814,7 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          is_default: boolean;
           org_id: string;
           party_id: string;
           role_key: string;
@@ -1797,6 +1824,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           id?: string;
+          is_default?: boolean;
           org_id: string;
           party_id: string;
           role_key: string;
@@ -1806,6 +1834,7 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          is_default?: boolean;
           org_id?: string;
           party_id?: string;
           role_key?: string;
@@ -2449,57 +2478,6 @@ export type Database = {
           },
         ];
       };
-      provider_field_verifications: {
-        Row: {
-          created_at: string;
-          field_key: string;
-          id: string;
-          org_id: string;
-          provider_id: string;
-          updated_at: string;
-          verified_at: string;
-          verified_by: string | null;
-          verified_source: string;
-        };
-        Insert: {
-          created_at?: string;
-          field_key: string;
-          id?: string;
-          org_id: string;
-          provider_id: string;
-          updated_at?: string;
-          verified_at?: string;
-          verified_by?: string | null;
-          verified_source?: string;
-        };
-        Update: {
-          created_at?: string;
-          field_key?: string;
-          id?: string;
-          org_id?: string;
-          provider_id?: string;
-          updated_at?: string;
-          verified_at?: string;
-          verified_by?: string | null;
-          verified_source?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "provider_field_verifications_org_id_fkey";
-            columns: ["org_id"];
-            isOneToOne: false;
-            referencedRelation: "organizations";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "provider_field_verifications_provider_id_fkey";
-            columns: ["provider_id"];
-            isOneToOne: false;
-            referencedRelation: "providers";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
       provider_facility_assignments: {
         Row: {
           created_at: string | null;
@@ -2548,6 +2526,57 @@ export type Database = {
           },
           {
             foreignKeyName: "provider_facility_assignments_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      provider_field_verifications: {
+        Row: {
+          created_at: string;
+          field_key: string;
+          id: string;
+          org_id: string;
+          provider_id: string;
+          updated_at: string;
+          verified_at: string;
+          verified_by: string | null;
+          verified_source: string;
+        };
+        Insert: {
+          created_at?: string;
+          field_key: string;
+          id?: string;
+          org_id: string;
+          provider_id: string;
+          updated_at?: string;
+          verified_at?: string;
+          verified_by?: string | null;
+          verified_source?: string;
+        };
+        Update: {
+          created_at?: string;
+          field_key?: string;
+          id?: string;
+          org_id?: string;
+          provider_id?: string;
+          updated_at?: string;
+          verified_at?: string;
+          verified_by?: string | null;
+          verified_source?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "provider_field_verifications_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "provider_field_verifications_provider_id_fkey";
             columns: ["provider_id"];
             isOneToOne: false;
             referencedRelation: "providers";
@@ -3700,6 +3729,8 @@ export type Database = {
         };
         Returns: undefined;
       };
+      _party_first_name: { Args: { p_name: string }; Returns: string };
+      _party_last_name: { Args: { p_name: string }; Returns: string };
       _payer_assert_name_available: {
         Args: { p_exclude_id: string; p_keys: string[] };
         Returns: undefined;
@@ -3926,10 +3957,12 @@ export type Database = {
       };
       document_storage_org_id: { Args: { p_name: string }; Returns: string };
       get_sop_field_tokens: { Args: never; Returns: Json };
-      insert_contact_party: {
-        Args: { p: Json; p_uid: string };
-        Returns: string;
-      };
+      insert_contact_party:
+        | { Args: { p: Json; p_uid: string }; Returns: string }
+        | {
+            Args: { p: Json; p_org_id: string; p_uid: string };
+            Returns: string;
+          };
       list_global_payers: {
         Args: never;
         Returns: {

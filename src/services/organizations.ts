@@ -8,6 +8,7 @@
 // Any authenticated user may create an org and becomes its admin (self-serve).
 import { supabase } from "@/integrations/supabase/externalClient";
 import { snakeizeRow } from "@/lib/case";
+import { composeFullName } from "@/lib/personName";
 import type { ContactInput } from "@/types";
 
 // Owner (name + email) is REQUIRED (E0.1 F0.1.2) and a customer-escalation
@@ -25,9 +26,15 @@ export interface CreateOrganizationInput {
 }
 
 // ContactInput (camelCase) → the snake_case jsonb the RPC expects (keys match
-// the parties columns: phone_office, address_line1, …).
+// the parties columns: phone_office, address_line1, …). The composed `name` is
+// added here because assert_contact_valid still requires it while the form now
+// captures the halves (D6); first_name/last_name ride alongside it and
+// insert_contact_party persists all three.
 function contactToJsonb(contact: ContactInput): Record<string, unknown> {
-  return snakeizeRow<Record<string, unknown>>(contact);
+  return snakeizeRow<Record<string, unknown>>({
+    ...contact,
+    name: composeFullName(contact),
+  });
 }
 
 export async function createOrganization(input: CreateOrganizationInput): Promise<string> {

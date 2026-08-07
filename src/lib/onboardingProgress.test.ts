@@ -19,11 +19,17 @@ import type { Party } from "@/types";
 function party(over: Partial<Party>): Party {
   return {
     id: "p-1",
+    orgId: "org-1",
     partyType: "person",
     name: "",
+    firstName: null,
+    lastName: null,
+    title: null,
     email: null,
     phoneOffice: null,
+    phoneExtension: null,
     phoneMobile: null,
+    fax: null,
     addressLine1: null,
     addressLine2: null,
     city: null,

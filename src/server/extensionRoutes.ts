@@ -26,6 +26,7 @@ import { validateQuickCardFields } from "@/lib/quickCardCatalog";
 import { ok, fail, type ApiMeta } from "./envelope";
 import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
+import { resolveOrgContactProfileTokens } from "@/services/orgContacts";
 
 // Date-only ISO (YYYY-MM-DD) for the pure queue reducer — a server clock read
 // at the route boundary, never inside the pure module.
@@ -158,6 +159,16 @@ export async function handleProviderProfile(
   // 5); resolution notes surface in meta, never as errors.
   const userTokens = resolveUserTokens(ctx);
   profile.tokens.push(...userTokens.tokens);
+
+  // Org contact families (billingContact.* / credentialingContact.* /
+  // contractingSigner.*) — the same append-a-code-owned-family pattern as
+  // {{user.*}}, resolved from the org's DEFAULT holder of each role (D9/D11).
+  // They are NOT case-scoped, so unlike payer.*/mso.*/contract.* they carry
+  // real values here. A role with no default holder yields null tokens plus an
+  // unresolved reason naming the missing contact — never a guess.
+  const contactTokens = await resolveOrgContactProfileTokens({ db: ctx.db, orgId: ctx.orgId });
+  profile.tokens.push(...contactTokens.tokens);
+  profile.unresolved.push(...contactTokens.unresolved);
 
   // R2 locked decision 4: one audit row per successful profile read — the
   // actor, the provider, the route. NEVER the body or any token value. A

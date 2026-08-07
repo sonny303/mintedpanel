@@ -5,7 +5,17 @@ PM decisions, Sowmya, 2026-08-07. Scope: activate the three reserved
 `credentialing_contact` — and make contact fields resolvable as tokens so they
 can be pulled into payer-form mapping.
 
-This record is the input to a future build epic. Nothing here is built yet.
+**STATUS: BUILT (same day).** Every decision below shipped in migrations
+`20260807130000` + `20260807130100` (repo + hosted) and the app/token layer on
+top; see the "2026-08-07 — People contact roles + contact token families"
+section in `CLAUDE.md` for what landed where. This record stays as the WHY —
+the reasoning behind each choice, which the code comments point back to.
+
+Two things were decided during the build and are recorded here for completeness:
+D8 was implemented at the ENFORCED level (`org_id NOT NULL` + RLS rewrite, not
+just copy-on-assign), and the two questionable quick-card exclusions found by
+the D14 review were LOGGED rather than changed — they are a product call, not
+this epic's scope.
 
 ## The problem
 

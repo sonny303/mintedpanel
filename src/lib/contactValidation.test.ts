@@ -7,10 +7,14 @@ import type { ContactInput } from "@/types";
 // intake stopped auto-creating a placeholder sales rep and that constant was
 // deleted; this is a local fixture with the same shape.
 const FULL_CONTACT: ContactInput = {
-  name: "Dana Reyes",
+  firstName: "Dana",
+  lastName: "Reyes",
+  title: "",
   email: "dana.reyes@example.test",
   phoneOffice: "704-555-0100",
+  phoneExtension: "",
   phoneMobile: "",
+  fax: "",
   addressLine1: "101 S Tryon St",
   addressLine2: "Suite 400",
   city: "Charlotte",
@@ -52,7 +56,16 @@ describe("contactErrors", () => {
   it("flags every required field on an empty contact (E0.2 FR-2)", () => {
     const e = contactErrors(EMPTY_CONTACT);
     expect(Object.keys(e).sort()).toEqual(
-      ["addressLine1", "city", "email", "name", "phoneOffice", "postalCode", "state"].sort(),
+      [
+        "addressLine1",
+        "city",
+        "email",
+        "firstName",
+        "lastName",
+        "phoneOffice",
+        "postalCode",
+        "state",
+      ].sort(),
     );
   });
 

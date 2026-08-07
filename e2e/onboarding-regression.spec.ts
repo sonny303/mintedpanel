@@ -201,7 +201,9 @@ test("duplicate org name surfaces a server error on the onboarding form (F0.1.2)
   await inputs.nth(1).fill("Jane Owner");
   await inputs.nth(2).fill("jane@example.test");
 
-  await form.locator("#customer-name").fill("Customer Person");
+  // D6: the intake form captures the name SPLIT (payer forms ask for it split).
+  await form.locator("#customer-first-name").fill("Customer");
+  await form.locator("#customer-last-name").fill("Person");
   await form.locator("#customer-email").fill("customer@example.test");
   await form.locator("#customer-phone").fill("555-555-0100");
   await form.locator("#customer-line1").fill("123 Main St");

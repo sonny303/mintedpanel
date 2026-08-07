@@ -16,7 +16,7 @@
 // (authenticated users) remain distinct records by design.
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -40,9 +40,9 @@ import { MembersPanel } from "@/components/settings/MembersPanel";
 import {
   useOrgParties,
   usePartyRoleTypes,
-  useVisibleParties,
   useCreateParty,
   useAssignRole,
+  useSetDefaultRole,
   useUnassignRole,
   useUpdateParty,
   useRemovePartyFromOrg,
@@ -115,9 +115,10 @@ function PartyCard({
   onEdit: (p: Party) => void;
   onRemove: (op: OrgParty) => void;
 }) {
-  const { party, roleKeys } = orgParty;
+  const { party, roleKeys, defaultRoleKeys } = orgParty;
   const assignRole = useAssignRole();
   const unassignRole = useUnassignRole();
+  const setDefault = useSetDefaultRole();
   const address = formatAddress(party);
 
   // Chip labels resolve from the LIVE governed list first (a role added to
@@ -135,6 +136,14 @@ function PartyCard({
     unassignRole.mutate(
       { partyId: party.id, roleKey },
       { onError: (e) => toast.error(errMessage(e, "Couldn't remove role")) },
+    );
+  // D1: the default holder is what the contact token families resolve, so it is
+  // marked on the chip and switchable in one click. At most one party per
+  // (org, role) — the partial unique index is the backstop.
+  const doSetDefault = (roleKey: PartyRoleKey) =>
+    setDefault.mutate(
+      { partyId: party.id, roleKey },
+      { onError: (e) => toast.error(errMessage(e, "Couldn't set the default")) },
     );
 
   return (
@@ -162,19 +171,43 @@ function PartyCard({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {roleKeys.map((rk) => (
-          <span key={rk} className={chipClass}>
-            {roleLabel(rk)}
-            <button
-              type="button"
-              aria-label={`Remove ${roleLabel(rk)} role`}
-              onClick={() => doUnassign(rk)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
+        {roleKeys.map((rk) => {
+          const isDefault = defaultRoleKeys.includes(rk);
+          return (
+            <span key={rk} className={chipClass}>
+              {roleLabel(rk)}
+              {isDefault ? (
+                <span
+                  title={`Used for ${roleLabel(rk)} form fields`}
+                  aria-label={`${roleLabel(rk)} — used for form fields`}
+                  className="inline-flex items-center gap-1 text-[11px] text-[#1B4D3E]"
+                >
+                  <Star className="h-3 w-3 fill-current" />
+                  Used on forms
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Use this person for ${roleLabel(rk)} form fields`}
+                  onClick={() => doSetDefault(rk)}
+                  disabled={setDefault.isPending}
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <Star className="h-3 w-3" />
+                  Use on forms
+                </button>
+              )}
+              <button
+                type="button"
+                aria-label={`Remove ${roleLabel(rk)} role`}
+                onClick={() => doUnassign(rk)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          );
+        })}
         <AddRoleSelect
           held={roleKeys}
           roleTypes={roleTypes}
@@ -287,94 +320,11 @@ function AddPartyDialog({
   );
 }
 
-function AddExistingPartyDialog({
-  roleTypes,
-  candidates,
-  onClose,
-}: {
-  roleTypes: PartyRoleType[];
-  candidates: Party[];
-  onClose: () => void;
-}) {
-  const assignRole = useAssignRole();
-  const [partyId, setPartyId] = useState<string>("");
-  const [roleKey, setRoleKey] = useState<PartyRoleKey | "">("");
-  const [formError, setFormError] = useState<string | null>(null);
-
-  function save() {
-    if (!partyId) {
-      setFormError("Choose a person to add.");
-      return;
-    }
-    if (!roleKey) {
-      setFormError("Choose a role.");
-      return;
-    }
-    setFormError(null);
-    assignRole.mutate(
-      { partyId, roleKey },
-      {
-        onSuccess: () => {
-          toast.success("Party added to this organization");
-          onClose();
-        },
-        onError: (e) => setFormError(errMessage(e, "Couldn't add party")),
-      },
-    );
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md border-[#E8E5E0] shadow-none">
-        <DialogHeader>
-          <DialogTitle>Add an existing person</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <p className="text-[12px] text-muted-foreground">
-            Reuse someone already in your portfolio (one record across organizations).
-          </p>
-          <div>
-            <Label className="text-[12px]">Person</Label>
-            <Select value={partyId} onValueChange={setPartyId}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select a person" />
-              </SelectTrigger>
-              <SelectContent>
-                {candidates.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                    {p.email ? ` · ${p.email}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-[12px]">Role</Label>
-            <ActiveRoleSelect roleTypes={roleTypes} value={roleKey} onChange={setRoleKey} />
-          </div>
-          {formError ? (
-            <div className="text-[12px] text-[#B91C1C] border border-[#FCA5A5] bg-[#FEF2F2] rounded-md px-3 py-2">
-              {formError}
-            </div>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={assignRole.isPending}>
-            Cancel
-          </Button>
-          <Button
-            onClick={save}
-            disabled={assignRole.isPending}
-            className="bg-[#1B4D3E] hover:bg-[#163E32] text-white"
-          >
-            {assignRole.isPending ? "Adding…" : "Add to organization"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// NB the "Add existing person" reuse dialog (F0.3.4) is GONE as of the D8
+// decision, 2026-08-07: a party belongs to exactly one org, so there is no
+// cross-org pool to pick from. Adding the same human to a second org means
+// entering them there, which is what keeps one org's edit from rewriting
+// another org's contact.
 
 function EditPartyDialog({ party, onClose }: { party: Party; onClose: () => void }) {
   const update = useUpdateParty();
@@ -479,28 +429,18 @@ function RemovePartyDialog({ orgParty, onClose }: { orgParty: OrgParty; onClose:
 export function PartiesManager() {
   const partiesQ = useOrgParties();
   const roleTypesQ = usePartyRoleTypes();
-  const visibleQ = useVisibleParties();
   const [adding, setAdding] = useState(false);
-  const [addingExisting, setAddingExisting] = useState(false);
   const [editing, setEditing] = useState<Party | null>(null);
   const [removing, setRemoving] = useState<OrgParty | null>(null);
 
   const parties = partiesQ.data ?? [];
   const roleTypes = roleTypesQ.data ?? [];
-  const inOrgIds = new Set(parties.map((p) => p.party.id));
-  const candidates = (visibleQ.data ?? []).filter((p) => !inOrgIds.has(p.id));
 
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[15px] font-semibold text-foreground">People</h2>
         <div className="flex gap-2">
-          {candidates.length > 0 ? (
-            <Button variant="outline" size="sm" onClick={() => setAddingExisting(true)}>
-              <UserPlus className="h-4 w-4" />
-              Add existing
-            </Button>
-          ) : null}
           <Button
             size="sm"
             onClick={() => setAdding(true)}
@@ -542,13 +482,6 @@ export function PartiesManager() {
       )}
 
       {adding ? <AddPartyDialog roleTypes={roleTypes} onClose={() => setAdding(false)} /> : null}
-      {addingExisting ? (
-        <AddExistingPartyDialog
-          roleTypes={roleTypes}
-          candidates={candidates}
-          onClose={() => setAddingExisting(false)}
-        />
-      ) : null}
       {editing ? <EditPartyDialog party={editing} onClose={() => setEditing(null)} /> : null}
       {removing ? (
         <RemovePartyDialog orgParty={removing} onClose={() => setRemoving(null)} />
