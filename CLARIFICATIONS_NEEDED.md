@@ -60,6 +60,36 @@ Format per entry:
 
 ## Resolved
 
+## [e6.9] Global-vs-org field-map precedence — RESOLVED (2026-08-07)
+
+- **Issue:** The editable registry needed a deterministic winner and mutation
+  target when a global row and an org override share a selector.
+- **Impact:** PR 2 could otherwise edit the wrong tier, hide the effective
+  mapping, or silently change every inheriting org.
+- **Options considered:** show both with org precedence; collapse to one
+  effective row; make global always win.
+- **Decision:** **Org override wins for that org.** Show both rows with tier
+  labels, edit each row in its own tier, and warn that the org row shadows
+  global. A global edit still reaches orgs without an override. No edit
+  implicitly creates, deletes, or switches an override.
+
+## [e6.9] Replacement for Proven in payer readiness — RESOLVED (2026-08-07)
+
+- **Issue:** Proven only meant every captured field was decided, not that the
+  real form was captured completely, but it also defined the funnel's terminal
+  `ready` state, next action/deep link, Payer Setup KPI, Templates copy, and
+  Scorecard behavior.
+- **Impact:** Dropping Proven without a replacement would leave readiness and
+  several consuming surfaces undefined.
+- **Options considered:** remove form readiness; infer it from captured
+  coverage; require an explicit trainer attestation.
+- **Decision:** **Explicit Form setup reviewed attestation.** Coverage remains
+  informational. Attestation stamps `form_setup_reviewed_at` and
+  `form_setup_reviewed_by`; any global capture or global-registry change clears
+  both atomically, while org-override edits do not mutate global readiness.
+  The funnel uses `reviewed`, its next action becomes `review_form_setup`, and
+  the KPI, Templates copy, Scorecard, filters, intents, and tests move together.
+
 ## [e6.9] Staff-only training mode vs the locked "no platform roles" decision — RESOLVED (2026-08-07)
 
 - **Issue:** E6.9 D11 (PM, in-session 2026-08-07) gated the Workbench's new
