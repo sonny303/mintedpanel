@@ -32,6 +32,7 @@ import {
 import { isValidEmail } from "@/lib/contactValidation";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
+import type { SopFieldToken, TokenGroup } from "@/lib/tokenGroups";
 
 interface DataField {
   label: string;
@@ -74,18 +75,6 @@ interface EditableTask {
   // Tasks-&-steps merge folded the old Tasks step into this card).
   executionType: ExecutionType;
   steps: EditableStep[];
-}
-
-interface SopFieldToken {
-  token: string;
-  table: string;
-  column: string;
-}
-
-interface TokenGroup {
-  prefix: string;
-  label: string;
-  items: SopFieldToken[];
 }
 
 interface DragStep {

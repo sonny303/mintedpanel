@@ -95,38 +95,8 @@ import {
 import { useSaveSopTemplateDraft, useDeleteSopTemplateDraft } from "@/hooks/useSopTemplateDrafts";
 import { cn } from "@/lib/utils";
 import type { Portal, SOPTaskDefinition, SOPTemplate, SopTemplateDraft } from "@/types";
-
-interface SopFieldToken {
-  token: string;
-  table: string;
-  column: string;
-}
-
-const TOKEN_GROUP_LABELS: Record<string, string> = {
-  provider: "Provider",
-  group: "Group",
-  facility: "Facility",
-  payer: "Payer",
-  mso: "MSO",
-  contract: "Contract",
-  license: "License",
-  assignment: "Assignment",
-  groupInsurance: "Group Insurance",
-  user: "User",
-};
-
-const TOKEN_GROUP_ORDER = [
-  "provider",
-  "group",
-  "facility",
-  "payer",
-  "mso",
-  "contract",
-  "license",
-  "assignment",
-  "groupInsurance",
-  "user",
-];
+import { groupTokens } from "@/lib/tokenGroups";
+import type { SopFieldToken } from "@/lib/tokenGroups";
 
 const US_STATES = [
   "AL",
@@ -262,24 +232,8 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     () => filterAuthoringTokens((tokensQ.data ?? []) as SopFieldToken[]),
     [tokensQ.data],
   );
-  const groupedTokens = useMemo(() => {
-    const map = new Map<string, SopFieldToken[]>();
-    for (const t of tokens) {
-      const prefix = t.token.split(".")[0];
-      const arr = map.get(prefix) ?? [];
-      arr.push(t);
-      map.set(prefix, arr);
-    }
-    // Known prefixes first (in order), then any unexpected prefixes so no live
-    // token is ever hidden from the picker.
-    const known = TOKEN_GROUP_ORDER.filter((p) => map.has(p));
-    const extra = [...map.keys()].filter((p) => !TOKEN_GROUP_ORDER.includes(p)).sort();
-    return [...known, ...extra].map((p) => ({
-      prefix: p,
-      label: TOKEN_GROUP_LABELS[p] ?? p,
-      items: map.get(p) ?? [],
-    }));
-  }, [tokens]);
+  // E6.9 F6.9.4: ONE grouping helper, shared with the field-registry picker.
+  const groupedTokens = useMemo(() => groupTokens(tokens), [tokens]);
   const firstToken = tokens[0]?.token ?? "provider.firstName";
 
   // A deep-linked intent lands directly on Tasks & steps — that is where the
