@@ -17,6 +17,12 @@ import type { Portal } from "@/types";
 const PORTAL_COLUMNS =
   "id, org_id, portal_key, name, payer_id, form_url, is_verified, last_verified_at, proven_at, url_changed_at, created_at, updated_at";
 
+// The /api projection adds the payer's DISPLAY NAME. E6.9's Train-forms module
+// groups portals by payer, and the extension has no payer endpoint of its own —
+// a payer id alone would render as a UUID. Embedded rather than a second round
+// trip, and it is not PHI (a payer's name is public catalog identity).
+const PORTAL_API_COLUMNS = `${PORTAL_COLUMNS}, payers(name)`;
+
 export interface PortalServiceCtx {
   db: SupabaseClient<Database>;
   orgId: string;
@@ -34,13 +40,17 @@ export interface PortalServiceCtx {
  *
  * Not PHI (a registry of payer portals and their URLs) — no audit row, and no
  * role gate: billing may read, matching the field-maps route. */
+/** A registry row as the extension sees it: the portal plus its payer's
+ * display name (see PORTAL_API_COLUMNS). */
+export type PortalApiRow = Portal & { payerName: string | null };
+
 export async function listPortalsForApi(
   ctx: PortalServiceCtx,
   filters: { portalKey?: string } = {},
-): Promise<Portal[]> {
+): Promise<PortalApiRow[]> {
   let query = ctx.db
     .from("portals")
-    .select(PORTAL_COLUMNS)
+    .select(PORTAL_API_COLUMNS)
     .or(`org_id.is.null,org_id.eq.${ctx.orgId}`)
     .order("name", { ascending: true })
     .order("id", { ascending: true });
@@ -51,7 +61,12 @@ export async function listPortalsForApi(
   }
   const { data, error } = await query;
   if (error) throw error;
-  return camelizeRow<Portal[]>(data ?? []);
+  type EmbeddedRow = Portal & { payers?: { name?: string | null } | null };
+  const rows = camelizeRow<EmbeddedRow[]>(data ?? []);
+  return rows.map(({ payers, ...portal }) => ({
+    ...portal,
+    payerName: payers?.name ?? null,
+  }));
 }
 
 export interface PortalInput {
