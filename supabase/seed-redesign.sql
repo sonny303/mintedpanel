@@ -47,21 +47,27 @@ WHERE NOT EXISTS (
 -- ---------------------------------------------------------------------------
 -- E0.1 — Owner parties (P5), one per org. Idempotent by owner email.
 -- ---------------------------------------------------------------------------
-INSERT INTO public.parties (party_type, name, email, created_by)
-SELECT 'person', v.owner_name, v.owner_email, '0e5eed00-0000-4000-a000-000000000000'::uuid
+INSERT INTO public.parties (org_id, party_type, name, first_name, last_name, email, created_by)
+SELECT o.id, 'person', v.owner_name,
+       public._party_first_name(v.owner_name), public._party_last_name(v.owner_name),
+       v.owner_email, '0e5eed00-0000-4000-a000-000000000000'::uuid
 FROM (VALUES
-  ('Owner Outer Banks', 'owner.outer-banks@example.test'),
-  ('Owner Tree Hill',   'owner.tree-hill@example.test'),
-  ('Owner Shelby',      'owner.shelby@example.test'),
-  ('Owner OB Therapy',  'owner.ob-therapy@example.test'),
-  ('Owner Gemstone',    'owner.gemstone@example.test'),
-  ('Owner Lowcountry',  'owner.lowcountry@example.test'),
-  ('Owner South Park',  'owner.south-park@example.test'),
-  ('Owner Dillon',      'owner.dillon@example.test'),
-  ('Owner Lone Star',   'owner.lone-star@example.test'),
-  ('Owner Point Place', 'owner.point-place@example.test'),
-  ('Owner Rose City',   'owner.rose-city@example.test')
-) AS v(owner_name, owner_email)
+  ('Owner Outer Banks', 'owner.outer-banks@example.test', 'Outer Banks Rehab Group'),
+  ('Owner Tree Hill',   'owner.tree-hill@example.test',   'Tree Hill Sports Therapy'),
+  ('Owner Shelby',      'owner.shelby@example.test',      'Shelby Sports Rehab'),
+  ('Owner OB Therapy',  'owner.ob-therapy@example.test',  'Outer Banks Therapy Group'),
+  ('Owner Gemstone',    'owner.gemstone@example.test',    'Gemstone Family Rehab'),
+  ('Owner Lowcountry',  'owner.lowcountry@example.test',  'Lowcountry Charm PT'),
+  ('Owner South Park',  'owner.south-park@example.test',  'South Park Physical Therapy'),
+  ('Owner Dillon',      'owner.dillon@example.test',      'Dillon Sports Medicine'),
+  ('Owner Lone Star',   'owner.lone-star@example.test',   'Lone Star Rehab Group'),
+  ('Owner Point Place', 'owner.point-place@example.test', 'Point Place Physical Therapy'),
+  ('Owner Rose City',   'owner.rose-city@example.test',   'Rose City Rehab Collective')
+) AS v(owner_name, owner_email, org_name)
+-- D8 (2026-08-07): a party belongs to exactly ONE org, so the owner row is
+-- created against its org rather than floating free to be joined later.
+JOIN public.organizations o
+  ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
 WHERE NOT EXISTS (
   SELECT 1 FROM public.parties p WHERE p.email = v.owner_email
 );
@@ -69,8 +75,8 @@ WHERE NOT EXISTS (
 -- ---------------------------------------------------------------------------
 -- E0.1 — Owner role assignments (org scope). Idempotent via the unique tuple.
 -- ---------------------------------------------------------------------------
-INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
-SELECT o.id, p.id, 'owner', 'org'
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type, is_default)
+SELECT o.id, p.id, 'owner', 'org', true
 FROM (VALUES
   ('Outer Banks Rehab Group',      'owner.outer-banks@example.test'),
   ('Tree Hill Sports Therapy',     'owner.tree-hill@example.test'),
@@ -86,24 +92,41 @@ FROM (VALUES
 ) AS v(org_name, owner_email)
 JOIN public.organizations o
   ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
-JOIN public.parties p ON p.email = v.owner_email
+JOIN public.parties p ON p.email = v.owner_email AND p.org_id = o.id
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- E0.2 — Sales rep (Zeb Loewenstine): one party, sales_rep on every seed org.
+-- E0.2 — Sales rep (Zeb Loewenstine): sales_rep on every seed org.
 -- ---------------------------------------------------------------------------
+-- D8 (2026-08-07): Zeb used to be ONE party assigned across all 11 orgs — the
+-- cross-org identity that decision retired. He is now one party PER org (same
+-- human, an org-owned record each), which is what the app does for real orgs.
 INSERT INTO public.parties (
-  party_type, name, email, phone_office, address_line1, address_line2, city, state, postal_code, country, created_by
+  org_id, party_type, name, first_name, last_name, email, phone_office,
+  address_line1, address_line2, city, state, postal_code, country, created_by
 )
-SELECT 'person', 'Zeb Loewenstine', 'zeb@mintedpanel.example.test', '704-555-0100',
+SELECT o.id, 'person', 'Zeb Loewenstine', 'Zeb', 'Loewenstine',
+       'zeb@mintedpanel.example.test', '704-555-0100',
        '101 S Tryon St', 'Suite 400', 'Charlotte', 'NC', '28280', 'US',
        '0e5eed00-0000-4000-a000-000000000000'::uuid
-WHERE NOT EXISTS (SELECT 1 FROM public.parties WHERE email = 'zeb@mintedpanel.example.test');
-
-INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
-SELECT o.id, z.id, 'sales_rep', 'org'
 FROM public.organizations o
-CROSS JOIN LATERAL (SELECT id FROM public.parties WHERE email = 'zeb@mintedpanel.example.test' LIMIT 1) z
+WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) IN (
+  'outerbanksrehabgroup','treehillsportstherapy','shelbysportsrehab','outerbankstherapygroup',
+  'gemstonefamilyrehab','lowcountrycharmpt','southparkphysicaltherapy','dillonsportsmedicine',
+  'lonestarrehabgroup','pointplacephysicaltherapy','rosecityrehabcollective'
+)
+AND NOT EXISTS (
+  SELECT 1 FROM public.parties p
+  WHERE p.org_id = o.id AND p.email = 'zeb@mintedpanel.example.test'
+);
+
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type, is_default)
+SELECT o.id, z.id, 'sales_rep', 'org', true
+FROM public.organizations o
+CROSS JOIN LATERAL (
+  SELECT id FROM public.parties
+   WHERE org_id = o.id AND email = 'zeb@mintedpanel.example.test' LIMIT 1
+) z
 WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) IN (
   'outerbanksrehabgroup','treehillsportstherapy','shelbysportsrehab','outerbankstherapygroup',
   'gemstonefamilyrehab','lowcountrycharmpt','southparkphysicaltherapy','dillonsportsmedicine',
@@ -115,9 +138,12 @@ ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
 -- E0.2 — Customer escalation contacts (one per org). Idempotent by email.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.parties (
-  party_type, name, email, phone_office, address_line1, city, state, postal_code, country, created_by
+  org_id, party_type, name, first_name, last_name, email, phone_office,
+  address_line1, city, state, postal_code, country, created_by
 )
-SELECT 'person', v.name, v.email, v.phone, v.line1, v.city, v.state, v.zip, 'US',
+SELECT o.id, 'person', v.name,
+       public._party_first_name(v.name), public._party_last_name(v.name),
+       v.email, v.phone, v.line1, v.city, v.state, v.zip, 'US',
        '0e5eed00-0000-4000-a000-000000000000'::uuid
 FROM (VALUES
   ('Sarah Cameron',     'contact.outer-banks@example.test', '252-555-0111', '12 Figure Eight Rd',        'Kill Devil Hills', 'NC', '27948'),
@@ -132,10 +158,25 @@ FROM (VALUES
   ('Kitty Forman',      'contact.point-place@example.test', '414-555-0120', '416 Marie Dr',              'Point Place',      'WI', '53511'),
   ('Candace Devereaux', 'contact.rose-city@example.test',   '503-555-0121', '3550 N Mississippi Ave',    'Portland',         'OR', '97227')
 ) AS v(name, email, phone, line1, city, state, zip)
+JOIN (VALUES
+  ('contact.outer-banks@example.test', 'Outer Banks Rehab Group'),
+  ('contact.tree-hill@example.test',   'Tree Hill Sports Therapy'),
+  ('contact.shelby@example.test',      'Shelby Sports Rehab'),
+  ('contact.ob-therapy@example.test',  'Outer Banks Therapy Group'),
+  ('contact.gemstone@example.test',    'Gemstone Family Rehab'),
+  ('contact.lowcountry@example.test',  'Lowcountry Charm PT'),
+  ('contact.south-park@example.test',  'South Park Physical Therapy'),
+  ('contact.dillon@example.test',      'Dillon Sports Medicine'),
+  ('contact.lone-star@example.test',   'Lone Star Rehab Group'),
+  ('contact.point-place@example.test', 'Point Place Physical Therapy'),
+  ('contact.rose-city@example.test',   'Rose City Rehab Collective')
+) AS m(email, org_name) ON m.email = v.email
+JOIN public.organizations o
+  ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(m.org_name, '\s+', '', 'g'))
 WHERE NOT EXISTS (SELECT 1 FROM public.parties p WHERE p.email = v.email);
 
-INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
-SELECT o.id, p.id, 'customer_escalation_contact', 'org'
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type, is_default)
+SELECT o.id, p.id, 'customer_escalation_contact', 'org', true
 FROM (VALUES
   ('Outer Banks Rehab Group',      'contact.outer-banks@example.test'),
   ('Tree Hill Sports Therapy',     'contact.tree-hill@example.test'),
@@ -151,18 +192,23 @@ FROM (VALUES
 ) AS v(org_name, email)
 JOIN public.organizations o
   ON lower(regexp_replace(o.name, '\s+', '', 'g')) = lower(regexp_replace(v.org_name, '\s+', '', 'g'))
-JOIN public.parties p ON p.email = v.email
+JOIN public.parties p ON p.email = v.email AND p.org_id = o.id
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
 
 -- ---------------------------------------------------------------------------
--- E0.3 — TS-10: Zeb ALSO holds 'owner' on Point Place Physical Therapy, in
--- addition to the seeded "Owner Point Place" and his sales_rep everywhere. One
--- party, many roles across orgs (F0.3.3/F0.3.4). Idempotent via the unique tuple.
+-- E0.3 — TS-10: Point Place's Zeb ALSO holds 'owner', beside the seeded
+-- "Owner Point Place" and his own sales_rep. F0.3.3 (one party, many roles)
+-- still holds — but WITHIN one org: the cross-org half (F0.3.4) was retired by
+-- D8 (2026-08-07), so this is the Point Place Zeb row, not a shared one. Added
+-- NON-default because "Owner Point Place" is already the org's default owner.
 -- ---------------------------------------------------------------------------
-INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type)
-SELECT o.id, z.id, 'owner', 'org'
+INSERT INTO public.party_role_assignments (org_id, party_id, role_key, scope_type, is_default)
+SELECT o.id, z.id, 'owner', 'org', false
 FROM public.organizations o
-CROSS JOIN LATERAL (SELECT id FROM public.parties WHERE email = 'zeb@mintedpanel.example.test' LIMIT 1) z
+CROSS JOIN LATERAL (
+  SELECT id FROM public.parties
+   WHERE org_id = o.id AND email = 'zeb@mintedpanel.example.test' LIMIT 1
+) z
 WHERE lower(regexp_replace(o.name, '\s+', '', 'g')) = 'pointplacephysicaltherapy'
 ON CONFLICT ON CONSTRAINT party_role_assignments_unique DO NOTHING;
 

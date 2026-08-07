@@ -479,8 +479,9 @@ test("TS-112: A→Z roster with ambient gaps; inline edit writes ONLY its field;
   await dialog.getByLabel("Facility to add").click();
   await page.getByRole("option", { name: "Nags Head Clinic" }).click();
   await dialog.getByLabel("Start date").click();
-  // Day buttons carry full accessible names (the assignments-wizard idiom).
-  await page.getByRole("button", { name: /July 15th/ }).click();
+  // Day buttons carry full accessible names. Pick from the visible month
+  // because this new assignment has no selected date to anchor the calendar.
+  await page.getByRole("button", { name: /15th/ }).first().click();
   await dialog.getByRole("button", { name: "Add facility", exact: true }).click();
   // The write-through lands, then the list re-derives with the new location.
   await expect

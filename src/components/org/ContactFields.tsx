@@ -16,23 +16,58 @@ const errClass = "mt-1 text-[12px] text-[#B91C1C]";
 export function ContactFields({ value, onChange, errors = {}, idPrefix }: ContactFieldsProps) {
   return (
     <div className="space-y-3">
+      {/* D6: the name is captured SPLIT because payer forms ask for it split.
+          The composed display value is derived at the service boundary. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <Label className="text-[12px]" htmlFor={`${idPrefix}-first-name`}>
+            First name
+          </Label>
+          <Input
+            id={`${idPrefix}-first-name`}
+            value={value.firstName}
+            onChange={(e) => onChange({ firstName: e.target.value })}
+            aria-invalid={errors.firstName ? true : undefined}
+            aria-describedby={errors.firstName ? `${idPrefix}-first-name-error` : undefined}
+            className="h-9"
+          />
+          {errors.firstName ? (
+            <div id={`${idPrefix}-first-name-error`} aria-live="polite" className={errClass}>
+              {errors.firstName}
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <Label className="text-[12px]" htmlFor={`${idPrefix}-last-name`}>
+            Last name
+          </Label>
+          <Input
+            id={`${idPrefix}-last-name`}
+            value={value.lastName}
+            onChange={(e) => onChange({ lastName: e.target.value })}
+            aria-invalid={errors.lastName ? true : undefined}
+            aria-describedby={errors.lastName ? `${idPrefix}-last-name-error` : undefined}
+            className="h-9"
+          />
+          {errors.lastName ? (
+            <div id={`${idPrefix}-last-name-error`} aria-live="polite" className={errClass}>
+              {errors.lastName}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <div>
-        <Label className="text-[12px]" htmlFor={`${idPrefix}-name`}>
-          Name
+        <Label className="text-[12px]" htmlFor={`${idPrefix}-title`}>
+          Title <span className="text-muted-foreground">(optional)</span>
         </Label>
         <Input
-          id={`${idPrefix}-name`}
-          value={value.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          aria-invalid={errors.name ? true : undefined}
-          aria-describedby={errors.name ? `${idPrefix}-name-error` : undefined}
+          id={`${idPrefix}-title`}
+          value={value.title ?? ""}
+          onChange={(e) => onChange({ title: e.target.value })}
+          placeholder="e.g. Managing Partner"
           className="h-9"
         />
-        {errors.name ? (
-          <div id={`${idPrefix}-name-error`} aria-live="polite" className={errClass}>
-            {errors.name}
-          </div>
-        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -72,6 +107,31 @@ export function ContactFields({ value, onChange, errors = {}, idPrefix }: Contac
               {errors.phoneOffice}
             </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-[12px]" htmlFor={`${idPrefix}-ext`}>
+            Extension <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id={`${idPrefix}-ext`}
+            value={value.phoneExtension ?? ""}
+            onChange={(e) => onChange({ phoneExtension: e.target.value })}
+            className="h-9"
+          />
+        </div>
+        <div>
+          <Label className="text-[12px]" htmlFor={`${idPrefix}-fax`}>
+            Fax <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            id={`${idPrefix}-fax`}
+            value={value.fax ?? ""}
+            onChange={(e) => onChange({ fax: e.target.value })}
+            className="h-9"
+          />
         </div>
       </div>
 

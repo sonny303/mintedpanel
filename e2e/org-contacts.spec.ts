@@ -33,11 +33,17 @@ const SESSION = {
 
 const party = (over: Record<string, unknown>) => ({
   id: "p",
+  org_id: ORG_ID,
   party_type: "person",
   name: "",
+  first_name: null,
+  last_name: null,
+  title: null,
   email: null,
   phone_office: null,
+  phone_extension: null,
   phone_mobile: null,
+  fax: null,
   address_line1: null,
   address_line2: null,
   city: null,

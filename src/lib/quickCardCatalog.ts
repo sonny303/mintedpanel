@@ -45,6 +45,7 @@
 // field-key -> profile-token join is a literal string match.
 
 import { normalizeTokenKey } from "@/lib/tokenFormat";
+import { orgContactTokenKeys, contactFamilyLabel } from "@/lib/orgContactTokens";
 
 /** The user_table_prefs page_key the extension quick-card layout is stored
  * under. Stable across machines/browsers (server-side, user-scoped). */
@@ -118,6 +119,13 @@ export const QUICK_CARD_EXCLUDED_FIELDS: readonly string[] = [
  * resolves. */
 export const USER_TOKEN_FIELDS: readonly string[] = ["user.name", "user.email"];
 
+/** The org contact families (2026-08-07, decisions D9/D10). Like {{user.*}},
+ * these have no schema backing the RPC can sweep — `parties` would emit
+ * `party.email`, which cannot say WHOSE — so the family is code-owned and
+ * appended here. The profile endpoint resolves the same keys from the org's
+ * default holder of each role, so the picker offers exactly what fills. */
+export const CONTACT_TOKEN_FIELDS: readonly string[] = orgContactTokenKeys();
+
 /** A selectable quick-card field, ready for the picker: the join key, a human
  * label, and the group it renders under (design doc 02 §2.7 groups by
  * section). */
@@ -137,6 +145,9 @@ const GROUP_LABELS: Readonly<Record<string, string>> = {
   assignment: "Facility assignment",
   groupInsurance: "Malpractice / insurance",
   user: "You",
+  billingContact: "Billing contact",
+  credentialingContact: "Credentialing contact",
+  contractingSigner: "Contracting signer",
 };
 
 /** Words that read wrong in sentence case. */
@@ -227,6 +238,17 @@ export function buildQuickCardCatalog(entries: readonly TokenCatalogEntry[]): Qu
       label: LABEL_OVERRIDES[key] ?? humanizeTokenField(field),
       group: "user",
       groupLabel: GROUP_LABELS.user,
+    });
+  }
+  for (const key of CONTACT_TOKEN_FIELDS) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const [group, ...fieldParts] = key.split(".");
+    fields.push({
+      key,
+      label: LABEL_OVERRIDES[key] ?? humanizeTokenField(fieldParts.join(".")),
+      group,
+      groupLabel: GROUP_LABELS[group] ?? contactFamilyLabel(group),
     });
   }
   return fields;

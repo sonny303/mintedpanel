@@ -10,6 +10,11 @@ vi.mock("@/services/portalFieldMaps", () => ({
 vi.mock("@/services/portals", () => ({ listPortalsForApi: vi.fn() }));
 vi.mock("@/services/fillSessions", () => ({ recordFillEvent: vi.fn() }));
 vi.mock("@/services/providerProfile", () => ({ getProviderProfile: vi.fn() }));
+// The org contact families ride the same profile response (2026-08-07). Mocked
+// like every other service here so the handler tests stay free of a DB fake.
+vi.mock("@/services/orgContacts", () => ({
+  resolveOrgContactProfileTokens: vi.fn().mockResolvedValue({ tokens: [], unresolved: [] }),
+}));
 vi.mock("@/services/providerCases", () => ({
   listOpenProviderCases: vi.fn(),
   searchOrgCases: vi.fn(),

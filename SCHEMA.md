@@ -56,25 +56,41 @@ Landed in the E0.1 PR (migration `20260709120000_party_model_foundation.sql`).
 The single, reusable way stakeholders (owner, CRM contacts, later entities) are
 represented.
 
-- **parties** — `id, party_type ('person'|'organization', default 'person'),
-name, email, phone_office, phone_mobile, address_line1, address_line2, city,
-state, postal_code, country, created_by, created_at`. **No `org_id`** — the one
-  approved exception to org-scoping: a party is reused across orgs (E0.3 F0.3.4).
-  RLS grants access where `created_by = auth.uid()` OR the caller is a member of
-  an org the party is assigned to (via `party_role_assignments`); writes also
-  require a writer role in one of those orgs. `created_by` has no FK (seed uses a
-  fixed placeholder).
+- **parties** — `id, org_id, party_type ('person'|'organization', default
+'person'), name, first_name, last_name, title, email, phone_office,
+phone_extension, phone_mobile, fax, address_line1, address_line2, city, state,
+postal_code, country, created_by, created_at`. **`org_id` is NOT NULL** as of
+  `20260807130000` (decision D8, 2026-08-07): a party belongs to exactly ONE org.
+  That REVERSES the E0.3 F0.3.4 cross-org reuse exception — one shared row meant
+  editing a contact's phone edited it for every org that had assigned them. RLS
+  is plain org-membership now (member SELECT, writer INSERT/UPDATE/DELETE);
+  `org_id` is immutable after insert (database trigger), and `(org_id, id)` is
+  unique so assignment FKs can preserve tenant identity structurally.
+  `created_by` is retained as provenance, no longer a visibility grant, and still
+  has no FK (seed uses a fixed placeholder). **`name` is the RETAINED display
+  column** — never edited directly; every write composes it from
+  `first_name`/`last_name` (`src/lib/personName.ts` `composeFullName`, mirrored in
+  SQL by `_party_first_name`/`_party_last_name`).
 - **party_role_types** — governed role reference list `role_key (PK), label,
-is_active`. Active: `owner`, `customer_escalation_contact`, `sales_rep`.
-  Reserved (`is_active = false`): `billing_contact`, `contracting_signer`,
-  `credentialing_contact`. Read-only to `authenticated`; new roles are data
-  inserts, never schema changes (E0.3 F0.3.5).
+is_active`. **All six roles are ACTIVE** since `20260807130000`: `owner`,
+  `customer_escalation_contact`, `sales_rep`, `billing_contact`,
+  `contracting_signer`, `credentialing_contact`. Read-only to `authenticated`;
+  new roles are data inserts, never schema changes (E0.3 F0.3.5).
 - **party_role_assignments** — `id, org_id, party_id, role_key, scope_type
-('org'|'facility'|'case', default 'org'), scope_id, created_at`, `UNIQUE NULLS
-NOT DISTINCT (org_id, party_id, role_key, scope_type, scope_id)`. Org-RLS-scoped
-  (member SELECT, writer INSERT/UPDATE/DELETE). A BEFORE trigger rejects
-  assigning an inactive (reserved) role. Stage 0 writes only `scope_type='org'`
-  (scope_id NULL).
+('org'|'group'|'facility'|'case', default 'org'), scope_id, is_default,
+created_at`, `UNIQUE NULLS NOT DISTINCT (org_id, party_id, role_key, scope_type,
+scope_id)` + partial unique `uq_party_role_assignments_default (org_id,
+role_key) WHERE is_default`. Org-RLS-scoped (member SELECT, writer
+  INSERT/UPDATE/DELETE); its composite FK `(org_id, party_id) → parties(org_id,
+id)` rejects every cross-org link, including service-role writes. A BEFORE
+  trigger rejects assigning an inactive role
+  (no role is inactive today — the mechanism stays for future reserved roles).
+  **`is_default` marks the ONE holder per (org, role) that the contact token
+  families resolve** (D1, mirroring `uq_payer_contacts_default_purpose`). The
+  `set_default_party_role` SECURITY INVOKER RPC validates and locks the target
+  assignment before atomically demoting/promoting defaults. The
+  `'group'` scope was added by D2 for a future per-TIN grain; the UI still writes
+  only `scope_type='org'` (scope_id NULL).
 
 ### memberships
 

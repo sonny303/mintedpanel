@@ -113,11 +113,22 @@ export type PartyRoleKey =
 
 export interface Party {
   id: string;
+  // D8 (2026-08-07): a party belongs to exactly ONE org. Before that it was
+  // cross-org by design (F0.3.4 reuse pool) and editing a shared contact edited
+  // it for every org that had assigned them.
+  orgId: string;
   partyType: PartyType;
+  /** Display name, RETAINED as the single legacy display column. Composed from
+   * firstName/lastName by the services — never edited directly. */
   name: string;
+  firstName: string | null;
+  lastName: string | null;
+  title: string | null;
   email: string | null;
   phoneOffice: string | null;
+  phoneExtension: string | null;
   phoneMobile: string | null;
+  fax: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -131,6 +142,7 @@ export interface Party {
 // An org-scoped role assignment resolved to its party (E0.2 contacts display).
 export interface OrgContact {
   roleKey: PartyRoleKey;
+  isDefault: boolean;
   party: Party;
 }
 
@@ -145,6 +157,9 @@ export interface PartyRoleType {
 export interface OrgParty {
   party: Party;
   roleKeys: PartyRoleKey[];
+  /** Roles this party is the org's DEFAULT holder of (D1). The default is what
+   * the contact token families resolve; at most one party per (org, role). */
+  defaultRoleKeys: PartyRoleKey[];
 }
 
 // Secure one-time data capture link (redesign E0.5). Operators read the state;
@@ -313,10 +328,17 @@ export interface ReportShareView {
 
 // Create/edit input for a CRM contact (E0.2). Split address, never one string.
 export interface ContactInput {
-  name: string;
+  firstName: string;
+  lastName: string;
+  /** Composed display value. Optional on input — every write path composes it
+   * from firstName/lastName (composeFullName) so the two cannot drift. */
+  name?: string;
+  title?: string;
   email: string;
   phoneOffice: string;
+  phoneExtension?: string;
   phoneMobile?: string;
+  fax?: string;
   addressLine1: string;
   addressLine2?: string;
   city: string;

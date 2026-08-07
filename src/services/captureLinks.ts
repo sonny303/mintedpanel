@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
 import type { CaptureLink, CaptureTokenView, ContactInput, IssuedCaptureLink } from "@/types";
+import { composeFullName, splitFullName } from "@/lib/personName";
 
 // `supabase.rpc` must be called bound (CLAUDE.md gotcha). One loose signature
 // reused for every RPC in this file.
@@ -92,10 +93,17 @@ export async function submitCapture(
   contact: ContactInput,
 ): Promise<{ ok: boolean; state: CaptureTokenView["state"] }> {
   const payload: Record<string, unknown> = {
-    name: contact.name.trim(),
+    // The RPC still requires a composed `name` (assert_contact_valid); the split
+    // halves ride alongside it so submit_capture persists them (D6).
+    name: composeFullName(contact),
+    first_name: contact.firstName.trim(),
+    last_name: contact.lastName.trim(),
+    title: contact.title?.trim() || null,
     email: contact.email.trim(),
     phone_office: contact.phoneOffice.trim(),
+    phone_extension: contact.phoneExtension?.trim() || null,
     phone_mobile: contact.phoneMobile?.trim() || null,
+    fax: contact.fax?.trim() || null,
     address_line1: contact.addressLine1.trim(),
     address_line2: contact.addressLine2?.trim() || null,
     city: contact.city.trim(),
@@ -116,11 +124,18 @@ export async function submitCapture(
 // not null) so the recipient's form prefills with any data already on file.
 function currentToContact(c: Record<string, unknown>): ContactInput {
   const s = (v: unknown) => (typeof v === "string" ? v : "");
+  // A party captured before the D6 split has no first/last on file — split its
+  // display name so the recipient's form opens populated rather than blank.
+  const split = splitFullName(s(c.name));
   return {
-    name: s(c.name),
+    firstName: s(c.first_name) || split.firstName,
+    lastName: s(c.last_name) || split.lastName,
+    title: s(c.title),
     email: s(c.email),
     phoneOffice: s(c.phone_office),
+    phoneExtension: s(c.phone_extension),
     phoneMobile: s(c.phone_mobile),
+    fax: s(c.fax),
     addressLine1: s(c.address_line1),
     addressLine2: s(c.address_line2),
     city: s(c.city),

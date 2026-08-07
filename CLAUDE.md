@@ -120,7 +120,7 @@ branch. If you are implementing a redesign epic:
   E0.1). Adds the browser CRUD + role management on top: `src/services/parties.ts`
   gained `listOrgParties` (grouped via pure `src/lib/parties.ts` `groupOrgParties`
   — one party, many roles, tested), `listVisibleParties` (cross-org reuse pool,
-  F0.3.4), `listPartyRoleTypes` (governed list), `createParty`, `assignRole`
+  F0.3.4 — **DELETED 2026-08-07 with D8**), `listPartyRoleTypes` (governed list), `createParty`, `assignRole`
   (trigger rejects reserved), `unassignRole`/`removePartyFromOrg` (both USED TO
   block removing the org's **only** sales rep, F0.2.2 — guard REMOVED by the
   2026-08-07 hotfix below; TD-4: the party RECORD is
@@ -132,7 +132,8 @@ branch. If you are implementing a redesign epic:
   on `/get-started`: party list with role chips (removable), Add person / Add
   existing (reuse) dialogs, edit dialog (shared `ContactFields`), remove-confirm,
   and a role picker (`party_role_types` — active selectable, reserved
-  visible-disabled, F0.3.5). Seed adds TS-10 (Zeb also `owner` on Point Place
+  visible-disabled, F0.3.5; **the Add-existing dialog is gone and no role is
+  reserved any more, 2026-08-07**). Seed adds TS-10 (Zeb also `owner` on Point Place
   alongside the seeded owner). RLS write/read paths verified live under the
   `authenticated` role.
 - **E0.4 — First-Run & Next-Action Landing.** No schema change (E0.0's
@@ -2361,6 +2362,115 @@ all three roles, incomplete → still rejected):
   reflects it); `contactValidation.test.ts` uses a local full-contact fixture.
 - `supabase/seed-redesign.sql` still seeds Zeb across the 11 demo orgs — it is a
   local fixture universe (never runs on hosted) and TS-9/TS-10 depend on it.
+
+### 2026-08-07 — People contact roles + contact token families
+
+Decision record: `docs/redesign/DECISION-RECORD-2026-08-07-people-contact-roles.md`
+(PM decisions D1–D14). Activates the three reserved party roles and makes contact
+fields resolvable as tokens for payer-form mapping. THREE additive migrations
+(repo + hosted, applied as a PAIR — the schema half makes `parties.org_id` NOT
+NULL and the RPC half is what stops every party-writing function 23502-ing;
+the third is a post-review hardening follow-up and is repo-only until the operator
+applies it):
+
+- **`20260807130000_people_contact_roles.sql` (schema).** `party_role_types` →
+  `is_active = true` for `billing_contact` / `contracting_signer` /
+  `credentialing_contact` (the `reject_inactive_role_assignment` trigger stays —
+  it just has nothing to reject today). `party_role_assignments` gained
+  `is_default` + partial unique `uq_party_role_assignments_default (org_id,
+role_key) WHERE is_default` (D1, the `payer_contacts` shape) and its
+  `scope_type` CHECK was widened with `'group'` (D2 — schema only; the UI still
+  writes `'org'`). `parties` gained `first_name`/`last_name` (D6, backfilled by a
+  last-space split), `title`/`fax`/`phone_extension` (D3/D7), and **`org_id NOT
+NULL`** (D8) — backfilled from the earliest assignment, else the creator's sole
+  membership; the four RLS policies were rewritten onto plain org membership, so
+  the `created_by` visibility disjunct is retired (kept as provenance). Live at
+  apply time: 1 org, 2 parties, 0 shared — the backfill was a no-op and the
+  guarded orphan DELETE deleted nothing.
+- **`20260807130100_people_contact_role_rpcs.sql` (functions).** FIVE
+  SECURITY DEFINER functions write `parties` and all are reissued to carry
+  `org_id` + the split name: `insert_contact_party` (**new 3-arg overload**; the
+  2-arg form is retained per the additive rule but can no longer satisfy the NOT
+  NULL — do not call it), `create_organization` 5-arg AND 3-arg,
+  `create_capture_link` (its existing-party check is now ORG-SCOPED, the other
+  half of the cross-org identity problem), `submit_capture` (persists
+  first/last/title/fax/extension — the capture form collects split names now, so
+  without this they would be silently dropped), and `validate_capture_token`
+  (additive `current` keys so the public form prefills them). Five behavioral
+  probes ran rollback-wrapped on hosted: reserved role assignable, second default
+  rejected, second NON-default holder allowed, group scope accepted, org-less
+  party rejected.
+- **`20260807150937_harden_party_role_tenant_integrity.sql` (follow-up,
+  repo-only).** Stops with an explicit count if any pre-existing assignment
+  disagrees with its party's org, then replaces the party-only FK with
+  `(org_id, party_id) → parties(org_id, id)`, makes `parties.org_id` immutable
+  for every DB role, and adds the same-org join to assignment INSERT/UPDATE RLS
+  checks. It also adds authenticated-only SECURITY INVOKER
+  `set_default_party_role`: validates + locks the target before atomically
+  demoting/promoting, with named missing-target/authorization errors.
+
+**Token families (D9–D13) — `billingContact.*` / `credentialingContact.*` /
+`contractingSigner.*`.** CODE-OWNED, not in `get_sop_field_tokens()`: that RPC
+derives from `information_schema.columns` and would emit `party.email`, which
+cannot say WHOSE. The family is inherently ROLE × FIELD, so it is appended the
+way `{{user.*}}` is (`src/server/userTokens.ts` precedent). Pure
+`src/lib/orgContactTokens.ts` (+13-case suite) owns the key surface + resolution;
+server-only `src/services/orgContacts.ts` reads the org's `is_default` holder per
+role in ONE query; `handleProviderProfile` appends the tokens AND their
+unresolved reasons. **Naming is effectively irreversible** (token keys join
+`portal_field_maps` ↔ profile ↔ quick cards by literal string match) — flat
+camelCase, matching `groupInsurance.*`. Fields: firstName, lastName, **fullName**
+(a server-derived COMPOSITE — the `facility.address` precedent, so a one-box form
+needs no mapping-time concatenation that `portal_field_maps.token` could not
+express), title, email, phoneOffice, phoneExtension, phoneMobile, fax,
+addressLine1/2, city, state, postalCode, country. Resolution is at PROFILE time
+(D11 — the org is on the guard ctx, unlike case-scoped `payer.*`/`mso.*`); a role
+with no default holder yields null tokens plus an honest reason, never a guess.
+**Deliberately absent from `sopResolver.buildTokenMap`** (D12 — a token in a SOP
+body is baked into `tasks.sop_content` at case creation and would go stale) and
+from `emailValuedTokenKeys()` (D13 — a contact is a value you type into a form,
+not someone the system emails; consequence: a `draft_email` step cannot address
+the credentialing contact). Both are PINNED as negative assertions in
+`orgContactTokens.test.ts`. The keys ARE offered on extension quick cards
+(`CONTACT_TOKEN_FIELDS` in `quickCardCatalog.ts`, the `USER_TOKEN_FIELDS`
+append pattern).
+
+**App layer.** `src/lib/personName.ts` (`splitFullName`/`composeFullName`/
+`personDisplayName`, +suite) mirrors the SQL split helpers — keep them in
+lockstep. `Party` gained orgId/firstName/lastName/title/fax/phoneExtension;
+`ContactInput` captures the name SPLIT with `name` now OPTIONAL (composed at
+every service boundary); `OrgParty` gained `defaultRoleKeys`; `OrgContact` gained
+`isDefault`. `parties.ts`: `createParty` writes `org_id` + the composed name,
+`updateParty` recomposes `name` whenever either half is patched, `assignRole`
+takes `{isDefault}` and defaults the FIRST holder of a role to true, new
+`setDefaultRole` calls the atomic `set_default_party_role` RPC; a missing target
+raises clearly and any failure rolls back without losing the prior default.
+**`listVisibleParties` is DELETED** with the F0.3.4
+cross-org reuse pool, and `PartiesManager`'s "Add existing" dialog with it —
+adding the same human to a second org means entering them there. Role chips now
+carry a "Used on forms" marker / "Use on forms" one-click promote.
+`dbErrors.ts` maps both party uniques. `ContactFields` renders First/Last +
+Title + Extension + Fax; `OrgCreateFields` splits the intake name.
+
+**Seed.** `seed-redesign.sql` party inserts are org-scoped: owners and customer
+contacts resolve their org in the same statement, and **Zeb is now one party PER
+org** (11 rows) rather than one row assigned across all 11 — TS-10 (Zeb also
+`owner` at Point Place) survives as a WITHIN-org multi-role fixture, added
+non-default beside the seeded owner.
+
+**Guardrail review (D14).** `quickCardCatalog.test.ts` stays — it is what makes
+the deny-list safe. Two exclusions look wrong on inspection and are logged, not
+fixed: `groupInsurance.coverageLevel` (malpractice sections DO ask primary vs
+secondary) and `provider.terminatedDate` (termination forms DO ask for an end
+date). Separately, the SOP authoring picker offers only the ~19 keys
+`buildTokenMap` resolves against 132 in the catalog — real debt, and the fix is
+widening the map, not removing the `resolvableTokenKeys()` gate.
+
+e2e `e2e/people-contact-roles.spec.ts` (TS-141 roles assignable + first holder
+defaults; TS-142 second holder non-default + demote-then-promote at the wire;
+TS-143 split-name capture + composed `name` + no reuse door). Types regenerated
+(hosted in sync; `provider_field_verifications` present, so the 2026-07-29
+regen caveat is CLEARED).
 
 ## What this is
 
