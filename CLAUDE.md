@@ -2367,9 +2367,11 @@ all three roles, incomplete → still rejected):
 
 Decision record: `docs/redesign/DECISION-RECORD-2026-08-07-people-contact-roles.md`
 (PM decisions D1–D14). Activates the three reserved party roles and makes contact
-fields resolvable as tokens for payer-form mapping. TWO additive migrations
+fields resolvable as tokens for payer-form mapping. THREE additive migrations
 (repo + hosted, applied as a PAIR — the schema half makes `parties.org_id` NOT
-NULL and the RPC half is what stops every party-writing function 23502-ing):
+NULL and the RPC half is what stops every party-writing function 23502-ing;
+the third is a post-review hardening follow-up and is repo-only until the operator
+applies it):
 
 - **`20260807130000_people_contact_roles.sql` (schema).** `party_role_types` →
   `is_active = true` for `billing_contact` / `contracting_signer` /
@@ -2398,6 +2400,14 @@ NULL`** (D8) — backfilled from the earliest assignment, else the creator's sol
   probes ran rollback-wrapped on hosted: reserved role assignable, second default
   rejected, second NON-default holder allowed, group scope accepted, org-less
   party rejected.
+- **`20260807150937_harden_party_role_tenant_integrity.sql` (follow-up,
+  repo-only).** Stops with an explicit count if any pre-existing assignment
+  disagrees with its party's org, then replaces the party-only FK with
+  `(org_id, party_id) → parties(org_id, id)`, makes `parties.org_id` immutable
+  for every DB role, and adds the same-org join to assignment INSERT/UPDATE RLS
+  checks. It also adds authenticated-only SECURITY INVOKER
+  `set_default_party_role`: validates + locks the target before atomically
+  demoting/promoting, with named missing-target/authorization errors.
 
 **Token families (D9–D13) — `billingContact.*` / `credentialingContact.*` /
 `contractingSigner.*`.** CODE-OWNED, not in `get_sop_field_tokens()`: that RPC
@@ -2433,10 +2443,9 @@ every service boundary); `OrgParty` gained `defaultRoleKeys`; `OrgContact` gaine
 `isDefault`. `parties.ts`: `createParty` writes `org_id` + the composed name,
 `updateParty` recomposes `name` whenever either half is patched, `assignRole`
 takes `{isDefault}` and defaults the FIRST holder of a role to true, new
-`setDefaultRole` does demote-then-promote (two PostgREST calls are not atomic
-under the partial unique, so the demote runs first — a failure between them
-leaves the role temporarily default-less, which resolves as an honest null,
-never as two defaults). **`listVisibleParties` is DELETED** with the F0.3.4
+`setDefaultRole` calls the atomic `set_default_party_role` RPC; a missing target
+raises clearly and any failure rolls back without losing the prior default.
+**`listVisibleParties` is DELETED** with the F0.3.4
 cross-org reuse pool, and `PartiesManager`'s "Add existing" dialog with it —
 adding the same human to a second org means entering them there. Role chips now
 carry a "Used on forms" marker / "Use on forms" one-click promote.

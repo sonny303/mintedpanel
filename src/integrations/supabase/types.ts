@@ -1850,11 +1850,11 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "party_role_assignments_party_id_fkey";
-            columns: ["party_id"];
+            foreignKeyName: "party_role_assignments_org_party_fkey";
+            columns: ["org_id", "party_id"];
             isOneToOne: false;
             referencedRelation: "parties";
-            referencedColumns: ["id"];
+            referencedColumns: ["org_id", "id"];
           },
           {
             foreignKeyName: "party_role_assignments_role_key_fkey";
@@ -4082,6 +4082,14 @@ export type Database = {
           p_to_status: string;
         };
         Returns: Json;
+      };
+      set_default_party_role: {
+        Args: {
+          p_org_id: string;
+          p_party_id: string;
+          p_role_key: string;
+        };
+        Returns: undefined;
       };
       set_global_portal_flags: {
         Args: { p_id: string; p_proven?: boolean; p_verified?: boolean };

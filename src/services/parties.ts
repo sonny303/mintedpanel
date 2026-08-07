@@ -196,28 +196,34 @@ export async function assignRole(
   });
 }
 
-// Promote one holder to the org's DEFAULT for a role (D1). Demote-then-promote,
-// because the partial unique index rejects two defaults for the same
-// (org, role) — the two statements are not atomic, so the demote runs first and
-// a failure between them leaves the role temporarily default-less (tokens
-// resolve null with an honest reason) rather than violating the invariant.
+function setDefaultRoleError(error: unknown): unknown {
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : "";
+  if (message.includes("party_role_default_assignment_not_found")) {
+    return new Error("This person no longer holds that role in this organization.");
+  }
+  if (message.includes("party_role_default_not_authorized")) {
+    return new Error("You do not have permission to change the default for this role.");
+  }
+  return translateDbError(error);
+}
+
+// Promote one holder to the org's DEFAULT for a role (D1). The database RPC
+// validates and locks the target before demoting the old default; any error
+// rolls the whole transaction back, so the role can never be left default-less.
 export async function setDefaultRole(partyId: string, roleKey: PartyRoleKey): Promise<void> {
   const orgId = requireActiveOrg();
-  const demote = await supabase
-    .from("party_role_assignments")
-    .update({ is_default: false })
-    .eq("org_id", orgId)
-    .eq("role_key", roleKey)
-    .eq("is_default", true);
-  if (demote.error) throw demote.error;
-
-  const promote = await supabase
-    .from("party_role_assignments")
-    .update({ is_default: true })
-    .eq("org_id", orgId)
-    .eq("role_key", roleKey)
-    .eq("party_id", partyId);
-  if (promote.error) throw translateDbError(promote.error);
+  const { error } = await supabase.rpc("set_default_party_role", {
+    p_org_id: orgId,
+    p_party_id: partyId,
+    p_role_key: roleKey,
+  });
+  if (error) throw setDefaultRoleError(error);
 
   await writeAudit({
     actionType: "UPDATE",

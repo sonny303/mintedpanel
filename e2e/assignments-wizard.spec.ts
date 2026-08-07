@@ -377,8 +377,9 @@ test("TS-40: group-scoped picker, required start date, primary swap stays single
 
   await dialog.getByRole("button", { name: "Start date at Shelby Main Clinic" }).click();
   // The calendar popover portals outside the dialog; day buttons carry full
-  // accessible dates.
-  await page.getByRole("button", { name: /July 15th/ }).click();
+  // accessible dates. Pick a day in the visible month rather than pinning July
+  // forever — this flow starts with no preselected date.
+  await page.getByRole("button", { name: /15th/ }).first().click();
   await dialog.getByRole("button", { name: "Save assignments" }).click();
   await expect(card).toContainText("Complete", { timeout: 15000 });
   await expect(card).toContainText("Shelby Main Clinic");
@@ -399,7 +400,7 @@ test("TS-40: group-scoped picker, required start date, primary swap stays single
   await expect(dialog2).toContainText("Performance North");
   await dialog2.getByLabel("Assign Performance North").click();
   await dialog2.getByRole("button", { name: "Start date at Performance North" }).click();
-  await page.getByRole("button", { name: /July 20th/ }).click();
+  await page.getByRole("button", { name: /20th/ }).first().click();
   await dialog2.getByLabel("Performance North is the primary location").click();
   await dialog2.getByRole("button", { name: "Save assignments" }).click();
 

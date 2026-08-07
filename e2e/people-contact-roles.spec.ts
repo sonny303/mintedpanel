@@ -9,7 +9,7 @@ import { test, expect, type Route } from "@playwright/test";
 //   TS-142  exactly one holder per (org, role) is the DEFAULT, and that is what
 //           the billingContact.*/credentialingContact.*/contractingSigner.*
 //           token families resolve. A second holder must land NON-default and
-//           be promotable in one click (demote-then-promote).
+//           be promotable in one atomic RPC.
 //   TS-143  the name is captured SPLIT and the retained `name` display column is
 //           COMPOSED from the halves on write; the cross-org "Add existing"
 //           reuse pool (F0.3.4) is gone with D8.
@@ -202,6 +202,35 @@ function makeHandler(fixtures: Record<string, unknown[]>, recorded: Recorded[]) 
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
     if (url.pathname.includes("/auth/v1/")) return json(SESSION);
+    if (url.pathname.endsWith("/rest/v1/rpc/set_default_party_role")) {
+      const body = req.postDataJSON() as {
+        p_org_id: string;
+        p_party_id: string;
+        p_role_key: string;
+      };
+      recorded.push({
+        method: req.method(),
+        table: "set_default_party_role",
+        url: req.url(),
+        body,
+      });
+      const assignments = fixtures.party_role_assignments as AssignmentRow[];
+      const target = assignments.find(
+        (row) =>
+          row.org_id === body.p_org_id &&
+          row.party_id === body.p_party_id &&
+          row.role_key === body.p_role_key,
+      );
+      if (!target) {
+        return json({ message: "party_role_default_assignment_not_found" }, 400);
+      }
+      for (const row of assignments) {
+        if (row.org_id === body.p_org_id && row.role_key === body.p_role_key) {
+          row.is_default = row.id === target.id;
+        }
+      }
+      return json(null);
+    }
     if (url.pathname.includes("/rest/v1/rpc/")) return json(0);
 
     const table = url.pathname.split("/rest/v1/")[1] ?? "";
@@ -367,7 +396,7 @@ test("TS-141: the three formerly-reserved roles are assignable, and the first ho
   ).toHaveCount(0);
 });
 
-test("TS-142: a second holder lands non-default and is promoted in one click (demote, then promote)", async ({
+test("TS-142: a second holder lands non-default and is promoted in one atomic RPC", async ({
   context,
   page,
 }) => {
@@ -429,22 +458,21 @@ test("TS-142: a second holder lands non-default and is promoted in one click (de
     );
   expect(post!.body).toMatchObject({ party_id: PARTY_SECOND, is_default: false });
 
-  // Promote Sam: demote-then-promote, never a single write that could leave two
-  // defaults for the same (org, role).
+  // Promote Sam in one database transaction. The browser must never demote with
+  // a direct PATCH that could commit before promotion.
   await samCard.getByRole("button", { name: /Use this person for Billing Contact/ }).click();
   await expect
-    .poll(
-      () =>
-        recorded.filter((r) => r.table === "party_role_assignments" && r.method === "PATCH").length,
-    )
-    .toBe(2);
-  const patches = recorded.filter(
-    (r) => r.table === "party_role_assignments" && r.method === "PATCH",
-  );
-  expect(patches[0].body).toEqual({ is_default: false });
-  expect(patches[0].url).toContain("is_default=eq.true");
-  expect(patches[1].body).toEqual({ is_default: true });
-  expect(patches[1].url).toContain(`party_id=eq.${PARTY_SECOND}`);
+    .poll(() => recorded.filter((r) => r.table === "set_default_party_role").length)
+    .toBe(1);
+  const promotion = recorded.find((r) => r.table === "set_default_party_role");
+  expect(promotion?.body).toEqual({
+    p_org_id: ORG_A,
+    p_party_id: PARTY_SECOND,
+    p_role_key: "billing_contact",
+  });
+  expect(
+    recorded.filter((r) => r.table === "party_role_assignments" && r.method === "PATCH"),
+  ).toHaveLength(0);
 
   const defaults = (fixtures.party_role_assignments as AssignmentRow[]).filter(
     (a) => a.role_key === "billing_contact" && a.is_default,

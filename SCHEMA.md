@@ -64,6 +64,8 @@ postal_code, country, created_by, created_at`. **`org_id` is NOT NULL** as of
   That REVERSES the E0.3 F0.3.4 cross-org reuse exception — one shared row meant
   editing a contact's phone edited it for every org that had assigned them. RLS
   is plain org-membership now (member SELECT, writer INSERT/UPDATE/DELETE);
+  `org_id` is immutable after insert (database trigger), and `(org_id, id)` is
+  unique so assignment FKs can preserve tenant identity structurally.
   `created_by` is retained as provenance, no longer a visibility grant, and still
   has no FK (seed uses a fixed placeholder). **`name` is the RETAINED display
   column** — never edited directly; every write composes it from
@@ -79,10 +81,14 @@ is_active`. **All six roles are ACTIVE** since `20260807130000`: `owner`,
 created_at`, `UNIQUE NULLS NOT DISTINCT (org_id, party_id, role_key, scope_type,
 scope_id)` + partial unique `uq_party_role_assignments_default (org_id,
 role_key) WHERE is_default`. Org-RLS-scoped (member SELECT, writer
-  INSERT/UPDATE/DELETE). A BEFORE trigger rejects assigning an inactive role
+  INSERT/UPDATE/DELETE); its composite FK `(org_id, party_id) → parties(org_id,
+id)` rejects every cross-org link, including service-role writes. A BEFORE
+  trigger rejects assigning an inactive role
   (no role is inactive today — the mechanism stays for future reserved roles).
   **`is_default` marks the ONE holder per (org, role) that the contact token
   families resolve** (D1, mirroring `uq_payer_contacts_default_purpose`). The
+  `set_default_party_role` SECURITY INVOKER RPC validates and locks the target
+  assignment before atomically demoting/promoting defaults. The
   `'group'` scope was added by D2 for a future per-TIN grain; the UI still writes
   only `scope_type='org'` (scope_id NULL).
 
