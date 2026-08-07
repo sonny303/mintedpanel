@@ -93,22 +93,22 @@ Format per entry:
 ## [e6.9] Staff-only training mode vs the locked "no platform roles" decision — RESOLVED (2026-08-07)
 
 - **Issue:** E6.9 D11 (PM, in-session 2026-08-07) gated the Workbench's new
- training mode, and the global field-map write paths it needs, to internal
- Minted staff — currently two people. E6.7 records "no platform-role gating"
- as a concept the PM explicitly rejected, and E6.5 defers platform-role
- hardening to R7 ("No platform-role/permission system (R7)"). The epic does
- not silently override a locked decision, so the conflict was raised here.
+  training mode, and the global field-map write paths it needs, to internal
+  Minted staff — currently two people. E6.7 records "no platform-role gating"
+  as a concept the PM explicitly rejected, and E6.5 defers platform-role
+  hardening to R7 ("No platform-role/permission system (R7)"). The epic does
+  not silently override a locked decision, so the conflict was raised here.
 - **Impact:** F6.9.2 (global unmap + global propose), F6.9.10 (journey split)
- and F6.9.11 (org-free global capture) were blocked pending the ruling.
+  and F6.9.11 (org-free global capture) were blocked pending the ruling.
 - **Options considered:** (1) interim capability flag; (2) ungated; (3) defer
- training mode to R7.
+  training mode to R7.
 - **Decision:** **(2) Ungated** (PM Sowmya, 2026-08-07). Anyone signed in can
- train globally — simplest, and consistent with the letter of the E6.7 "no
- platform roles" decision. The trade-off is accepted knowingly: every
- customer inherits whatever any signed-in user captures. D11's staff gate is
- superseded; no capability flag ships; R7's role model may revisit. E6.9 is
- updated in the same change (D11, F6.9.2, F6.9.10, F6.9.11,
- TS-142/143/151/152).
+  train globally — simplest, and consistent with the letter of the E6.7 "no
+  platform roles" decision. The trade-off is accepted knowingly: every
+  customer inherits whatever any signed-in user captures. D11's staff gate is
+  superseded; no capability flag ships; R7's role model may revisit. E6.9 is
+  updated in the same change (D11, F6.9.2, F6.9.10, F6.9.11,
+  TS-142/143/151/152).
 
 ## [e4.4] Full-SSN vault conflicts with the binding data/security rule — RESOLVED (2026-07-14)
 
