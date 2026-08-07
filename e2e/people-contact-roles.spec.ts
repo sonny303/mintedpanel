@@ -350,9 +350,7 @@ test("TS-141: the three formerly-reserved roles are assignable, and the first ho
   await expect
     .poll(() => recorded.filter((r) => r.table === "party_role_assignments" && r.method === "POST"))
     .toHaveLength(1);
-  const post = recorded.find(
-    (r) => r.table === "party_role_assignments" && r.method === "POST",
-  )!;
+  const post = recorded.find((r) => r.table === "party_role_assignments" && r.method === "POST")!;
   expect(post.body).toMatchObject({
     org_id: ORG_A,
     role_key: "billing_contact",
@@ -435,8 +433,9 @@ test("TS-142: a second holder lands non-default and is promoted in one click (de
   // defaults for the same (org, role).
   await samCard.getByRole("button", { name: /Use this person for Billing Contact/ }).click();
   await expect
-    .poll(() =>
-      recorded.filter((r) => r.table === "party_role_assignments" && r.method === "PATCH").length,
+    .poll(
+      () =>
+        recorded.filter((r) => r.table === "party_role_assignments" && r.method === "PATCH").length,
     )
     .toBe(2);
   const patches = recorded.filter(
