@@ -22,7 +22,10 @@ Not shown (not in schema): “Gathering docs”, spreadsheet “PTP”, free-tex
 - Active = `groupPayerFulfillment` union (fact OR approved) (`16C`)  
 - Legacy `/reports` → redirect into Reporting Center (`23A`)  
 - No invented metrics; no sanctions/committee/SLA baselines  
-- Live Supabase probes: **blocked in this cloud agent** even after desktop connect — need SQL results pasted or MCP tools visible to the run (`28C`)
+- Live validation (2026-08-07): probes in `supabase-validation.sql` ran on hosted
+  `fkvuhfsqcmujywzgczmc` — **schema OK, volume insufficient** (1 prospect org, 1
+  open case, 0 facts, 0 touches). See `METRIC-DICTIONARY.md` footnote.
+- Spec artifacts: `METRIC-DICTIONARY.md` + `../E7.0-competitive-reporting-dashboards.md`
 
 ## How to review
 
