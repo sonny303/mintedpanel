@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Minted Panel — Reporting Dashboard Mockups (v1 IA rev 2)</title>
+  <title>Minted Panel — Reporting Mockups (interactive · locked IA)</title>
   <style>
     :root {
       --mp-font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -14,6 +14,7 @@
       --mp-border: #E8E5E0;
       --mp-muted: #F5F4F1;
       --mp-primary: #1B4D3E;
+      --mp-primary-hover: #163F33;
       --mp-ink: #1F2937;
       --mp-ink-secondary: #6B7280;
       --mp-ink-faint: #9CA3AF;
@@ -37,6 +38,7 @@
       -webkit-font-smoothing: antialiased;
       font-variant-numeric: tabular-nums;
     }
+    button, select { font-family: inherit; }
     .banner {
       background: var(--mp-warn-tint);
       color: var(--mp-warn-ink);
@@ -45,16 +47,17 @@
       font-size: 12px;
       line-height: 1.45;
     }
+    .banner code { font-size: 11px; }
     .chooser {
-      max-width: 1180px;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 16px 20px 8px;
+      padding: 14px 20px 8px;
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
     }
-    .chooser label { font-size: 12px; color: var(--mp-ink-secondary); margin-right: 4px; }
+    .chooser label { font-size: 12px; color: var(--mp-ink-secondary); }
     .chip-btn {
       border: 1px solid var(--mp-border);
       background: #fff;
@@ -62,24 +65,25 @@
       border-radius: var(--mp-radius-control);
       padding: 7px 12px;
       font-size: 13px;
-      font-family: inherit;
       cursor: pointer;
     }
+    .chip-btn:hover { background: var(--mp-muted); }
     .chip-btn[aria-pressed="true"] {
       background: var(--mp-primary);
       color: #fff;
       border-color: var(--mp-primary);
     }
     .shell {
-      max-width: 1180px;
-      margin: 0 auto 40px;
+      max-width: 1200px;
+      margin: 0 auto 48px;
       background: var(--mp-app);
       border: 1px solid var(--mp-border);
       border-radius: var(--mp-radius-sm);
       overflow: hidden;
-      min-height: 720px;
+      min-height: 760px;
       display: grid;
       grid-template-columns: 220px 1fr;
+      position: relative;
     }
     .rail {
       background: var(--mp-sidebar);
@@ -89,26 +93,26 @@
     }
     .rail .brand { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 18px; }
     .rail .sec { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.45); margin: 14px 8px 6px; }
-    .rail a {
+    .rail button.nav {
       display: block;
+      width: 100%;
+      text-align: left;
       padding: 8px 10px;
       border-radius: var(--mp-radius-control);
+      border: 0;
+      background: transparent;
       color: inherit;
-      text-decoration: none;
+      cursor: pointer;
       margin-bottom: 2px;
+      font-size: 13px;
     }
-    .rail a.active { background: rgba(255,255,255,.12); color: #fff; }
+    .rail button.nav:hover { background: rgba(255,255,255,.08); }
+    .rail button.nav.active { background: rgba(255,255,255,.12); color: #fff; }
     .main { padding: 20px 24px 28px; overflow-x: auto; }
     .page-title { font-size: 16px; font-weight: 600; margin: 0; }
-    .page-desc { font-size: 12px; color: var(--mp-ink-secondary); margin: 4px 0 16px; }
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-    .toolbar .spacer { flex: 1; }
+    .page-desc { font-size: 12px; color: var(--mp-ink-secondary); margin: 4px 0 14px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+    .toolbar .spacer { flex: 1; min-width: 8px; }
     .btn {
       height: 32px;
       padding: 0 12px;
@@ -116,27 +120,37 @@
       border: 1px solid var(--mp-border);
       background: #fff;
       font-size: 13px;
-      font-family: inherit;
       cursor: pointer;
       color: var(--mp-ink);
     }
+    .btn:hover { background: var(--mp-muted); }
     .btn.primary { background: var(--mp-primary); color: #fff; border-color: var(--mp-primary); }
-    .selectish, .group-chip {
+    .btn.primary:hover { background: var(--mp-primary-hover); }
+    .selectish {
       height: 32px;
       padding: 0 10px;
+      border: 1px solid var(--mp-border);
+      border-radius: var(--mp-radius-control);
+      background: #fff;
+      font-size: 13px;
+      color: var(--mp-ink);
+      cursor: pointer;
+    }
+    .group-chip {
+      height: 32px;
+      padding: 0 12px;
       border: 1px solid var(--mp-border);
       border-radius: 999px;
       background: #fff;
       font-size: 13px;
       color: var(--mp-ink-secondary);
-      display: inline-flex;
-      align-items: center;
-      cursor: default;
+      cursor: pointer;
     }
+    .group-chip:hover { background: var(--mp-muted); }
     .group-chip[aria-pressed="true"] {
       border-color: #2563EB;
       color: var(--mp-ink);
-      box-shadow: 0 0 0 1px #2563EB inset;
+      box-shadow: inset 0 0 0 1px #2563EB;
     }
     .card {
       background: var(--mp-card);
@@ -146,22 +160,44 @@
       margin-bottom: 12px;
     }
     .card h2 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
-    .card .hint { font-size: 12px; color: var(--mp-ink-secondary); margin-bottom: 12px; }
-    .month-strip {
+    .card .hint { font-size: 12px; color: var(--mp-ink-secondary); margin: 0 0 12px; }
+    .month-strip, .kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
-    .month-cell {
+    .month-cell, .kpi {
       border: 1px solid var(--mp-border);
       border-radius: var(--mp-radius-sm);
       background: #fff;
       padding: 12px 14px;
+      text-align: left;
+      cursor: pointer;
+      width: 100%;
     }
-    .month-cell .lbl { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mp-ink-secondary); }
-    .month-cell .val { font-size: 22px; font-weight: 600; margin-top: 4px; font-family: var(--mp-mono); }
-    .month-cell .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
+    .month-cell:hover, .kpi:hover { background: var(--mp-muted); }
+    .month-cell[aria-pressed="true"], .kpi[aria-pressed="true"] {
+      border-color: var(--mp-primary);
+      box-shadow: inset 0 0 0 1px var(--mp-primary);
+    }
+    .month-cell .lbl, .kpi .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--mp-ink-secondary);
+    }
+    .month-cell .val, .kpi .val {
+      font-size: 22px;
+      font-weight: 600;
+      margin-top: 4px;
+      font-family: var(--mp-mono);
+    }
+    .month-cell .sub, .kpi .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
+    .kpi.warn .val { color: var(--mp-warn-ink); }
+    .kpi.danger .val { color: var(--mp-danger-ink); }
+    .kpi.ok .val { color: var(--mp-ok-ink); }
     .pill {
       display: inline-flex;
       align-items: center;
@@ -172,29 +208,37 @@
       font-size: 11px;
       font-weight: 500;
       white-space: nowrap;
+      border: 0;
+      cursor: pointer;
+      font-family: inherit;
     }
     .pill .dot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
     .pill.active { background: var(--mp-ok-tint); color: var(--mp-ok-ink); }
     .pill.active .dot { background: var(--mp-ok-ink); }
-    .pill.in-review { background: var(--mp-info-tint); color: var(--mp-info-ink); }
-    .pill.in-review .dot { background: var(--mp-info-ink); }
+    .pill.in_review { background: var(--mp-info-tint); color: var(--mp-info-ink); }
+    .pill.in_review .dot { background: var(--mp-info-ink); }
     .pill.submitted { background: var(--mp-violet-tint); color: var(--mp-violet-ink); }
     .pill.submitted .dot { background: var(--mp-violet-ink); }
-    .pill.in-progress { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
-    .pill.in-progress .dot { background: var(--mp-warn-ink); }
-    .pill.not-started { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
-    .pill.not-started .dot { background: var(--mp-neutral-ink); }
+    .pill.in_progress { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
+    .pill.in_progress .dot { background: var(--mp-warn-ink); }
+    .pill.not_started { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
+    .pill.not_started .dot { background: var(--mp-neutral-ink); }
     .pill.denied { background: var(--mp-danger-tint); color: var(--mp-danger-ink); }
     .pill.denied .dot { background: var(--mp-danger-ink); }
-    .pill.action { background: var(--mp-pending-tint); color: var(--mp-pending-ink); }
-    .pill.action .dot { background: var(--mp-pending-ink); }
+    .pill.action_required { background: var(--mp-pending-tint); color: var(--mp-pending-ink); }
+    .pill.action_required .dot { background: var(--mp-pending-ink); }
+    .pill.not_pursuing { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
+    .pill.not_pursuing .dot { background: var(--mp-neutral-ink); }
     .pill.ok { background: var(--mp-ok-tint); color: var(--mp-ok-ink); }
-    .pill.neutral { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
-    .pill.danger { background: var(--mp-danger-tint); color: var(--mp-danger-ink); }
-    .pill.info { background: var(--mp-info-tint); color: var(--mp-info-ink); }
-    .pill.brand { background: var(--mp-brand-tint); color: var(--mp-brand-ink); }
     .pill.warn { background: var(--mp-warn-tint); color: var(--mp-warn-ink); }
+    .pill.danger { background: var(--mp-danger-tint); color: var(--mp-danger-ink); }
+    .pill.brand { background: var(--mp-brand-tint); color: var(--mp-brand-ink); }
     .pill.pending { background: var(--mp-pending-tint); color: var(--mp-pending-ink); }
+    .pill.neutral { background: var(--mp-neutral-tint); color: var(--mp-neutral-ink); }
+    .pill:focus-visible, .btn:focus-visible, .group-chip:focus-visible, .month-cell:focus-visible, .kpi:focus-visible, .chip-btn:focus-visible, .tab:focus-visible {
+      outline: 2px solid rgba(27,77,62,.35);
+      outline-offset: 2px;
+    }
     table { width: 100%; border-collapse: collapse; }
     th {
       text-align: left;
@@ -213,19 +257,14 @@
       font-size: 13px;
       vertical-align: middle;
     }
+    tr.row-click { cursor: pointer; }
+    tr.row-click:hover td { background: var(--mp-muted); }
+    tr.row-click[aria-selected="true"] td { background: var(--mp-brand-tint); }
     .mono { font-family: var(--mp-mono); font-size: 12px; color: var(--mp-ink-secondary); }
     .name { font-size: 13px; font-weight: 600; }
     .subname { font-size: 12px; color: var(--mp-ink-secondary); margin-top: 2px; }
-    .empty { color: var(--mp-ink-faint); }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 12px;
-    }
     .tabs {
       display: flex;
-      gap: 0;
       border-bottom: 1px solid var(--mp-border);
       margin-bottom: 16px;
     }
@@ -237,39 +276,16 @@
       margin-bottom: -1px;
       padding: 10px 14px;
       font-size: 13px;
-      font-family: inherit;
       color: var(--mp-ink-secondary);
       cursor: pointer;
     }
+    .tab:hover { color: var(--mp-ink); }
     .tab[aria-selected="true"] {
       color: var(--mp-primary);
       border-bottom-color: var(--mp-primary);
       font-weight: 600;
     }
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 16px;
-    }
-    .kpi {
-      background: var(--mp-card);
-      border: 1px solid var(--mp-border);
-      border-radius: var(--mp-radius-sm);
-      padding: 12px 14px;
-    }
-    .kpi .lbl { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--mp-ink-secondary); }
-    .kpi .val { font-size: 22px; font-weight: 600; margin-top: 4px; font-family: var(--mp-mono); }
-    .kpi .sub { font-size: 11px; color: var(--mp-ink-faint); margin-top: 2px; }
-    .kpi.warn .val { color: var(--mp-warn-ink); }
-    .kpi.danger .val { color: var(--mp-danger-ink); }
-    .kpi.ok .val { color: var(--mp-ok-ink); }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1.1fr 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
+    .grid-2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 12px; margin-bottom: 12px; }
     .bars { display: flex; flex-direction: column; gap: 8px; }
     .bar-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: 8px; align-items: center; font-size: 12px; }
     .bar-track { height: 8px; background: var(--mp-muted); border-radius: 2px; overflow: hidden; }
@@ -278,12 +294,7 @@
     .bar-fill.warn { background: var(--mp-warn-ink); }
     .bar-fill.info { background: var(--mp-info-ink); }
     .bar-fill.pending { background: var(--mp-pending-ink); }
-    .footnote {
-      margin-top: 12px;
-      font-size: 11px;
-      color: var(--mp-ink-faint);
-      line-height: 1.45;
-    }
+    .footnote { margin-top: 12px; font-size: 11px; color: var(--mp-ink-faint); line-height: 1.45; }
     .callout {
       border: 1px solid #F0D9B0;
       background: var(--mp-warn-tint);
@@ -298,139 +309,184 @@
     .screen.active { display: block; }
     .ops-panel { display: none; }
     .ops-panel.active { display: block; }
-    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .stack { display: flex; flex-direction: column; gap: 10px; }
     .row-card {
       border: 1px solid var(--mp-border);
       border-radius: var(--mp-radius-sm);
-      padding: 10px 12px;
+      padding: 12px;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 8px;
       align-items: center;
+      background: #fff;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      font: inherit;
+      color: inherit;
     }
+    .row-card:hover { background: var(--mp-muted); }
     .row-card .title { font-size: 13px; font-weight: 600; }
     .row-card .meta { font-size: 12px; color: var(--mp-ink-secondary); margin-top: 2px; }
-    .matrix-wrap { overflow-x: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, .28);
+      display: none;
+      z-index: 20;
+    }
+    .drawer-backdrop.open { display: block; }
+    .drawer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: min(380px, 100%);
+      height: 100%;
+      background: #fff;
+      border-left: 1px solid var(--mp-border);
+      z-index: 21;
+      transform: translateX(100%);
+      transition: transform .18s ease;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer h3 { margin: 0; font-size: 15px; }
+    .drawer .meta { font-size: 12px; color: var(--mp-ink-secondary); }
+    .drawer dl { margin: 0; display: grid; grid-template-columns: 110px 1fr; gap: 8px 10px; font-size: 13px; }
+    .drawer dt { color: var(--mp-ink-secondary); }
+    .drawer dd { margin: 0; }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--mp-ink);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: var(--mp-radius-control);
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease, transform .15s ease;
+      z-index: 50;
+      max-width: min(480px, calc(100% - 32px));
+      text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .status-line {
+      font-size: 12px;
+      color: var(--mp-ink-secondary);
+      margin-bottom: 10px;
+      min-height: 18px;
+    }
     @media (max-width: 900px) {
       .shell { grid-template-columns: 1fr; }
       .rail { display: none; }
-      .kpis, .month-strip, .grid-2 { grid-template-columns: 1fr 1fr; }
+      .month-strip, .kpis, .grid-2 { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="banner">
-    <strong>Layout mockups only (rev 2).</strong>
-    Cell labels use Minted’s real <code>case_status</code> vocabulary (+ Active from live enrollment fact OR approved case).
-    Screenshot labels like “Gathering docs” / spreadsheet “PTP” are <strong>not</strong> in the schema and are not shown.
-    Sample counts are placeholders for composition — not live data. Supabase live probes are still blocked in this cloud agent (see note below).
+    <strong>Interactive IA mockup (fixture data).</strong>
+    Click screens, group/state filters, month cards, matrix cells, Ops tabs, and report cards.
+    Status labels = real <code>case_status</code> + <strong>Active</strong> (fact ∪ approved). Not live hosted counts — hosted volume is too thin.
   </div>
 
   <div class="chooser">
     <label>Screen</label>
-    <button type="button" class="chip-btn" data-screen="owner" aria-pressed="true">1 · Owner Network Health</button>
-    <button type="button" class="chip-btn" data-screen="ops" aria-pressed="false">2 · Ops Pipeline</button>
-    <button type="button" class="chip-btn" data-screen="center" aria-pressed="false">0 · Reporting Center index</button>
+    <button type="button" class="chip-btn" data-go="center" aria-pressed="false">0 · Reporting Center</button>
+    <button type="button" class="chip-btn" data-go="owner" aria-pressed="true">1 · Owner Network Health</button>
+    <button type="button" class="chip-btn" data-go="ops" aria-pressed="false">2 · Ops Pipeline</button>
   </div>
 
-  <div class="shell">
-    <aside class="rail">
+  <div class="shell" id="app">
+    <aside class="rail" aria-label="Sidebar">
       <div class="brand">Minted Panel</div>
       <div class="sec">Workspace</div>
-      <a href="#">Cases</a>
-      <a href="#">Payer Setup</a>
-      <a class="active" href="#">Reporting Center</a>
+      <button type="button" class="nav" data-go="owner">Cases</button>
+      <button type="button" class="nav">Payer Setup</button>
+      <button type="button" class="nav active" data-go="center">Reporting Center</button>
       <div class="sec">Organization</div>
-      <a href="#">Org Detail</a>
-      <a href="#">Groups</a>
-      <a href="#">Providers</a>
+      <button type="button" class="nav">Org Detail</button>
+      <button type="button" class="nav">Groups</button>
+      <button type="button" class="nav">Providers</button>
     </aside>
 
     <main class="main">
+      <!-- CENTER -->
       <section class="screen" id="screen-center" data-screen="center">
         <h1 class="page-title">Reporting Center</h1>
-        <p class="page-desc">v1 adds two entries; legacy /reports redirects here after build.</p>
+        <p class="page-desc">Click a card to open it. Legacy /reports redirects here after build.</p>
         <div class="card">
           <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mp-ink-secondary);margin-bottom:10px;">Performance</div>
           <div class="stack">
-            <div class="row-card">
+            <button type="button" class="row-card" data-go="owner">
               <div>
-                <div class="title">Owner Network Health <span class="pill brand">NEW</span></div>
-                <div class="meta">Enrollment matrix + this-month throughput/TAT. Share + CSV.</div>
+                <div class="title">Owner Network Health <span class="pill brand" style="cursor:default">NEW</span></div>
+                <div class="meta">Enrollment matrix + this-month throughput/TAT · Share + CSV</div>
               </div>
               <span class="mono">→</span>
-            </div>
-            <div class="row-card">
+            </button>
+            <button type="button" class="row-card" data-go="ops">
               <div>
-                <div class="title">Ops Pipeline <span class="pill brand">NEW</span></div>
-                <div class="meta">Tabs: Provider Network · Workload · Turnaround.</div>
+                <div class="title">Ops Pipeline <span class="pill brand" style="cursor:default">NEW</span></div>
+                <div class="meta">Provider Network · Workload · Turnaround</div>
               </div>
               <span class="mono">→</span>
-            </div>
-            <div class="row-card">
+            </button>
+            <button type="button" class="row-card" data-toast="Portfolio is an existing report — unchanged in E7.0.">
               <div>
-                <div class="title">Portfolio · Launches · count reports</div>
-                <div class="meta">Existing — unchanged.</div>
+                <div class="title">Portfolio</div>
+                <div class="meta">Existing cross-org book of business</div>
               </div>
               <span class="mono">→</span>
-            </div>
+            </button>
           </div>
         </div>
       </section>
 
-      <!-- OWNER: matrix + this month only -->
+      <!-- OWNER -->
       <section class="screen active" id="screen-owner" data-screen="owner">
         <h1 class="page-title">Network Health</h1>
-        <p class="page-desc">Owner / CEO · active org · enrollment matrix + this-month outcomes · Share + CSV.</p>
+        <p class="page-desc">Owner / CEO · active org · matrix + this-month outcomes only</p>
 
         <div class="callout">
-          <strong>Honest status map (vs your screenshots):</strong>
-          cells use only <em>Not Started · In Progress · Submitted · In Review · Action Required · Active · Denied · Not Pursuing</em>
-          or <em>—</em> (no target / out of scope).
-          “Gathering docs” is not a case status (that’s readiness gaps elsewhere).
-          Spreadsheet “PTP” / free-text notes are not modeled — not shown.
+          Locked cell rules: <strong>Active</strong> if live fact OR approved (wins over parallel open cases).
+          Columns = payers with active targets for the group filter. Empty in-scope = <strong>Not Started</strong> (no —).
+          Click a cell for provenance.
         </div>
 
-        <div class="toolbar">
-          <span class="group-chip" aria-pressed="true">All groups</span>
-          <span class="group-chip">Outer Banks</span>
-          <span class="group-chip">Dillon Sports</span>
-          <span class="selectish">State: All</span>
+        <div class="toolbar" id="owner-toolbar">
+          <button type="button" class="group-chip" data-group="all" aria-pressed="true">All groups</button>
+          <button type="button" class="group-chip" data-group="outer" aria-pressed="false">Outer Banks</button>
+          <button type="button" class="group-chip" data-group="dillon" aria-pressed="false">Dillon Sports</button>
+          <select class="selectish" id="state-filter" aria-label="State filter">
+            <option value="all">State: All (collapse)</option>
+            <option value="NC">State: NC</option>
+            <option value="SC">State: SC</option>
+          </select>
+          <select class="selectish" id="window-filter" aria-label="Time window">
+            <option value="30">Trailing 30 days</option>
+            <option value="90">Trailing 90 days</option>
+            <option value="month">This calendar month</option>
+          </select>
           <div class="spacer"></div>
-          <button type="button" class="btn">Download CSV</button>
-          <button type="button" class="btn primary">Share report</button>
+          <button type="button" class="btn" id="btn-csv-owner">Download CSV</button>
+          <button type="button" class="btn primary" id="btn-share">Share report</button>
         </div>
 
-        <div class="month-strip" aria-label="This month outcomes">
-          <div class="month-cell">
-            <div class="lbl">Approved (MoM)</div>
-            <div class="val">12</div>
-            <div class="sub">First → Approved in window</div>
-          </div>
-          <div class="month-cell">
-            <div class="lbl">Submitted (MoM)</div>
-            <div class="val">19</div>
-            <div class="sub">First → Submitted in window</div>
-          </div>
-          <div class="month-cell">
-            <div class="lbl">Denied (MoM)</div>
-            <div class="val">2</div>
-            <div class="sub">→ Denied in window</div>
-          </div>
-          <div class="month-cell">
-            <div class="lbl">Median days to approve</div>
-            <div class="val">41d</div>
-            <div class="sub">Create → first Approved · history</div>
-          </div>
-        </div>
+        <div class="status-line" id="owner-status">Showing All groups · all states</div>
+
+        <div class="month-strip" id="month-strip" aria-label="This month outcomes"></div>
 
         <div class="card">
           <h2>Enrollment matrix</h2>
-          <p class="hint">
-            Provider × payer at a glance (29A). Group chips + optional state filter.
-            Collapse states with most-advanced status. Columns = payers with an active
-            <code>payer_network_targets</code> row for the filtered group(s).
-          </p>
+          <p class="hint">Provider × payer. Click any status pill to inspect how the cell resolved.</p>
           <div class="matrix-wrap">
             <table>
               <thead>
@@ -443,208 +499,671 @@
                   <th>Medicare</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><div class="name">Morgan Apple</div><div class="subname">Orthopedic</div></td>
-                  <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
-                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
-                  <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                </tr>
-                <tr>
-                  <td><div class="name">Lydia Carmichael</div><div class="subname">Sports</div></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
-                  <td><span class="pill in-review"><span class="dot"></span>In Review</span></td>
-                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                </tr>
-                <tr>
-                  <td><div class="name">Aisha Okafor</div><div class="subname">Ortho</div></td>
-                  <td><span class="pill denied"><span class="dot"></span>Denied</span></td>
-                  <td><span class="pill in-progress"><span class="dot"></span>In Progress</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill action"><span class="dot"></span>Action Required</span></td>
-                </tr>
-                <tr>
-                  <td><div class="name">James Thornton</div><div class="subname">PT</div></td>
-                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                </tr>
-                <tr>
-                  <td><div class="name">Sara Whitfield</div><div class="subname">PT</div></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill active"><span class="dot"></span>Active</span></td>
-                  <td><span class="pill submitted"><span class="dot"></span>Submitted</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                  <td><span class="pill not-started"><span class="dot"></span>Not Started</span></td>
-                </tr>
-              </tbody>
+              <tbody id="matrix-body"></tbody>
             </table>
           </div>
-          <div class="legend" aria-label="Status legend">
-            <span class="pill active"><span class="dot"></span>Active</span>
-            <span class="pill in-review"><span class="dot"></span>In Review</span>
-            <span class="pill submitted"><span class="dot"></span>Submitted</span>
-            <span class="pill in-progress"><span class="dot"></span>In Progress</span>
-            <span class="pill action"><span class="dot"></span>Action Required</span>
-            <span class="pill not-started"><span class="dot"></span>Not Started</span>
-            <span class="pill denied"><span class="dot"></span>Denied</span>
-          </div>
-          <p class="footnote">
-            Locked cell rules: columns = payers with active targets for the group filter; every cell has a status
-            (no em-dash). Active if live fact OR approved (even if another open case exists). Else most-advanced
-            case status across states (optional state filter narrows). No case and no fact → Not Started.
-          </p>
+          <div class="legend" id="legend"></div>
+          <p class="footnote" id="matrix-footnote"></p>
         </div>
       </section>
 
       <!-- OPS -->
       <section class="screen" id="screen-ops" data-screen="ops">
         <h1 class="page-title">Ops Pipeline</h1>
-        <p class="page-desc">Ops managers · active org · CSV · tab order: Provider Network → Workload → Turnaround.</p>
+        <p class="page-desc">Ops managers · CSV · tabs: Provider Network → Workload → Turnaround</p>
         <div class="toolbar">
-          <span class="selectish">Trailing 30 days</span>
-          <span class="selectish">All groups</span>
-          <span class="selectish">All payers</span>
-          <span class="selectish">All states</span>
+          <select class="selectish" id="ops-window">
+            <option value="30">Trailing 30 days</option>
+            <option value="90">Trailing 90 days</option>
+          </select>
           <div class="spacer"></div>
-          <button type="button" class="btn">Download CSV</button>
+          <button type="button" class="btn" id="btn-csv-ops">Download CSV</button>
         </div>
 
-        <div class="tabs" role="tablist">
+        <div class="tabs" role="tablist" aria-label="Ops Pipeline sections">
           <button type="button" class="tab" role="tab" data-ops-tab="providers" aria-selected="true">Provider Network</button>
           <button type="button" class="tab" role="tab" data-ops-tab="workload" aria-selected="false">Workload</button>
           <button type="button" class="tab" role="tab" data-ops-tab="tat" aria-selected="false">Turnaround</button>
         </div>
 
         <div class="ops-panel active" data-ops-tab="providers">
-          <div class="kpis">
-            <div class="kpi ok"><div class="lbl">Active network</div><div class="val">62%</div><div class="sub">Moved from Owner · group×payer</div></div>
-            <div class="kpi"><div class="lbl">Open cases</div><div class="val">148</div><div class="sub">case_status open set</div></div>
-            <div class="kpi warn"><div class="lbl">At-risk launches</div><div class="val">3</div><div class="sub">Launches report rule</div></div>
-            <div class="kpi danger"><div class="lbl">Standing denials</div><div class="val">7</div><div class="sub">Denied, not reapplied</div></div>
-          </div>
+          <div class="kpis" id="ops-net-kpis"></div>
           <div class="card">
             <h2>Risk watch</h2>
-            <p class="hint">Moved from Owner — launches, expirables, awaiting ID, candidate buffer.</p>
+            <p class="hint">Click a row for the source rule.</p>
             <table>
               <thead><tr><th>Item</th><th>Type</th><th>Detail</th></tr></thead>
-              <tbody>
-                <tr><td>Raleigh Clinic</td><td><span class="pill warn">Launch</span></td><td class="mono">Go-live in 12d · open cases</td></tr>
-                <tr><td>DEA — B. Hershberger</td><td><span class="pill danger">Expiring</span></td><td class="mono">Documents · ≤30d rule</td></tr>
-                <tr><td>UHC · NC · M. Bell</td><td><span class="pill pending">Awaiting ID</span></td><td class="mono">Approved + expected ID null</td></tr>
-                <tr><td>Generation buffer</td><td><span class="pill brand">Candidates</span></td><td class="mono">generationBuffer size</td></tr>
-              </tbody>
+              <tbody id="risk-body"></tbody>
             </table>
           </div>
-          <div class="card">
-            <h2>Payer network fulfillment</h2>
-            <p class="hint">Same <code>groupPayerFulfillment</code> as the Groups board — single definition.</p>
-            <div class="bars">
-              <div class="bar-row"><span>Active</span><div class="bar-track"><div class="bar-fill ok" style="width:62%"></div></div><span class="mono">41</span></div>
-              <div class="bar-row"><span>In progress</span><div class="bar-track"><div class="bar-fill pending" style="width:28%"></div></div><span class="mono">18</span></div>
-              <div class="bar-row"><span>Targeted</span><div class="bar-track"><div class="bar-fill" style="width:10%"></div></div><span class="mono">7</span></div>
+          <div class="grid-2">
+            <div class="card">
+              <h2>Payer network fulfillment</h2>
+              <p class="hint"><code>groupPayerFulfillment</code> — Active = fact ∪ approved</p>
+              <div class="bars" id="fulfillment-bars"></div>
             </div>
-          </div>
-          <div class="card">
-            <h2>Provider coverage snapshot</h2>
-            <p class="hint">providerCaseProgress + providerGaps + license expirations — existing reducers.</p>
-            <table>
-              <thead><tr><th>Provider</th><th>Progress</th><th>Gaps</th><th>Soonest license</th></tr></thead>
-              <tbody>
-                <tr>
-                  <td><div class="name">Brian Hershberger, PT</div><div class="mono">1841293756</div></td>
-                  <td class="mono">4 of 6</td>
-                  <td><span class="pill warn">CAQH stale</span></td>
-                  <td class="mono">NC · days left</td>
-                </tr>
-                <tr>
-                  <td><div class="name">Sarah Nguyen, DPT</div><div class="mono">1730495821</div></td>
-                  <td class="mono">6 of 6</td>
-                  <td><span class="pill ok">None</span></td>
-                  <td class="mono">SC · days left</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="card">
+              <h2>Provider coverage</h2>
+              <p class="hint">Click a provider row</p>
+              <table>
+                <thead><tr><th>Provider</th><th>Progress</th><th>Gaps</th></tr></thead>
+                <tbody id="coverage-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         <div class="ops-panel" data-ops-tab="workload">
-          <div class="kpis">
-            <div class="kpi danger"><div class="lbl">Overdue follow-ups</div><div class="val">9</div><div class="sub">followUps carry-forward</div></div>
-            <div class="kpi warn"><div class="lbl">Overdue tasks</div><div class="val">14</div><div class="sub">open tasks past due_date</div></div>
-            <div class="kpi"><div class="lbl">Touches (30d)</div><div class="val">226</div><div class="sub">entry_type = touchpoint</div></div>
-            <div class="kpi"><div class="lbl">NBA queue</div><div class="val">148</div><div class="sub">buildNextBestActions</div></div>
-          </div>
+          <div class="kpis" id="ops-work-kpis"></div>
           <div class="grid-2">
             <div class="card">
               <h2>Touches by type</h2>
-              <p class="hint">Structured touch_type only.</p>
-              <div class="bars">
-                <div class="bar-row"><span>Portal</span><div class="bar-track"><div class="bar-fill" style="width:40%"></div></div><span class="mono">…</span></div>
-                <div class="bar-row"><span>Call</span><div class="bar-track"><div class="bar-fill info" style="width:28%"></div></div><span class="mono">…</span></div>
-                <div class="bar-row"><span>Email</span><div class="bar-track"><div class="bar-fill pending" style="width:18%"></div></div><span class="mono">…</span></div>
-              </div>
+              <div class="bars" id="touch-bars"></div>
             </div>
             <div class="card">
               <h2>Workload by coordinator</h2>
-              <p class="hint">Primary attribution: touches.coordinator_id. assigned_to optional/sparse.</p>
+              <p class="hint">Primary: <code>touches.coordinator_id</code> (not assigned_to)</p>
               <table>
                 <thead><tr><th>Person</th><th>Touches</th><th>Overdue FU</th></tr></thead>
-                <tbody>
-                  <tr><td>Alex R.</td><td class="mono">…</td><td class="mono">…</td></tr>
-                  <tr><td>Unattributed</td><td class="mono">…</td><td class="mono">…</td></tr>
-                </tbody>
+                <tbody id="coord-body"></tbody>
               </table>
             </div>
           </div>
         </div>
 
         <div class="ops-panel" data-ops-tab="tat">
-          <div class="kpis">
-            <div class="kpi"><div class="lbl">Median create→approve</div><div class="val">41d</div><div class="sub">Same definition as Owner strip</div></div>
-            <div class="kpi"><div class="lbl">Median submit→approve</div><div class="val">27d</div><div class="sub">History only</div></div>
-            <div class="kpi ok"><div class="lbl">Approved (30d)</div><div class="val">12</div><div class="sub">Matches Owner</div></div>
-            <div class="kpi warn"><div class="lbl">Still open &gt;60d</div><div class="val">23</div><div class="sub">Open case age</div></div>
-          </div>
+          <div class="kpis" id="ops-tat-kpis"></div>
           <div class="card">
             <h2>By payer (trailing approvals)</h2>
-            <p class="hint">Observed only — no expected baseline (<code>avg_decision_days</code> stop-write).</p>
+            <p class="hint">Observed only — no expected baseline. Click a row.</p>
             <table>
               <thead><tr><th>Payer</th><th>Approved</th><th>Median days</th><th>Denied</th></tr></thead>
-              <tbody>
-                <tr><td>BCBS NC</td><td class="mono">…</td><td class="mono">…</td><td class="mono">…</td></tr>
-                <tr><td>UHC</td><td class="mono">…</td><td class="mono">…</td><td class="mono">…</td></tr>
-              </tbody>
+              <tbody id="tat-payer-body"></tbody>
             </table>
           </div>
         </div>
       </section>
     </main>
+
+    <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+    <aside class="drawer" id="drawer" aria-live="polite" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <h3 id="drawer-title">Detail</h3>
+        <button type="button" class="btn" id="drawer-close">Close</button>
+      </div>
+      <div class="meta" id="drawer-sub"></div>
+      <dl id="drawer-dl"></dl>
+      <button type="button" class="btn primary" id="drawer-action" style="margin-top:auto">Open related</button>
+    </aside>
   </div>
 
-  <script>
-    const screenBtns = document.querySelectorAll("[data-screen].chip-btn");
-    const screens = document.querySelectorAll(".screen");
-    function showScreen(key) {
-      screens.forEach((s) => s.classList.toggle("active", s.dataset.screen === key));
-      screenBtns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.screen === key)));
-    }
-    screenBtns.forEach((b) => b.addEventListener("click", () => showScreen(b.dataset.screen)));
+  <div class="toast" id="toast" role="status"></div>
 
-    const tabBtns = document.querySelectorAll(".tab");
-    const panels = document.querySelectorAll(".ops-panel");
-    function showOpsTab(key) {
-      tabBtns.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.opsTab === key)));
-      panels.forEach((p) => p.classList.toggle("active", p.dataset.opsTab === key));
+  <script>
+    /**
+     * Fixture composition data — NOT hosted live counts.
+     * Demonstrates locked matrix rules (Active wins, Not Started empties).
+     */
+    const PAYERS = ["Aetna", "BCBS", "Cigna", "UHC", "Medicare"];
+    const LABELS = {
+      active: "Active",
+      in_review: "In Review",
+      submitted: "Submitted",
+      in_progress: "In Progress",
+      action_required: "Action Required",
+      not_started: "Not Started",
+      denied: "Denied",
+      not_pursuing: "Not Pursuing",
+    };
+    const OPEN_RANK = {
+      action_required: 4,
+      in_review: 3,
+      submitted: 2,
+      in_progress: 1,
+      not_started: 0,
+    };
+
+    const providers = [
+      { id: "p1", name: "Morgan Apple", specialty: "Orthopedic", groups: ["outer", "dillon"] },
+      { id: "p2", name: "Lydia Carmichael", specialty: "Sports", groups: ["outer"] },
+      { id: "p3", name: "Aisha Okafor", specialty: "Ortho", groups: ["dillon"] },
+      { id: "p4", name: "James Thornton", specialty: "PT", groups: ["outer", "dillon"] },
+      { id: "p5", name: "Sara Whitfield", specialty: "PT", groups: ["dillon"] },
+    ];
+
+    // Raw standings at provider×payer×state×group — used to resolve cells.
+    // kind: 'fact' | 'case'
+    const standings = [
+      // Morgan: Active via approved NC + parallel open SC on Aetna → Active (30A)
+      { providerId: "p1", payer: "Aetna", state: "NC", group: "outer", kind: "case", status: "approved" },
+      { providerId: "p1", payer: "Aetna", state: "SC", group: "outer", kind: "case", status: "in_progress" },
+      { providerId: "p1", payer: "BCBS", state: "NC", group: "outer", kind: "fact", status: "active" },
+      { providerId: "p1", payer: "Cigna", state: "NC", group: "outer", kind: "case", status: "in_progress" },
+      { providerId: "p1", payer: "Medicare", state: "NC", group: "dillon", kind: "case", status: "not_started" },
+
+      { providerId: "p2", payer: "BCBS", state: "NC", group: "outer", kind: "case", status: "approved" },
+      { providerId: "p2", payer: "Cigna", state: "NC", group: "outer", kind: "case", status: "in_review" },
+      { providerId: "p2", payer: "UHC", state: "SC", group: "outer", kind: "case", status: "submitted" },
+
+      { providerId: "p3", payer: "Aetna", state: "NC", group: "dillon", kind: "case", status: "denied" },
+      { providerId: "p3", payer: "BCBS", state: "NC", group: "dillon", kind: "case", status: "in_progress" },
+      { providerId: "p3", payer: "Medicare", state: "SC", group: "dillon", kind: "case", status: "action_required" },
+
+      { providerId: "p4", payer: "Aetna", state: "NC", group: "outer", kind: "fact", status: "active" },
+      { providerId: "p4", payer: "UHC", state: "NC", group: "dillon", kind: "case", status: "submitted" },
+      { providerId: "p4", payer: "Medicare", state: "NC", group: "dillon", kind: "case", status: "submitted" },
+
+      { providerId: "p5", payer: "BCBS", state: "SC", group: "dillon", kind: "case", status: "approved" },
+      { providerId: "p5", payer: "Cigna", state: "SC", group: "dillon", kind: "case", status: "submitted" },
+    ];
+
+    // Targets define in-scope payer columns per group
+    const targets = [
+      { group: "outer", payer: "Aetna", state: "NC" },
+      { group: "outer", payer: "Aetna", state: "SC" },
+      { group: "outer", payer: "BCBS", state: "NC" },
+      { group: "outer", payer: "Cigna", state: "NC" },
+      { group: "outer", payer: "UHC", state: "SC" },
+      { group: "outer", payer: "Medicare", state: "NC" },
+      { group: "dillon", payer: "Aetna", state: "NC" },
+      { group: "dillon", payer: "BCBS", state: "NC" },
+      { group: "dillon", payer: "Cigna", state: "SC" },
+      { group: "dillon", payer: "UHC", state: "NC" },
+      { group: "dillon", payer: "Medicare", state: "NC" },
+      { group: "dillon", payer: "Medicare", state: "SC" },
+    ];
+
+    const state = {
+      screen: "owner",
+      group: "all",
+      stateFilter: "all",
+      window: "30",
+      opsTab: "providers",
+      monthFocus: null,
+    };
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => el.classList.remove("show"), 2400);
     }
-    tabBtns.forEach((t) => t.addEventListener("click", () => showOpsTab(t.dataset.opsTab)));
+
+    function go(screen) {
+      state.screen = screen;
+      document.querySelectorAll(".screen").forEach((s) => {
+        s.classList.toggle("active", s.dataset.screen === screen);
+      });
+      document.querySelectorAll("[data-go].chip-btn").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.go === screen));
+      });
+      document.querySelectorAll(".rail .nav").forEach((b) => {
+        const isReporting = b.dataset.go === "center" || b.textContent === "Reporting Center";
+        b.classList.toggle("active", screen === "center" ? isReporting : b.dataset.go === screen);
+      });
+      closeDrawer();
+    }
+
+    function resolveCell(providerId, payer, groupFilter, stateFilter) {
+      const groups = groupFilter === "all" ? ["outer", "dillon"] : [groupFilter];
+      const inScope = targets.some(
+        (t) => groups.includes(t.group) && t.payer === payer && (stateFilter === "all" || t.state === stateFilter),
+      );
+      // Column still shown for All groups union; if payer not in filtered group targets, treat as not in scope → still Not Started per 31B when column present
+      const rows = standings.filter((s) => {
+        if (s.providerId !== providerId || s.payer !== payer) return false;
+        if (!groups.includes(s.group)) return false;
+        if (stateFilter !== "all" && s.state !== stateFilter) return false;
+        return true;
+      });
+
+      const activeRows = rows.filter(
+        (r) => r.kind === "fact" || r.status === "approved" || r.status === "active",
+      );
+      if (activeRows.length) {
+        return {
+          status: "active",
+          reason: "Active: live enrollment fact OR approved case (wins over parallel open cases).",
+          evidence: activeRows,
+          parallelOpen: rows.filter((r) => r.kind === "case" && OPEN_RANK[r.status] != null),
+          inScope,
+        };
+      }
+      if (!rows.length) {
+        return {
+          status: "not_started",
+          reason: inScope
+            ? "In scope (active target) but no case and no live fact → Not Started."
+            : "No standing under this group/state filter → Not Started.",
+          evidence: [],
+          parallelOpen: [],
+          inScope,
+        };
+      }
+      const open = rows.filter((r) => OPEN_RANK[r.status] != null);
+      if (open.length) {
+        open.sort((a, b) => OPEN_RANK[b.status] - OPEN_RANK[a.status]);
+        return {
+          status: open[0].status,
+          reason: "Most-advanced open-spine status across collapsed states.",
+          evidence: [open[0]],
+          parallelOpen: open.slice(1),
+          inScope,
+        };
+      }
+      if (rows.some((r) => r.status === "denied")) {
+        return {
+          status: "denied",
+          reason: "No Active; at least one Denied case in the filter.",
+          evidence: rows.filter((r) => r.status === "denied"),
+          parallelOpen: [],
+          inScope,
+        };
+      }
+      return {
+        status: "not_pursuing",
+        reason: "Only Not Pursuing remain under the filter.",
+        evidence: rows,
+        parallelOpen: [],
+        inScope,
+      };
+    }
+
+    function monthMetrics(windowKey) {
+      // Fixture scaling by window — composition only
+      const scale = windowKey === "90" ? 2.4 : windowKey === "month" ? 0.7 : 1;
+      return {
+        approved: Math.round(12 * scale),
+        submitted: Math.round(19 * scale),
+        denied: Math.max(1, Math.round(2 * scale)),
+        median: windowKey === "90" ? 44 : windowKey === "month" ? 38 : 41,
+      };
+    }
+
+    function renderMonthStrip() {
+      const m = monthMetrics(state.window);
+      const items = [
+        { key: "approved", lbl: "Approved", val: m.approved, sub: "First → Approved in window" },
+        { key: "submitted", lbl: "Submitted", val: m.submitted, sub: "First → Submitted in window" },
+        { key: "denied", lbl: "Denied", val: m.denied, sub: "→ Denied in window" },
+        { key: "median", lbl: "Median days to approve", val: m.median + "d", sub: "Create → first Approved · history" },
+      ];
+      document.getElementById("month-strip").innerHTML = items
+        .map(
+          (it) => `
+        <button type="button" class="month-cell" data-month="${it.key}" aria-pressed="${state.monthFocus === it.key}">
+          <div class="lbl">${it.lbl}</div>
+          <div class="val">${it.val}</div>
+          <div class="sub">${it.sub}</div>
+        </button>`,
+        )
+        .join("");
+    }
+
+    function renderMatrix() {
+      const groupLabel =
+        state.group === "all" ? "All groups" : state.group === "outer" ? "Outer Banks" : "Dillon Sports";
+      const stateLabel = state.stateFilter === "all" ? "all states (collapsed)" : state.stateFilter;
+      document.getElementById("owner-status").textContent = `Showing ${groupLabel} · ${stateLabel}`;
+
+      const body = document.getElementById("matrix-body");
+      const visibleProviders = providers.filter(
+        (p) => state.group === "all" || p.groups.includes(state.group),
+      );
+
+      body.innerHTML = visibleProviders
+        .map((p) => {
+          const cells = PAYERS.map((payer) => {
+            const cell = resolveCell(p.id, payer, state.group, state.stateFilter);
+            const focus = state.monthFocus;
+            const dim =
+              focus === "approved"
+                ? cell.status !== "active"
+                : focus === "denied"
+                  ? cell.status !== "denied"
+                  : focus === "submitted"
+                    ? cell.status !== "submitted"
+                    : false;
+            return `<td style="${dim ? "opacity:.35" : ""}">
+              <button type="button" class="pill ${cell.status}"
+                data-cell="${p.id}|${payer}"
+                title="Click for provenance">
+                <span class="dot"></span>${LABELS[cell.status]}
+              </button>
+            </td>`;
+          }).join("");
+          return `<tr>
+            <td><div class="name">${p.name}</div><div class="subname">${p.specialty}</div></td>
+            ${cells}
+          </tr>`;
+        })
+        .join("");
+
+      document.getElementById("legend").innerHTML = Object.entries(LABELS)
+        .map(
+          ([k, v]) =>
+            `<span class="pill ${k}" style="cursor:default"><span class="dot"></span>${v}</span>`,
+        )
+        .join("");
+
+      document.getElementById("matrix-footnote").textContent =
+        `${visibleProviders.length} providers × ${PAYERS.length} payers · fixture composition · click a pill for resolve path`;
+    }
+
+    function openDrawer({ title, sub, rows, actionLabel, onAction }) {
+      const drawer = document.getElementById("drawer");
+      const backdrop = document.getElementById("drawer-backdrop");
+      document.getElementById("drawer-title").textContent = title;
+      document.getElementById("drawer-sub").textContent = sub;
+      document.getElementById("drawer-dl").innerHTML = rows
+        .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+        .join("");
+      const action = document.getElementById("drawer-action");
+      action.textContent = actionLabel || "Close";
+      action.onclick = () => {
+        if (onAction) onAction();
+        else closeDrawer();
+      };
+      drawer.hidden = false;
+      backdrop.hidden = false;
+      requestAnimationFrame(() => {
+        drawer.classList.add("open");
+        backdrop.classList.add("open");
+      });
+    }
+
+    function closeDrawer() {
+      const drawer = document.getElementById("drawer");
+      const backdrop = document.getElementById("drawer-backdrop");
+      drawer.classList.remove("open");
+      backdrop.classList.remove("open");
+      setTimeout(() => {
+        drawer.hidden = true;
+        backdrop.hidden = true;
+      }, 180);
+    }
+
+    function showCell(providerId, payer) {
+      const p = providers.find((x) => x.id === providerId);
+      const cell = resolveCell(providerId, payer, state.group, state.stateFilter);
+      const evidence = cell.evidence
+        .map(
+          (e) =>
+            `${e.kind} · ${e.state} · ${e.group} · ${e.status}`,
+        )
+        .join("<br>") || "—";
+      const parallel = cell.parallelOpen
+        .map((e) => `${e.state}/${e.status}`)
+        .join(", ") || "none";
+      openDrawer({
+        title: `${p.name} × ${payer}`,
+        sub: LABELS[cell.status],
+        rows: [
+          ["Display", `<span class="pill ${cell.status}" style="cursor:default"><span class="dot"></span>${LABELS[cell.status]}</span>`],
+          ["Rule", cell.reason],
+          ["Evidence", evidence],
+          ["Parallel open", parallel],
+          ["Filters", `group=${state.group}, state=${state.stateFilter}`],
+        ],
+        actionLabel: "Go to Ops · Provider Network",
+        onAction: () => {
+          closeDrawer();
+          go("ops");
+          setOpsTab("providers");
+          toast(`Would deep-link ${p.name} × ${payer} in product build`);
+        },
+      });
+    }
+
+    function renderOps() {
+      const m = monthMetrics(state.window);
+      document.getElementById("ops-net-kpis").innerHTML = [
+        { cls: "ok", lbl: "Active network", val: "62%", sub: "Moved from Owner · group×payer" },
+        { cls: "", lbl: "Open cases", val: "148", sub: "case_status open set" },
+        { cls: "warn", lbl: "At-risk launches", val: "3", sub: "Launches report rule" },
+        { cls: "danger", lbl: "Standing denials", val: "7", sub: "Denied, not reapplied" },
+      ]
+        .map(
+          (k) => `<button type="button" class="kpi ${k.cls}" data-toast="${k.sub}">
+            <div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div>
+          </button>`,
+        )
+        .join("");
+
+      document.getElementById("risk-body").innerHTML = [
+        ["Raleigh Clinic", "warn", "Launch", "Go-live in 12d · open cases", "launchReport at-risk rule"],
+        ["DEA — B. Hershberger", "danger", "Expiring", "Documents · ≤30d", "documents.classifyExpiration"],
+        ["UHC · NC · M. Bell", "pending", "Awaiting ID", "Approved + expected ID null", "enrollmentIdBadge"],
+        ["Generation buffer", "brand", "Candidates", "proposed − live facts", "generationBuffer"],
+      ]
+        .map(
+          ([item, tone, type, detail, rule]) => `
+          <tr class="row-click" data-risk="${rule}">
+            <td>${item}</td>
+            <td><span class="pill ${tone}" style="cursor:default">${type}</span></td>
+            <td class="mono">${detail}</td>
+          </tr>`,
+        )
+        .join("");
+
+      document.getElementById("fulfillment-bars").innerHTML = [
+        ["Active", 62, 41, "ok"],
+        ["In progress", 28, 18, "pending"],
+        ["Targeted", 10, 7, ""],
+      ]
+        .map(
+          ([label, pct, n, cls]) => `
+          <div class="bar-row"><span>${label}</span>
+            <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+            <span class="mono">${n}</span></div>`,
+        )
+        .join("");
+
+      document.getElementById("coverage-body").innerHTML = [
+        ["Brian Hershberger, PT", "4 of 6", "warn", "CAQH stale"],
+        ["Sarah Nguyen, DPT", "6 of 6", "ok", "None"],
+        ["Marcus Bell, PT", "1 of 5", "danger", "No facility"],
+      ]
+        .map(
+          ([name, prog, tone, gap]) => `
+          <tr class="row-click" data-toast="Would open provider record · ${name}">
+            <td><div class="name">${name}</div></td>
+            <td class="mono">${prog}</td>
+            <td><span class="pill ${tone}" style="cursor:default">${gap}</span></td>
+          </tr>`,
+        )
+        .join("");
+
+      document.getElementById("ops-work-kpis").innerHTML = [
+        { cls: "danger", lbl: "Overdue follow-ups", val: "9", sub: "followUps carry-forward" },
+        { cls: "warn", lbl: "Overdue tasks", val: "14", sub: "open tasks past due_date" },
+        { cls: "", lbl: "Touches (window)", val: String(Math.round(226 * (state.window === "90" ? 2.2 : 1))), sub: "entry_type = touchpoint" },
+        { cls: "", lbl: "NBA queue", val: "148", sub: "buildNextBestActions" },
+      ]
+        .map(
+          (k) => `<button type="button" class="kpi ${k.cls}" data-toast="${k.sub}">
+            <div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div>
+          </button>`,
+        )
+        .join("");
+
+      document.getElementById("touch-bars").innerHTML = [
+        ["Portal", 40, 90, ""],
+        ["Call", 28, 63, "info"],
+        ["Email", 18, 41, "pending"],
+        ["Other", 14, 32, "warn"],
+      ]
+        .map(
+          ([label, pct, n, cls]) => `
+          <div class="bar-row"><span>${label}</span>
+            <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+            <span class="mono">${n}</span></div>`,
+        )
+        .join("");
+
+      document.getElementById("coord-body").innerHTML = [
+        ["Alex R.", 78, 4],
+        ["Jordan K.", 61, 3],
+        ["Unattributed", 22, 2],
+      ]
+        .map(
+          ([name, t, fu]) => `
+          <tr class="row-click" data-toast="Coordinator rollup via touches.coordinator_id · ${name}">
+            <td>${name}</td><td class="mono">${t}</td><td class="mono">${fu}</td>
+          </tr>`,
+        )
+        .join("");
+
+      document.getElementById("ops-tat-kpis").innerHTML = [
+        { cls: "", lbl: "Median create→approve", val: m.median + "d", sub: "Same definition as Owner" },
+        { cls: "", lbl: "Median submit→approve", val: "27d", sub: "History only" },
+        { cls: "ok", lbl: "Approved (window)", val: String(m.approved), sub: "Matches Owner strip" },
+        { cls: "warn", lbl: "Still open >60d", val: "23", sub: "Open case age" },
+      ]
+        .map(
+          (k) => `<button type="button" class="kpi ${k.cls}" data-toast="${k.sub}">
+            <div class="lbl">${k.lbl}</div><div class="val">${k.val}</div><div class="sub">${k.sub}</div>
+          </button>`,
+        )
+        .join("");
+
+      document.getElementById("tat-payer-body").innerHTML = [
+        ["BCBS NC", 5, 36, 0],
+        ["UHC", 3, 52, 1],
+        ["Aetna", 2, 44, 1],
+        ["Medicaid NC", 2, 61, 0],
+      ]
+        .map(
+          ([payer, a, d, den]) => `
+          <tr class="row-click" data-toast="TAT by payer · ${payer} · observed only">
+            <td>${payer}</td>
+            <td class="mono">${a}</td>
+            <td class="mono">${d}d</td>
+            <td class="mono">${den}</td>
+          </tr>`,
+        )
+        .join("");
+    }
+
+    function setOpsTab(key) {
+      state.opsTab = key;
+      document.querySelectorAll(".tab").forEach((t) => {
+        t.setAttribute("aria-selected", String(t.dataset.opsTab === key));
+      });
+      document.querySelectorAll(".ops-panel").forEach((p) => {
+        p.classList.toggle("active", p.dataset.opsTab === key);
+      });
+    }
+
+    function renderAll() {
+      renderMonthStrip();
+      renderMatrix();
+      renderOps();
+      document.querySelectorAll(".group-chip").forEach((c) => {
+        c.setAttribute("aria-pressed", String(c.dataset.group === state.group));
+      });
+    }
+
+    // Events
+    document.body.addEventListener("click", (e) => {
+      const goEl = e.target.closest("[data-go]");
+      if (goEl && goEl.dataset.go) {
+        go(goEl.dataset.go);
+        return;
+      }
+      const toastEl = e.target.closest("[data-toast]");
+      if (toastEl && toastEl.dataset.toast && !toastEl.closest("[data-cell]")) {
+        toast(toastEl.dataset.toast);
+      }
+      const group = e.target.closest("[data-group]");
+      if (group) {
+        state.group = group.dataset.group;
+        renderAll();
+        toast(`Group filter → ${group.textContent}`);
+        return;
+      }
+      const month = e.target.closest("[data-month]");
+      if (month) {
+        const key = month.dataset.month;
+        state.monthFocus = state.monthFocus === key ? null : key;
+        renderMonthStrip();
+        renderMatrix();
+        toast(
+          state.monthFocus
+            ? `Highlighting matrix cells related to ${key}`
+            : "Cleared month highlight",
+        );
+        return;
+      }
+      const cell = e.target.closest("[data-cell]");
+      if (cell) {
+        const [pid, payer] = cell.dataset.cell.split("|");
+        showCell(pid, payer);
+        return;
+      }
+      const tab = e.target.closest(".tab");
+      if (tab) {
+        setOpsTab(tab.dataset.opsTab);
+        toast(`Ops tab → ${tab.textContent}`);
+        return;
+      }
+      const risk = e.target.closest("[data-risk]");
+      if (risk) {
+        openDrawer({
+          title: "Risk watch item",
+          sub: "Source rule (existing lib)",
+          rows: [
+            ["Rule", risk.dataset.risk],
+            ["Note", "No new schema — reuse existing derivations."],
+          ],
+          actionLabel: "Close",
+        });
+      }
+    });
+
+    document.getElementById("state-filter").addEventListener("change", (e) => {
+      state.stateFilter = e.target.value;
+      renderAll();
+      toast(`State filter → ${e.target.value}`);
+    });
+    document.getElementById("window-filter").addEventListener("change", (e) => {
+      state.window = e.target.value;
+      document.getElementById("ops-window").value = e.target.value === "month" ? "30" : e.target.value;
+      renderAll();
+      toast(`Window → ${e.target.selectedOptions[0].text}`);
+    });
+    document.getElementById("ops-window").addEventListener("change", (e) => {
+      state.window = e.target.value;
+      document.getElementById("window-filter").value = e.target.value;
+      renderAll();
+    });
+    document.getElementById("btn-csv-owner").addEventListener("click", () => {
+      toast("CSV: one row per provider×payer cell (fixture download not wired in mock)");
+    });
+    document.getElementById("btn-share").addEventListener("click", () => {
+      openDrawer({
+        title: "Share Network Health",
+        sub: "Extends report_shares (Portfolio pattern)",
+        rows: [
+          ["Scope", "Active org (single_org)"],
+          ["Expiry", "30 days"],
+          ["Access", "Read-only public token link"],
+        ],
+        actionLabel: "Copy link (mock)",
+        onAction: () => {
+          toast("Copied mock share link");
+          closeDrawer();
+        },
+      });
+    });
+    document.getElementById("btn-csv-ops").addEventListener("click", () => {
+      toast(`CSV for Ops · ${state.opsTab} tab`);
+    });
+    document.getElementById("drawer-close").addEventListener("click", closeDrawer);
+    document.getElementById("drawer-backdrop").addEventListener("click", closeDrawer);
+
+    renderAll();
   </script>
 </body>
 </html>

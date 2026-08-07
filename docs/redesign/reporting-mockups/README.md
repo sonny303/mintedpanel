@@ -27,6 +27,17 @@ Not shown (not in schema): “Gathering docs”, spreadsheet “PTP”, free-tex
   open case, 0 facts, 0 touches). See `METRIC-DICTIONARY.md` footnote.
 - Spec artifacts: `METRIC-DICTIONARY.md` + `../E7.0-competitive-reporting-dashboards.md`
 
-## How to review
+## How to review (interactive)
 
-Click the screen chips at the top. On Ops Pipeline, switch the three underline tabs. React to information architecture first; pixel polish is deferred to the build session.
+Open `index.html` (or serve the folder). Fixture data demonstrates locked matrix rules — not hosted counts.
+
+| Click | What happens |
+|---|---|
+| Screen chips / Reporting Center cards / sidebar Reporting | Navigate screens |
+| Group chips · State · Window selects | Re-resolve matrix + month strip |
+| Month KPI cards | Toggle highlight related matrix cells |
+| Matrix status pills | Drawer with resolve provenance (Active wins, evidence, parallel open) |
+| Share / CSV | Mock share drawer / toast |
+| Ops tabs · KPI cards · risk/coverage/TAT rows | Tab switch / rule toasts / drawers |
+
+Pixel polish deferred to the build session; IA + interaction contract are the review target.
