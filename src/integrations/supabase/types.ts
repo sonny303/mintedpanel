@@ -2236,6 +2236,7 @@ export type Database = {
           created_at: string;
           field_label: string | null;
           field_type: string;
+          display_label: string | null;
           form_section: string | null;
           hardcoded_value: string | null;
           id: string;
@@ -2244,8 +2245,10 @@ export type Database = {
           org_id: string | null;
           page_step: string | null;
           portal_key: string;
+          section: string | null;
           selector: string;
           selector_fallbacks: Json | null;
+          sort_order: number | null;
           source: string;
           status: string;
           token: string | null;
@@ -2258,6 +2261,7 @@ export type Database = {
           created_at?: string;
           field_label?: string | null;
           field_type: string;
+          display_label?: string | null;
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
@@ -2266,8 +2270,10 @@ export type Database = {
           org_id?: string | null;
           page_step?: string | null;
           portal_key: string;
+          section?: string | null;
           selector: string;
           selector_fallbacks?: Json | null;
+          sort_order?: number | null;
           source: string;
           status?: string;
           token?: string | null;
@@ -2280,6 +2286,7 @@ export type Database = {
           created_at?: string;
           field_label?: string | null;
           field_type?: string;
+          display_label?: string | null;
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
@@ -2288,8 +2295,10 @@ export type Database = {
           org_id?: string | null;
           page_step?: string | null;
           portal_key?: string;
+          section?: string | null;
           selector?: string;
           selector_fallbacks?: Json | null;
+          sort_order?: number | null;
           source?: string;
           status?: string;
           token?: string | null;
@@ -4135,17 +4144,21 @@ export type Database = {
         Args: { p_ssn: string; p_token: string };
         Returns: Json;
       };
-      train_global_field_map: {
+      propose_shared_field_map: {
         Args: {
           p_field_label?: string;
-          p_id: string;
-          p_source: string;
-          p_status: string;
-          p_token?: string;
+          p_field_type?: string;
+          p_form_section?: string;
+          p_notes?: string;
+          p_page_step?: string;
+          p_portal_key: string;
+          p_selector: string;
+          p_sort_order?: number;
         };
         Returns: {
           confidence: number | null;
           created_at: string;
+          display_label: string | null;
           field_label: string | null;
           field_type: string;
           form_section: string | null;
@@ -4156,8 +4169,87 @@ export type Database = {
           org_id: string | null;
           page_step: string | null;
           portal_key: string;
+          section: string | null;
           selector: string;
           selector_fallbacks: Json | null;
+          sort_order: number | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "portal_field_maps";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      update_shared_field_registry: {
+        Args: {
+          p_entries: Json;
+        };
+        Returns: {
+          confidence: number | null;
+          created_at: string;
+          display_label: string | null;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          section: string | null;
+          selector: string;
+          selector_fallbacks: Json | null;
+          sort_order: number | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "portal_field_maps";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      train_global_field_map: {
+        Args: {
+          p_field_label?: string;
+          p_hardcoded_value?: string;
+          p_id: string;
+          p_source: string;
+          p_status: string;
+          p_token?: string;
+        };
+        Returns: {
+          confidence: number | null;
+          created_at: string;
+          display_label: string | null;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          section: string | null;
+          selector: string;
+          selector_fallbacks: Json | null;
+          sort_order: number | null;
           source: string;
           status: string;
           token: string | null;
