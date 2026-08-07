@@ -60,6 +60,25 @@ Format per entry:
 
 ## Resolved
 
+## [e6.9] Scope simplification — RESOLVED (2026-08-07, PM Muda review)
+
+- **Issue:** The PM challenged E6.9's size (built for two operators) and ran an
+  in-session Muda review plus a multiple-choice alignment sequence (Q1–Q22).
+- **Decision:** E6.9 is narrowed to two PRs (panel registry + extension Train
+  forms). Trained forms are a **shared library with no org-specific
+  overrides** (the "Global-vs-org field-map precedence" resolution below is
+  **deferred with the override model**, not shipped in E6.9); the shared
+  library holds form definition and mappings only; no change history/undo;
+  multiple forms per payer identified by URL/heading with a numbered-candidate
+  fallback; the extension gets exactly two modules (Train forms / Work cases);
+  the generic Submit-form task carries no portal binding and no behavior;
+  mapping review happens in the existing Submit-form task editor under Payer
+  Setup → Templates; there is **no tracked "prepare form" task**. Descoped to
+  follow-ups: readiness/attestation ("Replacement for Proven" below is
+  deferred, existing Proven machinery untouched by E6.9), per-page fill
+  telemetry, shared-write audit, dictionary-learning changes. See the epic's
+  D12–D18 and revision history.
+
 ## [e6.9] Page identity on SPA wizards — RESOLVED (2026-08-07)
 
 - **Issue:** F6.9.12 derives a captured page's identity from its URL and/or
