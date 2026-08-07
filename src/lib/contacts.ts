@@ -1,6 +1,8 @@
-// Shared CRM-contact constants (E0.2). The Zeb default mirrors the
-// create_organization RPC's server-side sales-rep default and the redesign seed
-// — keep the three in sync (like canonicalStatuses mirrors the RPC).
+// Shared CRM-contact constants (E0.2). NB there is deliberately NO default sales
+// rep here anymore: intake used to pre-fill (and the RPC used to substitute) a
+// placeholder person, which put an unasked-for Sales Rep on every new org's
+// People list. A sales rep is added through the People surface like any other
+// party — see migration 20260807120000_org_intake_no_default_sales_rep.sql.
 import type { ContactInput, Party, PartyRoleKey } from "@/types";
 
 export const EMPTY_CONTACT: ContactInput = {
@@ -13,20 +15,6 @@ export const EMPTY_CONTACT: ContactInput = {
   city: "",
   state: "",
   postalCode: "",
-  country: "US",
-};
-
-// Zeb Loewenstine — the sales rep pre-filled on every new org (E0.2 FR-1).
-export const DEFAULT_SALES_REP: ContactInput = {
-  name: "Zeb Loewenstine",
-  email: "zeb@mintedpanel.example.test",
-  phoneOffice: "704-555-0100",
-  phoneMobile: "",
-  addressLine1: "101 S Tryon St",
-  addressLine2: "Suite 400",
-  city: "Charlotte",
-  state: "NC",
-  postalCode: "28280",
   country: "US",
 };
 

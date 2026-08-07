@@ -97,8 +97,10 @@ branch. If you are implementing a redesign epic:
   `customer_escalation_contact`/`sales_rep` roles already shipped in E0.1.
   **`create_organization` v3** (`20260709130000`, additive 5-arg overload;
   legacy 1-/3-arg kept, unambiguous since the 5-arg requires the customer arg):
-  customer-escalation contact required, sales rep defaults to **Zeb Loewenstine**
-  when omitted; both stored as parties with their roles via SECURITY-DEFINER
+  customer-escalation contact required, sales rep defaulted to **Zeb Loewenstine**
+  when omitted (**that default is GONE** — see the 2026-08-07 hotfix below; the
+  sales rep is optional and omitting it creates no party); both stored as parties
+  with their roles via SECURITY-DEFINER
   helpers `assert_contact_valid`/`insert_contact_party` (client-revoked).
   Frontend: `ContactInput` type + `src/lib/contacts.ts` (`DEFAULT_SALES_REP` Zeb,
   `EMPTY_CONTACT`, `PARTY_ROLE_LABELS`, `partyToContactInput`) + `contactErrors`
@@ -119,8 +121,9 @@ branch. If you are implementing a redesign epic:
   gained `listOrgParties` (grouped via pure `src/lib/parties.ts` `groupOrgParties`
   — one party, many roles, tested), `listVisibleParties` (cross-org reuse pool,
   F0.3.4), `listPartyRoleTypes` (governed list), `createParty`, `assignRole`
-  (trigger rejects reserved), `unassignRole`/`removePartyFromOrg` (both block
-  removing the org's **only** sales rep, F0.2.2; TD-4: the party RECORD is
+  (trigger rejects reserved), `unassignRole`/`removePartyFromOrg` (both USED TO
+  block removing the org's **only** sales rep, F0.2.2 — guard REMOVED by the
+  2026-08-07 hotfix below; TD-4: the party RECORD is
   retained — a browser client can't verify "no assignments anywhere" under
   org-scoped RLS, and the FK cascades). Hooks in `useParties.ts`
   (`useOrgParties`/`usePartyRoleTypes`/`useVisibleParties`/`useCreateParty`/
@@ -2319,6 +2322,45 @@ states`/`_payer_norm_aliases`/`_payer_assert_name_available` (no client
   global duplicate (variant spelling — slips the normalized-name guard
   exactly like a real manual dup). TS-138/139/140 run at the RPC/service
   layer (backend-only epic — no e2e).
+
+### Hotfix 2026-08-07 — org intake no longer auto-creates a sales rep
+
+Every org created since E0.8 carried a placeholder person ("Zeb Loewenstine",
+`zeb@mintedpanel.example.test`) on its People list holding the Sales Rep role.
+Two halves of E0.2 had drifted into a defect: the RPC substituted that identity
+when `p_sales_rep` was omitted (FR-1), and E0.8 F0.8.2 then removed the sales-rep
+field from the intake form — so the default fired on 100% of real org creations
+and nobody could have entered anything else. ONE additive migration (repo +
+hosted, `20260807120000_org_intake_no_default_sales_rep.sql`; behavior verified
+by a rollback-wrapped hosted probe — omitted → owner+customer only, supplied →
+all three roles, incomplete → still rejected):
+
+- **`create_organization` 5-arg reissued** (CREATE OR REPLACE — same signature,
+  1-/3-arg overloads untouched): the `v_zeb` constant is gone and the sales rep
+  is genuinely optional. NULL / JSON null / `{}` ⇒ no party, no assignment;
+  anything else is validated by the unchanged `assert_contact_valid` and stored
+  exactly as before. Customer contact stays required.
+- **Data cleanup in the same migration** (idempotent, no-op on a fresh
+  rebuild): deletes `sales_rep` assignments whose party carries the placeholder
+  email, then the now-orphaned party rows — so it also leaves the cross-org
+  "Add existing person" pool (`listVisibleParties` sees parties via
+  `created_by`, so dropping the assignment alone would not have). Live at apply
+  time: one org (BEST Physical Therapy LLC); after: zero `sales_rep`
+  assignments anywhere, zero placeholder parties.
+- **App layer:** `DEFAULT_SALES_REP` deleted from `src/lib/contacts.ts`;
+  `useOrgCreateForm` no longer holds sales-rep state (its `salesRep` /
+  `patchSalesRep` / `salesErrors` returns are gone — no consumer had them since
+  E0.8); `CreateOrganizationInput.salesRep` is optional and sends `null` when
+  absent.
+- **The F0.2.2 "can't remove the org's only sales rep" guard is REMOVED** from
+  `unassignRole` / `removePartyFromOrg` (and `countOrgRole` with it). It was
+  only coherent while intake guaranteed a sales rep existed; with the default
+  gone it would have trapped the first sales rep anyone adds, and an org may
+  legitimately have none. `e2e/parties-regression.spec.ts` was flipped to pin
+  the removal SUCCEEDING (write-through DELETE handler, so the refetch really
+  reflects it); `contactValidation.test.ts` uses a local full-contact fixture.
+- `supabase/seed-redesign.sql` still seeds Zeb across the 11 demo orgs — it is a
+  local fixture universe (never runs on hosted) and TS-9/TS-10 depend on it.
 
 ## What this is
 

@@ -132,18 +132,6 @@ export async function createParty(input: ContactInput): Promise<Party> {
   return party;
 }
 
-async function countOrgRole(roleKey: PartyRoleKey): Promise<number> {
-  const orgId = requireActiveOrg();
-  const { count, error } = await supabase
-    .from("party_role_assignments")
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
-    .eq("role_key", roleKey)
-    .eq("scope_type", "org");
-  if (error) throw error;
-  return count ?? 0;
-}
-
 // Assign an active role to a party at org scope (F0.3.2). The DB trigger rejects
 // reserved roles and the unique constraint rejects a duplicate assignment.
 export async function assignRole(partyId: string, roleKey: PartyRoleKey): Promise<void> {
@@ -160,13 +148,14 @@ export async function assignRole(partyId: string, roleKey: PartyRoleKey): Promis
   });
 }
 
-// Remove one role from a party in this org. Blocks removing the org's only sales
-// rep (F0.2.2).
+// Remove one role from a party in this org.
+//
+// The E0.2 F0.2.2 "can't remove the org's only sales rep" guard is GONE: it was
+// only safe while every org was guaranteed a sales rep by the intake default,
+// and with that default removed (migration 20260807120000) it just trapped the
+// first sales rep someone added — an org may legitimately have none.
 export async function unassignRole(partyId: string, roleKey: PartyRoleKey): Promise<void> {
   const orgId = requireActiveOrg();
-  if (roleKey === "sales_rep" && (await countOrgRole("sales_rep")) <= 1) {
-    throw new Error("This is the only sales rep. Add another before removing this role.");
-  }
   const { error } = await supabase
     .from("party_role_assignments")
     .delete()
@@ -184,22 +173,12 @@ export async function unassignRole(partyId: string, roleKey: PartyRoleKey): Prom
 }
 
 // Remove a party from the org = delete all its assignments in this org (F0.3.1).
-// Blocks removing the org's only sales rep (F0.2.2). TD-4: the party RECORD is
-// deliberately retained — a browser client can't safely verify "no assignments
-// anywhere" under org-scoped RLS, and the FK is ON DELETE CASCADE, so deleting
-// it could wipe another org's assignment. It simply drops out of this org's list.
+// No sales-rep guard (see unassignRole). TD-4: the party RECORD is deliberately
+// retained — a browser client can't safely verify "no assignments anywhere"
+// under org-scoped RLS, and the FK is ON DELETE CASCADE, so deleting it could
+// wipe another org's assignment. It simply drops out of this org's list.
 export async function removePartyFromOrg(partyId: string): Promise<void> {
   const orgId = requireActiveOrg();
-  const { data: rows, error: rErr } = await supabase
-    .from("party_role_assignments")
-    .select("role_key")
-    .eq("org_id", orgId)
-    .eq("party_id", partyId);
-  if (rErr) throw rErr;
-  const roles = (rows ?? []).map((r) => r.role_key as PartyRoleKey);
-  if (roles.includes("sales_rep") && (await countOrgRole("sales_rep")) <= 1) {
-    throw new Error("This is the only sales rep. Add another before removing this contact.");
-  }
   const { error } = await supabase
     .from("party_role_assignments")
     .delete()

@@ -11,17 +11,17 @@ import { snakeizeRow } from "@/lib/case";
 import type { ContactInput } from "@/types";
 
 // Owner (name + email) is REQUIRED (E0.1 F0.1.2) and a customer-escalation
-// contact + sales rep are REQUIRED (E0.2 FR-2). The RPC v3 rejects blanks, an
-// invalid email, missing contact fields, and a duplicate normalized org name,
-// surfacing a verbatim message the UI shows. There is no defaulting of the owner
-// here; the sales rep defaults to Zeb server-side (the form pre-fills him). Both
-// call sites (NoOrgScreen, CreateOrganizationModal) pass the full input.
+// contact is REQUIRED (E0.2 FR-2). The RPC rejects blanks, an invalid email,
+// missing contact fields, and a duplicate normalized org name, surfacing a
+// verbatim message the UI shows. Nothing is defaulted: the sales rep is OPTIONAL
+// and omitting it creates no party at all (the old placeholder default is gone —
+// migration 20260807120000). No intake surface sends one today.
 export interface CreateOrganizationInput {
   name: string;
   ownerName: string;
   ownerEmail: string;
   customer: ContactInput;
-  salesRep: ContactInput;
+  salesRep?: ContactInput;
 }
 
 // ContactInput (camelCase) → the snake_case jsonb the RPC expects (keys match
@@ -48,7 +48,7 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
     p_owner_name: ownerName,
     p_owner_email: ownerEmail,
     p_customer: contactToJsonb(input.customer),
-    p_sales_rep: contactToJsonb(input.salesRep),
+    p_sales_rep: input.salesRep ? contactToJsonb(input.salesRep) : null,
   });
   if (error) throw new Error(error.message);
   return data as string;
