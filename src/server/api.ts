@@ -185,11 +185,13 @@ async function routeApiRequest(request: Request): Promise<Response> {
   // which is exactly what training mode sends. Ungated for any signed-in user
   // (D11) — JWT verification is the gate.
   if (isSharedFieldMaps) {
-    if (method !== "POST") return fail(405, "Method not allowed");
+    if (method !== "POST" && method !== "GET") return fail(405, "Method not allowed");
     try {
       const user = await authenticateUser(request);
       const routes = await loadExtensionRoutes();
-      return await routes.handleProposeSharedFieldMap(await readJsonBody(request), user);
+      return method === "GET"
+        ? await routes.handleListSharedFieldMaps(url, user)
+        : await routes.handleProposeSharedFieldMap(await readJsonBody(request), user);
     } catch (error) {
       return toErrorResponse(error);
     }

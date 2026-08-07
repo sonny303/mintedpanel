@@ -802,6 +802,16 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  const sharedMaps = await apiGet("/api/shared-field-maps", { token: kansasTok });
+  const sharedMapRows = sharedMaps.body?.data ?? [];
+  const mapOrgLeak = sharedMapRows.filter((r) => r.orgId != null);
+  check(
+    "22b. Shared field-map read returns GLOBAL rows only",
+    sharedMaps.status === 200 && mapOrgLeak.length === 0,
+    `status=${sharedMaps.status} rows=${sharedMapRows.length} withOrg=${mapOrgLeak.length}`,
+    { leak: true },
+  );
+
   const sharedProposal = await apiPost(
     "/api/shared-field-maps",
     {

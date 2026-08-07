@@ -4,6 +4,7 @@
 // logic here.
 import {
   listPortalFieldMaps,
+  listSharedFieldMaps,
   proposeFieldMap,
   type ProposeFieldMapInput,
 } from "@/services/portalFieldMaps";
@@ -290,6 +291,15 @@ export async function handleListPortalFieldMaps(url: URL, ctx: AuthContext): Pro
 // label, selector and control type. No field-value key exists in this
 // contract, so a value cannot ride in. No audit row (audit_log.org_id is NOT
 // NULL and there is no org); the row's updated_at is the trail (D14).
+// GET /api/shared-field-maps?portal_key= — the SHARED tier's own rows, for
+// E6.9 Train forms. Pairs with the propose POST below on the same user-scoped
+// guard: a trainer reads what a recognized form already has, then adds to it.
+export async function handleListSharedFieldMaps(url: URL, user: UserContext): Promise<Response> {
+  const portalKey = url.searchParams.get("portal_key") ?? undefined;
+  const rows = await listSharedFieldMaps(user.db, portalKey);
+  return ok(rows, { total: rows.length });
+}
+
 export async function handleProposeSharedFieldMap(
   body: unknown,
   user: UserContext,

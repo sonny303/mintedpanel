@@ -446,6 +446,13 @@ export async function createMockApiServer(options = {}) {
       return envelope(res, 200, rows, null, { total: rows.length });
     }
     if (/^\/api\/shared-field-maps\/?$/.test(url.pathname)) {
+      if (method === "GET") {
+        // Leak "sharedtier": a private org row leaks into the shared read.
+        const portalKey = url.searchParams.get("portal_key");
+        let rows = FIELD_MAPS.filter((r) => r.orgId === null || leak === "sharedtier");
+        if (portalKey) rows = rows.filter((r) => r.portalKey === portalKey);
+        return envelope(res, 200, rows, null, { total: rows.length });
+      }
       if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
       const body = (await readBody(req)) ?? {};
       const portalKey = String(body.portal_key ?? "")

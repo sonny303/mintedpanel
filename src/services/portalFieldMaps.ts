@@ -55,6 +55,34 @@ export async function listPortalFieldMaps(
   return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
 }
 
+/** GET /api/shared-field-maps?portal_key= — the SHARED tier only.
+ *
+ * The org-scoped read above cannot serve E6.9 Train forms: it needs a resolved
+ * `orgId` for its disjunct, and training deliberately names no org. Filtering
+ * to `org_id IS NULL` is the whole safety argument — with no org in scope
+ * there is nothing to widen the result to, so no org's private overrides can
+ * be returned to a caller who never identified one.
+ *
+ * The registry presentation columns ride along (display_label/section/
+ * sort_order) so the trainer can be told what a recognized form already has. */
+export async function listSharedFieldMaps(
+  db: SupabaseClient<Database>,
+  portalKey?: string,
+): Promise<PortalFieldMap[]> {
+  let query = db
+    .from("portal_field_maps")
+    .select(APP_PORTAL_FIELD_MAP_COLUMNS)
+    .is("org_id", null)
+    .order("portal_key", { ascending: true })
+    .order("sort_order", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (portalKey) query = query.eq("portal_key", normalizePortalKey(portalKey) ?? "");
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = camelizeRow<PortalFieldMap[]>(data ?? []);
+  return rows.map((row) => ({ ...row, token: normalizeTokenKey(row.token) }));
+}
+
 // Wire shape of POST /api/portal-field-maps — snake_case per the extension's
 // locked body idiom (the touches contract, not the camelCase row payloads).
 // Deliberately NO token/source/status: see proposeFieldMap.
