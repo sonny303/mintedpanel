@@ -3,6 +3,9 @@
 This directory is the source of truth for the Minted Panel redesign. Epics branch off
 `main` and target `main` (the `redesign` staging branch was retired 2026-07-21).
 
+Cross-lane write/merge map (epic queue + 3M parallel lane, human-only ops):
+[`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
+
 ## Roles
 
 | Role                    | Agent          | Responsibility                                                                |

@@ -2,6 +2,9 @@
 
 Instructions for AI coding agents working on Minted Panel.
 
+Write/merge process (epic lane + 3M parallel lane): [`docs/ops/repo-workflow.md`](docs/ops/repo-workflow.md).
+Epic lifecycle: [`docs/redesign/README.md`](docs/redesign/README.md).
+
 ## Project overview
 
 Minted Panel is a credentialing operations SaaS for medical groups, tracking providers, payers, cases, tasks, touches, and contracts across states and MSOs. The stack is React 18 + TypeScript + Vite + Tailwind + shadcn/ui, with TanStack Router for routing, Zustand for client state, TanStack Query for server state, and Supabase for database, auth, and RLS. The product is feature-complete; most work is incremental UI, bug fixes, and additive backend tables.

@@ -166,8 +166,11 @@ cycle at least once; treat them as hard rules.
    `docs/redesign/uiux-component-guide.md` (component + build constraints) and
    `docs/redesign/README.md` (workflow + merge gate). Use relative links
    (`./uiux-component-guide.md`) and verify every link points at a real file.
-7. **Deliver to the `redesign` branch**, at `docs/redesign/EX.X-<slug>.md` —
-   never to `main`. The auto-review listener only fires on `redesign`.
+7. **Deliver epic docs targeting `main`**, at `docs/redesign/EX.X-<slug>.md`.
+   The `redesign` staging branch was retired 2026-07-21; opening the epic PR
+   against `main` and having the PM merge it is what approves the epic (see
+   [`README.md`](./README.md)). Current write/merge map:
+   [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
 8. **Keep doing (consistently strong):** Gherkin acceptance criteria, explicit
    non-goals, scenario/seed mapping tables, locked decisions + open questions
    sections, and revision history.
