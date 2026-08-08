@@ -2502,9 +2502,19 @@ regen caveat is CLEARED).
 Epic `docs/redesign/E6.9-form-setup-unification.md` (PM decisions D1–D18).
 Panel PR 1 = F6.9.1–F6.9.6; extension PR 2 = F6.9.7–F6.9.9 in
 `sonny303/minted-extension` (branch `claude/e6-9-form-setup-pr-1-1s2g7t`).
-**E6 wave rule applies: the three migrations are REPO-ONLY — hosted apply is
-an operator step**; every behavioural claim below was proven by
-rollback-wrapped hosted probes.
+The three migrations were written repo-only per the E6-wave rule and are now
+**APPLIED TO HOSTED** (`20260808024145`/`024232`/`024259`); every behavioural
+claim below was proven by rollback-wrapped hosted probes first.
+
+> **Outage, 2026-08-08 — read this before shipping another repo-only
+> migration.** PR #263 merged with `APP_PORTAL_FIELD_MAP_COLUMNS` selecting
+> `display_label, section, sort_order` while `20260807160000` was still
+> repo-only. Merging deploys, so every browser read of `portal_field_maps`
+> 400'd on the missing columns; `usePayerReadinessFunnel` counts that query in
+> its `isError`, so **Payer Setup rendered "Couldn't load payers"** even though
+> the payer list itself had loaded ("3 payers in your network" showed above the
+> error). Fixed by applying all three migrations. The rule this violated is now
+> explicit in AGENTS.md: schema may lead code, code may never lead schema.
 
 - **`20260807160000_e69_field_registry.sql`** — additive `display_label` /
   `section` / `sort_order` on `portal_field_maps`, the two PER-TIER partial

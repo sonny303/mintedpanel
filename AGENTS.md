@@ -58,6 +58,17 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
   destructive-DDL window closed at the production cut (2026-07-19); any
   future exception requires an explicit PM-approved carve-out written into
   this section._
+- **A migration that deployed code DEPENDS ON must be applied to hosted BEFORE
+  the PR merges.** "Repo-only, hosted apply is an operator step" (the E6-wave
+  rule) is safe only while nothing deployed reads the new object — schema ahead
+  of code, never code ahead of schema. Merging to `main` deploys immediately,
+  so a service projection, RPC call or policy that names an unapplied column is
+  a production outage the moment it lands, not a pending task. E6.9 shipped
+  `display_label`/`section`/`sort_order` into `APP_PORTAL_FIELD_MAP_COLUMNS`
+  with the migration still repo-only: every `portal_field_maps` read 400'd and
+  Payer Setup showed "Couldn't load payers" (2026-08-08). If a build session
+  cannot apply the migration, the code that needs it does not merge in the same
+  PR — split the schema into its own PR and land it first.
 - `touches`, `status_history`, and `audit_log` are append-only — no UPDATE, no DELETE, in code or policy.
 - Providers store `ssn_last4` only in ordinary tables. The full SSN exists ONLY inside the E4.4 server-only Sensitive Identifiers Vault (PM security decision 2026-07-14): a separated, RLS-locked table with no PostgREST/client SELECT grant, encrypted at rest, accessed exclusively through the narrowly scoped audited SECURITY DEFINER RPCs the epic defines (fill-only release with `no-store`, admin reveal with justification, audited ingress). Outside those vault paths the last-4-only rule still binds absolutely: never accept, store, log, export, or render a full SSN anywhere else.
 - One credentialing case per `(provider_id, group_id, payer_id, state)` — the live DB constraint since E2.1 (`UNIQUE NULLS NOT DISTINCT`, migration `20260713150000`): a provider can have parallel cases with the same payer/state under different groups (each group's TIN contracts separately), and legacy NULL-group rows stay unique at `(provider_id, payer_id, state)` because NULL = NULL under NULLS NOT DISTINCT. Credentialing only.
