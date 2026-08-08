@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Minted Panel /api",
-    "description": "HTTP surface for the Chrome extension workbench (+ document signing for the webapp).\n\nEvery response is `{ data, error, meta }`.\n- Success: `data` set, `error` null\n- Failure: `data` null, `error` string, HTTP status set\n- List `meta` often carries `{ total, page, pageSize }`\n- Rows are camelCase unless a locked snake_case key is noted\n\n## Auth\n- `Authorization: Bearer <supabase JWT>` on every data route\n- User-scoped (`/api/me/*`, `/api/shared-*`): JWT only — no `x-org-id`\n- Org-scoped: multi-org callers must send `x-org-id` (or `?orgId=`); single-org may omit\n\n## Consumers\n- Extension: almost everything except `/api/documents/*`\n- Webapp: `/api/documents/*` only (rest is browser → Supabase RLS)\n- SSN release is panel-ready; extension not wired yet\n\nSource of truth: `src/server/api.ts` + `extensionRoutes.ts` / `providerRoutes.ts` / `documentRoutes.ts`.\nExtension mirror types: minted-extension `src/shared/apiTypes.ts`.",
+    "description": "HTTP surface for the Chrome extension workbench (+ document signing for the webapp).\n\nEvery response is `{ data, error, meta }`.\n- Success: `data` set, `error` null\n- Failure: `data` null, `error` string, HTTP status set\n- List `meta` often carries `{ total, page, pageSize }`\n- Rows are camelCase unless a locked snake_case key is noted\n\n## Auth\n- `Authorization: Bearer <supabase JWT>` on every data route\n- User-scoped (`/api/me/*`, `/api/shared-*`): JWT only \u2014 no `x-org-id`\n- Org-scoped: multi-org callers must send `x-org-id` (or `?orgId=`); single-org may omit\n\n## Consumers\n- Extension: almost everything except `/api/documents/*`\n- Webapp: `/api/documents/*` only (rest is browser \u2192 Supabase RLS)\n- SSN release is panel-ready; extension not wired yet\n\nSource of truth: `src/server/api.ts` + `extensionRoutes.ts` / `providerRoutes.ts` / `documentRoutes.ts`.\nExtension mirror types: minted-extension `src/shared/apiTypes.ts`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -58,12 +58,16 @@
     {
       "key": "state",
       "value": "KS"
+    },
+    {
+      "key": "acmePortalKey",
+      "value": "acme_provider_enrollment"
     }
   ],
   "item": [
     {
       "name": "0. Health",
-      "description": "Public — no JWT.",
+      "description": "Public \u2014 no JWT.",
       "item": [
         {
           "name": "GET health",
@@ -159,7 +163,7 @@
                 "orgs"
               ]
             },
-            "description": "Org discovery — call this BEFORE sending `x-org-id`. Returns the caller's memberships."
+            "description": "Org discovery \u2014 call this BEFORE sending `x-org-id`. Returns the caller's memberships."
           },
           "response": [
             {
@@ -184,7 +188,7 @@
                     "orgs"
                   ]
                 },
-                "description": "Org discovery — call this BEFORE sending `x-org-id`. Returns the caller's memberships."
+                "description": "Org discovery \u2014 call this BEFORE sending `x-org-id`. Returns the caller's memberships."
               },
               "status": "OK",
               "code": 200,
@@ -297,7 +301,7 @@
                 }
               }
             },
-            "description": "Save layout. Keys must be in the served catalog (non-catalog key → 422). No length cap."
+            "description": "Save layout. Keys must be in the served catalog (non-catalog key \u2192 422). No length cap."
           },
           "response": [
             {
@@ -336,7 +340,7 @@
                     }
                   }
                 },
-                "description": "Save layout. Keys must be in the served catalog (non-catalog key → 422). No length cap."
+                "description": "Save layout. Keys must be in the served catalog (non-catalog key \u2192 422). No length cap."
               },
               "status": "OK",
               "code": 200,
@@ -355,7 +359,7 @@
     },
     {
       "name": "2. Shared training tier (user-scoped, E6.9)",
-      "description": "Train-forms mode. JWT only — never send `x-org-id`. Touches the global library every org inherits.",
+      "description": "Train-forms mode. JWT only \u2014 never send `x-org-id`. Touches the global library every org inherits.",
       "item": [
         {
           "name": "GET shared portals",
@@ -526,7 +530,7 @@
                 }
               }
             },
-            "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` — re-capture returns existing row with decision untouched. Shape-only; never send values."
+            "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` \u2014 re-capture returns existing row with decision untouched. Shape-only; never send values."
           },
           "response": [
             {
@@ -564,7 +568,7 @@
                     }
                   }
                 },
-                "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` — re-capture returns existing row with decision untouched. Shape-only; never send values."
+                "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` \u2014 re-capture returns existing row with decision untouched. Shape-only; never send values."
               },
               "status": "OK",
               "code": 200,
@@ -576,6 +580,1012 @@
                 }
               ],
               "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"dddddddd-dddd-4ddd-8ddd-dddddddddddd\",\n      \"orgId\": null,\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"selector\": \"#npi\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"token\": null,\n      \"pageStep\": \"Provider info\",\n      \"sortOrder\": 12\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Walkthrough \u00b7 Train Acme form",
+      "description": "Ordered run of Shared training for a NEW sample payer form `acme_provider_enrollment` (Acme Health Insurance).\n\n**Prerequisite (not /api):** register a global portals row via `upsert_global_portal` or SQL \u2014 see docs/api/shared-training-walkthrough.md Step 0.\n\nRun 1 \u2192 11 in order. JWT only; never send x-org-id. Set env `acmePortalKey` (default acme_provider_enrollment).",
+      "item": [
+        {
+          "name": "1. GET shared portals (find Acme)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-portals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-portals"
+              ]
+            },
+            "description": "Step 1. JWT only \u2014 no x-org-id. Prerequisite Step 0 (register global portal via upsert_global_portal / SQL) is NOT an /api route. See docs/api/shared-training-walkthrough.md."
+          },
+          "response": [
+            {
+              "name": "Sample 200 with Acme",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-portals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-portals"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"a1000000-0000-4000-8000-000000000001\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"name\": \"Acme provider enrollment\",\n      \"formUrl\": \"https://providers.acmehealth.example/enroll/application\",\n      \"payerId\": \"b2000000-0000-4000-8000-000000000002\",\n      \"payerName\": \"Acme Health Insurance\",\n      \"isVerified\": false,\n      \"createdAt\": \"2026-08-08T18:00:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:00:00.000Z\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "2. GET shared field maps (expect empty)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{acmePortalKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ],
+              "query": [
+                {
+                  "key": "portal_key",
+                  "value": "{{acmePortalKey}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Step 2. Brand-new form \u2192 empty array."
+          },
+          "response": [
+            {
+              "name": "Sample 200 empty",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{acmePortalKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ],
+                  "query": [
+                    {
+                      "key": "portal_key",
+                      "value": "{{acmePortalKey}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 0\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "01 Propose \u00b7 First Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#providerFirstName\",\n  \"field_label\": \"First Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#providerFirstName\",\n  \"field_label\": \"First Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 0\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000010\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#providerFirstName\",\n      \"token\": null,\n      \"fieldLabel\": \"First Name\",\n      \"formSection\": \"Provider Information\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 0,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Propose \u00b7 Last Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#providerLastName\",\n  \"field_label\": \"Last Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#providerLastName\",\n  \"field_label\": \"Last Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 1\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000011\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#providerLastName\",\n      \"token\": null,\n      \"fieldLabel\": \"Last Name\",\n      \"formSection\": \"Provider Information\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 1,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Propose \u00b7 NPI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#npi\",\n  \"field_label\": \"National Provider Identifier\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#npi\",\n  \"field_label\": \"National Provider Identifier\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 2\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000012\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#npi\",\n      \"token\": null,\n      \"fieldLabel\": \"National Provider Identifier\",\n      \"formSection\": \"Provider Information\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 2,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Propose \u00b7 Specialty",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"select#specialty\",\n  \"field_label\": \"Specialty\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"select\",\n  \"sort_order\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"select#specialty\",\n  \"field_label\": \"Specialty\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"select\",\n  \"sort_order\": 3\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000013\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"select#specialty\",\n      \"token\": null,\n      \"fieldLabel\": \"Specialty\",\n      \"formSection\": \"Provider Information\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"select\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 3,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Propose \u00b7 Practice name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#practiceName\",\n  \"field_label\": \"Practice / Group Name\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#practiceName\",\n  \"field_label\": \"Practice / Group Name\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 4\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000014\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#practiceName\",\n      \"token\": null,\n      \"fieldLabel\": \"Practice / Group Name\",\n      \"formSection\": \"Practice Location\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 4,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Propose \u00b7 Street",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#addrStreet\",\n  \"field_label\": \"Street Address\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#addrStreet\",\n  \"field_label\": \"Street Address\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 5\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000015\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrStreet\",\n      \"token\": null,\n      \"fieldLabel\": \"Street Address\",\n      \"formSection\": \"Practice Location\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 5,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "07 Propose \u00b7 City",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#addrCity\",\n  \"field_label\": \"City\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#addrCity\",\n  \"field_label\": \"City\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 6\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000016\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrCity\",\n      \"token\": null,\n      \"fieldLabel\": \"City\",\n      \"formSection\": \"Practice Location\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 6,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "08 Propose \u00b7 State",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#addrState\",\n  \"field_label\": \"State\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"select\",\n  \"sort_order\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#addrState\",\n  \"field_label\": \"State\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"select\",\n  \"sort_order\": 7\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000017\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrState\",\n      \"token\": null,\n      \"fieldLabel\": \"State\",\n      \"formSection\": \"Practice Location\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"select\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 7,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "09 Propose \u00b7 ZIP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Propose-only shared row. Response is always 200 with `{ data: { map } }`. Server forces orgId null, status proposed, source manual, token null.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#addrZip\",\n  \"field_label\": \"ZIP Code\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 8\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"acme_provider_enrollment\",\n  \"selector\": \"#addrZip\",\n  \"field_label\": \"ZIP Code\",\n  \"form_section\": \"Practice Location\",\n  \"page_step\": \"Practice location\",\n  \"field_type\": \"text\",\n  \"sort_order\": 8\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000018\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrZip\",\n      \"token\": null,\n      \"fieldLabel\": \"ZIP Code\",\n      \"formSection\": \"Practice Location\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"displayLabel\": null,\n      \"section\": null,\n      \"sortOrder\": 8,\n      \"createdAt\": \"2026-08-08T18:05:00.000Z\",\n      \"updatedAt\": \"2026-08-08T18:05:00.000Z\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "10. GET shared field maps (9 rows)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{acmePortalKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ],
+              "query": [
+                {
+                  "key": "portal_key",
+                  "value": "{{acmePortalKey}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Step 5. Confirm all proposed rows landed, ordered by sort_order."
+          },
+          "response": [
+            {
+              "name": "Sample 200 with 9 maps",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{acmePortalKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ],
+                  "query": [
+                    {
+                      "key": "portal_key",
+                      "value": "{{acmePortalKey}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000010\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#providerFirstName\",\n      \"token\": null,\n      \"fieldLabel\": \"First Name\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 0\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000011\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#providerLastName\",\n      \"token\": null,\n      \"fieldLabel\": \"Last Name\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 1\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000012\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#npi\",\n      \"token\": null,\n      \"fieldLabel\": \"National Provider Identifier\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 2\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000013\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"select#specialty\",\n      \"token\": null,\n      \"fieldLabel\": \"Specialty\",\n      \"pageStep\": \"Provider identity\",\n      \"fieldType\": \"select\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 3\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000014\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#practiceName\",\n      \"token\": null,\n      \"fieldLabel\": \"Practice / Group Name\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 4\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000015\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrStreet\",\n      \"token\": null,\n      \"fieldLabel\": \"Street Address\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 5\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000016\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrCity\",\n      \"token\": null,\n      \"fieldLabel\": \"City\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 6\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000017\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrState\",\n      \"token\": null,\n      \"fieldLabel\": \"State\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"select\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 7\n    },\n    {\n      \"id\": \"c3000000-0000-4000-8000-000000000018\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#addrZip\",\n      \"token\": null,\n      \"fieldLabel\": \"ZIP Code\",\n      \"pageStep\": \"Practice location\",\n      \"fieldType\": \"text\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 8\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 9\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "11. POST re-propose First Name (idempotent)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "description": "Step 6. Same selector \u2192 same map.id, decision untouched. Still HTTP 200 (shared path does not use 201).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#providerFirstName\",\n  \"field_label\": \"First Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Sample 200 same id",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"{{acmePortalKey}}\",\n  \"selector\": \"#providerFirstName\",\n  \"field_label\": \"First Name\",\n  \"form_section\": \"Provider Information\",\n  \"page_step\": \"Provider identity\",\n  \"field_type\": \"text\",\n  \"sort_order\": 0\n}"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"c3000000-0000-4000-8000-000000000010\",\n      \"orgId\": null,\n      \"portalKey\": \"acme_provider_enrollment\",\n      \"selector\": \"#providerFirstName\",\n      \"token\": null,\n      \"fieldLabel\": \"First Name\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"sortOrder\": 0\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
             }
           ]
         }
@@ -634,7 +1644,7 @@
                 }
               ]
             },
-            "description": "List projection — no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
+            "description": "List projection \u2014 no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
           },
           "response": [
             {
@@ -686,7 +1696,7 @@
                     }
                   ]
                 },
-                "description": "List projection — no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
+                "description": "List projection \u2014 no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
               },
               "status": "OK",
               "code": 200,
@@ -875,7 +1885,7 @@
                 }
               }
             },
-            "description": "Extension CAQH gap pull — narrow allowlist (deaNumber, caqhId, taxonomyCode, suffix, middleInitial, specialty, subSpecialty)."
+            "description": "Extension CAQH gap pull \u2014 narrow allowlist (deaNumber, caqhId, taxonomyCode, suffix, middleInitial, specialty, subSpecialty)."
           }
         },
         {
@@ -919,7 +1929,7 @@
                 }
               ]
             },
-            "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` — two-letter license state\n- `facilityId` — pin facility.*/assignment.* tokens; omit + several facilities → `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
+            "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` \u2014 two-letter license state\n- `facilityId` \u2014 pin facility.*/assignment.* tokens; omit + several facilities \u2192 `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
           },
           "response": [
             {
@@ -963,7 +1973,7 @@
                     }
                   ]
                 },
-                "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` — two-letter license state\n- `facilityId` — pin facility.*/assignment.* tokens; omit + several facilities → `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
+                "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` \u2014 two-letter license state\n- `facilityId` \u2014 pin facility.*/assignment.* tokens; omit + several facilities \u2192 `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
               },
               "status": "OK",
               "code": 200,
@@ -1111,7 +2121,7 @@
                 }
               }
             },
-            "description": "Record re-attestation. Future `attested_on` → 422. Returns narrow shape, not full provider row."
+            "description": "Record re-attestation. Future `attested_on` \u2192 422. Returns narrow shape, not full provider row."
           },
           "response": [
             {
@@ -1157,7 +2167,7 @@
                     }
                   }
                 },
-                "description": "Record re-attestation. Future `attested_on` → 422. Returns narrow shape, not full provider row."
+                "description": "Record re-attestation. Future `attested_on` \u2192 422. Returns narrow shape, not full provider row."
               },
               "status": "OK",
               "code": 200,
@@ -1513,7 +2523,7 @@
                 }
               ]
             },
-            "description": "Case half of unified search. Ids + display fields only. Blank `q` → `[]`. `providerId` wins if both present."
+            "description": "Case half of unified search. Ids + display fields only. Blank `q` \u2192 `[]`. `providerId` wins if both present."
           },
           "response": [
             {
@@ -1550,7 +2560,7 @@
                     }
                   ]
                 },
-                "description": "Case half of unified search. Ids + display fields only. Blank `q` → `[]`. `providerId` wins if both present."
+                "description": "Case half of unified search. Ids + display fields only. Blank `q` \u2192 `[]`. `providerId` wins if both present."
               },
               "status": "OK",
               "code": 200,
@@ -1684,7 +2694,7 @@
                 }
               }
             },
-            "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor — no second side effects."
+            "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor \u2014 no second side effects."
           },
           "response": [
             {
@@ -1730,7 +2740,7 @@
                     }
                   }
                 },
-                "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor — no second side effects."
+                "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor \u2014 no second side effects."
               },
               "status": "OK",
               "code": 200,
@@ -1788,7 +2798,7 @@
                 }
               }
             },
-            "description": "E4.1 typed touch from the extension. `touch_type` required:\n`call | email | portal | fax | caqh_update | provider_outreach | internal_sync`\n\nportal_submission-only fields (`portal_key`, `task_id`, …) → loud 422 on this kind."
+            "description": "E4.1 typed touch from the extension. `touch_type` required:\n`call | email | portal | fax | caqh_update | provider_outreach | internal_sync`\n\nportal_submission-only fields (`portal_key`, `task_id`, \u2026) \u2192 loud 422 on this kind."
           }
         }
       ]
@@ -1837,7 +2847,7 @@
                 }
               }
             },
-            "description": "**camelCase body**. Client-generated `id` is idempotency key + PK. Replay → 200 stored row; first insert → 201. Writer only."
+            "description": "**camelCase body**. Client-generated `id` is idempotency key + PK. Replay \u2192 200 stored row; first insert \u2192 201. Writer only."
           }
         },
         {
@@ -1883,7 +2893,7 @@
                 }
               }
             },
-            "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked → 409 naming the blocker."
+            "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked \u2192 409 naming the blocker."
           },
           "response": [
             {
@@ -1929,7 +2939,7 @@
                     }
                   }
                 },
-                "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked → 409 naming the blocker."
+                "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked \u2192 409 naming the blocker."
               },
               "status": "OK",
               "code": 200,
@@ -1983,7 +2993,7 @@
                 }
               ]
             },
-            "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1–100 (default 20)."
+            "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1\u2013100 (default 20)."
           },
           "response": [
             {
@@ -2020,7 +3030,7 @@
                     }
                   ]
                 },
-                "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1–100 (default 20)."
+                "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1\u2013100 (default 20)."
               },
               "status": "OK",
               "code": 200,
@@ -2039,7 +3049,7 @@
     },
     {
       "name": "8. Documents (org-scoped, webapp only)",
-      "description": "E4.5 signing surface. Browser app consumes these; extension does not. Bytes PUT browser → Storage direct after upload-intent.",
+      "description": "E4.5 signing surface. Browser app consumes these; extension does not. Bytes PUT browser \u2192 Storage direct after upload-intent.",
       "item": [
         {
           "name": "POST upload intent",
@@ -2160,7 +3170,7 @@
                 "download"
               ]
             },
-            "description": "120s signed download. Members incl. billing. Cross-org id → 404 before signing."
+            "description": "120s signed download. Members incl. billing. Cross-org id \u2192 404 before signing."
           }
         }
       ]

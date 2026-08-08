@@ -19,12 +19,26 @@ Importable collection of every HTTP route under `/api/*`, with sample request bo
 | 0. Health | public | ops |
 | 1. Me | user JWT | extension |
 | 2. Shared training tier | user JWT | extension (Train forms) |
+| Walkthrough · Train Acme form | user JWT | **run in order** — new-form example |
 | 3. Providers | org | extension (+ Chunk 3 pilot) |
 | 4. Portals & field maps | org | extension (Work cases) |
 | 5. Cases & touches | org | extension |
 | 6. Fill events & task steps | org | extension |
 | 7. Next best action | org | extension |
 | 8. Documents | org | **webapp only** |
+
+## Shared training walkthrough
+
+Full call sequence + payloads for training a **new sample payer form**
+(`acme_provider_enrollment`):
+
+→ [`shared-training-walkthrough.md`](./shared-training-walkthrough.md)
+
+Set env `acmePortalKey` (default `acme_provider_enrollment`), paste `jwt`, then
+run the Postman **Walkthrough · Train Acme form** folder top-to-bottom.
+
+**Prerequisite:** a global `portals` row must already exist (webapp
+`upsert_global_portal` / SQL) — there is no `POST /api/shared-portals`.
 
 ## Envelope (every response)
 
