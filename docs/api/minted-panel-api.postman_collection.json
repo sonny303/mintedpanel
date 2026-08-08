@@ -1,0 +1,2169 @@
+{
+  "info": {
+    "name": "Minted Panel /api",
+    "description": "HTTP surface for the Chrome extension workbench (+ document signing for the webapp).\n\nEvery response is `{ data, error, meta }`.\n- Success: `data` set, `error` null\n- Failure: `data` null, `error` string, HTTP status set\n- List `meta` often carries `{ total, page, pageSize }`\n- Rows are camelCase unless a locked snake_case key is noted\n\n## Auth\n- `Authorization: Bearer <supabase JWT>` on every data route\n- User-scoped (`/api/me/*`, `/api/shared-*`): JWT only — no `x-org-id`\n- Org-scoped: multi-org callers must send `x-org-id` (or `?orgId=`); single-org may omit\n\n## Consumers\n- Extension: almost everything except `/api/documents/*`\n- Webapp: `/api/documents/*` only (rest is browser → Supabase RLS)\n- SSN release is panel-ready; extension not wired yet\n\nSource of truth: `src/server/api.ts` + `extensionRoutes.ts` / `providerRoutes.ts` / `documentRoutes.ts`.\nExtension mirror types: minted-extension `src/shared/apiTypes.ts`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://mintedpanel.vercel.app"
+    },
+    {
+      "key": "jwt",
+      "value": ""
+    },
+    {
+      "key": "orgId",
+      "value": ""
+    },
+    {
+      "key": "providerId",
+      "value": ""
+    },
+    {
+      "key": "caseId",
+      "value": ""
+    },
+    {
+      "key": "facilityId",
+      "value": ""
+    },
+    {
+      "key": "portalKey",
+      "value": "bcbs_ks_enrollment"
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "stepId",
+      "value": ""
+    },
+    {
+      "key": "documentId",
+      "value": ""
+    },
+    {
+      "key": "state",
+      "value": "KS"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "description": "Public — no JWT.",
+      "item": [
+        {
+          "name": "GET health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Liveness. Proves the nitro `/api` path without touching Supabase."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/health",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "health"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "Liveness. Proves the nitro `/api` path without touching Supabase."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": \"ok\",\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Me (user-scoped)",
+      "description": "JWT only. No `x-org-id`. Org discovery + prefs that follow the user across orgs.",
+      "item": [
+        {
+          "name": "GET my orgs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/orgs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "orgs"
+              ]
+            },
+            "description": "Org discovery — call this BEFORE sending `x-org-id`. Returns the caller's memberships."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/me/orgs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "me",
+                    "orgs"
+                  ]
+                },
+                "description": "Org discovery — call this BEFORE sending `x-org-id`. Returns the caller's memberships."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"orgId\": \"11111111-1111-4111-8111-111111111111\",\n      \"orgName\": \"Kansas Fitness Physio\",\n      \"role\": \"admin\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET view prefs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/view-prefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "view-prefs"
+              ]
+            },
+            "description": "Saved quick-card layout + schema-derived catalog (`fields` null = nothing saved)."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/me/view-prefs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "me",
+                    "view-prefs"
+                  ]
+                },
+                "description": "Saved quick-card layout + schema-derived catalog (`fields` null = nothing saved)."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"fields\": [\n      \"provider.firstName\",\n      \"provider.lastName\",\n      \"provider.npi\"\n    ],\n    \"catalog\": [\n      {\n        \"key\": \"provider.firstName\",\n        \"label\": \"First name\",\n        \"group\": \"provider\",\n        \"groupLabel\": \"Provider\"\n      }\n    ]\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT view prefs",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/me/view-prefs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me",
+                "view-prefs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fields\": [\n    \"provider.firstName\",\n    \"provider.lastName\",\n    \"provider.npi\",\n    \"provider.ssnLast4\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Save layout. Keys must be in the served catalog (non-catalog key → 422). No length cap."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/me/view-prefs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "me",
+                    "view-prefs"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"fields\": [\n    \"provider.firstName\",\n    \"provider.lastName\",\n    \"provider.npi\",\n    \"provider.ssnLast4\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Save layout. Keys must be in the served catalog (non-catalog key → 422). No length cap."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"fields\": [\n      \"provider.firstName\",\n      \"provider.lastName\",\n      \"provider.npi\",\n      \"provider.ssnLast4\"\n    ]\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Shared training tier (user-scoped, E6.9)",
+      "description": "Train-forms mode. JWT only — never send `x-org-id`. Touches the global library every org inherits.",
+      "item": [
+        {
+          "name": "GET shared portals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-portals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-portals"
+              ]
+            },
+            "description": "Global portal registry rows only (`org_id` null)."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-portals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-portals"
+                  ]
+                },
+                "description": "Global portal registry rows only (`org_id` null)."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\n      \"orgId\": null,\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"name\": \"BCBS KS network enrollment\",\n      \"payerId\": \"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\n      \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n      \"formUrl\": \"https://provider.bcbsks.com/facelets/allUsers/form/NetworkEnrollmentForm.faces\",\n      \"isVerified\": false,\n      \"lastVerifiedAt\": null,\n      \"provenAt\": null,\n      \"urlChangedAt\": null,\n      \"createdAt\": \"2026-07-28T00:00:00.000Z\",\n      \"updatedAt\": \"2026-07-28T00:00:00.000Z\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET shared field maps",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{portalKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ],
+              "query": [
+                {
+                  "key": "portal_key",
+                  "value": "{{portalKey}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Shared-tier maps for one form, ordered by `sort_order`."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps?portal_key={{portalKey}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ],
+                  "query": [
+                    {
+                      "key": "portal_key",
+                      "value": "{{portalKey}}",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "Shared-tier maps for one form, ordered by `sort_order`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"cccccccc-cccc-4ccc-8ccc-cccccccccccc\",\n      \"orgId\": null,\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"urlPattern\": null,\n      \"pageStep\": \"Provider info\",\n      \"mapType\": \"web\",\n      \"selector\": \"#firstName\",\n      \"selectorFallbacks\": null,\n      \"source\": \"token\",\n      \"token\": \"provider.firstName\",\n      \"hardcodedValue\": null,\n      \"transform\": null,\n      \"fieldType\": \"text\",\n      \"notes\": null,\n      \"status\": \"approved\",\n      \"displayLabel\": \"First name\",\n      \"section\": \"Identity\",\n      \"sortOrder\": 1,\n      \"createdAt\": \"2026-08-07T00:00:00.000Z\",\n      \"updatedAt\": \"2026-08-07T00:00:00.000Z\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST propose shared field map",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shared-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shared-field-maps"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"selector\": \"#npi\",\n  \"field_label\": \"NPI\",\n  \"form_section\": \"Credentials\",\n  \"page_step\": \"Provider info\",\n  \"field_type\": \"text\",\n  \"sort_order\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` — re-capture returns existing row with decision untouched. Shape-only; never send values."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shared-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shared-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"selector\": \"#npi\",\n  \"field_label\": \"NPI\",\n  \"form_section\": \"Credentials\",\n  \"page_step\": \"Provider info\",\n  \"field_type\": \"text\",\n  \"sort_order\": 12\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Propose-only. `org_id` always null. Idempotent on `(portal_key, selector)` — re-capture returns existing row with decision untouched. Shape-only; never send values."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"dddddddd-dddd-4ddd-8ddd-dddddddddddd\",\n      \"orgId\": null,\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"selector\": \"#npi\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"token\": null,\n      \"pageStep\": \"Provider info\",\n      \"sortOrder\": 12\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Providers (org-scoped)",
+      "description": "PHI-minimized list; profile is the dense fill payload.",
+      "item": [
+        {
+          "name": "GET list providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers?page=1&pageSize=100&sort=last_name&order=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "100",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "last_name",
+                  "disabled": false
+                },
+                {
+                  "key": "order",
+                  "value": "asc",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "List projection — no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/providers?page=1&pageSize=100&sort=last_name&order=asc",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "providers"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "100",
+                      "disabled": false
+                    },
+                    {
+                      "key": "sort",
+                      "value": "last_name",
+                      "disabled": false
+                    },
+                    {
+                      "key": "order",
+                      "value": "asc",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "List projection — no SSN/DOB/home address. Optional `?search=` for name/NPI/email."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n      \"firstName\": \"Brooke\",\n      \"lastName\": \"Ostrander\",\n      \"credentials\": \"PT, DPT\",\n      \"npi\": \"1234567890\",\n      \"homeState\": \"KS\",\n      \"caqhId\": \"12345678\",\n      \"caqhLastAttestedDate\": \"2026-05-01\",\n      \"taxonomyCode\": \"225100000X\",\n      \"status\": \"active\",\n      \"groupId\": \"ffffffff-ffff-4fff-8fff-ffffffffffff\",\n      \"specialty\": \"Physical Therapy\",\n      \"email\": \"brooke@example.test\",\n      \"updatedAt\": \"2026-07-21T00:00:00.000Z\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1,\n    \"page\": 1,\n    \"pageSize\": 100\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET search providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers?search=ostrander&page=1&pageSize=25&sort=last_name&order=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "ostrander",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "25",
+                  "disabled": false
+                },
+                {
+                  "key": "sort",
+                  "value": "last_name",
+                  "disabled": false
+                },
+                {
+                  "key": "order",
+                  "value": "asc",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Provider half of the extension unified search."
+          }
+        },
+        {
+          "name": "GET provider by id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/{{providerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{providerId}}"
+              ]
+            },
+            "description": "Single provider row. Extension normally uses list + profile instead."
+          }
+        },
+        {
+          "name": "POST create provider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Ada\",\n  \"lastName\": \"Lovelace\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Chunk 3 pilot create. Writer roles. Extension does not call this."
+          }
+        },
+        {
+          "name": "PATCH provider field",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/{{providerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{providerId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deaNumber\": \"BO1234563\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Extension CAQH gap pull — narrow allowlist (deaNumber, caqhId, taxonomyCode, suffix, middleInitial, specialty, subSpecialty)."
+          }
+        },
+        {
+          "name": "GET provider profile (fill payload)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/{{providerId}}/profile?state={{state}}&facilityId={{facilityId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{providerId}}",
+                "profile"
+              ],
+              "query": [
+                {
+                  "key": "state",
+                  "value": "{{state}}",
+                  "disabled": false
+                },
+                {
+                  "key": "facilityId",
+                  "value": "{{facilityId}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` — two-letter license state\n- `facilityId` — pin facility.*/assignment.* tokens; omit + several facilities → `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/providers/{{providerId}}/profile?state={{state}}&facilityId={{facilityId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "providers",
+                    "{{providerId}}",
+                    "profile"
+                  ],
+                  "query": [
+                    {
+                      "key": "state",
+                      "value": "{{state}}",
+                      "disabled": false
+                    },
+                    {
+                      "key": "facilityId",
+                      "value": "{{facilityId}}",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "PHI-dense fill payload. `Cache-Control: no-store` + READ audit.\n\nQuery:\n- `state` — two-letter license state\n- `facilityId` — pin facility.*/assignment.* tokens; omit + several facilities → `meta.needs_facility: true`\n\nLocked snake_case: `selected_facility_id`, `meta.needs_facility`.\nToken keys are bare catalog form (`provider.firstName`), never `{{braced}}`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"provider\": {\n      \"id\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\"\n    },\n    \"tokens\": [\n      {\n        \"token\": \"provider.firstName\",\n        \"value\": \"Brooke\"\n      },\n      {\n        \"token\": \"provider.npi\",\n        \"value\": \"1234567890\"\n      },\n      {\n        \"token\": \"user.email\",\n        \"value\": \"specialist@example.test\"\n      }\n    ],\n    \"unresolved\": [\n      {\n        \"token\": \"payer.name\",\n        \"reason\": \"case-scoped; not available on profile\"\n      }\n    ],\n    \"facilities\": [\n      {\n        \"id\": \"99999999-9999-4999-8999-999999999999\",\n        \"name\": \"Main Clinic\",\n        \"street\": \"100 Main St\",\n        \"suite\": null,\n        \"city\": \"Topeka\",\n        \"state\": \"KS\",\n        \"zip\": \"66603\"\n      }\n    ],\n    \"selected_facility_id\": \"99999999-9999-4999-8999-999999999999\"\n  },\n  \"error\": null,\n  \"meta\": {\n    \"notes\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET SSN release (fill-only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/{{providerId}}/ssn-release?caseId={{caseId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{providerId}}",
+                "ssn-release"
+              ],
+              "query": [
+                {
+                  "key": "caseId",
+                  "value": "{{caseId}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "E4.4 fill-only full SSN. Writer + `caseId` required. `no-store` + READ audit. Extension not wired yet."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/providers/{{providerId}}/ssn-release?caseId={{caseId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "providers",
+                    "{{providerId}}",
+                    "ssn-release"
+                  ],
+                  "query": [
+                    {
+                      "key": "caseId",
+                      "value": "{{caseId}}",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "E4.4 fill-only full SSN. Writer + `caseId` required. `no-store` + READ audit. Extension not wired yet."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"ssn\": \"900556789\",\n    \"ssnLast4\": \"6789\"\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST CAQH attestation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/providers/{{providerId}}/caqh-attestation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{providerId}}",
+                "caqh-attestation"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"attested_on\": \"2026-08-08\",\n  \"verified_fields\": [\n    \"provider.caqhId\",\n    \"provider.npi\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Record re-attestation. Future `attested_on` → 422. Returns narrow shape, not full provider row."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/providers/{{providerId}}/caqh-attestation",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "providers",
+                    "{{providerId}}",
+                    "caqh-attestation"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"attested_on\": \"2026-08-08\",\n  \"verified_fields\": [\n    \"provider.caqhId\",\n    \"provider.npi\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Record re-attestation. Future `attested_on` → 422. Returns narrow shape, not full provider row."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n    \"caqhLastAttestedDate\": \"2026-08-08\",\n    \"currentThroughDays\": 120,\n    \"verifiedFields\": 2\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Portals & field maps (org-scoped)",
+      "description": "Case-mode registry + propose-only org maps. Only `approved` maps fill.",
+      "item": [
+        {
+          "name": "GET portals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portals"
+              ]
+            },
+            "description": "Own-org + global registry. Optional `?portal_key=`."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/portals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portals"
+                  ]
+                },
+                "description": "Own-org + global registry. Optional `?portal_key=`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\n      \"orgId\": null,\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"name\": \"BCBS KS network enrollment\",\n      \"payerId\": \"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\n      \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n      \"formUrl\": \"https://provider.bcbsks.com/facelets/allUsers/form/NetworkEnrollmentForm.faces\",\n      \"isVerified\": false,\n      \"lastVerifiedAt\": null,\n      \"provenAt\": null,\n      \"urlChangedAt\": null,\n      \"createdAt\": \"2026-07-28T00:00:00.000Z\",\n      \"updatedAt\": \"2026-07-28T00:00:00.000Z\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET portal field maps",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal-field-maps?portal_key={{portalKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal-field-maps"
+              ],
+              "query": [
+                {
+                  "key": "portal_key",
+                  "value": "{{portalKey}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Global (`orgId` null) + caller-org overrides. Fill uses approved only."
+          }
+        },
+        {
+          "name": "POST propose field map",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal-field-maps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal-field-maps"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"selector\": \"#taxId\",\n  \"field_label\": \"Tax ID\",\n  \"form_section\": \"Group\",\n  \"field_type\": \"text\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Propose-only under caller org. Server forces status `proposed`, source `manual`, token null. Idempotent on `(portal_key, selector)`."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/portal-field-maps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portal-field-maps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"selector\": \"#taxId\",\n  \"field_label\": \"Tax ID\",\n  \"form_section\": \"Group\",\n  \"field_type\": \"text\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Propose-only under caller org. Server forces status `proposed`, source `manual`, token null. Idempotent on `(portal_key, selector)`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"map\": {\n      \"id\": \"12121212-1212-4121-8121-121212121212\",\n      \"orgId\": \"11111111-1111-4111-8111-111111111111\",\n      \"portalKey\": \"bcbs_ks_enrollment\",\n      \"selector\": \"#taxId\",\n      \"status\": \"proposed\",\n      \"source\": \"manual\",\n      \"token\": null\n    },\n    \"suggestion\": {\n      \"token\": \"group.tin\",\n      \"portalCount\": 3,\n      \"fromDictionary\": true\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Cases & touches (org-scoped)",
+      "description": "Case picker / search / context. Touches body is snake_case (locked R2). Fill-events are camelCase.",
+      "item": [
+        {
+          "name": "GET cases by provider",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases?providerId={{providerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "providerId",
+                  "value": "{{providerId}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Open cases for the picker. Includes `portalTasks`, `payerReferenceId`, `latestNote`, `lastSubmittedAt`."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cases?providerId={{providerId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "cases"
+                  ],
+                  "query": [
+                    {
+                      "key": "providerId",
+                      "value": "{{providerId}}",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "Open cases for the picker. Includes `portalTasks`, `payerReferenceId`, `latestNote`, `lastSubmittedAt`."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"33333333-3333-4333-8333-333333333333\",\n      \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n      \"state\": \"KS\",\n      \"status\": \"In Progress\",\n      \"submittedDate\": null,\n      \"payerReferenceId\": null,\n      \"latestNote\": {\n        \"text\": \"Waiting on CAQH update\",\n        \"author\": \"Alex Specialist\",\n        \"at\": \"2026-08-01T15:00:00.000Z\"\n      },\n      \"lastSubmittedAt\": null,\n      \"portalTasks\": [\n        {\n          \"taskId\": \"44444444-4444-4444-8444-444444444444\",\n          \"title\": \"Submit network enrollment\",\n          \"portalKey\": \"bcbs_ks_enrollment\",\n          \"status\": \"open\"\n        }\n      ]\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET search cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases?q=brooke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "brooke",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Case half of unified search. Ids + display fields only. Blank `q` → `[]`. `providerId` wins if both present."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cases?q=brooke",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "cases"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "brooke",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "Case half of unified search. Ids + display fields only. Blank `q` → `[]`. `providerId` wins if both present."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"33333333-3333-4333-8333-333333333333\",\n      \"providerId\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n      \"providerName\": \"Brooke Ostrander\",\n      \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n      \"state\": \"KS\",\n      \"status\": \"In Progress\",\n      \"payerReferenceId\": null,\n      \"payerPipelineState\": \"not_started\"\n    }\n  ],\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET case context",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/{{caseId}}/context",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "{{caseId}}",
+                "context"
+              ]
+            },
+            "description": "Workbench post-selection context. `no-store` + READ audit."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cases/{{caseId}}/context",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "cases",
+                    "{{caseId}}",
+                    "context"
+                  ]
+                },
+                "description": "Workbench post-selection context. `no-store` + READ audit."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"referenceNumbers\": [\n      \"REF-12345\"\n    ],\n    \"payerPipelineState\": \"drafting\",\n    \"provider\": {\n      \"id\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n      \"name\": \"Brooke Ostrander\"\n    },\n    \"payer\": {\n      \"id\": \"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\n      \"name\": \"Blue Cross and Blue Shield of Kansas\"\n    },\n    \"state\": \"KS\",\n    \"selectedFacility\": {\n      \"id\": \"99999999-9999-4999-8999-999999999999\",\n      \"name\": \"Main Clinic\",\n      \"street\": \"100 Main St\",\n      \"suite\": null,\n      \"city\": \"Topeka\",\n      \"state\": \"KS\",\n      \"zip\": \"66603\"\n    },\n    \"openTasks\": [\n      {\n        \"id\": \"44444444-4444-4444-8444-444444444444\",\n        \"title\": \"Submit network enrollment\",\n        \"status\": \"open\",\n        \"executionType\": \"extension_fill\",\n        \"sortOrder\": 1,\n        \"dueDate\": null,\n        \"steps\": [\n          {\n            \"id\": \"step-1\",\n            \"label\": \"Complete online form\",\n            \"order\": 1,\n            \"isCompleted\": false,\n            \"stepType\": \"online_form\",\n            \"portalKey\": \"bcbs_ks_enrollment\"\n          }\n        ]\n      }\n    ],\n    \"latestNote\": {\n      \"content\": \"Waiting on CAQH update\",\n      \"createdAt\": \"2026-08-01T15:00:00.000Z\",\n      \"authorName\": \"Alex Specialist\"\n    },\n    \"latestTouch\": {\n      \"touchDate\": \"2026-07-30\",\n      \"touchType\": \"call\",\n      \"outcome\": \"attempted\",\n      \"note\": \"Left voicemail\"\n    }\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST portal submission touch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/{{caseId}}/touches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "{{caseId}}",
+                "touches"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"portal_submission\",\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"idempotency_id\": \"55555555-5555-4555-8555-555555555555\",\n  \"fill_session_id\": \"66666666-6666-4666-8666-666666666666\",\n  \"note\": null,\n  \"payer_reference_id\": \"REF-12345\",\n  \"wip_note\": \"Submitted via BCBS KS portal\",\n  \"task_id\": \"44444444-4444-4444-8444-444444444444\",\n  \"pdf_filename\": null,\n  \"bump_status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor — no second side effects."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/cases/{{caseId}}/touches",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "cases",
+                    "{{caseId}}",
+                    "touches"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"kind\": \"portal_submission\",\n  \"portal_key\": \"bcbs_ks_enrollment\",\n  \"idempotency_id\": \"55555555-5555-4555-8555-555555555555\",\n  \"fill_session_id\": \"66666666-6666-4666-8666-666666666666\",\n  \"note\": null,\n  \"payer_reference_id\": \"REF-12345\",\n  \"wip_note\": \"Submitted via BCBS KS portal\",\n  \"task_id\": \"44444444-4444-4444-8444-444444444444\",\n  \"pdf_filename\": null,\n  \"bump_status\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "**snake_case body** (locked). Idempotent on `idempotency_id`.\n\nOptional write-back: `payer_reference_id`, `wip_note`, `task_id`, `pdf_filename`.\n`bump_status: true` asks the route to report what the DB trigger did (`meta.status_bump`).\nReplay short-circuits at the anchor — no second side effects."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"55555555-5555-4555-8555-555555555555\",\n    \"caseId\": \"33333333-3333-4333-8333-333333333333\",\n    \"touchDate\": \"2026-08-08\",\n    \"touchType\": \"portal\",\n    \"outcome\": \"submitted\",\n    \"notes\": \"Application submitted via BCBS KS network enrollment\",\n    \"source\": \"extension\"\n  },\n  \"error\": null,\n  \"meta\": {\n    \"status_bump\": \"applied\",\n    \"status_bump_reason\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST structured touch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cases/{{caseId}}/touches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cases",
+                "{{caseId}}",
+                "touches"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"structured_touch\",\n  \"idempotency_id\": \"77777777-7777-4777-8777-777777777777\",\n  \"touch_type\": \"call\",\n  \"outcome\": \"successful\",\n  \"note\": \"Spoke with payer rep\",\n  \"recipient_name\": \"Payer enrollment desk\",\n  \"recipient_contact\": \"800-555-0100\",\n  \"next_follow_up_date\": \"2026-08-15\",\n  \"clears_follow_up\": false,\n  \"payer_reference_id\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "E4.1 typed touch from the extension. `touch_type` required:\n`call | email | portal | fax | caqh_update | provider_outreach | internal_sync`\n\nportal_submission-only fields (`portal_key`, `task_id`, …) → loud 422 on this kind."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Fill events & task steps (org-scoped)",
+      "item": [
+        {
+          "name": "POST fill event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/fill-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "fill-events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"66666666-6666-4666-8666-666666666666\",\n  \"caseId\": \"33333333-3333-4333-8333-333333333333\",\n  \"providerId\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n  \"portalKey\": \"bcbs_ks_enrollment\",\n  \"fillMode\": \"web\",\n  \"startedAt\": \"2026-08-08T18:00:00.000Z\",\n  \"completedAt\": \"2026-08-08T18:00:12.000Z\",\n  \"fieldsFilled\": 24,\n  \"fieldsSkipped\": [\n    {\n      \"kind\": \"skipped\",\n      \"label\": \"Tax ID\",\n      \"reason\": \"field not found on this page\",\n      \"mapId\": \"12121212-1212-4121-8121-121212121212\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "**camelCase body**. Client-generated `id` is idempotency key + PK. Replay → 200 stored row; first insert → 201. Writer only."
+          }
+        },
+        {
+          "name": "PATCH complete task step",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{taskId}}/steps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tasks",
+                "{{taskId}}",
+                "steps"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stepId\": \"{{stepId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked → 409 naming the blocker."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/tasks/{{taskId}}/steps",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "tasks",
+                    "{{taskId}}",
+                    "steps"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"stepId\": \"{{stepId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "The ONE /api task-state write (S4.3). Server owns ordering; blocked → 409 naming the blocker."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"task\": {\n      \"id\": \"44444444-4444-4444-8444-444444444444\",\n      \"status\": \"open\"\n    },\n    \"allDone\": false\n  },\n  \"error\": null,\n  \"meta\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Next best action (org-scoped)",
+      "item": [
+        {
+          "name": "GET next best action",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/next-best-action?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "next-best-action"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1–100 (default 20)."
+          },
+          "response": [
+            {
+              "name": "Sample 200",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "x-org-id",
+                    "value": "{{orgId}}",
+                    "type": "text",
+                    "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/next-best-action?limit=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "next-best-action"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20",
+                      "disabled": false
+                    }
+                  ]
+                },
+                "description": "Server-ranked queue. `{ item: null }` = honest queue clear. `item` is `items[0]`. Optional `?limit=` 1–100 (default 20)."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"item\": {\n      \"caseId\": \"33333333-3333-4333-8333-333333333333\",\n      \"providerId\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n      \"providerName\": \"Brooke Ostrander\",\n      \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n      \"groupName\": \"Outer Banks PT\",\n      \"state\": \"KS\",\n      \"actionKind\": \"task\",\n      \"action\": \"Submit network enrollment\",\n      \"reason\": \"Open portal task due\",\n      \"deadline\": {\n        \"date\": \"2026-08-10\",\n        \"source\": \"task_due\",\n        \"overdue\": false\n      },\n      \"payerPipelineState\": \"drafting\",\n      \"deepLink\": \"/cases/33333333-3333-4333-8333-333333333333\"\n    },\n    \"items\": [\n      {\n        \"caseId\": \"33333333-3333-4333-8333-333333333333\",\n        \"providerId\": \"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee\",\n        \"providerName\": \"Brooke Ostrander\",\n        \"payerName\": \"Blue Cross and Blue Shield of Kansas\",\n        \"groupName\": \"Outer Banks PT\",\n        \"state\": \"KS\",\n        \"actionKind\": \"task\",\n        \"action\": \"Submit network enrollment\",\n        \"reason\": \"Open portal task due\",\n        \"deadline\": {\n          \"date\": \"2026-08-10\",\n          \"source\": \"task_due\",\n          \"overdue\": false\n        },\n        \"payerPipelineState\": \"drafting\",\n        \"deepLink\": \"/cases/33333333-3333-4333-8333-333333333333\"\n      }\n    ]\n  },\n  \"error\": null,\n  \"meta\": {\n    \"total\": 1\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Documents (org-scoped, webapp only)",
+      "description": "E4.5 signing surface. Browser app consumes these; extension does not. Bytes PUT browser → Storage direct after upload-intent.",
+      "item": [
+        {
+          "name": "POST upload intent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/upload-intent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "upload-intent"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerType\": \"provider\",\n  \"ownerId\": \"{{providerId}}\",\n  \"kind\": \"w9\",\n  \"fileName\": \"w9.pdf\",\n  \"fileSize\": 102400,\n  \"mimeType\": \"application/pdf\",\n  \"familyId\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Writer. Mints short-lived signed upload URL for a server-derived object key."
+          }
+        },
+        {
+          "name": "POST finalize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/finalize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "finalize"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ownerType\": \"provider\",\n  \"ownerId\": \"{{providerId}}\",\n  \"kind\": \"w9\",\n  \"familyId\": \"88888888-8888-4888-8888-888888888888\",\n  \"versionNumber\": 1,\n  \"fileName\": \"w9.pdf\",\n  \"fileSize\": 102400,\n  \"mimeType\": \"application/pdf\",\n  \"expirationDate\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Verify object at server path, then immutable metadata insert. Idempotent."
+          }
+        },
+        {
+          "name": "GET download",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-org-id",
+                "value": "{{orgId}}",
+                "type": "text",
+                "description": "Required for multi-org users on org-scoped routes. Omit for single-org (server resolves sole membership). Never send on user-scoped /api/me/* or /api/shared-* routes."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/documents/{{documentId}}/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "documents",
+                "{{documentId}}",
+                "download"
+              ]
+            },
+            "description": "120s signed download. Members incl. billing. Cross-org id → 404 before signing."
+          }
+        }
+      ]
+    }
+  ]
+}
