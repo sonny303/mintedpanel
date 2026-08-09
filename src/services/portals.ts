@@ -12,6 +12,11 @@ import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import {
+  isListableRegistryPortal,
+  isListableSharedPortal,
+  type PortalPayerFacts,
+} from "@/lib/portalVisibility";
 import type { Portal } from "@/types";
 
 const PORTAL_COLUMNS =
@@ -21,7 +26,29 @@ const PORTAL_COLUMNS =
 // groups portals by payer, and the extension has no payer endpoint of its own —
 // a payer id alone would render as a UUID. Embedded rather than a second round
 // trip, and it is not PHI (a payer's name is public catalog identity).
-const PORTAL_API_COLUMNS = `${PORTAL_COLUMNS}, payers(name)`;
+//
+// Slice 6 / D6.4 also reads the payer's LIFECYCLE off the same embed, because
+// a global portal is only listable while its payer is live
+// (src/lib/portalVisibility.ts). One embed serves both — no second round trip,
+// and the filter can never read a staler payer than the name it renders.
+const PORTAL_API_COLUMNS = `${PORTAL_COLUMNS}, payers(name, status, archived_at, merged_into_id)`;
+
+/** The embedded payer as camelizeRow leaves it (the embed is recursed too). */
+type EmbeddedPayer = (PortalPayerFacts & { name?: string | null }) | null;
+type EmbeddedPortalRow = Portal & { payers?: EmbeddedPayer };
+
+/** Split the embed off a raw row into the display name + the facts the
+ * D6.4 predicate needs — the one place the wire shape is unpacked. */
+function unpackPortalRow(row: EmbeddedPortalRow): {
+  portal: PortalApiRow;
+  payer: PortalPayerFacts | null;
+} {
+  const { payers, ...portal } = row;
+  return {
+    portal: { ...portal, payerName: payers?.name ?? null },
+    payer: payers ?? null,
+  };
+}
 
 export interface PortalServiceCtx {
   db: SupabaseClient<Database>;
@@ -37,6 +64,9 @@ export interface PortalServiceCtx {
  * uses (SOP online_form steps, portal_field_maps, fill_sessions), folded to its
  * canonical form on write — so the extension's page -> portal match is a
  * literal compare, like the token join.
+ *
+ * Global rows are additionally held to the Slice 6 D6.4 predicate — see
+ * isListableRegistryPortal. Own-org rows are unaffected.
  *
  * Not PHI (a registry of payer portals and their URLs) — no audit row, and no
  * role gate: billing may read, matching the field-maps route. */
@@ -61,12 +91,16 @@ export async function listPortalsForApi(
   }
   const { data, error } = await query;
   if (error) throw error;
-  type EmbeddedRow = Portal & { payers?: { name?: string | null } | null };
-  const rows = camelizeRow<EmbeddedRow[]>(data ?? []);
-  return rows.map(({ payers, ...portal }) => ({
-    ...portal,
-    payerName: payers?.name ?? null,
-  }));
+  const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
+  // D6.4: own-org rows pass through untouched; global rows must point at a
+  // live catalog payer, so Work-case recognition can't match a page to a
+  // portal whose payer is retired, merged or archived.
+  return rows
+    .map(unpackPortalRow)
+    .filter(({ portal, payer }) =>
+      isListableRegistryPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
+    )
+    .map(({ portal }) => portal);
 }
 
 /** GET /api/shared-portals — the GLOBAL registry rows only (`org_id IS NULL`),
@@ -78,6 +112,10 @@ export async function listPortalsForApi(
  * tier is what makes that safe: there is no org in scope, so no org's private
  * registry rows can be returned to a caller who never named an org.
  *
+ * Slice 6 / D6.4 (F24): rows whose payer is missing, retired, merged or
+ * archived are dropped — see isListableSharedPortal for why a hidden ghost
+ * beats a listed one.
+ *
  * Not PHI (portal names, URLs, verification state) — no audit row, no role
  * gate, matching the org-scoped route it mirrors. */
 export async function listSharedPortals(db: SupabaseClient<Database>): Promise<PortalApiRow[]> {
@@ -88,9 +126,14 @@ export async function listSharedPortals(db: SupabaseClient<Database>): Promise<P
     .order("name", { ascending: true })
     .order("id", { ascending: true });
   if (error) throw error;
-  type EmbeddedRow = Portal & { payers?: { name?: string | null } | null };
-  const rows = camelizeRow<EmbeddedRow[]>(data ?? []);
-  return rows.map(({ payers, ...portal }) => ({ ...portal, payerName: payers?.name ?? null }));
+  const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
+  // D6.4 (F24): every row here is global, so the shared-tier predicate applies
+  // to all of them — a payerless or dead-payer row is a ghost the trainer can
+  // never finish, and offering it is worse than not listing it.
+  return rows
+    .map(unpackPortalRow)
+    .filter(({ portal, payer }) => isListableSharedPortal({ payerId: portal.payerId, payer }))
+    .map(({ portal }) => portal);
 }
 
 export interface PortalInput {

@@ -155,10 +155,24 @@ export interface PayerWriteInput {
   providerIdLabel?: string | null;
   providerIdExpected?: boolean | null;
   delegationNote?: string | null;
+  /**
+   * 3M Slice 6 / D6.1 — CREATE ONLY (updatePayer ignores it; a payer's
+   * identity and an org's adoption of it are separate facts, and editing the
+   * former must never touch the latter).
+   *
+   * Default true: creating still adds the payer to the active org's network,
+   * the E6.7 behaviour every existing caller relies on. False authors the
+   * GLOBAL identity alone — no org_payer_assignments row, so the payer stays
+   * out of "my network", out of attach eligibility, and out of generation
+   * until someone adopts it through the existing Add-to-my-network path.
+   */
+  assignToOrg?: boolean;
 }
 
-/** F6.7.1 — create a GLOBAL payer and add it to the active org's network in
- * one transaction (the RPC also reactivates an archived subscription). */
+/** F6.7.1 — create a GLOBAL payer. By default (Slice 6 D6.1) it also adds the
+ * payer to the active org's network in the same transaction (the RPC
+ * reactivates an archived subscription); `assignToOrg: false` authors the
+ * catalog identity only. */
 export async function createPayer(input: PayerWriteInput): Promise<Payer> {
   const orgId = requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
@@ -173,6 +187,10 @@ export async function createPayer(input: PayerWriteInput): Promise<Payer> {
     p_provider_id_label: input.providerIdLabel ?? undefined,
     p_provider_id_expected: input.providerIdExpected ?? undefined,
     p_delegation_note: input.delegationNote ?? undefined,
+    // Sent EXPLICITLY, never left to the SQL default: an omitted param would
+    // read as "assign" no matter what the caller meant, which is the one
+    // failure mode this flag exists to prevent.
+    p_assign_to_org: input.assignToOrg ?? true,
   });
   if (error) throw mapPayerWriteError(error);
   return camelizeRow<Payer>(data as Record<string, unknown>);

@@ -304,6 +304,77 @@ describe("the E6.8 lifecycle migrations — grant definitions", () => {
   });
 });
 
+// 3M Slice 6 — platform authoring vs org adoption. Softening "creating =
+// adding" must not soften anything else: the payers table stays write-locked,
+// the RPC stays the only door, and the read widening stays a READ widening.
+describe("the Slice 6 migrations — grant + policy shape", () => {
+  const assignFlagMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260809120000_slice6_create_payer_assign_flag.sql"),
+    "utf8",
+  ).toLowerCase();
+  const sopReadMigration = readFileSync(
+    join(ROOT, "supabase/migrations/20260809120100_slice6_global_sop_read_without_assignment.sql"),
+    "utf8",
+  ).toLowerCase();
+  // The prose explains what the assignment gate USED to do, so shape checks
+  // read the statements only.
+  const sopReadStatements = sopReadMigration
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+
+  it("never re-grants payers table DML or recreates the dropped write policies", () => {
+    for (const sql of [assignFlagMigration, sopReadMigration]) {
+      expect(sql).not.toMatch(/grant\s+[a-z, ]*insert[a-z, ]*on\s+(table\s+)?public\.payers/);
+      expect(sql).not.toMatch(/grant\s+[a-z, ]*update[a-z, ]*on\s+(table\s+)?public\.payers/);
+      expect(sql).not.toMatch(/create policy payers_(insert|update)/);
+    }
+  });
+
+  it("the create_payer reissue drops the old 10-param signature (no PostgREST overload)", () => {
+    expect(assignFlagMigration).toMatch(
+      /drop function if exists public\.create_payer\(\s*uuid, text, text, text\[\], text\[\], text, boolean, text, boolean, text\s*\)/,
+    );
+    expect(assignFlagMigration).toContain("p_assign_to_org boolean default true");
+  });
+
+  it("keeps the RPC grant floor: anon revoked, EXECUTE only to authenticated/service_role", () => {
+    expect(assignFlagMigration).toMatch(
+      /revoke all on function public\.create_payer\([\s\S]*?\) from anon/,
+    );
+    expect(assignFlagMigration).toMatch(
+      /grant execute on function public\.create_payer\([\s\S]*?\) to authenticated, service_role/,
+    );
+  });
+
+  it("the assignment upsert is CONDITIONAL — the whole point of the flag", () => {
+    // The upsert must sit inside the guard, or `false` would still adopt.
+    expect(assignFlagMigration).toMatch(
+      /if v_assign then[\s\S]*?insert into public\.org_payer_assignments[\s\S]*?end if;/,
+    );
+    // And an omitted param must still mean "assign" (the E6.7 default).
+    expect(assignFlagMigration).toContain("coalesce(p_assign_to_org, true)");
+  });
+
+  it("the D6.5 widening is SELECT-only — no write policy, no new table grant", () => {
+    expect(sopReadStatements).toMatch(/create policy sop_templates_select[\s\S]*?for select/);
+    expect(sopReadStatements).not.toMatch(
+      /create policy [a-z_]+ on public\.sop_templates?\w*\s*for (insert|update|delete)/,
+    );
+    expect(sopReadStatements).not.toMatch(/^\s*grant /m);
+    // The global disjunct is now unconditional (the portals_select_org shape),
+    // which is what makes an unadopted payer's SOP readable by its author —
+    // no assignment subquery survives in either policy body.
+    expect(sopReadStatements).toContain("or (org_id is null)");
+    expect(sopReadStatements).not.toContain("org_payer_assignments");
+  });
+
+  it("widens the version policy in lockstep with its parent", () => {
+    expect(sopReadStatements).toContain("drop policy if exists sop_template_versions_select");
+    expect(sopReadStatements).toContain("or (t.org_id is null)");
+  });
+});
+
 describe("the payers write-lockdown migration (20260718120000) — grant definitions", () => {
   const sql = lockdownMigration.toLowerCase();
 

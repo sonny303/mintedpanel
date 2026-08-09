@@ -124,6 +124,20 @@ describe("pickTemplate — wrong payer / state / archived never match", () => {
   it("returns null when there are no templates", () => {
     expect(pickTemplate([], "p1", "KS", "g1")).toBeNull();
   });
+
+  // 3M Slice 6 / D6.5: widening sop_templates_select made every GLOBAL row
+  // readable without an org_payer_assignments row, so listTemplates now hands
+  // this resolver templates for payers the org has not adopted. That is safe
+  // only because payer match is exact — the extra rows are, by construction,
+  // for other payers, and a case can only exist for an adopted one.
+  it("ignores newly visible global SOPs for payers this case is not for", () => {
+    const unadopted = globalPayerTmpl({ id: "unadopted", payerId: "p-unadopted", groupId: null });
+    const mine = tmpl({ id: "mine", groupId: "g1" });
+    expect(pickTemplate([unadopted, mine], "p1", "KS", "g1")?.id).toBe("mine");
+    // And with nothing of the org's own, an unrelated payer's SOP is still
+    // not a candidate — the fallback tier decides, exactly as before.
+    expect(pickTemplate([unadopted], "p1", "KS", "g1")).toBeNull();
+  });
 });
 
 // The global-fallback tier (E1.7b F1.7b.4 / TE-8). The fallback is a global

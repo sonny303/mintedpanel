@@ -2567,6 +2567,91 @@ NULL`), and a tier-partitioned `sort_order` backfill. `display_label` is the
 - e2e `e2e/field-registry.spec.ts` (TS-144…TS-149);
   `payer-setup-module.spec.ts` TS-132/TS-134 retargeted off the retired queue.
 
+### 3M Slice 6 — platform authoring vs org adoption (2026-08-09)
+
+Spike + locked decisions: `docs/ops/slice-6-platform-org-spike.md` (D6.1–D6.7);
+audit trail `docs/ops/3m-slice-4-sowmya-audit.md` §F23–F26. TWO additive
+migrations, **REPO-ONLY — hosted apply is an operator step** (3M lane rule,
+`docs/ops/repo-workflow.md` § Human-only ops); every behavioural claim below was
+proven on a throwaway Postgres running CI's exact dry-run procedure, not a fake.
+
+- **D6.1 (`20260809120000_slice6_create_payer_assign_flag`) — `create_payer`
+  gained `p_assign_to_org boolean DEFAULT true`.** E6.7's "creating = adding"
+  is now the DEFAULT, not the only option: `true` is today's behaviour byte for
+  byte (identity insert + the caller org's `org_payer_assignments` upsert + the
+  same audit row, one transaction); `false` writes the GLOBAL identity alone, so
+  the platform loop (payer → SOP → shared portal → train → map) can run before
+  any org adopts the payer. **`p_org_id` stays REQUIRED either way** — it
+  authorizes the call (writer-member) and owns the audit row; no platform role
+  is invented (R7 owns that). Shape is DROP + CREATE, not a defaulted arg on the
+  old signature: PostgREST cannot disambiguate overloads whose named-argument
+  sets nest (the E4.2 publish-RPC / E6.8 `set_case_status` precedent). An
+  unassigned create leaves NO assignment row, so the audit row is its only
+  record — the `after` payload carries `assignedToOrg` and the description
+  distinguishes the two intents.
+- **D6.5 Option A (`20260809120100_slice6_global_sop_read_without_assignment`)
+  — the read-back that D6.1 exposes.** `author_global_sop` never required an
+  assignment but `sop_templates_select` did, so a SOP authored for an unadopted
+  payer was written and then invisible to its author (write-then-vanish).
+  **Both `sop_templates_select` and `sop_template_versions_select` now admit
+  every global row unconditionally** (`org_id IS NULL`), replacing the
+  assignment-gated disjunct and subsuming the payerless-fallback disjunct —
+  the shape `portals_select_org` has had since E6.5, and strictly narrower than
+  global SOP AUTHORING, which E6.5 already opened to any authenticated caller
+  (TD-42). SELECT only; every write policy is untouched. **Resolution cannot
+  change**: `pickTemplate` matches payer exactly and a case only exists for an
+  adopted payer, so newly visible rows can never win a match (pinned in
+  `pickTemplate.test.ts`). **`payers_select` is deliberately NOT widened** —
+  `listPayers` is the "my network" universe feeding the manual-case picker and
+  attach eligibility. Verified live under `SET ROLE authenticated`: both global
+  SOPs + version rows readable, the unadopted payer row still invisible.
+- **Because `payers_select` stays narrow, the Template Editor needed its own
+  payer universe.** `useAuthoringPayers` (`src/hooks/usePayerCatalog.ts`) unions
+  `usePayers()` with `useGlobalPayers()` (the `list_global_payers` SECURITY
+  DEFINER browse read — the same source Payer Detail resolves from, for exactly
+  this reason) through pure `src/lib/authoringPayers.ts`; `TemplateWizard` reads
+  it, so an unadopted payer is pickable and renders its own name instead of "—"
+  on the template being authored for it. The merge treats a non-array as empty:
+  it runs during RENDER, and a `for (… of 0)` TypeError takes the whole editor
+  down through the router error boundary (which is exactly what a harness
+  returning `0` for an unhandled RPC did to `sop-versioning.spec.ts`).
+- **D6.4 (F24) — ghost portals, no migration.** Pure
+  `src/lib/portalVisibility.ts` (`isListableSharedPortal` /
+  `isListableRegistryPortal`) drops GLOBAL registry rows that are not workable
+  forms — null `payer_id`, or a payer that is retired / merged / archived —
+  applied in BOTH places a global portal is listed: `listSharedPortals`
+  (E6.9 Train) and the global leg of `listPortalsForApi` (Work-case
+  recognition). **Own-org rows are untouched.** `PORTAL_API_COLUMNS` now embeds
+  `payers(name, status, archived_at, merged_into_id)` — one embed serves the
+  display name and the filter, so it can never read a staler payer than the name
+  it renders. The predicate FAILS CLOSED on a missing embed. No new `/api`
+  shape, so no new gate assertion (the gate still passes + reddens on all 17
+  leak modes).
+- **App layer:** `PayerWriteInput.assignToOrg?: boolean` (CREATE-ONLY —
+  `updatePayer` ignores it, pinned; editing identity must never touch adoption)
+  sent EXPLICITLY as `p_assign_to_org` rather than relying on the SQL default;
+  `PayerDetailsForm` gained an optional `networkSection` slot and
+  `/admin/payers/new` renders the **"Also add to my network"** checkbox
+  (default ON), threading it through the unchanged `useCreatePayer`. The toast
+  branches — an unassigned create says "created in the payer catalog", never
+  "added to your network", because the payer is genuinely not in the list that
+  claim would send the user to. Adoption stays Payer Detail's "Add to my
+  network".
+- **types.ts was HAND-EDITED** (`create_payer.Args` gained
+  `p_assign_to_org?: boolean`), not regenerated: hosted apply is an operator
+  step in this lane, so a regen would reflect the PRE-migration hosted schema
+  and delete the new arg. Regenerate after the operator applies both files.
+  Table-register rows updated for `payers`, `org_payer_assignments`,
+  `sop_templates`, `sop_template_versions`, `portals`.
+- Tests: `portalVisibility.test.ts`, `authoringPayers.test.ts`,
+  `services/portals.di.test.ts` (the columns really requested + both routes'
+  filtering), both-mode threading in `payers.governance.di.test.ts`, a Slice 6
+  grant/policy-shape block in `payerGovernance.test.ts` (old signature dropped,
+  assignment upsert is CONDITIONAL, the widening is SELECT-only), and
+  `e2e/payer-form.spec.ts` (checkbox on → assignment + "In my network";
+  off → no assignment, honest toast, Add CTA on detail — its `create_payer`
+  handler mirrors the RPC's own branch).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
