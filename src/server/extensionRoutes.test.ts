@@ -583,13 +583,20 @@ describe("task step handler (S4.3 — the one /api task-state write)", () => {
 describe("portals registry handler", () => {
   const url = (qs = "") => new URL(`https://x.test/api/portals${qs}`);
 
-  it("returns the registry rows with meta.total", async () => {
+  it("returns the registry rows with meta.total and registry_empty false", async () => {
     listPortalsMock.mockResolvedValue([{ id: "p1" }, { id: "p2" }] as never);
     const res = await handleListPortals(url(), ctx());
     expect(res.status).toBe(200);
     const b = await body(res);
     expect(b.data).toEqual([{ id: "p1" }, { id: "p2" }]);
-    expect(b.meta).toEqual({ total: 2 });
+    expect(b.meta).toEqual({ total: 2, registry_empty: false });
+  });
+
+  it("marks meta.registry_empty when the registry has no rows", async () => {
+    listPortalsMock.mockResolvedValue([] as never);
+    const res = await handleListPortals(url(), ctx());
+    const b = await body(res);
+    expect(b.meta).toEqual({ total: 0, registry_empty: true });
   });
 
   it("scopes the read to the guard-resolved org", async () => {
