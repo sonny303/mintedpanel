@@ -7,10 +7,10 @@ Status after Slice 0 merge (`5a07308`, 2026-08-09). Process map:
 
 ## Baseline — complete
 
-| Repo | `origin/main` SHA | Local CI (2026-08-08) |
-| --- | --- | --- |
-| mintedpanel | `5843fcf` at Slice 0 open; **merged as `5a07308`** | **Green** — lint 0 errors; vitest **134 / 1636** passed |
-| minted-extension | `76721fc` (#34 Train/Case on main) | **Green** — typecheck/lint clean; vitest **14 / 172** passed |
+| Repo             | `origin/main` SHA                                  | Local CI (2026-08-08)                                        |
+| ---------------- | -------------------------------------------------- | ------------------------------------------------------------ |
+| mintedpanel      | `5843fcf` at Slice 0 open; **merged as `5a07308`** | **Green** — lint 0 errors; vitest **134 / 1636** passed      |
+| minted-extension | `76721fc` (#34 Train/Case on main)                 | **Green** — typecheck/lint clean; vitest **14 / 172** passed |
 
 - [x] Both repos synced to `origin/main` for Slice 0
 - [x] Slice 0 docs merged (PR #266)
@@ -45,19 +45,19 @@ show app.settings.ssn_vault_key;
 select count(*) as global_portals from portals where org_id is null;
 ```
 
-| Item | Agent status |
-| --- | --- |
-| Aug 7 migrations applied | **Unverified** — no DB access |
-| Vault `ssn_vault_key` | **Unverified** — no DB access |
-| Portals non-empty for UAT | **Unverified** — no DB access |
+| Item                          | Agent status                  |
+| ----------------------------- | ----------------------------- |
+| Aug 7 migrations applied      | **Unverified** — no DB access |
+| Vault `ssn_vault_key`         | **Unverified** — no DB access |
+| Portals non-empty for UAT     | **Unverified** — no DB access |
 | Types/migrations drift (#264) | **Unverified** — no DB access |
 
 ---
 
 ## Lane status
 
-| Slice | Status |
-| --- | --- |
-| 0 | **Done** (merged #266) |
-| 1 | Next — open-cases → `case_status`, portals empty-state, fill/inject tests |
-| 6 | Queued after Slice 1 — platform/org payer overhaul |
+| Slice | Status                                                                    |
+| ----- | ------------------------------------------------------------------------- |
+| 0     | **Done** (merged #266)                                                    |
+| 1     | Next — open-cases → `case_status`, portals empty-state, fill/inject tests |
+| 6     | Queued after Slice 1 — platform/org payer overhaul                        |
