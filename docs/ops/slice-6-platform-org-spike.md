@@ -12,13 +12,13 @@ Companion process: [`repo-workflow.md`](./repo-workflow.md). Product loop contex
 
 E6.7 locked **creating = adding**: `create_payer` always upserts `org_payer_assignments` for the caller org in the same transaction.
 
-| Evidence | Path |
-| --- | --- |
-| RPC always assigns | `supabase/migrations/20260727120000_e67_payer_manual_setup.sql` (~310–315) |
-| Service always passes `p_org_id` | `src/services/payers.ts` `createPayer` |
-| Create UI toast assumes network | `src/routes/admin.payers_.new.tsx` — “added to your network” |
+| Evidence                           | Path                                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| RPC always assigns                 | `supabase/migrations/20260727120000_e67_payer_manual_setup.sql` (~310–315)              |
+| Service always passes `p_org_id`   | `src/services/payers.ts` `createPayer`                                                  |
+| Create UI toast assumes network    | `src/routes/admin.payers_.new.tsx` — “added to your network”                            |
 | Setup / funnel gated on assignment | `src/lib/payerSetup.ts` `activeOrgPayers` → `PayerSetupPage`, `usePayerReadinessFunnel` |
-| Train list unfiltered | `listSharedPortals` — all global portals; no payer lifecycle filter |
+| Train list unfiltered              | `listSharedPortals` — all global portals; no payer lifecycle filter                     |
 
 **Desired model:** platform setup (payer → SOP → shared portal → train → map) is independent of org adoption (assign → targets → cases → fill).
 
@@ -34,10 +34,10 @@ E6.7 locked **creating = adding**: `create_payer` always upserts `org_payer_assi
 p_assign_to_org boolean DEFAULT true
 ```
 
-| Value | Behavior |
-| --- | --- |
-| `true` (default) | Today’s behavior: upsert active `org_payer_assignments` + current audit copy |
-| `false` | Insert global payer only; **skip** assignment upsert; audit: “Created global payer …” |
+| Value            | Behavior                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `true` (default) | Today’s behavior: upsert active `org_payer_assignments` + current audit copy          |
+| `false`          | Insert global payer only; **skip** assignment upsert; audit: “Created global payer …” |
 
 Still requires `p_org_id` for **writer-membership auth** (admin/specialist of that org) — platform authoring does not invent a platform role (E6.7 / D11 posture). Adoption uses existing `addAssignment` / detail “Add to my network”.
 
@@ -45,9 +45,9 @@ Still requires `p_org_id` for **writer-membership auth** (admin/specialist of th
 
 ### D6.2 — UX: two intents, one form, default assign = on for Setup entry
 
-| Intent | How |
-| --- | --- |
-| **Ops: set up for my network** | Existing `/admin/payers/new` from Payer Setup — **`assignToOrg: true`** (default). Toast stays “added to your network”. |
+| Intent                             | How                                                                                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ops: set up for my network**     | Existing `/admin/payers/new` from Payer Setup — **`assignToOrg: true`** (default). Toast stays “added to your network”.                                                                        |
 | **Platform: author identity only** | Same form + control **“Also add to my network”** (checkbox, **default checked** for Setup CTA). Unchecked → `assignToOrg: false` → toast “Payer created” → detail shows **Add to my network**. |
 
 Two separate top-level verbs later are optional polish; the checkbox is the smallest ship that matches existing “Add to my network” language on detail (`PayerDetailPage`).
@@ -56,11 +56,11 @@ Two separate top-level verbs later are optional polish; the checkbox is the smal
 
 ### D6.3 — List semantics (platform vs my network)
 
-| List | Source | Role |
-| --- | --- | --- |
-| **My network** | `activeOrgPayers()` | Payer Setup, readiness funnel, attach shortlist, manual case picker |
-| **Platform catalog** | `list_global_payers` | Near-match, detail, author for any global row |
-| **Shared portals (Train)** | `listSharedPortals` + **D6.4 filter** | Org-free train picker |
+| List                       | Source                                | Role                                                                |
+| -------------------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| **My network**             | `activeOrgPayers()`                   | Payer Setup, readiness funnel, attach shortlist, manual case picker |
+| **Platform catalog**       | `list_global_payers`                  | Near-match, detail, author for any global row                       |
+| **Shared portals (Train)** | `listSharedPortals` + **D6.4 filter** | Org-free train picker                                               |
 
 Group attach may still pull from catalog then assign on save (existing path) — out of Slice 6 scope to redesign.
 
@@ -90,10 +90,10 @@ Today `author_global_sop` / `upsert_global_portal` do **not** require assignment
 
 **Slice 6 build must include one of:**
 
-| Option | Choice |
-| --- | --- |
+| Option            | Choice                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A (preferred)** | Widen global SOP/portal **read** RLS (or list RPC) so writers can see global rows they authored / all active global SOPs for a payer when viewing that payer’s detail Templates tab — without requiring assignment |
-| **B** | Document “platform author must assign before listing” — **rejected** for this spike (defeats the model) |
+| **B**             | Document “platform author must assign before listing” — **rejected** for this spike (defeats the model)                                                                                                            |
 
 Spike locks **Option A** as in-scope for the Slice 6 build PR (or a tight follow-up PR in the same tranche). Exact RLS wording is a build-time spike ≤30 min against `sop_template_versions` / portals policies.
 
@@ -113,24 +113,24 @@ Ship `docs/ops/global-portal-payer-inventory.sql` (no deletes): counts / rows fo
 
 ## Supersedes
 
-| Prior | Change |
-| --- | --- |
+| Prior                    | Change                                             |
+| ------------------------ | -------------------------------------------------- |
 | E6.7 “creating = adding” | Softened: creating **may** add; default still adds |
-| TD / plan F23 monitor | Becomes **fix** under Slice 6 build |
+| TD / plan F23 monitor    | Becomes **fix** under Slice 6 build                |
 
 ---
 
 ## Minimal PR map (build)
 
-| # | Change | Files (indicative) |
-| --- | --- | --- |
-| 1 | Migration: `p_assign_to_org boolean DEFAULT true` | new `supabase/migrations/20260809*_create_payer_assign_flag.sql`; `table-register.md` note |
-| 2 | Service + types regen | `payers.ts` `PayerWriteInput.assignToOrg?`; DI test; generated `types.ts` |
-| 3 | Create UI | `admin.payers_.new.tsx` checkbox + toast; `useCreatePayer` already invalidates assignments |
-| 4 | Shared portal filter | `portals.ts` `listSharedPortals` + `listPortalsForApi`; unit/route tests; isolation script if needed |
-| 5 | SOP/portal read for unassigned | RLS/list path per D6.5 Option A |
-| 6 | Inventory SQL | `docs/ops/global-portal-payer-inventory.sql` |
-| 7 | E2e | `e2e/payer-form.spec.ts` — mock + assert both assign modes; Setup still lands “In my network” when checked |
+| #   | Change                                            | Files (indicative)                                                                                         |
+| --- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1   | Migration: `p_assign_to_org boolean DEFAULT true` | new `supabase/migrations/20260809*_create_payer_assign_flag.sql`; `table-register.md` note                 |
+| 2   | Service + types regen                             | `payers.ts` `PayerWriteInput.assignToOrg?`; DI test; generated `types.ts`                                  |
+| 3   | Create UI                                         | `admin.payers_.new.tsx` checkbox + toast; `useCreatePayer` already invalidates assignments                 |
+| 4   | Shared portal filter                              | `portals.ts` `listSharedPortals` + `listPortalsForApi`; unit/route tests; isolation script if needed       |
+| 5   | SOP/portal read for unassigned                    | RLS/list path per D6.5 Option A                                                                            |
+| 6   | Inventory SQL                                     | `docs/ops/global-portal-payer-inventory.sql`                                                               |
+| 7   | E2e                                               | `e2e/payer-form.spec.ts` — mock + assert both assign modes; Setup still lands “In my network” when checked |
 
 **Suggested PR split:** (1) RPC + service + create UI + e2e, (2) portal filter + inventory, (3) SOP read-back — or one PR if kept tight.
 
@@ -171,8 +171,8 @@ Stop at draft PR + spike criteria checklist in PR body.
 
 ## Open only if PM overrides
 
-| Topic | Spike default |
-| --- | --- |
-| Default checkbox on | **On** (preserve ops “create = network”) |
-| Apply portal filter to Work `/api/portals` global leg | **Yes** |
-| SOP read-back without assign | **In scope (Option A)** |
+| Topic                                                 | Spike default                            |
+| ----------------------------------------------------- | ---------------------------------------- |
+| Default checkbox on                                   | **On** (preserve ops “create = network”) |
+| Apply portal filter to Work `/api/portals` global leg | **Yes**                                  |
+| SOP read-back without assign                          | **In scope (Option A)**                  |

@@ -125,10 +125,7 @@ describe("listOpenProviderCases — org isolation", () => {
   });
 
   it("makes no touchlog read when there are no open cases", async () => {
-    const { db, captures } = makeFakeDb([
-      { data: { id: PROVIDER_ID } },
-      { data: [] },
-    ]);
+    const { db, captures } = makeFakeDb([{ data: { id: PROVIDER_ID } }, { data: [] }]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
