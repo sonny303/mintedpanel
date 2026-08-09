@@ -7,25 +7,26 @@ Epic lifecycle: [`docs/redesign/README.md`](docs/redesign/README.md).
 
 ## Project overview
 
-Minted Panel is a credentialing operations SaaS for medical groups, tracking providers, payers, cases, tasks, touches, and contracts across states and MSOs. The stack is React 18 + TypeScript + Vite + Tailwind + shadcn/ui, with TanStack Router for routing, Zustand for client state, TanStack Query for server state, and Supabase for database, auth, and RLS. The product is feature-complete; most work is incremental UI, bug fixes, and additive backend tables.
+Minted Panel is a credentialing operations SaaS for medical groups, tracking providers, payers, cases, tasks, touches, and contracts across states. The stack is React 19 + TypeScript + Tailwind v4 + shadcn/ui on **TanStack Start** (file-based routing on a nitro server, SSR-capable — not a plain Vite SPA), with Zustand for auth/org state, TanStack Query for server state, and Supabase for database, auth, and RLS. The product is feature-complete; most work is incremental UI, bug fixes, and additive backend tables.
 
 ## Architecture
 
 - `src/routes/` — TanStack file-based routes. Parent routes only render `<Outlet />`.
 - `src/components/[module]/` — feature components grouped by domain.
 - `src/components/layout/` and `src/components/ui/` — shared shell and shadcn primitives.
-- `src/services/` — the ONLY place Supabase is called. Each service owns one table or domain.
+- `src/services/` — the ONLY place Supabase is called. Each service owns one table or domain. Query functions take an optional server ctx (DI); the default is the browser client.
 - `src/hooks/` — TanStack Query wrappers that call services. Components use hooks, never services directly.
+- `src/server/` — nitro-side `/api/*` routes (extension-facing + the document-signing endpoints), behind `guard.ts`. Server-only — never imported by a browser bundle.
+- `src/server.ts` / `src/start.ts` — the nitro fetch entry and Start config. `src/server.ts` intercepts the `/api` prefix before SSR.
 - `src/types/index.ts` — every domain interface.
-- `src/lib/` — pure utilities (sopResolver, audit, case helpers, auth-store).
-- `src/stores/` — Zustand stores for cross-component UI state (e.g. active org).
+- `src/lib/` — pure utilities and client state (sopResolver, audit, case helpers, and the Zustand `auth-store.ts` holding session + active org). There is no `src/stores/`.
 
 ## Protected files — do not modify without explicit instruction
 
 - All files in `supabase/migrations/`. Add new migrations; never edit existing ones.
 - `src/types/index.ts` (additive only).
 - `src/lib/sopResolver.ts`.
-- `tailwind.config.*` and design tokens.
+- Design tokens — `src/styles/tokens.css` (a byte-identical drop-in from `docs/redesign/design-system/`, kept in `.prettierignore`) and the `docs/redesign/design-system/` bundle itself. Tailwind v4 is configured in CSS; there is no `tailwind.config.*`.
 - `src/components/layout/*` and `src/components/ui/*`.
 
 ## Supabase client rule
@@ -36,7 +37,9 @@ The ONLY valid Supabase client import is:
 import { supabase } from "@/integrations/supabase/externalClient";
 ```
 
-The auto-generated `client.ts` (dead code pointing at an abandoned database) and the `auth-attacher.ts` middleware that imported it were deleted in Jul 2026. If a generated Supabase scaffold ever reappears, delete it — never import it. `externalClient.ts` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from the environment (see `.env.example`).
+That is the only file under `src/integrations/supabase/` besides the generated `types.ts`. The auto-generated `client.ts` (dead code pointing at an abandoned database) and the `auth-attacher.ts` middleware that imported it were deleted in Jul 2026 — if a generated Supabase scaffold ever reappears, delete it, never import it. `externalClient.ts` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from the environment (see `.env.example`).
+
+Server routes are the exception and use their own clients in `src/server/serviceClient.ts` (service-role + auth), which Vite's `**/server/**` import protection keeps out of browser bundles.
 
 ## Routing rules
 
@@ -48,8 +51,19 @@ The auto-generated `client.ts` (dead code pointing at an abandoned database) and
 ## Data rules
 
 - Never call Supabase from a component. Components → hooks → services → Supabase.
-- Never hardcode arrays/mock data in components. Source from `src/data/*.ts` or services.
+- Never hardcode arrays/mock data in components. Closed reference sets live in a pure `src/lib/*.ts` module (e.g. `usStates.ts`, `canonicalStatuses.ts`); everything else comes from a service.
 - For table cells with pills, badges, or two-line content, write custom table markup. Do not force everything through a generic DataTable.
+
+## Server `/api` rules
+
+`src/server/*` routes use the **service-role** client, which bypasses RLS — so
+tenant isolation there is enforced in code, not by the database.
+
+- Every data route runs through `guard.ts`. `org_id` and role come from the authenticated membership, never from the request body or a query param.
+- Reuse the service via DI (pass a server ctx); never write a second copy of a query in a route handler.
+- List payloads use narrowed column sets (no PHI); PHI-bearing responses set `Cache-Control: no-store` and are never logged.
+- Every new resource route adds assertions to `scripts/verify-org-isolation.mjs` and coverage in `scripts/mock-api-server.mjs` before merge. A red isolation gate is stop-ship.
+- Browser hooks do not call `/api` — the one sanctioned exception is the `/api/documents/*` signing endpoints (a signed Storage URL cannot be minted client-side).
 
 ## Database rules
 
