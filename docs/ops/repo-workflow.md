@@ -133,4 +133,5 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 | [`docs/redesign/README.md`](../redesign/README.md) | Epic lifecycle + merge gate |
 | [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md) | New epic skeleton |
 | [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off |
+| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions) |
 | Extension `CLAUDE.md` | Extension architecture + wire contracts |
