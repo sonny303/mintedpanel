@@ -10,10 +10,10 @@ manual today**.
 
 ## Two lanes
 
-| Lane | Who builds | Branch pattern | Merge |
-| --- | --- | --- | --- |
-| **Epic queue** | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges — **never self-merge** |
-| **3M / parallel** | Cloud Agent (this engagement) | `cursor/3m-<slice>-6f36` | PM merges draft PRs — **never self-merge** |
+| Lane              | Who builds                           | Branch pattern                                                            | Merge                                      |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------ |
+| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges — **never self-merge**  |
+| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                  | PM merges draft PRs — **never self-merge** |
 
 Epic lane owns roadmap features (e.g. E6.9 Form Setup). The 3M lane owns
 reliability, muda deletion, and approved simplification slices — it must not
@@ -66,10 +66,10 @@ Summary:
 
 ### CI surfaces (panel)
 
-| Workflow | What |
-| --- | --- |
-| `.github/workflows/ci.yml` | format, typecheck, lint, unit tests, build, migration dry-run |
-| `.github/workflows/verify-org-isolation.yml` | org-isolation gate for `/api` |
+| Workflow                                     | What                                                          |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `.github/workflows/ci.yml`                   | format, typecheck, lint, unit tests, build, migration dry-run |
+| `.github/workflows/verify-org-isolation.yml` | org-isolation gate for `/api`                                 |
 
 Extension: `.github/workflows/ci.yml` — typecheck, lint, vitest.
 
@@ -94,13 +94,13 @@ the extension (JWT + panel `/api` only).
 These are not agent-verifiable. Checklist:
 [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md).
 
-| Step | Why manual |
-| --- | --- |
-| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet |
-| Provision vault `app.settings.ssn_vault_key` | E4.4 operator task; fail-closed until set |
-| Confirm UAT portals seeded | Empty registry ⇒ extension fill/capture silent no-op |
-| Merge PRs / approve epics | Governance: never self-merge |
-| Preview / UAT sign-off | AGENTS.md: no self-testing panel journeys in chat |
+| Step                                                      | Why manual                                           |
+| --------------------------------------------------------- | ---------------------------------------------------- |
+| Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet     |
+| Provision vault `app.settings.ssn_vault_key`              | E4.4 operator task; fail-closed until set            |
+| Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op |
+| Merge PRs / approve epics                                 | Governance: never self-merge                         |
+| Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat    |
 
 ---
 
@@ -115,22 +115,22 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 ## Strip / simplify register (process muda)
 
-| Item | Status |
-| --- | --- |
-| `reviewed: true` gate | **Retired** 2026-08-07 — epic merge to `main` is approval |
-| EPIC-TEMPLATE “deliver to `redesign` branch” | **Fixed** (Slice 0) — deliver epic docs to `main` |
-| Root `CONTRIBUTING.md` | **Not added** — sole-author context; this file is enough |
-| Postman `/api` collection | **Out of scope** for 3M |
-| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules |
+| Item                                                     | Status                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------- |
+| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval |
+| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`         |
+| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough  |
+| Postman `/api` collection                                | **Out of scope** for 3M                                   |
+| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules     |
 
 ---
 
 ## Quick links
 
-| Doc | Role |
-| --- | --- |
-| [`AGENTS.md`](../../AGENTS.md) | Binding coding rules for agents |
-| [`docs/redesign/README.md`](../redesign/README.md) | Epic lifecycle + merge gate |
-| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md) | New epic skeleton |
-| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off |
-| Extension `CLAUDE.md` | Extension architecture + wire contracts |
+| Doc                                                                | Role                                    |
+| ------------------------------------------------------------------ | --------------------------------------- |
+| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents         |
+| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate             |
+| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                       |
+| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                   |
+| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts |
