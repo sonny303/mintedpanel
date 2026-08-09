@@ -69,7 +69,8 @@ import {
   toEditable,
   type EditableTask,
 } from "@/components/templates/editableTemplate";
-import { useCreateSop, usePayers, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
+import { useCreateSop, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
+import { useAuthoringPayers } from "@/hooks/usePayerCatalog";
 import { useAuthorGlobalSop } from "@/hooks/useGlobalAuthoring";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { useProviderGroups } from "@/hooks/useLookups";
@@ -210,7 +211,10 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   // rows keep the admin gate.
   const canEdit = isGlobal ? true : isAdmin;
 
-  const payersQ = usePayers();
+  // Slice 6 D6.5: the GLOBAL catalog union, not just "my network" — the
+  // editor authors global templates, and a payer created without org adoption
+  // must still name itself on the template being written for it.
+  const payersQ = useAuthoringPayers();
   const groupsQ = useProviderGroups();
   const tokensQ = useTokenCatalog();
   const portalsQ = usePortals();

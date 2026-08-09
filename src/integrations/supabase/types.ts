@@ -3900,6 +3900,7 @@ export type Database = {
       create_payer: {
         Args: {
           p_aliases?: string[];
+          p_assign_to_org?: boolean;
           p_delegation_note?: string;
           p_group_id_expected?: boolean;
           p_group_id_label?: string;
