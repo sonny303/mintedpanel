@@ -15,6 +15,11 @@ Devs never block on design review — every deviation instead leaves a row here.
 
 An unlogged unapproved component is a review blocker; a logged one never is.
 
+**3M Slice 4 note (2026-08-09):** rows below are correctly logged compositions
+awaiting the normal design-review triage cycle (`pending review` → `approved` /
+`replace`). That triage is PM/design process work, not a Lean 3M code slice —
+see [`docs/ops/3m-slice-4-sowmya-audit.md`](docs/ops/3m-slice-4-sowmya-audit.md).
+
 ## Register
 
 | Component / deviation                                                                                        | Where used                                                                                                                                                                                                                                | Why needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Owner | Date       | Status         |

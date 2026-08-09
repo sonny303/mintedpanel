@@ -97,7 +97,7 @@ These are not agent-verifiable. Checklist:
 | Step                                                      | Why manual                                           |
 | --------------------------------------------------------- | ---------------------------------------------------- |
 | Apply hosted Supabase migrations (SQL Editor / dashboard) | No automated `dev → staging → prod` pipeline yet     |
-| Provision vault `app.settings.ssn_vault_key`              | E4.4 operator task; fail-closed until set            |
+| Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed |
 | Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op |
 | Merge PRs / approve epics                                 | Governance: never self-merge                         |
 | Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat    |
@@ -133,5 +133,7 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 | [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                         |
 | [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                   |
 | [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                               |
+| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation   |
+| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog        |
 | [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions) |
 | Extension `CLAUDE.md`                                              | Extension architecture + wire contracts             |
