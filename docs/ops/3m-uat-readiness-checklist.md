@@ -1,19 +1,19 @@
 # 3M UAT readiness checklist
 
-Status after Slice 0 merge (`5a07308`, 2026-08-09). Process map:
-[`repo-workflow.md`](./repo-workflow.md).
+Process map: [`repo-workflow.md`](./repo-workflow.md).  
+Sowmya audit: [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md).  
+Slice 5 close-out: [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md).
 
 ---
 
 ## Baseline — complete
 
-| Repo             | `origin/main` SHA                                  | Local CI (2026-08-08)                                        |
-| ---------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| mintedpanel      | `5843fcf` at Slice 0 open; **merged as `5a07308`** | **Green** — lint 0 errors; vitest **134 / 1636** passed      |
-| minted-extension | `76721fc` (#34 Train/Case on main)                 | **Green** — typecheck/lint clean; vitest **14 / 172** passed |
+| Repo             | Notes                                                             |
+| ---------------- | ----------------------------------------------------------------- |
+| mintedpanel      | Slices 0–3 + Slice 6 spike on `main` (through #270 / #269 / #268) |
+| minted-extension | Slices 1–3 on `main` (#35 / #36 / #37)                            |
 
-- [x] Both repos synced to `origin/main` for Slice 0
-- [x] Slice 0 docs merged (PR #266)
+- [x] Both repos synced to `origin/main` for Slice 0+
 - [x] Epic collision watch noted: `portals.ts`, `extensionRoutes.ts`, `payers.ts`, `payerSetup.ts`, extension `sidepanel/main.ts`
 
 ---
@@ -21,9 +21,9 @@ Status after Slice 0 merge (`5a07308`, 2026-08-09). Process map:
 ## Hosted Supabase — not verified from agent
 
 This Cloud Agent environment has **no Supabase credentials** and the Supabase MCP
-server is `needsAuth` (desktop-only auth). Hosted checks below were **not run**.
-They are inventory for whoever has SQL Editor access — not a blocking gate for
-Slice 1 code work.
+server is often `needsAuth` (desktop-only auth). Hosted checks below are inventory
+for whoever has SQL Editor / Vault access — **not** a blocking gate for Slice 6
+code, but required before full-SSN / Field Registry UAT.
 
 Migrations expected on hosted (filename order):
 
@@ -39,25 +39,34 @@ select version from supabase_migrations.schema_migrations
 where version like '20260807%'
 order by version;
 
--- vault presence (do not log the secret):
-show app.settings.ssn_vault_key;
+-- Vault secret presence (do NOT select the secret value into logs/chat):
+select exists (
+  select 1 from vault.decrypted_secrets where name = 'ssn_vault_key'
+) as vault_key_present;
 
 select count(*) as global_portals from portals where org_id is null;
 ```
 
-| Item                          | Agent status                  |
-| ----------------------------- | ----------------------------- |
-| Aug 7 migrations applied      | **Unverified** — no DB access |
-| Vault `ssn_vault_key`         | **Unverified** — no DB access |
-| Portals non-empty for UAT     | **Unverified** — no DB access |
-| Types/migrations drift (#264) | **Unverified** — no DB access |
+Provisioning steps for the vault secret: Slice 4 appendix § F1 (Dashboard → Vault →
+name `ssn_vault_key`). Hosted rejects `ALTER DATABASE` custom GUCs.
+
+| Item                          | Agent status                  | PM / ops |
+| ----------------------------- | ----------------------------- | -------- |
+| Aug 7 migrations applied      | **Unverified** — no DB access | [ ]      |
+| Vault `ssn_vault_key`         | **Unverified** — no DB access | [ ]      |
+| Portals non-empty for UAT     | **Unverified** — no DB access | [ ]      |
+| Types/migrations drift (#264) | **Unverified** — no DB access | [ ]      |
 
 ---
 
 ## Lane status
 
-| Slice | Status                                                                    |
-| ----- | ------------------------------------------------------------------------- |
-| 0     | **Done** (merged #266)                                                    |
-| 1     | Next — open-cases → `case_status`, portals empty-state, fill/inject tests |
-| 6     | Queued after Slice 1 — platform/org payer overhaul                        |
+| Slice | Status                                                                                    |
+| ----- | ----------------------------------------------------------------------------------------- |
+| 0     | **Done** — #266                                                                           |
+| 1     | **Done** — panel #267 + extension #35                                                     |
+| 2     | **Done** — panel #268 + extension #36                                                     |
+| 3     | **Done** — panel #270 + extension #37                                                     |
+| 4     | **Done** — Sowmya audit appendix (`3m-slice-4-sowmya-audit.md`) + debt reconciliation     |
+| 5     | **Done** — close-out (`3m-slice-5-closeout.md`); F13 env override; TD-49/TD-50 registered |
+| 6     | **Next** — build from spike (`slice-6-platform-org-spike.md`); spike merged #269          |
