@@ -121,7 +121,6 @@ const RENDERING_ROUTES = [
   "/org-detail",
   "/groups",
   "/providers",
-  "/reports",
   "/admin/templates/new",
   // Slice B — the manual payer-setup create door (a stale id renders an honest
   // "Payer not found", never a dead end). The edit door moved to the payer
@@ -151,6 +150,12 @@ const REDIRECTING_ROUTES: Array<{ from: string; to: RegExp }> = [
   { from: "/launches/loc-1", to: /\/reporting\/launches\/?$/ },
   // E6.6 F6.6.4 — the Audit Log admin page re-homed into the Center.
   { from: "/admin/audit", to: /\/reporting\/audit-log\/?$/ },
+  // 3M Slice 2 — the pre-redesign /reports tab switcher retires to the Center.
+  // Nothing linked here after the six-item sidebar landed, so the only traffic
+  // is old bookmarks. ?tab= is deliberately dropped (the Center is a registry,
+  // not a tab strip) — the /admin/portals?payerId= precedent.
+  { from: "/reports", to: /\/reporting\/?$/ },
+  { from: "/reports?tab=roster", to: /\/reporting\/?$/ },
   // Imports live with data (E6.4 carries them; wizard uploads meanwhile).
   { from: "/admin/import", to: /\/providers\/?$/ },
   // Payer Setup consolidations (E6.5 built the module; Slice G finalized it —
