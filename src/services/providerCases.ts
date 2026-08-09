@@ -1,10 +1,9 @@
 // Open cases for one provider — the extension popup's case dropdown
-// (GET /api/cases?providerId=). "Open" is derived from the org's status
-// configuration, never from hardcoded labels: a case is open unless its
-// credentialing status has action_bucket 'complete', the config's terminal
-// marker (the same bucket the M2 action engine treats as terminal — see
-// src/lib/actionState.ts rule 6). A case with no status is unclassified,
-// which the app routes to "needs a human" — it is open here too.
+// (GET /api/cases?providerId=). "Open" follows E6.0 `case_status` via
+// `isOpenCaseStatus` (src/lib/caseStatus.ts) — NOT the legacy
+// credentialing_status_id / status_configs.action_bucket mirror. Null or
+// unrecognized case_status stays open (needs a human) rather than silently
+// dropping the case.
 //
 // PR C (Stories 5, 10, 11) adds three read fields the extension prefills/guards
 // off, all derived within the same org-scoped query:
@@ -29,6 +28,7 @@
 //
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { caseStatusLabel, isCaseStatus, isOpenCaseStatus } from "@/lib/caseStatus";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -69,15 +69,14 @@ export interface OpenProviderCase {
   portalTasks: OpenProviderCasePortalTask[];
 }
 
-const CASE_COLUMNS =
-  "id, state, submitted_date, payer_reference_id, credentialing_status_id, payers(name)";
+const CASE_COLUMNS = "id, state, submitted_date, payer_reference_id, case_status, payers(name)";
 
 interface CaseRow {
   id: string;
   state: string;
   submitted_date: string | null;
   payer_reference_id: string | null;
-  credentialing_status_id: string | null;
+  case_status: string | null;
   payers: { name: string | null } | null;
 }
 
@@ -98,6 +97,17 @@ interface TaskRow {
   sop_content: unknown;
 }
 
+/** Null/unknown stay open so a drifted row is never silently dropped. */
+function rowIsOpen(caseStatus: string | null): boolean {
+  if (caseStatus == null || !isCaseStatus(caseStatus)) return true;
+  return isOpenCaseStatus(caseStatus);
+}
+
+function displayStatus(caseStatus: string | null): string | null {
+  if (caseStatus == null || !isCaseStatus(caseStatus)) return null;
+  return caseStatusLabel(caseStatus);
+}
+
 // Null = the provider is not in the caller's org (the route's 404) — a
 // cross-org provider is indistinguishable from one that doesn't exist.
 export async function listOpenProviderCases(
@@ -115,16 +125,6 @@ export async function listOpenProviderCases(
   if (providerErr) throw providerErr;
   if (!provider) return null;
 
-  const { data: statuses, error: statusErr } = await db
-    .from("status_configs")
-    .select("id, label, action_bucket")
-    .eq("org_id", orgId)
-    .eq("track", "credentialing");
-  if (statusErr) throw statusErr;
-  const statusById = new Map(
-    (statuses ?? []).map((s) => [s.id as string, s as { label: string; action_bucket: string }]),
-  );
-
   const { data: cases, error: caseErr } = await db
     .from("credential_cases")
     .select(CASE_COLUMNS)
@@ -132,11 +132,7 @@ export async function listOpenProviderCases(
     .eq("provider_id", providerId);
   if (caseErr) throw caseErr;
 
-  const open = ((cases ?? []) as unknown as CaseRow[]).filter((row) => {
-    if (row.credentialing_status_id == null) return true;
-    const status = statusById.get(row.credentialing_status_id);
-    return status?.action_bucket !== "complete";
-  });
+  const open = ((cases ?? []) as unknown as CaseRow[]).filter((row) => rowIsOpen(row.case_status));
 
   // PR C: latest note + last submission per open case, from the touchlog. One
   // org-scoped read over just the open case ids; skipped when there are none.
@@ -221,9 +217,7 @@ export async function listOpenProviderCases(
       id: row.id,
       payerName: row.payers?.name ?? null,
       state: row.state,
-      status: row.credentialing_status_id
-        ? (statusById.get(row.credentialing_status_id)?.label ?? null)
-        : null,
+      status: displayStatus(row.case_status),
       submittedDate: row.submitted_date,
       payerReferenceId: row.payer_reference_id,
       latestNote: note ? { text: note.notes, author: note.author, at: note.at } : null,
@@ -247,7 +241,7 @@ export async function listOpenProviderCases(
 
 // One case-search result row — ids + display fields only, never beyond the
 // existing list projections (TE-11). Provider display name is first+last (both
-// in PROVIDER_LIST_COLUMNS); status is the credentialing label; payerPipeline
+// in PROVIDER_LIST_COLUMNS); status is the E6.0 case_status label; payerPipeline
 // is the E4.0 pipeline-display input.
 export interface CaseSearchRow {
   id: string;
@@ -263,7 +257,7 @@ export interface CaseSearchRow {
 const CASE_SEARCH_MAX = 50;
 
 const CASE_SEARCH_COLUMNS =
-  "id, state, provider_id, payer_reference_id, credentialing_status_id, payer_pipeline_state, " +
+  "id, state, provider_id, payer_reference_id, case_status, payer_pipeline_state, " +
   "providers(id, first_name, last_name), payers(name)";
 
 interface CaseSearchDbRow {
@@ -271,7 +265,7 @@ interface CaseSearchDbRow {
   state: string;
   provider_id: string;
   payer_reference_id: string | null;
-  credentialing_status_id: string | null;
+  case_status: string | null;
   payer_pipeline_state: string | null;
   providers: { id: string; first_name: string | null; last_name: string | null } | null;
   payers: { name: string | null } | null;
@@ -293,14 +287,6 @@ export async function searchOrgCases(
   const q = query.trim().toLowerCase();
   if (q === "") return [];
 
-  const { data: statuses, error: statusErr } = await db
-    .from("status_configs")
-    .select("id, label")
-    .eq("org_id", orgId)
-    .eq("track", "credentialing");
-  if (statusErr) throw statusErr;
-  const labelById = new Map((statuses ?? []).map((s) => [s.id as string, s.label as string]));
-
   const { data: cases, error: caseErr } = await db
     .from("credential_cases")
     .select(CASE_SEARCH_COLUMNS)
@@ -321,9 +307,7 @@ export async function searchOrgCases(
       providerName,
       payerName,
       state: row.state,
-      status: row.credentialing_status_id
-        ? (labelById.get(row.credentialing_status_id) ?? null)
-        : null,
+      status: displayStatus(row.case_status),
       payerReferenceId: row.payer_reference_id,
       payerPipelineState: row.payer_pipeline_state ?? "not_started",
     });

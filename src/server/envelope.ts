@@ -18,6 +18,11 @@ export interface ApiMeta {
   // always in `data` regardless — a skipped bump is never an error.
   status_bump?: "applied" | "skipped";
   status_bump_reason?: string;
+  // GET /api/portals only: true when the registry returned zero rows for this
+  // org (own-org + global). Distinguishes "empty registry" from a fetch
+  // failure so the extension can show a loud empty-state instead of treating
+  // the tab as an unrecognized page.
+  registry_empty?: boolean;
 }
 
 export interface ApiEnvelope<T> {

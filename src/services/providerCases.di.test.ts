@@ -60,19 +60,11 @@ function ctxWith(db: SupabaseClient<Database>): ProviderCasesServiceCtx {
 
 const PROVIDER_ID = "99999999-8888-4777-8666-121212121212";
 
-// Kansas-shaped credentialing statuses: 'complete' is the terminal bucket.
-const STATUSES = [
-  { id: "st-open", label: "In Progress", action_bucket: "ours" },
-  { id: "st-submitted", label: "Submitted", action_bucket: "waiting_payer" },
-  { id: "st-innetwork", label: "In-Network", action_bucket: "complete" },
-  { id: "st-oon", label: "OON", action_bucket: "complete" },
-];
-
 function caseRow(
   id: string,
   payerName: string | null,
   state: string,
-  statusId: string | null,
+  caseStatus: string | null,
   submitted: string | null = null,
   payerReferenceId: string | null = null,
 ) {
@@ -81,7 +73,7 @@ function caseRow(
     state,
     submitted_date: submitted,
     payer_reference_id: payerReferenceId,
-    credentialing_status_id: statusId,
+    case_status: caseStatus,
     payers: payerName == null ? null : { name: payerName },
   };
 }
@@ -105,19 +97,17 @@ describe("listOpenProviderCases — org isolation", () => {
   it("org-scopes every query it makes", async () => {
     const { db, captures } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c-open", "Aetna", "KS", "st-open")] },
+      { data: [caseRow("c-open", "Aetna", "KS", "in_progress")] },
       NO_TOUCHES,
       { data: [] },
     ]);
 
     await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
-    // providers, status_configs, credential_cases, then the touchlog + tasks
-    // reads (only when there are open cases).
+    // providers, credential_cases, then touchlog + tasks (when open cases exist).
+    // No status_configs read — open/closed is E6.0 case_status.
     expect(captures.map((c) => c.table)).toEqual([
       "providers",
-      "status_configs",
       "credential_cases",
       "touches",
       "tasks",
@@ -125,45 +115,39 @@ describe("listOpenProviderCases — org isolation", () => {
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
-    const caseCap = captures[2];
+    const caseCap = captures[1];
     expect(caseCap.filters).toContainEqual(["provider_id", PROVIDER_ID]);
-    // Explicit projection, never select('*').
+    expect(caseCap.selectCols).toContain("case_status");
+    expect(caseCap.selectCols).not.toContain("credentialing_status_id");
     expect(caseCap.selectCols).not.toContain("*");
-    // The touchlog + tasks reads are both scoped to the open case ids.
+    expect(captures[2].filters).toContainEqual(["case_id", ["c-open"]]);
     expect(captures[3].filters).toContainEqual(["case_id", ["c-open"]]);
-    expect(captures[4].filters).toContainEqual(["case_id", ["c-open"]]);
-    expect(captures[4].selectCols).not.toContain("*");
   });
 
   it("makes no touchlog read when there are no open cases", async () => {
     const { db, captures } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
       { data: [] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
     expect(result).toEqual([]);
-    expect(captures.map((c) => c.table)).toEqual([
-      "providers",
-      "status_configs",
-      "credential_cases",
-    ]);
+    expect(captures.map((c) => c.table)).toEqual(["providers", "credential_cases"]);
   });
 });
 
-describe("listOpenProviderCases — open/terminal derivation from status config", () => {
-  it("drops cases whose status is in the 'complete' bucket, keeps the rest", async () => {
+describe("listOpenProviderCases — open/terminal derivation from case_status", () => {
+  it("keeps open spine statuses and drops terminals (approved/denied/not_pursuing)", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
       {
         data: [
-          caseRow("c-open", "Aetna", "KS", "st-open"),
-          caseRow("c-submitted", "BCBS", "KS", "st-submitted", "2026-06-01"),
-          caseRow("c-done", "Cigna", "KS", "st-innetwork"),
-          caseRow("c-oon", "Humana", "KS", "st-oon"),
+          caseRow("c-open", "Aetna", "KS", "in_progress"),
+          caseRow("c-submitted", "BCBS", "KS", "submitted", "2026-06-01"),
+          caseRow("c-approved", "Cigna", "KS", "approved"),
+          caseRow("c-denied", "Humana", "KS", "denied"),
+          caseRow("c-np", "UHC", "KS", "not_pursuing"),
         ],
       },
       NO_TOUCHES,
@@ -186,10 +170,9 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
     });
   });
 
-  it("a case with no status is unclassified and stays open (status null)", async () => {
+  it("a case with null case_status stays open (status null)", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
       { data: [caseRow("c-null", "Aetna", "MO", null)] },
       NO_TOUCHES,
       { data: [] },
@@ -212,11 +195,10 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
     ]);
   });
 
-  it("a case pointing at an unknown status id stays open rather than silently dropping", async () => {
+  it("a case with an unknown case_status stays open rather than silently dropping", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c-ghost", "Aetna", "KS", "st-deleted")] },
+      { data: [caseRow("c-ghost", "Aetna", "KS", "legacy_bucket")] },
       NO_TOUCHES,
       { data: [] },
     ]);
@@ -230,8 +212,7 @@ describe("listOpenProviderCases — open/terminal derivation from status config"
   it("a provider with only terminal cases returns an empty list, not null", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c-done", "Cigna", "KS", "st-innetwork")] },
+      { data: [caseRow("c-done", "Cigna", "KS", "approved")] },
     ]);
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
@@ -244,10 +225,8 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
   it("exposes payerReferenceId, latest note (author-resolved), and last submission", async () => {
     const { db, captures } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c1", "Aetna", "KS", "st-open", null, "REF-42")] },
+      { data: [caseRow("c1", "Aetna", "KS", "in_progress", null, "REF-42")] },
       {
-        // newest-first, mixed entry types
         data: [
           {
             case_id: "c1",
@@ -298,16 +277,13 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
         portalTasks: [],
       },
     ]);
-    // The profiles author lookup is org-agnostic by id but only runs when a
-    // note has an author.
     expect(captures.map((c) => c.table)).toContain("profiles");
   });
 
   it("falls back to email when the author has no full_name, and skips the profiles read when no note has an author", async () => {
     const { db, captures } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      { data: [caseRow("c1", "Aetna", "KS", "in_progress")] },
       {
         data: [
           {
@@ -325,7 +301,6 @@ describe("listOpenProviderCases — PR C prefill/guard fields", () => {
 
     const result = await listOpenProviderCases(ctxWith(db), PROVIDER_ID);
 
-    // A system_event is neither a note nor a submitted touchpoint.
     expect(result?.[0].latestNote).toBeNull();
     expect(result?.[0].lastSubmittedAt).toBeNull();
     expect(result?.[0].portalTasks).toEqual([]);
@@ -347,8 +322,7 @@ describe("listOpenProviderCases — portalTasks (Phase 4)", () => {
   it("surfaces a non-completed task's distinct portal keys as portalTasks", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      { data: [caseRow("c1", "Aetna", "KS", "in_progress")] },
       NO_TOUCHES,
       {
         data: [
@@ -370,21 +344,16 @@ describe("listOpenProviderCases — portalTasks (Phase 4)", () => {
   it("excludes completed tasks and steps with no portalKey; normalizes + dedupes keys", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      { data: [caseRow("c1", "Aetna", "KS", "in_progress")] },
       NO_TOUCHES,
       {
         data: [
-          // Completed task is skipped entirely.
           taskRow("t-done", "c1", "Done", "completed", [{ portalKey: "availity" }]),
-          // Two steps, same key (cased/spaced) → one deduped entry; a keyless
-          // step contributes nothing.
           taskRow("t1", "c1", "Two steps", "not_started", [
             { portalKey: " Availity " },
             { portalKey: "availity" },
             { label: "no portal" },
           ]),
-          // Two distinct keys on one task → two entries.
           taskRow("t2", "c1", "Multi", "in_progress", [
             { portalKey: "caqh" },
             { portalKey: "pecos" },
@@ -405,8 +374,7 @@ describe("listOpenProviderCases — portalTasks (Phase 4)", () => {
   it("returns an empty portalTasks when a case has no portal-linked tasks", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
-      { data: [caseRow("c1", "Aetna", "KS", "st-open")] },
+      { data: [caseRow("c1", "Aetna", "KS", "in_progress")] },
       NO_TOUCHES,
       { data: [taskRow("t1", "c1", "Call payer", "in_progress", [{ label: "phone them" }])] },
     ]);
@@ -421,13 +389,12 @@ describe("listOpenProviderCases — dropdown ordering", () => {
   it("sorts by payer name then state, nameless payers last", async () => {
     const { db } = makeFakeDb([
       { data: { id: PROVIDER_ID } },
-      { data: STATUSES },
       {
         data: [
-          caseRow("c-noname", null, "KS", "st-open"),
-          caseRow("c-bcbs-mo", "BCBS", "MO", "st-open"),
-          caseRow("c-aetna", "Aetna", "KS", "st-open"),
-          caseRow("c-bcbs-ks", "BCBS", "KS", "st-open"),
+          caseRow("c-noname", null, "KS", "in_progress"),
+          caseRow("c-bcbs-mo", "BCBS", "MO", "in_progress"),
+          caseRow("c-aetna", "Aetna", "KS", "in_progress"),
+          caseRow("c-bcbs-ks", "BCBS", "KS", "in_progress"),
         ],
       },
       NO_TOUCHES,
@@ -446,7 +413,7 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     state: "KS",
     provider_id: "p1",
     payer_reference_id: null,
-    credentialing_status_id: "st-open",
+    case_status: "in_progress",
     payer_pipeline_state: "drafting",
     providers: { id: "p1", first_name: "Brooke", last_name: "Ostrander" },
     payers: { name: "BCBS of Kansas" },
@@ -460,16 +427,17 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     expect(captures).toHaveLength(0);
   });
 
-  it("org-scopes the status + case reads", async () => {
-    const { db, captures } = makeFakeDb([{ data: STATUSES }, { data: [searchCaseRow()] }]);
+  it("org-scopes the case read (no status_configs)", async () => {
+    const { db, captures } = makeFakeDb([{ data: [searchCaseRow()] }]);
     await searchOrgCases(ctxWith(db), "brooke");
-    expect(captures.map((c) => c.table)).toEqual(["status_configs", "credential_cases"]);
-    for (const cap of captures) expect(cap.filters).toContainEqual(["org_id", "org-1"]);
+    expect(captures.map((c) => c.table)).toEqual(["credential_cases"]);
+    expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
+    expect(captures[0].selectCols).toContain("case_status");
   });
 
   it("matches on provider name, payer name, and tracking id (case-insensitive), mapping display fields", async () => {
     const rows = [
-      searchCaseRow({ id: "c1" }), // provider Brooke Ostrander / BCBS
+      searchCaseRow({ id: "c1" }),
       searchCaseRow({
         id: "c2",
         providers: { id: "p2", first_name: "Stan", last_name: "Marsh" },
@@ -482,9 +450,8 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
         payers: { name: "Aetna" },
       }),
     ];
-    const { db } = makeFakeDb([{ data: STATUSES }, { data: rows }]);
+    const { db } = makeFakeDb([{ data: rows }]);
 
-    // "brooke" matches c1 (provider name) and c2 (tracking id), not c3.
     const result = await searchOrgCases(ctxWith(db), "BROOKE");
     expect(result.map((r) => r.id).sort()).toEqual(["c1", "c2"]);
     const c1 = result.find((r) => r.id === "c1");
@@ -497,11 +464,10 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     });
   });
 
-  it("resolves the credentialing status label and defaults pipeline to not_started", async () => {
+  it("resolves the case_status label and defaults pipeline to not_started", async () => {
     const { db } = makeFakeDb([
-      { data: STATUSES },
       {
-        data: [searchCaseRow({ credentialing_status_id: null, payer_pipeline_state: null })],
+        data: [searchCaseRow({ case_status: null, payer_pipeline_state: null })],
       },
     ]);
     const result = await searchOrgCases(ctxWith(db), "brooke");

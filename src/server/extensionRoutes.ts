@@ -243,7 +243,7 @@ export async function handleSsnRelease(id: string, url: URL, ctx: AuthContext): 
 export async function handleListPortals(url: URL, ctx: AuthContext): Promise<Response> {
   const portalKey = url.searchParams.get("portal_key") ?? undefined;
   const rows = await listPortalsForApi({ db: ctx.db, orgId: ctx.orgId }, { portalKey });
-  return ok(rows, { total: rows.length });
+  return ok(rows, { total: rows.length, registry_empty: rows.length === 0 });
 }
 
 // GET /api/shared-portals — the GLOBAL registry only, for E6.9 Train forms.
@@ -334,8 +334,8 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
 
 // GET /api/cases — two additive modes over the same org-scoped route:
 //   ?providerId=<uuid>  the popup's case dropdown: the provider's OPEN cases
-//                       (open = credentialing status not in the 'complete'
-//                       bucket). A cross-org providerId is a 404.
+//                       (open = E6.0 case_status in OPEN_CASE_STATUSES). A
+//                       cross-org providerId is a 404.
 //   ?q=<text>           E4.3 TE-11 — the case half of the unified standalone
 //                       search: org-scoped, matching payer name / provider
 //                       name / tracking id, ids + display fields only.
