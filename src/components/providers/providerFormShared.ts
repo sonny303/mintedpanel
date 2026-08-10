@@ -1,5 +1,5 @@
-// Shared constants, types, and validation for Add/Edit provider forms.
-// Owned by ProviderForm.tsx and EditProviderForm.tsx.
+// Shared constants, types, and validation for the Add Provider stepper.
+// Record edit uses a separate inline Identity path (EditProviderForm retired).
 import { isKnownTaxonomyCode } from "@/lib/providerTaxonomy";
 
 // Re-export the single mastered state list (src/lib/usStates.ts) rather than
@@ -27,16 +27,11 @@ export interface ProviderFormState {
   ssnLast4: string;
   email: string;
   phone: string;
-  homeStreet: string;
-  homeCity: string;
-  homeState: string;
-  homeZip: string;
   npi: string;
   caqhId: string;
   isNewGrad: boolean;
   caqhLastAttestedDate: string;
   taxonomyCode: string;
-  deaNumber: string;
   licenses: LicenseRow[];
   groupId: string;
   facilityIds: string[];
@@ -45,10 +40,6 @@ export interface ProviderFormState {
   degree: string;
   schoolName: string;
   graduationDate: string;
-  malpracticeCarrier: string;
-  malpracticePolicyNumber: string;
-  malpracticeCoverageStart: string;
-  malpracticeCoverageEnd: string;
 }
 
 export const emptyProviderFormState: ProviderFormState = {
@@ -59,16 +50,11 @@ export const emptyProviderFormState: ProviderFormState = {
   ssnLast4: "",
   email: "",
   phone: "",
-  homeStreet: "",
-  homeCity: "",
-  homeState: "",
-  homeZip: "",
   npi: "",
   caqhId: "",
   isNewGrad: false,
   caqhLastAttestedDate: "",
   taxonomyCode: "225100000X",
-  deaNumber: "",
   licenses: [{ state: "", number: "", type: "", issueDate: "", expirationDate: "" }],
   groupId: "",
   facilityIds: [],
@@ -77,10 +63,6 @@ export const emptyProviderFormState: ProviderFormState = {
   degree: "",
   schoolName: "",
   graduationDate: "",
-  malpracticeCarrier: "",
-  malpracticePolicyNumber: "",
-  malpracticeCoverageStart: "",
-  malpracticeCoverageEnd: "",
 };
 
 export type ProviderFormErrors = Partial<Record<string, string>>;

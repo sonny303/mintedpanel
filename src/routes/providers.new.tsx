@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useActiveOrgId, useAuthStore, useRole } from "@/lib/auth-store";
+import { queryKeys } from "@/hooks/queryKeys";
 import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
   ProviderForm,
@@ -51,27 +52,23 @@ function toProviderInput(form: ProviderFormState): ProviderInput {
     ssnLast4: form.ssnLast4 || null,
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
-    homeStreet: form.homeStreet.trim() || null,
-    homeCity: form.homeCity.trim() || null,
-    homeState: form.homeState || null,
-    homeZip: form.homeZip.trim() || null,
     npi: form.npi || null,
     caqhId: form.isNewGrad ? null : form.caqhId || null,
-    caqhLastAttestedDate: form.caqhLastAttestedDate || null,
+    caqhLastAttestedDate: form.isNewGrad ? null : form.caqhLastAttestedDate || null,
     taxonomyCode: form.taxonomyCode.trim() || null,
-    deaNumber: form.deaNumber.trim() || null,
     isNewGrad: form.isNewGrad,
+    // Mirror only when no groupAssignments plan — createProviderWithDetails
+    // overwrites group_id from the primary assignment when one is passed.
     groupId: form.groupId || null,
     specialty: form.specialty.trim() || null,
     startDate: form.startDate || null,
     degree: form.degree.trim() || null,
     schoolName: form.schoolName.trim() || null,
     graduationDate: form.graduationDate || null,
-    malpracticeCarrier: form.malpracticeCarrier.trim() || null,
-    malpracticePolicyNumber: form.malpracticePolicyNumber.trim() || null,
-    malpracticeCoverageStart: form.malpracticeCoverageStart || null,
-    malpracticeCoverageEnd: form.malpracticeCoverageEnd || null,
-    status: "active",
+    // Align with roster create + DB default. "Not ready / missing data" for
+    // reporting is this lifecycle value + derived readiness gaps + is_new_grad
+    // — not a fourth status enum value.
+    status: "onboarding",
   };
 }
 
@@ -107,6 +104,7 @@ function Page() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["providers", orgId] });
       qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
     },
   });
 
@@ -124,14 +122,19 @@ function Page() {
 
   const onSubmit = async (form: ProviderFormState) => {
     try {
+      const groupAssignments = form.groupId
+        ? [{ groupId: form.groupId, isPrimary: true as const }]
+        : undefined;
       const result: CreateProviderWithDetailsResult = await create.mutateAsync({
         provider: toProviderInput(form),
         licenses: toLicenseInputs(form),
         facilityIds: form.facilityIds,
+        groupAssignments,
       });
       if (result.warnings.length > 0) {
         for (const w of result.warnings) toast.error(w);
-        toast.warning("Provider created, but some details did not save. Fix and retry.");
+        toast.warning("Provider created, but some details did not save. Fix them on the record.");
+        navigate({ to: "/providers/$id", params: { id: result.provider.id } });
         return;
       }
       // ZERO cases created here (F6.3.5). New candidates surface in the group
@@ -157,8 +160,8 @@ function Page() {
         title="Add provider"
         description={
           launchLocation
-            ? `Pre-assigned to ${launchLocation.name}. All fields are optional.`
-            : "Enter provider details. All fields are optional — save with as little or as much as you have."
+            ? `Pre-assigned to ${launchLocation.name}. First and last name are required; everything else can be incomplete. New providers start as Onboarding.`
+            : "First and last name are required. Save with as little or as much as you have — new providers start as Onboarding until ready."
         }
       />
       <ProviderForm

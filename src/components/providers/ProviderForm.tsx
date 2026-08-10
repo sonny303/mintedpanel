@@ -1,5 +1,5 @@
 // Multi-step Add Provider form used by /providers/new. Re-exports shared
-// types/state for legacy import sites; the Edit flow lives in EditProviderForm.tsx.
+// types/state for the route. Record edit is inline on /providers/$id.
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
@@ -244,12 +244,6 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <Row label="SSN" value={form.ssnLast4 ? maskSsn(form.ssnLast4) : null} />
         <Row label="Email" value={form.email} />
         <Row label="Phone" value={form.phone} />
-        <Row
-          label="Home address"
-          value={[form.homeStreet, form.homeCity, form.homeState, form.homeZip]
-            .filter(Boolean)
-            .join(", ")}
-        />
       </Section>
       <Section title="Credentials" step={2}>
         <Row label="NPI" value={form.npi} />
@@ -259,7 +253,6 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
           value={form.caqhLastAttestedDate ? fmtDate(form.caqhLastAttestedDate) : ""}
         />
         <Row label="Taxonomy" value={form.taxonomyCode} />
-        <Row label="DEA" value={form.deaNumber} />
       </Section>
       <Section title="Licenses" step={3}>
         <div className="md:col-span-2 space-y-1">
@@ -271,7 +264,7 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
           ))}
         </div>
       </Section>
-      <Section title="Employment & Malpractice" step={4}>
+      <Section title="Employment" step={4}>
         <Row label="Group" value={groupName} />
         <Row label="Facilities" value={facilityNames} />
         <Row label="Specialty" value={form.specialty} />
@@ -279,16 +272,6 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
         <Row label="Degree" value={form.degree} />
         <Row label="School" value={form.schoolName} />
         <Row label="Graduation" value={form.graduationDate} />
-        <Row label="Carrier" value={form.malpracticeCarrier} />
-        <Row label="Policy" value={form.malpracticePolicyNumber} />
-        <Row
-          label="Coverage"
-          value={
-            form.malpracticeCoverageStart || form.malpracticeCoverageEnd
-              ? `${form.malpracticeCoverageStart || "—"} → ${form.malpracticeCoverageEnd || "—"}`
-              : null
-          }
-        />
       </Section>
     </div>
   );

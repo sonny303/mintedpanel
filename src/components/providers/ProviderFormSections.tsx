@@ -75,41 +75,6 @@ export function PersonalSection({ form, errors, update }: SectionProps) {
       <Field label="Phone">
         <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} />
       </Field>
-      <div className="md:col-span-2">
-        <FieldLabel>Home address</FieldLabel>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-          <Input
-            className="md:col-span-3"
-            placeholder="Street"
-            value={form.homeStreet}
-            onChange={(e) => update("homeStreet", e.target.value)}
-          />
-          <Input
-            className="md:col-span-2"
-            placeholder="City"
-            value={form.homeCity}
-            onChange={(e) => update("homeCity", e.target.value)}
-          />
-          <Select value={form.homeState} onValueChange={(v) => update("homeState", v)}>
-            <SelectTrigger>
-              <SelectValue placeholder="State" />
-            </SelectTrigger>
-            <SelectContent>
-              {US_STATES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            className="md:col-span-1"
-            placeholder="ZIP"
-            value={form.homeZip}
-            onChange={(e) => update("homeZip", e.target.value)}
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -174,9 +139,6 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
             ))}
           </SelectContent>
         </Select>
-      </Field>
-      <Field label="DEA number">
-        <Input value={form.deaNumber} onChange={(e) => update("deaNumber", e.target.value)} />
       </Field>
     </div>
   );
@@ -358,32 +320,6 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
           type="date"
           value={form.graduationDate}
           onChange={(e) => update("graduationDate", e.target.value)}
-        />
-      </Field>
-      <Field label="Malpractice carrier">
-        <Input
-          value={form.malpracticeCarrier}
-          onChange={(e) => update("malpracticeCarrier", e.target.value)}
-        />
-      </Field>
-      <Field label="Policy number">
-        <Input
-          value={form.malpracticePolicyNumber}
-          onChange={(e) => update("malpracticePolicyNumber", e.target.value)}
-        />
-      </Field>
-      <Field label="Coverage start">
-        <Input
-          type="date"
-          value={form.malpracticeCoverageStart}
-          onChange={(e) => update("malpracticeCoverageStart", e.target.value)}
-        />
-      </Field>
-      <Field label="Coverage end">
-        <Input
-          type="date"
-          value={form.malpracticeCoverageEnd}
-          onChange={(e) => update("malpracticeCoverageEnd", e.target.value)}
         />
       </Field>
     </div>
