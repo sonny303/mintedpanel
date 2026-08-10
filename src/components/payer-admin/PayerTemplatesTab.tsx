@@ -73,7 +73,11 @@ function NextStepCard({ payer }: { payer: Payer }) {
           <div className="text-[12px] text-muted-foreground">{step.position}</div>
         ) : null}
       </div>
-      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+      <Button
+        asChild
+        size="sm"
+        className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+      >
         <Link to="/admin/templates/new" search={{ payerId: payer.id, tier: "global" }}>
           {step.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Link>

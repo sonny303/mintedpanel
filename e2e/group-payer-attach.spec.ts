@@ -315,13 +315,18 @@ test("TS-110: the picker never offers a zero-overlap payer; proposed states = pa
   await expect(page.getByText(/BCBS Texas.*none cover NC, CO/)).toBeVisible();
 
   // Review: proposed states = Aetna (NC, SC) ∩ group (NC, CO) = NC only.
+  // Fixture has zero facilities — E6.2 still lists NC, but #277 defaults leave
+  // zero-facility states unchecked (Save stays disabled until the human checks).
   await page.getByRole("button", { name: /Aetna/ }).click();
   await expect(page.getByLabel("Target NC")).toBeVisible();
+  await expect(page.getByText(/No facilities in this state yet/)).toBeVisible();
   await expect(page.getByLabel("Target SC")).toHaveCount(0);
   await expect(page.getByLabel("Target CO")).toHaveCount(0);
   // The org-level enablement is never surfaced in the flow.
   await expect(page.getByText(/enablement|subscription|assignment/i)).toHaveCount(0);
 
+  await expect(page.getByRole("button", { name: "Save targets" })).toBeDisabled();
+  await page.getByLabel("Target NC").click();
   await page.getByRole("button", { name: "Save targets" }).click();
   await expect(page.getByText("Aetna attached")).toBeVisible({ timeout: 15000 });
 
