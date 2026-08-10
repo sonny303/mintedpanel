@@ -129,9 +129,17 @@ Constant lives in one place (recommend `src/lib/sopMatchKey.ts` or
 `pickTemplate.ts`) and every writer/reader imports it — no scattered `"all"` /
 `"ALL"` literals.
 
-### D3.3 — `pickTemplate` ranked tiers (exact always beats All; org always beats global)
+### D3.3 — `pickTemplate` ranked tiers (group + state first; ownership wall inherited)
 
-Extend `candidateRank` — array order stays non-load-bearing:
+**Grain truth:** a case key is `(payer, state, group)`. Contracts and attach
+defaults are also group×payer. Org is tenancy / override ownership — not the
+primary attachment of a payer. US-2 must lead with **exact group > any-group**
+and **exact state > All**, not “org beats global.”
+
+Extend `candidateRank` — array order stays non-load-bearing. Default table
+below **inserts All inside the existing E4.2 ownership wall** (org block, then
+global block, then fallback). That wall is pre-Slice-3; it already makes
+`org any-group` beat `global exact-group` today.
 
 | Rank | Ownership        | State   | Group                 |
 | ---- | ---------------- | ------- | --------------------- |
@@ -147,13 +155,28 @@ Extend `candidateRank` — array order stays non-load-bearing:
 
 Pinned properties (unit-test these first, before UI):
 
-1. Exact-state template always beats All for the same ownership+group grain.
-2. Org All beats global exact (org override rule preserved).
-3. Wrong payer never matches.
-4. Archived never matches.
-5. Fallback still last; All never masquerades as fallback (fallback stays
+1. Exact-state template always beats All for the same ownership + group grain.
+2. Exact-group template always beats any-group for the same ownership + state
+   grain. A template for a **different** group never matches.
+3. Wrong payer never matches; archived never matches.
+4. Fallback still last; All never masquerades as fallback (fallback stays
    payerless global).
+5. **Ownership wall (inherited E4.2, not Slice-3 intent):** org block still
+   outranks the entire global block — so org All can beat global exact. If PM
+   wants group affinity to outrank ownership (e.g. global exact-group beats
+   org All / org any-group), that is **D3.3-G** below — reopen explicitly;
+   do not silently change E4.2 inside this slice.
 
+#### D3.3-G — optional reopen (not default; needs PM)
+
+If payers-are-group-attached should beat org ownership when ranking:
+
+| Priority idea                                                         | Effect                                                                              |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Rank by state specificity, then group specificity, then ownership     | `global exact + exact group` beats `org All + any group` (and possibly org any)     |
+
+Only adopt D3.3-G with an explicit PM flip — it changes live E4.2 behavior for
+exact-state rows too, not just All.
 ### D3.4 — Uniqueness / coexistence
 
 - **Allowed:** active exact `NC` **and** active `All` for the same
@@ -217,21 +240,24 @@ US-3 → D3.4 · US-4 → D3.6/D3.7.
 | AC1.4 | `orgSopMatchKeyError` / org create·update asserts and the global author path treat `'All'` as a **complete** state (not null, not “Any state”).      |
 | AC1.5 | Review / provenance / list copy shows the label **All states**, never a blank or a raw unexpected casing.                                            |
 
-### US-2 — Resolve the right SOP when All and exact coexist
+### US-2 — Resolve the right SOP for a case’s payer × group × state
 
 **As** generation / readiness / stamping,  
-**I want** one ranked `pickTemplate` that understands All-states,  
-**so that** exact overrides still win and org overrides still beat global.
+**I want** `pickTemplate` to treat All-states as a state wildcard on the same
+grain cases already use (**payer + group + state**),  
+**so that** a group-specific exact SOP still wins over a broader All, and All
+only fills gaps — not so that “org beats global” becomes the story.
 
-| #     | Acceptance criterion                                                                                                      |
-| ----- | ------------------------------------------------------------------------------------------------------------------------- |
-| AC2.1 | `candidateRank` implements the D3.3 nine ranks (org exact → org All → global exact → global All → fallback).              |
-| AC2.2 | Exact-state template always beats All for the same ownership + group grain.                                               |
-| AC2.3 | Org All beats global exact for an org-owned case key (org-override rule preserved).                                       |
-| AC2.4 | Wrong payer never matches; archived never matches.                                                                        |
-| AC2.5 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                      |
-| AC2.6 | A template with `state=All`, any-group resolves for concrete case states (e.g. NC and SC) when no better match exists.    |
-| AC2.7 | Unit tests pin AC2.2–AC2.6 **before** UI ships.                                                                           |
+| #     | Acceptance criterion                                                                                                                                                                                                 |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC2.1 | Insert All as a **state** wildcard inside each existing ownership × group slot (D3.3 table). No second matcher.                                                                                                      |
+| AC2.2 | **Exact state beats All** for the same ownership + group grain (exact-group NC beats All for that group; exact any-group NC beats All any-group).                                                                    |
+| AC2.3 | **Exact group beats any-group** for the same ownership + state grain. A template authored for a different group never resolves.                                                                                      |
+| AC2.4 | Wrong payer never matches; archived never matches.                                                                                                                                                                   |
+| AC2.5 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                                                                                                                 |
+| AC2.6 | A template with `state=All` + matching group grain resolves for concrete case states (e.g. NC and SC) when no better (exact-state) match exists.                                                                     |
+| AC2.7 | Unit tests pin AC2.2–AC2.6 **before** UI ships.                                                                                                                                                                      |
+| AC2.8 | **Ownership wall:** default build keeps E4.2 (org block before global block). Call out in PR that org All may beat global exact as an *inherited* consequence — not a Slice-3 goal. Flip only if PM picks **D3.3-G**. |
 
 ### US-3 — Exact + All can share a payer; two Alls cannot
 
@@ -347,7 +373,8 @@ Prefer merge #279 first if still open (TS-110 attach-defaults e2e).
 
 Must (map to US/AC in spike §User stories):
 - ALL_STATES_SENTINEL = 'All' (US-1)
-- pickTemplate ranks per D3.3; exact beats All; org beats global (US-2)
+- pickTemplate: exact state > All; exact group > any-group; All fills gaps (US-2)
+- Keep E4.2 ownership wall unless PM picks D3.3-G (US-2 AC2.8)
 - Wizard offers All states; writers persist 'All' (US-1)
 - orgSopMatchKeyError / author path accept 'All' (not null) (US-1/3)
 - Unit tests for ranks + uniqueness coexistence (US-2/3)
