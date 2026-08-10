@@ -1,135 +1,90 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignmentsByPayerId,
   catalogAction,
   isActiveAssignment,
   payerSetupEmptyState,
 } from "./payerCatalogActions";
-import { filterDirectoryRows } from "./payerDirectory";
 import type { OrgPayerAssignment, Payer } from "@/types";
 
-function mkPayer(over: Partial<Payer> & { id: string }): Payer {
+function mkPayer(over: Partial<Payer> = {}): Payer {
   return {
-    orgId: null as unknown as string, // global-catalog row (org_id NULL)
-    name: over.id,
-    isActive: true,
-    avgDecisionDays: null,
-    createdAt: "2026-07-15T00:00:00Z",
+    id: "p1",
+    orgId: null,
+    name: "BCBS",
+    status: "active",
     ...over,
-  };
+  } as Payer;
 }
 
-function mkAssign(payerId: string, status?: "active" | "archived"): OrgPayerAssignment {
+function mkAssign(
+  payerId: string,
+  status: OrgPayerAssignment["status"] = "active",
+): OrgPayerAssignment {
   return {
-    id: `opa-${payerId}`,
+    id: "a1",
     orgId: "org-1",
     payerId,
-    starter: false,
     status,
-    archivedAt: status === "archived" ? "2026-07-15T00:00:00Z" : null,
-    createdAt: "2026-07-15T00:00:00Z",
-  };
+    archivedAt: status === "archived" ? "2026-01-01T00:00:00Z" : null,
+    starter: false,
+    createdAt: "2026-01-01T00:00:00Z",
+  } as OrgPayerAssignment;
 }
 
-describe("isActiveAssignment", () => {
-  it("treats a missing status as active (pre-hardening rows/fixtures)", () => {
-    expect(isActiveAssignment({ status: undefined })).toBe(true);
+describe("isActiveAssignment (dormant helper)", () => {
+  it("treats missing status as active", () => {
+    expect(isActiveAssignment({ status: undefined } as OrgPayerAssignment)).toBe(true);
   });
-  it("is true for active, false for archived, false for null", () => {
-    expect(isActiveAssignment({ status: "active" })).toBe(true);
-    expect(isActiveAssignment({ status: "archived" })).toBe(false);
+  it("reads status", () => {
+    expect(isActiveAssignment({ status: "active" } as OrgPayerAssignment)).toBe(true);
+    expect(isActiveAssignment({ status: "archived" } as OrgPayerAssignment)).toBe(false);
     expect(isActiveAssignment(null)).toBe(false);
     expect(isActiveAssignment(undefined)).toBe(false);
   });
 });
 
-describe("catalogAction", () => {
+describe("catalogAction — OPA-RETIRE target membership", () => {
   const empty = new Map<string, Payer>();
 
-  it("active subscription → added", () => {
-    const p = mkPayer({ id: "p1" });
-    expect(catalogAction(p, mkAssign("p1", "active"), empty)).toEqual({ kind: "added" });
-    // A missing-status (pre-hardening) subscription also reads as added.
-    expect(catalogAction(p, mkAssign("p1"), empty)).toEqual({ kind: "added" });
+  it("inNetwork → added", () => {
+    const p = mkPayer();
+    expect(catalogAction(p, true, empty)).toEqual({ kind: "added" });
   });
 
-  it("no subscription on an active payer → add", () => {
-    const p = mkPayer({ id: "p1", status: "active" });
-    expect(catalogAction(p, undefined, empty)).toEqual({ kind: "add" });
-    // A payer with no catalog status defaults to active/addable.
-    expect(catalogAction(mkPayer({ id: "p1" }), null, empty)).toEqual({ kind: "add" });
+  it("not in network + active → add", () => {
+    expect(catalogAction(mkPayer(), false, empty)).toEqual({ kind: "add" });
   });
 
-  it("archived subscription on an active payer → reactivate", () => {
-    const p = mkPayer({ id: "p1", status: "active" });
-    expect(catalogAction(p, mkAssign("p1", "archived"), empty)).toEqual({ kind: "reactivate" });
-  });
-
-  it("merged payer → unavailable with the canonical successor", () => {
-    const successor = mkPayer({ id: "p2", name: "BCBS-NC (new entity)" });
-    const merged = mkPayer({ id: "p1", status: "merged", mergedIntoId: "p2" });
-    const byId = new Map([["p2", successor]]);
-    expect(catalogAction(merged, undefined, byId)).toEqual({
+  it("merged / retired → unavailable", () => {
+    const byId = new Map([["p2", mkPayer({ id: "p2", name: "Successor" })]]);
+    expect(catalogAction(mkPayer({ status: "merged", mergedIntoId: "p2" }), false, byId)).toEqual({
       kind: "unavailable",
       reason: "merged",
-      successor,
+      successor: byId.get("p2"),
     });
-  });
-
-  it("retired payer → unavailable with no successor", () => {
-    const retired = mkPayer({ id: "p1", status: "retired" });
-    expect(catalogAction(retired, undefined, empty)).toEqual({
+    expect(catalogAction(mkPayer({ status: "retired" }), false, empty)).toEqual({
       kind: "unavailable",
       reason: "retired",
       successor: null,
     });
   });
 
-  it("merged payer with an unknown merged_into_id → unavailable, successor null", () => {
-    const merged = mkPayer({ id: "p1", status: "merged", mergedIntoId: "gone" });
-    expect(catalogAction(merged, undefined, empty)).toEqual({
-      kind: "unavailable",
-      reason: "merged",
-      successor: null,
-    });
+  it("inNetwork wins over merged status (already attached history)", () => {
+    expect(catalogAction(mkPayer({ status: "retired" }), true, empty)).toEqual({ kind: "added" });
   });
 
-  it("an ACTIVE subscription takes precedence over a retired/merged catalog status", () => {
-    // Already subscribed before the payer retired — still 'added', never blocked.
-    const retired = mkPayer({ id: "p1", status: "retired" });
-    expect(catalogAction(retired, mkAssign("p1", "active"), empty)).toEqual({ kind: "added" });
-  });
-
-  it("alias search then add: a payer found by alias is addable", () => {
-    const p = mkPayer({ id: "p1", name: "Blue Cross NC", aliases: ["BCBS-NC", "Anthem NC"] });
-    const found = filterDirectoryRows([p], { query: "anthem", state: "all", kind: "all" });
-    expect(found).toHaveLength(1);
-    expect(catalogAction(found[0], undefined, new Map([["p1", p]]))).toEqual({ kind: "add" });
+  // Keep the dormant helper reachable so merge_payer / legacy reads stay typed.
+  it("dormant assignment helper still classifies archived", () => {
+    expect(isActiveAssignment(mkAssign("p1", "archived"))).toBe(false);
   });
 });
 
-describe("assignmentsByPayerId", () => {
-  it("indexes assignments by payer id", () => {
-    const a = mkAssign("p1", "active");
-    const b = mkAssign("p2", "archived");
-    const map = assignmentsByPayerId([a, b]);
-    expect(map.get("p1")).toBe(a);
-    expect(map.get("p2")).toBe(b);
-    expect(map.get("nope")).toBeUndefined();
-  });
-});
-
-describe("payerSetupEmptyState", () => {
-  it("no active subscriptions → no_payers", () => {
+describe("payerSetupEmptyState — targets", () => {
+  it("no active targets → no_payers", () => {
     expect(payerSetupEmptyState([])).toBe("no_payers");
-    expect(payerSetupEmptyState([mkAssign("p1", "archived")])).toBe("no_payers");
+    expect(payerSetupEmptyState([{ status: "archived" }])).toBe("no_payers");
   });
-  it("at least one active subscription → no_scope", () => {
-    expect(payerSetupEmptyState([mkAssign("p1", "active")])).toBe("no_scope");
-    // A pre-hardening (missing status) subscription counts as active.
-    expect(payerSetupEmptyState([mkAssign("p1")])).toBe("no_scope");
-    expect(payerSetupEmptyState([mkAssign("p1", "archived"), mkAssign("p2", "active")])).toBe(
-      "no_scope",
-    );
+  it("any active target → no_scope (targets exist; readiness may still be empty)", () => {
+    expect(payerSetupEmptyState([{ status: "active" }])).toBe("no_scope");
   });
 });

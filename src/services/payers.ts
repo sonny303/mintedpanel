@@ -5,11 +5,10 @@
 // payer setup through the create_payer / update_payer SECURITY DEFINER RPCs.
 // The service still NEVER issues a direct payers INSERT/UPDATE — the
 // 20260718120000 write lockdown stands (no policies, no grants); the RPCs are
-// the only door, they validate (name/kind/states), run the duplicate guard,
-// stamp provenance, upsert the caller org's org_payer_assignments row
-// (create = it's in my network), and write their own audit rows — so this
-// service must NOT also writeAudit. Rows are GLOBAL (org_id NULL): authored
-// once, template inheritance intact.
+// the only door. Rows are GLOBAL (org_id NULL).
+//
+// OPA-RETIRE (R1 B): create_payer no longer upserts org_payer_assignments.
+// Catalog visibility is RLS-wide for globals; adoption = group attach.
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
@@ -17,11 +16,9 @@ import type { Payer, PayerKind } from "@/types";
 
 export async function listPayers(): Promise<Payer[]> {
   const orgId = requireActiveOrg();
-  // Own-org rows plus global-catalog rows (org_id NULL). RLS gates which global
-  // rows are returned to the org_payer_assignments-subscribed ones, so this
-  // mirrors the portal_field_maps shared-catalog read. The own-org disjunct is
-  // vestigial on live data (payers are global-catalog-only since the legacy
-  // cutover close-out) but keeps local seed fixtures readable.
+  // Own-org rows plus ALL global-catalog rows (org_id NULL). OPA-RETIRE:
+  // payers_select no longer gates globals on org_payer_assignments — network
+  // membership is derived from payer_network_targets in the app layer.
   const { data, error } = await supabase
     .from("payers")
     .select("*")
@@ -33,9 +30,9 @@ export async function listPayers(): Promise<Payer[]> {
 
 export async function getPayer(id: string): Promise<Payer | null> {
   const orgId = requireActiveOrg();
-  // Same visibility as listPayers: an own-org row OR an assigned global row
-  // (RLS scopes the global disjunct), so detail surfaces (e.g. the scorecard)
-  // can read an assigned catalog payer without any policy change.
+  // Same visibility as listPayers: an own-org row OR any global row
+  // (OPA-RETIRE widened payers_select). Detail surfaces (e.g. the scorecard)
+  // can read a catalog payer without an assignment row.
   const { data, error } = await supabase
     .from("payers")
     .select("*")
@@ -157,16 +154,11 @@ export interface PayerWriteInput {
   delegationNote?: string | null;
 }
 
-/** F6.7.1 — create a GLOBAL payer. The RPC also upserts the caller org's
- * `org_payer_assignments` row in the same transaction ("creating = adding").
+/** F6.7.1 — create a GLOBAL payer. OPA-RETIRE: the RPC does NOT upsert
+ * `org_payer_assignments` (table dormant as a gate). Adoption is group attach.
  *
- * 3M payer-setup cleanup (Slice 1): the Slice 6 `p_assign_to_org` flag is NOT
- * sent. It was never applied to hosted, so the deployed 10-arg signature could
- * not resolve a call carrying it — PostgREST matches an RPC by its named-
- * argument set, so every "+ Set up payer" returned PGRST202 and no payer could
- * be created at all. Re-converging on the live signature is the smaller and
- * more reversible fix than a production migration, and the flag is moot once
- * the adoption layer stops gating visibility (Slice 3). */
+ * 3M: never send `p_assign_to_org` — that flag was superseded and would
+ * PGRST202 against the live 10-arg signature. */
 export async function createPayer(input: PayerWriteInput): Promise<Payer> {
   const orgId = requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);

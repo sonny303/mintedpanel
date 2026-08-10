@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePayers, useReactivatePayer, useSops } from "@/hooks/useAdmin";
-import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
 import { fmtDate } from "@/lib/format";
 import { activeOrgPayers } from "@/lib/payerSetup";
@@ -248,7 +248,7 @@ function DefaultTemplateCard() {
 
 export function PayerSetupPage() {
   const payersQ = usePayers();
-  const assignmentsQ = useOrgPayerAssignments();
+  const targetsQ = usePayerNetworkTargets();
   const funnel = usePayerReadinessFunnel();
   const isAdmin = useIsAdmin();
   const reactivateMut = useReactivatePayer();
@@ -265,11 +265,11 @@ export function PayerSetupPage() {
   // Archived rows ride the SAME inclusion rule with the opt-in flag; the
   // funnel rows (active payers only) carry the readiness facts.
   const rows = useMemo(() => {
-    const included = activeOrgPayers(payersQ.data ?? [], assignmentsQ.data ?? [], {
+    const included = activeOrgPayers(payersQ.data ?? [], targetsQ.data ?? [], {
       includeArchived: true,
     });
     return buildPayerSetupRows(included, funnel.rows ?? []);
-  }, [payersQ.data, assignmentsQ.data, funnel.rows]);
+  }, [payersQ.data, targetsQ.data, funnel.rows]);
 
   const kpis = useMemo(() => countPayerSetupKpis(rows), [rows]);
   const visible = useMemo(() => filterPayerSetupRows(rows, filters), [rows, filters]);
@@ -278,8 +278,8 @@ export function PayerSetupPage() {
   const kindOptions = useMemo(() => payerSetupKindOptions(rows), [rows]);
 
   const totalCount = rows.length;
-  const isLoading = funnel.isLoading || payersQ.isLoading || assignmentsQ.isLoading;
-  const isError = funnel.isError || payersQ.isError || assignmentsQ.isError;
+  const isLoading = funnel.isLoading || payersQ.isLoading || targetsQ.isLoading;
+  const isError = funnel.isError || payersQ.isError || targetsQ.isError;
 
   const handleReactivate = (row: PayerSetupViewRow) => {
     reactivateMut.mutate(row.payerId, {

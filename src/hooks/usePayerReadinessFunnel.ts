@@ -1,12 +1,12 @@
 // E6.5 F6.5.1 — composition hook for the Payer Setup funnel head. Joins the
-// existing caches (payers, subscriptions, SOP heads, portals, field maps) plus
+// existing caches (payers, targets, SOP heads, portals, field maps) plus
 // the shared drift composition and runs the pure buildPayerReadinessFunnel
-// derivation over the org's ACTIVE payers (the E4.2 inclusion rule —
-// activeOrgPayers, never targets). Nothing stored; every authoring write
-// re-derives this list through the existing query invalidations.
+// derivation over the org's ACTIVE network payers (OPA-RETIRE: activeOrgPayers
+// from targets, never org_payer_assignments). Nothing stored; every authoring
+// write re-derives this list through the existing query invalidations.
 import { useMemo } from "react";
 import { usePayers, useSops } from "@/hooks/useAdmin";
-import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { usePortals, usePortalFieldMaps } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { activeOrgPayers } from "@/lib/payerSetup";
@@ -21,18 +21,18 @@ export interface PayerReadinessFunnelData {
 
 export function usePayerReadinessFunnel(): PayerReadinessFunnelData {
   const payersQ = usePayers();
-  const assignmentsQ = useOrgPayerAssignments();
+  const targetsQ = usePayerNetworkTargets();
   const templatesQ = useSops();
   const portalsQ = usePortals();
   const fieldMapsQ = usePortalFieldMaps();
   const drift = useFormDrift();
 
-  const sources = [payersQ, assignmentsQ, templatesQ, portalsQ, fieldMapsQ];
+  const sources = [payersQ, targetsQ, templatesQ, portalsQ, fieldMapsQ];
   const resolved = sources.every((q) => q.data !== undefined);
 
   const rows = useMemo(() => {
     if (!resolved) return undefined;
-    const included = activeOrgPayers(payersQ.data ?? [], assignmentsQ.data ?? []);
+    const included = activeOrgPayers(payersQ.data ?? [], targetsQ.data ?? []);
     return buildPayerReadinessFunnel({
       payers: included.map(({ payer }) => ({ id: payer.id, name: payer.name })),
       sops: templatesQ.data ?? [],
@@ -43,7 +43,7 @@ export function usePayerReadinessFunnel(): PayerReadinessFunnelData {
   }, [
     resolved,
     payersQ.data,
-    assignmentsQ.data,
+    targetsQ.data,
     templatesQ.data,
     portalsQ.data,
     fieldMapsQ.data,

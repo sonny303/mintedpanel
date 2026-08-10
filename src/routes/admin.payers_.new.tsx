@@ -5,10 +5,9 @@
 // (the duplicate guardrail), step 2 collects the details and calls
 // create_payer.
 //
-// 3M payer-setup cleanup (Slice 1) — the Slice 6 "Also add to my network"
-// checkbox is GONE. Its `p_assign_to_org` param was never applied to hosted,
-// so sending it made create_payer unresolvable (PGRST202) and broke payer
-// creation outright. Creating a payer adds it, full stop.
+// OPA-RETIRE (R1 B): create_payer writes the GLOBAL catalog row only —
+// it does not upsert org_payer_assignments. Attach to a group to put the
+// payer in network. The Slice 6 "Also add to my network" checkbox stays gone.
 //
 // Un-nested with the `payers_` idiom (the admin.payers_.$id.scorecard
 // precedent) so the /admin/payers redirect shell never hijacks it.
@@ -93,7 +92,7 @@ function SetUpPayerPage() {
     if (hasPayerFormErrors(payerFormErrors(draft))) return;
     createMut.mutate(toPayerWriteInput(draft), {
       onSuccess: (payer) => {
-        toast.success(`${payer.name} added to your network`);
+        toast.success(`${payer.name} created in the payer catalog`);
         void navigate({ to: "/admin/payer-admin/setup/$payerId", params: { payerId: payer.id } });
       },
       onError: (e) => setSubmitError(e instanceof Error ? e.message : "Couldn't create the payer."),

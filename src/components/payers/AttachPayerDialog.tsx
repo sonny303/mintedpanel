@@ -1,10 +1,6 @@
-// E1.5 F1.5.1/F1.5.2 attach flow. Phase 1 is the curated picker — ONLY payers
-// enabled for the org via org_payer_assignments (never the full catalog),
-// showing name/kind/states. Phase 2 is the reviewable group×state
-// expansion (pure expandTargets/reviewExpansion): every row carries its
-// facility-count reason, exceptions are unchecked, previously archived rows
-// arrive PRE-UNCHECKED (F1.5.3 re-attach), and already-active rows render
-// checked-and-locked — a save never rewrites them.
+// E1.5 F1.5.1/F1.5.2 attach flow. Phase 1 is the catalog picker (OPA-RETIRE:
+// globals via widened payers_select — not org_payer_assignments). Phase 2 is
+// the reviewable group×state expansion (pure expandTargets/reviewExpansion).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {

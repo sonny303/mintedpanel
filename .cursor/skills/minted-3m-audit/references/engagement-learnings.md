@@ -32,7 +32,7 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 | --------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | **Ready = checklist SOP**         | #277 merged            | Portal train/prove/drift = badges, not Ready gate                                                                         |
 | **Attach: defaults only**         | #277 merged            | Do not reverse E6.2                                                                                                       |
-| **`org_payer_assignments` table** | **R1 B locked**        | Retire **as a gate** only; rows dormant; never DROP. Work: **OPA-RETIRE** (not Slice 3). Not a generation candidacy input |
+| **`org_payer_assignments` table** | **building #285**      | Retire **as a gate** only; rows dormant; never DROP. Work: **OPA-RETIRE** (not Slice 3). Not a generation candidacy input |
 | **Catalog DELETE**                | #275 code              | Hosted = second PM sign-off (OPS-PURGE)                                                                                   |
 | **`create_payer` 10-arg**         | #274                   | No resurrect `p_assign_to_org`                                                                                            |
 | **SOP All-states + D3.3-G**       | #280                   | Owns the name **Slice 3**; do not reuse for OPA-RETIRE                                                                    |
@@ -56,6 +56,8 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 **What we got wrong first:** “org beats global” — grain is payer × group × state; PM → D3.3-G.
 
 **Process:** ask “what is the case key?” before coding; explicit PM flip when tests must break; don’t leave build PR red for unrelated failures.
+
+- Do not conflate **org↔payer adoption** (historically `org_payer_assignments`) with **group↔payer ops** (`payer_network_targets` / contracts / cases). OPA-RETIRE collapses “in network” onto targets; the assignments **table** still must not be DROPped.
 
 ## Findings that looked fixed but weren’t (mura traps)
 
