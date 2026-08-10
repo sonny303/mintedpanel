@@ -53,7 +53,9 @@ The cleanup removes two sources of friction from the shipped journey:
 The cleanup migration is intentionally separate from the code fix and is not
 considered complete until the hosted database operator applies it. Until then,
 the application may still show the retired catalog rows even though the setup
-flow itself is functional.
+flow itself is functional. The platform-authoring follow-up also depends on
+the Slice 3 read-path work and the paired SOP read-widening migration; those
+dependencies must be complete before the adoption split is treated as live.
 
 ## Global authoring
 
