@@ -6,13 +6,16 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 | ID          | 3M   | Area       | Symptom                                                               | Likely bites                                                                                             |
 | ----------- | ---- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| OPA-CONFLICT | Muri | both/ops  | Skill/#280 keep `org_payer_assignments` vs payer-setup “retire it”    | **PM R1** before next payer-setup PR — see `docs/ops/audit-course-correct-2026-08-10.md`                |
+| GEN-SILENT  | Muri | panel      | Pre-candidacy skips (`no_facility`, facts fence) leave no `/generation` row | Surface skip records + banner; license already on readiness — don’t conflate                       |
 | OPS-S6      | Muri | ops        | Slice 6 **SOP read** migration may still be unapplied; vault          | Apply `20260809120100` only ( `20260809120000` is **superseded** by #274 ); regen types; vault checklist |
 | OPS-PURGE   | Muri | ops        | #275 catalog DELETE merged but not hosted                             | **Second PM sign-off** then apply; never agent-apply                                                     |
-| TRAIN-DUAL  | Mura | extension  | Train/capture vs recognition disagree on portal                       | Spike dual registry → single pointer → delete secondary                                                  |
-| LISTPORTALS | Mura | extension  | `chrome.storage` portals ignore D6.4 filter                           | Align with API visibility or remove browser list for fill                                                |
+| TRAIN-DUAL  | Mura | extension  | Login/redirect false “New form”; URL bind (build #40)                 | Spike #281 + build #40 open; **once-per-payer** — no further Train until GEN-SILENT/R2                   |
+| TD-51       | Muri | extension  | Capture click wiring unproven (source tripwire ≠ click sim)           | Extract side-effect owner or jsdom click; rides TD-50; do not count as covered                           |
 | CAPTURE-PHI | Muri | extension  | Labels/values risk in capture path                                    | Audit payload fields; redact; no value logging                                                           |
 | VAULT       | Muri | panel/ops  | E4.4 vault not verified hosted                                        | Ops checklist only                                                                                       |
-| DOC-PICK    | Mura | panel docs | SCHEMA/CLAUDE still describe pre–D3.3-G `pickTemplate` ownership wall | Truth scrub only (no behavior) after #280 merges                                                         |
+| DOC-PICK    | Mura | panel docs | SCHEMA/CLAUDE still describe pre–D3.3-G `pickTemplate` ownership wall | Truth scrub only (no behavior); code + table-register already D3.3-G after #280                          |
+| LISTPORTALS | Mura | panel      | Browser `listPortals` skipped D6.4                                    | **In flight** #282 — close when merged                                                                   |
 
 ## P1 — active muda / mura
 
@@ -58,4 +61,6 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - `docs/ops/3m-slice-5-closeout.md`
 - `docs/ops/slice-6-platform-org-spike.md`
 - `docs/ops/slice-3-sop-all-states-spike.md` (payer-setup Slice 3 — D3.1 A + D3.3-G locked; build #280)
+- `docs/ops/train-dual-registry-spike.md` (TRAIN-DUAL — locked; build #40; cadence once-per-payer)
+- `docs/ops/audit-course-correct-2026-08-10.md` (stop-the-line: OPA R1 + GEN-SILENT R2; TD-51)
 - `docs/ops/global-portal-payer-inventory.sql`

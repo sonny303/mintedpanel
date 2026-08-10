@@ -34,7 +34,14 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 | **Catalog DELETE**                | #275 merged code                      | Hosted apply needs **second PM sign-off**. Never run purge SQL without it.                                                                                |
 | **`create_payer` live signature** | #274 merged                           | App sends the hosted **10-arg** RPC. `p_assign_to_org` migration is `.superseded` — do not resurrect.                                                     |
 | **Slice 3 = SOP All-states**      | **#280** build (CI green); spike #278 | D3.1 A (`state='All'`); **D3.3-G** ranks state → group → ownership. TD-47 closed in #280. Do not resurrect E4.2 “org any-group beats global exact-group.” |
-| **Slice 5**                       | out                                   | Generation-reason / sidepanel godfile work stays out unless asked.                                                                                        |
+| **Slice 5**                       | out                                   | Generation-reason / sidepanel godfile work stays out unless asked. Prefer ID **GEN-SILENT** / **TD-50** — do not confuse with closed **3M Slice 5**. |
+
+## Cadence discipline (2026-08-10 course-correct)
+
+- Rank residual bites by **how often the job runs** (daily provider→cases before once-per-payer Train), not severity alone.
+- TRAIN-DUAL build (#40) shipped after LISTPORTALS (#282) without a frequency line — acceptable as a scoped fix, **not** as proof cadence is followed. Further Train/payer-setup product stops until **R1** (`org_payer_assignments`) and **R2** (next daily-loop bite) in `docs/ops/audit-course-correct-2026-08-10.md`.
+- Source-grep harness asserts are **tripwires**, not behavioral coverage (TD-51). Same class as the `submissionTouches` incident — name the gap; don’t count it done.
+- **Hosted ≠ merged.** #275 DELETE and `20260809120100` remain ops residual until signed apply.
 
 ## Slice 3 review + lessons (2026-08-10)
 
