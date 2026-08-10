@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isFallbackTemplate, pickTemplate, resolutionTier } from "./pickTemplate";
+import {
+  isFallbackTemplate,
+  pickTemplate,
+  resolutionTier,
+  ALL_STATES_SENTINEL,
+} from "./pickTemplate";
 import type { SOPTemplate } from "@/types";
 
 function tmpl(over: Partial<SOPTemplate>): SOPTemplate {
@@ -72,7 +77,7 @@ describe("pickTemplate — group precedence (exact beats any, order-independent)
   });
 });
 
-describe("pickTemplate — org override vs global payer vs fallback", () => {
+describe("pickTemplate — D3.3-G ownership at equal specificity", () => {
   it("an organization override beats a global payer-specific SOP (same payer/state/group)", () => {
     const orgExact = tmpl({ id: "org-exact", groupId: "g1" });
     const globalExact = globalPayerTmpl({ id: "global-exact", groupId: "g1" });
@@ -80,11 +85,12 @@ describe("pickTemplate — org override vs global payer vs fallback", () => {
     expect(pickTemplate([orgExact, globalExact], "p1", "KS", "g1")?.id).toBe("org-exact");
   });
 
-  it("an organization any-group SOP beats a global payer exact-group SOP (org tier outranks global tier)", () => {
+  it("a global exact-group SOP beats an org any-group SOP (group before ownership)", () => {
     const orgAny = tmpl({ id: "org-any", groupId: null });
     const globalExact = globalPayerTmpl({ id: "global-exact", groupId: "g1" });
-    // Tier 2 (org any) < tier 3 (global exact): the org override always wins.
-    expect(pickTemplate([globalExact, orgAny], "p1", "KS", "g1")?.id).toBe("org-any");
+    // Rank 2 (global exact+exact group) < rank 3 (org exact+any group).
+    expect(pickTemplate([orgAny, globalExact], "p1", "KS", "g1")?.id).toBe("global-exact");
+    expect(pickTemplate([globalExact, orgAny], "p1", "KS", "g1")?.id).toBe("global-exact");
   });
 
   it("a global payer-specific SOP beats the generic fallback", () => {
@@ -101,12 +107,60 @@ describe("pickTemplate — org override vs global payer vs fallback", () => {
   });
 });
 
+describe("pickTemplate — All-states (D3.3-G)", () => {
+  it("All + any-group resolves for concrete case states when nothing better exists", () => {
+    const allAny = tmpl({ id: "all-any", state: ALL_STATES_SENTINEL, groupId: null });
+    expect(pickTemplate([allAny], "p1", "NC", "g1")?.id).toBe("all-any");
+    expect(pickTemplate([allAny], "p1", "SC", "g1")?.id).toBe("all-any");
+  });
+
+  it("exact state beats All for the same ownership + group grain", () => {
+    const exact = tmpl({ id: "nc", state: "NC", groupId: "g1" });
+    const all = tmpl({ id: "all", state: ALL_STATES_SENTINEL, groupId: "g1" });
+    expect(pickTemplate([all, exact], "p1", "NC", "g1")?.id).toBe("nc");
+    expect(pickTemplate([exact, all], "p1", "SC", "g1")?.id).toBe("all");
+  });
+
+  it("global exact + exact group beats org All + exact group (state before ownership)", () => {
+    const orgAll = tmpl({ id: "org-all", state: ALL_STATES_SENTINEL, groupId: "g1" });
+    const globalExact = globalPayerTmpl({ id: "g-nc", state: "NC", groupId: "g1" });
+    expect(pickTemplate([orgAll, globalExact], "p1", "NC", "g1")?.id).toBe("g-nc");
+  });
+
+  it("exact group beats any-group at All-states across ownership", () => {
+    const orgAllAny = tmpl({ id: "org-all-any", state: ALL_STATES_SENTINEL, groupId: null });
+    const globalAllExact = globalPayerTmpl({
+      id: "g-all-g1",
+      state: ALL_STATES_SENTINEL,
+      groupId: "g1",
+    });
+    expect(pickTemplate([orgAllAny, globalAllExact], "p1", "NC", "g1")?.id).toBe("g-all-g1");
+  });
+
+  it("org All beats global All at equal group specificity", () => {
+    const orgAll = tmpl({ id: "org-all", state: ALL_STATES_SENTINEL, groupId: null });
+    const globalAll = globalPayerTmpl({ id: "g-all", state: ALL_STATES_SENTINEL, groupId: null });
+    expect(pickTemplate([globalAll, orgAll], "p1", "NC", "g1")?.id).toBe("org-all");
+  });
+
+  it("All never masquerades as the generic fallback", () => {
+    const all = tmpl({ id: "all", state: ALL_STATES_SENTINEL, groupId: null });
+    const fallback = fallbackTmpl();
+    expect(pickTemplate([fallback, all], "p1", "NC", "g1")?.id).toBe("all");
+  });
+
+  it("All for a different group never resolves", () => {
+    const allOther = tmpl({ id: "all-g2", state: ALL_STATES_SENTINEL, groupId: "g2" });
+    expect(pickTemplate([allOther], "p1", "NC", "g1")).toBeNull();
+  });
+});
+
 describe("pickTemplate — wrong payer / state / archived never match", () => {
   it("does not match a template with a different payer", () => {
     expect(pickTemplate([tmpl({ id: "wp", payerId: "p2" })], "p1", "KS", "g1")).toBeNull();
   });
 
-  it("does not match a template with a different state", () => {
+  it("does not match a template with a different state (and not All)", () => {
     expect(pickTemplate([tmpl({ id: "ws", state: "MO" })], "p1", "KS", "g1")).toBeNull();
   });
 
@@ -142,7 +196,7 @@ describe("pickTemplate — wrong payer / state / archived never match", () => {
 
 // The global-fallback tier (E1.7b F1.7b.4 / TE-8). The fallback is a global
 // (orgId null) payerless template; it is selected only when every payer tier
-// (org exact/any, global exact/any) misses.
+// misses.
 describe("pickTemplate — generic fallback tier", () => {
   it("selects the fallback when no template matches the payer", () => {
     expect(pickTemplate([fallbackTmpl()], "p1", "KS", "g1")?.id).toBe("fb");

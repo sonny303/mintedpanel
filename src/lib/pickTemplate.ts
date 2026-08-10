@@ -1,30 +1,42 @@
 // Deterministic SOP template selection for a (payer, state, group). The
-// precedence is EXPLICIT and ORDER-INDEPENDENT (E4.2 SOP-resolution hardening):
-// the same inputs always select the same template regardless of the order rows
-// arrive from the database. Candidates are ranked into fixed tiers and the
-// lowest tier wins; array position is never load-bearing.
+// precedence is EXPLICIT and ORDER-INDEPENDENT (E4.2 SOP-resolution hardening,
+// revised by 3M Slice 3 / D3.3-G): the same inputs always select the same
+// template regardless of the order rows arrive from the database. Candidates
+// are ranked into fixed tiers and the lowest tier wins; array position is never
+// load-bearing.
 //
-//   1. active organization-specific   payer + state + EXACT group
-//   2. active organization-specific   payer + state + ANY group  (group-agnostic)
-//   3. active global / shared payer-specific   payer + state + EXACT group
-//   4. active global / shared payer-specific   payer + state + ANY group
-//   5. active platform-managed global generic fallback (payerless global SOP)
-//   6. null
+// Sort keys (D3.3-G — state specificity → group specificity → ownership):
+//
+//   1. active organization-specific   payer + EXACT state + EXACT group
+//   2. active global / shared         payer + EXACT state + EXACT group
+//   3. active organization-specific   payer + EXACT state + ANY group
+//   4. active global / shared         payer + EXACT state + ANY group
+//   5. active organization-specific   payer + All states  + EXACT group
+//   6. active global / shared         payer + All states  + EXACT group
+//   7. active organization-specific   payer + All states  + ANY group
+//   8. active global / shared         payer + All states  + ANY group
+//   9. active platform-managed global generic fallback (payerless global SOP)
+//  10. null
 //
 // "Any group" means a group-agnostic template (null groupId) — NOT "any specific
 // group". A template authored for a DIFFERENT group is never selected, so a
 // group-specific SOP never leaks onto another group. A template for another
-// payer or state is never selected. Archived templates never resolve. An
-// organization override (tiers 1–2) always beats a global payer SOP (tiers 3–4),
-// which always beats the generic fallback (tier 5).
+// payer is never selected. Archived templates never resolve.
+//
+// Intentional break vs pre-Slice-3 E4.2: a global exact-state + exact-group SOP
+// beats an org exact-state + any-group SOP (group specificity before ownership).
+// At equal state + group specificity, org still beats global.
 //
 // The seeded fallback (E1.7b) is identified by SHAPE (global + payerless), never
 // by id, so a reseeded environment still labels and selects it correctly.
 //
 // PM decision (E4.2 hardening): the supported organization-authored match key is
 // payer + state + group. Specialty is preserved as legacy / non-routing metadata
-// but is NOT a runtime match key.
+// but is NOT a runtime match key. Slice 3 adds All-states as a state wildcard.
 import type { SOPTemplate } from "@/types";
+import { ALL_STATES_SENTINEL } from "@/lib/sopMatchKey";
+
+export { ALL_STATES_SENTINEL };
 
 // The seeded fallback row's fixed UUID (migration
 // 20260713120000_sop_template_versions.sql). Identification is by SHAPE
@@ -72,19 +84,28 @@ function candidateRank(
   payerId: string,
   state: string,
   groupId: string | null,
-): 1 | 2 | 3 | 4 | 5 | null {
-  // Tier 5: the generic fallback qualifies for ANY request (it is the last
+): 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | null {
+  // Tier 9: the generic fallback qualifies for ANY request (it is the last
   // resort). Checked first so a payerless global row is never mistaken for a
   // payer-specific candidate.
-  if (isFallbackTemplate(t)) return 5;
-  // Tiers 1–4 require an exact payer + state match — never another payer/state.
-  if (t.payerId !== payerId || t.state !== state) return null;
+  if (isFallbackTemplate(t)) return 9;
+  // Payer must match exactly — never another payer.
+  if (t.payerId !== payerId) return null;
+  const exactState = t.state === state;
+  const allState = t.state === ALL_STATES_SENTINEL;
+  if (!exactState && !allState) return null;
   const exactGroup = t.groupId === groupId; // the requested group (or both null)
   const anyGroup = t.groupId === null; // group-agnostic template
+  if (!exactGroup && !anyGroup) {
+    // A template authored for a DIFFERENT specific group never resolves here.
+    return null;
+  }
   const isOrg = templateOrgId(t) !== null;
-  if (exactGroup) return isOrg ? 1 : 3;
-  if (anyGroup) return isOrg ? 2 : 4;
-  // A template authored for a DIFFERENT specific group never resolves here.
+  // D3.3-G: state specificity → group specificity → ownership.
+  if (exactState && exactGroup) return isOrg ? 1 : 2;
+  if (exactState && anyGroup) return isOrg ? 3 : 4;
+  if (allState && exactGroup) return isOrg ? 5 : 6;
+  if (allState && anyGroup) return isOrg ? 7 : 8;
   return null;
 }
 
