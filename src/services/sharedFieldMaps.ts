@@ -50,9 +50,10 @@ const asOptionalString = (value: unknown): string | null => {
  * Propose one shared (`org_id IS NULL`) registry row from extension capture.
  *
  * Idempotent on the F6.9.1 per-tier unique index: the RPC is
- * `ON CONFLICT DO NOTHING` + re-read, so re-capturing a page returns each
- * existing row with its decision untouched. That is what makes re-capture
- * drift repair rather than a reset (D7).
+ * `ON CONFLICT DO NOTHING` + re-read, then refreshes presentation columns
+ * (`sort_order`, `field_label`, `form_section`, `page_step`) without touching
+ * decision fields — so re-capturing a page returns each existing row with its
+ * status/token/source intact while repairing DOM-order drift (BITE-CAP-02).
  *
  * Shape-only, enforced here as well as in the extension: the accepted keys are
  * portal identity, page/section structure, label, selector and control type.

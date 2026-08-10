@@ -94,6 +94,7 @@ export interface ProposeFieldMapInput {
   field_type?: string | null;
   url_pattern?: string | null;
   page_step?: string | null;
+  sort_order?: number | null;
 }
 
 export type ProposeFieldMapResult =
@@ -230,6 +231,9 @@ export async function proposeFieldMap(
       return { kind: "rejected", status: 422, message: `${key} must be a string` };
     }
   }
+  if (input.sort_order != null && typeof input.sort_order !== "number") {
+    return { kind: "rejected", status: 422, message: "sort_order must be a number" };
+  }
 
   // Already known? Global rows count: the shared catalog is authoritative for
   // portal truths, so a selector it already covers needs no org proposal.
@@ -263,6 +267,7 @@ export async function proposeFieldMap(
       form_section: input.form_section?.trim() || null,
       url_pattern: input.url_pattern?.trim() || null,
       page_step: input.page_step?.trim() || null,
+      sort_order: typeof input.sort_order === "number" ? input.sort_order : null,
       field_type: fieldType,
       map_type: "web",
       status: "proposed",
@@ -482,7 +487,8 @@ export interface SharedProposeInput {
 
 /** Create (or resolve, if capture already saw it) a shared registry row.
  * Idempotent on the F6.9.1 partial unique index — a repeat capture returns the
- * existing row with its decision intact rather than resetting it. */
+ * existing row with its decision intact and refreshes presentation columns
+ * (sort order, payer label/section/page) when the DOM drifted. */
 export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<PortalFieldMap> {
   const rpc = supabase.rpc.bind(supabase);
   const { data, error } = await rpc("propose_shared_field_map", {
