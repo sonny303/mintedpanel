@@ -11,7 +11,7 @@
 import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { enrollmentIdBadge, type EnrollmentIdBadge } from "@/lib/payerIssuedIds";
-import type { FunnelNextAction } from "@/lib/payerReadinessFunnel";
+import type { FunnelFormSuggestion, FunnelNextAction } from "@/lib/payerReadinessFunnel";
 import type { TemplateEditorIntent } from "@/lib/templateEditorIntent";
 import type {
   CredentialCase,
@@ -48,25 +48,27 @@ export function parsePayerDetailTab(value: unknown): PayerDetailTab {
 }
 
 /**
- * The Template Editor intent a funnel next-action deep-links into. Spellings
+ * The Template Editor intent a funnel form-suggestion deep-links into. Spellings
  * are Slice F's shipped `TEMPLATE_EDITOR_INTENTS`; `author_sop` and `ready`
  * have no intent (one is a create, the other is done). `capture` exists in the
  * editor but the funnel never emits a capture action, so no mapping can.
  */
-const NEXT_ACTION_INTENT: Partial<Record<FunnelNextAction, TemplateEditorIntent>> = {
+const FORM_SUGGESTION_INTENT: Record<FunnelFormSuggestion, TemplateEditorIntent> = {
   register_portal: "register",
   train_mappings: "train",
   repair_drift: "repair",
   run_dry_test: "prove",
 };
 
-export function templateIntentForNextAction(action: FunnelNextAction): TemplateEditorIntent | null {
-  return NEXT_ACTION_INTENT[action] ?? null;
+export function templateIntentForFormSuggestion(
+  suggestion: FunnelFormSuggestion,
+): TemplateEditorIntent {
+  return FORM_SUGGESTION_INTENT[suggestion];
 }
 
 /** The Templates tab's next-step CTA: what to do, and where it goes. */
 export interface TemplateNextStep {
-  action: FunnelNextAction;
+  action: FunnelNextAction | FunnelFormSuggestion;
   label: string;
   /** Form-setup ladder position, "" for the non-ladder actions. */
   position: string;
@@ -77,11 +79,14 @@ export interface TemplateNextStep {
 
 const NEXT_ACTION_COPY: Record<FunnelNextAction, { label: string; position: string }> = {
   author_sop: { label: "Author template", position: "" },
-  register_portal: { label: "Register portal", position: "Form setup · 1 of 3" },
-  train_mappings: { label: "Map fields", position: "Form setup · 2 of 3" },
-  repair_drift: { label: "Repair drift", position: "Form setup · drift" },
-  run_dry_test: { label: "Check coverage", position: "Form setup · 3 of 3" },
   ready: { label: "Ready", position: "" },
+};
+
+const FORM_SUGGESTION_COPY: Record<FunnelFormSuggestion, { label: string; position: string }> = {
+  register_portal: { label: "Register portal", position: "Autofill · optional" },
+  train_mappings: { label: "Map fields", position: "Autofill · optional" },
+  repair_drift: { label: "Repair drift", position: "Autofill · drift" },
+  run_dry_test: { label: "Check coverage", position: "Autofill · optional" },
 };
 
 export function templateNextStep(row: {
@@ -94,7 +99,23 @@ export function templateNextStep(row: {
     label: copy.label,
     position: copy.position,
     templateId: row.sopTemplateId,
-    intent: templateIntentForNextAction(row.nextAction),
+    intent: null,
+  };
+}
+
+/** Soft autofill CTA when the checklist is Ready but form setup is incomplete. */
+export function autofillSuggestionStep(row: {
+  formSuggestion: FunnelFormSuggestion | null;
+  sopTemplateId: string | null;
+}): TemplateNextStep | null {
+  if (!row.formSuggestion) return null;
+  const copy = FORM_SUGGESTION_COPY[row.formSuggestion];
+  return {
+    action: row.formSuggestion,
+    label: copy.label,
+    position: copy.position,
+    templateId: row.sopTemplateId,
+    intent: templateIntentForFormSuggestion(row.formSuggestion),
   };
 }
 

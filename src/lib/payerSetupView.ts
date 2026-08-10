@@ -8,7 +8,8 @@
 // projects them into the screen's vocabulary:
 //   Template status  = Published | Needs template (one badge, no Partial)
 //   Form not proven  = published template drives an online form that is not
-//                      yet proven by a mock dry run
+//                      yet proven by a mock dry run (autofill KPI — not the
+//                      Ready gate; Ready = published checklist SOP)
 //   Drift detected   = a previously-working form has broken mappings
 // Archived rows carry no readiness projection — they render an Archived badge
 // plus Reactivate, and they bypass the KPI filter (they are only visible at

@@ -103,13 +103,14 @@ describe("sopOnlineFormNeeds", () => {
   });
 });
 
-describe("buildPayerReadinessFunnel ladder", () => {
+describe("buildPayerReadinessFunnel Ready = checklist SOP", () => {
   it("no global SOP → author_sop, not started", () => {
     const row = build({});
     expect(row.nextAction).toBe("author_sop");
     expect(row.sopPublished).toBe(false);
     expect(row.started).toBe(false);
     expect(row.ready).toBe(false);
+    expect(row.formSuggestion).toBeNull();
   });
 
   it("org-scoped and archived SOPs never count as published", () => {
@@ -120,33 +121,44 @@ describe("buildPayerReadinessFunnel ladder", () => {
     expect(row.nextAction).toBe("author_sop");
   });
 
-  it("SOP with an online form but no portal → register_portal", () => {
+  it("empty taskDefinitions do not count as a published checklist", () => {
+    const row = build({ sops: [sop({ taskDefinitions: [] })] });
+    expect(row.sopPublished).toBe(false);
+    expect(row.nextAction).toBe("author_sop");
+  });
+
+  it("SOP with an online form but no portal → ready + register_portal suggestion", () => {
     const row = build({ sops: [sop()] });
     expect(row.needsPortal).toBe(true);
     expect(row.formState).toBe("none");
-    expect(row.nextAction).toBe("register_portal");
+    expect(row.nextAction).toBe("ready");
+    expect(row.ready).toBe(true);
+    expect(row.formSuggestion).toBe("register_portal");
+    expect(row.readyNote).toMatch(/autofill portal not registered/i);
     expect(row.started).toBe(true);
   });
 
-  it("portal registered, nothing approved → train_mappings", () => {
+  it("portal registered, nothing approved → ready + train_mappings suggestion", () => {
     const row = build({
       sops: [sop()],
       portals: [portal()],
       fieldMaps: [fieldMap({ id: "m1", status: "proposed" })],
     });
     expect(row.formState).toBe("registered");
-    expect(row.nextAction).toBe("train_mappings");
+    expect(row.nextAction).toBe("ready");
+    expect(row.formSuggestion).toBe("train_mappings");
     expect(row.portalKey).toBe("acme_portal");
   });
 
-  it("trained but not proven → run_dry_test", () => {
+  it("trained but not proven → ready + run_dry_test suggestion", () => {
     const row = build({
       sops: [sop()],
       portals: [portal()],
       fieldMaps: [fieldMap({ id: "m1" })],
     });
     expect(row.formState).toBe("trained");
-    expect(row.nextAction).toBe("run_dry_test");
+    expect(row.nextAction).toBe("ready");
+    expect(row.formSuggestion).toBe("run_dry_test");
   });
 
   it("carries the first global SOP head id for editor deep-links", () => {
@@ -155,7 +167,7 @@ describe("buildPayerReadinessFunnel ladder", () => {
     expect(build({}).sopTemplateId).toBeNull();
   });
 
-  it("proven with no drift → ready", () => {
+  it("proven with no drift → ready, no form suggestion", () => {
     const row = build({
       sops: [sop()],
       portals: [portal({ provenAt: "2026-07-19T00:00:00Z" })],
@@ -164,10 +176,11 @@ describe("buildPayerReadinessFunnel ladder", () => {
     expect(row.formState).toBe("proven");
     expect(row.nextAction).toBe("ready");
     expect(row.ready).toBe(true);
+    expect(row.formSuggestion).toBeNull();
     expect(row.readyNote).toBeNull();
   });
 
-  it("drift outranks the dry test and readiness → repair_drift", () => {
+  it("drift is a soft suggestion — Ready stays true", () => {
     const broken = fieldMap({ id: "m1" });
     const row = build({
       sops: [sop()],
@@ -176,8 +189,10 @@ describe("buildPayerReadinessFunnel ladder", () => {
       driftByPortal: new Map([["acme_portal", [broken]]]),
     });
     expect(row.driftCount).toBe(1);
-    expect(row.nextAction).toBe("repair_drift");
-    expect(row.ready).toBe(false);
+    expect(row.nextAction).toBe("ready");
+    expect(row.ready).toBe(true);
+    expect(row.formSuggestion).toBe("repair_drift");
+    expect(row.readyNote).toMatch(/unrepaired drift/i);
   });
 
   it("no online form step → ready with the no-portal note", () => {
@@ -185,6 +200,7 @@ describe("buildPayerReadinessFunnel ladder", () => {
     expect(row.needsPortal).toBe(false);
     expect(row.nextAction).toBe("ready");
     expect(row.ready).toBe(true);
+    expect(row.formSuggestion).toBeNull();
     expect(row.readyNote).toMatch(/no portal required/i);
   });
 
@@ -195,18 +211,19 @@ describe("buildPayerReadinessFunnel ladder", () => {
     });
     expect(row.formState).toBe("registered");
     expect(row.portalKey).toBe("acme_portal");
+    expect(row.nextAction).toBe("ready");
   });
 
   it("rows sort by payer name", () => {
     const rows = buildPayerReadinessFunnel({
       payers: [
-        { id: "z", name: "Zeta" },
+        { id: "b", name: "Bravo" },
         { id: "a", name: "Alpha" },
       ],
       sops: [],
       portals: [],
       fieldMaps: [],
     });
-    expect(rows.map((r) => r.payerName)).toEqual(["Alpha", "Zeta"]);
+    expect(rows.map((r) => r.payerName)).toEqual(["Alpha", "Bravo"]);
   });
 });

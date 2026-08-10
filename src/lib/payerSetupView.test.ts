@@ -46,6 +46,7 @@ function funnel(payerId: string, over: Partial<FunnelRow> = {}): FunnelRow {
     sopTemplateId: null,
     driftCount: 0,
     nextAction: "author_sop",
+    formSuggestion: null,
     ready: false,
     readyNote: null,
     started: false,
@@ -74,22 +75,26 @@ const FUNNEL: FunnelRow[] = [
     nextAction: "ready",
     ready: true,
   }),
-  // Published + trained-but-unproven form → Form not proven.
+  // Published + trained-but-unproven form → Form not proven KPI (Ready still).
   funnel("p-uhc", {
     sopPublished: true,
     needsPortal: true,
     formState: "trained",
-    nextAction: "run_dry_test",
+    nextAction: "ready",
+    formSuggestion: "run_dry_test",
+    ready: true,
   }),
   // No published template → Needs template.
   funnel("p-banner"),
-  // Published + proven but drifted → Drift detected (still counts as proven).
+  // Published + proven but drifted → Drift detected (still Ready).
   funnel("p-select", {
     sopPublished: true,
     needsPortal: true,
     formState: "proven",
     driftCount: 3,
-    nextAction: "repair_drift",
+    nextAction: "ready",
+    formSuggestion: "repair_drift",
+    ready: true,
   }),
 ];
 

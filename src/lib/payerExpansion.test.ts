@@ -70,7 +70,7 @@ describe("expandTargets (TS-41 intersection)", () => {
 describe("reviewExpansion (defaults) + planAttachmentSave (exceptions, restore)", () => {
   const expansion = expandTargets(["NC"], groups, facilities);
 
-  it("new rows default checked; previously archived rows are PRE-UNCHECKED", () => {
+  it("new facility-backed rows default checked; previously archived rows are PRE-UNCHECKED", () => {
     const review = reviewExpansion(expansion, [
       target({ id: "t-arch", groupId: "g-1", state: "NC", status: "archived" }),
     ]);
@@ -91,6 +91,20 @@ describe("reviewExpansion (defaults) + planAttachmentSave (exceptions, restore)"
         targetId: null,
         defaultChecked: true,
       },
+    ]);
+  });
+
+  it("zero-facility states stay visible but unchecked by default", () => {
+    const review = reviewExpansion(
+      [
+        { groupId: "g-1", state: "CO", facilityCount: 0 },
+        { groupId: "g-1", state: "NC", facilityCount: 2 },
+      ],
+      [],
+    );
+    expect(review.map((r) => ({ state: r.state, defaultChecked: r.defaultChecked }))).toEqual([
+      { state: "CO", defaultChecked: false },
+      { state: "NC", defaultChecked: true },
     ]);
   });
 
