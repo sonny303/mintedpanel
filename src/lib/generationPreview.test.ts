@@ -315,7 +315,8 @@ describe("splitGenerationPreview / generationPreviewSummary", () => {
 
 describe("buildGenerationSkips — GEN-SILENT", () => {
   const roster = (
-    over: Partial<GenerationRosterProviderInput> & Pick<GenerationRosterProviderInput, "providerId">,
+    over: Partial<GenerationRosterProviderInput> &
+      Pick<GenerationRosterProviderInput, "providerId">,
   ): GenerationRosterProviderInput => ({
     providerName: over.providerName ?? "Provider",
     pendingVerification: false,

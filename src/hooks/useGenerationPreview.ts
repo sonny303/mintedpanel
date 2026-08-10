@@ -240,8 +240,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
         providerId: p.id,
         providerName: `${p.firstName} ${p.lastName}`.trim(),
         pendingVerification: p.verificationState === "pending_verification",
-        skipEligible:
-          p.status !== "terminated" && !p.referenceOnly && p.isTestProvider !== true,
+        skipEligible: p.status !== "terminated" && !p.referenceOnly && p.isTestProvider !== true,
       })),
     );
     const skips = allSkips.filter(
