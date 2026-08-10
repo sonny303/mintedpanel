@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  catalogAction,
-  isActiveAssignment,
-  payerSetupEmptyState,
-} from "./payerCatalogActions";
+import { catalogAction, isActiveAssignment, payerSetupEmptyState } from "./payerCatalogActions";
 import type { OrgPayerAssignment, Payer } from "@/types";
 
 function mkPayer(over: Partial<Payer> = {}): Payer {

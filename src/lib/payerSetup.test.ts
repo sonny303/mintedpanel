@@ -37,10 +37,7 @@ describe("activeOrgPayers — OPA-RETIRE (targets, never assignments)", () => {
   });
 
   it("excludes the Pre-Cred sentinel", () => {
-    const rows = activeOrgPayers(
-      [payer({ name: "Pre-Credentialing Setup" })],
-      [target()],
-    );
+    const rows = activeOrgPayers([payer({ name: "Pre-Credentialing Setup" })], [target()]);
     expect(rows).toEqual([]);
   });
 
@@ -55,19 +52,14 @@ describe("activeOrgPayers — OPA-RETIRE (targets, never assignments)", () => {
 
 describe("activeOrgPayers — archived payers (E6.8)", () => {
   it("excludes archived payers by default", () => {
-    const rows = activeOrgPayers(
-      [payer({ archivedAt: "2026-07-27T00:00:00Z" })],
-      [target()],
-    );
+    const rows = activeOrgPayers([payer({ archivedAt: "2026-07-27T00:00:00Z" })], [target()]);
     expect(rows).toEqual([]);
   });
 
   it("includeArchived opts archived payers back in when they have targets", () => {
-    const rows = activeOrgPayers(
-      [payer({ archivedAt: "2026-07-27T00:00:00Z" })],
-      [target()],
-      { includeArchived: true },
-    );
+    const rows = activeOrgPayers([payer({ archivedAt: "2026-07-27T00:00:00Z" })], [target()], {
+      includeArchived: true,
+    });
     expect(rows).toHaveLength(1);
   });
 
@@ -79,14 +71,14 @@ describe("activeOrgPayers — archived payers (E6.8)", () => {
 
 describe("networkPayerIdsFromTargets / archivedPayerIds", () => {
   it("collects only active target payer ids", () => {
-    expect(
-      [...networkPayerIdsFromTargets([target(), target({ status: "archived", payerId: "x" })])],
-    ).toEqual(["pay-1"]);
+    expect([
+      ...networkPayerIdsFromTargets([target(), target({ status: "archived", payerId: "x" })]),
+    ]).toEqual(["pay-1"]);
   });
 
   it("archivedPayerIds", () => {
-    expect([...archivedPayerIds([payer({ archivedAt: "2026-01-01" }), payer({ id: "p2" })])]).toEqual(
-      ["pay-1"],
-    );
+    expect([
+      ...archivedPayerIds([payer({ archivedAt: "2026-01-01" }), payer({ id: "p2" })]),
+    ]).toEqual(["pay-1"]);
   });
 });

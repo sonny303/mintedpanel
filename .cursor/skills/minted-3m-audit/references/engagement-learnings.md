@@ -32,7 +32,7 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 | --------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | **Ready = checklist SOP**         | #277 merged            | Portal train/prove/drift = badges, not Ready gate                                                                         |
 | **Attach: defaults only**         | #277 merged            | Do not reverse E6.2                                                                                                       |
-| **`org_payer_assignments` table** | **building #285**      | Retire **as a gate** only; rows dormant; never DROP. Work: **OPA-RETIRE** (not Slice 3). Not a generation candidacy input |
+| **`org_payer_assignments` table** | **#285** (this PR)     | Gate retired in product; table dormant; never DROP. E2e harness retarget may remain (OPA-E2E). Not Slice 3.               |
 | **Catalog DELETE**                | #275 code              | Hosted = second PM sign-off (OPS-PURGE)                                                                                   |
 | **`create_payer` 10-arg**         | #274                   | No resurrect `p_assign_to_org`                                                                                            |
 | **SOP All-states + D3.3-G**       | #280                   | Owns the name **Slice 3**; do not reuse for OPA-RETIRE                                                                    |

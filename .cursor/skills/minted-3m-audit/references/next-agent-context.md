@@ -3,33 +3,31 @@
 **Purpose:** cheap orientation so the next agent does not re-derive the Aug
 2026 thread. Prefer this + `known-debt-map.md` over re-reading chat.
 
-**As of:** 2026-08-11 (24h PR clear — all open product PRs CI-green; merge
-order in `docs/ops/24h-pr-wiki-audit-2026-08-11.md`).
+**As of:** 2026-08-11 (rebasing OPA-RETIRE #285 onto main after the 24h clear
+merged CAP/LISTPORTALS/SOP-TT/Add Provider; #285 is the last panel product PR).
 
 ---
 
 ## Where we are (one screen)
 
-| Item                       | State                                                    | PR / id                        |
-| -------------------------- | -------------------------------------------------------- | ------------------------------ |
-| Skill pack                 | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Twin on extension (#41 merged) |
-| Course-correct             | Docs lock R1/R2                                          | panel #283 merged              |
-| **GEN-SILENT**             | Merged                                                   | panel #284                     |
-| 24h audit skill            | Ready                                                    | panel #299                     |
-| LISTPORTALS                | Ready to merge                                           | panel #282                     |
-| CAP panel                  | Ready (#290 sort refresh, #289 stale copy)               | merge before/with ext CAP      |
-| SOP-TT                     | Tip ready (#297); 01–03 closed as superseded             | panel #297                     |
-| Add Provider harden        | Ready                                                    | panel #288                     |
-| **OPA-RETIRE**             | Ready (merge last among product)                         | panel #285 — hosted apply ops  |
-| TRAIN-DUAL spike           | Locked C amended                                         | panel #281 merged              |
-| TRAIN-DUAL build           | Ready                                                    | extension #40                  |
-| CAP extension              | Ready stack #43 → #44; #46 independent                   | after CAP-01 (#42)             |
-| OPS-PURGE / OPS-S6 / VAULT | Hosted residual                                          | Human sign-off only            |
+| Item                       | State                                                    | PR / id                       |
+| -------------------------- | -------------------------------------------------------- | ----------------------------- |
+| Skill pack                 | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Twin on extension (#41)       |
+| Course-correct             | Docs lock R1/R2                                          | panel #283 merged             |
+| **GEN-SILENT**             | Merged                                                   | panel #284                    |
+| 24h audit skill + wiki     | Merged                                                   | panel #299 / #301             |
+| LISTPORTALS                | Merged                                                   | panel #282                    |
+| CAP panel                  | Merged (#290 / #289)                                     | —                             |
+| SOP-TT                     | Merged tip                                               | panel #297                    |
+| Add Provider harden        | Merged                                                   | panel #288                    |
+| **OPA-RETIRE**             | Open — rebase + merge last; hosted apply = ops           | panel #285                    |
+| TRAIN-DUAL spike           | Locked C amended                                         | panel #281 merged             |
+| TRAIN-DUAL build           | Open (rebase onto CAP-05 main)                           | extension #40                 |
+| CAP extension              | Merged (#42 / #43 / #44 / #46)                           | —                             |
+| OPS-PURGE / OPS-S6 / VAULT | Hosted residual                                          | Human sign-off only           |
 
-**Cadence rule:** daily provider→cases was unblocked by GEN-SILENT. Prefer
-landing OPA-RETIRE (#285) after smaller Form/portal bites. Do not start new
-Train/payer-setup product while those ready PRs are still open unless PM
-re-orders.
+**Cadence rule:** daily provider→cases unblocked by GEN-SILENT. Land
+OPA-RETIRE (#285) next on panel; TRAIN-DUAL (#40) on extension. Hosted ≠ merged.
 
 ---
 
@@ -40,7 +38,7 @@ re-orders.
 | Ready = checklist SOP | #277 — not autofill/train/prove                                                                                                         |
 | Attach defaults only  | #277 — do not reverse E6.2                                                                                                              |
 | D3.3-G `pickTemplate` | #280 — state → group → ownership; `state='All'`                                                                                         |
-| **R1 B**              | Retire `org_payer_assignments` **as a gate** only; table+rows **dormant** (never DROP). Not a `buildGenerationPreview` candidacy input. |
+| **R1 B**              | `#285` retires `org_payer_assignments` **as a gate** only; table+rows **dormant** (never DROP). Network = active `payer_network_targets`. |
 | **R2**                | **GEN-SILENT** — explain `no_facility` / `pending_verification` skips on `/generation`                                                  |
 | TRAIN-DUAL D-TD.*     | URL = capture bind; selection sticky nav/messaging; C1 mismatch copy; keep two APIs; reject B/D auto-bind                               |
 | #275 DELETE           | Code merged; hosted needs **second** PM sign-off                                                                                        |
@@ -82,7 +80,7 @@ re-orders.
 ## Ops residual (never agent-apply)
 
 - #275 catalog DELETE unapplied (~270 payers) until second sign-off
-- OPA-RETIRE + CAP-02 migrations — confirm hosted after merge
+- OPA-RETIRE migration — confirm hosted after #285 merges
 - `20260809120100` SOP read widen — confirm hosted
 - Vault checklist
 
@@ -93,11 +91,29 @@ Announce merges as **repo-green**, never as production-live without ops.
 ## Paste-ready next mandate
 
 ```
-Mandate: Human-merge open PRs in docs/ops/24h-pr-wiki-audit-2026-08-11.md order.
-  After merge: operator-apply OPA + CAP-02 migrations; second sign-off #275.
+Mandate: Human-merge panel #285 (OPA-RETIRE) then extension #40 (TRAIN-DUAL).
+  After merge: operator-apply OPA migration; second sign-off #275.
 Bind: .cursor/skills/minted-3m-audit/ — read references/next-agent-context.md first.
 Locked: R1 B dormant assignments table; R2 GEN-SILENT shipped; D3.3-G; Ready=checklist;
   TRAIN-DUAL C amended; never DROP assignments.
 Verify: unit + Playwright green on each PR before merge; hosted≠merged.
 Stop: never self-merge; never claim source-grep = wiring proof (TD-51).
 ```
+
+---
+
+## What #285 already shipped (do not redo)
+
+Migration `supabase/migrations/20260810220000_opa_retire_assignment_gate.sql`:
+
+1. `payers_select` → own-org OR `org_id IS NULL` (no assignment subquery)
+2. `payer_network_targets` INSERT/UPDATE WITH CHECK → drop assignment EXISTS
+3. `create_payer` (10-arg) → no assignment upsert; audit `assignedToOrg: false`
+
+App (targets-derived network):
+
+- `src/lib/payerSetup.ts` — `activeOrgPayers(payers, targets)`, `networkPayerIdsFromTargets`
+- `src/lib/payerCatalogActions.ts` — `catalogAction(payer, inNetwork, …)`; no `reactivate` kind
+- Setup / readiness / ManualCase / PayerDetail / attach services / wizard shortlist
+- Governance pins in `src/lib/payerGovernance.test.ts`
+- E2e fixtures retargeted to active `payer_network_targets`
