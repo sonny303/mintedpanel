@@ -351,7 +351,10 @@ describe("the Slice 6 SOP-read widening — grant + policy shape", () => {
   // a service that stopped sending the flag is exactly the drift that broke
   // creation, only in the opposite direction.
   it("the D6.1 assign-flag migration stays retired and unapplied", () => {
-    const base = join(ROOT, "supabase/migrations/20260809120000_slice6_create_payer_assign_flag.sql");
+    const base = join(
+      ROOT,
+      "supabase/migrations/20260809120000_slice6_create_payer_assign_flag.sql",
+    );
     expect(existsSync(base)).toBe(false);
     const retired = readFileSync(`${base}.superseded`, "utf8").toLowerCase();
     expect(retired).toContain("retired / never applied");
