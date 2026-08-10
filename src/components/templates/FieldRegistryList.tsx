@@ -36,7 +36,7 @@ export type RegistryDecision =
 
 interface Props {
   rows: readonly RegistryRow[];
-  /** Ids the latest capture did not see — rendered as stale, never deleted (D7). */
+  /** Ids the latest real fill did not find on the page — rendered as stale, never deleted (D7). */
   staleIds?: ReadonlySet<string>;
   canEdit: boolean;
   groupedTokens: TokenGroup[];
@@ -49,7 +49,7 @@ const PILL: Record<FieldDecision, { label: string; tone: StatusColor }> = {
   fixed: { label: "Fixed value", tone: "green" },
   human: { label: "Human fills this", tone: "neutral" },
   undecided: { label: "Needs a decision", tone: "amber" },
-  stale: { label: "Not on the form", tone: "neutral" },
+  stale: { label: "Not found in the latest fill", tone: "neutral" },
   invalid: { label: "Needs attention", tone: "red" },
 };
 
@@ -74,7 +74,7 @@ export function FieldRegistryList({
                 trainer actually works at — one aggregate count over 23 fields
                 says nothing about which part of the form is unfinished. */}
             <p className="text-[11px] text-muted-foreground">
-              {section.mapped} of {section.total} mapped
+              {section.mapped} of {section.total} mapped in section
             </p>
           </div>
           <div className="divide-y divide-[#E8E5E0] rounded-md border border-[#E8E5E0]">
@@ -203,8 +203,8 @@ function RegistryRowEditor({
       ) : null}
       <p className="text-[11px] text-muted-foreground">{classification.reason}</p>
 
-      {/* Stale rows keep their controls. Staleness is INFORMATION — the last
-          capture or fill did not see this field — not a lock: a drifted
+      {/* Stale rows keep their controls. Staleness is INFORMATION — the latest
+          real fill did not find this field on the page — not a lock: a drifted
           mapping is repaired by re-pointing it right here, which is the whole
           E6.5 F6.5.4 repair path. Locking the row would leave a broken mapping
           with no way to fix it from the editor. */}
