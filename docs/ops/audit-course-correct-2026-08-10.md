@@ -1,7 +1,8 @@
 # Audit course-correct (2026-08-10)
 
-**Status:** stop-the-line for new payer-setup / Train product work until the
-two PM rulings below land. Docs only — no schema/behavior in this PR.
+**Status:** R1 + R2 **locked** (PM 2026-08-10). Docs lock in this PR;
+**GEN-SILENT** builds as a separate product PR. OPA-RETIRE (retire-as-gate) is
+payer-setup follow-on — rename off “Slice 3”; no DDL drop of the table.
 
 Companion: skill `.cursor/skills/minted-3m-audit/` ·
 [`repo-workflow.md`](./repo-workflow.md) · TECH-DEBT **TD-51**.
@@ -22,51 +23,35 @@ Companion: skill `.cursor/skills/minted-3m-audit/` ·
 
 ---
 
-## Stop-the-line rulings (need PM)
+## Stop-the-line rulings — **LOCKED** (PM 2026-08-10)
 
-### R1 — `org_payer_assignments`
+### R1 — `org_payer_assignments` → **B retire as a gate**
 
-| Lane signal | Claim |
-| ----------- | ----- |
-| Skill / #280 / #281 locks | **Keep** `org_payer_assignments` (org↔payer adoption ≠ group↔payer ops) |
-| Payer-setup lane mandate (chat) | Assignments **not needed**; keep `payer_network_targets` |
-
-**Evidence (code, not opinion):** `buildGenerationPreview` candidacy inputs are
-targets, group assignments, facility assignments, exclusions, and existing
-cases only (`src/lib/generationPreview.ts` header + `GenerationPreviewInput`).
-`org_payer_assignments` is **not** among them. Retiring it **as a generation
-gate** cannot change which cases generate — confirmed in code. (It may still
-gate catalog visibility, attach pickers, SOP read RLS, or `create_payer`
-side-effects — those are separate consumers; R1 is about the **gate** claim.)
-
-Same table, opposite lane mandates. Every subsequent attach/create/SOP-read PR
-hardens one assumption. **No further payer-setup product PR until R1.**
+| Decision | Detail |
+| -------- | ------ |
+| **Lock** | Stop reading `org_payer_assignments` to gate catalog visibility, attach eligibility, and `create_payer` side-effect |
+| **Table** | Leave table + rows in place, **dormant**, additive rule — **never DROP** |
+| **Cases** | Proven safe: not a `buildGenerationPreview` candidacy input |
+| **Touches** | `payers_select` RLS + attach WITH CHECK — that is **OPA-RETIRE** (paused payer-setup work; **do not** call it Slice 3 — #280 owns that label) |
 
 ```
-Evidence: org_payer_assignments is NOT a candidacy input to buildGenerationPreview
-(targets/group-assignments/facility-assignments/exclusions/existing-cases only) —
-confirmed in code. "Retire as a gate" cannot change generated cases.
-
-R1 org_payer_assignments: keep (skill lock) | retire-as-gate (payer-setup; cases unaffected per evidence) | spike-only (inventory other consumers + D-questions, no DDL)
+R1: B retire-as-gate (LOCKED)
+Work id if built: OPA-RETIRE / PS-UNIVERSE — not "Slice 3"
 ```
 
-### R2 — Next code bite = daily provider→cases loop
+### R2 — Next code bite → **GEN-SILENT** (LOCKED)
 
-Do **not** start more Train / catalog / portal dual-registry work until a
-daily-loop bite is in flight (or PM explicitly re-orders).
-
-**Recommended next code bite (after R1, or in parallel if R1 = keep / retire-as-gate with no DDL yet):**
-
-**GEN-SILENT** — surface pre-candidacy skips on `/generation` (especially
-`no_facility` / facts-fenced providers). Today `buildGenerationPreview` drops
-them with **no row and no reason**. License-state is already a readiness gap on
-*proposed* rows — do not conflate.
+Daily-loop fix: a provider with no facility assignment, or stuck in
+`pending_verification`, produces **zero rows and zero explanation** on
+`/generation`. Surface why, using signals the system already computes.
+License-state stays an advisory readiness gap on rows that *do* generate —
+do not conflate.
 
 Hot files: `src/lib/generationPreview.ts`, `src/hooks/useGenerationPreview.ts`,
-`src/components/generation/GenerationGrid.tsx`, optional `providerGaps.ts`.
+`src/components/generation/GenerationGrid.tsx`.
 
 ```
-R2 next build: GEN-SILENT (recommended) | other daily-loop (name it) | resume Train/payer-setup anyway
+R2: GEN-SILENT (LOCKED) — build next; OPA-RETIRE is separate follow-on
 ```
 
 ---
@@ -111,10 +96,13 @@ If R1 resolves to retire-as-gate, **do not** call that work “Slice 3” — #2
 ## Next-agent packet
 
 ```
-Stop: no new Train / payer-setup product until PM replies R1 + R2.
+Locked: R1 = B retire-as-gate (table stays dormant); R2 = GEN-SILENT build.
 Bind: .cursor/skills/minted-3m-audit/
-If R2 = GEN-SILENT: panel-only; emit skip rows for pre-candidacy drops;
-mirror gated banner; unit tests; no org_payer_assignments DDL.
+GEN-SILENT: emit skip rows for no_facility + pending_verification on /generation;
+mirror gated-style banner; unit tests; do not change candidacy math.
+OPA-RETIRE: separate bite after GEN-SILENT — payers_select RLS + attach WITH
+CHECK + create_payer side-effect; never DROP org_payer_assignments; never
+name it Slice 3 (#280).
 Ops: OPS-PURGE / OPS-S6 remain human sign-off.
-Never self-merge. Never claim source-grep = behavioral coverage.
+Never self-merge. Never claim source-grep = behavioral coverage (TD-51).
 ```

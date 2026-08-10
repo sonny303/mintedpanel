@@ -6,8 +6,8 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 | ID          | 3M   | Area       | Symptom                                                               | Likely bites                                                                                             |
 | ----------- | ---- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| OPA-CONFLICT | Muri | both/ops  | Skill keep vs payer-setup retire `org_payer_assignments` as gate      | **PM R1** — evidence: not a `buildGenerationPreview` candidacy input; rename retire work off “Slice 3” (#280) |
-| GEN-SILENT  | Muri | panel      | Pre-candidacy skips (`no_facility`, facts fence) leave no `/generation` row | Surface skip records + banner; license already on readiness — don’t conflate                       |
+| OPA-CONFLICT | Muri | both/ops  | Retire `org_payer_assignments` **as a gate** (R1 B locked)             | **OPA-RETIRE** follow-on — dormant table; not Slice 3; after GEN-SILENT                                |
+| GEN-SILENT  | Muri | panel      | Pre-candidacy skips (`no_facility`, `pending_verification`) silent on `/generation` | **R2 locked — build now**; surface skip rows + banner                                            |
 | OPS-S6      | Muri | ops        | Slice 6 **SOP read** migration may still be unapplied; vault          | Apply `20260809120100` only ( `20260809120000` is **superseded** by #274 ); regen types; vault checklist |
 | OPS-PURGE   | Muri | ops        | #275 catalog DELETE merged but not hosted                             | **Second PM sign-off** then apply; never agent-apply                                                     |
 | TRAIN-DUAL  | Mura | extension  | Login/redirect false “New form”; URL bind (build #40)                 | Spike #281 + build #40 open; **once-per-payer** — no further Train until GEN-SILENT/R2                   |

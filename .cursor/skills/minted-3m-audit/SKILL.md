@@ -128,7 +128,7 @@ Recommend **one next tranche** (2–5 bite-sized PRs max), not a new mega-engage
 8. **Don't silent-`.limit()` getCases** — needs pagination UX (TD-49).
 9. **Hosted ≠ repo** — DROP+CREATE RPCs on `main` are an S0 cliff until operator apply.
 10. **Engagement closed ≠ optimized** — always re-score the live system.
-11. **Corrected payer-setup locks** — Ready = checklist SOP; attach defaults only (not reverse E6.2); **`org_payer_assignments` keep vs retire is OPA-CONFLICT — PM R1 required** before next payer-setup product PR (`docs/ops/audit-course-correct-2026-08-10.md`); no DELETE without second PM sign-off (#275); Slice 5 generation-reason out unless asked (prefer **GEN-SILENT**). Slice 3 All-states = D3.1 A + **D3.3-G** (#280) — do not resurrect E4.2 org-block-first ranking.
+11. **Corrected payer-setup locks** — Ready = checklist SOP; attach defaults only (not reverse E6.2); **R1 B:** retire `org_payer_assignments` **as a gate** only (table stays dormant — never DROP); work id **OPA-RETIRE** (not Slice 3); no DELETE without second PM sign-off (#275); **R2 GEN-SILENT** is the next daily-loop build. Slice 3 All-states = D3.1 A + **D3.3-G** (#280) — do not resurrect E4.2 org-block-first ranking.
 12. **Bind this skill; don’t paste the audit** into handoffs or PR bodies — cite the skill path + locked table in `engagement-learnings.md`.
 13. **Case grain first** — when debating match/attach/SOP stories, lead with `(payer, group, state)`; org is tenancy/adoption, not the payer’s primary attachment.
 14. **Cadence over severity alone** — daily provider→cases before once-per-payer Train; hosted ≠ merged; source-grep ≠ behavioral coverage (TD-51).
