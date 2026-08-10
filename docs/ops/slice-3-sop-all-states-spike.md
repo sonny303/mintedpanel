@@ -1,7 +1,8 @@
 # Slice 3 spike — SOP All-states / multi-state match
 
-**Status:** spike complete (2026-08-10) — **ready for build after PM ack of §Locked
-decisions** (D3.1–D3.7). No product code in this PR.  
+**Status:** spike complete (2026-08-10) — **PM ack recorded 2026-08-10:
+`D3.1 A; D3.2–D3.7 as written`.** Build targets §User stories below. No product
+code in this PR.  
 **Branch / PR:** `cursor/3m-slice-3-sop-all-states-spike-3a65`  
 **Lane:** corrected 3M payer-setup plan. Skill: `.cursor/skills/minted-3m-audit/`
 (PR #273).  
@@ -17,28 +18,27 @@ Companion: [`repo-workflow.md`](./repo-workflow.md) ·
 
 ```
 Mandate: Continue corrected 3M payer-setup plan.
-Next: Slice 3 BUILD only after PM acks D3.1–D3.7 in this file
-      (spike default D3.1 = Option A, state='All').
+Next: Slice 3 BUILD — PM ack locked (D3.1 A; D3.2–D3.7 as written).
+      Implement US-1..US-4 in §User stories (this file).
 
 Draft PRs:
-- #278 this spike (docs) — merge after CI green + PM ack of decisions
-- #273 minted-3m-audit skill — bind .cursor/skills/minted-3m-audit/; don't paste audit
+- #278 this spike (docs) — merge when CI green
+- Build PR: cursor/3m-slice-3-sop-all-states-build-3adf off main
+- #273 minted-3m-audit skill — bind; don't paste audit
 - #279 e2e hotfix for #277 attach defaults (merge first if still open)
 
 Prior merged: #277 Ready/attach · #274 create_payer S0 · #275 purge code
-Branch prior: cursor/3m-payer-ready-attach-defaults-b4fa
 
 Locked (do not re-litigate):
+- D3.1 = Option A (state='All'); D3.2–D3.7 as written in this spike
 - Ready = checklist SOP; autofill = badge; form mapper stays
 - Attach: defaults only; don't reverse E6.2
 - Keep org_payer_assignments unless reopened
 - No DELETE without second PM sign-off (#275)
 - Slice 5 out unless asked
 
-Build handoff after ack: see § Claude / Cursor build handoff below.
-Stop: draft PR + D3 checklist in body; never self-merge.
+Stop: draft build PR + US/AC checklist in body; never self-merge.
 ```
-
 ---
 
 ## Do not confuse two “Slice 3” names
@@ -107,15 +107,17 @@ control “All states”, not “Any state”.
 
 ---
 
-## Locked decisions (build from these — **PM ack required**)
+## Locked decisions (build from these — **PM ACKED 2026-08-10**)
 
-### D3.1 — Storage shape: All-states sentinel on existing `state` (Option A)
+**PM reply:** `D3.1 A; D3.2–D3.7 as written`. Option B is deferred (not this
+build). Do not re-open A vs B.
+
+### D3.1 — Storage shape: All-states sentinel on existing `state` (Option A) ✅
 
 - Store the wildcard as the **scalar** `sop_templates.state` value (not a new
   column, not null).
 - Cases / targets / contracts stay `^[A-Z]{2}$` — unchanged.
-- **PM must confirm A vs B.** Spike defaults to **A**.
-
+- **Locked: Option A.**
 ### D3.2 — Wire / display form of the sentinel
 
 | Layer                         | Value                                                                                                                                                                                             |
@@ -195,8 +197,80 @@ inherit All-states for free. Do **not** special-case the #277 Ready funnel
 
 ---
 
-## Schema / RPC impact (Option A — no new column)
+## User stories + acceptance criteria (build target)
 
+These four stories are what the Slice 3 **build** PR implements and what the PR
+body’s checklist maps to. Trace: US-1 → D3.1/D3.2/D3.5 · US-2 → D3.3/D3.6 ·
+US-3 → D3.4 · US-4 → D3.6/D3.7.
+
+### US-1 — Author one payer checklist for all case states
+
+**As** a template author (platform global or org override),  
+**I want** to set the SOP match key to **All states**,  
+**so that** I do not clone the same checklist once per two-letter state.
+
+| #     | Acceptance criterion                                                                                                                                 |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1.1 | Template Basics offers an **All states** option alongside US states (design screen 4).                                                               |
+| AC1.2 | Choosing All persists `sop_templates.state = 'All'` (capital A). Choosing a US state persists `^[A-Z]{2}$`. No `states text[]` column.                |
+| AC1.3 | Writers/readers share one `ALL_STATES_SENTINEL` constant — no scattered `"all"` / `"ALL"` literals.                                                  |
+| AC1.4 | `orgSopMatchKeyError` / org create·update asserts and the global author path treat `'All'` as a **complete** state (not null, not “Any state”).      |
+| AC1.5 | Review / provenance / list copy shows the label **All states**, never a blank or a raw unexpected casing.                                            |
+
+### US-2 — Resolve the right SOP when All and exact coexist
+
+**As** generation / readiness / stamping,  
+**I want** one ranked `pickTemplate` that understands All-states,  
+**so that** exact overrides still win and org overrides still beat global.
+
+| #     | Acceptance criterion                                                                                                      |
+| ----- | ------------------------------------------------------------------------------------------------------------------------- |
+| AC2.1 | `candidateRank` implements the D3.3 nine ranks (org exact → org All → global exact → global All → fallback).              |
+| AC2.2 | Exact-state template always beats All for the same ownership + group grain.                                               |
+| AC2.3 | Org All beats global exact for an org-owned case key (org-override rule preserved).                                       |
+| AC2.4 | Wrong payer never matches; archived never matches.                                                                        |
+| AC2.5 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                      |
+| AC2.6 | A template with `state=All`, any-group resolves for concrete case states (e.g. NC and SC) when no better match exists.    |
+| AC2.7 | Unit tests pin AC2.2–AC2.6 **before** UI ships.                                                                           |
+
+### US-3 — Exact + All can share a payer; two Alls cannot
+
+**As** an author maintaining both a default process and a state exception,  
+**I want** an active exact-state SOP and an active All SOP for the same payer/group,  
+**so that** exceptions stay explicit without deleting the default.
+
+| #     | Acceptance criterion                                                                                                                           |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC3.1 | Active exact `NC` **and** active `All` for the same `(org\|global, payer, group)` are allowed (different `state` values).                      |
+| AC3.2 | A second active `All` for the same `(org\|global, payer, group)` is blocked (org uniqueness / assert + global `author_global_sop` in-body).    |
+| AC3.3 | Null-state “Any state” remains forbidden for org match keys — All is the only wildcard this build introduces.                                  |
+
+### US-4 — One matcher; Ready and out-of-scope stays closed
+
+**As** the program owner,  
+**I want** All-states to ride the existing resolver only,  
+**so that** #277 Ready, attach, purge, and Slice 5 are not reopened by this PR.
+
+| #     | Acceptance criterion                                                                                                                         |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC4.1 | No second template matcher — generation confirm, readiness, and stamps keep calling `pickTemplate` only.                                     |
+| AC4.2 | #277 Ready stays checklist presence (≥1 active global SOP with ≥1 task); authoring All vs exact does **not** by itself flip Ready.           |
+| AC4.3 | Diff does **not** include: Ready/attach/purge changes, `org_payer_assignments` removal, Option B `states text[]`, null Any-state, TD-48 multi-group, extension Train/fill, Slice 5, or `sopResolver.ts` content edits. |
+| AC4.4 | TD-47 closed (or pointed at shipped build) when US-1..US-3 land.                                                                             |
+
+### Story → verify map
+
+| Verify # (below) | Stories   |
+| ---------------- | --------- |
+| 1, 5             | US-1      |
+| 1–3, 6           | US-2      |
+| 2, 4             | US-3      |
+| 7                | US-4      |
+| 8                | all (CI)  |
+
+---
+
+## Schema / RPC impact (Option A — no new column)
 | Object                                  | Change                                                                                                                                                                                                                                                                                                                              |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sop_templates.state`                   | None (already wildcard-capable)                                                                                                                                                                                                                                                                                                     |
@@ -246,48 +320,49 @@ Expect empty. Seed fixtures use ordinary two-letter states.
 
 ---
 
-## Minimal PR map (build — after PM ack)
+## Minimal PR map (build — PM acked; implement US-1..US-4)
 
-| #   | Change                                                       | Files (indicative)                                                                 |
-| --- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| 1   | Sentinel constant + `pickTemplate` ranks 3/4/7/8 + tests     | `pickTemplate.ts`, `pickTemplate.test.ts`                                          |
-| 2   | Match-key validation accepts All                             | `sopMatchKey.ts` (+test), `templates.ts` asserts                                   |
-| 3   | Wizard All-states option + write path                        | `TemplateWizard.tsx`                                                               |
-| 4   | Global author path (if RPC body needs a comment/guard tweak) | `author_global_sop` migration **only if** live body rejects All; else service-only |
-| 5   | Close TD-47 + wiki one-liner                                 | `TECH-DEBT.md`, `docs/wiki/payer-setup.md` if needed                               |
+| #   | Change                                                       | Stories | Files (indicative)                                                                 |
+| --- | ------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------- |
+| 1   | Sentinel constant + `pickTemplate` ranks 3/4/7/8 + tests     | US-2    | `pickTemplate.ts`, `pickTemplate.test.ts`                                          |
+| 2   | Match-key validation accepts All                             | US-1/3  | `sopMatchKey.ts` (+test), `templates.ts` asserts                                   |
+| 3   | Wizard All-states option + write path                        | US-1    | `TemplateWizard.tsx`                                                               |
+| 4   | Global author path (if RPC body needs a comment/guard tweak) | US-1/3  | `author_global_sop` migration **only if** live body rejects All; else service-only |
+| 5   | Close TD-47 + wiki one-liner                                 | US-4    | `TECH-DEBT.md`, `docs/wiki/payer-setup.md` if needed                               |
 
 **Suggested split:** (1)+(2) pure/resolver PR → (3)+(5) UI/docs. Keep under bite-size
-rules (~one behavior per PR).
+rules (~one behavior per PR). Single build PR is OK if still reviewable.
 
 ---
 
-## Claude / Cursor build handoff (after spike merges + PM ack)
+## Claude / Cursor build handoff (PM acked — ready to code)
 
 ```
-Implements Slice 3 from docs/ops/slice-3-sop-all-states-spike.md
-(LOCKED D3.1–D3.7 — confirm D3.1 is Option A before coding).
-Branch: cursor/3m-slice-3-sop-all-states-build-3a65 off main.
+Implements Slice 3 US-1..US-4 from docs/ops/slice-3-sop-all-states-spike.md
+(PM ack: D3.1 A; D3.2–D3.7 as written).
+Branch: cursor/3m-slice-3-sop-all-states-build-3adf off main.
 Bind skill: .cursor/skills/minted-3m-audit/ (PR #273).
 Rules: AGENTS.md; additive only; never self-merge; draft PR.
+Prefer merge #279 first if still open (TS-110 attach-defaults e2e).
 
-Must:
-- ALL_STATES_SENTINEL = 'All'
-- pickTemplate ranks per D3.3; exact beats All; org beats global
-- Wizard offers All states; writers persist 'All'
-- orgSopMatchKeyError / author path accept 'All' (not null)
-- Unit tests for ranks + uniqueness coexistence
-- Close TD-47 when shipped
+Must (map to US/AC in spike §User stories):
+- ALL_STATES_SENTINEL = 'All' (US-1)
+- pickTemplate ranks per D3.3; exact beats All; org beats global (US-2)
+- Wizard offers All states; writers persist 'All' (US-1)
+- orgSopMatchKeyError / author path accept 'All' (not null) (US-1/3)
+- Unit tests for ranks + uniqueness coexistence (US-2/3)
+- Close TD-47 when shipped (US-4)
+- PR body checklist = US-1..US-4 AC rows
 
-Must not:
+Must not (US-4 / D3.7):
 - Reopen Ready / attach / purge / org_payer_assignments removal
-- states text[] unless PM flipped D3.1 to B
+- states text[] (Option B deferred)
 - Null Any-state
 - Extension changes
 - Slice 5
 
-Stop at draft PR + D3 checklist in PR body.
+Stop at draft PR + US/AC checklist in PR body.
 ```
-
 ---
 
 ## Verify (build acceptance)
