@@ -1,8 +1,8 @@
 # Slice 3 spike — SOP All-states / multi-state match
 
 **Status:** spike complete (2026-08-10) — **PM ack recorded 2026-08-10:
-`D3.1 A; D3.2–D3.7 as written`.** Build targets §User stories below. No product
-code in this PR.  
+`D3.1 A; D3.2–D3.7 as written`; follow-up flip `D3.3-G` (group before
+ownership).** Build targets §User stories below. No product code in this PR.  
 **Branch / PR:** `cursor/3m-slice-3-sop-all-states-spike-3a65`  
 **Lane:** corrected 3M payer-setup plan. Skill: `.cursor/skills/minted-3m-audit/`
 (PR #273).  
@@ -18,7 +18,8 @@ Companion: [`repo-workflow.md`](./repo-workflow.md) ·
 
 ```
 Mandate: Continue corrected 3M payer-setup plan.
-Next: Slice 3 BUILD — PM ack locked (D3.1 A; D3.2–D3.7 as written).
+Next: Slice 3 BUILD — PM ack locked (D3.1 A; D3.2–D3.7 as written;
+      D3.3-G = group specificity before ownership).
       Implement US-1..US-4 in §User stories (this file).
 
 Draft PRs:
@@ -30,7 +31,9 @@ Draft PRs:
 Prior merged: #277 Ready/attach · #274 create_payer S0 · #275 purge code
 
 Locked (do not re-litigate):
-- D3.1 = Option A (state='All'); D3.2–D3.7 as written in this spike
+- D3.1 = Option A (state='All'); D3.2–D3.7 as written
+- D3.3-G: rank state specificity → group specificity → ownership
+  (breaks E4.2 “org any beats global exact-group” — intentional)
 - Ready = checklist SOP; autofill = badge; form mapper stays
 - Attach: defaults only; don't reverse E6.2
 - Keep org_payer_assignments unless reopened
@@ -129,54 +132,50 @@ Constant lives in one place (recommend `src/lib/sopMatchKey.ts` or
 `pickTemplate.ts`) and every writer/reader imports it — no scattered `"all"` /
 `"ALL"` literals.
 
-### D3.3 — `pickTemplate` ranked tiers (group + state first; ownership wall inherited)
+### D3.3 — `pickTemplate` ranked tiers (**D3.3-G locked**)
 
-**Grain truth:** a case key is `(payer, state, group)`. Contracts and attach
-defaults are also group×payer. Org is tenancy / override ownership — not the
-primary attachment of a payer. US-2 must lead with **exact group > any-group**
-and **exact state > All**, not “org beats global.”
+**PM flip (2026-08-10):** group specificity before ownership. Org is tenancy /
+override ownership — not the primary attachment of a payer. Case grain stays
+`(payer, state, group)`.
 
-Extend `candidateRank` — array order stays non-load-bearing. Default table
-below **inserts All inside the existing E4.2 ownership wall** (org block, then
-global block, then fallback). That wall is pre-Slice-3; it already makes
-`org any-group` beat `global exact-group` today.
+**Sort keys (lower rank wins):**
 
-| Rank | Ownership        | State   | Group                 |
-| ---- | ---------------- | ------- | --------------------- |
-| 1    | org              | exact   | exact                 |
-| 2    | org              | exact   | any (`group_id` null) |
-| 3    | org              | **All** | exact                 |
-| 4    | org              | **All** | any                   |
-| 5    | global payer     | exact   | exact                 |
-| 6    | global payer     | exact   | any                   |
-| 7    | global payer     | **All** | exact                 |
-| 8    | global payer     | **All** | any                   |
-| 9    | generic fallback | —       | —                     |
+1. **State specificity** — exact two-letter > `All` > (fallback has no payer/state)
+2. **Group specificity** — exact group > any-group (`group_id` null). Different
+   group never qualifies.
+3. **Ownership** — org > global payer > generic fallback
+
+Extend `candidateRank` — array order stays non-load-bearing:
+
+| Rank | State   | Group                 | Ownership        |
+| ---- | ------- | --------------------- | ---------------- |
+| 1    | exact   | exact                 | org              |
+| 2    | exact   | exact                 | global payer     |
+| 3    | exact   | any (`group_id` null) | org              |
+| 4    | exact   | any                   | global payer     |
+| 5    | **All** | exact                 | org              |
+| 6    | **All** | exact                 | global payer     |
+| 7    | **All** | any                   | org              |
+| 8    | **All** | any                   | global payer     |
+| 9    | —       | —                     | generic fallback |
+
+**Intentional E4.2 break:** `global exact + exact group` (rank 2) beats
+`org exact + any-group` (rank 3). Old E4.2 had org any-group beat global
+exact-group; D3.3-G reverses that. Update `pickTemplate.ts` header comments and
+existing tests that assert the old wall.
 
 Pinned properties (unit-test these first, before UI):
 
-1. Exact-state template always beats All for the same ownership + group grain.
-2. Exact-group template always beats any-group for the same ownership + state
-   grain. A template for a **different** group never matches.
-3. Wrong payer never matches; archived never matches.
-4. Fallback still last; All never masquerades as fallback (fallback stays
+1. Exact-state always beats All (including across ownership — global exact
+   exact-group beats org All exact-group).
+2. Exact-group always beats any-group at the same state specificity (including
+   across ownership — global exact exact-group beats org exact any-group).
+3. At equal state + group specificity, org beats global.
+4. Wrong payer never matches; archived never matches; different group never
+   matches.
+5. Fallback still last; All never masquerades as fallback (fallback stays
    payerless global).
-5. **Ownership wall (inherited E4.2, not Slice-3 intent):** org block still
-   outranks the entire global block — so org All can beat global exact. If PM
-   wants group affinity to outrank ownership (e.g. global exact-group beats
-   org All / org any-group), that is **D3.3-G** below — reopen explicitly;
-   do not silently change E4.2 inside this slice.
 
-#### D3.3-G — optional reopen (not default; needs PM)
-
-If payers-are-group-attached should beat org ownership when ranking:
-
-| Priority idea                                                         | Effect                                                                              |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Rank by state specificity, then group specificity, then ownership     | `global exact + exact group` beats `org All + any group` (and possibly org any)     |
-
-Only adopt D3.3-G with an explicit PM flip — it changes live E4.2 behavior for
-exact-state rows too, not just All.
 ### D3.4 — Uniqueness / coexistence
 
 - **Allowed:** active exact `NC` **and** active `All` for the same
@@ -203,7 +202,7 @@ exact-state rows too, not just All.
 ### D3.6 — Consumers
 
 No parallel matchers. Everything that resolves a template for a case key already
-calls `pickTemplate` (generation confirm, readiness, stamps). After D3.3 they
+calls `pickTemplate` (generation confirm, readiness, stamps). After D3.3-G they
 inherit All-states for free. Do **not** special-case the #277 Ready funnel
 (checklist presence, not per-state coverage).
 
@@ -223,7 +222,7 @@ inherit All-states for free. Do **not** special-case the #277 Ready funnel
 ## User stories + acceptance criteria (build target)
 
 These four stories are what the Slice 3 **build** PR implements and what the PR
-body’s checklist maps to. Trace: US-1 → D3.1/D3.2/D3.5 · US-2 → D3.3/D3.6 ·
+body’s checklist maps to. Trace: US-1 → D3.1/D3.2/D3.5 · US-2 → D3.3-G/D3.6 ·
 US-3 → D3.4 · US-4 → D3.6/D3.7.
 
 ### US-1 — Author one payer checklist for all case states
@@ -243,21 +242,22 @@ US-3 → D3.4 · US-4 → D3.6/D3.7.
 ### US-2 — Resolve the right SOP for a case’s payer × group × state
 
 **As** generation / readiness / stamping,  
-**I want** `pickTemplate` to treat All-states as a state wildcard on the same
-grain cases already use (**payer + group + state**),  
-**so that** a group-specific exact SOP still wins over a broader All, and All
-only fills gaps — not so that “org beats global” becomes the story.
+**I want** `pickTemplate` to rank by **state specificity → group specificity →
+ownership** (D3.3-G),  
+**so that** a group-exact payer SOP beats a broader any-group org override, and
+All only fills gaps when no exact-state match exists.
 
 | #     | Acceptance criterion                                                                                                                                                                                                 |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC2.1 | Insert All as a **state** wildcard inside each existing ownership × group slot (D3.3 table). No second matcher.                                                                                                      |
-| AC2.2 | **Exact state beats All** for the same ownership + group grain (exact-group NC beats All for that group; exact any-group NC beats All any-group).                                                                    |
-| AC2.3 | **Exact group beats any-group** for the same ownership + state grain. A template authored for a different group never resolves.                                                                                      |
-| AC2.4 | Wrong payer never matches; archived never matches.                                                                                                                                                                   |
-| AC2.5 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                                                                                                                 |
-| AC2.6 | A template with `state=All` + matching group grain resolves for concrete case states (e.g. NC and SC) when no better (exact-state) match exists.                                                                     |
-| AC2.7 | Unit tests pin AC2.2–AC2.6 **before** UI ships.                                                                                                                                                                      |
-| AC2.8 | **Ownership wall:** default build keeps E4.2 (org block before global block). Call out in PR that org All may beat global exact as an *inherited* consequence — not a Slice-3 goal. Flip only if PM picks **D3.3-G**. |
+| AC2.1 | `candidateRank` implements the D3.3-G nine ranks (table above). No second matcher.                                                                                                                                   |
+| AC2.2 | **Exact state beats All** at every ownership/group combination (e.g. global exact + exact group beats org All + exact group).                                                                                        |
+| AC2.3 | **Exact group beats any-group** at the same state specificity **across ownership** (e.g. global exact + exact group beats org exact + any-group). Different group never resolves.                                    |
+| AC2.4 | At equal state + group specificity, **org beats global**.                                                                                                                                                            |
+| AC2.5 | Wrong payer never matches; archived never matches.                                                                                                                                                                   |
+| AC2.6 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                                                                                                                 |
+| AC2.7 | A template with `state=All` + matching group grain resolves for concrete case states (e.g. NC and SC) when no better (exact-state) match exists.                                                                     |
+| AC2.8 | Existing E4.2 tests that assert “org any-group beats global exact-group” are **rewritten** to the D3.3-G expectation; `pickTemplate.ts` header comments updated.                                                      |
+| AC2.9 | Unit tests pin AC2.2–AC2.8 **before** UI ships.                                                                                                                                                                      |
 
 ### US-3 — Exact + All can share a payer; two Alls cannot
 
@@ -289,7 +289,7 @@ only fills gaps — not so that “org beats global” becomes the story.
 | Verify # (below) | Stories   |
 | ---------------- | --------- |
 | 1, 5             | US-1      |
-| 1–3, 6           | US-2      |
+| 1–3, 6, 9        | US-2      |
 | 2, 4             | US-3      |
 | 7                | US-4      |
 | 8                | all (CI)  |
@@ -394,14 +394,15 @@ Stop at draft PR + US/AC checklist in PR body.
 
 ## Verify (build acceptance)
 
-1. Template with `state=All`, any-group → resolves for case states NC and SC
-2. Exact `NC` org template beats All when both exist for same payer/group
-3. Org All beats global exact NC for an org-owned case key
+1. Template with `state=All`, matching group grain → resolves for case states NC and SC
+2. Exact `NC` template beats All when both exist for same ownership + group grain
+3. Exact-group match beats any-group for the same ownership + state (different group never leaks)
 4. Second active All for same payer/group blocked (org UI error + global RPC)
 5. Wizard shows All states; saving round-trips `'All'`
 6. Fallback still only when no payer template matches
 7. #277 Ready still checklist-only (All vs exact does not flip Ready by itself)
 8. CI: targeted vitest + `tsc --noEmit`
+9. (Inherited E4.2 / AC2.8) Unless D3.3-G: org block still outranks global — document, don’t celebrate as All-states intent
 
 ---
 
