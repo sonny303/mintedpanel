@@ -56,13 +56,14 @@ Never one PR. Require a spike doc with D-decisions first (see Slice 6), then:
 ### BITE-<area>-<nn>: <title>
 
 - **3M:** Muri | Mura | Muda
+- **Cadence:** daily | setup | once-payer | ops | rare
 - **Repos:** panel | extension | both | ops
 - **Depends on:** none | BITE-…
 - **Problem:** ≤2 sentences
 - **Change:** bullets, files if known
 - **AC:** 2–5 checks
 - **Out of scope:** explicit
-- **PM decision needed:** none | question
+- **PM decision needed:** none | question (include code evidence if ruling)
 ```
 
 ## Anti-patterns
@@ -71,3 +72,15 @@ Never one PR. Require a spike doc with D-decisions first (see Slice 6), then:
 - Recommendations that are only “investigate” with no exit criteria.
 - Re-opening signed D-decisions as soft suggestions.
 - Hosted ops buried inside a code bite — split **ops** bites.
+- Ranking by severity while ignoring **cadence** (daily vs once-per-payer).
+- Claiming source-grep / `toContain` harness asserts as behavioral wiring proof.
+- Naming OPA-RETIRE “Slice 3” or GEN-SILENT “Slice 5”.
+
+## Cadence tag (add to every bite)
+
+```markdown
+- **Cadence:** daily | setup | once-payer | ops | rare
+```
+
+Daily provider→cases beats once-per-payer Train when both are open unless PM
+re-orders.

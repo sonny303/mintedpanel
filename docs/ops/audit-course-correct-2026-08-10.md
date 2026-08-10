@@ -78,7 +78,7 @@ Announce merges as **repo-green**; never imply production-live without ops.
 | **Payer-setup Slice 5** (out) | Generation-reason visibility (+ sidepanel extract) | Prefer **GEN-SILENT** / **TD-50** |
 
 Prefer **GEN-SILENT** / **OPA-RETIRE** / **TD-*** IDs in chat over bare “Slice N.”
-If R1 resolves to retire-as-gate, **do not** call that work “Slice 3” — #280 already owns that label.
+R1 = retire-as-gate is **locked** — that follow-on is **OPA-RETIRE**, never “Slice 3.”
 ---
 
 ## TRAIN-DUAL status (honest)
