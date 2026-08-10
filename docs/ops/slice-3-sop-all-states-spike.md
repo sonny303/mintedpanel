@@ -13,6 +13,34 @@ Companion: [`repo-workflow.md`](./repo-workflow.md) ·
 
 ---
 
+## Next-agent packet (paste-ready)
+
+```
+Mandate: Continue corrected 3M payer-setup plan.
+Next: Slice 3 BUILD only after PM acks D3.1–D3.7 in this file
+      (spike default D3.1 = Option A, state='All').
+
+Draft PRs:
+- #278 this spike (docs) — merge after CI green + PM ack of decisions
+- #273 minted-3m-audit skill — bind .cursor/skills/minted-3m-audit/; don't paste audit
+- #279 e2e hotfix for #277 attach defaults (merge first if still open)
+
+Prior merged: #277 Ready/attach · #274 create_payer S0 · #275 purge code
+Branch prior: cursor/3m-payer-ready-attach-defaults-b4fa
+
+Locked (do not re-litigate):
+- Ready = checklist SOP; autofill = badge; form mapper stays
+- Attach: defaults only; don't reverse E6.2
+- Keep org_payer_assignments unless reopened
+- No DELETE without second PM sign-off (#275)
+- Slice 5 out unless asked
+
+Build handoff after ack: see § Claude / Cursor build handoff below.
+Stop: draft PR + D3 checklist in body; never self-merge.
+```
+
+---
+
 ## Do not confuse two “Slice 3” names
 
 | Name                                                           | Meaning                                                               | Status                                                                            |
