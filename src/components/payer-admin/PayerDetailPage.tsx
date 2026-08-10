@@ -4,16 +4,16 @@
 // · Cases · Templates · Scorecard · Manage) and makes identity EDITABLE in
 // place (§2.11) by reusing Slice B's PayerDetailsForm — never a second form.
 //
-// The payer is resolved from the GLOBAL catalog read (list_global_payers), not
-// getPayer: the RLS or-filter can't see an UNASSIGNED global row, and this
-// page must render for a payer the org hasn't adopted yet (the Slice B
-// near-match "Use this one" hand-off lands here).
+// The payer is resolved from the GLOBAL catalog read (list_global_payers).
+// OPA-RETIRE: RLS now shows unassigned globals; adoption = active
+// payer_network_targets (not org_payer_assignments). This page must still
+// render for a payer the org hasn't adopted yet (the Slice B near-match
+// "Use this one" hand-off lands here).
 //
 // Tab bodies mount lazily — each owns its own hooks, so opening Overview never
 // fetches the scorecard's fill/status-history caches.
 import { useMemo, useRef } from "react";
 import { Link } from "@tanstack/react-router";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
@@ -24,21 +24,18 @@ import { PayerOverviewTab } from "@/components/payer-admin/PayerOverviewTab";
 import { PayerScorecardPanel } from "@/components/payer-admin/PayerScorecardPanel";
 import { PayerTemplatesTab } from "@/components/payer-admin/PayerTemplatesTab";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
-import {
-  useAddAssignment,
-  useOrgPayerAssignments,
-  useReactivateAssignment,
-} from "@/hooks/useOrgPayerAssignments";
-import { assignmentsByPayerId, catalogAction } from "@/lib/payerCatalogActions";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
+import { catalogAction } from "@/lib/payerCatalogActions";
 import { PAYER_KIND_LABELS } from "@/lib/payerDirectory";
 import {
   PAYER_DETAIL_TABS,
   PAYER_DETAIL_TAB_LABELS,
   type PayerDetailTab,
 } from "@/lib/payerDetailView";
+import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
 import { useIsAdmin } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import type { OrgPayerAssignment, Payer, PayerCatalogStatus, PayerKind } from "@/types";
+import type { Payer, PayerCatalogStatus, PayerKind } from "@/types";
 
 const KIND_PILL: Record<PayerKind, StatusColor> = {
   commercial: "brand",
@@ -85,7 +82,7 @@ export function PayerDetailPage({
   startEditing = false,
 }: PayerDetailPageProps) {
   const payersQ = useGlobalPayers();
-  const assignmentsQ = useOrgPayerAssignments();
+  const targetsQ = usePayerNetworkTargets();
   const isAdmin = useIsAdmin();
   // WAI-ARIA tabs: one tab stop for the whole strip (roving tabindex), arrows
   // move between tabs, and focus follows selection so the stop stays coherent.
@@ -114,18 +111,14 @@ export function PayerDetailPage({
     e.preventDefault();
     selectTab(PAYER_DETAIL_TABS[next]);
   };
-  const addMut = useAddAssignment();
-  const reactivateMut = useReactivateAssignment();
 
   const payers = useMemo(() => payersQ.data ?? [], [payersQ.data]);
   const payer = useMemo(() => payers.find((p) => p.id === payerId) ?? null, [payers, payerId]);
   const payerById = useMemo(() => new Map(payers.map((p) => [p.id, p])), [payers]);
-  const assignment = useMemo(
-    () =>
-      assignmentsByPayerId((assignmentsQ.data as OrgPayerAssignment[] | undefined) ?? []).get(
-        payerId,
-      ),
-    [assignmentsQ.data, payerId],
+  const targets = useMemo(() => targetsQ.data ?? [], [targetsQ.data]);
+  const inNetwork = useMemo(
+    () => networkPayerIdsFromTargets(targets).has(payerId),
+    [targets, payerId],
   );
 
   if (payersQ.isError) {
@@ -173,23 +166,9 @@ export function PayerDetailPage({
   const kind = payer.payerKind ?? "commercial";
   const status = STATUS_PILL[payer.status ?? "active"];
   const states = payer.states ?? [];
-  const action = catalogAction(payer, assignment, payerById);
-  const canManage = isAdmin && assignmentsQ.data !== undefined;
+  const action = catalogAction(payer, inNetwork, payerById);
+  const canManage = isAdmin && targetsQ.data !== undefined;
   const mergedInto = payer.mergedIntoId ? (payerById.get(payer.mergedIntoId) ?? null) : null;
-  const networkPending = addMut.isPending || reactivateMut.isPending;
-
-  const handleAdd = () => {
-    addMut.mutate(payer.id, {
-      onSuccess: () => toast.success(`${payer.name} added to your network`),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't add the payer"),
-    });
-  };
-  const handleReactivateAssignment = () => {
-    reactivateMut.mutate(payer.id, {
-      onSuccess: () => toast.success(`${payer.name} is back in your network`),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't reactivate the payer"),
-    });
-  };
 
   return (
     <div className="space-y-4">
@@ -227,11 +206,11 @@ export function PayerDetailPage({
             </p>
           ) : null}
         </div>
-        {/* The only network verbs left on this page are ADDING (and the
-            follow-on scope hand-off): removal collapsed into Archive on the
+        {/* Network membership is target-derived (OPA-RETIRE). Adoption happens
+            via group attach on /groups; removal collapsed into Archive on the
             Manage tab (§2.2). */}
         {/* The successor is named ONCE — by the merged-into line above, which
-            links it. This says only why there is no Add button. */}
+            links it. This says only why there is no Attach button. */}
         {action.kind === "unavailable" ? (
           <span className="flex-none self-center text-[12px] text-muted-foreground">
             {action.reason === "merged" ? "Merged" : "Retired"} — can&apos;t be added
@@ -246,23 +225,11 @@ export function PayerDetailPage({
         ) : null}
         {canManage && action.kind === "add" ? (
           <Button
+            asChild
             size="sm"
             className="h-8 flex-none bg-[#1B4D3E] px-3 text-[12px] text-white hover:bg-[#163F33]"
-            disabled={networkPending}
-            onClick={handleAdd}
           >
-            Add to my network
-          </Button>
-        ) : null}
-        {canManage && action.kind === "reactivate" ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 flex-none px-3 text-[12px]"
-            disabled={networkPending}
-            onClick={handleReactivateAssignment}
-          >
-            Add back to my network
+            <Link to="/groups">Attach to a group</Link>
           </Button>
         ) : null}
       </header>
