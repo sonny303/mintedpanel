@@ -174,19 +174,16 @@ async function fulfillSupabase(route: Route) {
         delegation_note: body.p_delegation_note ?? null,
       });
       db.payers.push(row);
-      // 3M Slice 6 D6.1 — the harness mirrors the RPC's own branch: the
-      // assignment row is written ONLY when the caller asked for it. An
-      // omitted param still means "assign" (the SQL default), so the
-      // pre-Slice-6 behaviour is what a caller that says nothing gets.
-      if (body.p_assign_to_org !== false) {
-        db.org_payer_assignments.push({
-          id: `as-${db.org_payer_assignments.length + 1}`,
-          org_id: ORG_ID,
-          payer_id: row.id,
-          starter: false,
-          status: "active",
-        });
-      }
+      // The harness mirrors the LIVE create_payer: adoption is unconditional
+      // ("creating = adding"), in the same transaction as the identity insert.
+      // The Slice 6 p_assign_to_org branch is gone with the retired migration.
+      db.org_payer_assignments.push({
+        id: `as-${db.org_payer_assignments.length + 1}`,
+        org_id: ORG_ID,
+        payer_id: row.id,
+        starter: false,
+        status: "active",
+      });
       return json(row);
     }
     if (fn === "update_payer") {
@@ -337,9 +334,8 @@ test("details — new: required fields, aliases, ID expectations → create_paye
 
   await page.getByLabel("Delegation note").fill("Roster adds process in 30 days.");
 
-  // Slice 6 D6.2: adoption is ON by default — this route is entered from
-  // Payer Setup, where "set this payer up for my network" is the intent.
-  await expect(page.getByLabel("Also add to my network")).toBeChecked();
+  // Creating a payer adds it — there is no adoption choice to make.
+  await expect(page.getByLabel("Also add to my network")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Create payer" }).click();
 
@@ -358,68 +354,18 @@ test("details — new: required fields, aliases, ID expectations → create_paye
     p_provider_id_label: "Banner Provider Number",
     p_group_id_expected: false,
     p_delegation_note: "Roster adds process in 30 days.",
-    p_assign_to_org: true,
   });
   expect(body.p_group_id_label ?? null).toBeNull();
+  // The live create_payer declares no p_assign_to_org. PostgREST resolves by
+  // named-argument set, so sending it made the function unresolvable and broke
+  // creation outright — this is the wire-level pin on that regression.
+  expect(body).not.toHaveProperty("p_assign_to_org");
   expect(tableWrites.filter((w) => w.table === "payers")).toEqual([]);
 
   // Creating lands on the new payer, already in the org's network.
   await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\/payer-new-/, { timeout: 15000 });
   await expect(page.getByRole("heading", { name: "Banner Health Plans" })).toBeVisible();
   await expect(page.getByText("In my network")).toBeVisible();
-});
-
-// 3M Slice 6 / D6.1 + D6.2 — the second intent. Platform setup (payer → SOP →
-// shared portal → train → map) does not need an org to have adopted the payer,
-// so unticking "Also add to my network" must author the catalog identity ALONE:
-// no assignment on the wire, a confirmation that does not claim network
-// membership, and a detail page offering adoption as the next step.
-test("details — new: unticking 'Also add to my network' creates the catalog record only", async ({
-  page,
-}) => {
-  await page.goto("/admin/payers/new");
-  await page.getByLabel("Payer name", { exact: true }).fill("Sunrise Health Network");
-  await page.getByRole("button", { name: "Continue" }).click();
-
-  await page.getByLabel("Payer kind").click();
-  await page.getByRole("option", { name: "Commercial" }).click();
-  await page.getByLabel("States this payer operates in").click();
-  await page.getByRole("option", { name: "AZ", exact: true }).click();
-  await page.getByRole("button", { name: "Done" }).click();
-
-  const assignToggle = page.getByLabel("Also add to my network");
-  await expect(assignToggle).toBeChecked();
-  await assignToggle.uncheck();
-  // The helper text stops promising Payer Setup once adoption is off.
-  await expect(page.getByText(/Creates the catalog record only/)).toBeVisible();
-
-  await page.getByRole("button", { name: "Create payer" }).click();
-
-  await expect
-    .poll(() => rpcCalls.filter((c) => c.path === "create_payer").length, { timeout: 15000 })
-    .toBe(1);
-  const body = rpcCalls.find((c) => c.path === "create_payer")?.body ?? {};
-  // The org is STILL sent — it authorizes the write and owns the audit row.
-  expect(body).toMatchObject({
-    p_org_id: ORG_ID,
-    p_name: "Sunrise Health Network",
-    p_assign_to_org: false,
-  });
-  // Nothing adopted the payer: no assignment row, and no table write at all.
-  expect(db?.org_payer_assignments.some((a) => a.payer_id !== AETNA_ID)).toBe(false);
-  expect(tableWrites).toEqual([]);
-
-  // The confirmation says what actually happened — claiming "added to your
-  // network" would send the user looking for it in a list it is not in.
-  await expect(page.getByText("Sunrise Health Network created in the payer catalog")).toBeVisible();
-  await expect(page.getByText(/added to your network/)).toHaveCount(0);
-
-  // Detail renders for a payer the org has NOT adopted (it resolves through
-  // list_global_payers, not the assignment-gated read) and offers adoption.
-  await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\/payer-new-/, { timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Sunrise Health Network" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add to my network" })).toBeVisible();
-  await expect(page.getByText("In my network")).toHaveCount(0);
 });
 
 test("duplicate rejection renders inline and keeps the form", async ({ page }) => {
