@@ -15,10 +15,10 @@ Companion: [`repo-workflow.md`](./repo-workflow.md) ·
 
 ## Do not confuse two “Slice 3” names
 
-| Name | Meaning | Status |
-| --- | --- | --- |
-| **This spike** — SOP All-states | One payer checklist covers every case state without N template clones | **In scope** |
-| **#274 prose** — “Slice 3 = drop `org_payer_assignments` gate” | Adoption-layer rewrite implied while fixing `create_payer` | **Out of scope / locked closed** — keep `org_payer_assignments` unless PM reopens |
+| Name                                                           | Meaning                                                               | Status                                                                            |
+| -------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **This spike** — SOP All-states                                | One payer checklist covers every case state without N template clones | **In scope**                                                                      |
+| **#274 prose** — “Slice 3 = drop `org_payer_assignments` gate” | Adoption-layer rewrite implied while fixing `create_payer`            | **Out of scope / locked closed** — keep `org_payer_assignments` unless PM reopens |
 
 Also **do not reopen** Ready (#277), attach defaults (#277), or catalog purge DELETE
 (#275 — second PM sign-off still required before hosted apply). Slice 5 stays out
@@ -35,17 +35,17 @@ state**, so a multi-state payer either:
 1. duplicates the same SOP per state, or
 2. silently resolves the **generic fallback** for every uncovered state.
 
-| Evidence | Path |
-| --- | --- |
-| Exact `t.state === state` for tiers 1–4 | `src/lib/pickTemplate.ts` `candidateRank` |
-| Org match key forbids null/"Any state" | `src/lib/sopMatchKey.ts` `orgSopMatchKeyError` |
-| Wizard UI deliberately omits All/Any | `TemplateWizard.tsx` — comment “resolver matches states exactly” |
-| Global RPC requires non-empty `p_state` | `author_global_sop` (E6.5 / E6.7) |
-| Design already draws **All states** | `docs/redesign/design-reference/payer-and-cases/4 - Template Editor.dc.html` (`value="all"`) |
-| Debt register | `TECH-DEBT.md` TD-47 — “ranked All-states tier in `pickTemplate`” |
-| Schema already allows `'All'` | `20260710160000_state_format_checks.sql` — `sop_templates.state` **excluded** from `^[A-Z]{2}$` so matching wildcards stay valid |
+| Evidence                                | Path                                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Exact `t.state === state` for tiers 1–4 | `src/lib/pickTemplate.ts` `candidateRank`                                                                                        |
+| Org match key forbids null/"Any state"  | `src/lib/sopMatchKey.ts` `orgSopMatchKeyError`                                                                                   |
+| Wizard UI deliberately omits All/Any    | `TemplateWizard.tsx` — comment “resolver matches states exactly”                                                                 |
+| Global RPC requires non-empty `p_state` | `author_global_sop` (E6.5 / E6.7)                                                                                                |
+| Design already draws **All states**     | `docs/redesign/design-reference/payer-and-cases/4 - Template Editor.dc.html` (`value="all"`)                                     |
+| Debt register                           | `TECH-DEBT.md` TD-47 — “ranked All-states tier in `pickTemplate`”                                                                |
+| Schema already allows `'All'`           | `20260710160000_state_format_checks.sql` — `sop_templates.state` **excluded** from `^[A-Z]{2}$` so matching wildcards stay valid |
 
-**Not the same as `payers.states[]`.** That array is where the payer *operates*
+**Not the same as `payers.states[]`.** That array is where the payer _operates_
 (attach / generation eligibility). SOP coverage is a separate match-key question.
 
 **Not the Ready gate.** After #277, Payer Setup Ready = ≥1 active global SOP with
@@ -58,15 +58,15 @@ the checklist Ready badge.
 
 Two readings appeared in the corrected-plan thread. They are **not equivalent**.
 
-| | **A — Literal All-states sentinel** | **B — `states text[]` multi-cover** |
-| --- | --- | --- |
-| Storage | Existing `sop_templates.state = 'All'` (wire casing locked below) | Additive `sop_templates.states text[]` (+ keep or migrate scalar `state`) |
-| Match | Exact two-letter wins; else template with sentinel matches any case state | Exact scalar (if kept) wins; else `case.state ∈ template.states` |
-| Design mock | Matches screen 4 (“All states” option) | Not in the mock; more flexible than design |
-| Schema | **No column** — format floor already carved out for `'All'` | Additive migration + backfill story |
-| Uniqueness | One active All per `(payer, group)` at org/global tier; exact-state siblings coexist | Overlapping sets (NC+SC vs SC+GA) need exclusion rules — L-sized |
-| Subset cover (NC+SC, not GA) | **No** — All means every state | **Yes** |
-| Effort | M (resolver + RPC/assert + wizard + tests) | L (schema + uniqueness + RPC signature + UI multi-select + every reader) |
+|                              | **A — Literal All-states sentinel**                                                  | **B — `states text[]` multi-cover**                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Storage                      | Existing `sop_templates.state = 'All'` (wire casing locked below)                    | Additive `sop_templates.states text[]` (+ keep or migrate scalar `state`) |
+| Match                        | Exact two-letter wins; else template with sentinel matches any case state            | Exact scalar (if kept) wins; else `case.state ∈ template.states`          |
+| Design mock                  | Matches screen 4 (“All states” option)                                               | Not in the mock; more flexible than design                                |
+| Schema                       | **No column** — format floor already carved out for `'All'`                          | Additive migration + backfill story                                       |
+| Uniqueness                   | One active All per `(payer, group)` at org/global tier; exact-state siblings coexist | Overlapping sets (NC+SC vs SC+GA) need exclusion rules — L-sized          |
+| Subset cover (NC+SC, not GA) | **No** — All means every state                                                       | **Yes**                                                                   |
+| Effort                       | M (resolver + RPC/assert + wizard + tests)                                           | L (schema + uniqueness + RPC signature + UI multi-select + every reader)  |
 
 **Spike recommendation: Option A** for the build that closes TD-47 / F4. Defer
 Option B until a real payer needs a proper subset (not “all of this payer’s
@@ -90,10 +90,10 @@ control “All states”, not “Any state”.
 
 ### D3.2 — Wire / display form of the sentinel
 
-| Layer | Value |
-| --- | --- |
-| Stored / RPC / `pickTemplate` | `'All'` (capital A — matches the 2026-07-10 migration comment + MSO `'All'` precedent) |
-| Wizard `<SelectItem>` | `value="All"`, label **All states** (design used lowercase `all` — normalize at write via the same path as `normalizeStateCode` **must not** run; use an explicit `ALL_STATES_SENTINEL` constant) |
+| Layer                         | Value                                                                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stored / RPC / `pickTemplate` | `'All'` (capital A — matches the 2026-07-10 migration comment + MSO `'All'` precedent)                                                                                                            |
+| Wizard `<SelectItem>`         | `value="All"`, label **All states** (design used lowercase `all` — normalize at write via the same path as `normalizeStateCode` **must not** run; use an explicit `ALL_STATES_SENTINEL` constant) |
 
 Constant lives in one place (recommend `src/lib/sopMatchKey.ts` or
 `pickTemplate.ts`) and every writer/reader imports it — no scattered `"all"` /
@@ -103,17 +103,17 @@ Constant lives in one place (recommend `src/lib/sopMatchKey.ts` or
 
 Extend `candidateRank` — array order stays non-load-bearing:
 
-| Rank | Ownership | State | Group |
-| --- | --- | --- | --- |
-| 1 | org | exact | exact |
-| 2 | org | exact | any (`group_id` null) |
-| 3 | org | **All** | exact |
-| 4 | org | **All** | any |
-| 5 | global payer | exact | exact |
-| 6 | global payer | exact | any |
-| 7 | global payer | **All** | exact |
-| 8 | global payer | **All** | any |
-| 9 | generic fallback | — | — |
+| Rank | Ownership        | State   | Group                 |
+| ---- | ---------------- | ------- | --------------------- |
+| 1    | org              | exact   | exact                 |
+| 2    | org              | exact   | any (`group_id` null) |
+| 3    | org              | **All** | exact                 |
+| 4    | org              | **All** | any                   |
+| 5    | global payer     | exact   | exact                 |
+| 6    | global payer     | exact   | any                   |
+| 7    | global payer     | **All** | exact                 |
+| 8    | global payer     | **All** | any                   |
+| 9    | generic fallback | —       | —                     |
 
 Pinned properties (unit-test these first, before UI):
 
@@ -169,14 +169,14 @@ inherit All-states for free. Do **not** special-case the #277 Ready funnel
 
 ## Schema / RPC impact (Option A — no new column)
 
-| Object | Change |
-| --- | --- |
-| `sop_templates.state` | None (already wildcard-capable) |
-| `uq_sop_templates_active_org_match` | None |
-| `author_global_sop` | Allow `p_state = 'All'`; keep “non-empty” check; duplicate guard unchanged |
-| Org `createTemplate` / `updateTemplate` | `assertActiveOrgMatchKeyComplete` accepts All; uniqueness assert accepts All |
-| Types / table-register | Doc note on sentinel; no generated-type change if column unchanged |
-| Hosted apply | **None** for A — pure app + RPC body. If `author_global_sop` is reissued, 3M lane still treats hosted apply as operator step — prefer `CREATE OR REPLACE` only if a body change is required; otherwise keep validation in the TS service and teach the RPC’s incomplete check that `'All'` is complete (it already is — non-empty). |
+| Object                                  | Change                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sop_templates.state`                   | None (already wildcard-capable)                                                                                                                                                                                                                                                                                                     |
+| `uq_sop_templates_active_org_match`     | None                                                                                                                                                                                                                                                                                                                                |
+| `author_global_sop`                     | Allow `p_state = 'All'`; keep “non-empty” check; duplicate guard unchanged                                                                                                                                                                                                                                                          |
+| Org `createTemplate` / `updateTemplate` | `assertActiveOrgMatchKeyComplete` accepts All; uniqueness assert accepts All                                                                                                                                                                                                                                                        |
+| Types / table-register                  | Doc note on sentinel; no generated-type change if column unchanged                                                                                                                                                                                                                                                                  |
+| Hosted apply                            | **None** for A — pure app + RPC body. If `author_global_sop` is reissued, 3M lane still treats hosted apply as operator step — prefer `CREATE OR REPLACE` only if a body change is required; otherwise keep validation in the TS service and teach the RPC’s incomplete check that `'All'` is complete (it already is — non-empty). |
 
 **Option B (if chosen):** additive `states text[]`, RPC arg, uniqueness policy for
 overlaps, wizard multi-select, dual-read period — rewrite this section before
@@ -189,13 +189,13 @@ build.
 **Verified 2026-08-10** (operator SQL Editor against hosted) for the active
 per-payer grain:
 
-| payer_id | state | count |
-| --- | --- | --- |
-| `4983e2ad-…f610c6` | NC | 1 |
-| `225c1eb7-…0f2a6c` | CA | 1 |
-| `6239daa9-…467a90` | OR | 1 |
-| `5e76b166-…a52420` | NC | 1 |
-| `3c823616-…cb3c79` | NC | 1 |
+| payer_id           | state | count |
+| ------------------ | ----- | ----- |
+| `4983e2ad-…f610c6` | NC    | 1     |
+| `225c1eb7-…0f2a6c` | CA    | 1     |
+| `6239daa9-…467a90` | OR    | 1     |
+| `5e76b166-…a52420` | NC    | 1     |
+| `3c823616-…cb3c79` | NC    | 1     |
 
 Read:
 
@@ -220,13 +220,13 @@ Expect empty. Seed fixtures use ordinary two-letter states.
 
 ## Minimal PR map (build — after PM ack)
 
-| # | Change | Files (indicative) |
-| --- | --- | --- |
-| 1 | Sentinel constant + `pickTemplate` ranks 3/4/7/8 + tests | `pickTemplate.ts`, `pickTemplate.test.ts` |
-| 2 | Match-key validation accepts All | `sopMatchKey.ts` (+test), `templates.ts` asserts |
-| 3 | Wizard All-states option + write path | `TemplateWizard.tsx` |
-| 4 | Global author path (if RPC body needs a comment/guard tweak) | `author_global_sop` migration **only if** live body rejects All; else service-only |
-| 5 | Close TD-47 + wiki one-liner | `TECH-DEBT.md`, `docs/wiki/payer-setup.md` if needed |
+| #   | Change                                                       | Files (indicative)                                                                 |
+| --- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| 1   | Sentinel constant + `pickTemplate` ranks 3/4/7/8 + tests     | `pickTemplate.ts`, `pickTemplate.test.ts`                                          |
+| 2   | Match-key validation accepts All                             | `sopMatchKey.ts` (+test), `templates.ts` asserts                                   |
+| 3   | Wizard All-states option + write path                        | `TemplateWizard.tsx`                                                               |
+| 4   | Global author path (if RPC body needs a comment/guard tweak) | `author_global_sop` migration **only if** live body rejects All; else service-only |
+| 5   | Close TD-47 + wiki one-liner                                 | `TECH-DEBT.md`, `docs/wiki/payer-setup.md` if needed                               |
 
 **Suggested split:** (1)+(2) pure/resolver PR → (3)+(5) UI/docs. Keep under bite-size
 rules (~one behavior per PR).
