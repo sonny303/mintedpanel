@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   PAYER_DETAIL_TABS,
+  autofillSuggestionStep,
   buildPayerCaseRows,
   buildPayerEnrollmentRows,
   parsePayerDetailTab,
   payerMergeCandidates,
   payerTemplateRows,
-  templateIntentForNextAction,
+  templateIntentForFormSuggestion,
   templateNextStep,
   templateStateCoverage,
   type PayerCaseSlice,
@@ -85,43 +86,48 @@ describe("tabs", () => {
 });
 
 describe("template intent mapping", () => {
-  it("maps every form-setup action to a REAL Template Editor intent", () => {
+  it("maps every autofill suggestion to a REAL Template Editor intent", () => {
     // Spelling drift here breaks the deep link silently, so assert against
     // Slice F's shipped union rather than string literals alone.
-    for (const action of [
+    for (const suggestion of [
       "register_portal",
       "train_mappings",
       "repair_drift",
       "run_dry_test",
     ] as const) {
-      const intent = templateIntentForNextAction(action);
-      expect(intent).not.toBeNull();
+      const intent = templateIntentForFormSuggestion(suggestion);
       expect(TEMPLATE_EDITOR_INTENTS).toContain(intent);
     }
-    expect(templateIntentForNextAction("register_portal")).toBe("register");
-    expect(templateIntentForNextAction("train_mappings")).toBe("train");
-    expect(templateIntentForNextAction("repair_drift")).toBe("repair");
-    expect(templateIntentForNextAction("run_dry_test")).toBe("prove");
+    expect(templateIntentForFormSuggestion("register_portal")).toBe("register");
+    expect(templateIntentForFormSuggestion("train_mappings")).toBe("train");
+    expect(templateIntentForFormSuggestion("repair_drift")).toBe("repair");
+    expect(templateIntentForFormSuggestion("run_dry_test")).toBe("prove");
   });
 
-  it("authoring and ready carry no intent", () => {
-    expect(templateIntentForNextAction("author_sop")).toBeNull();
-    expect(templateIntentForNextAction("ready")).toBeNull();
-  });
-
-  it("templateNextStep carries label, ladder position, target and intent", () => {
-    expect(templateNextStep({ nextAction: "repair_drift", sopTemplateId: "t-1" })).toEqual({
-      action: "repair_drift",
-      label: "Repair drift",
-      position: "Form setup · drift",
-      templateId: "t-1",
-      intent: "repair",
-    });
+  it("blocking next-step is only author_sop or ready (no form intent)", () => {
     expect(templateNextStep({ nextAction: "author_sop", sopTemplateId: null })).toMatchObject({
       label: "Author template",
       templateId: null,
       intent: null,
     });
+    expect(templateNextStep({ nextAction: "ready", sopTemplateId: "t-1" })).toMatchObject({
+      action: "ready",
+      intent: null,
+      templateId: "t-1",
+    });
+  });
+
+  it("autofillSuggestionStep carries optional soft CTA + intent", () => {
+    expect(
+      autofillSuggestionStep({ formSuggestion: "repair_drift", sopTemplateId: "t-1" }),
+    ).toEqual({
+      action: "repair_drift",
+      label: "Repair drift",
+      position: "Autofill · drift",
+      templateId: "t-1",
+      intent: "repair",
+    });
+    expect(autofillSuggestionStep({ formSuggestion: null, sopTemplateId: "t-1" })).toBeNull();
   });
 });
 

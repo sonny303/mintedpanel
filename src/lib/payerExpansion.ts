@@ -43,7 +43,9 @@ export interface ExpansionReviewRow extends ExpansionRow {
   existing: ExistingTargetState;
   /** The existing target row id when one exists (for restore). */
   targetId: string | null;
-  /** Default review selection: new rows checked; previously archived rows
+  /** Default review selection: new facility-backed rows checked; zero-facility
+   * states stay visible but unchecked (3M — group-operating-state eligibility
+   * can propose states with no active location yet); previously archived rows
    * PRE-UNCHECKED (F1.5.3 — an archive is a deliberate exception until the
    * reviewer says otherwise); already-active rows stay attached. */
   defaultChecked: boolean;
@@ -63,7 +65,8 @@ export function reviewExpansion(
       ...row,
       existing,
       targetId: match?.id ?? null,
-      defaultChecked: existing === "none",
+      // Keep E6.2 group-operating-state eligibility; only the DEFAULT changes.
+      defaultChecked: existing === "none" && row.facilityCount > 0,
     };
   });
 }

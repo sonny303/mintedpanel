@@ -7,9 +7,10 @@
 // on, and §2.7 forbids putting them back on Payer Setup. So the per-payer
 // next-step affordance lands here, where the payer's own templates are. The
 // param spellings come from Slice F's shipped TEMPLATE_EDITOR_INTENTS via the
-// pure templateIntentForNextAction map (asserted against that union in
+// pure templateIntentForFormSuggestion map (asserted against that union in
 // payerDetailView.test.ts — a silent spelling drift would break the deep link
-// with no error). The E6.5 funnel derivation is REUSED as-is, never re-derived.
+// with no error). The E6.5 funnel derivation is REUSED — Ready is checklist
+// SOP only; autofill is a soft secondary CTA (`autofillSuggestionStep`).
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
@@ -20,7 +21,12 @@ import { useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
 import { fmtDate } from "@/lib/format";
-import { payerTemplateRows, templateNextStep, templateStateCoverage } from "@/lib/payerDetailView";
+import {
+  autofillSuggestionStep,
+  payerTemplateRows,
+  templateNextStep,
+  templateStateCoverage,
+} from "@/lib/payerDetailView";
 import type { Payer } from "@/types";
 
 function NextStepCard({ payer }: { payer: Payer }) {
@@ -37,12 +43,24 @@ function NextStepCard({ payer }: { payer: Payer }) {
 
   const step = templateNextStep(row);
   if (step.action === "ready") {
+    const autofill = autofillSuggestionStep(row);
     return (
       <div className="flex flex-wrap items-center gap-3 rounded-[6px] border border-[#E8E5E0] bg-white px-4 py-3">
         <StatusPill status="green" label="Ready for business" />
-        <span className="text-[12.5px] text-muted-foreground">
-          {row.readyNote ?? "A published template and a proven form — nothing outstanding."}
+        <span className="min-w-[160px] flex-1 text-[12.5px] text-muted-foreground">
+          {row.readyNote ?? "Published enrollment checklist — nothing blocking."}
         </span>
+        {autofill?.templateId ? (
+          <Button asChild size="sm" variant="outline" className="h-8 flex-none">
+            <Link
+              to="/admin/templates/$id"
+              params={{ id: autofill.templateId }}
+              search={autofill.intent ? { intent: autofill.intent } : undefined}
+            >
+              {autofill.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -54,37 +72,12 @@ function NextStepCard({ payer }: { payer: Payer }) {
         {step.position ? (
           <div className="text-[12px] text-muted-foreground">{step.position}</div>
         ) : null}
-        {step.action === "repair_drift" ? (
-          <div className="text-[12px] text-[#B91C1C]">
-            {row.driftCount} broken mapping{row.driftCount === 1 ? "" : "s"} on the last real fill.
-          </div>
-        ) : null}
       </div>
-      {step.templateId ? (
-        <Button
-          asChild
-          size="sm"
-          className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-        >
-          <Link
-            to="/admin/templates/$id"
-            params={{ id: step.templateId }}
-            search={step.intent ? { intent: step.intent } : undefined}
-          >
-            {step.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-          </Link>
-        </Button>
-      ) : (
-        <Button
-          asChild
-          size="sm"
-          className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-        >
-          <Link to="/admin/templates/new" search={{ payerId: payer.id, tier: "global" }}>
-            {step.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-          </Link>
-        </Button>
-      )}
+      <Button asChild size="sm" className="h-8 flex-none bg-[#1B4D3E] text-white hover:bg-[#163F33]">
+        <Link to="/admin/templates/new" search={{ payerId: payer.id, tier: "global" }}>
+          {step.label} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </Link>
+      </Button>
     </div>
   );
 }

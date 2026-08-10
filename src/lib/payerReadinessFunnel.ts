@@ -1,8 +1,12 @@
 // E6.5 F6.5.1 — the per-payer "Ready for business" funnel, the module head of
 // the consolidated Payer Setup workspace. Pure derivation over the GLOBAL
-// catalog tier: a payer is ready when a global SOP is published for it AND —
-// when that SOP actually drives an online form — the form is registered,
-// trained, and proven by a mock dry run, with no unrepaired drift.
+// catalog tier.
+//
+// 3M payer-setup (2026-08-10): Ready means a usable enrollment CHECKLIST —
+// ≥1 active global SOP with ≥1 task. Portal register / train / prove / drift
+// stay computed as non-blocking autofill badges (`formSuggestion`), never as
+// the Ready gate. FormStepPanel / Field Registry stay shipped product; this
+// module only stops treating autofill as the business-readiness ladder.
 //
 // Supersedes the E4.2 org-grain PayerSetupList derivation (payerSetup.ts):
 // org-scoped dimensions (scope targets, blockers, generation state) now live
@@ -13,8 +17,15 @@ import type { PortalFieldMap, SOPTaskDefinition } from "@/types";
 
 export type FunnelFormState = "none" | "registered" | "trained" | "proven";
 
-export type FunnelNextAction =
-  "author_sop" | "register_portal" | "train_mappings" | "repair_drift" | "run_dry_test" | "ready";
+/** Blocking readiness: author a checklist, or the checklist is Ready. */
+export type FunnelNextAction = "author_sop" | "ready";
+
+/** Optional autofill follow-ups — badges / soft CTAs, never the Ready gate. */
+export type FunnelFormSuggestion =
+  | "register_portal"
+  | "train_mappings"
+  | "repair_drift"
+  | "run_dry_test";
 
 export interface FunnelPayerInput {
   id: string;
@@ -44,10 +55,10 @@ export interface FunnelPortalInput {
 export interface FunnelRow {
   payerId: string;
   payerName: string;
-  /** ≥1 active GLOBAL SOP names this payer. */
+  /** ≥1 active GLOBAL SOP with ≥1 task names this payer. */
   sopPublished: boolean;
   sopCount: number;
-  /** The payer's SOPs carry ≥1 online_form step ⇒ a portal is required. */
+  /** The payer's SOPs carry ≥1 online_form step ⇒ autofill may apply. */
   needsPortal: boolean;
   formState: FunnelFormState;
   /** First matched portal key (payer-linked or SOP-step-linked), for links. */
@@ -56,8 +67,10 @@ export interface FunnelRow {
   sopTemplateId: string | null;
   driftCount: number;
   nextAction: FunnelNextAction;
+  /** Autofill follow-up when Ready but form setup is incomplete / drifted. */
+  formSuggestion: FunnelFormSuggestion | null;
   ready: boolean;
-  /** Set when ready without a portal (the SOP has no online form step). */
+  /** Honest Ready copy (no-portal note, or autofill-still-open note). */
   readyNote: string | null;
   /** Any authoring signal at all — the UI splits started vs not-started. */
   started: boolean;
@@ -124,7 +137,11 @@ export function buildPayerReadinessFunnel(input: BuildFunnelInput): FunnelRow[] 
 
   const rows: FunnelRow[] = [];
   for (const payer of input.payers) {
-    const sops = globalSopsByPayer.get(payer.id) ?? [];
+    const allSops = globalSopsByPayer.get(payer.id) ?? [];
+    // Empty taskDefinitions = not a usable checklist yet (still author_sop).
+    const sops = allSops.filter(
+      (s) => Array.isArray(s.taskDefinitions) && s.taskDefinitions.length > 0,
+    );
     const sopPublished = sops.length > 0;
 
     // Portals in play for this payer: payer-linked rows ∪ rows the SOP's own
@@ -156,22 +173,27 @@ export function buildPayerReadinessFunnel(input: BuildFunnelInput): FunnelRow[] 
     for (const p of payerPortals) driftCount += drift.get(p.portalKey)?.length ?? 0;
 
     let nextAction: FunnelNextAction;
+    let formSuggestion: FunnelFormSuggestion | null = null;
     let readyNote: string | null = null;
     if (!sopPublished) {
       nextAction = "author_sop";
-    } else if (!needsPortal) {
-      nextAction = "ready";
-      readyNote = "SOP has no online form step — no portal required";
-    } else if (formState === "none") {
-      nextAction = "register_portal";
-    } else if (driftCount > 0) {
-      nextAction = "repair_drift";
-    } else if (formState === "registered") {
-      nextAction = "train_mappings";
-    } else if (formState === "trained") {
-      nextAction = "run_dry_test";
     } else {
       nextAction = "ready";
+      if (!needsPortal) {
+        readyNote = "SOP has no online form step — no portal required";
+      } else if (formState === "none") {
+        formSuggestion = "register_portal";
+        readyNote = "Checklist ready — autofill portal not registered yet";
+      } else if (driftCount > 0) {
+        formSuggestion = "repair_drift";
+        readyNote = "Checklist ready — autofill has unrepaired drift";
+      } else if (formState === "registered") {
+        formSuggestion = "train_mappings";
+        readyNote = "Checklist ready — autofill mappings not trained yet";
+      } else if (formState === "trained") {
+        formSuggestion = "run_dry_test";
+        readyNote = "Checklist ready — autofill not proven yet";
+      }
     }
 
     rows.push({
@@ -185,6 +207,7 @@ export function buildPayerReadinessFunnel(input: BuildFunnelInput): FunnelRow[] 
       sopTemplateId: sops[0]?.id ?? null,
       driftCount,
       nextAction,
+      formSuggestion,
       ready: nextAction === "ready",
       readyNote,
       started: sopPublished || payerPortals.length > 0,
