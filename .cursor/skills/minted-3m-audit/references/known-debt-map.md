@@ -8,11 +8,11 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 | ----------- | ---- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | OPS-S6      | Muri | ops        | Slice 6 **SOP read** migration may still be unapplied; vault          | Apply `20260809120100` only ( `20260809120000` is **superseded** by #274 ); regen types; vault checklist |
 | OPS-PURGE   | Muri | ops        | #275 catalog DELETE merged but not hosted                             | **Second PM sign-off** then apply; never agent-apply                                                     |
-| TRAIN-DUAL  | Mura | extension  | Train/capture vs recognition disagree on portal                       | Spike dual registry → single pointer → delete secondary                                                  |
-| LISTPORTALS | Mura | extension  | `chrome.storage` portals ignore D6.4 filter                           | Align with API visibility or remove browser list for fill                                                |
+| TRAIN-DUAL  | Mura | extension  | Train dropdown vs URL recognition disagree on capture pointer         | Spike ready: `docs/ops/train-dual-registry-spike.md` — build after PM ack of D-TD.1–D-TD.5                |
+| LISTPORTALS | Mura | panel      | Browser `listPortals()` (RLS own+global) skips D6.4 ghost filter      | Sibling of TRAIN-DUAL D-TD.4 — extension fill already uses filtered `/api/portals`                       |
 | CAPTURE-PHI | Muri | extension  | Labels/values risk in capture path                                    | Audit payload fields; redact; no value logging                                                           |
 | VAULT       | Muri | panel/ops  | E4.4 vault not verified hosted                                        | Ops checklist only                                                                                       |
-| DOC-PICK    | Mura | panel docs | SCHEMA/CLAUDE still describe pre–D3.3-G `pickTemplate` ownership wall | Truth scrub only (no behavior) after #280 merges                                                         |
+| DOC-PICK    | Mura | panel docs | SCHEMA/CLAUDE still describe pre–D3.3-G `pickTemplate` ownership wall | Truth scrub only (no behavior); code + table-register already D3.3-G after #280                          |
 
 ## P1 — active muda / mura
 
@@ -58,4 +58,5 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - `docs/ops/3m-slice-5-closeout.md`
 - `docs/ops/slice-6-platform-org-spike.md`
 - `docs/ops/slice-3-sop-all-states-spike.md` (payer-setup Slice 3 — D3.1 A + D3.3-G locked; build #280)
+- `docs/ops/train-dual-registry-spike.md` (TRAIN-DUAL — pointer + registry; awaiting PM ack)
 - `docs/ops/global-portal-payer-inventory.sql`
