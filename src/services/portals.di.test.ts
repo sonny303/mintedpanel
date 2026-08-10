@@ -1,18 +1,25 @@
 // 3M Slice 6 / D6.4 (F24) — the ghost filter at the SERVICE boundary, where
-// both /api registry reads actually apply it.
+// both /api registry reads and the browser listPortals path apply it.
 //
 // The predicate itself is unit-tested in src/lib/portalVisibility.test.ts.
-// What this suite pins is the wiring the extension depends on: the payer
-// lifecycle columns are really requested (a filter reading columns the query
-// never selected would silently drop everything), the shared route drops
-// ghosts, and the Work route drops GLOBAL ghosts while leaving own-org rows
-// alone.
+// What this suite pins is the wiring the extension + panel pickers depend on:
+// the payer lifecycle columns are really requested (a filter reading columns
+// the query never selected would silently drop everything), the shared route
+// drops ghosts, the Work route drops GLOBAL ghosts while leaving own-org rows
+// alone, and browser listPortals matches that Work rule so SOP/case portal
+// selects cannot offer a ghost fill will never recognize.
 import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
+const browserHolder = vi.hoisted(() => ({
+  from: (_table: string): unknown => {
+    throw new Error("no fake browser db installed");
+  },
+}));
+
 vi.mock("@/integrations/supabase/externalClient", () => ({
-  supabase: { from: () => ({}) },
+  supabase: { from: (table: string) => browserHolder.from(table) },
 }));
 
 vi.mock("@/lib/audit", () => ({
@@ -20,7 +27,7 @@ vi.mock("@/lib/audit", () => ({
   writeAudit: vi.fn(),
 }));
 
-import { listPortalsForApi, listSharedPortals } from "./portals";
+import { listPortals, listPortalsForApi, listSharedPortals } from "./portals";
 
 type Row = Record<string, unknown>;
 
@@ -47,6 +54,13 @@ function fakeDb(rows: Row[]): { db: SupabaseClient<Database>; captured: Captured
     Promise.resolve({ data: rows, error: null }).then(resolve);
   const db = { from: () => chain } as unknown as SupabaseClient<Database>;
   return { db, captured };
+}
+
+/** Install the same chain shape on the browser supabase mock used by listPortals. */
+function installBrowserDb(rows: Row[]): Captured {
+  const { db, captured } = fakeDb(rows);
+  browserHolder.from = () => db.from("portals");
+  return captured;
 }
 
 function portalRow(over: Row = {}): Row {
@@ -153,5 +167,44 @@ describe("listPortalsForApi — GET /api/portals (Work recognition)", () => {
       method: "eq",
       args: ["portal_key", "bcbs_ks_enrollment"],
     });
+  });
+});
+
+describe("listPortals — browser usePortals (D-TD.4 / D6.4)", () => {
+  it("requests the payer lifecycle embed so the filter cannot read stale facts", async () => {
+    const captured = installBrowserDb([]);
+    await listPortals();
+    expect(captured.selected).toContain("payers(name, status, archived_at, merged_into_id)");
+    expect(captured.filters).toContainEqual({
+      method: "or",
+      args: ["org_id.eq.org-1,org_id.is.null"],
+    });
+  });
+
+  it("drops GLOBAL ghosts so SOP/case portal selects match Work fill", async () => {
+    installBrowserDb([portalRow(), ...GHOSTS]);
+    const rows = await listPortals();
+    expect(rows.map((r) => r.id)).toEqual(["portal-1"]);
+    expect(rows[0]).not.toHaveProperty("payerName");
+  });
+
+  it("leaves own-org rows untouched, matching listPortalsForApi", async () => {
+    const ownOrgOddities: Row[] = [
+      portalRow({ id: "own-nopayer", org_id: "org-1", payer_id: null, payers: null }),
+      portalRow({
+        id: "own-retired",
+        org_id: "org-1",
+        payer_id: "payer-retired",
+        payers: {
+          name: "Retired Payer",
+          status: "retired",
+          archived_at: null,
+          merged_into_id: null,
+        },
+      }),
+    ];
+    installBrowserDb([...ownOrgOddities, portalRow(), ...GHOSTS]);
+    const rows = await listPortals();
+    expect(rows.map((r) => r.id)).toEqual(["own-nopayer", "own-retired", "portal-1"]);
   });
 });

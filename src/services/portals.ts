@@ -148,13 +148,28 @@ export async function listPortals(): Promise<Portal[]> {
   // Own-org rows plus GLOBAL registry rows (org_id NULL, E6.5) — the shared-
   // catalog read pattern (portal_field_maps/payers/sop_templates). Global rows
   // are read-only here; their writes go through the authoring RPCs below.
+  //
+  // D6.4 (TRAIN-DUAL D-TD.4): same ghost filter as listPortalsForApi's global
+  // leg. usePortals consumers (SOP portal selects, PortalStepLink, registry)
+  // must not offer a global portal the extension Work path would drop —
+  // otherwise TaskDrawer "Open portal" points at a form fill can never match.
   const { data, error } = await supabase
     .from("portals")
-    .select(PORTAL_COLUMNS)
+    .select(PORTAL_API_COLUMNS)
     .or(`org_id.eq.${orgId},org_id.is.null`)
     .order("name", { ascending: true });
   if (error) throw error;
-  return camelizeRow<Portal[]>(data ?? []);
+  const rows = camelizeRow<EmbeddedPortalRow[]>(data ?? []);
+  return rows
+    .map(unpackPortalRow)
+    .filter(({ portal, payer }) =>
+      isListableRegistryPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
+    )
+    .map(({ portal }) => {
+      // Browser callers expect Portal[], not the API's payerName projection.
+      const { payerName: _ignored, ...rest } = portal;
+      return rest;
+    });
 }
 
 export async function createPortal(input: PortalInput): Promise<Portal> {
