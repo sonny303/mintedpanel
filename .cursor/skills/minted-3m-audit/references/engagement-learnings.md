@@ -38,7 +38,7 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 | **SOP All-states + D3.3-G**       | #280                   | Owns the name **Slice 3**; do not reuse for OPA-RETIRE                                                                    |
 | **GEN-SILENT**                    | **R2 locked** / #284   | Daily-loop: explain `no_facility` + `pending_verification` skips                                                          |
 | **TRAIN-DUAL**                    | Spike #281 + build #40 | URL bind; C1 copy; once-per-payer; TD-51 open                                                                             |
-| **LISTPORTALS**                   | #282                   | Browser `listPortals` = D6.4                                                                                              |
+| **LISTPORTALS**                   | closed #282            | Browser `listPortals` = D6.4 (same predicate as Work API)                                                                 |
 | **3M Slice 5**                    | closed                 | TD-41/49/50 park — ≠ GEN-SILENT                                                                                           |
 
 ## TRAIN-DUAL lessons (code-verified)
@@ -60,7 +60,7 @@ Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 ## Findings that looked fixed but weren’t (mura traps)
 
 - Open Cases = `case_status` — do not regress.
-- Portals empty registry UX shipped; **LISTPORTALS** was remaining browser/API D6.4 drift.
+- Portals empty registry UX shipped; browser `listPortals` now shares D6.4 with the Work API (**LISTPORTALS** closed — #282).
 - Reporting route redirect ≠ orphan `components/reports/*` cleanup.
 - F13 Vite env ≠ CORS/manifest rest.
 - F23/F24 closed in Slice 6; Slice 4 audit markdown is historical.
