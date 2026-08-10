@@ -50,7 +50,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Payer Setup</h1>
-<p><em>Updated for: E6.5 plus 3M payer-setup cleanup slices 1–2 (2026-08-10).</em></p>
+<p><em>Updated for: E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10).</em></p>
 <p>Journey A — payer readiness: catalog + SOPs with embedded form setup. Global: authored once, inherited by every org.</p>
 <h2>Shipped (E6.5)</h2>
 <ul>
@@ -67,6 +67,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 <ul>
 <li><strong>Set up payer</strong> is one intent: enter the payer details and create it. The old “Also add to my network” choice is not part of this flow; a successful create adds the payer to the active organization and the confirmation says so. The backend performs the identity insert and organization assignment in one transaction.</li>
 <li><strong>The catalog is curated, not a seed inventory.</strong> The retired catalog-sync rows that are not referenced by cases, targets, enrollment facts, SOPs, portals, generation records, contacts, settings, or other payer links are removed by an operator-run cleanup. Human-created payers, organization records, merged payers, and every referenced payer remain available.</li>
+<li><strong>SOP All-states (3M Slice 3):</strong> Template Basics can author <code>state = 'All'</code> so one checklist covers every case state. Resolution ranks state specificity, then group specificity, then ownership (<code>pickTemplate</code> D3.3-G). Ready remains checklist presence (#277), not per-state coverage.</li>
 </ul>
 <p>The cleanup migration is intentionally separate from the code fix and is not considered complete until the hosted database operator applies it. Until then, the application may still show the retired catalog rows even though the setup flow itself is functional. The platform-authoring follow-up also depends on the Slice 3 read-path work and the paired SOP read-widening migration; those dependencies must be complete before the adoption split is treated as live.</p>
 <h2>Global authoring</h2>
