@@ -106,6 +106,16 @@ describe("translateDbError — 23514 check violations", () => {
     expect(messageOf(result)).toBe("A contract requires a payer.");
   });
 
+  it("translates the facility-assignment start-date check", () => {
+    const result = translateDbError(
+      pgError(
+        "23514",
+        'new row for relation "provider_facility_assignments" violates check constraint "provider_facility_assignments_start_date_check"',
+      ),
+    );
+    expect(messageOf(result)).toBe("A facility assignment requires a start date.");
+  });
+
   it("passes an unknown check violation through unchanged", () => {
     const original = pgError(
       "23514",

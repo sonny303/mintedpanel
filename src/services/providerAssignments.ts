@@ -39,19 +39,30 @@ export interface AssignmentRowInput {
   startDate?: string | null;
 }
 
+/** Local calendar today (YYYY-MM-DD). The PFA start_date CHECK rejects null
+ *  on new inserts; callers that omit a date (Add Provider) default here —
+ *  same posture as the CSV relationship pass in importRuns. */
+function localTodayIso(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Shared bulk insert used by the legacy callers (provider create, launch
  * assign). Duplicate (provider, facility) pairs are ignored, matching the
  * old launch upsert semantics. */
 export async function insertAssignmentRows(rows: AssignmentRowInput[]): Promise<void> {
   if (rows.length === 0) return;
   const orgId = requireActiveOrg();
+  const today = localTodayIso();
   const { error } = await supabase.from("provider_facility_assignments").upsert(
     rows.map((r) => ({
       org_id: orgId,
       provider_id: r.providerId,
       facility_id: r.facilityId,
       is_primary: r.isPrimary ?? false,
-      start_date: r.startDate ?? null,
+      // E1.4 CHECK (start_date IS NOT NULL) — NOT VALID still enforces inserts.
+      start_date: r.startDate?.trim() || today,
     })),
     { onConflict: "provider_id,facility_id", ignoreDuplicates: true },
   );
