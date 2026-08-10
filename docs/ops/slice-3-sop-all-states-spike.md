@@ -186,25 +186,35 @@ build.
 
 ## Hosted / live data (ops)
 
-Supabase MCP was **unauthenticated** in this spike environment — live counts are
-**Unverified — ops**. Before build merge, operator should confirm:
+**Verified 2026-08-10** (operator SQL Editor against hosted) for the active
+per-payer grain:
+
+| payer_id | state | count |
+| --- | --- | --- |
+| `4983e2ad-…f610c6` | NC | 1 |
+| `225c1eb7-…0f2a6c` | CA | 1 |
+| `6239daa9-…467a90` | OR | 1 |
+| `5e76b166-…a52420` | NC | 1 |
+| `3c823616-…cb3c79` | NC | 1 |
+
+Read:
+
+- **5** active payer-linked SOPs; every `(payer, state)` count is **1** — no
+  duplication pressure to collapse before introducing All.
+- States in use are ordinary two-letter codes only (`NC` ×3 payers, `CA`, `OR`).
+- No live `'All'` / wildcard row in this set (wizard never offered it). Option A
+  introduces the sentinel on a clean slate.
+
+Still useful once (optional confirm — not blocking D3.1):
 
 ```sql
 -- any existing wildcard-ish rows?
 select state, count(*) from sop_templates
  where state is not null and state !~ '^[A-Z]{2}$'
  group by 1;
-
--- active templates per payer (duplication pressure)
-select payer_id, state, count(*)
-  from sop_templates
- where archived = false and payer_id is not null
- group by 1, 2
- order by 3 desc;
 ```
 
-Expect zero `'All'` rows today (wizard never offered it). Seed fixtures use
-ordinary two-letter states.
+Expect empty. Seed fixtures use ordinary two-letter states.
 
 ---
 
