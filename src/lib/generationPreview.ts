@@ -395,7 +395,7 @@ export function buildGenerationSkips(
       if (rosterRow && !rosterRow.skipEligible) continue;
 
       let reason: GenerationSkipReason | null = null;
-      let providerName = rosterRow?.providerName ?? factsById.get(providerId)?.providerName;
+      const providerName = rosterRow?.providerName ?? factsById.get(providerId)?.providerName;
 
       if (rosterRow?.pendingVerification) {
         reason = "pending_verification";
