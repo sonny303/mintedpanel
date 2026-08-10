@@ -42,6 +42,7 @@ Locked (do not re-litigate):
 
 Stop: draft build PR + US/AC checklist in body; never self-merge.
 ```
+
 ---
 
 ## Do not confuse two “Slice 3” names
@@ -121,6 +122,7 @@ build). Do not re-open A vs B.
   column, not null).
 - Cases / targets / contracts stay `^[A-Z]{2}$` — unchanged.
 - **Locked: Option A.**
+
 ### D3.2 — Wire / display form of the sentinel
 
 | Layer                         | Value                                                                                                                                                                                             |
@@ -231,13 +233,13 @@ US-3 → D3.4 · US-4 → D3.6/D3.7.
 **I want** to set the SOP match key to **All states**,  
 **so that** I do not clone the same checklist once per two-letter state.
 
-| #     | Acceptance criterion                                                                                                                                 |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC1.1 | Template Basics offers an **All states** option alongside US states (design screen 4).                                                               |
-| AC1.2 | Choosing All persists `sop_templates.state = 'All'` (capital A). Choosing a US state persists `^[A-Z]{2}$`. No `states text[]` column.                |
-| AC1.3 | Writers/readers share one `ALL_STATES_SENTINEL` constant — no scattered `"all"` / `"ALL"` literals.                                                  |
-| AC1.4 | `orgSopMatchKeyError` / org create·update asserts and the global author path treat `'All'` as a **complete** state (not null, not “Any state”).      |
-| AC1.5 | Review / provenance / list copy shows the label **All states**, never a blank or a raw unexpected casing.                                            |
+| #     | Acceptance criterion                                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1.1 | Template Basics offers an **All states** option alongside US states (design screen 4).                                                          |
+| AC1.2 | Choosing All persists `sop_templates.state = 'All'` (capital A). Choosing a US state persists `^[A-Z]{2}$`. No `states text[]` column.          |
+| AC1.3 | Writers/readers share one `ALL_STATES_SENTINEL` constant — no scattered `"all"` / `"ALL"` literals.                                             |
+| AC1.4 | `orgSopMatchKeyError` / org create·update asserts and the global author path treat `'All'` as a **complete** state (not null, not “Any state”). |
+| AC1.5 | Review / provenance / list copy shows the label **All states**, never a blank or a raw unexpected casing.                                       |
 
 ### US-2 — Resolve the right SOP for a case’s payer × group × state
 
@@ -247,17 +249,17 @@ ownership** (D3.3-G),
 **so that** a group-exact payer SOP beats a broader any-group org override, and
 All only fills gaps when no exact-state match exists.
 
-| #     | Acceptance criterion                                                                                                                                                                                                 |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC2.1 | `candidateRank` implements the D3.3-G nine ranks (table above). No second matcher.                                                                                                                                   |
-| AC2.2 | **Exact state beats All** at every ownership/group combination (e.g. global exact + exact group beats org All + exact group).                                                                                        |
-| AC2.3 | **Exact group beats any-group** at the same state specificity **across ownership** (e.g. global exact + exact group beats org exact + any-group). Different group never resolves.                                    |
-| AC2.4 | At equal state + group specificity, **org beats global**.                                                                                                                                                            |
-| AC2.5 | Wrong payer never matches; archived never matches.                                                                                                                                                                   |
-| AC2.6 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                                                                                                                 |
-| AC2.7 | A template with `state=All` + matching group grain resolves for concrete case states (e.g. NC and SC) when no better (exact-state) match exists.                                                                     |
-| AC2.8 | Existing E4.2 tests that assert “org any-group beats global exact-group” are **rewritten** to the D3.3-G expectation; `pickTemplate.ts` header comments updated.                                                      |
-| AC2.9 | Unit tests pin AC2.2–AC2.8 **before** UI ships.                                                                                                                                                                      |
+| #     | Acceptance criterion                                                                                                                                                              |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC2.1 | `candidateRank` implements the D3.3-G nine ranks (table above). No second matcher.                                                                                                |
+| AC2.2 | **Exact state beats All** at every ownership/group combination (e.g. global exact + exact group beats org All + exact group).                                                     |
+| AC2.3 | **Exact group beats any-group** at the same state specificity **across ownership** (e.g. global exact + exact group beats org exact + any-group). Different group never resolves. |
+| AC2.4 | At equal state + group specificity, **org beats global**.                                                                                                                         |
+| AC2.5 | Wrong payer never matches; archived never matches.                                                                                                                                |
+| AC2.6 | Generic fallback stays last and stays payerless — All never masquerades as fallback.                                                                                              |
+| AC2.7 | A template with `state=All` + matching group grain resolves for concrete case states (e.g. NC and SC) when no better (exact-state) match exists.                                  |
+| AC2.8 | Existing E4.2 tests that assert “org any-group beats global exact-group” are **rewritten** to the D3.3-G expectation; `pickTemplate.ts` header comments updated.                  |
+| AC2.9 | Unit tests pin AC2.2–AC2.8 **before** UI ships.                                                                                                                                   |
 
 ### US-3 — Exact + All can share a payer; two Alls cannot
 
@@ -265,11 +267,11 @@ All only fills gaps when no exact-state match exists.
 **I want** an active exact-state SOP and an active All SOP for the same payer/group,  
 **so that** exceptions stay explicit without deleting the default.
 
-| #     | Acceptance criterion                                                                                                                           |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC3.1 | Active exact `NC` **and** active `All` for the same `(org\|global, payer, group)` are allowed (different `state` values).                      |
-| AC3.2 | A second active `All` for the same `(org\|global, payer, group)` is blocked (org uniqueness / assert + global `author_global_sop` in-body).    |
-| AC3.3 | Null-state “Any state” remains forbidden for org match keys — All is the only wildcard this build introduces.                                  |
+| #     | Acceptance criterion                                                                                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC3.1 | Active exact `NC` **and** active `All` for the same `(org\|global, payer, group)` are allowed (different `state` values).                   |
+| AC3.2 | A second active `All` for the same `(org\|global, payer, group)` is blocked (org uniqueness / assert + global `author_global_sop` in-body). |
+| AC3.3 | Null-state “Any state” remains forbidden for org match keys — All is the only wildcard this build introduces.                               |
 
 ### US-4 — One matcher; Ready and out-of-scope stays closed
 
@@ -277,26 +279,27 @@ All only fills gaps when no exact-state match exists.
 **I want** All-states to ride the existing resolver only,  
 **so that** #277 Ready, attach, purge, and Slice 5 are not reopened by this PR.
 
-| #     | Acceptance criterion                                                                                                                         |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC4.1 | No second template matcher — generation confirm, readiness, and stamps keep calling `pickTemplate` only.                                     |
-| AC4.2 | #277 Ready stays checklist presence (≥1 active global SOP with ≥1 task); authoring All vs exact does **not** by itself flip Ready.           |
+| #     | Acceptance criterion                                                                                                                                                                                                   |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC4.1 | No second template matcher — generation confirm, readiness, and stamps keep calling `pickTemplate` only.                                                                                                               |
+| AC4.2 | #277 Ready stays checklist presence (≥1 active global SOP with ≥1 task); authoring All vs exact does **not** by itself flip Ready.                                                                                     |
 | AC4.3 | Diff does **not** include: Ready/attach/purge changes, `org_payer_assignments` removal, Option B `states text[]`, null Any-state, TD-48 multi-group, extension Train/fill, Slice 5, or `sopResolver.ts` content edits. |
-| AC4.4 | TD-47 closed (or pointed at shipped build) when US-1..US-3 land.                                                                             |
+| AC4.4 | TD-47 closed (or pointed at shipped build) when US-1..US-3 land.                                                                                                                                                       |
 
 ### Story → verify map
 
-| Verify # (below) | Stories   |
-| ---------------- | --------- |
-| 1, 5             | US-1      |
-| 1–3, 6, 9        | US-2      |
-| 2, 4             | US-3      |
-| 7                | US-4      |
-| 8                | all (CI)  |
+| Verify # (below) | Stories  |
+| ---------------- | -------- |
+| 1, 5             | US-1     |
+| 1–3, 6, 9        | US-2     |
+| 2, 4             | US-3     |
+| 7                | US-4     |
+| 8                | all (CI) |
 
 ---
 
 ## Schema / RPC impact (Option A — no new column)
+
 | Object                                  | Change                                                                                                                                                                                                                                                                                                                              |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sop_templates.state`                   | None (already wildcard-capable)                                                                                                                                                                                                                                                                                                     |
@@ -390,6 +393,7 @@ Must not (US-4 / D3.7):
 
 Stop at draft PR + US/AC checklist in PR body.
 ```
+
 ---
 
 ## Verify (build acceptance)
