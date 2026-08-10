@@ -29,10 +29,12 @@ import {
 import { archivedPayerIds } from "@/lib/payerSetup";
 import {
   buildGenerationPreview,
+  buildGenerationSkips,
   generationPreviewSummary,
   previewRowKey,
   type GenerationPreviewRow,
   type GenerationPreviewSummary,
+  type GenerationSkipRow,
 } from "@/lib/generationPreview";
 import {
   createCaseGenerationExclusion,
@@ -126,6 +128,8 @@ export interface GenerationPreviewData {
   exclusions: CaseGenerationExclusion[] | undefined;
   /** E4.2 TE-13 — proposed rows blocked by a missing required attribute. */
   gated: GatedRow[] | undefined;
+  /** GEN-SILENT — group members dropped before candidacy with an explanation. */
+  skips: GenerationSkipRow[] | undefined;
   /** E4.2 SOP hardening — keys of PROPOSED rows that resolve to the generic
    * fallback SOP (no payer-specific SOP matches). The preview labels these and
    * warns before confirming; the tier is persisted on the created run row. */
@@ -142,6 +146,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
   const groupAssignmentsQ = useProviderGroupAssignments();
   const facilityAssignmentsQ = useProviderAssignments();
   const factsQ = useProviderReadinessFacts();
+  const rosterQ = useProviders();
   const licensesQ = useOrgStateLicenses();
   const facilitiesQ = useFacilities();
   const documentsQ = useGroupReadinessDocuments();
@@ -159,6 +164,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     groupAssignmentsQ,
     facilityAssignmentsQ,
     factsQ,
+    rosterQ,
     licensesQ,
     facilitiesQ,
     documentsQ,
@@ -207,7 +213,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       };
     });
 
-    const allRows = buildGenerationPreview({
+    const previewInput = {
       today,
       targets: liveTargets,
       groupAssignments: groupAssignmentsQ.data ?? [],
@@ -218,12 +224,28 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       payers: (payersQ.data ?? []).map((p) => ({ id: p.id, name: p.name })),
       existingCases,
       exclusions: exclusionsQ.data ?? [],
-    });
+    };
+
+    const allRows = buildGenerationPreview(previewInput);
 
     // TE-6 — payer/group scope is a POST-filter over the locked preview rows;
     // buildGenerationPreview's candidate/dedupe/exclusion logic is untouched.
     const rows = allRows.filter(
       (r) => (!scopePayer || r.payerId === scopePayer) && (!scopeGroup || r.groupId === scopeGroup),
+    );
+
+    const allSkips = buildGenerationSkips(
+      previewInput,
+      (rosterQ.data ?? []).map((p) => ({
+        providerId: p.id,
+        providerName: `${p.firstName} ${p.lastName}`.trim(),
+        pendingVerification: p.verificationState === "pending_verification",
+        skipEligible:
+          p.status !== "terminated" && !p.referenceOnly && p.isTestProvider !== true,
+      })),
+    );
+    const skips = allSkips.filter(
+      (s) => (!scopePayer || s.payerId === scopePayer) && (!scopeGroup || s.groupId === scopeGroup),
     );
 
     // TE-13 — gate proposed rows against their SOP's required attributes.
@@ -264,7 +286,14 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       contracts,
     });
     const readinessByKey = new Map(readinessRows.map((r) => [previewRowKey(r), r]));
-    return { rows, readinessByKey, gated: gating.gated, providerFacilities, fallbackRowKeys };
+    return {
+      rows,
+      readinessByKey,
+      gated: gating.gated,
+      skips,
+      providerFacilities,
+      fallbackRowKeys,
+    };
   }, [
     resolved,
     today,
@@ -274,6 +303,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     groupAssignmentsQ.data,
     facilityAssignmentsQ.data,
     factsQ.data,
+    rosterQ.data,
     licensesQ.data,
     facilitiesQ.data,
     documentsQ.data,
@@ -293,6 +323,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
     readinessByKey: derived?.readinessByKey,
     exclusions: exclusionsQ.data,
     gated: derived?.gated,
+    skips: derived?.skips,
     fallbackRowKeys: derived?.fallbackRowKeys,
     providerFacilities: derived?.providerFacilities,
     isLoading: sources.some((q) => q.isLoading),

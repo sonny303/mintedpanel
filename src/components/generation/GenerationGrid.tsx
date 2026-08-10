@@ -56,6 +56,7 @@ import {
 import {
   EXCLUSION_REASON_LABELS,
   existingCaseIndicator,
+  generationSkipKey,
   previewRowKey,
   type GenerationPreviewRow,
 } from "@/lib/generationPreview";
@@ -162,6 +163,7 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
   const releasedCount = released.length;
   const releasedFallbackCount = released.filter((r) => fallbackKeys.has(previewRowKey(r))).length;
   const gated = preview.gated ?? [];
+  const skips = preview.skips ?? [];
   const groups = groupGridRows(gridRows, pivot);
 
   const toggleKeys = (keys: readonly string[], check: boolean) => {
@@ -312,6 +314,45 @@ export function GenerationGrid({ scope = {}, defaultPivot = "provider" }: Genera
                 </li>
               );
             })}
+          </ul>
+        </div>
+      ) : null}
+
+      {skips.length > 0 ? (
+        <div className="rounded-md border border-[#E8E5E0] bg-[#FAFAF9] p-3">
+          <p className="text-[13px] font-medium text-foreground">
+            {skips.length} provider × target{skips.length === 1 ? "" : "s"} not generating — reason
+            shown (not a missing profile attribute).
+          </p>
+          <ul className="mt-2 space-y-2">
+            {skips.map((skip) => (
+              <li
+                key={generationSkipKey(skip)}
+                className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground"
+              >
+                <span className="font-medium text-foreground">{skip.providerName}</span>
+                <span>
+                  {skip.groupName} · {skip.payerName} {skip.state} — {skip.reasonLabel}
+                </span>
+                {skip.reason === "no_facility" ? (
+                  <Link
+                    to="/providers/$id"
+                    params={{ id: skip.providerId }}
+                    className="ml-auto text-[12px] text-primary underline-offset-2 hover:underline"
+                  >
+                    Fix facility
+                  </Link>
+                ) : (
+                  <Link
+                    to="/providers/$id"
+                    params={{ id: skip.providerId }}
+                    className="ml-auto text-[12px] text-primary underline-offset-2 hover:underline"
+                  >
+                    Open provider
+                  </Link>
+                )}
+              </li>
+            ))}
           </ul>
         </div>
       ) : null}
