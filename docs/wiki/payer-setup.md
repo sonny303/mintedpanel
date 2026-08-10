@@ -1,6 +1,6 @@
 # Payer Setup
 
-_Updated for: E6.5 (2026-07-19)._
+_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–2 (2026-08-10)._
 
 Journey A — payer readiness: catalog + SOPs with embedded form setup.
 Global: authored once, inherited by every org.
@@ -34,6 +34,28 @@ Global: authored once, inherited by every org.
 - **Org settings moved out**: resolution-ID labels live on Org Detail (org
   data stays with the org). The denial word-list and queue ranking are FIXED
   defaults since E6.6 — no editors anywhere; changes are a platform change.
+
+## 3M cleanup — payer setup is one deliberate path
+
+The cleanup removes two sources of friction from the shipped journey:
+
+- **Set up payer** is one intent: enter the payer details and create it. The
+  old “Also add to my network” choice is not part of this flow; a successful
+  create adds the payer to the active organization and the confirmation says
+  so. The backend performs the identity insert and organization assignment in
+  one transaction.
+- **The catalog is curated, not a seed inventory.** The retired catalog-sync
+  rows that are not referenced by cases, targets, enrollment facts, SOPs,
+  portals, generation records, contacts, settings, or other payer links are
+  removed by an operator-run cleanup. Human-created payers, organization
+  records, merged payers, and every referenced payer remain available.
+
+The cleanup migration is intentionally separate from the code fix and is not
+considered complete until the hosted database operator applies it. Until then,
+the application may still show the retired catalog rows even though the setup
+flow itself is functional. The platform-authoring follow-up also depends on
+the Slice 3 read-path work and the paired SOP read-widening migration; those
+dependencies must be complete before the adoption split is treated as live.
 
 ## Global authoring
 
