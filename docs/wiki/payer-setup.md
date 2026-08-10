@@ -1,6 +1,6 @@
 # Payer Setup
 
-_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–2 (2026-08-10)._
+_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10)._
 
 Journey A — payer readiness: catalog + SOPs with embedded form setup.
 Global: authored once, inherited by every org.
@@ -49,6 +49,10 @@ The cleanup removes two sources of friction from the shipped journey:
   portals, generation records, contacts, settings, or other payer links are
   removed by an operator-run cleanup. Human-created payers, organization
   records, merged payers, and every referenced payer remain available.
+- **SOP All-states (3M Slice 3):** Template Basics can author `state = 'All'`
+  so one checklist covers every case state. Resolution ranks state
+  specificity, then group specificity, then ownership (`pickTemplate`
+  D3.3-G). Ready remains checklist presence (#277), not per-state coverage.
 
 The cleanup migration is intentionally separate from the code fix and is not
 considered complete until the hosted database operator applies it. Until then,

@@ -78,7 +78,8 @@ import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { usePortalFieldMaps, usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
-import { orgSopMatchKeyError } from "@/lib/sopMatchKey";
+import { ALL_STATES_SENTINEL, formatSopStateLabel, orgSopMatchKeyError } from "@/lib/sopMatchKey";
+
 import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
 import {
   resolveIntentBanner,
@@ -582,13 +583,14 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   // pick back to "Any group".
   const groupOptions = useMemo(() => {
     const all = groupsQ.data ?? [];
-    if (state === "none") return all;
+    // All-states (and unset) do not narrow the group list to one US state.
+    if (state === "none" || state === ALL_STATES_SENTINEL) return all;
     return all.filter((g) => g.id === groupId || (g.states ?? []).includes(state));
   }, [groupsQ.data, state, groupId]);
 
   function handleStateChange(next: string) {
     setState(next);
-    if (groupId !== "none" && next !== "none") {
+    if (groupId !== "none" && next !== "none" && next !== ALL_STATES_SENTINEL) {
       const g = (groupsQ.data ?? []).find((x) => x.id === groupId);
       if (g && !(g.states ?? []).includes(next)) setGroupId("none");
     }
@@ -1148,9 +1150,10 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                       <SelectValue placeholder="Select a state" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* No "Any state" — a template must target a state (the
-                          resolver matches states exactly). */}
+                      {/* No null "Any state" — use All states (sentinel) or a
+                          two-letter code (D3.1 A / D3.5). */}
                       {!canEdit ? <SelectItem value="none">Not state-specific</SelectItem> : null}
+                      <SelectItem value={ALL_STATES_SENTINEL}>All states</SelectItem>
                       {US_STATES.map((s) => (
                         <SelectItem key={s} value={s}>
                           {s}
@@ -1185,7 +1188,9 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                     {state === "none"
                       ? "Pick a state to scope the group list."
                       : groupId === "none"
-                        ? `Applies to every group operating in ${state}.`
+                        ? state === ALL_STATES_SENTINEL
+                          ? "Applies to every group for this payer, any case state."
+                          : `Applies to every group operating in ${state}.`
                         : "Wins over the all-groups template for this group."}
                   </p>
                 </div>
@@ -1307,7 +1312,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                 <dt className="text-muted-foreground">Payer</dt>
                 <dd>{payerId === "none" ? "— (required)" : (payerName ?? "—")}</dd>
                 <dt className="text-muted-foreground">State</dt>
-                <dd>{state === "none" ? "— (required)" : state}</dd>
+                <dd>{state === "none" ? "— (required)" : formatSopStateLabel(state)}</dd>
                 <dt className="text-muted-foreground">Group</dt>
                 <dd>
                   {groupId === "none"
