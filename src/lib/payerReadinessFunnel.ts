@@ -22,10 +22,7 @@ export type FunnelNextAction = "author_sop" | "ready";
 
 /** Optional autofill follow-ups — badges / soft CTAs, never the Ready gate. */
 export type FunnelFormSuggestion =
-  | "register_portal"
-  | "train_mappings"
-  | "repair_drift"
-  | "run_dry_test";
+  "register_portal" | "train_mappings" | "repair_drift" | "run_dry_test";
 
 export interface FunnelPayerInput {
   id: string;
