@@ -6,7 +6,7 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 | ID          | 3M   | Area       | Symptom                                                               | Likely bites                                                                                             |
 | ----------- | ---- | ---------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| OPA-CONFLICT | Muri | both/ops  | Skill/#280 keep `org_payer_assignments` vs payer-setup “retire it”    | **PM R1** before next payer-setup PR — see `docs/ops/audit-course-correct-2026-08-10.md`                |
+| OPA-CONFLICT | Muri | both/ops  | Skill keep vs payer-setup retire `org_payer_assignments` as gate      | **PM R1** — evidence: not a `buildGenerationPreview` candidacy input; rename retire work off “Slice 3” (#280) |
 | GEN-SILENT  | Muri | panel      | Pre-candidacy skips (`no_facility`, facts fence) leave no `/generation` row | Surface skip records + banner; license already on readiness — don’t conflate                       |
 | OPS-S6      | Muri | ops        | Slice 6 **SOP read** migration may still be unapplied; vault          | Apply `20260809120100` only ( `20260809120000` is **superseded** by #274 ); regen types; vault checklist |
 | OPS-PURGE   | Muri | ops        | #275 catalog DELETE merged but not hosted                             | **Second PM sign-off** then apply; never agent-apply                                                     |

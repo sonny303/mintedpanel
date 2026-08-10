@@ -31,11 +31,23 @@ Companion: skill `.cursor/skills/minted-3m-audit/` ·
 | Skill / #280 / #281 locks | **Keep** `org_payer_assignments` (org↔payer adoption ≠ group↔payer ops) |
 | Payer-setup lane mandate (chat) | Assignments **not needed**; keep `payer_network_targets` |
 
-Same table, opposite directions. Every subsequent attach/create/SOP-read PR
+**Evidence (code, not opinion):** `buildGenerationPreview` candidacy inputs are
+targets, group assignments, facility assignments, exclusions, and existing
+cases only (`src/lib/generationPreview.ts` header + `GenerationPreviewInput`).
+`org_payer_assignments` is **not** among them. Retiring it **as a generation
+gate** cannot change which cases generate — confirmed in code. (It may still
+gate catalog visibility, attach pickers, SOP read RLS, or `create_payer`
+side-effects — those are separate consumers; R1 is about the **gate** claim.)
+
+Same table, opposite lane mandates. Every subsequent attach/create/SOP-read PR
 hardens one assumption. **No further payer-setup product PR until R1.**
 
 ```
-R1 org_payer_assignments: keep (skill lock) | retire (payer-setup mandate) | spike-only (inventory consumers + D-questions, no DDL)
+Evidence: org_payer_assignments is NOT a candidacy input to buildGenerationPreview
+(targets/group-assignments/facility-assignments/exclusions/existing-cases only) —
+confirmed in code. "Retire as a gate" cannot change generated cases.
+
+R1 org_payer_assignments: keep (skill lock) | retire-as-gate (payer-setup; cases unaffected per evidence) | spike-only (inventory other consumers + D-questions, no DDL)
 ```
 
 ### R2 — Next code bite = daily provider→cases loop
@@ -43,7 +55,7 @@ R1 org_payer_assignments: keep (skill lock) | retire (payer-setup mandate) | spi
 Do **not** start more Train / catalog / portal dual-registry work until a
 daily-loop bite is in flight (or PM explicitly re-orders).
 
-**Recommended next code bite (after R1, or in parallel if R1 = keep):**
+**Recommended next code bite (after R1, or in parallel if R1 = keep / retire-as-gate with no DDL yet):**
 
 **GEN-SILENT** — surface pre-candidacy skips on `/generation` (especially
 `no_facility` / facts-fenced providers). Today `buildGenerationPreview` drops
@@ -71,15 +83,17 @@ Announce merges as **repo-green**; never imply production-live without ops.
 
 ---
 
-## Naming collision
+## Naming collisions
 
-| Label | Meaning |
-| ----- | ------- |
-| **3M Slice 5** (closed) | F13 hygiene + TD-41/49/50 park — `docs/ops/3m-slice-5-closeout.md` |
-| **Payer-setup Slice 5** (out) | Generation-reason visibility (+ sidepanel extract) — skill lock “out unless asked” |
+| Label | Meaning | Urgency |
+| ----- | ------- | ------- |
+| **3M / shipped Slice 3** (#280) | SOP All-states + D3.3-G `pickTemplate` — `docs/ops/slice-3-sop-all-states-spike.md` | **Live** — number already shipped |
+| **Payer-setup Slice 3** (unbuilt) | Collapse payer universe / retire `org_payer_assignments` as gate | **Collides with #280** if R1 = retire — rename before that work ships (e.g. **PS-UNIVERSE** / **OPA-RETIRE**) |
+| **3M Slice 5** (closed) | F13 hygiene + TD-41/49/50 park — `docs/ops/3m-slice-5-closeout.md` | Closed; prefer TD ids |
+| **Payer-setup Slice 5** (out) | Generation-reason visibility (+ sidepanel extract) | Prefer **GEN-SILENT** / **TD-50** |
 
-Prefer **GEN-SILENT** / **TD-50** IDs in chat over “Slice 5.”
-
+Prefer **GEN-SILENT** / **OPA-RETIRE** / **TD-*** IDs in chat over bare “Slice N.”
+If R1 resolves to retire-as-gate, **do not** call that work “Slice 3” — #280 already owns that label.
 ---
 
 ## TRAIN-DUAL status (honest)
