@@ -1,3 +1,20 @@
+-- RETIRED / NEVER APPLIED — 3M payer-setup cleanup, Slice 1 (2026-08-10).
+--
+-- This migration was written in the 3M lane, where hosted apply is an operator
+-- step, and that apply never happened. Meanwhile the app-layer half of D6.1
+-- shipped to main and sent `p_assign_to_org` on every create_payer call.
+-- PostgREST resolves an RPC by its named-argument SET, so a call carrying an
+-- argument the live 10-arg function does not declare is unresolvable: every
+-- "+ Set up payer" returned PGRST202 and no payer could be created at all.
+--
+-- Slice 1 re-converges the CODE on the live signature instead of applying this
+-- file — the smaller, more reversible fix, and the flag is moot anyway once
+-- Slice 3 stops org_payer_assignments from gating payer visibility (an
+-- unadopted payer is readable by its author without any flag).
+--
+-- Retired, not deleted, per the additive rule (the #169 `.superseded`
+-- precedent). Do NOT apply this to hosted.
+
 -- 3M Slice 6 / D6.1 — platform authoring vs org adoption.
 -- Spike: docs/ops/slice-6-platform-org-spike.md (LOCKED D6.1).
 --

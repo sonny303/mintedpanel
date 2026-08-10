@@ -119,13 +119,6 @@ export interface PayerDetailsFormProps {
   submitError?: string | null;
   title: string;
   description: string;
-  /**
-   * 3M Slice 6 / D6.2 — the create flow's "Also add to my network" control,
-   * rendered as the form's last section. It is a property of the CREATE call
-   * (create_payer's p_assign_to_org), not of the payer record, so it lives
-   * with the caller that owns the call; edit passes nothing and is unchanged.
-   */
-  networkSection?: React.ReactNode;
 }
 
 export function PayerDetailsForm({
@@ -139,7 +132,6 @@ export function PayerDetailsForm({
   submitError,
   title,
   description,
-  networkSection,
 }: PayerDetailsFormProps) {
   const [aliasDraft, setAliasDraft] = useState("");
   const errors = payerFormErrors(draft);
@@ -335,10 +327,6 @@ export function PayerDetailsForm({
             className="min-h-[70px]"
           />
         </section>
-
-        {networkSection ? (
-          <section className="border-t border-[#F0EEEA] pt-4">{networkSection}</section>
-        ) : null}
 
         {submitError ? (
           <p

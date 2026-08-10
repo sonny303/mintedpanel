@@ -20,7 +20,7 @@
 //      through the audited upsert/delete RPCs, anon rejected by grant floor.
 // (The live grant/RLS state was additionally verified on hosted via
 // rolled-back simulations — recorded in the PR descriptions.)
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -304,14 +304,10 @@ describe("the E6.8 lifecycle migrations — grant definitions", () => {
   });
 });
 
-// 3M Slice 6 — platform authoring vs org adoption. Softening "creating =
-// adding" must not soften anything else: the payers table stays write-locked,
-// the RPC stays the only door, and the read widening stays a READ widening.
-describe("the Slice 6 migrations — grant + policy shape", () => {
-  const assignFlagMigration = readFileSync(
-    join(ROOT, "supabase/migrations/20260809120000_slice6_create_payer_assign_flag.sql"),
-    "utf8",
-  ).toLowerCase();
+// 3M Slice 6 / payer-setup cleanup — the D6.5 read widening stays; the D6.1
+// assign-flag migration was RETIRED unapplied (Slice 1), because the app half
+// shipped without it and made create_payer unresolvable in production.
+describe("the Slice 6 SOP-read widening — grant + policy shape", () => {
   const sopReadMigration = readFileSync(
     join(ROOT, "supabase/migrations/20260809120100_slice6_global_sop_read_without_assignment.sql"),
     "utf8",
@@ -324,36 +320,13 @@ describe("the Slice 6 migrations — grant + policy shape", () => {
     .join("\n");
 
   it("never re-grants payers table DML or recreates the dropped write policies", () => {
-    for (const sql of [assignFlagMigration, sopReadMigration]) {
-      expect(sql).not.toMatch(/grant\s+[a-z, ]*insert[a-z, ]*on\s+(table\s+)?public\.payers/);
-      expect(sql).not.toMatch(/grant\s+[a-z, ]*update[a-z, ]*on\s+(table\s+)?public\.payers/);
-      expect(sql).not.toMatch(/create policy payers_(insert|update)/);
-    }
-  });
-
-  it("the create_payer reissue drops the old 10-param signature (no PostgREST overload)", () => {
-    expect(assignFlagMigration).toMatch(
-      /drop function if exists public\.create_payer\(\s*uuid, text, text, text\[\], text\[\], text, boolean, text, boolean, text\s*\)/,
+    expect(sopReadMigration).not.toMatch(
+      /grant\s+[a-z, ]*insert[a-z, ]*on\s+(table\s+)?public\.payers/,
     );
-    expect(assignFlagMigration).toContain("p_assign_to_org boolean default true");
-  });
-
-  it("keeps the RPC grant floor: anon revoked, EXECUTE only to authenticated/service_role", () => {
-    expect(assignFlagMigration).toMatch(
-      /revoke all on function public\.create_payer\([\s\S]*?\) from anon/,
+    expect(sopReadMigration).not.toMatch(
+      /grant\s+[a-z, ]*update[a-z, ]*on\s+(table\s+)?public\.payers/,
     );
-    expect(assignFlagMigration).toMatch(
-      /grant execute on function public\.create_payer\([\s\S]*?\) to authenticated, service_role/,
-    );
-  });
-
-  it("the assignment upsert is CONDITIONAL — the whole point of the flag", () => {
-    // The upsert must sit inside the guard, or `false` would still adopt.
-    expect(assignFlagMigration).toMatch(
-      /if v_assign then[\s\S]*?insert into public\.org_payer_assignments[\s\S]*?end if;/,
-    );
-    // And an omitted param must still mean "assign" (the E6.7 default).
-    expect(assignFlagMigration).toContain("coalesce(p_assign_to_org, true)");
+    expect(sopReadMigration).not.toMatch(/create policy payers_(insert|update)/);
   });
 
   it("the D6.5 widening is SELECT-only — no write policy, no new table grant", () => {
@@ -372,6 +345,19 @@ describe("the Slice 6 migrations — grant + policy shape", () => {
   it("widens the version policy in lockstep with its parent", () => {
     expect(sopReadStatements).toContain("drop policy if exists sop_template_versions_select");
     expect(sopReadStatements).toContain("or (t.org_id is null)");
+  });
+
+  // The retirement is the fix, so it has to be pinned: an un-retired file plus
+  // a service that stopped sending the flag is exactly the drift that broke
+  // creation, only in the opposite direction.
+  it("the D6.1 assign-flag migration stays retired and unapplied", () => {
+    const base = join(
+      ROOT,
+      "supabase/migrations/20260809120000_slice6_create_payer_assign_flag.sql",
+    );
+    expect(existsSync(base)).toBe(false);
+    const retired = readFileSync(`${base}.superseded`, "utf8").toLowerCase();
+    expect(retired).toContain("retired / never applied");
   });
 });
 
