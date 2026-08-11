@@ -34,10 +34,7 @@ export function TokenPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
-  const options = useMemo(
-    () => filterTokenGroups(groupedTokens, query),
-    [groupedTokens, query],
-  );
+  const options = useMemo(() => filterTokenGroups(groupedTokens, query), [groupedTokens, query]);
 
   return (
     <Popover
@@ -132,9 +129,7 @@ export function TokenPicker({
                       <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
                         {token.token}
                       </span>
-                      {selected ? (
-                        <Check className="h-3.5 w-3.5 flex-none text-[#1B4D3E]" />
-                      ) : null}
+                      {selected ? <Check className="h-3.5 w-3.5 flex-none text-[#1B4D3E]" /> : null}
                     </button>
                   );
                 })}

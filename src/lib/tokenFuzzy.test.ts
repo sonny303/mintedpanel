@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  filterTokenGroups,
-  fuzzyScore,
-  searchableTokenText,
-} from "./tokenFuzzy";
+import { filterTokenGroups, fuzzyScore, searchableTokenText } from "./tokenFuzzy";
 import type { SopFieldToken, TokenGroup } from "./tokenGroups";
 
 function t(token: string, column = "col"): SopFieldToken {
@@ -15,7 +11,11 @@ function groups(): TokenGroup[] {
     {
       prefix: "provider",
       label: "Provider",
-      items: [t("provider.npi", "npi"), t("provider.firstName", "first_name"), t("provider.lastName", "last_name")],
+      items: [
+        t("provider.npi", "npi"),
+        t("provider.firstName", "first_name"),
+        t("provider.lastName", "last_name"),
+      ],
     },
     {
       prefix: "group",

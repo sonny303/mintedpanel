@@ -71,10 +71,7 @@ function bestTokenScore(query: string, token: SopFieldToken, groupLabel: string)
  * Within each surviving group, items are ranked by score (then token key).
  * Empty query returns the groups unchanged (stable catalog order).
  */
-export function filterTokenGroups(
-  groups: readonly TokenGroup[],
-  query: string,
-): TokenGroup[] {
+export function filterTokenGroups(groups: readonly TokenGroup[], query: string): TokenGroup[] {
   const q = query.trim();
   if (q.length === 0) return [...groups];
 
@@ -83,9 +80,7 @@ export function filterTokenGroups(
       const items = group.items
         .map((item) => ({ item, score: bestTokenScore(q, item, group.label) }))
         .filter((row): row is { item: SopFieldToken; score: number } => row.score != null)
-        .sort(
-          (a, b) => b.score - a.score || a.item.token.localeCompare(b.item.token),
-        )
+        .sort((a, b) => b.score - a.score || a.item.token.localeCompare(b.item.token))
         .map((row) => row.item);
       const top = items.length === 0 ? null : bestTokenScore(q, items[0], group.label);
       return { group: { ...group, items }, top };
