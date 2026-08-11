@@ -536,11 +536,13 @@ test("TS-144 — an already-mapped field stays listed, editable, and positionall
   // escape hatch — unmapping is its own explicit action.
   const picker = first.getByRole("combobox", { name: /Map First Name to a token/i });
   await picker.click();
-  const menu = page.locator("[data-radix-select-viewport]").first();
+  const menu = page.getByRole("listbox", { name: "Token options" });
+  // Fuzzy search narrows the catalog without scrolling the whole family list.
+  await page.getByRole("textbox", { name: "Search tokens" }).fill("first name");
   await expect(menu.getByRole("option", { name: "provider.firstName" })).toBeVisible();
-  // Families are headings, so a 132-token catalog is navigable (D8).
+  await expect(menu.getByRole("option", { name: "provider.lastName" })).toHaveCount(0);
+  // Families remain headings over the filtered hits (D8).
   await expect(menu.getByText("Provider", { exact: true })).toBeVisible();
-  await expect(menu.getByText("Group", { exact: true })).toBeVisible();
   // Unmapping is its own explicit action — never a "No token" option that
   // silently reads as a decision.
   await expect(menu.getByRole("option", { name: /^No token$/ })).toHaveCount(0);
