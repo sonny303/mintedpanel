@@ -50,22 +50,28 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Providers</h1>
-<p><em>Updated for: E6.4 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p><em>Updated for: E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
 <p>Journey B — the consolidated people record.</p>
 <h2>The roster — shipped with E6.4</h2>
 <ul>
 <li><strong>A→Z by last name, always</strong> (stated on screen; search and filters never change the sort). PHI-safe list: no DOB, SSN, or home address ever rides the roster read. Filters: group, license state, has-gaps; free search on name/NPI; Export roster CSV.</li>
-<li><strong>Gap pills are ambient</strong>: no facility assignment (the provider cannot generate cases), missing NPI/CAQH, stale CAQH attestation (the readiness window), expiring/expired license. Clicking a pill opens the record with that exact section focused.</li>
+<li><strong>Gap pills are ambient</strong>: no facility assignment (the provider cannot generate cases), missing NPI/CAQH, stale CAQH attestation (the readiness window), expiring/expired license. Clicking a pill opens the record on the matching tab (<code>#identity</code> / <code>#groups-facilities</code> / <code>#licenses</code>, and readiness under Cases).</li>
 <li>The provider CSV <strong>lives on this page</strong> (one row per relationship — repeat identity columns for extra facilities, groups, licenses, and enrollments). The template download comes with a <strong>reference sheet of your real group/facility/payer names</strong>; unknown names are row errors naming the column, and the post-commit summary counts every relationship attached.</li>
 </ul>
-<h2>The record — shipped with E6.4</h2>
+<h2>Add provider — shipped</h2>
 <ul>
-<li>One page per provider with section jump-nav: Identity · Groups &amp; facilities · Licenses · Enrollments · Cases · Documents (deep-linkable <code>#section</code> anchors).</li>
-<li><strong>Every identity field edits inline</strong> — pencil, change, save; one audited write per field. The monolithic edit form is retired (its URL redirects here), which kills the defect where saving it dropped facility assignments. DOB is masked at rest (reveal on edit); SSN stays last-4 with the vault flow.</li>
+<li><strong>Taxonomy is a dropdown</strong>, not free text: NUCC codes for the specialties we enroll (PT + dietitian today). Specialty label stays editable beside it when needed.</li>
+<li><strong>Facility assignment requires a start date.</strong> Saving without one used to fail with a raw database toast; the form now collects the date and the error reads as a sentence if anything else is missing.</li>
+<li><strong>Creating a provider creates ZERO cases</strong> (E6.3) — open <strong>Generate cases</strong> from the record (or the readiness section) to enter the shared grid scoped to this provider.</li>
+<li><em>(Lands with PR #288)</em> Onboarding harden: clearer group join on create and a trimmed create-field set so the first save matches what the roster actually needs.</li>
+</ul>
+<h2>The record — shipped</h2>
+<ul>
+<li><strong>Tabbed record</strong> (not one long scroll): Provider Info · Groups &amp; facilities · Licenses · Enrollments · Cases · Documents · Internal Notes. Deep links still work — roster gap pills and readiness fix-here anchors open the right tab.</li>
+<li><strong>Provider Info</strong> edits through one <strong>Edit details → Save changes</strong> pass (diff-only audited patch). DOB is masked at rest (reveal in edit); SSN stays last-4 with the vault flow. Home address and malpractice are not on this form (malpractice lives on the group).</li>
 <li><strong>Groups &amp; facilities are managed in place</strong>: membership chips (primary starred, ≥1 group / one-primary invariants hold on every path) and a first-class <strong>+ Add facility</strong> with a start date — the moment it saves, the provider is generatable and the group's buffer updates. No edit elsewhere on the record can touch assignments.</li>
-<li><strong>Enrollments panel</strong> records migration facts (payer, state, effective date) under a group's contract — never a case; prior-employer status never belongs here. <strong>Expire</strong> flips the fact and immediately re-opens the candidate on the board.</li>
-<li><strong>Cases panel</strong> is read-only: one line per case with the unified status pill, prior denials preserved beneath reapplied cycles, and "x of y approved" in the header.</li>
-<li><strong>Creating a provider creates ZERO cases</strong> (E6.3) — the record's <strong>Review &amp; generate</strong> opens the shared grid scoped to this provider.</li>
+<li><strong>Enrollments panel</strong> records migration facts (payer, state, effective date) under a group's contract — never a case; prior-employer status never belongs here. Approved cases also derive a read-only “From case” enrollment row.</li>
+<li><strong>Cases panel</strong> is read-only case lines plus the advisory <strong>Readiness</strong> matrix for this provider (filters + fix-here links).</li>
 </ul>
 <footer class="pagefoot"><span><a href="./groups.html">← Groups</a></span><span></span></footer>
 </main>
