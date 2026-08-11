@@ -672,7 +672,7 @@ export interface PayerAttachCommitResult {
  * ';'-delimited states. Idempotent skip-on-match against existing targets —
  * an already-active target skips, an archived one RESTORES (never a duplicate
  * insert under the (group, payer, state) unique), and the org-level enablement
- * rides attachGroupPayer's implicit addAssignment. A mid-loop failure leaves
+ * rides attachGroupPayer (OPA-RETIRE: targets only). A mid-loop failure leaves
  * the run resumable (the same rows skip on retry).
  */
 export async function commitPayerAttachImportRun(input: {

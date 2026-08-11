@@ -29,16 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pickTemplate } from "@/lib/pickTemplate";
-import { resolveTemplate } from "@/lib/sopResolver";
-import { stampTasks } from "@/lib/sopStamp";
-import { US_STATES } from "@/lib/usStates";
 import { useCases, useCreateCase } from "@/hooks/useCases";
 import { useProviders, useProviderGroupAssignments } from "@/hooks/useProviders";
 import { useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
-import { useOrgPayerAssignments } from "@/hooks/useOrgPayerAssignments";
-import { isActiveAssignment } from "@/lib/payerCatalogActions";
+import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
+import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
+import { pickTemplate } from "@/lib/pickTemplate";
+import { resolveTemplate } from "@/lib/sopResolver";
+import { stampTasks } from "@/lib/sopStamp";
+import { US_STATES } from "@/lib/usStates";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 
 interface ManualCaseModalProps {
@@ -54,7 +54,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const groupsQ = useProviderGroups();
   const providerAssignmentsQ = useProviderGroupAssignments();
   const payersQ = usePayers();
-  const payerAssignmentsQ = useOrgPayerAssignments();
+  const targetsQ = usePayerNetworkTargets();
   const templatesQ = useSops();
   const casesQ = useCases();
   const createCase = useCreateCase();
@@ -83,13 +83,11 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     return roster.filter((p) => assignedProviderIds.has(p.id));
   }, [currentProviderAssignments, roster]);
   const payers = useMemo(() => {
-    const assigned = new Set(
-      (payerAssignmentsQ.data ?? []).filter(isActiveAssignment).map((a) => a.payerId),
-    );
+    const inNetwork = networkPayerIdsFromTargets(targetsQ.data ?? []);
     return (payersQ.data ?? []).filter(
-      (p) => (p.status ?? "active") === "active" && assigned.has(p.id),
+      (p) => (p.status ?? "active") === "active" && inNetwork.has(p.id),
     );
-  }, [payersQ.data, payerAssignmentsQ.data]);
+  }, [payersQ.data, targetsQ.data]);
 
   // TE-6: the group select offers the provider's groups from
   // provider_group_assignments (un-ended memberships, the E1.3 semantic).
@@ -130,7 +128,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     groupsQ.isLoading ||
     providerAssignmentsQ.isLoading ||
     payersQ.isLoading ||
-    payerAssignmentsQ.isLoading ||
+    targetsQ.isLoading ||
     templatesQ.isLoading ||
     casesQ.isLoading;
   const failed =
@@ -138,7 +136,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     groupsQ.isError ||
     providerAssignmentsQ.isError ||
     payersQ.isError ||
-    payerAssignmentsQ.isError ||
+    targetsQ.isError ||
     templatesQ.isError ||
     casesQ.isError;
   const prerequisitesReady = providers.length > 0 && payers.length > 0;
@@ -148,7 +146,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     void groupsQ.refetch();
     void providerAssignmentsQ.refetch();
     void payersQ.refetch();
-    void payerAssignmentsQ.refetch();
+    void targetsQ.refetch();
     void templatesQ.refetch();
     void casesQ.refetch();
   };

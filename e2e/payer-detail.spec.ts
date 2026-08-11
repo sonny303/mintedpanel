@@ -199,6 +199,38 @@ function buildDb(): Record<string, Row[]> {
       { id: "as-2", org_id: ORG_ID, payer_id: CIGNA_ID, starter: false, status: "active" },
       { id: "as-3", org_id: ORG_ID, payer_id: UHC_ID, starter: false, status: "active" },
     ],
+    payer_network_targets: [
+      {
+        id: "t-1",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: AETNA_ID,
+        state: "CO",
+        status: "active",
+        payer_issued_id: null,
+        created_at: "2026-07-12T00:00:00Z",
+      },
+      {
+        id: "t-2",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: CIGNA_ID,
+        state: "CO",
+        status: "active",
+        payer_issued_id: null,
+        created_at: "2026-07-12T00:00:00Z",
+      },
+      {
+        id: "t-3",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: UHC_ID,
+        state: "AZ",
+        status: "active",
+        payer_issued_id: null,
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
     payer_contacts: [
       {
         id: "pc-1",
@@ -678,6 +710,7 @@ test("a non-admin reads every tab but is offered no lifecycle verb", async ({ co
 
   await expect(page.getByRole("button", { name: "Edit payer" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "+ Add contact" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Attach to a group" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
   await tab(page, "Manage").click();

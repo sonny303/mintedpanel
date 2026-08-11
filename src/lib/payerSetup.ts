@@ -1,45 +1,43 @@
-// E4.2 unified payer setup → E6.5 slim-down → 2026-07-20 re-scope. The
-// org-grain setup-funnel derivation (buildPayerSetupRows and its dimension
-// model) retired with the PayerSetupList, and the resolution-ID source chain
-// retired with the Org Detail settings table (the identifier label is a
-// Minted-curated payer fact now; issued VALUES live on enrollment facts and
-// payer network targets). What survives here is the shared inclusion rule:
-// which payers count as "the organization's payers".
-import { isActiveAssignment } from "./payerCatalogActions";
+// E4.2 unified payer setup → E6.5 slim-down → OPA-RETIRE (R1 B, 2026-08-10).
+// Inclusion used to read org_payer_assignments. That table is now DORMANT as a
+// gate — "in my network" = ≥1 active payer_network_targets row (group attach).
 import { PRE_CRED_PAYER_NAME } from "./statusLabels";
-import type { OrgPayerAssignment, Payer } from "@/types";
+import type { Payer, PayerNetworkTarget } from "@/types";
 
 export interface ActiveOrgPayer {
   payer: Payer;
-  assignment: OrgPayerAssignment | null;
+}
+
+/** Active target payer ids — the OPA-RETIRE network set. */
+export function networkPayerIdsFromTargets(
+  targets: readonly Pick<PayerNetworkTarget, "payerId" | "status">[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const t of targets) {
+    if (t.status === "active") out.add(t.payerId);
+  }
+  return out;
 }
 
 /**
  * The "active organization payer" inclusion rule the whole workspace shares:
- * a catalog payer with an ACTIVE org_payer_assignments subscription — never
- * derived from targets, so a payer added a minute ago is already included.
- * The Pre-Credentialing Setup sentinel is excluded: it is bookkeeping for
- * pre-cred cases, not a payer to set up.
- *
- * E6.8 F6.8.1: ARCHIVED payers (`archivedAt` set) are excluded from the
- * default derivation — with the catalog gone the payer list IS the org's
- * network, and archive is its "remove" verb. The Show-archived toggle (UI
- * slice A) opts back in via `includeArchived`; reactivation clears the flag
- * and the payer returns everywhere at once.
+ * a catalog payer with ≥1 ACTIVE payer_network_targets row — never an
+ * org_payer_assignments row (OPA-RETIRE). The Pre-Credentialing Setup
+ * sentinel is excluded. ARCHIVED payers (`archivedAt`) are excluded unless
+ * `includeArchived` (Show-archived toggle).
  */
 export function activeOrgPayers(
   payers: readonly Payer[],
-  assignments: readonly OrgPayerAssignment[],
+  targets: readonly Pick<PayerNetworkTarget, "payerId" | "status">[],
   opts?: { includeArchived?: boolean },
 ): ActiveOrgPayer[] {
-  const assignmentByPayer = new Map(assignments.map((a) => [a.payerId, a]));
+  const inNetwork = networkPayerIdsFromTargets(targets);
   const out: ActiveOrgPayer[] = [];
   for (const payer of payers) {
     if (payer.name === PRE_CRED_PAYER_NAME) continue;
     if (payer.archivedAt != null && !opts?.includeArchived) continue;
-    const assignment = assignmentByPayer.get(payer.id) ?? null;
-    if (!isActiveAssignment(assignment)) continue;
-    out.push({ payer, assignment });
+    if (!inNetwork.has(payer.id)) continue;
+    out.push({ payer });
   }
   out.sort((a, b) => a.payer.name.localeCompare(b.payer.name));
   return out;

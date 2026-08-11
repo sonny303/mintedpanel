@@ -30,7 +30,6 @@ function payer(
       states: ["NC"],
       ...over,
     } as Payer,
-    assignment: null,
   };
 }
 

@@ -1,8 +1,8 @@
 import { test, expect, type Route } from "@playwright/test";
 
 // E1.5 TE-8 — Payer Network wizard-section coverage over the mock harness:
-//   TS-41 curated attach + expansion (Shelby): the picker offers ONLY the
-//         org-enabled payers (never the wider catalog); attaching BCBS-NC
+//   TS-41 catalog attach + expansion (Shelby, OPA-RETIRE): the picker offers
+//         the visible catalog (not org_payer_assignments); attaching BCBS-NC
 //         previews Group 1 × NC and Group 2 × NC with facility-count reasons
 //         and unchecking Group 1 × NC saves only the other row; BCBS-KS then
 //         expands to Group 2 × KS only. Prerequisite note is informational.
@@ -271,8 +271,8 @@ function seedAuth(
 }
 
 // Shelby TS-41 base: two groups, Group 1 in NC, Group 2 in NC + KS; three
-// enabled payers (BCBS-NC / BCBS-KS / Cigna-NC) and one unassigned catalog
-// payer that must never surface in the picker.
+// previously-"enabled" payers (BCBS-NC / BCBS-KS / Cigna-NC) plus
+// UnitedHealthcare in the catalog — OPA-RETIRE offers the full catalog.
 function shelbyFixtures(over: Record<string, unknown[]> = {}) {
   return makeFixtures({
     party_role_assignments: contactAssignments(ORG_SHELBY, "shelby"),
@@ -305,7 +305,7 @@ function shelbyFixtures(over: Record<string, unknown[]> = {}) {
   });
 }
 
-test("TS-41: curated picker + two-group expansion with an unchecked exception", async ({
+test("TS-41: catalog picker + two-group expansion with an unchecked exception", async ({
   context,
   page,
 }) => {
@@ -318,13 +318,14 @@ test("TS-41: curated picker + two-group expansion with an unchecked exception", 
   const card = page.locator("#wizard-payer-network");
   await expect(card).toContainText("Not started", { timeout: 30000 });
 
-  // Curated shortlist: ONLY the three enabled payers are offered (F1.5.1).
+  // Catalog shortlist (OPA-RETIRE): every active catalog payer is offered —
+  // assignment no longer gates the picker. UnitedHealthcare is included.
   await card.getByRole("button", { name: "Attach payer" }).click();
   const dialog = page.getByRole("dialog", { name: "Attach a payer" });
   await expect(dialog).toContainText("Blue Cross and Blue Shield of North Carolina");
   await expect(dialog).toContainText("BCBS of Kansas");
   await expect(dialog).toContainText("Cigna Healthcare");
-  await expect(dialog).not.toContainText("UnitedHealthcare");
+  await expect(dialog).toContainText("UnitedHealthcare");
 
   // BCBS-NC expands to BOTH groups' NC rows with facility-count reasons.
   await dialog

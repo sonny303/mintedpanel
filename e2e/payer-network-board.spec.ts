@@ -608,8 +608,7 @@ test("TS-124: removing a payer ARCHIVES its targets (never deletes); re-attach r
     timeout: 30000,
   });
 
-  // Remove: archive this group's targets, then the implicit org enablement
-  // (no other group works the payer) — never a DELETE anywhere.
+  // Remove: archive this group's targets only (OPA-RETIRE — no assignment RPC).
   await page.getByRole("button", { name: "Remove payer" }).click();
   await page.getByRole("button", { name: "Remove payer" }).last().click();
   await expect(page.getByText("No payers targeted yet.")).toBeVisible({ timeout: 15000 });
@@ -619,7 +618,7 @@ test("TS-124: removing a payer ARCHIVES its targets (never deletes); re-attach r
   expect(targetPatch?.body?.status).toBe("archived");
   expect(
     writes.find((w) => w.method === "RPC" && w.path === "archive_org_payer_assignment"),
-  ).toBeTruthy();
+  ).toBeUndefined();
   expect(writes.filter((w) => w.method === "DELETE")).toHaveLength(0);
   expect(fixtures.payer_network_targets).toHaveLength(1); // the row survives, archived
 

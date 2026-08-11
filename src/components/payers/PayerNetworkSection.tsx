@@ -1,16 +1,15 @@
-// Payer Network wizard section body (E1.5) — the second E1.0 preview to go
-// live. The org attaches payers from its CURATED shortlist (payers visible
-// via org_payer_assignments — never the full catalog); each attachment is
-// shown with its live group×state target chips. Archive is a status flip
-// (per-target X or payer-level Archive; TE-5 — never a DELETE); archived
-// targets sit in a collapsible view with one-click Restore, and a fully
-// archived payer offers Re-attach (re-runs the expansion with archived rows
-// pre-unchecked). "New expansion available" is DERIVED by re-running the
+// Payer Network wizard section body (E1.5) — OPA-RETIRE: the attach shortlist
+// is the visible catalog (listPayers / globals), not org_payer_assignments.
+// Each attachment is shown with its live group×state target chips. Archive is
+// a status flip (per-target X or payer-level Archive; TE-5 — never a DELETE);
+// archived targets sit in a collapsible view with one-click Restore, and a
+// fully archived payer offers Re-attach (re-runs the expansion with archived
+// rows pre-unchecked). "New expansion available" is DERIVED by re-running the
 // pure expansion against current facilities (TE-7) — never a stored flag.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArchiveRestore, ArrowRight, Plus, X } from "lucide-react";
+import { ArchiveRestore, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/StatusPill";
 import { AttachPayerDialog } from "@/components/payers/AttachPayerDialog";
@@ -20,7 +19,7 @@ import {
   useRestoreTarget,
 } from "@/hooks/usePayerNetworkTargets";
 import { expandTargets, newExpansionRows } from "@/lib/payerExpansion";
-import { isActiveAssignment } from "@/lib/payerCatalogActions";
+import { PRE_CRED_PAYER_NAME } from "@/lib/statusLabels";
 import { PAYER_KIND_LABELS, formatStates } from "@/lib/payerDirectory";
 import type { Payer, PayerNetworkTarget } from "@/types";
 import type { SectionBodyProps } from "@/components/onboarding/sectionBodies";
@@ -38,16 +37,18 @@ export function PayerNetworkSection({ wizard }: SectionBodyProps) {
 
   const groupById = new Map(wizard.providerGroups.map((g) => [g.id, g]));
 
-  // The curated shortlist (F1.5.1): org-visible payers intersected with the
-  // org's ACTIVE org_payer_assignments subscriptions — never the full catalog,
-  // and never a catalog-archived subscription (E4.2 hardening: archiving the
-  // subscription removes the payer from the org's attach surface).
-  const shortlist = useMemo(() => {
-    const assigned = new Set(
-      wizard.payerAssignments.filter(isActiveAssignment).map((a) => a.payerId),
-    );
-    return wizard.payers.filter((p) => assigned.has(p.id));
-  }, [wizard.payers, wizard.payerAssignments]);
+  // OPA-RETIRE shortlist: active, non-archived catalog payers (globals via
+  // widened payers_select). Retired/merged/Pre-Cred excluded.
+  const shortlist = useMemo(
+    () =>
+      wizard.payers.filter(
+        (p) =>
+          p.name !== PRE_CRED_PAYER_NAME &&
+          (p.status ?? "active") === "active" &&
+          p.archivedAt == null,
+      ),
+    [wizard.payers],
+  );
   const shortlistIds = useMemo(() => new Set(shortlist.map((p) => p.id)), [shortlist]);
 
   const targetsByPayer = useMemo(() => {
@@ -64,9 +65,9 @@ export function PayerNetworkSection({ wizard }: SectionBodyProps) {
   const pickerPayers = shortlist.filter(
     (p) => !(targetsByPayer.get(p.id) ?? []).some((t) => t.status === "active"),
   );
-  // Only archived targets whose SUBSCRIPTION is still active — a catalog-archived
-  // subscription (and its cascade-archived targets) leaves the wizard until it is
-  // reactivated from the payer catalog.
+  // Archived targets for payers still on the shortlist (active + not
+  // catalog-archived). A catalog-archived payer drops out of shortlistIds, so
+  // its targets leave the wizard until reactivation.
   const archivedTargets = wizard.payerNetworkTargets.filter(
     (t) => t.status === "archived" && shortlistIds.has(t.payerId),
   );
@@ -75,15 +76,11 @@ export function PayerNetworkSection({ wizard }: SectionBodyProps) {
     return (
       <div className="flex flex-col items-start gap-3">
         <p className="text-[13px] text-muted-foreground">
-          No payers have been added to this organization yet. Browse the payer catalog to add the
-          payers this organization works with, then attach them here to record which networks each
-          group is pursuing.
+          No payers in the catalog yet. Set up a payer first, then attach it here to record which
+          networks each group is pursuing.
         </p>
-        <Button asChild variant="outline">
-          <Link to="/payer-directory">
-            <ArrowRight className="h-4 w-4" />
-            Browse payer catalog
-          </Link>
+        <Button asChild size="sm" className="h-8 bg-[#1B4D3E] px-3 text-[12px] text-white">
+          <Link to="/admin/payers/new">Set up a payer</Link>
         </Button>
       </div>
     );

@@ -416,3 +416,55 @@ describe("the org_payer_settings migration (20260716190000) — locked shape", (
     expect(sql).not.toContain("avg_decision_days");
   });
 });
+
+// OPA-RETIRE (R1 B, 2026-08-10) — retire org_payer_assignments as a GATE only.
+// Never DROP the table. Do not call this "Slice 3" (#280 owns that label).
+describe("OPA-RETIRE — assignment gate retirement (`20260810220000`)", () => {
+  const migrationPath = join(
+    ROOT,
+    "supabase/migrations/20260810220000_opa_retire_assignment_gate.sql",
+  );
+  const raw = readFileSync(migrationPath, "utf8");
+  const sql = raw
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .toLowerCase();
+
+  it("never DROPs org_payer_assignments (table stays dormant)", () => {
+    expect(sql).not.toMatch(/drop\s+table\s+(if\s+exists\s+)?public\.org_payer_assignments/);
+    expect(existsSync(migrationPath)).toBe(true);
+  });
+
+  it("widens payers_select to unconditional globals (no assignment subquery)", () => {
+    expect(sql).toContain("drop policy if exists payers_select");
+    expect(sql).toMatch(/create policy payers_select[\s\S]*?or \(org_id is null\)/);
+    const policyBody = sql.slice(sql.indexOf("create policy payers_select"));
+    const nextPolicy = policyBody.search(/\ncreate policy |\ncreate or replace function/);
+    const body = nextPolicy >= 0 ? policyBody.slice(0, nextPolicy) : policyBody;
+    expect(body).not.toContain("org_payer_assignments");
+  });
+
+  it("targets INSERT/UPDATE WITH CHECK drop the assignment EXISTS", () => {
+    expect(sql).toContain("drop policy if exists payer_network_targets_insert");
+    expect(sql).toContain("drop policy if exists payer_network_targets_update");
+    for (const name of ["payer_network_targets_insert", "payer_network_targets_update"] as const) {
+      const start = sql.indexOf(`create policy ${name}`);
+      expect(start).toBeGreaterThan(-1);
+      const slice = sql.slice(start);
+      const end = slice.search(/\ncreate policy |\ncreate or replace function|\nrevoke /);
+      const body = end >= 0 ? slice.slice(0, end) : slice;
+      expect(body).toContain("provider_groups");
+      expect(body).not.toContain("org_payer_assignments");
+    }
+  });
+
+  it("create_payer body no longer upserts org_payer_assignments", () => {
+    expect(sql).toContain("create or replace function public.create_payer");
+    const start = sql.indexOf("create or replace function public.create_payer");
+    const body = sql.slice(start);
+    expect(body).not.toMatch(/insert\s+into\s+public\.org_payer_assignments/);
+    expect(body).not.toContain("p_assign_to_org");
+    expect(body).toContain("'assignedtoorg', false");
+  });
+});

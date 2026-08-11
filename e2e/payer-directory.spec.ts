@@ -191,19 +191,38 @@ test("TS-36 (retargeted): the org payer list filters by name, State, and Kind �
   context,
   page,
 }) => {
-  // The org's own payers now feed the page (payers table ∩ active
-  // assignments), not the retired catalog browse.
+  // The org's own payers now feed the page (payers ∩ active targets —
+  // OPA-RETIRE), not the retired catalog browse / assignment subscription.
   const fixtures = makeFixtures();
   fixtures.payers = fixtures.global_payers;
-  fixtures.org_payer_assignments = [
-    { id: "opa-1", org_id: ORG_TREE_HILL, payer_id: "gp-bcbsnc", starter: false, status: "active" },
-    { id: "opa-2", org_id: ORG_TREE_HILL, payer_id: "gp-uhc", starter: false, status: "active" },
+  fixtures.org_payer_assignments = [];
+  fixtures.payer_network_targets = [
     {
-      id: "opa-3",
+      id: "t-1",
       org_id: ORG_TREE_HILL,
-      payer_id: "gp-superior",
-      starter: false,
+      group_id: "g-1",
+      payer_id: "gp-bcbsnc",
+      state: "NC",
       status: "active",
+      created_at: "2026-07-12T00:00:00Z",
+    },
+    {
+      id: "t-2",
+      org_id: ORG_TREE_HILL,
+      group_id: "g-1",
+      payer_id: "gp-uhc",
+      state: "NC",
+      status: "active",
+      created_at: "2026-07-12T00:00:00Z",
+    },
+    {
+      id: "t-3",
+      org_id: ORG_TREE_HILL,
+      group_id: "g-1",
+      payer_id: "gp-superior",
+      state: "TX",
+      status: "active",
+      created_at: "2026-07-12T00:00:00Z",
     },
   ];
   const { handler } = makeHandler(fixtures);
@@ -276,23 +295,24 @@ test("payer detail drill-in behind the name link; long state lists truncate to t
         payer_slug: "national-health",
       }),
     ],
-    org_payer_assignments: [
+    org_payer_assignments: [],
+    payer_network_targets: [
       {
-        id: "opa-1",
+        id: "t-1",
         org_id: ORG_TREE_HILL,
+        group_id: "g-1",
         payer_id: "gp-bcbsnc",
-        starter: false,
+        state: "NC",
         status: "active",
-        archived_at: null,
         created_at: "2026-07-14T00:00:00Z",
       },
       {
-        id: "opa-2",
+        id: "t-2",
         org_id: ORG_TREE_HILL,
+        group_id: "g-1",
         payer_id: "gp-national",
-        starter: false,
+        state: "NC",
         status: "active",
-        archived_at: null,
         created_at: "2026-07-14T00:00:00Z",
       },
     ],
@@ -399,13 +419,16 @@ test("governance: catalog diff review is not exposed to org users", async ({ con
         created_at: "2026-07-12T12:00:00Z",
       },
     ],
-    org_payer_assignments: [
+    org_payer_assignments: [],
+    payer_network_targets: [
       {
-        id: "opa-1",
+        id: "t-1",
         org_id: ORG_TREE_HILL,
+        group_id: "g-1",
         payer_id: "gp-bcbsnc",
-        starter: false,
+        state: "NC",
         status: "active",
+        created_at: "2026-07-12T00:00:00Z",
       },
     ],
   });

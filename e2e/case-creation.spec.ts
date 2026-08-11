@@ -7,7 +7,7 @@
 //   TS-51  Denial → reapply on the SAME case: reapply flips Denied → In
 //          Progress (recorded in the unified history) and appends tasks
 //          restamped from the current SOP — no second case is ever created.
-//   TS-52  Manual one-off case against a non-attached payer: same key and
+//   TS-52  Manual one-off case against an in-network payer: same key and
 //          dedupe, generation_run_id stays NULL, and a repeat attempt at the
 //          key blocks with a link to the existing case.
 import { test, expect, type Route } from "@playwright/test";
@@ -166,8 +166,8 @@ const STATUS_CONFIGS = [
 ];
 
 // Jane works at clinics of BOTH groups; both groups target BCBS-NC in NC —
-// the TS-50 two-group scenario. Cigna-NC is org-visible but NOT attached
-// (no payer_network_targets row) — the TS-52 one-off payer.
+// the TS-50 two-group scenario. Cigna-NC starts WITHOUT a target so TS-52 can
+// attach it as the in-network one-off (OPA-RETIRE: the picker is targets-only).
 function makeFixtures() {
   return {
     organizations: [
@@ -692,11 +692,23 @@ test("TS-51: a denied case reapplies on the SAME case — Denied → In Progress
   await expect(page.getByText("Original submission")).toBeVisible();
 });
 
-test("TS-52: a manual one-off case against a non-attached payer gets the same key discipline and a NULL run id; the key then blocks with a link", async ({
+test("TS-52: a manual one-off case against an in-network payer gets the same key discipline and a NULL run id; the key then blocks with a link", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures();
+  // OPA-RETIRE: ManualCaseModal offers only payers with an active target.
+  // Seed Cigna into the network so the one-off path still exercises the
+  // run-less create + key block (the old assignment-without-target hatch is gone).
+  (fixtures.payer_network_targets as Array<Record<string, unknown>>).push({
+    id: "t-cigna",
+    org_id: ORG_SHELBY,
+    payer_id: "pay-cigna",
+    group_id: "g-1",
+    state: "NC",
+    status: "active",
+    created_at: "2026-07-12T00:00:00Z",
+  });
   const { handler, writes } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
@@ -710,8 +722,6 @@ test("TS-52: a manual one-off case against a non-attached payer gets the same ke
   await page.getByRole("option", { name: "Jane Whitaker" }).click();
   await dialog.getByRole("combobox", { name: "Group" }).click();
   await page.getByRole("option", { name: "Group 1" }).click();
-  // Cigna-NC is assigned to the org but OUTSIDE its attached network targets —
-  // the exact Q2a escape hatch. The picker is not filtered to targets.
   await dialog.getByRole("combobox", { name: "Payer" }).click();
   await page.getByRole("option", { name: "Cigna-NC" }).click();
   await dialog.getByRole("combobox", { name: "State" }).click();
@@ -761,6 +771,7 @@ test("manual case replaces empty selectors with provider and payer setup actions
   const fixtures = makeFixtures();
   fixtures.providers = [];
   fixtures.org_payer_assignments = [];
+  fixtures.payer_network_targets = [];
   const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);
@@ -807,13 +818,14 @@ test("manual case directs providers without group assignments back to the roster
   await expect(dialog.getByRole("button", { name: "Create case" })).toBeDisabled();
 });
 
-test("manual case excludes an org-owned payer without an assignment (subscription-only picker)", async ({
+test("manual case excludes a payer with no active network target (targets-only picker)", async ({
   context,
   page,
 }) => {
   const fixtures = makeFixtures();
   fixtures.payers = [payerRow("pay-legacy", "Legacy Org Payer", ORG_SHELBY)];
   fixtures.org_payer_assignments = [];
+  fixtures.payer_network_targets = [];
   const { handler } = makeHandler(fixtures);
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context, ORG_SHELBY);

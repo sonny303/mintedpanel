@@ -15,9 +15,9 @@ Workbench `/api` is for the **browser extension only**. Panel does not need Post
 
 - JWT / session carries **org membership** (`memberships`).
 - **Active org** in panel: Zustand auth-store `activeOrgId`.
-- **`org_payer_assignments`:** table + rows **stay** (additive — never DROP). **R1 B (2026-08-10):** retire it **as a gate** for catalog visibility, attach eligibility, and `create_payer` side-effect — work id **OPA-RETIRE** (do **not** call this Slice 3; #280 owns that label). It is **not** a `buildGenerationPreview` candidacy input (targets / group assignments / facility assignments / exclusions / existing cases only).
+- **`org_payer_assignments`:** table + rows **stay** (additive — never DROP). **OPA-RETIRE (#285 / R1 B):** retired **as a gate** for catalog visibility, attach eligibility, and `create_payer` side-effect — do **not** call this Slice 3 (#280 owns that label). It is **not** a `buildGenerationPreview` candidacy input. Org ↔ payer “in network” = ≥1 active `payer_network_targets` row; do not resurrect assignment-gated `payers_select` / attach WITH CHECK / `create_payer` upsert.
 - Group↔payer ops live on **`payer_network_targets` / contracts / cases** — different layer.
-- **`create_payer`:** live hosted signature is the **10-arg** form (#274). Until OPA-RETIRE lands, creating a payer may still upsert the caller org’s assignment in-RPC; the Slice 6 `p_assign_to_org` flag was **superseded** (do not reintroduce).
+- **`create_payer`:** live hosted signature is the **10-arg** form (#274). OPA-RETIRE stops the in-RPC assignment upsert; the Slice 6 `p_assign_to_org` flag was **superseded** (do not reintroduce).
 - SOP library read-back: prefer migration `20260809120100` (global SOPs readable without assignment) — confirm hosted apply (OPS-S6).
 - Authoring payer universe ≠ ops/filter universe — `useAuthoringPayers` / `list_global_payers` in authoring UIs.
 - Payer Setup **Ready** = checklist SOP presence (#277), not form proven/drift. Attach review defaults are facility-backed only; E6.2 eligibility unchanged.

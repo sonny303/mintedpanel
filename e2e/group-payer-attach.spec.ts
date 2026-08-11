@@ -1,10 +1,10 @@
 // E6.2 F6.2.4 — TS-110: eligibility-filtered attach to the group via the
 // picker AND the CSV path. The picker never offers a zero-overlap payer;
-// proposed states = payer states ∩ group operating states, user-reviewed; the
-// org-level enablement (org_payer_assignments) is created implicitly and no
-// UI surfaces it. The CSV rides the staged-import machine: exact-header gate,
-// per-row eligibility errors named at scan time, idempotent skip-on-match
-// commit.
+// proposed states = payer states ∩ group operating states, user-reviewed.
+// OPA-RETIRE: attach writes payer_network_targets only — no
+// org_payer_assignments upsert, and no UI surfaces enablement/subscription.
+// The CSV rides the staged-import machine: exact-header gate, per-row
+// eligibility errors named at scan time, idempotent skip-on-match commit.
 import { test, expect, type Page, type Route } from "@playwright/test";
 
 const AUTH_KEY = "sb-example-auth-token";
@@ -296,7 +296,7 @@ async function uploadCsv(page: Page, name: string, content: string) {
   await page.locator('input[type="file"]').setInputFiles(csvFile(name, content));
 }
 
-test("TS-110: the picker never offers a zero-overlap payer; proposed states = payer ∩ group; enablement is implicit and never surfaced", async ({
+test("TS-110: the picker never offers a zero-overlap payer; proposed states = payer ∩ group; enablement is never surfaced", async ({
   context,
   page,
 }) => {
@@ -322,7 +322,7 @@ test("TS-110: the picker never offers a zero-overlap payer; proposed states = pa
   await expect(page.getByText(/No facilities in this state yet/)).toBeVisible();
   await expect(page.getByLabel("Target SC")).toHaveCount(0);
   await expect(page.getByLabel("Target CO")).toHaveCount(0);
-  // The org-level enablement is never surfaced in the flow.
+  // Org-level enablement/subscription is never surfaced (OPA-RETIRE).
   await expect(page.getByText(/enablement|subscription|assignment/i)).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Save targets" })).toBeDisabled();
@@ -330,16 +330,15 @@ test("TS-110: the picker never offers a zero-overlap payer; proposed states = pa
   await page.getByRole("button", { name: "Save targets" }).click();
   await expect(page.getByText("Aetna attached")).toBeVisible({ timeout: 15000 });
 
-  // Implicit enablement wrote the assignment row BEFORE the target insert.
-  const assignmentPost = writes.findIndex(
-    (w) => w.method === "POST" && w.path === "org_payer_assignments",
-  );
-  const targetPost = writes.findIndex(
+  // Targets only — no dormant org_payer_assignments write.
+  expect(
+    writes.filter((w) => w.method === "POST" && w.path === "org_payer_assignments"),
+  ).toHaveLength(0);
+  const targetPosts = writes.filter(
     (w) => w.method === "POST" && w.path === "payer_network_targets",
   );
-  expect(assignmentPost).toBeGreaterThanOrEqual(0);
-  expect(targetPost).toBeGreaterThan(assignmentPost);
-  const target = writes[targetPost]?.body;
+  expect(targetPosts.length).toBeGreaterThanOrEqual(1);
+  const target = targetPosts[0]?.body;
   expect(target?.group_id).toBe("g-ob");
   expect(target?.payer_id).toBe("pay-aetna");
   expect(target?.state).toBe("NC");

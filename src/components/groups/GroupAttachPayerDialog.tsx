@@ -5,8 +5,7 @@
 // group operating states, with the group's facility count per state as
 // context) — reviewExpansion/planAttachmentSave reused verbatim, so archived
 // rows arrive pre-unchecked and re-attach RESTORES (never a duplicate). Save
-// runs attachGroupPayer: the org-level enablement (org_payer_assignments) is
-// created implicitly and never managed by the user.
+// runs attachGroupPayer (OPA-RETIRE: targets only — no org_payer_assignments).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
