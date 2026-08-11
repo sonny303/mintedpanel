@@ -54,5 +54,8 @@ export function taxonomyOptionsForValue(
 ): readonly ProviderTaxonomyOption[] {
   const normalized = current ? normalizeTaxonomyCode(current) : "";
   if (!normalized || isKnownTaxonomyCode(normalized)) return PROVIDER_TAXONOMY_OPTIONS;
-  return [...PROVIDER_TAXONOMY_OPTIONS, { code: normalized, label: "Current value (not in catalog)" }];
+  return [
+    ...PROVIDER_TAXONOMY_OPTIONS,
+    { code: normalized, label: "Current value (not in catalog)" },
+  ];
 }
