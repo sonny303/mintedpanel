@@ -188,6 +188,31 @@ export function portalKeyConflicts(tasks: EditableTask[]): PortalKeyConflict[] {
   return out;
 }
 
+// BITE-SOP-TT-03 / D-SOP-1 A — collapsed Action row helpers. Storage stays
+// task+steps; the editor collapses the 1:1 case so authors set one name + Mode
+// instead of mirroring title and step instruction.
+
+/** True when the action has at most one step — the common portal-fill path. */
+export function isCollapsedAction(task: Pick<EditableTask, "steps">): boolean {
+  return task.steps.length <= 1;
+}
+
+/** Patch for renaming an action: a sole step's instruction tracks the name so
+ * publish still stamps a step label generation expects, without a second field. */
+export function actionNamePatch(
+  task: Pick<EditableTask, "steps">,
+  title: string,
+): Partial<EditableTask> {
+  if (task.steps.length !== 1) return { title };
+  const [sole] = task.steps;
+  return { title, steps: [{ ...sole, label: title }] };
+}
+
+/** Portal / online_form path ⇒ Auto-fill; every other Mode ⇒ Manual. */
+export function executionTypeForActionMode(stepType: SOPStepType): ExecutionType {
+  return stepType === "online_form" ? "extension_fill" : "manual";
+}
+
 export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
   return tasks.map((t, i) => ({
     title: t.title,
