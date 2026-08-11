@@ -523,16 +523,16 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
-  // Step 2 (Actions): one named action with one step — collapsed row syncs
-  // the step label from the action name (BITE-SOP-TT-03).
+  // Step 2 (Actions): Portal / Auto-fill preset seeds one collapsed action;
+  // rename it (BITE-SOP-TT-03/04).
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: "Add action" }).click();
+  await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
   await page
     .locator('div:has(> label:text-is("Action 1 name"))')
     .first()
     .locator("input")
     .fill("Submit enrollment");
-  await page.getByRole("button", { name: "Add step" }).click();
   await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /^3 Review$/ }).click();

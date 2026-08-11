@@ -316,14 +316,13 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
 
     await page.getByRole("button", { name: "Actions" }).click();
     await page.getByRole("button", { name: "Add action" }).click();
+    await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
     await page
       .locator('div:has(> label:text-is("Action 1 name"))')
       .first()
       .locator("input")
       .fill("Confirm the provider is enrollment-ready");
-    // Collapsed Action row (BITE-SOP-TT-03): one step hides the duplicate
-    // instruction field and syncs the step label from the action name.
-    await page.getByRole("button", { name: "Add step" }).click();
+    // Portal preset already seeds one online_form step (collapsed Action row).
     await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "Review" }).click();

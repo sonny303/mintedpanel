@@ -28,6 +28,7 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArchiveRestore,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -51,6 +52,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,10 +71,13 @@ import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTask
 import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVersionHistory";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
+  ACTION_PRESETS,
+  createActionFromPreset,
   fromEditable,
   portalKeyConflicts,
   randId,
   toEditable,
+  type ActionPresetId,
   type EditableTask,
 } from "@/components/templates/editableTemplate";
 import { useCreateSop, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
@@ -314,19 +325,11 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     setDirty(true);
   }, []);
 
-  // --- task-level edits (Tasks & steps, via TemplateTaskRow) ---
-  function addTask() {
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: randId(),
-        title: "New task",
-        description: "",
-        dueOffsetDays: prev.length * 7,
-        executionType: "manual",
-        steps: [],
-      },
-    ]);
+  // --- task-level edits (Actions, via TemplateTaskRow) ---
+  // BITE-SOP-TT-04: Add action opens presets (portal/email/channel), never an
+  // empty Manual shell with zero steps.
+  function addAction(preset: ActionPresetId) {
+    setTasks((prev) => [...prev, createActionFromPreset(preset, prev.length * 7)]);
     markDirty();
   }
   // E4.2 PM round-4 — accessible task reorder (move up/down, no drag needed).
@@ -1249,10 +1252,30 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
               </p>
             </div>
             {canEdit ? (
-              <Button size="sm" variant="outline" onClick={addTask}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add action
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add action
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[240px]">
+                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Seed from
+                  </DropdownMenuLabel>
+                  {ACTION_PRESETS.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      className="flex flex-col items-start gap-0.5 py-2"
+                      onSelect={() => addAction(p.id)}
+                    >
+                      <span className="text-sm">{p.label}</span>
+                      <span className="text-[11px] text-muted-foreground">{p.hint}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
           </div>
 
@@ -1260,7 +1283,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
             <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
               <EmptyState
                 message="No actions yet"
-                description="Add an action to start building this template"
+                description="Add a portal, email, or channel action to start"
               />
             </div>
           ) : (

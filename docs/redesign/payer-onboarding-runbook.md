@@ -61,23 +61,30 @@ for legacy stamps but are inert and hidden from new selections
 | Typical turnaround (days)                |       |
 | Follow-up cadence (days)                 |       |
 
-## 4. The SOP itself — tasks and steps
+## 4. The SOP itself — actions (tasks and steps)
 
-_[Template wizard: Basics → Tasks → Steps & fields → Review → Publish
-(E1.7b Model A; E4.2 execution types)]_
+_[Template wizard: Basics → Actions → Review → Publish
+(E1.7b Model A; E4.2 execution types; BITE-SOP-TT-03/04 Action language)]_
 
 Match key: payer = section 1, state = section 1, specialty = ______,
 group = ______ (leave "Any" unless a customer-specific override is needed —
 global templates are shared across orgs; org-specific ones win automatically).
 
-For each task, list its ordered steps. Step types: `online_form`,
+**Add action presets:** use **Add action → Portal / Auto-fill** (or Draft
+email / Phone / Fax / Mail) so each checklist item starts with Mode +
+execution already paired — do not begin from an empty Manual shell. Rename
+the action; pick the portal on the portal path. Add another step under an
+action only when you need a multi-step checklist under the same due date
+(D-SOP-4 A).
+
+For each action, list its ordered steps. Step types: `online_form`,
 `draft_email`, `pdf`, `fax`, `phone`, `mail`.
 
-| #   | Task title | Execution type (`manual` / Auto-fill=`extension_fill` only) | Steps (type — label — cadence/turnaround) | Due offset / assignee default |
-| --- | ---------- | ----------------------------------------------------------- | ----------------------------------------- | ----------------------------- |
-| 1   |            |                                                             |                                           |                               |
-| 2   |            |                                                             |                                           |                               |
-| 3   |            |                                                             |                                           |                               |
+| #   | Action name | Execution type (`manual` / Auto-fill=`extension_fill` only) | Steps (type — label — cadence/turnaround) | Due offset / assignee default |
+| --- | ----------- | ----------------------------------------------------------- | ----------------------------------------- | ----------------------------- |
+| 1   |             |                                                             |                                           |                               |
+| 2   |             |                                                             |                                           |                               |
+| 3   |             |                                                             |                                           |                               |
 
 Data fields per step: which provider tokens does the step consume
 (e.g. `provider.caqhId`, `provider.npi`)? These come from the closed token

@@ -213,6 +213,105 @@ export function executionTypeForActionMode(stepType: SOPStepType): ExecutionType
   return stepType === "online_form" ? "extension_fill" : "manual";
 }
 
+// BITE-SOP-TT-04 / D-SOP-4 A — "Add action" presets so authors never start from
+// an empty Manual shell. Storage stays task+steps; each preset is one collapsed
+// action (title ≡ sole step label) with Mode/execution derived from step type.
+
+/** Closed preset ids offered by the Template Editor Add-action menu. */
+export type ActionPresetId = "portal_fill" | "draft_email" | "phone" | "fax" | "mail";
+
+export interface ActionPresetMeta {
+  id: ActionPresetId;
+  /** Menu label. */
+  label: string;
+  /** Short hint under the menu item (execution + Mode). */
+  hint: string;
+}
+
+/** Menu order for Add action — portal/email first, then channel seeds. */
+export const ACTION_PRESETS: readonly ActionPresetMeta[] = [
+  {
+    id: "portal_fill",
+    label: "Portal / Auto-fill",
+    hint: "Auto-fill · Portal form",
+  },
+  {
+    id: "draft_email",
+    label: "Draft email",
+    hint: "Manual · Draft email",
+  },
+  {
+    id: "phone",
+    label: "Phone call",
+    hint: "Manual · Phone",
+  },
+  {
+    id: "fax",
+    label: "Fax",
+    hint: "Manual · Fax",
+  },
+  {
+    id: "mail",
+    label: "Mail",
+    hint: "Manual · Mail",
+  },
+] as const;
+
+const PRESET_TITLES: Record<ActionPresetId, string> = {
+  portal_fill: "Fill online form",
+  draft_email: "Draft email",
+  phone: "Phone call",
+  fax: "Fax",
+  mail: "Mail",
+};
+
+const PRESET_STEP_TYPES: Record<ActionPresetId, SOPStepType> = {
+  portal_fill: "online_form",
+  draft_email: "draft_email",
+  phone: "phone",
+  fax: "fax",
+  mail: "mail",
+};
+
+function emptyEditableStep(stepType: SOPStepType, label: string): EditableStep {
+  return {
+    id: randId(),
+    label,
+    detail: "",
+    stepType,
+    emailTemplate: {
+      subject: "",
+      body: "",
+      // draft_email seeds one empty To row so the recipient editor matches the
+      // "Add To" shape; other Modes keep empty lists (recipients never write).
+      to: stepType === "draft_email" ? [newEditableRecipient()] : [],
+      cc: [],
+    },
+    dataFields: [],
+    portalKey: "",
+    expectedTurnaroundDays: null,
+    followUpEveryDays: null,
+    requiredArtifacts: [],
+  };
+}
+
+/** Pure factory: one collapsed EditableTask for an Add-action preset. */
+export function createActionFromPreset(
+  preset: ActionPresetId,
+  dueOffsetDays: number,
+): EditableTask {
+  const title = PRESET_TITLES[preset];
+  const stepType = PRESET_STEP_TYPES[preset];
+  return {
+    id: randId(),
+    title,
+    description: "",
+    dueOffsetDays,
+    executionType: executionTypeForActionMode(stepType),
+    steps: [emptyEditableStep(stepType, title)],
+  };
+}
+
 export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
   return tasks.map((t, i) => ({
     title: t.title,
