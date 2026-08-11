@@ -111,6 +111,23 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     user_table_prefs: [],
   };
 
+  // Aetna portal is always present — TS-114b authors a Portal / Auto-fill
+  // action and BITE-SOP-TT-01 hard-blocks publish without a linked portal.
+  db.portals.push({
+    id: "portal-aetna",
+    org_id: null,
+    portal_key: "aetna_enroll",
+    name: "Aetna Portal",
+    payer_id: AETNA_ID,
+    form_url: "https://portal.example/aetna",
+    is_verified: false,
+    last_verified_at: null,
+    proven_at: null,
+    url_changed_at: null,
+    created_at: "2026-07-13T00:00:00Z",
+    updated_at: "2026-07-13T00:00:00Z",
+  });
+
   if (scenario !== "authoring") {
     db.sop_templates.push({
       id: BCBS_TPL_ID,
@@ -140,36 +157,20 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       created_at: "2026-07-13T00:00:00Z",
       updated_at: "2026-07-13T00:00:00Z",
     });
-    db.portals.push(
-      {
-        id: "portal-bcbs",
-        org_id: null,
-        portal_key: "bcbs_ks_enrollment",
-        name: "BCBS KS Enrollment",
-        payer_id: BCBS_ID,
-        form_url: "https://portal.example/bcbs",
-        is_verified: true,
-        last_verified_at: "2026-07-14T00:00:00Z",
-        proven_at: null,
-        url_changed_at: null,
-        created_at: "2026-07-13T00:00:00Z",
-        updated_at: "2026-07-13T00:00:00Z",
-      },
-      {
-        id: "portal-aetna",
-        org_id: null,
-        portal_key: "aetna_enroll",
-        name: "Aetna Portal",
-        payer_id: AETNA_ID,
-        form_url: "https://portal.example/aetna",
-        is_verified: false,
-        last_verified_at: null,
-        proven_at: null,
-        url_changed_at: null,
-        created_at: "2026-07-13T00:00:00Z",
-        updated_at: "2026-07-13T00:00:00Z",
-      },
-    );
+    db.portals.push({
+      id: "portal-bcbs",
+      org_id: null,
+      portal_key: "bcbs_ks_enrollment",
+      name: "BCBS KS Enrollment",
+      payer_id: BCBS_ID,
+      form_url: "https://portal.example/bcbs",
+      is_verified: true,
+      last_verified_at: "2026-07-14T00:00:00Z",
+      proven_at: null,
+      url_changed_at: null,
+      created_at: "2026-07-13T00:00:00Z",
+      updated_at: "2026-07-13T00:00:00Z",
+    });
     db.portal_field_maps.push(
       {
         id: "m1",
@@ -524,7 +525,8 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
   // Step 2 (Actions): Portal / Auto-fill preset seeds one collapsed action;
-  // rename it (BITE-SOP-TT-03/04).
+  // rename it and link the payer's portal (BITE-SOP-TT-01/03/04 — Auto-fill
+  // publish lint requires a portalKey).
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: "Add action" }).click();
   await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
@@ -534,6 +536,9 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
     .locator("input")
     .fill("Submit enrollment");
   await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
+  const portalTrigger = page.getByRole("combobox").filter({ hasText: /No portal|Aetna Portal/ });
+  await portalTrigger.click();
+  await page.getByRole("option", { name: "Aetna Portal" }).click();
 
   await page.getByRole("button", { name: /^3 Review$/ }).click();
   await page.getByRole("button", { name: "Create template" }).click();

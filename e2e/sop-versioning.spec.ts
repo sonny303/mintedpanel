@@ -322,8 +322,14 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
       .first()
       .locator("input")
       .fill("Confirm the provider is enrollment-ready");
-    // Portal preset already seeds one online_form step (collapsed Action row).
+    // Portal preset seeds one online_form step; BITE-SOP-TT-01 requires a
+    // linked portal before Auto-fill content can publish.
     await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
+    const portalTrigger = page
+      .getByRole("combobox")
+      .filter({ hasText: /No portal|Humana provider portal/ });
+    await portalTrigger.click();
+    await page.getByRole("option", { name: "Humana provider portal" }).click();
 
     await page.getByRole("button", { name: "Review" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
