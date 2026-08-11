@@ -51,6 +51,10 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - Catalog purge **code** — #275 (hosted apply still OPS-PURGE)
 - **TD-47 / SOP All-states + D3.3-G `pickTemplate`** — #280 (spike #278)
 
+## Open spikes (awaiting PM)
+
+- **SOP Tasks & steps simplification** — `docs/ops/sop-tasks-steps-simplification-spike.md` (D-SOP-1..4); no product code until ack.
+
 ## Canonical registers
 
 - `TECH-DEBT.md` (root)
