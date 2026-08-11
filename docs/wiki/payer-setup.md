@@ -1,6 +1,6 @@
 # Payer Setup
 
-_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10)._
+_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10); Form Setup / Train capture notes (2026-08-11)._
 
 Journey A — payer readiness: catalog + SOPs with embedded form setup.
 Global: authored once, inherited by every org.
@@ -17,18 +17,37 @@ Global: authored once, inherited by every org.
   dry test → ready. A no-online-form SOP is ready with a note.
 - **Portal setup lives inside the SOP editor** (the online_form step's "Form
   setup" panel): register or pick the portal (global or org tier by the
-  template), train captured mappings in place (broken-on-last-fill rows queue
-  FIRST), and run the mock dry run — register → capture (extension) → train →
-  prove. Only capture leaves the editor: "Open form" opens the portal page,
-  where the extension does the capture (granting site access on the first visit
-  to a non-BCBS portal); the proposed mappings then appear back in Form setup.
+  template), train captured mappings in the **field registry** (every row
+  stays listed and editable; token / fixed value / human-fills decisions),
+  and run the mock dry run — register → capture (extension) → train → prove.
+  Only capture leaves the editor: "Open form" opens the portal page, where
+  the extension does the capture (granting site access on the first visit to
+  a non-BCBS portal); the proposed mappings then appear back in Form setup.
+  Token pickers are searchable (fuzzy) over the served catalog.
+- **Stale mappings** (field missing on the last real fill) keep their
+  controls and use fill-time copy — staleness is information, not a lock
+  _(lands with panel #289)_. Re-capturing a page refreshes presentation
+  (`sort_order` / labels) without resetting an existing decision _(lands
+  with panel #290 + extension capture order PRs)_.
+- **Ghost portals stay out of pickers.** Browser portal lists apply the same
+  D6.4 filter the API already used: global rows with no workable payer
+  (null / retired / merged / archived) do not appear _(lands with #282)_.
 - **The dry run uses SYNTHETIC mock data** (versioned profile, never a
   provider row, never PHI), once per payer — a pass means every captured field
   has a decided auto-fill mapping and stamps the portal **Proven**.
 - **Drift repair (ex-Fix-it)** reopens the same editor: the Sidebar badge is
-  the drift count, the SOPs tab banners deep-link the owning SOP, and a
-  retrained mapping clears the badge (repaired-pending-verification until the
-  next real fill).
+  the drift count, and a retrained mapping clears the badge
+  (repaired-pending-verification until the next real fill).
+- **Train in the extension** (paired Work/Train shell): URL match binds
+  which form capture writes to; a sticky dropdown selection that does not
+  match the open tab shows mismatch copy and disables capture _(lands with
+  extension #40)_. Capture skips hidden controls, orders fields by page walk,
+  and identifies a real second page instead of always reusing page 1
+  _(lands with extension #43 / #44 / #46)_.
+- **SOP Actions editor** _(lands with #297)_: Auto-fill steps lint for a
+  linked portal (“needs form follow-up”), inert execution types stay out of
+  the picker, collapsed Action rows stay readable, and Add action offers
+  presets/seeds.
 - **MSO routing retired** as an org rules engine — delegation is a curated
   payer fact on the catalog row (`Delegated: …`) plus SOP content.
 - **Org settings moved out**: resolution-ID labels live on Org Detail (org
@@ -44,6 +63,12 @@ The cleanup removes two sources of friction from the shipped journey:
   create adds the payer to the active organization and the confirmation says
   so. The backend performs the identity insert and organization assignment in
   one transaction.
+- _(Lands with #285 OPA-RETIRE)_ **Network membership is group attach
+  (active `payer_network_targets`), not the dormant
+  `org_payer_assignments` subscription gate.** Create still authorizes under
+  the caller org; “in my network” / attach pickers follow live targets. The
+  assignments table is **not dropped**. Hosted migration apply stays an
+  operator step.
 - **The catalog is curated, not a seed inventory.** The retired catalog-sync
   rows that are not referenced by cases, targets, enrollment facts, SOPs,
   portals, generation records, contacts, settings, or other payer links are
