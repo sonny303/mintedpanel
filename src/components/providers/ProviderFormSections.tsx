@@ -22,6 +22,7 @@ import {
   type ProviderFormState,
   type UpdateProviderField,
 } from "@/components/providers/providerFormShared";
+import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 
 interface SectionProps {
   form: ProviderFormState;
@@ -155,9 +156,24 @@ export function CredentialsSection({ form, errors, update }: SectionProps) {
       <Field
         label="Taxonomy code"
         error={errors.taxonomyCode}
-        helper="Change if this provider uses a specialty taxonomy"
+        helper="NUCC taxonomy for this provider's specialty"
       >
-        <Input value={form.taxonomyCode} onChange={(e) => update("taxonomyCode", e.target.value)} />
+        <Select
+          value={form.taxonomyCode || undefined}
+          onValueChange={(v) => update("taxonomyCode", v)}
+        >
+          <SelectTrigger aria-label="Taxonomy code">
+            <SelectValue placeholder="Select taxonomy" />
+          </SelectTrigger>
+          <SelectContent>
+            {taxonomyOptionsForValue(form.taxonomyCode).map(({ code, label }) => (
+              <SelectItem key={code} value={code}>
+                <span className="font-mono text-[13px]">{code}</span>
+                <span className="text-muted-foreground"> — {label}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
       <Field label="DEA number">
         <Input value={form.deaNumber} onChange={(e) => update("deaNumber", e.target.value)} />

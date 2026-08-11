@@ -37,6 +37,7 @@ import { usePayers } from "@/hooks/useAdmin";
 import { StateSelect } from "@/components/StateSelect";
 import { ENROLLMENT_GUARD_TEXT } from "@/components/providers/EnrollmentsPanel";
 import { isValidNpi } from "@/lib/providerGroup";
+import { taxonomyOptionsForValue } from "@/lib/providerTaxonomy";
 import { validateGroupAssignments, type GroupAssignmentInput } from "@/lib/groupAssignments";
 import type { LicenseInput, ProviderInput } from "@/services/providers";
 import type { Provider, ProviderGroup } from "@/types";
@@ -410,12 +411,22 @@ function FormBody({
               <Label htmlFor="prov-taxonomy" className="text-[12px]">
                 Taxonomy code
               </Label>
-              <Input
-                id="prov-taxonomy"
-                value={form.taxonomyCode}
-                onChange={(e) => set({ taxonomyCode: e.target.value })}
-                className="h-9"
-              />
+              <Select
+                value={form.taxonomyCode || undefined}
+                onValueChange={(v) => set({ taxonomyCode: v })}
+              >
+                <SelectTrigger id="prov-taxonomy" className="h-9" aria-label="Taxonomy code">
+                  <SelectValue placeholder="Select taxonomy" />
+                </SelectTrigger>
+                <SelectContent>
+                  {taxonomyOptionsForValue(form.taxonomyCode).map(({ code, label }) => (
+                    <SelectItem key={code} value={code}>
+                      <span className="font-mono text-[13px]">{code}</span>
+                      <span className="text-muted-foreground"> — {label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="prov-specialty" className="text-[12px]">
