@@ -63,8 +63,8 @@ const nonEmpty = (value: string | null | undefined): boolean =>
  * cannot explain must never be counted as mapped or quietly skipped.
  *
  * `stale` is passed in rather than derived: staleness is a fact about the last
- * capture (the field was not in it), which lives in the drift layer, not on
- * the row.
+ * real fill (the field was not found on the page at fill time), which lives in
+ * the drift layer, not on the row.
  */
 export function classifyFieldMap(
   map: ClassifiableFieldMap,
@@ -74,7 +74,7 @@ export function classifyFieldMap(
     return RESULT("stale", false, false, false, "Retired");
   }
   if (options.stale) {
-    return RESULT("stale", false, false, false, "Not found in the latest capture");
+    return RESULT("stale", false, false, false, "Not found in the latest fill");
   }
 
   // Undecided is a STATUS fact and is checked first, whatever the source. This

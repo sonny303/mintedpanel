@@ -616,7 +616,9 @@ test("TS-132 — drift: badge + banner + in-editor repair clears it; never block
   await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
   const brokenRow = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "NPI Number" }).first();
-  await expect(brokenRow.locator("span.inline-flex", { hasText: "Not on the form" })).toBeVisible();
+  await expect(
+    brokenRow.locator("span.inline-flex", { hasText: "Not found in the latest fill" }),
+  ).toBeVisible();
 
   // Repair: re-point it at a token → train_global_field_map on the wire
   // (global row) → the repaired-since rule re-derives the drift away.

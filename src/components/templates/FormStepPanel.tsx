@@ -142,8 +142,8 @@ export function FormStepPanel({
   const approvedCount = useMemo(() => maps.filter((m) => m.status === "approved").length, [maps]);
 
   // E6.9: ONE derivation for the read-out, shared with the dry run and the list
-  // via the classifier. `brokenIds` doubles as the stale set — a field the
-  // latest capture did not see (D7).
+  // via the classifier. `brokenIds` doubles as the stale set — map ids the
+  // latest real fill reported as not found on the page (form drift, D7).
   const coverage = useMemo(
     () => registryCoverage(maps as RegistryRow[], brokenIds),
     [maps, brokenIds],
@@ -381,7 +381,7 @@ export function FormStepPanel({
                 )}
                 {/* Informational only — no readiness semantics (D13). */}
                 <span>
-                  {coverage.mapped} of {coverage.total} mapped
+                  {coverage.mapped} of {coverage.total} mapped overall
                   {coverage.pages > 0
                     ? ` · ${coverage.pages} page${coverage.pages === 1 ? "" : "s"} captured`
                     : ""}

@@ -719,7 +719,7 @@ test("TS-147 — re-capture keeps naming and decisions; a vanished field goes st
   await expect(page.getByText("Form setup").first()).toBeVisible({ timeout: 30000 });
   const entity = rowFor(page, "Entity Type");
   await expect(entity).toBeVisible();
-  await expect(pillIn(entity, "Not on the form")).toBeVisible();
+  await expect(pillIn(entity, "Not found in the latest fill")).toBeVisible();
   expect((db?.portal_field_maps ?? []).some((m) => m.id === "m-entity")).toBe(true);
 
   // Nothing about a shared row ever became an org row.
