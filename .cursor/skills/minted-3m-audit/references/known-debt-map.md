@@ -18,6 +18,7 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 | ID             | 3M   | Area      | Symptom                                               | Likely bites                                            |
 | -------------- | ---- | --------- | ----------------------------------------------------- | ------------------------------------------------------- |
+| SOP-TT         | Mura | panel     | Tasks & steps: dual execution×step types + 1:1 bloat  | Spike `docs/ops/sop-tasks-steps-simplification-spike.md` → BITE-SOP-TT-01..04 after PM D-SOP ack |
 | PAY-UNIVERSE   | Mura | both      | Three payer lists (ops / authoring / globals) confuse | Doc map + UI copy; then consolidate call sites          |
 | GLOBAL-PAYERS  | Muda | panel/db  | Dead catalog rows (code path #275)                    | Ops apply after second PM sign-off — not a re-inventory |
 | ORPHAN-REPORTS | Muda | panel     | `components/reports/*` after `/reporting`             | Delete orphan modules + grep imports                    |
@@ -49,6 +50,10 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - Ready = checklist SOP + attach facility-backed defaults — #277
 - Catalog purge **code** — #275 (hosted apply still OPS-PURGE)
 - **TD-47 / SOP All-states + D3.3-G `pickTemplate`** — #280 (spike #278)
+
+## Open spikes (awaiting PM)
+
+- **SOP Tasks & steps simplification** — `docs/ops/sop-tasks-steps-simplification-spike.md` (D-SOP-1..4); no product code until ack.
 
 ## Canonical registers
 
