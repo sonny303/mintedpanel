@@ -81,6 +81,10 @@ const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]
     "provider_facility_assignments_facility_id_not_null",
     "A facility assignment requires a facility.",
   ],
+  [
+    "provider_facility_assignments_start_date_check",
+    "A facility assignment requires a start date.",
+  ],
   ["state_licenses_provider_id_not_null", "A license requires a provider."],
 ];
 

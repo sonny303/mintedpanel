@@ -4,9 +4,11 @@ description: >-
   Lean 3M (Muri/Mura/Muda) audit engineer for Minted Panel (webapp) and Minted
   Panel Workbench (Chrome extension). Use when the user asks for a 3M audit,
   lean waste review, muda/mura/muri findings, optimization pass, system health
-  vs engagement closure, bite-sized improvement slices, or post-3M residual
-  debt. Also use when evaluating payers/portals/Train/Work, dual-door /api vs
-  Supabase, or whether the system is "truly optimized" after a tranche closed.
+  vs engagement closure, bite-sized improvement slices, post-3M residual debt,
+  GEN-SILENT / OPA-RETIRE / TRAIN-DUAL / LISTPORTALS follow-ons, or whether the
+  system is "truly optimized" after a tranche closed. Also use for payers/
+  portals/Train/Work, dual-door /api vs Supabase, or cadence ranking of daily
+  provider→cases vs once-per-payer Train.
 ---
 
 # Minted 3M Audit Engineer
@@ -16,17 +18,19 @@ through Lean **3M** lenses. Engagement closure ≠ system optimization. Always
 re-diagnose the _current_ tree; never declare the product "done" because a prior
 slice merged.
 
-Read these before writing findings (progressive disclosure):
+**Start here for residual work** (progressive disclosure — do not reload the
+whole chat):
 
-| File                                                                     | When                                               |
-| ------------------------------------------------------------------------ | -------------------------------------------------- |
-| [references/architecture-truth.md](references/architecture-truth.md)     | Always — two doors, join keys, payer universes     |
-| [references/engagement-learnings.md](references/engagement-learnings.md) | Always — locked decisions + traps from Aug 2026 3M |
-| [references/bite-size-rules.md](references/bite-size-rules.md)           | Always — how to slice recommendations              |
-| [references/known-debt-map.md](references/known-debt-map.md)             | When ranking residual work — TD + post-3M N-ids    |
+| File                                                                     | When                                           |
+| ------------------------------------------------------------------------ | ---------------------------------------------- |
+| [references/next-agent-context.md](references/next-agent-context.md)     | **First** — live locks, open PRs, next mandate |
+| [references/architecture-truth.md](references/architecture-truth.md)     | Always before contradicting stack/grain        |
+| [references/engagement-learnings.md](references/engagement-learnings.md) | Locked decisions + traps                       |
+| [references/bite-size-rules.md](references/bite-size-rules.md)           | How to slice recommendations                   |
+| [references/known-debt-map.md](references/known-debt-map.md)             | Ranking residual — re-verify in code           |
 
-Also bind to repo rules when present: panel `AGENTS.md`, `docs/ops/repo-workflow.md`,
-extension `CLAUDE.md`.
+Also bind: panel `AGENTS.md`, `docs/ops/repo-workflow.md`,
+`docs/ops/audit-course-correct-2026-08-10.md`, extension `CLAUDE.md`.
 
 ---
 
@@ -37,22 +41,27 @@ extension `CLAUDE.md`.
 - Cross-repo Train/Work/payer/portal/fill reliability
 - Turning a large epic into bite-sized PRs
 - Distinguishing **ops residual** from **code** work
+- Ranking daily provider→cases vs once-per-payer Train
 
-Do **not** use this skill to implement an epic end-to-end unless the user
-explicitly asks for implementation after approving a slice.
+Do **not** implement an epic end-to-end unless the user explicitly asks after
+approving a slice / locking D-decisions.
 
 ---
 
 ## 3M definitions (Minted-specific)
 
-| Lens     | Meaning here                                    | Typical signals                                                                                                                          |
-| -------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Muri** | Overburden / reliability / trust failure        | Silent no-ops, wrong cases, PHI leaks, hosted schema cliffs, untested hot paths, godfiles that block safe change                         |
-| **Mura** | Unevenness / incoherent operator or agent model | Two UIs for one job, three payer universes, API filtered but browser list not, Train vs Work sharing one pointer, docs lying about stack |
-| **Muda** | Waste                                           | Orphan components, unreachable UI, seed catalog mass, stale comments, duplicate create doors, hand-maintained API mirrors                |
+| Lens     | Meaning here                                    | Typical signals                                                                                                                   |
+| -------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Muri** | Overburden / reliability / trust failure        | Silent no-ops, wrong cases, PHI leaks, hosted schema cliffs, untested hot paths, godfiles that block safe change                  |
+| **Mura** | Unevenness / incoherent operator or agent model | Two UIs for one job, three payer universes, API filtered but browser list not, Train dropdown vs URL bind, docs lying about stack |
+| **Muda** | Waste                                           | Orphan components, unreachable UI, seed catalog mass, stale comments, duplicate create doors, hand-maintained API mirrors         |
 
-Severity: **S0** stop-ship/ops cliff · **S1** trust or daily-path · **S2** scale/DX · **S3** cleanup.  
-Effort: **XS** <½ day · **S** small PR · **M** multi-file · **L** epic — **must** be broken into sub-slices (see bite-size rules).
+Severity: **S0** stop-ship/ops cliff · **S1** trust or **daily-path** · **S2** scale/DX · **S3** cleanup.  
+Effort: **XS** <½ day · **S** small PR · **M** multi-file · **L** epic — **must** be broken into sub-slices.
+
+**Cadence weight:** when severity ties, prefer jobs run **multiple times a day**
+(provider→cases / generation / Work fill) over **once-per-payer** Train. Severity
+alone shipped TRAIN-DUAL before GEN-SILENT — that was a process miss.
 
 ---
 
@@ -60,92 +69,87 @@ Effort: **XS** <½ day · **S** small PR · **M** multi-file · **L** epic — *
 
 ### 1. Establish baseline
 
-1. Confirm which repos are in the workspace (`mintedpanel`, `minted-extension`).
-2. `git fetch` + note `origin/main` SHAs for both.
-3. Skim `docs/ops/3m-uat-readiness-checklist.md` and `TECH-DEBT.md` — treat as
-   hints, **re-verify in code**.
-4. If Supabase MCP / hosted creds missing: mark hosted checks **Unverified — ops**,
-   never invent green.
+1. Confirm repos (`mintedpanel`, `minted-extension`).
+2. Read `references/next-agent-context.md` — note open PR ids before inventing work.
+3. `git fetch` + note `origin/main` SHAs for both.
+4. Skim `TECH-DEBT.md` + debt map — **re-verify in code**.
+5. If Supabase MCP / hosted creds missing: mark hosted **Unverified — ops**,
+   never invent green. **Hosted ≠ merged.**
 
 ### 2. Probe the live architecture (code-verified)
 
-Must verify against current code, not memory:
-
-| Probe           | Panel                                                                           | Extension                                                       |
-| --------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Two doors       | Browser → services → Supabase; `/api/*` for extension + documents               | JWT → `/api` only; never service role; never table queries      |
-| Payer create    | `create_payer` **10-arg** live (#274); no `p_assign_to_org`                     | n/a                                                             |
-| Payer universes | `activeOrgPayers` vs `list_global_payers` vs `useAuthoringPayers`               | Train shared portals vs Work org portals                        |
-| Portal ghosts   | `portalVisibility` on **which** list paths?                                     | Which registry does tab detect use?                             |
-| Open cases      | `case_status` vs legacy mirrors                                                 | `/api` open-cases consumer                                      |
-| Hot files       | `portals.ts`, `payers.ts`, `payerSetup.ts`, `extensionRoutes.ts`, templates RLS | `sidepanel/main.ts`, `inject.ts`, `captureScan.ts`, `config.ts` |
+| Probe            | Panel                                                                   | Extension                                                 |
+| ---------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
+| Two doors        | Browser → services → Supabase; `/api/*` for extension + documents       | JWT → `/api` only; never service role                     |
+| Payer create     | `create_payer` **10-arg** (#274); no resurrected `p_assign_to_org`      | n/a                                                       |
+| Assignments gate | R1 B: retiring gate is **OPA-RETIRE**; table stays; not candidacy input | n/a                                                       |
+| Generation skips | `buildGenerationSkips` / GEN-SILENT banner vs silent drops              | n/a                                                       |
+| Portal ghosts    | `listPortals` + API paths use `portalVisibility`?                       | Work = `/api/portals`; Train = shared                     |
+| Train bind       | n/a                                                                     | URL match binds capture; dropdown = nav; C1 mismatch copy |
+| Open cases       | `case_status`                                                           | `OPEN_CASE_STATUSES`                                      |
+| Hot files        | `generationPreview.ts`, `portals.ts`, `payers.ts`, `extensionRoutes.ts` | `trainForms.ts`, `sidepanel/main.ts`, `portals.ts`        |
 
 ### 3. Produce the register
 
-Output a ranked table (max ~25 findings unless user asks for exhaustive):
+`ID | 3M | Area | Finding | Evidence (paths) | Sev | Effort | Cadence | Rec | Why it still hurts`
 
-`ID | 3M | Area | Finding | Evidence (paths) | Sev | Effort | Rec | Why it still hurts`
-
-**Rec** ∈ `fix` | `monitor` | `delete` | `postpone` | `ops`.
+**Rec** ∈ `fix` | `monitor` | `delete` | `postpone` | `ops`.  
+**Cadence** ∈ `daily` | `setup` | `once-payer` | `ops` | `rare`.
 
 ### 4. Bite-size every recommendation
 
-Every `fix`/`delete` with effort **M** or **L** must be split into **sub-slices**
-with: goal, in/out of scope, hot files, verify, stop condition. Follow
-[bite-size-rules.md](references/bite-size-rules.md). Never hand the user a
-single "rewrite Train" or "decompose sidepanel" blob.
+Every `fix`/`delete` with effort **M** or **L** → sub-slices (goal / in / out /
+hot files / verify / stop). Follow [bite-size-rules.md](references/bite-size-rules.md).
 
-### 5. Separate lanes in the summary
+### 5. Separate lanes
 
-Always partition:
+| Lane                 | Examples                                                    |
+| -------------------- | ----------------------------------------------------------- |
+| **Code (agentable)** | GEN-SILENT, LISTPORTALS, DOC-PICK, OPA-RETIRE (careful RLS) |
+| **Ops (human)**      | OPS-PURGE, OPS-S6, Vault, CORS                              |
+| **Epic / R7**        | Platform roles, FormStepPanel completion                    |
+| **Backlog**          | TD-41, TD-49, TD-50, TD-51                                  |
 
-| Lane                 | Examples                                                                    |
-| -------------------- | --------------------------------------------------------------------------- |
-| **Code (agentable)** | Filter browser `listPortals`, Train tab registry fix, delete orphan reports |
-| **Ops (human)**      | Hosted migrations, Vault secret, CORS extension id                          |
-| **Epic / R7**        | Platform roles, FormStepPanel completion, staging env pipeline              |
-| **Backlog owned**    | TD-41, TD-49, TD-50 with AC already written                                 |
-
-### 6. Close with Keep / Improve / Kill + next tranche
-
-- **Keep** — load-bearing; do not "simplify" away
-- **Improve** — ordered P0→P2 bite-sized slices
-- **Kill** — delete candidates with grep-zero importers
-
-Recommend **one next tranche** (2–5 bite-sized PRs max), not a new mega-engagement.
+### 6. Close with Keep / Improve / Kill + **one** next tranche (2–5 bites max)
 
 ---
 
-## Hard rules (from AGENTS + 3M engagement)
+## Hard rules
 
-1. **Additive DB only** — never edit old migrations; never DROP tables/columns. Row cleanup is a separate ops tranche with inventory → signed set → backup → DELETE.
+1. **Additive DB only** — never edit old migrations; never DROP tables/columns. Row cleanup = ops tranche.
 2. **Never self-merge.** Draft PRs; PM merges.
-3. **Components → hooks → services → Supabase.** No Supabase from components. Only `externalClient` (not dead `client.ts`).
-4. **No `/api/payers`.** Payers arrive nested on portals/cases. Extension never holds service role.
-5. **Panel-first wire contracts** — change panel `/api`, then extension types/mock.
-6. **PHI:** capture is shape-only (labels/selectors); fill values stay in worker; no full SSN outside vault RPCs; `ssn_last4` only elsewhere.
-7. **Don't re-gate TD-42** (ungated shared authoring) in a lean pass — that's R7.
-8. **Don't silent-`.limit()` getCases** — needs pagination UX (TD-49).
-9. **Hosted ≠ repo** — DROP+CREATE RPCs on `main` are an S0 cliff until operator apply.
-10. **Engagement closed ≠ optimized** — always re-score the live system.
-11. **Corrected payer-setup locks** — Ready = checklist SOP; attach defaults only (not reverse E6.2); keep `org_payer_assignments`; no DELETE without second PM sign-off (#275); Slice 5 out unless asked. Slice 3 All-states = D3.1 A + **D3.3-G** (#280) — do not resurrect E4.2 org-block-first ranking.
-12. **Bind this skill; don’t paste the audit** into handoffs or PR bodies — cite the skill path + locked table in `engagement-learnings.md`.
-13. **Case grain first** — when debating match/attach/SOP stories, lead with `(payer, group, state)`; org is tenancy/adoption, not the payer’s primary attachment.
+3. **Components → hooks → services → Supabase.** Only `externalClient`.
+4. **No `/api/payers`.** Extension never holds service role.
+5. **Panel-first wire contracts.**
+6. **PHI:** capture shape-only; no full SSN outside vault RPCs.
+7. **Don't re-gate TD-42** in a lean pass.
+8. **Don't silent-`.limit()` getCases** (TD-49).
+9. **Hosted ≠ repo** — merged code can be unapplied; say so.
+10. **Engagement closed ≠ optimized.**
+11. **Payer-setup locks (2026-08-10+):** Ready = checklist SOP; attach defaults only; **R1 B** retire assignments **as gate** (table dormant — **OPA-RETIRE**, not Slice 3); #275 DELETE needs second sign-off; **R2 GEN-SILENT** is the daily-loop build; D3.3-G (#280) stays.
+12. **Bind this skill; don’t paste audits** into handoffs/PR bodies.
+13. **Case grain first** — `(payer, group, state)`; org is tenancy/adoption.
+14. **Cadence over severity alone** — daily loop before once-per-payer Train.
+15. **Measure, don’t infer** — PM reply blocks carry code evidence (e.g. candidacy inputs), not lane-opinion tables alone.
+16. **Source-grep ≠ coverage** (TD-51) — tripwires OK; never claim click/wiring proven.
+17. **Train capture bind = URL only** — never auto-bind dropdown key (shared-tier poison; idempotent propose).
 
 ---
 
-## Anti-patterns in audit output
+## Anti-patterns
 
 - Victory-lap scorecards without a **new** residual register
-- "Postpone" without owner + acceptance criteria
+- Ranking by severity while ignoring job frequency
+- "Postpone" without owner + AC
 - Effort **L** without sub-slices
-- Asking PM to tick hosted boxes when they asked for review/merge only — label as **ops residual**
-- Recommending `/api/payers`, Train rewrite, or FormStepPanel epic as a "small 3M fix"
-- Treating `useAuthoringPayers` or D6.4 API filter as bugs — they are intentional Slice 6 shapes; find _remaining_ unevenness (e.g. browser list unfiltered)
-- Pasting a full prior audit transcript instead of binding `.cursor/skills/minted-3m-audit/`
-- Building SOP All-states / dropping `org_payer_assignments` without the current locked gate
-- Treating D3.3-G as optional or recommending “org any-group beats global exact-group” after #280
-- Confusing org↔payer adoption with group↔payer operational grain
+- Dumping hosted chore lists on PM — label **ops residual**
+- Calling OPA-RETIRE “Slice 3” or GEN-SILENT “Slice 5”
+- Treating D3.3-G as optional / resurrecting E4.2 org-block-first
+- Claiming LISTPORTALS is chrome.storage (it’s browser `listPortals` / `usePortals`)
+- Framing Train dropdown-not-setting-`portal` as the defect (happy-path design; defect = false “New form” on redirects)
+- Counting harness `readFileSync`/`toContain` as behavioral wiring proof
+- Building more Train/payer-setup while GEN-SILENT daily-loop is the locked R2 unless PM re-orders
+- DROPping `org_payer_assignments`
 
 ---
 
@@ -154,17 +158,15 @@ Recommend **one next tranche** (2–5 bite-sized PRs max), not a new mega-engage
 ```markdown
 ## Verdict
 
-[One paragraph: optimized? no/partial — biggest levers]
+[optimized? no/partial — biggest levers — cadence note]
 
 ## 3M register (current)
 
-[table]
+[table with Cadence column]
 
-## Untangled slices (for anything M/L)
+## Untangled slices (M/L only)
 
-### Slice A — …
-
-- Goal / In / Out / Hot files / Verify / Stop
+### BITE-…
 
 ## Lanes
 
@@ -174,8 +176,8 @@ Recommend **one next tranche** (2–5 bite-sized PRs max), not a new mega-engage
 
 ## Recommended next tranche
 
-[2–5 bite-sized items only]
+[2–5 bites; daily-loop first unless PM says otherwise]
 ```
 
-If the user wants a paste-ready builder prompt for the next tranche, generate it in the
-same style as the Slice 6 Claude handoff: must / must-not / hot files / verify / stop.
+Paste-ready builder prompts: must / must-not / hot files / verify / stop —
+same shape as Slice 6 / `next-agent-context.md` mandate block.
