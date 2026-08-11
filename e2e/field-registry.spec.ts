@@ -489,7 +489,7 @@ async function fulfillSupabase(route: Route) {
 }
 
 /** Open the editor with the online-form panel already expanded (?intent=train
- * is the Slice F deep-link that lands on Tasks & steps with the panel open). */
+ * is the Slice F deep-link that lands on Actions with the panel open). */
 async function openRegistry(page: import("@playwright/test").Page) {
   await page.goto(`/admin/templates/${TPL_ID}?intent=train`);
   await expect(page.getByText("Form setup").first()).toBeVisible({ timeout: 30000 });

@@ -13,6 +13,7 @@
 // on the group board / generation grid; this funnel measures the
 // authored-once-inherited-everywhere platform state instead.
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { needsFormFollowUp } from "@/lib/executionTypes";
 import type { PortalFieldMap, SOPTaskDefinition } from "@/types";
 
 export type FunnelFormState = "none" | "registered" | "trained" | "proven";
@@ -55,7 +56,7 @@ export interface FunnelRow {
   /** ≥1 active GLOBAL SOP with ≥1 task names this payer. */
   sopPublished: boolean;
   sopCount: number;
-  /** The payer's SOPs carry ≥1 online_form step ⇒ autofill may apply. */
+  /** The payer's SOPs need form follow-up (Auto-fill OR online_form). */
   needsPortal: boolean;
   formState: FunnelFormState;
   /** First matched portal key (payer-linked or SOP-step-linked), for links. */
@@ -144,7 +145,9 @@ export function buildPayerReadinessFunnel(input: BuildFunnelInput): FunnelRow[] 
     // Portals in play for this payer: payer-linked rows ∪ rows the SOP's own
     // online_form steps name by key.
     const stepNeeds = sops.map((s) => sopOnlineFormNeeds(s.taskDefinitions));
-    const needsPortal = stepNeeds.some((n) => n.hasOnlineForm);
+    // BITE-SOP-TT-01 — same helper as TE-16 payer readiness (OR of Auto-fill /
+    // online_form). Portal-key matching still uses sopOnlineFormNeeds alone.
+    const needsPortal = sops.some((s) => needsFormFollowUp(s.taskDefinitions));
     const matched = new Map<string, FunnelPortalInput>();
     for (const p of portalsByPayer.get(payer.id) ?? []) matched.set(p.portalKey, p);
     for (const n of stepNeeds) {

@@ -11,7 +11,7 @@
 // the payer/state/group match inputs.
 
 import { isFallbackTemplate, pickTemplate } from "./pickTemplate";
-import { hasExtensionFillTask } from "./executionTypes";
+import { needsFormFollowUp } from "./executionTypes";
 import type { SOPTemplate } from "@/types";
 
 export interface ReadinessTargetInput {
@@ -44,7 +44,7 @@ export interface PayerReadinessRow {
   underlying: UnderlyingTargetReadiness[];
   /** The resolved payer-specific template id when ready; null when Needs SOP. */
   resolvedTemplateId: string | null;
-  /** TE-16: the resolved SOP has ≥1 extension_fill task → show form readiness. */
+  /** BITE-SOP-TT-01: resolved SOP needs form follow-up (Auto-fill OR online_form). */
   hasExtensionFill: boolean;
   /** Match key for the "create org-specific SOP" link — the first uncovered
    * target's group when Needs SOP, else null. */
@@ -84,7 +84,7 @@ export function buildPayerReadiness(input: PayerReadinessInput): PayerReadinessR
       ? (input.templates.find((tpl) => tpl.id === resolvedTemplateId) ?? null)
       : null;
     const hasExtensionFill = resolvedTemplate
-      ? hasExtensionFillTask(resolvedTemplate.taskDefinitions)
+      ? needsFormFollowUp(resolvedTemplate.taskDefinitions)
       : false;
 
     rows.push({

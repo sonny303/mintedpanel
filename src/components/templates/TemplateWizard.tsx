@@ -1,8 +1,8 @@
 // Three-step wizard for authoring a template (payer-and-cases screen 4:
-// Basics · Tasks & steps · Review — the old Tasks and "Steps & fields" steps
-// rendered the same list twice and are merged). The jsonb shape is unchanged
-// (owned by src/lib/sopResolver.ts): tasks -> steps -> data fields with bare
-// tokens; case creation reads it untouched.
+// Basics · Actions · Review — BITE-SOP-TT-03 relabels the middle step; the old
+// Tasks and "Steps & fields" steps rendered the same list twice and are merged).
+// The jsonb shape is unchanged (owned by src/lib/sopResolver.ts): tasks ->
+// steps -> data fields with bare tokens; case creation reads it untouched.
 //
 // Tier is DERIVED from the match key, never chosen: the editor authors GLOBAL
 // rows only (payer + state + optional group — §2.4: it never creates org-tier
@@ -28,6 +28,7 @@ import { useBlocker, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArchiveRestore,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -51,6 +52,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,10 +71,13 @@ import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTask
 import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVersionHistory";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
+  ACTION_PRESETS,
+  createActionFromPreset,
   fromEditable,
   portalKeyConflicts,
   randId,
   toEditable,
+  type ActionPresetId,
   type EditableTask,
 } from "@/components/templates/editableTemplate";
 import { useCreateSop, usePublishSop, useUpdateSop } from "@/hooks/useAdmin";
@@ -157,7 +168,7 @@ const US_STATES = [
 // the same list twice, so they are ONE step now.
 const STEPS = [
   { n: 1, label: "Basics" },
-  { n: 2, label: "Tasks & steps" },
+  { n: 2, label: "Actions" },
   { n: 3, label: "Review" },
 ] as const;
 
@@ -188,7 +199,7 @@ interface TemplateWizardProps {
   prefill?: WizardPrefill;
   // E4.2 F4.2.1 — resume an existing draft (create mode only).
   draft?: SopTemplateDraft | null;
-  // Slice F — a readiness CTA deep-link (?intent=): land on Tasks & steps with
+  // Slice F — a readiness CTA deep-link (?intent=): land on Actions with
   // the owning form panel expanded and the derived context banner explaining
   // why. The banner re-derives from live step state and disappears when the
   // work is done.
@@ -241,7 +252,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const groupedTokens = useMemo(() => groupTokens(tokens), [tokens]);
   const firstToken = tokens[0]?.token ?? "provider.firstName";
 
-  // A deep-linked intent lands directly on Tasks & steps — that is where the
+  // A deep-linked intent lands directly on Actions — that is where the
   // work it points at lives.
   const [step, setStep] = useState(intent ? 2 : 1);
   const [name, setName] = useState(draftPayload?.name ?? initial?.name ?? "");
@@ -314,19 +325,11 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     setDirty(true);
   }, []);
 
-  // --- task-level edits (Tasks & steps, via TemplateTaskRow) ---
-  function addTask() {
-    setTasks((prev) => [
-      ...prev,
-      {
-        id: randId(),
-        title: "New task",
-        description: "",
-        dueOffsetDays: prev.length * 7,
-        executionType: "manual",
-        steps: [],
-      },
-    ]);
+  // --- task-level edits (Actions, via TemplateTaskRow) ---
+  // BITE-SOP-TT-04: Add action opens presets (portal/email/channel), never an
+  // empty Manual shell with zero steps.
+  function addAction(preset: ActionPresetId) {
+    setTasks((prev) => [...prev, createActionFromPreset(preset, prev.length * 7)]);
     markDirty();
   }
   // E4.2 PM round-4 — accessible task reorder (move up/down, no drag needed).
@@ -404,11 +407,16 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           t.id === taskId
             ? {
                 ...t,
+                // New steps default to online_form — keep/set Auto-fill on that path
+                // (BITE-SOP-TT-03).
+                executionType: "extension_fill",
                 steps: [
                   ...t.steps,
                   {
                     id: randId(),
-                    label: "New step",
+                    // Sole-step actions sync label from the action name on rename;
+                    // seed the instruction from the current title when present.
+                    label: t.steps.length === 0 && t.title.trim() ? t.title : "New step",
                     detail: "",
                     stepType: "online_form" as const,
                     emailTemplate: { subject: "", body: "", to: [], cc: [] },
@@ -1236,25 +1244,46 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Tasks &amp; steps</h2>
+              <h2 className="text-sm font-semibold">Actions</h2>
               <p className="text-xs text-muted-foreground">
-                Each task holds its own ordered steps — reorder with the arrows or by dragging. An
-                online-form step owns its portal setup inline.
+                Each action is one checklist item — Mode chooses portal, email, or a channel. A
+                single-step action collapses to one name; add another step only when you need a
+                multi-step checklist under the same due date.
               </p>
             </div>
             {canEdit ? (
-              <Button size="sm" variant="outline" onClick={addTask}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add task
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add action
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[240px]">
+                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Seed from
+                  </DropdownMenuLabel>
+                  {ACTION_PRESETS.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      className="flex flex-col items-start gap-0.5 py-2"
+                      onSelect={() => addAction(p.id)}
+                    >
+                      <span className="text-sm">{p.label}</span>
+                      <span className="text-[11px] text-muted-foreground">{p.hint}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
           </div>
 
           {tasks.length === 0 ? (
             <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
               <EmptyState
-                message="No tasks yet"
-                description="Add a task to start building this template"
+                message="No actions yet"
+                description="Add a portal, email, or channel action to start"
               />
             </div>
           ) : (

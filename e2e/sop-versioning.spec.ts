@@ -15,7 +15,7 @@ import { test, expect, type Route } from "@playwright/test";
 //          through the same RPC, and exits to Payer Setup.
 //   Slice F versioning-lite: the header v-chip; History offers restore-as-new
 //          (an old version republishes as version N+1 — never edited in
-//          place); a readiness deep-link (?intent=) lands on Tasks & steps
+//          place); a readiness deep-link (?intent=) lands on Actions
 //          with a DERIVED context banner that disappears when the work is
 //          done, and the owning form panel mounts expanded.
 // Selection order itself (fallback only when both payer tiers miss) is pinned
@@ -314,19 +314,22 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
       timeout: 30000,
     });
 
-    await page.getByRole("button", { name: "Tasks & steps" }).click();
-    await page.getByRole("button", { name: "Add task" }).click();
+    await page.getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("button", { name: "Add action" }).click();
+    await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
     await page
-      .locator('div:has(> label:text-is("Task 1 title"))')
+      .locator('div:has(> label:text-is("Action 1 name"))')
       .first()
       .locator("input")
       .fill("Confirm the provider is enrollment-ready");
-    await page.getByRole("button", { name: "Add step" }).click();
-    await page
-      .locator('div:has(> label:text-is("Step 1 instruction"))')
-      .first()
-      .locator("textarea")
-      .fill("Check licenses and CAQH before starting");
+    // Portal preset seeds one online_form step; BITE-SOP-TT-01 requires a
+    // linked portal before Auto-fill content can publish.
+    await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
+    const portalTrigger = page
+      .getByRole("combobox")
+      .filter({ hasText: /No portal|Humana provider portal/ });
+    await portalTrigger.click();
+    await page.getByRole("option", { name: "Humana provider portal" }).click();
 
     await page.getByRole("button", { name: "Review" }).click();
     await page.getByRole("button", { name: "Publish" }).click();
@@ -429,7 +432,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
     expect(captured.headPatches).toBe(0);
   });
 
-  test("slice F: a readiness deep-link lands on Tasks & steps with a DERIVED context banner and the form panel open", async ({
+  test("slice F: a readiness deep-link lands on Actions with a DERIVED context banner and the form panel open", async ({
     page,
   }) => {
     await page.goto(`/admin/templates/${TEMPLATE_ID}?intent=register`);

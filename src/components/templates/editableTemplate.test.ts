@@ -4,7 +4,16 @@
 // taught to keep. fromEditable omits unset optional fields so stored jsonb
 // stays minimal, exactly like portalKey.
 import { describe, expect, it } from "vitest";
-import { fromEditable, portalKeyConflicts, taskPortalKeys, toEditable } from "./editableTemplate";
+import {
+  actionNamePatch,
+  createActionFromPreset,
+  executionTypeForActionMode,
+  fromEditable,
+  isCollapsedAction,
+  portalKeyConflicts,
+  taskPortalKeys,
+  toEditable,
+} from "./editableTemplate";
 import type { SOPTaskDefinition } from "@/types";
 
 // Already in the writer's normalized form (detail/dataFields always present)
@@ -253,5 +262,111 @@ describe("taskPortalKeys", () => {
   it("is empty for legacy steps without portal keys", () => {
     const [task] = toEditable([{ title: "T", steps: [{ label: "S", stepType: "online_form" }] }]);
     expect(taskPortalKeys(task)).toEqual([]);
+  });
+});
+
+describe("collapsed Action row helpers (BITE-SOP-TT-03)", () => {
+  it("treats zero- and one-step actions as collapsed", () => {
+    const [one] = toEditable([{ title: "Fill portal", steps: [onlineFormStep("availity")] }]);
+    const [empty] = toEditable([{ title: "Empty", steps: [] }]);
+    const [multi] = toEditable([
+      { title: "Multi", steps: [onlineFormStep("a"), { label: "Call", stepType: "phone" }] },
+    ]);
+    expect(isCollapsedAction(one)).toBe(true);
+    expect(isCollapsedAction(empty)).toBe(true);
+    expect(isCollapsedAction(multi)).toBe(false);
+  });
+
+  it("syncs the sole step label from the action name", () => {
+    const [task] = toEditable([
+      { title: "Old name", steps: [{ label: "Old name", stepType: "online_form" }] },
+    ]);
+    const patch = actionNamePatch(task, "Fill BCBS KS portal");
+    expect(patch.title).toBe("Fill BCBS KS portal");
+    expect(patch.steps).toHaveLength(1);
+    expect(patch.steps?.[0].label).toBe("Fill BCBS KS portal");
+    // Multi-step keeps independent step labels.
+    const [multi] = toEditable([
+      {
+        title: "Packet",
+        steps: [
+          { label: "Call", stepType: "phone" },
+          { label: "Fax", stepType: "fax" },
+        ],
+      },
+    ]);
+    expect(actionNamePatch(multi, "Renamed")).toEqual({ title: "Renamed" });
+  });
+
+  it("maps Portal form Mode to Auto-fill and channel Modes to Manual", () => {
+    expect(executionTypeForActionMode("online_form")).toBe("extension_fill");
+    expect(executionTypeForActionMode("draft_email")).toBe("manual");
+    expect(executionTypeForActionMode("phone")).toBe("manual");
+    expect(executionTypeForActionMode("fax")).toBe("manual");
+    expect(executionTypeForActionMode("mail")).toBe("manual");
+    expect(executionTypeForActionMode("pdf")).toBe("manual");
+  });
+});
+
+describe("action presets (BITE-SOP-TT-04)", () => {
+  it("seeds Portal / Auto-fill with extension_fill and one online_form step", () => {
+    const action = createActionFromPreset("portal_fill", 14);
+    expect(action.title).toBe("Fill online form");
+    expect(action.dueOffsetDays).toBe(14);
+    expect(action.executionType).toBe("extension_fill");
+    expect(action.steps).toHaveLength(1);
+    expect(action.steps[0]).toMatchObject({
+      label: "Fill online form",
+      stepType: "online_form",
+      portalKey: "",
+      detail: "",
+    });
+    expect(action.steps[0].emailTemplate.to).toEqual([]);
+    expect(isCollapsedAction(action)).toBe(true);
+  });
+
+  it("seeds Draft email with Manual, draft_email, and one empty To row", () => {
+    const action = createActionFromPreset("draft_email", 0);
+    expect(action.title).toBe("Draft email");
+    expect(action.executionType).toBe("manual");
+    expect(action.steps).toHaveLength(1);
+    const [step] = action.steps;
+    expect(step.stepType).toBe("draft_email");
+    expect(step.label).toBe("Draft email");
+    expect(step.emailTemplate.to).toHaveLength(1);
+    expect(step.emailTemplate.to[0]).toMatchObject({
+      source: "literal",
+      address: "",
+    });
+    expect(step.emailTemplate.cc).toEqual([]);
+    expect(step.emailTemplate.subject).toBe("");
+    expect(step.emailTemplate.body).toBe("");
+    // Round-trip drops the blank To until filled — publish lint still requires ≥1 valid To.
+    const [stored] = fromEditable([action]);
+    expect(stored.executionType).toBeUndefined();
+    expect(stored.steps[0].emailTemplate).toEqual({ subject: "", body: "" });
+  });
+
+  it("seeds Phone / Fax / Mail as Manual + matching stepType", () => {
+    for (const [preset, stepType, title] of [
+      ["phone", "phone", "Phone call"],
+      ["fax", "fax", "Fax"],
+      ["mail", "mail", "Mail"],
+    ] as const) {
+      const action = createActionFromPreset(preset, 7);
+      expect(action.title).toBe(title);
+      expect(action.executionType).toBe("manual");
+      expect(action.steps).toHaveLength(1);
+      expect(action.steps[0].stepType).toBe(stepType);
+      expect(action.steps[0].label).toBe(title);
+      expect(action.steps[0].portalKey).toBe("");
+    }
+  });
+
+  it("assigns distinct ids per seed so React keys never collide", () => {
+    const a = createActionFromPreset("portal_fill", 0);
+    const b = createActionFromPreset("portal_fill", 0);
+    expect(a.id).not.toBe(b.id);
+    expect(a.steps[0].id).not.toBe(b.steps[0].id);
   });
 });

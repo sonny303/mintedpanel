@@ -215,10 +215,10 @@ test.describe("E1.7b portal-task integrity", () => {
     const nameInput = page.locator("section input").first();
     await expect(nameInput).toBeVisible({ timeout: 30000 });
 
-    // Tasks & steps shows the per-task conflict warning naming both portals.
-    await page.getByRole("button", { name: "Tasks & steps" }).click();
+    // Actions shows the per-action conflict warning naming both portals.
+    await page.getByRole("button", { name: "Actions" }).click();
     await expect(
-      page.getByText(/This task links more than one portal \(availity, bcbs_ks_enrollment\)/),
+      page.getByText(/This action links more than one portal \(availity, bcbs_ks_enrollment\)/),
     ).toBeVisible();
 
     // A content edit turns the footer action into Publish.
@@ -240,7 +240,7 @@ test.describe("E1.7b portal-task integrity", () => {
     await expect(nameInput).toBeVisible({ timeout: 30000 });
 
     // No conflict warning anywhere in the steps view.
-    await page.getByRole("button", { name: "Tasks & steps" }).click();
+    await page.getByRole("button", { name: "Actions" }).click();
     await expect(page.getByText(/links more than one portal/)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Basics" }).click();

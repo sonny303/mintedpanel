@@ -17,6 +17,19 @@ export type ExecutionType = (typeof EXECUTION_TYPES)[number];
 /** null/absent execution type ⇒ manual (the DB CHECK allows null for this). */
 export const DEFAULT_EXECUTION_TYPE: ExecutionType = "manual";
 
+// BITE-SOP-TT-02 / D-SOP-2 A — authoring offers only the types that matter
+// today. Wire values for auto_verify / document_attach stay on EXECUTION_TYPES
+// for reads, stamps, and legacy rows; they are not choosable for new picks.
+export const AUTHORING_EXECUTION_TYPES = ["manual", "extension_fill"] as const;
+
+export type AuthoringExecutionType = (typeof AUTHORING_EXECUTION_TYPES)[number];
+
+/** Inert captured-config types — keep resolving for existing stamps; hide from
+ * new Template Editor selections (BITE-SOP-TT-02). */
+export const INERT_EXECUTION_TYPES = ["auto_verify", "document_attach"] as const;
+
+export type InertExecutionType = (typeof INERT_EXECUTION_TYPES)[number];
+
 // User-facing labels (payer-and-cases §2.8 terminology): `extension_fill`
 // renders as "Auto-fill" — the internal identifier keeps its name, and the
 // design's Auto-fill IS the extension-fill capability with the extension
@@ -39,6 +52,10 @@ export const EXECUTION_TYPE_HINTS: Record<ExecutionType, string> = {
   document_attach: "Pulls a document from the vault. Recorded now, no effect yet.",
 };
 
+function isInertExecutionType(value: ExecutionType): value is InertExecutionType {
+  return (INERT_EXECUTION_TYPES as readonly string[]).includes(value);
+}
+
 export function isExecutionType(value: unknown): value is ExecutionType {
   return typeof value === "string" && (EXECUTION_TYPES as readonly string[]).includes(value);
 }
@@ -46,6 +63,19 @@ export function isExecutionType(value: unknown): value is ExecutionType {
 /** Resolve any raw value to a concrete execution type, defaulting to manual. */
 export function resolveExecutionType(value: unknown): ExecutionType {
   return isExecutionType(value) ? value : DEFAULT_EXECUTION_TYPE;
+}
+
+/** Template Editor picker options: Manual + Auto-fill always. If the task
+ * already carries an inert type, include that value so the Select isn't blank
+ * — never offer inert types when the current value is Manual or Auto-fill. */
+export function authoringExecutionTypeOptions(
+  current: ExecutionType | string | null | undefined,
+): readonly ExecutionType[] {
+  const resolved = resolveExecutionType(current);
+  if (isInertExecutionType(resolved)) {
+    return [...AUTHORING_EXECUTION_TYPES, resolved];
+  }
+  return AUTHORING_EXECUTION_TYPES;
 }
 
 /** The stored/stamped form: manual is the implicit default, so it is stored as
@@ -66,4 +96,30 @@ export interface HasExecutionType {
  * over the version's task metadata. */
 export function hasExtensionFillTask(tasks: readonly HasExecutionType[]): boolean {
   return tasks.some((t) => resolveExecutionType(t.executionType) === "extension_fill");
+}
+
+/** Narrow step shape for the online_form presence check. */
+export interface HasOnlineFormStep {
+  steps?: readonly { stepType?: string | null }[] | null;
+}
+
+/** Does a SOP contain at least one online_form step? The funnel's historical
+ * "needs portal" signal — kept as a named predicate so readiness surfaces
+ * share vocabulary with BITE-SOP-TT-01. */
+export function hasOnlineFormStep(tasks: readonly HasOnlineFormStep[]): boolean {
+  for (const task of tasks) {
+    for (const step of Array.isArray(task.steps) ? task.steps : []) {
+      if (step?.stepType === "online_form") return true;
+    }
+  }
+  return false;
+}
+
+/** BITE-SOP-TT-01 / D-SOP-3 interim — unify the dual "needs form" signals.
+ * Form follow-ups apply when the SOP has Auto-fill OR an online_form step.
+ * Both `payerReadiness` and `payerReadinessFunnel` consume this helper. */
+export function needsFormFollowUp(
+  tasks: readonly (HasExecutionType & HasOnlineFormStep)[],
+): boolean {
+  return hasExtensionFillTask(tasks) || hasOnlineFormStep(tasks);
 }
