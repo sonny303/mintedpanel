@@ -1,8 +1,9 @@
 // E4.2 F4.2.2 — the payer readiness composition. Pure projection over ACTIVE
 // payer_network_targets × SOP resolution (buildPayerReadiness), enriched with:
-//   - TE-16 form readiness: the SAME `mappingCoverage` scorecard derivation over
-//     the payer's portals + field maps, shown only when the resolved SOP has an
-//     extension_fill task (row.hasExtensionFill).
+//   - TE-16 / BITE-SOP-TT-01 form readiness: the SAME `mappingCoverage`
+//     scorecard derivation over the payer's portals + field maps, shown when
+//     the resolved SOP needs form follow-up (row.hasExtensionFill via
+//     needsFormFollowUp).
 //   - TE-13 blocked-provider count per payer × state, derived from the shared
 //     generation gating (useGenerationPreview().gated).
 // Nothing is stored — every read re-derives.

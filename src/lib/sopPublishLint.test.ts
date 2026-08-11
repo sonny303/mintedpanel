@@ -101,4 +101,83 @@ describe("lintSopForPublish", () => {
     const r = lintSopForPublish([task("Portal work", ["Fill the portal"])]);
     expect(r.ok).toBe(true);
   });
+
+  // BITE-SOP-TT-01 — Auto-fill ↔ online_form + portalKey.
+  it("rejects Auto-fill with no online_form step", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "extension_fill",
+        steps: [{ label: "Call the payer", stepType: "phone" }],
+      },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /Auto-fill.*online form step/.test(e.message))).toBe(true);
+  });
+
+  it("rejects Auto-fill online_form without a portalKey", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "extension_fill",
+        steps: [{ label: "Fill the portal", stepType: "online_form" }],
+      },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /online form.*needs a portal/.test(e.message))).toBe(true);
+  });
+
+  it("rejects Auto-fill online_form with a blank portalKey", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "extension_fill",
+        steps: [{ label: "Fill the portal", stepType: "online_form", portalKey: "   " }],
+      },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /online form.*needs a portal/.test(e.message))).toBe(true);
+  });
+
+  it("accepts Auto-fill with an online_form step and portalKey", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "extension_fill",
+        steps: [
+          { label: "Fill the portal", stepType: "online_form", portalKey: "bcbs_ks_enrollment" },
+        ],
+      },
+    ]);
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("does not apply the Auto-fill portal rule to manual tasks", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "manual",
+        steps: [{ label: "Fill the portal", stepType: "online_form" }],
+      },
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("flags every online_form step missing a portal on an Auto-fill task", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Submit application",
+        executionType: "extension_fill",
+        steps: [
+          { label: "First form", stepType: "online_form", portalKey: "availity" },
+          { label: "Second form", stepType: "online_form" },
+        ],
+      },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].stepIndex).toBe(2);
+    expect(r.errors[0].message).toMatch(/step 2 \(online form\) needs a portal/);
+  });
 });
