@@ -4,7 +4,15 @@
 // taught to keep. fromEditable omits unset optional fields so stored jsonb
 // stays minimal, exactly like portalKey.
 import { describe, expect, it } from "vitest";
-import { fromEditable, portalKeyConflicts, taskPortalKeys, toEditable } from "./editableTemplate";
+import {
+  actionNamePatch,
+  executionTypeForActionMode,
+  fromEditable,
+  isCollapsedAction,
+  portalKeyConflicts,
+  taskPortalKeys,
+  toEditable,
+} from "./editableTemplate";
 import type { SOPTaskDefinition } from "@/types";
 
 // Already in the writer's normalized form (detail/dataFields always present)
@@ -253,5 +261,48 @@ describe("taskPortalKeys", () => {
   it("is empty for legacy steps without portal keys", () => {
     const [task] = toEditable([{ title: "T", steps: [{ label: "S", stepType: "online_form" }] }]);
     expect(taskPortalKeys(task)).toEqual([]);
+  });
+});
+
+describe("collapsed Action row helpers (BITE-SOP-TT-03)", () => {
+  it("treats zero- and one-step actions as collapsed", () => {
+    const [one] = toEditable([{ title: "Fill portal", steps: [onlineFormStep("availity")] }]);
+    const [empty] = toEditable([{ title: "Empty", steps: [] }]);
+    const [multi] = toEditable([
+      { title: "Multi", steps: [onlineFormStep("a"), { label: "Call", stepType: "phone" }] },
+    ]);
+    expect(isCollapsedAction(one)).toBe(true);
+    expect(isCollapsedAction(empty)).toBe(true);
+    expect(isCollapsedAction(multi)).toBe(false);
+  });
+
+  it("syncs the sole step label from the action name", () => {
+    const [task] = toEditable([
+      { title: "Old name", steps: [{ label: "Old name", stepType: "online_form" }] },
+    ]);
+    const patch = actionNamePatch(task, "Fill BCBS KS portal");
+    expect(patch.title).toBe("Fill BCBS KS portal");
+    expect(patch.steps).toHaveLength(1);
+    expect(patch.steps?.[0].label).toBe("Fill BCBS KS portal");
+    // Multi-step keeps independent step labels.
+    const [multi] = toEditable([
+      {
+        title: "Packet",
+        steps: [
+          { label: "Call", stepType: "phone" },
+          { label: "Fax", stepType: "fax" },
+        ],
+      },
+    ]);
+    expect(actionNamePatch(multi, "Renamed")).toEqual({ title: "Renamed" });
+  });
+
+  it("maps Portal form Mode to Auto-fill and channel Modes to Manual", () => {
+    expect(executionTypeForActionMode("online_form")).toBe("extension_fill");
+    expect(executionTypeForActionMode("draft_email")).toBe("manual");
+    expect(executionTypeForActionMode("phone")).toBe("manual");
+    expect(executionTypeForActionMode("fax")).toBe("manual");
+    expect(executionTypeForActionMode("mail")).toBe("manual");
+    expect(executionTypeForActionMode("pdf")).toBe("manual");
   });
 });

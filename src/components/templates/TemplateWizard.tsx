@@ -1,8 +1,8 @@
 // Three-step wizard for authoring a template (payer-and-cases screen 4:
-// Basics · Tasks & steps · Review — the old Tasks and "Steps & fields" steps
-// rendered the same list twice and are merged). The jsonb shape is unchanged
-// (owned by src/lib/sopResolver.ts): tasks -> steps -> data fields with bare
-// tokens; case creation reads it untouched.
+// Basics · Actions · Review — BITE-SOP-TT-03 relabels the middle step; the old
+// Tasks and "Steps & fields" steps rendered the same list twice and are merged).
+// The jsonb shape is unchanged (owned by src/lib/sopResolver.ts): tasks ->
+// steps -> data fields with bare tokens; case creation reads it untouched.
 //
 // Tier is DERIVED from the match key, never chosen: the editor authors GLOBAL
 // rows only (payer + state + optional group — §2.4: it never creates org-tier
@@ -157,7 +157,7 @@ const US_STATES = [
 // the same list twice, so they are ONE step now.
 const STEPS = [
   { n: 1, label: "Basics" },
-  { n: 2, label: "Tasks & steps" },
+  { n: 2, label: "Actions" },
   { n: 3, label: "Review" },
 ] as const;
 
@@ -188,7 +188,7 @@ interface TemplateWizardProps {
   prefill?: WizardPrefill;
   // E4.2 F4.2.1 — resume an existing draft (create mode only).
   draft?: SopTemplateDraft | null;
-  // Slice F — a readiness CTA deep-link (?intent=): land on Tasks & steps with
+  // Slice F — a readiness CTA deep-link (?intent=): land on Actions with
   // the owning form panel expanded and the derived context banner explaining
   // why. The banner re-derives from live step state and disappears when the
   // work is done.
@@ -241,7 +241,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const groupedTokens = useMemo(() => groupTokens(tokens), [tokens]);
   const firstToken = tokens[0]?.token ?? "provider.firstName";
 
-  // A deep-linked intent lands directly on Tasks & steps — that is where the
+  // A deep-linked intent lands directly on Actions — that is where the
   // work it points at lives.
   const [step, setStep] = useState(intent ? 2 : 1);
   const [name, setName] = useState(draftPayload?.name ?? initial?.name ?? "");
@@ -404,11 +404,16 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           t.id === taskId
             ? {
                 ...t,
+                // New steps default to online_form — keep/set Auto-fill on that path
+                // (BITE-SOP-TT-03).
+                executionType: "extension_fill",
                 steps: [
                   ...t.steps,
                   {
                     id: randId(),
-                    label: "New step",
+                    // Sole-step actions sync label from the action name on rename;
+                    // seed the instruction from the current title when present.
+                    label: t.steps.length === 0 && t.title.trim() ? t.title : "New step",
                     detail: "",
                     stepType: "online_form" as const,
                     emailTemplate: { subject: "", body: "", to: [], cc: [] },
@@ -1236,16 +1241,17 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold">Tasks &amp; steps</h2>
+              <h2 className="text-sm font-semibold">Actions</h2>
               <p className="text-xs text-muted-foreground">
-                Each task holds its own ordered steps — reorder with the arrows or by dragging. An
-                online-form step owns its portal setup inline.
+                Each action is one checklist item — Mode chooses portal, email, or a channel. A
+                single-step action collapses to one name; add another step only when you need a
+                multi-step checklist under the same due date.
               </p>
             </div>
             {canEdit ? (
               <Button size="sm" variant="outline" onClick={addTask}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add task
+                Add action
               </Button>
             ) : null}
           </div>
@@ -1253,8 +1259,8 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           {tasks.length === 0 ? (
             <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
               <EmptyState
-                message="No tasks yet"
-                description="Add a task to start building this template"
+                message="No actions yet"
+                description="Add an action to start building this template"
               />
             </div>
           ) : (

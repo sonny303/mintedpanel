@@ -5,6 +5,7 @@ import { memo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +19,9 @@ import {
 import { EmptyState } from "@/components/EmptyState";
 import { FormStepPanel } from "@/components/templates/FormStepPanel";
 import {
+  actionNamePatch,
+  executionTypeForActionMode,
+  isCollapsedAction,
   newEditableRecipient,
   taskPortalKeys,
   type EditableRecipient,
@@ -26,13 +30,14 @@ import { emailValuedTokenKeys } from "@/lib/sopResolver";
 import {
   EXECUTION_TYPE_HINTS,
   EXECUTION_TYPE_LABELS,
+  INERT_EXECUTION_TYPES,
   authoringExecutionTypeOptions,
   type ExecutionType,
 } from "@/lib/executionTypes";
 import { isValidEmail } from "@/lib/contactValidation";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
-import type { SopFieldToken, TokenGroup } from "@/lib/tokenGroups";
+import type { TokenGroup } from "@/lib/tokenGroups";
 
 interface DataField {
   label: string;
@@ -158,6 +163,34 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   updateDataField,
   removeDataField,
 }: TemplateTaskRowProps) {
+  // BITE-SOP-TT-03 / D-SOP-1 A — ≤1 step collapses to one Action row (name +
+  // Mode + mode config). Multi-step keeps the expanded step list.
+  const collapsed = isCollapsedAction(task);
+  const soleStep = task.steps.length === 1 ? task.steps[0] : null;
+  const inertExecution = (INERT_EXECUTION_TYPES as readonly string[]).includes(task.executionType);
+  // Portal Mode → Auto-fill toggle; multi-step / inert legacy keep the select.
+  const showAutoFillToggle =
+    collapsed && soleStep?.stepType === "online_form" && !inertExecution;
+  const showExecutionSelect = !collapsed || inertExecution;
+
+  function setPortalKey(stepId: string, portalKey: string) {
+    updateStep(task.id, stepId, { portalKey });
+    // Selecting a portal on the online_form path keeps/sets Auto-fill.
+    if (portalKey.trim() !== "") {
+      updateTask(task.id, { executionType: "extension_fill" });
+    }
+  }
+
+  function setActionMode(stepId: string, stepType: SOPStepType) {
+    updateStep(task.id, stepId, { stepType });
+    // Collapsed Action: Mode owns Auto-fill vs Manual. Multi-step: only promote
+    // to Auto-fill when an online_form step is chosen — never demote from a
+    // sibling channel step while another portal step may still need Auto-fill.
+    if (collapsed || stepType === "online_form") {
+      updateTask(task.id, { executionType: executionTypeForActionMode(stepType) });
+    }
+  }
+
   return (
     <div
       draggable={canEdit}
@@ -173,13 +206,13 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
         {canEdit ? (
           <div className="mt-1 flex flex-col items-center gap-0.5">
             <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-            {/* E4.2 PM round-4 — keyboard-operable task reorder alongside drag. */}
+            {/* E4.2 PM round-4 — keyboard-operable action reorder alongside drag. */}
             <Button
               variant="ghost"
               size="icon"
               className="h-6 w-6"
               disabled={taskIdx === 0}
-              aria-label={`Move task ${taskIdx + 1} up`}
+              aria-label={`Move action ${taskIdx + 1} up`}
               onClick={() => moveTask(taskIdx, -1)}
             >
               <ArrowUp className="h-3.5 w-3.5" />
@@ -189,7 +222,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
               size="icon"
               className="h-6 w-6"
               disabled={taskIdx === taskCount - 1}
-              aria-label={`Move task ${taskIdx + 1} down`}
+              aria-label={`Move action ${taskIdx + 1} down`}
               onClick={() => moveTask(taskIdx, 1)}
             >
               <ArrowDown className="h-3.5 w-3.5" />
@@ -198,10 +231,10 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
         ) : null}
         <div className="flex-1 grid grid-cols-[1fr_140px] gap-3">
           <div>
-            <Label>Task {taskIdx + 1} title</Label>
+            <Label>Action {taskIdx + 1} name</Label>
             <Input
               value={task.title}
-              onChange={(e) => updateTask(task.id, { title: e.target.value })}
+              onChange={(e) => updateTask(task.id, actionNamePatch(task, e.target.value))}
               disabled={!canEdit}
             />
           </div>
@@ -218,39 +251,68 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
               disabled={!canEdit}
             />
           </div>
-          <div>
-            {/* E4.2 TE-12 — execution type (captured configuration; only
-                Auto-fill drives form setup + readiness today). */}
-            <Label>Execution type</Label>
-            <Select
-              value={task.executionType}
-              onValueChange={(v) => updateTask(task.id, { executionType: v as ExecutionType })}
-              disabled={!canEdit}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {authoringExecutionTypeOptions(task.executionType).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {EXECUTION_TYPE_LABELS[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {EXECUTION_TYPE_HINTS[task.executionType]}
-            </p>
-          </div>
-          <div className="col-span-2">
-            <Label>Description</Label>
-            <Textarea
-              value={task.description}
-              onChange={(e) => updateTask(task.id, { description: e.target.value })}
-              disabled={!canEdit}
-              rows={2}
-            />
-          </div>
+          {showAutoFillToggle ? (
+            <div className="col-span-2">
+              <label className="flex items-start gap-2">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={task.executionType === "extension_fill"}
+                  disabled={!canEdit}
+                  onCheckedChange={(checked) =>
+                    updateTask(task.id, {
+                      executionType: checked === true ? "extension_fill" : "manual",
+                    })
+                  }
+                  aria-label="Auto-fill"
+                />
+                <span>
+                  <span className="text-sm font-medium leading-none">Auto-fill</span>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {EXECUTION_TYPE_HINTS.extension_fill}
+                  </p>
+                </span>
+              </label>
+            </div>
+          ) : null}
+          {showExecutionSelect ? (
+            <div>
+              {/* E4.2 TE-12 — execution type (captured configuration; only
+                  Auto-fill drives form setup + readiness today). */}
+              <Label>Execution type</Label>
+              <Select
+                value={task.executionType}
+                onValueChange={(v) => updateTask(task.id, { executionType: v as ExecutionType })}
+                disabled={!canEdit}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {authoringExecutionTypeOptions(task.executionType).map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {EXECUTION_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {EXECUTION_TYPE_HINTS[task.executionType]}
+              </p>
+            </div>
+          ) : null}
+          {/* Collapsed Action rows hide the always-on description — Mode +
+              name carry the intent. Multi-step keeps notes visible. */}
+          {!collapsed ? (
+            <div className="col-span-2">
+              <Label>Description</Label>
+              <Textarea
+                value={task.description}
+                onChange={(e) => updateTask(task.id, { description: e.target.value })}
+                disabled={!canEdit}
+                rows={2}
+              />
+            </div>
+          ) : null}
         </div>
         {canEdit ? (
           <Button
@@ -258,6 +320,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
             size="icon"
             onClick={() => removeTask(task.id)}
             className="text-muted-foreground hover:text-destructive"
+            aria-label={`Remove action ${taskIdx + 1}`}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -267,325 +330,418 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
       <div className="p-4 space-y-3">
         {taskPortalKeys(task).length > 1 ? (
           <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
-            This task links more than one portal ({taskPortalKeys(task).join(", ")}). A task can
+            This action links more than one portal ({taskPortalKeys(task).join(", ")}). An action can
             fill only one portal — pick one. Save is blocked until then.
           </div>
         ) : null}
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            Steps in this task
-          </span>
-          {canEdit ? (
-            <Button size="sm" variant="outline" onClick={() => addStep(task.id)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add step
-            </Button>
-          ) : null}
-        </div>
 
-        {task.steps.map((step, stepIdx) => (
-          <div
-            key={step.id}
-            draggable={canEdit}
-            onDragStart={(e) => {
-              e.stopPropagation();
-              setDragStep({ taskId: task.id, stepId: step.id });
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onDrop={(e) => {
-              e.stopPropagation();
-              if (dragStep && dragStep.taskId === task.id) {
-                reorderSteps(task.id, dragStep.stepId, step.id);
-              }
-              setDragStep(null);
-            }}
-            className="rounded-md border border-[#E8E5E0] p-3 bg-muted/20"
-          >
-            <div className="flex items-start gap-2">
+        {collapsed && soleStep ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Mode</span>
               {canEdit ? (
-                <div className="mt-1 flex flex-col items-center gap-0.5">
-                  <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    disabled={stepIdx === 0}
-                    aria-label={`Move step ${stepIdx + 1} up`}
-                    onClick={() => moveStep(task.id, stepIdx, -1)}
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    disabled={stepIdx === task.steps.length - 1}
-                    aria-label={`Move step ${stepIdx + 1} down`}
-                    onClick={() => moveStep(task.id, stepIdx, 1)}
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : null}
-              <div className="flex-1 space-y-2">
-                <div>
-                  <Label className="text-xs">Step {stepIdx + 1} instruction</Label>
-                  <Textarea
-                    value={step.label}
-                    onChange={(e) => updateStep(task.id, step.id, { label: e.target.value })}
-                    disabled={!canEdit}
-                    rows={2}
-                  />
-                </div>
-
-                <div>
-                  <Label className="text-xs">Step type</Label>
-                  <Select
-                    value={step.stepType}
-                    onValueChange={(v) =>
-                      updateStep(task.id, step.id, { stepType: v as SOPStepType })
-                    }
-                    disabled={!canEdit}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="online_form">Online form</SelectItem>
-                      <SelectItem value="draft_email">Draft email</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="fax">Fax</SelectItem>
-                      <SelectItem value="mail">Mail</SelectItem>
-                      <SelectItem value="pdf" disabled>
-                        PDF (coming soon)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {step.stepType === "draft_email" ? (
-                  <div className="space-y-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
-                    <p className="text-[11px] text-[#92400E]">
-                      Tokens like {"{{provider.firstName}}"} resolve when the task is created. The
-                      product drafts the email for review — it never sends.
-                    </p>
-                    <RecipientListEditor
-                      label="To"
-                      required
-                      recipients={step.emailTemplate.to}
-                      canEdit={canEdit}
-                      onChange={(to) =>
-                        updateStep(task.id, step.id, {
-                          emailTemplate: { ...step.emailTemplate, to },
-                        })
-                      }
-                    />
-                    <RecipientListEditor
-                      label="Cc"
-                      recipients={step.emailTemplate.cc}
-                      canEdit={canEdit}
-                      onChange={(cc) =>
-                        updateStep(task.id, step.id, {
-                          emailTemplate: { ...step.emailTemplate, cc },
-                        })
-                      }
-                    />
-                    <div>
-                      <Label className="text-xs">Subject</Label>
-                      <Input
-                        value={step.emailTemplate.subject}
-                        onChange={(e) =>
-                          updateStep(task.id, step.id, {
-                            emailTemplate: { ...step.emailTemplate, subject: e.target.value },
-                          })
-                        }
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <Label className="text-xs">Body</Label>
-                        {canEdit ? (
-                          <Select
-                            value=""
-                            onValueChange={(token) =>
-                              updateStep(task.id, step.id, {
-                                emailTemplate: {
-                                  ...step.emailTemplate,
-                                  body: appendToken(step.emailTemplate.body, token),
-                                },
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-7 w-[160px] text-xs">
-                              <SelectValue placeholder="Insert token" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {groupedTokens.map((grp) => (
-                                <div key={grp.prefix}>
-                                  <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                                    {grp.label}
-                                  </div>
-                                  {grp.items.map((t) => (
-                                    <SelectItem key={t.token} value={t.token}>
-                                      {t.token}
-                                    </SelectItem>
-                                  ))}
-                                </div>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : null}
-                      </div>
-                      <Textarea
-                        value={step.emailTemplate.body}
-                        onChange={(e) =>
-                          updateStep(task.id, step.id, {
-                            emailTemplate: { ...step.emailTemplate, body: e.target.value },
-                          })
-                        }
-                        disabled={!canEdit}
-                        rows={5}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {step.stepType === "online_form" ? (
-                      <>
-                        <PortalStepSelect
-                          step={step}
-                          portals={portals}
-                          templatePayerId={templatePayerId}
-                          canEdit={canEdit}
-                          onChange={(portalKey) => updateStep(task.id, step.id, { portalKey })}
-                        />
-                        {/* E6.5 F6.5.2 — register/train/prove without leaving the
-                            editor. Self-contained (own cached hooks); renders
-                            collapsed so Step 3 typing never pays for it. */}
-                        <FormStepPanel
-                          portalKey={normalizePortalKey(step.portalKey)}
-                          templatePayerId={templatePayerId}
-                          canEdit={canEdit}
-                          isGlobalAuthoring={isGlobalAuthoring}
-                          defaultOpen={autoOpenStepId === step.id}
-                          onPortalKeyChange={(portalKey) =>
-                            updateStep(task.id, step.id, { portalKey })
-                          }
-                        />
-                      </>
-                    ) : null}
-                    {/* E6.9 F6.9.6: on online-form steps the registry in Form
-                        setup IS the field list — a field used to be mapped
-                        twice, with two labels and two pickers over the same
-                        catalog. Fax/phone/mail steps (the other users of this
-                        branch) keep Data fields exactly as before; draft_email
-                        never had them. The stored `dataFields` JSON is retained
-                        on every step (additive-only rule) — it simply stops
-                        being read for online-form steps, so an unmigrated or
-                        rolled-back reader still finds what it expects. */}
-                    <div className={step.stepType === "online_form" ? "hidden" : undefined}>
-                      <div className="flex items-center justify-between mb-1">
-                        <Label className="text-xs">Data fields</Label>
-                        {canEdit ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => addDataField(task.id, step.id)}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add field
-                          </Button>
-                        ) : null}
-                      </div>
-                      {step.dataFields.length === 0 ? (
-                        <EmptyState message="No data fields yet" />
-                      ) : (
-                        <div className="space-y-2">
-                          {step.dataFields.map((field, i) => (
-                            <div
-                              key={i}
-                              className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
-                            >
-                              <Input
-                                placeholder="Label"
-                                value={field.label}
-                                onChange={(e) =>
-                                  updateDataField(task.id, step.id, i, {
-                                    label: e.target.value,
-                                  })
-                                }
-                                disabled={!canEdit}
-                              />
-                              <Select
-                                value={field.token}
-                                onValueChange={(v) =>
-                                  updateDataField(task.id, step.id, i, { token: v })
-                                }
-                                disabled={!canEdit}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {groupedTokens.map((grp) => (
-                                    <div key={grp.prefix}>
-                                      <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                                        {grp.label}
-                                      </div>
-                                      {grp.items.map((t) => (
-                                        <SelectItem key={t.token} value={t.token}>
-                                          {t.token}
-                                        </SelectItem>
-                                      ))}
-                                    </div>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              {canEdit ? (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => removeDataField(task.id, step.id, i)}
-                                  className="text-muted-foreground hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <StepCadenceFields
-                  step={step}
-                  canEdit={canEdit}
-                  onChange={(patch) => updateStep(task.id, step.id, patch)}
-                />
-              </div>
-              {canEdit ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeStep(task.id, step.id)}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
+                <Button size="sm" variant="outline" onClick={() => addStep(task.id)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add another step
                 </Button>
               ) : null}
             </div>
+            <div>
+              <Label className="text-xs">Mode</Label>
+              <Select
+                value={soleStep.stepType}
+                onValueChange={(v) => setActionMode(soleStep.id, v as SOPStepType)}
+                disabled={!canEdit}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="online_form">Portal form</SelectItem>
+                  <SelectItem value="draft_email">Draft email</SelectItem>
+                  <SelectItem value="phone">Phone</SelectItem>
+                  <SelectItem value="fax">Fax</SelectItem>
+                  <SelectItem value="mail">Mail</SelectItem>
+                  <SelectItem value="pdf" disabled>
+                    PDF (coming soon)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <StepModeBody
+              step={soleStep}
+              taskId={task.id}
+              canEdit={canEdit}
+              groupedTokens={groupedTokens}
+              portals={portals}
+              templatePayerId={templatePayerId}
+              isGlobalAuthoring={isGlobalAuthoring}
+              autoOpenStepId={autoOpenStepId}
+              updateStep={updateStep}
+              addDataField={addDataField}
+              updateDataField={updateDataField}
+              removeDataField={removeDataField}
+              onPortalKeyChange={(portalKey) => setPortalKey(soleStep.id, portalKey)}
+            />
           </div>
-        ))}
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Steps in this action
+              </span>
+              {canEdit ? (
+                <Button size="sm" variant="outline" onClick={() => addStep(task.id)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add step
+                </Button>
+              ) : null}
+            </div>
+
+            {task.steps.map((step, stepIdx) => (
+              <div
+                key={step.id}
+                draggable={canEdit}
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  setDragStep({ taskId: task.id, stepId: step.id });
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.stopPropagation();
+                  if (dragStep && dragStep.taskId === task.id) {
+                    reorderSteps(task.id, dragStep.stepId, step.id);
+                  }
+                  setDragStep(null);
+                }}
+                className="rounded-md border border-[#E8E5E0] p-3 bg-muted/20"
+              >
+                <div className="flex items-start gap-2">
+                  {canEdit ? (
+                    <div className="mt-1 flex flex-col items-center gap-0.5">
+                      <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        disabled={stepIdx === 0}
+                        aria-label={`Move step ${stepIdx + 1} up`}
+                        onClick={() => moveStep(task.id, stepIdx, -1)}
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        disabled={stepIdx === task.steps.length - 1}
+                        aria-label={`Move step ${stepIdx + 1} down`}
+                        onClick={() => moveStep(task.id, stepIdx, 1)}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : null}
+                  <div className="flex-1 space-y-2">
+                    <div>
+                      <Label className="text-xs">Step {stepIdx + 1} instruction</Label>
+                      <Textarea
+                        value={step.label}
+                        onChange={(e) => updateStep(task.id, step.id, { label: e.target.value })}
+                        disabled={!canEdit}
+                        rows={2}
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Step type</Label>
+                      <Select
+                        value={step.stepType}
+                        onValueChange={(v) => setActionMode(step.id, v as SOPStepType)}
+                        disabled={!canEdit}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="online_form">Online form</SelectItem>
+                          <SelectItem value="draft_email">Draft email</SelectItem>
+                          <SelectItem value="phone">Phone</SelectItem>
+                          <SelectItem value="fax">Fax</SelectItem>
+                          <SelectItem value="mail">Mail</SelectItem>
+                          <SelectItem value="pdf" disabled>
+                            PDF (coming soon)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <StepModeBody
+                      step={step}
+                      taskId={task.id}
+                      canEdit={canEdit}
+                      groupedTokens={groupedTokens}
+                      portals={portals}
+                      templatePayerId={templatePayerId}
+                      isGlobalAuthoring={isGlobalAuthoring}
+                      autoOpenStepId={autoOpenStepId}
+                      updateStep={updateStep}
+                      addDataField={addDataField}
+                      updateDataField={updateDataField}
+                      removeDataField={removeDataField}
+                      onPortalKeyChange={(portalKey) => setPortalKey(step.id, portalKey)}
+                    />
+                  </div>
+                  {canEdit ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeStep(task.id, step.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
 });
+
+/** Mode-specific step body (portal / email / data fields / cadence). Shared by
+ * the collapsed Action row and the expanded multi-step list. */
+function StepModeBody({
+  step,
+  taskId,
+  canEdit,
+  groupedTokens,
+  portals,
+  templatePayerId,
+  isGlobalAuthoring,
+  autoOpenStepId,
+  updateStep,
+  addDataField,
+  updateDataField,
+  removeDataField,
+  onPortalKeyChange,
+}: {
+  step: EditableStep;
+  taskId: string;
+  canEdit: boolean;
+  groupedTokens: TokenGroup[];
+  portals: Portal[];
+  templatePayerId: string | null;
+  isGlobalAuthoring: boolean;
+  autoOpenStepId: string | null;
+  updateStep: TemplateTaskRowProps["updateStep"];
+  addDataField: TemplateTaskRowProps["addDataField"];
+  updateDataField: TemplateTaskRowProps["updateDataField"];
+  removeDataField: TemplateTaskRowProps["removeDataField"];
+  onPortalKeyChange: (portalKey: string) => void;
+}) {
+  return (
+    <>
+      {step.stepType === "draft_email" ? (
+        <div className="space-y-2 rounded-md border border-[#FDE68A] bg-[#FEF3C7] p-3">
+          <p className="text-[11px] text-[#92400E]">
+            Tokens like {"{{provider.firstName}}"} resolve when the task is created. The product
+            drafts the email for review — it never sends.
+          </p>
+          <RecipientListEditor
+            label="To"
+            required
+            recipients={step.emailTemplate.to}
+            canEdit={canEdit}
+            onChange={(to) =>
+              updateStep(taskId, step.id, {
+                emailTemplate: { ...step.emailTemplate, to },
+              })
+            }
+          />
+          <RecipientListEditor
+            label="Cc"
+            recipients={step.emailTemplate.cc}
+            canEdit={canEdit}
+            onChange={(cc) =>
+              updateStep(taskId, step.id, {
+                emailTemplate: { ...step.emailTemplate, cc },
+              })
+            }
+          />
+          <div>
+            <Label className="text-xs">Subject</Label>
+            <Input
+              value={step.emailTemplate.subject}
+              onChange={(e) =>
+                updateStep(taskId, step.id, {
+                  emailTemplate: { ...step.emailTemplate, subject: e.target.value },
+                })
+              }
+              disabled={!canEdit}
+            />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs">Body</Label>
+              {canEdit ? (
+                <Select
+                  value=""
+                  onValueChange={(token) =>
+                    updateStep(taskId, step.id, {
+                      emailTemplate: {
+                        ...step.emailTemplate,
+                        body: appendToken(step.emailTemplate.body, token),
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger className="h-7 w-[160px] text-xs">
+                    <SelectValue placeholder="Insert token" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groupedTokens.map((grp) => (
+                      <div key={grp.prefix}>
+                        <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                          {grp.label}
+                        </div>
+                        {grp.items.map((t) => (
+                          <SelectItem key={t.token} value={t.token}>
+                            {t.token}
+                          </SelectItem>
+                        ))}
+                      </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+            </div>
+            <Textarea
+              value={step.emailTemplate.body}
+              onChange={(e) =>
+                updateStep(taskId, step.id, {
+                  emailTemplate: { ...step.emailTemplate, body: e.target.value },
+                })
+              }
+              disabled={!canEdit}
+              rows={5}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {step.stepType === "online_form" ? (
+            <>
+              <PortalStepSelect
+                step={step}
+                portals={portals}
+                templatePayerId={templatePayerId}
+                canEdit={canEdit}
+                onChange={onPortalKeyChange}
+              />
+              {/* E6.5 F6.5.2 — register/train/prove without leaving the
+                  editor. Self-contained (own cached hooks); renders
+                  collapsed so Step 3 typing never pays for it. */}
+              <FormStepPanel
+                portalKey={normalizePortalKey(step.portalKey)}
+                templatePayerId={templatePayerId}
+                canEdit={canEdit}
+                isGlobalAuthoring={isGlobalAuthoring}
+                defaultOpen={autoOpenStepId === step.id}
+                onPortalKeyChange={onPortalKeyChange}
+              />
+            </>
+          ) : null}
+          {/* E6.9 F6.9.6: on online-form steps the registry in Form
+              setup IS the field list — a field used to be mapped
+              twice, with two labels and two pickers over the same
+              catalog. Fax/phone/mail steps (the other users of this
+              branch) keep Data fields exactly as before; draft_email
+              never had them. The stored `dataFields` JSON is retained
+              on every step (additive-only rule) — it simply stops
+              being read for online-form steps, so an unmigrated or
+              rolled-back reader still finds what it expects. */}
+          <div className={step.stepType === "online_form" ? "hidden" : undefined}>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs">Data fields</Label>
+              {canEdit ? (
+                <Button size="sm" variant="ghost" onClick={() => addDataField(taskId, step.id)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add field
+                </Button>
+              ) : null}
+            </div>
+            {step.dataFields.length === 0 ? (
+              <EmptyState message="No data fields yet" />
+            ) : (
+              <div className="space-y-2">
+                {step.dataFields.map((field, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <Input
+                      placeholder="Label"
+                      value={field.label}
+                      onChange={(e) =>
+                        updateDataField(taskId, step.id, i, {
+                          label: e.target.value,
+                        })
+                      }
+                      disabled={!canEdit}
+                    />
+                    <Select
+                      value={field.token}
+                      onValueChange={(v) => updateDataField(taskId, step.id, i, { token: v })}
+                      disabled={!canEdit}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {groupedTokens.map((grp) => (
+                          <div key={grp.prefix}>
+                            <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                              {grp.label}
+                            </div>
+                            {grp.items.map((t) => (
+                              <SelectItem key={t.token} value={t.token}>
+                                {t.token}
+                              </SelectItem>
+                            ))}
+                          </div>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {canEdit ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeDataField(taskId, step.id, i)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <StepCadenceFields
+        step={step}
+        canEdit={canEdit}
+        onChange={(patch) => updateStep(taskId, step.id, patch)}
+      />
+    </>
+  );
+}
 
 // E1.7b F1.7b.5 (TE-15) — the To/CC recipient editor for a draft-email step.
 // Every row has an explicit "Recipient source" selector (Email address | Profile

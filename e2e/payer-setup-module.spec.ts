@@ -523,21 +523,17 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
-  // Step 2 (Tasks & steps — slice F merged the old Tasks and "Steps & fields"
-  // steps): one named task with one named step (the lint minimum).
-  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
-  await page.getByRole("button", { name: "Add task" }).click();
+  // Step 2 (Actions): one named action with one step — collapsed row syncs
+  // the step label from the action name (BITE-SOP-TT-03).
+  await page.getByRole("button", { name: /^2 Actions$/ }).click();
+  await page.getByRole("button", { name: "Add action" }).click();
   await page
-    .locator('div:has(> label:text-is("Task 1 title"))')
+    .locator('div:has(> label:text-is("Action 1 name"))')
     .first()
     .locator("input")
     .fill("Submit enrollment");
   await page.getByRole("button", { name: "Add step" }).click();
-  await page
-    .locator('div:has(> label:text-is("Step 1 instruction"))')
-    .first()
-    .locator("textarea")
-    .fill("Fill the Aetna portal form");
+  await expect(page.getByText("Mode", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /^3 Review$/ }).click();
   await page.getByRole("button", { name: "Create template" }).click();
@@ -563,7 +559,7 @@ test("TS-131 — the step's portal picker offers the payer's registered portals 
   await expect(page.getByRole("heading", { name: "BCBS Kansas NC Enrollment" })).toBeVisible({
     timeout: 30000,
   });
-  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
+  await page.getByRole("button", { name: /^2 Actions$/ }).click();
 
   // Payer-filtered by default: the BCBS portal is offered, the Aetna one is not.
   const portalTrigger = page.getByRole("combobox").filter({ hasText: "BCBS KS Enrollment" });
@@ -613,7 +609,7 @@ test("TS-132 — drift: badge + banner + in-editor repair clears it; never block
   // Step 3 → the form panel lists the drifted mapping, labeled. E6.9 replaced
   // the train QUEUE with the field REGISTRY: every row stays listed, and a
   // stale row keeps its controls so the repair path is still one click.
-  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
+  await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
   const brokenRow = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "NPI Number" }).first();
   await expect(brokenRow.locator("span.inline-flex", { hasText: "Not on the form" })).toBeVisible();
@@ -673,7 +669,7 @@ test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run gre
   await expect(page.getByRole("heading", { name: "BCBS Kansas NC Enrollment" })).toBeVisible({
     timeout: 30000,
   });
-  await page.getByRole("button", { name: /^2 Tasks & steps$/ }).click();
+  await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
 
   // Run 1: the proposed CAQH mapping is undecided → the run fails honestly and
