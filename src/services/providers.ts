@@ -363,18 +363,32 @@ export async function createProviderWithDetails(
   }
 
   // E1.4 TE-3: assignment writes route through the shared service.
+  // Prefer the provider's employment start date when present; insertAssignmentRows
+  // defaults a missing date to today so the start_date NOT NULL CHECK never trips.
   const facilityIds = input.facilityIds.filter((fid) => fid);
+  const assignmentStart = input.provider.startDate?.trim() || null;
   let insertedFacilityIds: string[] = [];
   if (facilityIds.length > 0) {
     try {
       await insertAssignmentRows(
-        facilityIds.map((facilityId) => ({ providerId: created.id, facilityId })),
+        facilityIds.map((facilityId) => ({
+          providerId: created.id,
+          facilityId,
+          startDate: assignmentStart,
+        })),
       );
       insertedFacilityIds = facilityIds;
     } catch (facErr) {
-      warnings.push(
-        `Facility assignments not saved: ${facErr instanceof Error ? facErr.message : "unknown error"}`,
-      );
+      const detail =
+        facErr instanceof Error
+          ? facErr.message
+          : typeof facErr === "object" &&
+              facErr !== null &&
+              "message" in facErr &&
+              typeof (facErr as { message: unknown }).message === "string"
+            ? (facErr as { message: string }).message
+            : "unknown error";
+      warnings.push(`Facility assignments not saved: ${detail}`);
     }
   }
 
