@@ -147,7 +147,11 @@ describe("buildPayerReadiness", () => {
         state: "NC",
         groupId: null,
         taskDefinitions: [
-          { title: "Fax packet", executionType: "manual", steps: [{ label: "Fax", stepType: "fax" }] },
+          {
+            title: "Fax packet",
+            executionType: "manual",
+            steps: [{ label: "Fax", stepType: "fax" }],
+          },
         ] as never,
       }),
     ];

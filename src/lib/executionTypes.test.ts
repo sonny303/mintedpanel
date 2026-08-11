@@ -35,10 +35,7 @@ describe("executionTypes", () => {
 
   it("authoring picker hides inert types unless the task already has one", () => {
     expect(authoringExecutionTypeOptions("manual")).toEqual(["manual", "extension_fill"]);
-    expect(authoringExecutionTypeOptions("extension_fill")).toEqual([
-      "manual",
-      "extension_fill",
-    ]);
+    expect(authoringExecutionTypeOptions("extension_fill")).toEqual(["manual", "extension_fill"]);
     expect(authoringExecutionTypeOptions(null)).toEqual(["manual", "extension_fill"]);
     expect(authoringExecutionTypeOptions("auto_verify")).toEqual([
       "manual",
@@ -95,9 +92,9 @@ describe("executionTypes", () => {
     expect(
       needsFormFollowUp([{ executionType: "extension_fill", steps: [{ stepType: "phone" }] }]),
     ).toBe(true);
-    expect(needsFormFollowUp([{ executionType: "manual", steps: [{ stepType: "online_form" }] }])).toBe(
-      true,
-    );
+    expect(
+      needsFormFollowUp([{ executionType: "manual", steps: [{ stepType: "online_form" }] }]),
+    ).toBe(true);
     expect(
       needsFormFollowUp([
         {

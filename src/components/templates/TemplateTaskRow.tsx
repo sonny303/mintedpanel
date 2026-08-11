@@ -169,8 +169,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   const soleStep = task.steps.length === 1 ? task.steps[0] : null;
   const inertExecution = (INERT_EXECUTION_TYPES as readonly string[]).includes(task.executionType);
   // Portal Mode → Auto-fill toggle; multi-step / inert legacy keep the select.
-  const showAutoFillToggle =
-    collapsed && soleStep?.stepType === "online_form" && !inertExecution;
+  const showAutoFillToggle = collapsed && soleStep?.stepType === "online_form" && !inertExecution;
   const showExecutionSelect = !collapsed || inertExecution;
 
   function setPortalKey(stepId: string, portalKey: string) {
@@ -330,8 +329,8 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
       <div className="p-4 space-y-3">
         {taskPortalKeys(task).length > 1 ? (
           <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
-            This action links more than one portal ({taskPortalKeys(task).join(", ")}). An action can
-            fill only one portal — pick one. Save is blocked until then.
+            This action links more than one portal ({taskPortalKeys(task).join(", ")}). An action
+            can fill only one portal — pick one. Save is blocked until then.
           </div>
         ) : null}
 
