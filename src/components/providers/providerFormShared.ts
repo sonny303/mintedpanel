@@ -1,6 +1,6 @@
 // Shared constants, types, and validation for Add/Edit provider forms.
 // Owned by ProviderForm.tsx and EditProviderForm.tsx.
-import { isPtTaxonomyCode } from "@/lib/ptTaxonomy";
+import { isKnownTaxonomyCode } from "@/lib/providerTaxonomy";
 
 // Re-export the single mastered state list (src/lib/usStates.ts) rather than
 // keep a second copy in sync — the provider forms import US_STATES from here.
@@ -112,8 +112,10 @@ export function validateCredentials(f: ProviderFormState): ProviderFormErrors {
   const e: ProviderFormErrors = {};
   if (f.npi && !NPI_RE.test(f.npi)) e.npi = "NPI must be 10 digits and start with 1";
   if (!f.isNewGrad && f.caqhId && !CAQH_RE.test(f.caqhId)) e.caqhId = "CAQH must be 8 digits";
-  if (f.taxonomyCode && !isPtTaxonomyCode(f.taxonomyCode))
-    e.taxonomyCode = "Must be a PT/PTA taxonomy code (225X series)";
+  // Soft gate: value must be one of the picker options (PT/PTA + dietitian).
+  // Blank stays allowed; the Credentials step defaults to Physical Therapist.
+  if (f.taxonomyCode && !isKnownTaxonomyCode(f.taxonomyCode))
+    e.taxonomyCode = "Select a taxonomy from the list";
   return e;
 }
 

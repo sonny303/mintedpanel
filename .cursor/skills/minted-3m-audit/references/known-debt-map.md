@@ -23,6 +23,7 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 | ID | 3M | Cadence | Area | Symptom | Likely bites |
 | -- | -- | ------- | ---- | ------- | ------------ |
+| SOP-TT | Mura | setup | panel | Tasks & steps: dual execution×step types + 1:1 bloat | Spike `docs/ops/sop-tasks-steps-simplification-spike.md` → BITE-SOP-TT-01..04 (#293/#295/#296/#297) |
 | PAY-UNIVERSE | Mura | setup | both | Three payer lists confuse | Doc map + UI copy; then consolidate |
 | GLOBAL-PAYERS | Muda | ops | panel/db | Dead catalog rows | Ops apply after OPS-PURGE sign-off |
 | ORPHAN-REPORTS | Muda | rare | panel | `components/reports/*` | Delete + grep imports |
@@ -47,6 +48,10 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - Payer create S0 (#274) · Ready + attach defaults (#277) · Catalog purge **code** (#275)
 - **TD-47 / SOP All-states + D3.3-G** (#280)
 
+## Open spikes (awaiting PM)
+
+- **SOP Tasks & steps simplification** — `docs/ops/sop-tasks-steps-simplification-spike.md` (D-SOP-1..4); no product code until ack.
+
 ## Canonical registers
 
 - `TECH-DEBT.md` / `DESIGN-DEBT.md`
@@ -56,4 +61,6 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - `docs/ops/slice-6-platform-org-spike.md`
 - `docs/ops/3m-slice-5-closeout.md` (closed 3M Slice 5)
 - `docs/ops/3m-slice-4-sowmya-audit.md` (historical)
+- `docs/ops/slice-3-sop-all-states-spike.md` (payer-setup Slice 3 — D3.1 A + D3.3-G locked; build #280)
+- `docs/ops/train-dual-registry-spike.md` (TRAIN-DUAL — pointer + registry; awaiting PM ack)
 - `docs/ops/global-portal-payer-inventory.sql`
