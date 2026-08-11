@@ -1,6 +1,6 @@
 # Groups
 
-_Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journeys B and C — the working entity for payer attach and generation.
 
@@ -99,3 +99,12 @@ record all open the ONE shared preview grid, pre-scoped to their slice:
   already-existing / failed), concurrent duplicates degrade to safe skips,
   and partial failure names the failed rows and stays on the grid. Full
   success lands on Cases filtered to the run.
+- **Nobody drops out silently.** A group member under an active target who
+  never reaches a bucket is listed above the grid with the reason: **no
+  facility assignment under this group** (in the group, but at none of its
+  clinics — so there is nothing to enroll into) or **pending verification**
+  (not yet eligible to generate). Each line links to the provider so the fix
+  is one click away. This explains drops; it is NOT a new gate and it changes
+  no count — the buffer math is unchanged. Terminated, reference-only and
+  test providers are never listed, and a license gap is not a skip reason:
+  it rides readiness on a row that DOES generate.

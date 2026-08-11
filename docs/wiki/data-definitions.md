@@ -1,6 +1,6 @@
 # Data definitions
 
-_Updated for: E6.4 (PR #207, 2026-07-19). Plain-English definitions of the
+_Updated for: E6.4 (PR #207) plus GEN-SILENT skip reasons (2026-08-11). Plain-English definitions of the
 data the app shows and stores. Terms are grouped by the surface where you
 meet them; each definition describes the SHIPPED behavior on `redesign`._
 
@@ -89,6 +89,12 @@ Every case shows exactly ONE status; the list is fixed and code-owned:
 
 ## Generation terms (E6.3)
 
+- **Skipped before candidacy** — a group member under an active target who
+  never becomes a candidate at all, listed above the grid with its reason
+  instead of vanishing. Two reasons ship: **no facility assignment under this
+  group** and **pending verification**. It is an explanation, not a bucket and
+  not a gate — a skipped provider is in no run ledger row and changes no
+  count. Terminated, reference-only and test providers are never listed.
 - **Candidate** — a provider × payer × state combination that could become a
   case: in the group's targets, not already a case, not enrolled by a live
   fact, not excluded.

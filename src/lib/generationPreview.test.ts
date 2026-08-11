@@ -5,13 +5,16 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGenerationPreview,
+  buildGenerationSkips,
   existingCaseIndicator,
   generationPreviewSummary,
+  generationSkipKey,
   previewRowKey,
   splitGenerationPreview,
   type GenerationExclusionInput,
   type GenerationExistingCaseInput,
   type GenerationPreviewInput,
+  type GenerationRosterProviderInput,
 } from "./generationPreview";
 
 const TODAY = "2026-07-13";
@@ -307,5 +310,84 @@ describe("splitGenerationPreview / generationPreviewSummary", () => {
       existing: 1,
       excluded: 1,
     });
+  });
+});
+
+describe("buildGenerationSkips — GEN-SILENT", () => {
+  const roster = (
+    over: Partial<GenerationRosterProviderInput> &
+      Pick<GenerationRosterProviderInput, "providerId">,
+  ): GenerationRosterProviderInput => ({
+    providerName: over.providerName ?? "Provider",
+    pendingVerification: false,
+    skipEligible: true,
+    ...over,
+  });
+
+  it("explains membership without a facility under the target group", () => {
+    // Same Q1 example as candidacy: Jane is a g2 member but only at a g1 clinic.
+    const input = baseInput({
+      facilityAssignments: [{ providerId: "jane", facilityId: "f-g1" }],
+      groupAssignments: [
+        { providerId: "jane", groupId: "g1" },
+        { providerId: "jane", groupId: "g2" },
+      ],
+      providers: [{ providerId: "jane", providerName: "Jane Whitaker" }],
+    });
+    const skips = buildGenerationSkips(input, [
+      roster({ providerId: "jane", providerName: "Jane Whitaker" }),
+    ]);
+    expect(buildGenerationPreview(input).map(previewRowKey)).toEqual(["jane|g1|bcbs-nc|NC"]);
+    expect(skips.map(generationSkipKey)).toEqual([
+      "jane|g2|bcbs-ks|KS|no_facility",
+      "jane|g2|bcbs-nc|NC|no_facility",
+    ]);
+    expect(skips[0]?.reasonLabel).toMatch(/facility/i);
+  });
+
+  it("explains pending_verification members the facts fence drops", () => {
+    const input = baseInput({
+      groupAssignments: [{ providerId: "pending", groupId: "g1" }],
+      facilityAssignments: [{ providerId: "pending", facilityId: "f-g1" }],
+      providers: [], // fence: absent from readiness facts
+    });
+    const skips = buildGenerationSkips(input, [
+      roster({
+        providerId: "pending",
+        providerName: "Pat Pending",
+        pendingVerification: true,
+      }),
+    ]);
+    expect(buildGenerationPreview(input)).toEqual([]);
+    expect(skips).toEqual([
+      expect.objectContaining({
+        providerId: "pending",
+        groupId: "g1",
+        payerId: "bcbs-nc",
+        state: "NC",
+        reason: "pending_verification",
+      }),
+    ]);
+  });
+
+  it("does not emit skips for providers who already candidacy-succeed", () => {
+    const skips = buildGenerationSkips(baseInput(), [
+      roster({ providerId: "jane", providerName: "Jane Whitaker" }),
+      roster({ providerId: "amir", providerName: "Amir Patel" }),
+    ]);
+    expect(skips).toEqual([]);
+  });
+
+  it("ignores terminated / ineligible roster rows", () => {
+    const input = baseInput({
+      groupAssignments: [{ providerId: "gone", groupId: "g1" }],
+      facilityAssignments: [],
+      providers: [],
+    });
+    expect(
+      buildGenerationSkips(input, [
+        roster({ providerId: "gone", providerName: "Gone", skipEligible: false }),
+      ]),
+    ).toEqual([]);
   });
 });

@@ -50,7 +50,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Groups</h1>
-<p><em>Updated for: E6.3 (2026-07-19). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p><em>Updated for: E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
 <p>Journeys B and C — the working entity for payer attach and generation.</p>
 <h2>The Groups front door</h2>
 <ul>
@@ -85,6 +85,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 <li><strong>Pivot by provider or by payer</strong> — same rows, two groupings, per-header check-alls; the entry point picks the default (a payer-row entry opens grouped by payer).</li>
 <li><strong>Skip-for-now vs Exclude are different intents</strong>: unchecking a row skips it with no reason and no ceremony — it stays in the buffer and reappears checked next time. Exclude… records the reasoned, persistent opt-out (restorable in one click, on the grid and on the board).</li>
 <li><strong>Confirm</strong> runs the per-row transactional creation: cases are born Not Started with SOP version stamps (generic-fallback usage is flagged before confirm and recorded on the run), one immutable run + per-candidate ledger row for EVERY bucket (created / skipped / excluded / enrolled / already-existing / failed), concurrent duplicates degrade to safe skips, and partial failure names the failed rows and stays on the grid. Full success lands on Cases filtered to the run.</li>
+<li><strong>Nobody drops out silently.</strong> A group member under an active target who never reaches a bucket is listed above the grid with the reason: <strong>no facility assignment under this group</strong> (in the group, but at none of its clinics — so there is nothing to enroll into) or <strong>pending verification</strong> (not yet eligible to generate). Each line links to the provider so the fix is one click away. This explains drops; it is NOT a new gate and it changes no count — the buffer math is unchanged. Terminated, reference-only and test providers are never listed, and a license gap is not a skip reason: it rides readiness on a row that DOES generate.</li>
 </ul>
 <footer class="pagefoot"><span><a href="./org-detail.html">← Org Detail</a></span><span><a href="./providers.html">Providers →</a></span></footer>
 </main>

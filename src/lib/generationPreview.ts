@@ -307,3 +307,132 @@ export function generationPreviewSummary(
     excluded: rows.filter((r) => r.disposition === "excluded").length,
   };
 }
+
+// ---------- GEN-SILENT — pre-candidacy skips (visible why, not a new gate) ----------
+
+/**
+ * Why a group member under an active target never became a preview row.
+ * Does NOT change candidacy math — only explains drops that were silent.
+ */
+export type GenerationSkipReason = "no_facility" | "pending_verification";
+
+export const GENERATION_SKIP_REASON_LABELS: Record<GenerationSkipReason, string> = {
+  no_facility: "No facility assignment under this group",
+  pending_verification: "Pending verification — not yet eligible to generate",
+};
+
+export interface GenerationRosterProviderInput {
+  providerId: string;
+  providerName: string;
+  /** E3.1 fence — absent from readiness facts until verified. */
+  pendingVerification: boolean;
+  /** Terminated / reference-only / test providers are not skip-banner material. */
+  skipEligible: boolean;
+}
+
+export interface GenerationSkipRow {
+  providerId: string;
+  providerName: string;
+  groupId: string;
+  groupName: string;
+  payerId: string;
+  payerName: string;
+  state: string;
+  reason: GenerationSkipReason;
+  reasonLabel: string;
+}
+
+export function generationSkipKey(
+  row: Pick<GenerationSkipRow, "providerId" | "groupId" | "payerId" | "state" | "reason">,
+): string {
+  return `${row.providerId}|${row.groupId}|${row.payerId}|${row.state}|${row.reason}`;
+}
+
+/**
+ * Emit one skip row per active target × group member that candidacy drops
+ * with no preview row: pending_verification (facts fence) or no_facility
+ * (member of group, no clinic under that group). License gaps stay on
+ * readiness for rows that DO generate — never emitted here.
+ */
+export function buildGenerationSkips(
+  input: GenerationPreviewInput,
+  roster: readonly GenerationRosterProviderInput[],
+): GenerationSkipRow[] {
+  const factsById = new Map(input.providers.map((p) => [p.providerId, p]));
+  const rosterById = new Map(roster.map((p) => [p.providerId, p]));
+  const groupNameById = new Map(input.groups.map((g) => [g.id, g.name]));
+  const payerNameById = new Map(input.payers.map((p) => [p.id, p.name]));
+
+  const membersByGroup = new Map<string, Set<string>>();
+  for (const a of input.groupAssignments) {
+    if (!a.providerId || !a.groupId) continue;
+    if (a.endDate != null && a.endDate.slice(0, 10) < input.today) continue;
+    if (!membersByGroup.has(a.groupId)) membersByGroup.set(a.groupId, new Set());
+    membersByGroup.get(a.groupId)?.add(a.providerId);
+  }
+
+  const facilityGroupById = new Map(input.facilities.map((f) => [f.id, f.groupId]));
+  const clinicProvidersByGroup = new Map<string, Set<string>>();
+  for (const fa of input.facilityAssignments) {
+    if (!fa.providerId || !fa.facilityId) continue;
+    const groupId = facilityGroupById.get(fa.facilityId);
+    if (!groupId) continue;
+    if (!clinicProvidersByGroup.has(groupId)) clinicProvidersByGroup.set(groupId, new Set());
+    clinicProvidersByGroup.get(groupId)?.add(fa.providerId);
+  }
+
+  const skips = new Map<string, GenerationSkipRow>();
+  for (const target of input.targets) {
+    if (target.status !== "active") continue;
+    const members = membersByGroup.get(target.groupId);
+    if (!members) continue;
+    const atClinic = clinicProvidersByGroup.get(target.groupId) ?? new Set<string>();
+    const groupName = groupNameById.get(target.groupId) ?? "Unknown group";
+    const payerName = payerNameById.get(target.payerId) ?? "Unknown payer";
+
+    for (const providerId of members) {
+      const rosterRow = rosterById.get(providerId);
+      if (rosterRow && !rosterRow.skipEligible) continue;
+
+      let reason: GenerationSkipReason | null = null;
+      const providerName = rosterRow?.providerName ?? factsById.get(providerId)?.providerName;
+
+      if (rosterRow?.pendingVerification) {
+        reason = "pending_verification";
+      } else if (factsById.has(providerId) && !atClinic.has(providerId)) {
+        reason = "no_facility";
+      } else {
+        continue;
+      }
+
+      if (!providerName) continue;
+      const key = generationSkipKey({
+        providerId,
+        groupId: target.groupId,
+        payerId: target.payerId,
+        state: target.state,
+        reason,
+      });
+      if (skips.has(key)) continue;
+      skips.set(key, {
+        providerId,
+        providerName,
+        groupId: target.groupId,
+        groupName,
+        payerId: target.payerId,
+        payerName,
+        state: target.state,
+        reason,
+        reasonLabel: GENERATION_SKIP_REASON_LABELS[reason],
+      });
+    }
+  }
+
+  return [...skips.values()].sort(
+    (a, b) =>
+      a.providerName.localeCompare(b.providerName) ||
+      a.state.localeCompare(b.state) ||
+      a.payerName.localeCompare(b.payerName) ||
+      a.reason.localeCompare(b.reason),
+  );
+}
