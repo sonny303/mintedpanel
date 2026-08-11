@@ -2910,9 +2910,11 @@ built only when a real consumer pulls them. The current surface:
   pinned `ACKNOWLEDGED_TOKENS` snapshot — a new column fails the suite BY NAME
   until someone classifies it. Do not delete that test to make a build pass.
   Not a PHI read/write (field KEYS + schema metadata, no values) — no audit row.
-  NB the extension still ships a stale verbatim mirror of the old 75-key list in
-  `src/shared/quickCards.ts`; it must be deleted and the picker driven from the
-  served `catalog` (extension-repo work, not done here).
+  **Extension-side fix landed 2026-07-28** (this note previously said it hadn't):
+  `src/shared/quickCards.ts` in `minted-extension` no longer mirrors the old
+  75-key list — the picker is driven by the SERVED `catalog` from
+  `GET /api/me/view-prefs`, with the local list used only as a shape-only
+  fallback if that fetch fails.
 - `GET /api/next-best-action` — the extension's log-and-advance queue-top read
   (E4.3 F4.3.4/TE-6, `src/services/nextBestAction.ts`). A guarded, org-scoped
   read that ASSEMBLES the same ~17 org caches the browser My Cases queue
