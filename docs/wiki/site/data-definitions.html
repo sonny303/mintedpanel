@@ -50,7 +50,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Data definitions</h1>
-<p><em>Updated for: E6.4 (PR #207, 2026-07-19). Plain-English definitions of the data the app shows and stores. Terms are grouped by the surface where you meet them; each definition describes the SHIPPED behavior on <code>redesign</code>.</em></p>
+<p><em>Updated for: E6.4 (PR #207) plus GEN-SILENT skip reasons (2026-08-11). Plain-English definitions of the data the app shows and stores. Terms are grouped by the surface where you meet them; each definition describes the SHIPPED behavior on <code>redesign</code>.</em></p>
 <h2>Core entities</h2>
 <ul>
 <li><strong>Organization (org)</strong> — the customer account. Everything you see is scoped to the active org; no data crosses orgs.</li>
@@ -99,6 +99,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </ul>
 <h2>Generation terms (E6.3)</h2>
 <ul>
+<li><strong>Skipped before candidacy</strong> — a group member under an active target who never becomes a candidate at all, listed above the grid with its reason instead of vanishing. Two reasons ship: <strong>no facility assignment under this group</strong> and <strong>pending verification</strong>. It is an explanation, not a bucket and not a gate — a skipped provider is in no run ledger row and changes no count. Terminated, reference-only and test providers are never listed.</li>
 <li><strong>Candidate</strong> — a provider × payer × state combination that could become a case: in the group's targets, not already a case, not enrolled by a live fact, not excluded.</li>
 <li><strong>Buffer (awaiting generation)</strong> — the visible count of candidates that accumulated since the last run (provider joined, payer attached, fact expired). Nothing is created until a human confirms.</li>
 <li><strong>Skip for now</strong> — unchecking a row in the grid. Selection state only: nothing is stored, the candidate stays in the buffer and reappears checked next time. In the run ledger the row records as <code>skipped</code>.</li>
