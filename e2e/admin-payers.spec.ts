@@ -78,16 +78,24 @@ function fixtures(): Record<string, unknown[]> {
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
-    org_payer_assignments: [
+    // OPA-RETIRE: setup inclusion is target-derived; assignments stay dormant.
+    org_payer_assignments: [],
+    payer_network_targets: [
       {
-        id: "assign-1",
+        id: "t-1",
         org_id: ORG_ID,
+        group_id: "g-1",
         payer_id: GLOBAL_PAYER_ID,
-        starter: false,
+        state: "NC",
         status: "active",
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
+    sop_templates: [],
+    portals: [],
+    portal_field_maps: [],
+    fill_sessions: [],
+    provider_groups: [],
   };
 }
 

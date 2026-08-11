@@ -122,6 +122,20 @@ function buildDb(): Record<string, Row[]> {
     org_payer_assignments: [
       { id: "as-1", org_id: ORG_ID, payer_id: AETNA_ID, starter: false, status: "active" },
     ],
+    // OPA-RETIRE: "In my network" on detail is target-derived. Seed Aetna
+    // so edit/detail fixtures that expect membership stay green; create_payer
+    // itself never writes assignments or targets.
+    payer_network_targets: [
+      {
+        id: "t-aetna",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: AETNA_ID,
+        state: "AZ",
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
     sop_templates: [],
     portals: [],
     notes: [],
@@ -174,16 +188,8 @@ async function fulfillSupabase(route: Route) {
         delegation_note: body.p_delegation_note ?? null,
       });
       db.payers.push(row);
-      // The harness mirrors the LIVE create_payer: adoption is unconditional
-      // ("creating = adding"), in the same transaction as the identity insert.
-      // The Slice 6 p_assign_to_org branch is gone with the retired migration.
-      db.org_payer_assignments.push({
-        id: `as-${db.org_payer_assignments.length + 1}`,
-        org_id: ORG_ID,
-        payer_id: row.id,
-        starter: false,
-        status: "active",
-      });
+      // OPA-RETIRE: create_payer writes the GLOBAL catalog row only — no
+      // org_payer_assignments upsert and no auto target. Adoption is group attach.
       return json(row);
     }
     if (fn === "update_payer") {
@@ -362,10 +368,12 @@ test("details — new: required fields, aliases, ID expectations → create_paye
   expect(body).not.toHaveProperty("p_assign_to_org");
   expect(tableWrites.filter((w) => w.table === "payers")).toEqual([]);
 
-  // Creating lands on the new payer, already in the org's network.
+  // Creating lands on the new payer — catalog-only until a group attach.
   await expect(page).toHaveURL(/\/admin\/payer-admin\/setup\/payer-new-/, { timeout: 15000 });
   await expect(page.getByRole("heading", { name: "Banner Health Plans" })).toBeVisible();
-  await expect(page.getByText("In my network")).toBeVisible();
+  await expect(page.getByText("Banner Health Plans created in the payer catalog")).toBeVisible();
+  await expect(page.getByText("In my network")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Attach to a group" })).toBeVisible();
 });
 
 test("duplicate rejection renders inline and keeps the form", async ({ page }) => {

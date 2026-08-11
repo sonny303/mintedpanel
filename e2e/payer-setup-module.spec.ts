@@ -99,6 +99,27 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       { id: "as-1", org_id: ORG_ID, payer_id: AETNA_ID, starter: false, status: "active" },
       { id: "as-2", org_id: ORG_ID, payer_id: BCBS_ID, starter: false, status: "active" },
     ],
+    // OPA-RETIRE: Payer Setup inclusion is target-derived.
+    payer_network_targets: [
+      {
+        id: "t-aetna",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: AETNA_ID,
+        state: "NC",
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+      {
+        id: "t-bcbs",
+        org_id: ORG_ID,
+        group_id: "g-1",
+        payer_id: BCBS_ID,
+        state: "NC",
+        status: "active",
+        created_at: "2026-07-12T00:00:00Z",
+      },
+    ],
     sop_templates: [],
     sop_template_versions: [],
     portals: [],

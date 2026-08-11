@@ -312,15 +312,14 @@ test("TS-25: fresh org shows the full journey — derived chips and disabled pre
     sectionCard(page, "wizard-assignments").getByRole("button", { name: "Go to Providers" }),
   ).toBeVisible();
 
-  // E1.5 activated Payer Network: with no added payers it renders the
-  // actionable empty state with a Browse payer catalog action (E4.2 hardening),
-  // not a disabled preview.
+  // E1.5 activated Payer Network — OPA-RETIRE: with an empty catalog the
+  // section points at Set up a payer (not the retired Browse catalog CTA).
   await expect(sectionCard(page, "wizard-payer-network")).toContainText("Not started");
   await expect(sectionCard(page, "wizard-payer-network")).toContainText(
-    "No payers have been added to this organization yet",
+    "No payers in the catalog yet",
   );
   await expect(
-    sectionCard(page, "wizard-payer-network").getByRole("link", { name: "Browse payer catalog" }),
+    sectionCard(page, "wizard-payer-network").getByRole("link", { name: "Set up a payer" }),
   ).toBeVisible();
 
   // 2026-07-21: Scope Review left the wizard for the provider record
