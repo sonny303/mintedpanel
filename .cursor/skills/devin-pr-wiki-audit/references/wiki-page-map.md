@@ -1,41 +1,58 @@
-# Wiki page map — code surfaces → deep wiki
+# Wiki page map — path globs → deep wiki
 
-Use this when classifying PR diffs. Prefer the **most specific** page; update
-`data-definitions.md` whenever a vocabulary / status / derived pill changes.
-Update `where-did-it-go.md` when a route or surface is retired or redirected.
+Prefer the **most specific** page. Always consider `data-definitions.md` when
+statuses, pills, dispositions, or entity names change. Always consider
+`where-did-it-go.md` when routes redirect or surfaces retire.
 
-Panel wiki lives at `docs/wiki/`. Extension has no wiki — map Workbench changes
-into these panel pages.
+Panel: `docs/wiki/`. Extension: no wiki — map into panel pages.
 
-| Touch pattern (path / topic) | Wiki page(s) |
-| ---------------------------- | ------------ |
-| `/cases`, case status, NBA queue, touches, status history, case detail | [cases.md](../../../docs/wiki/cases.md) |
-| `caseStatus`, `set_case_status`, eight statuses, denial reasons | [cases.md](../../../docs/wiki/cases.md) + [data-definitions.md](../../../docs/wiki/data-definitions.md) |
-| Payer Setup, `/admin/payer-admin`, catalog, SOPs, portals, field registry, Train | [payer-setup.md](../../../docs/wiki/payer-setup.md) |
-| Groups hub, facilities, payer network board, attach, enrollment facts | [groups.md](../../../docs/wiki/groups.md) |
-| Generation preview/confirm, run history, exclusions, one-door create | [groups.md](../../../docs/wiki/groups.md) + [data-definitions.md](../../../docs/wiki/data-definitions.md) |
-| Providers roster/record, licenses, SSN vault UI, readiness, enrollments | [providers.md](../../../docs/wiki/providers.md) |
-| Org Detail, People/parties, members, onboarding entry | [org-detail.md](../../../docs/wiki/org-detail.md) |
-| Reporting Center, portfolio, denials, launches, audit, leads | [reporting-center.md](../../../docs/wiki/reporting-center.md) |
-| Redirects, retired routes, IA moves | [where-did-it-go.md](../../../docs/wiki/where-did-it-go.md) |
-| New entity vocabulary, rollups, gap pills, dispositions, ledgers | [data-definitions.md](../../../docs/wiki/data-definitions.md) |
+## Fast classify (panel path prefixes)
 
-## Extension → wiki
+| Path glob / topic | Wiki page(s) |
+| ----------------- | ------------ |
+| `src/routes/cases*` · `src/components/cases/**` · `src/lib/caseStatus*` · `src/lib/casesView*` · `src/lib/nextBestActions*` · touches / status history | **cases.md** |
+| `src/routes/admin.payer-admin*` · `src/components/payer-admin/**` · `src/components/templates/**` · `src/lib/fieldRegistry*` · `src/lib/payerSetup*` · `src/lib/payerReadiness*` · portals / field maps / train | **payer-setup.md** |
+| `src/routes/groups*` · `src/components/groups/**` · payer network board · `enrollmentFacts*` · `generation*` · `src/lib/generation*` · `src/lib/caseRollups*` | **groups.md** (+ data-definitions if dispositions/status vocabulary) |
+| `src/routes/providers*` · `src/components/providers/**` · licenses · SSN vault UI · readiness · enrollments panel | **providers.md** |
+| `src/routes/org-detail*` · `src/components/org/**` · `parties*` · People / Access / members | **org-detail.md** |
+| `src/routes/reporting*` · `src/components/reporting/**` · `src/lib/reports*` · denials / launches / audit / leads | **reporting-center.md** |
+| Redirect tables · `legacy-routes` · deleted surfaces · sidebar IA moves | **where-did-it-go.md** |
+| Eight statuses · fulfillment pills · gap pills · generation dispositions · enrollment facts · touch kinds | **data-definitions.md** |
+| `docs/wiki/**` already in PR | Confirm build ran; usually no extra wiki PR |
 
-| Extension change | Panel wiki impact |
-| ---------------- | ----------------- |
-| Fill / capture / Train vs Work mode | payer-setup.md (forms), cases.md (submission close-out) |
-| Handoff `SET_ACTIVE_CASE`, case search, NBA | cases.md |
-| Touches / `bump_status` / portal submission logging | cases.md + data-definitions.md |
-| Field-map propose / shared tier | payer-setup.md |
-| Portal recognition / host permissions | payer-setup.md (register/train), where-did-it-go if UX moved |
+## Extension path prefixes → panel wiki
 
-## Likely **no** wiki change
+| Path / topic | Wiki |
+| ------------ | ---- |
+| `src/sidepanel/**` · Train/Work mode · capture | payer-setup.md (forms); cases.md if Work UX |
+| `src/background/fill*` · `src/content/**` · fill engine | payer-setup.md + cases.md (fill → submit) |
+| `src/background/activeCase*` · handoff · case search · NBA | cases.md |
+| touches / submission / `bump_status` messaging | cases.md + data-definitions.md |
+| shared field maps / portals client | payer-setup.md |
+| `src/shared/apiTypes.ts` wire shapes | wiki only if UX/contract user-visible; else note in report, no wiki |
 
-- Pure test / lint / CI workflow edits with no product behavior change
-- Comment-only or typo fixes in non-user-facing code
-- Internal agent skills under `.cursor/skills/` (this folder) — optional one-line
-  in ops docs only if the PM asks
+## Panel `/api` (extension-facing) — wiki when user-visible
 
-When unsure: open the walkthrough page a coordinator would use for that job and
-ask whether the PR would surprise them. If yes → update.
+| Area | Wiki if… |
+| ---- | -------- |
+| profile / field-maps / portals / shared-field-maps | Train/fill story changes → payer-setup |
+| cases / touches / context / next-best-action | Casework story changes → cases (+ definitions) |
+| view-prefs / documents / ssn-release | providers or cases only if UI story changes |
+
+## Skip wiki (mark Needed? = N)
+
+- `.cursor/skills/**`, agent prompts, internal ops markdown (unless PM asks)
+- Pure `*.test.ts` / e2e-only with no product copy/behavior change
+- Lint/format/CI workflow-only
+- Comment-only / typo in non-user-facing code
+- Types regen with no behavior change
+
+## Gap decision heuristic
+
+```
+product-facing path hit?
+  no  → Needed? N
+  yes → open mapped wiki section
+          coordinator would be wrong/surprised? → gap (edit)
+          page already describes new behavior + Updated for current? → current
+```

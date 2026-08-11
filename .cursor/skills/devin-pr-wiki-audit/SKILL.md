@@ -11,181 +11,143 @@ description: >-
 
 # Devin — 24h PR status + deep wiki sync
 
-You are **Devin**, the reviewer/wiki owner for Minted Panel. Run this skill end
-to end when asked to audit the last 24 hours of PR activity.
+You are **Devin**, Minted Panel reviewer and **wiki owner** (`docs/wiki/`).
+Run this skill end-to-end for a last-24-hours audit. Prefer the baked-in
+context below over re-reading `CLAUDE.md` / epics unless a PR is schema-heavy
+or crosses a trust boundary.
 
-Repos in scope:
+| Repo | GitHub | Docs |
+| ---- | ------ | ---- |
+| Panel | `sonny303/mintedpanel` | `docs/wiki/*.md` (source) → `npm run wiki:build` → `docs/wiki/site/` + `public/wiki/` (`/wiki/`) |
+| Extension | `sonny303/minted-extension` | No wiki; Train/Work/fill/capture/touches → panel wiki pages |
 
-| Repo | GitHub | Wiki / product docs |
-| ---- | ------ | ------------------- |
-| Panel (primary) | `sonny303/mintedpanel` | `docs/wiki/*.md` (source of truth) + `npm run wiki:build` |
-| Extension | `sonny303/minted-extension` | No `docs/wiki/`; note Workbench behavior in panel wiki when Train/Work/fill/capture/touches change |
+**Base = `main`** (redesign branch retired). Never self-merge. Never invent
+hosted-ops green.
 
-Base branch for both: **`main`**. Never self-merge. Never invent green for hosted ops.
-
-Progressive disclosure:
+Progressive disclosure (read these; do not re-derive):
 
 | File | When |
 | ---- | ---- |
-| [references/wiki-page-map.md](references/wiki-page-map.md) | Always — map code surfaces → wiki pages |
-| [references/report-template.md](references/report-template.md) | Always — paste this shape into the final reply |
-| Panel `docs/wiki/README.md` | Wiki ownership + update rules |
-| Panel `docs/ops/repo-workflow.md` | Merge gates, lanes, human-only ops |
+| [references/product-snapshot.md](references/product-snapshot.md) | Always — IA, vocabulary, what “product does” means |
+| [references/wiki-page-map.md](references/wiki-page-map.md) | Always — path globs → wiki pages + skip rules |
+| [references/gh-recipes.md](references/gh-recipes.md) | Always — copy-paste `gh` one-shots |
+| [references/report-template.md](references/report-template.md) | Final reply only |
+
+---
+
+## Efficiency rules (do these)
+
+1. **One inventory pass, then triage** — use the recipes in `gh-recipes.md`;
+   do not open every PR in the browser first.
+2. **Classify from `files` + title before reading the full diff.** Only open
+   `gh pr diff` for PRs that map to a wiki page or look product-facing.
+3. **Wiki gap test is coordinator surprise**, not “every file mentioned.”
+   Pure CI/test/skill/chore → `no wiki` (see skip list).
+4. **Parallelize** panel + extension inventory; parallelize thread GraphQL per
+   open/merged PR in the window.
+5. **Do not** re-read whole `CLAUDE.md` / epic files for this audit unless the
+   PR adds migrations, `/api` contracts, or auth/RLS/PHI.
+6. **Batch wiki edits** into one follow-up PR:
+   `docs(wiki): sync after <PR list> (24h audit)`.
+7. If inventory is empty → report `ALL CLEAR` with empty tables; do not invent
+   work.
 
 ---
 
 ## Goal
 
-1. List every PR **created** in the last 24 hours on both repos.
-2. Confirm each PR's **status** (open / draft / merged / closed).
-3. Confirm each is **fully resolved** (review threads + CI + merge outcome).
-4. For every **merged** PR, confirm **deep wiki** reflects what the product now
-   does — and open a follow-up doc PR (or push wiki commits on an allowed branch)
-   when it does not.
-
-"Fully resolved" means: intended outcome reached (merged or intentionally closed),
-CI green at merge (or failures explained), **no unresolved review threads**, and
-wiki/product docs match shipped behavior. An open draft awaiting PM is **not**
-fully resolved — report it as blocked/waiting.
+1. Every PR **created** in the last 24h (both repos) — status known.
+2. Every PR **merged** in the window (even if created earlier) — wiki checked.
+3. **Fully resolved** = intended outcome + CI understood + **all review
+   threads resolved** + wiki matches shipped UX when product-facing.
+4. Open draft waiting on PM = `open-waiting` (not fully resolved; not a doc bug).
 
 ---
 
 ## Procedure
 
-### 1. Time window
+### 1–2. Window + inventory
 
-```bash
-SINCE=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-  || date -u -v-24H +%Y-%m-%dT%H:%M:%SZ)
-echo "Window start (UTC): $SINCE"
+Run the **Inventory** recipe in [references/gh-recipes.md](references/gh-recipes.md).
+Dedupe by repo+number. Sort by `createdAt` ascending in the report.
+
+### 3. Per-PR deep-dive (only when needed)
+
+Always fetch for each inventoried PR:
+
+- `state`, `isDraft`, `baseRefName` (must be `main`), `mergedAt` / `closedAt`
+- `statusCheckRollup` (failing check **names**)
+- GraphQL `reviewThreads` → any `isResolved: false` blocks `merged-clean`
+
+| Label | Criteria |
+| ----- | -------- |
+| `merged-clean` | Merged to `main`; checks green or explained; threads resolved; wiki OK or N/A |
+| `merged-wiki-gap` | Merged cleanly but wiki stale/wrong for shipped behavior |
+| `open-blocking` | Failing CI, unresolved threads, conflicts, wrong base |
+| `open-waiting` | Healthy open/draft awaiting human/PM merge |
+| `closed-intentional` | Closed unmerged with explicit reason |
+| `closed-unclear` | Closed unmerged, no disposition |
+
+Lane hints (branch name → expectations):
+
+| Pattern | Lane | Notes |
+| ------- | ---- | ----- |
+| `EX.X:…` title / epic branch | Epic | FR trace in body; wiki often in same PR |
+| `cursor/3m-…` | 3M | Draft; PM merges; wiki if UX/API changed |
+| `cursor/…-dc2b` | Cloud agent | Same as 3M unless titled docs-only |
+| `claude/…` | Builder | Devin reviews; never self-merge |
+
+Panel CI to name in notes: `format`, `typecheck`, `lint`, `lint:epics`,
+`test`, `build`, `migration dry-run`; isolation gate on `/api` deploys.
+Extension: `typecheck`, `lint`, `test`.
+
+### 4. Diff → wiki (fast path)
+
+```text
+files / title  →  wiki-page-map globs  →  candidate pages
+read only those docs/wiki/*.md headers (_Updated for:) + sections the PR touches
+gap?  →  edit + wiki:build  →  else mark current
 ```
 
-Use GitHub's `created:` filter (creation time), not `updated:`. Also scan PRs
-**merged** in the window even if created earlier — they still need wiki sync.
-
-### 2. Enumerate PRs (both repos)
-
-```bash
-for REPO in sonny303/mintedpanel sonny303/minted-extension; do
-  echo "=== $REPO created ==="
-  gh pr list --repo "$REPO" --state all --limit 50 \
-    --json number,title,url,state,isDraft,createdAt,mergedAt,closedAt,author,headRefName,baseRefName \
-    --jq --arg since "$SINCE" \
-    '[.[] | select(.createdAt >= $since)]'
-
-  echo "=== $REPO merged in window (may predate create) ==="
-  gh pr list --repo "$REPO" --state merged --limit 50 \
-    --json number,title,url,mergedAt,createdAt,headRefName \
-    --jq --arg since "$SINCE" \
-    '[.[] | select(.mergedAt != null and .mergedAt >= $since)]'
-done
-```
-
-Deduplicate by `number` per repo. Sort by `createdAt` ascending in the report.
-
-### 3. Per-PR status deep-dive
-
-For each PR:
-
-```bash
-gh pr view <n> --repo <repo> --json \
-  state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,reviews,\
-  comments,url,title,body,files,commits,mergedAt,closedAt,baseRefName,headRefName
-
-# Review threads (must be resolved for "fully resolved")
-gh api repos/<owner>/<repo>/pulls/<n>/comments --jq \
-  '[.[] | {id, path, line, in_reply_to_id, user: .user.login, body: .body[0:120]}]'
-
-gh api graphql -f query='
-  query($owner:String!, $repo:String!, $number:Int!) {
-    repository(owner:$owner, name:$repo) {
-      pullRequest(number:$number) {
-        reviewThreads(first:100) {
-          nodes { isResolved isOutdated path comments(first:1){nodes{body author{login}}} }
-        }
-      }
-    }
-  }' -f owner=sonny303 -f repo=<mintedpanel|minted-extension> -F number=<n>
-```
-
-Classify each PR:
-
-| Status label | Criteria |
-| ------------ | -------- |
-| `merged-clean` | Merged to `main`; CI green at merge; all review threads resolved |
-| `merged-wiki-gap` | Merged cleanly but wiki/product docs missing or stale for the change |
-| `open-blocking` | Open with failing CI, unresolved threads, or merge conflicts |
-| `open-waiting` | Open/draft, healthy, waiting on PM/human merge (never self-merge) |
-| `closed-intentional` | Closed without merge with an explicit reason in comments/body |
-| `closed-unclear` | Closed without merge and no clear disposition |
-
-Pin failures with the exact check name / thread path. Do not soft-pass.
-
-### 4. Diff → wiki impact
-
-For each **merged** PR (and any open PR whose docs should land with the merge):
-
-```bash
-gh pr diff <n> --repo <repo> --name-only
-gh pr view <n> --repo <repo> --json body,title,files
-```
-
-Map touched paths to wiki pages using
-[references/wiki-page-map.md](references/wiki-page-map.md).
-
-Ask for each impacted page:
+Coordinator questions (any “no” / “yes surprise” ⇒ gap):
 
 1. Does the page still describe **shipped** behavior on `main`?
-2. Is the `_Updated for:` line current (epic/PR id + date)?
-3. Would a coordinator reading only the wiki misunderstand the product?
+2. Is `_Updated for:` current enough to find this change?
+3. Would a coordinator using only the wiki do the wrong thing?
 
-If yes to (3) or no to (1)/(2) → **wiki gap**.
+### 5. Close wiki gaps
 
-### 5. Close wiki gaps (same session when possible)
+- Edit `docs/wiki/<page>.md` only (user-facing). Bump `_Updated for:`
+  (epic and/or `PR #N, YYYY-MM-DD`).
+- Write **shipped** behavior in coordinator language (see product-snapshot).
+- Mark unmerged work _(lands with …)_ — never as live.
+- `npm run wiki:build` in the same PR; new pages → `PAGE_ORDER` in
+  `scripts/build-wiki-site.mjs`.
+- Do **not** edit epic files / `CLARIFICATIONS_NEEDED.md` / apply hosted
+  migrations in this skill unless the user explicitly asks.
 
-Wiki rules (`docs/wiki/README.md`):
+### 6. Report
 
-- Edit markdown under `docs/wiki/` — that is the source of truth.
-- Describe shipped behavior only. Mark not-yet-merged work _(lands with …)_.
-- Bump `_Updated for:` on every page you change.
-- After markdown edits: `npm run wiki:build` so `docs/wiki/site/` and
-  `public/wiki/` stay in sync.
-- New page → register in `scripts/build-wiki-site.mjs` `PAGE_ORDER` (build fails
-  if missing).
-- Prefer a dedicated follow-up PR titled like
-  `docs(wiki): sync after <PR list> (24h audit)` targeting `main`.
-- Extension-only behavior that changes Train/Work/fill/capture/touches still
-  updates the **panel** wiki (Cases / Payer Setup / data-definitions as mapped).
+Fill [references/report-template.md](references/report-template.md).
 
-Do **not** rewrite epic files or `CLARIFICATIONS_NEEDED.md` in this skill unless
-the user explicitly asks. Do not apply hosted migrations.
-
-### 6. Emit the report
-
-Fill [references/report-template.md](references/report-template.md) completely.
-End with a single verdict line:
-
-- `ALL CLEAR` — every 24h PR is `merged-clean` or `closed-intentional`, and wiki
-  matches shipped product
+- `ALL CLEAR` — every window PR is `merged-clean` or `closed-intentional`,
+  wiki matches product
 - `ACTION REQUIRED` — any `open-blocking`, `merged-wiki-gap`, or `closed-unclear`
+  (`open-waiting` alone ⇒ ACTION REQUIRED with waiting list, unless user asked
+  only for merge confirmation of already-merged PRs)
 
 ---
 
 ## Hard rules
 
-- Never self-merge; never approve your own bypass of unresolved threads.
-- Never claim wiki is current without opening the mapped pages and the PR diff.
-- Never document planned behavior as live.
-- Cross-repo `/api` contract changes: panel wiki + note extension consumers.
-- Human-only ops (hosted migrations, vault key, portal seed, UAT sign-off) stay
-  listed as ops residual — not "docs done."
-- If `gh` auth fails, stop and report auth gap; do not invent PR states.
----
+- Never self-merge; never resolve threads by ignoring them.
+- Never claim wiki current without reading the mapped page against the diff.
+- Cross-repo `/api` changes: panel wiki + call out extension consumers.
+- Ops residual (hosted migration, vault key, portal seed, UAT) ≠ docs done.
+- `gh` auth failure → stop; do not invent PR states.
 
-## Trigger phrases
+## Triggers
 
-- "review PRs from the last 24 hours"
-- "confirm PRs merged and resolved"
-- "sync the deep wiki"
-- "Devin daily PR/wiki audit"
-- "are we fully caught up on docs after today's merges"
+“review PRs from the last 24 hours” · “confirm PRs merged and resolved” ·
+“sync the deep wiki” · “Devin daily PR/wiki audit” · “caught up on docs after
+today’s merges”

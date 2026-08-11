@@ -1,7 +1,6 @@
 # 24h PR + wiki audit report
 
-Copy this template into the final reply. Fill every section; use `none` rather
-than omitting a table.
+Copy into the final reply. Use `none` instead of omitting sections.
 
 ```markdown
 # 24h PR + wiki audit
@@ -15,25 +14,26 @@ than omitting a table.
 
 | Repo | PR | Title | Created | State | Classification | Notes |
 | ---- | -- | ----- | ------- | ----- | -------------- | ----- |
-| panel | #N | … | ISO | merged/open/… | merged-clean / … | CI / threads |
+| panel | #N | … | ISO | merged/open/… | merged-clean / … | CI / threads / wiki N/A |
 
 ## Resolution checklist
 
-For each PR that is not `merged-clean` or `closed-intentional`, one bullet:
+PRs that are not `merged-clean` or `closed-intentional` (include `open-waiting`):
 
-- **panel#N** — blocking reason → owner / next step
+- **panel#N** — reason → owner / next step
 - **extension#N** — …
+- or `none`
 
 ## Merged changes → product understanding
 
-One short paragraph per merged PR: what the product does differently now
-(coordinator language, not file lists).
+One short coordinator-language paragraph per **merged** PR (what someone does
+differently in the app/extension). `none` if no merges.
 
 ## Wiki sync
 
-| Page | Needed? | Status | PR / commit |
-| ---- | ------- | ------ | ----------- |
-| cases.md | Y/N | current / updated / gap | … |
+| Page | Needed? | Status | Evidence |
+| ---- | ------- | ------ | -------- |
+| cases.md | Y/N | current / updated / gap / n/a | PR #… or “no product paths” |
 | payer-setup.md | Y/N | … | … |
 | groups.md | Y/N | … | … |
 | providers.md | Y/N | … | … |
@@ -41,12 +41,11 @@ One short paragraph per merged PR: what the product does differently now
 | reporting-center.md | Y/N | … | … |
 | data-definitions.md | Y/N | … | … |
 | where-did-it-go.md | Y/N | … | … |
-| wiki site rebuild (`npm run wiki:build`) | Y/N | done / n/a / gap | … |
+| `npm run wiki:build` | Y/N | done / n/a / gap | … |
 
 ## Ops residual (not docs)
 
-List human-only follow-ups surfaced by the PRs (hosted migration apply, vault
-key, portal seed, UAT). `none` if empty.
+Hosted migration / vault / portal seed / UAT — or `none`.
 
 ## Follow-ups opened this run
 
