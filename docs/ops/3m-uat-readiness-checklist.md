@@ -18,31 +18,66 @@ Slice 5 close-out: [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md).
 
 ---
 
-## Hosted Supabase — not verified from agent
+## Hosted Supabase — verify by SCHEMA STATE, never by version string
 
-This Cloud Agent environment has **no Supabase credentials** and the Supabase MCP
-server is often `needsAuth` (desktop-only auth). Hosted checks below are inventory
-for whoever has SQL Editor / Vault access — **not** a blocking gate for Slice 6
-code, but required before full-SSN / Field Registry UAT.
+An agent session **may** have Supabase MCP access (`execute_sql`,
+`apply_migration`). Check before assuming: if the tools answer, these boxes are
+agent-verifiable and should be filled in, not left as inventory. The older
+"no Supabase credentials / MCP is desktop-only" claim was wrong often enough to
+cause a wasted audit — treat access as a thing to test, not a known constant.
 
-Migrations expected on hosted (filename order):
+### THE TRAP: repo filenames are not hosted migration versions
 
-- `20260807130000_people_contact_roles.sql`
-- `20260807130100_people_contact_role_rpcs.sql`
-- `20260807150937_harden_party_role_tenant_integrity.sql`
-- `20260807160000_e69_field_registry.sql`
-- `20260807160100_e69_shared_registry_rpcs.sql`
-- `20260807170000_e69_datafields_to_registry.sql`
+`supabase_migrations.schema_migrations.version` records the timestamp the
+migration was applied **under**, and `apply_migration` (MCP) mints its own. A
+file named `20260809120100_*.sql` can be live on hosted under version
+`20260808024259`. They are two different numbering spaces.
+
+So this comparison is **always wrong** and will report healthy migrations as
+missing:
 
 ```sql
+-- ❌ DO NOT DO THIS — filenames never match applied versions
 select version from supabase_migrations.schema_migrations
-where version like '20260807%'
-order by version;
+where version like '20260807%';
+```
 
--- Vault secret presence (do NOT select the secret value into logs/chat):
-select exists (
-  select 1 from vault.decrypted_secrets where name = 'ssn_vault_key'
-) as vault_key_present;
+**Verify the OBJECT the migration creates instead.** Policy bodies, function
+signatures, and column presence are the ground truth:
+
+```sql
+-- ✅ Is a policy still gated on something a migration was meant to remove?
+select qual::text like '%org_payer_assignments%' as still_gated
+from pg_policies where tablename='payers' and policyname='payers_select';
+
+-- ✅ Does a function carry the parameter / body a migration added or removed?
+select pg_get_function_arguments(oid) as args, prosrc like '%...%' as has_body
+from pg_proc where proname='create_payer';
+
+-- ✅ Do the columns exist?
+select count(*) from information_schema.columns
+where table_name='portal_field_maps'
+  and column_name in ('display_label','section','sort_order');
+```
+
+For behaviour (RLS especially) a shape check is not enough — impersonate a real
+member inside a rolled-back transaction:
+
+```sql
+begin;
+select set_config('request.jwt.claims',
+  json_build_object('sub','<a real member user_id>','role','authenticated')::text, true);
+set local role authenticated;
+select count(*) from sop_templates where org_id is null;   -- what CAN this user see?
+rollback;
+```
+
+### Other hosted checks
+
+```sql
+-- Vault secret presence (never select the secret VALUE into logs/chat):
+select exists (select 1 from vault.decrypted_secrets where name='ssn_vault_key')
+  as vault_key_present;
 
 select count(*) as global_portals from portals where org_id is null;
 ```
@@ -50,12 +85,22 @@ select count(*) as global_portals from portals where org_id is null;
 Provisioning steps for the vault secret: Slice 4 appendix § F1 (Dashboard → Vault →
 name `ssn_vault_key`). Hosted rejects `ALTER DATABASE` custom GUCs.
 
-| Item                          | Agent status                  | PM / ops |
-| ----------------------------- | ----------------------------- | -------- |
-| Aug 7 migrations applied      | **Unverified** — no DB access | [ ]      |
-| Vault `ssn_vault_key`         | **Unverified** — no DB access | [ ]      |
-| Portals non-empty for UAT     | **Unverified** — no DB access | [ ]      |
-| Types/migrations drift (#264) | **Unverified** — no DB access | [ ]      |
+### Status (verified against schema state 2026-08-11)
+
+| Item                                     | Status                                                                      |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| Aug 7 party-role migrations              | ✅ applied (6 party cols, `is_default`, composite FK)                       |
+| Aug 7 party-role **hardening** follow-up | ✅ applied (`set_default_party_role` live)                                  |
+| E6.9 field registry + shared RPCs        | ✅ applied (3 cols; 6-arg `train_global_field_map`)                         |
+| E6.9 dataFields → registry DML           | ✅ applied (140 shared rows, 139 with `sort_order`)                         |
+| CAP-02 shared-propose refresh            | ✅ applied                                                                  |
+| Slice 6 D6.5 global SOP read             | ✅ applied 2026-08-11                                                       |
+| OPA-RETIRE assignment gate               | ✅ applied 2026-08-11 (before #285 merged)                                  |
+| Slice 6 D6.1 `p_assign_to_org`           | ⛔ **RETIRED** — `.superseded`; code converged instead                      |
+| Vault `ssn_vault_key`                    | ✅ present                                                                  |
+| Portals non-empty for UAT                | ✅ 5 global rows                                                            |
+| **Catalog purge (`20260810120000`)**     | ⏳ **NOT applied — needs 2nd PM sign-off** (260 unreferenced global payers) |
+| **`types.ts` drift**                     | ⏳ **stale — regen needed** (carries the retired `p_assign_to_org` arg)     |
 
 ---
 
