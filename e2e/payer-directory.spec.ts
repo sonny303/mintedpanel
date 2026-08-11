@@ -1,4 +1,5 @@
 import { test, expect, type Route } from "@playwright/test";
+import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E1.6 TE-6 + E4.2 payer governance, retargeted by the payer-and-cases
 // Slice A (the catalog browse is retired — /payer-directory now lands on the
@@ -156,7 +157,12 @@ function makeHandler(fixtures: Record<string, unknown[]>) {
       if (prefer.includes("return=representation")) return json(wantsObject ? {} : [{}]);
       return json(null, 201);
     }
-    const rows = (fixtures[table] ?? []).filter((r) => matchFilters(r as Record<string, unknown>));
+    const rows = withPortalPayerEmbed(
+      table,
+      url.searchParams.get("select"),
+      (fixtures[table] ?? []).filter((r) => matchFilters(r as Record<string, unknown>)),
+      (fixtures.payers ?? fixtures.global_payers ?? []) as Record<string, unknown>[],
+    );
     if (wantsObject) {
       if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
       return json(rows[0]);

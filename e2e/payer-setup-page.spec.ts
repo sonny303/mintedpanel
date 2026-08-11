@@ -1,4 +1,5 @@
 import { test, expect, type Route } from "@playwright/test";
+import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // Payer & Cases design bundle, screen 1 (Slice A) — the single-view Payer
 // Setup page over the mock harness. One test per designed state (the bundle's
@@ -359,7 +360,13 @@ async function fulfillSupabase(route: Route) {
     return json(wantsObject ? {} : [{}], req.method() === "POST" ? 201 : 200);
   }
 
-  const rows = (db[table] ?? []).filter(matchFilters);
+  const select = url.searchParams.get("select");
+  const rows = withPortalPayerEmbed(
+    table,
+    select,
+    (db[table] ?? []).filter(matchFilters),
+    db.payers ?? [],
+  );
   if (wantsObject) {
     if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
     return json(rows[0]);

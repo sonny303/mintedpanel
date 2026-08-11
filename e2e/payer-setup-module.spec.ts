@@ -1,4 +1,5 @@
 import { test, expect, type Route } from "@playwright/test";
+import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E6.5 — the consolidated Payer Setup module over the mock harness
 // (TS-114/131/132/133/134). Supersedes e2e/fix-it.spec.ts (drift repair moved
@@ -437,7 +438,13 @@ async function fulfillSupabase(route: Route) {
     return json(rows);
   }
 
-  const rows = (db[table] ?? []).filter(matchFilters);
+  const select = url.searchParams.get("select");
+  const rows = withPortalPayerEmbed(
+    table,
+    select,
+    (db[table] ?? []).filter(matchFilters),
+    db.payers ?? [],
+  );
   if (wantsObject) {
     if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
     return json(rows[0]);
