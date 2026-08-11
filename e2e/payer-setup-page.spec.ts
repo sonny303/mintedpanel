@@ -66,6 +66,20 @@ function payerRow(id: string, name: string, extra: Row = {}): Row {
   };
 }
 
+function targetRow(id: string, payerId: string, extra: Row = {}): Row {
+  return {
+    id,
+    org_id: ORG_ID,
+    group_id: "g-setup",
+    payer_id: payerId,
+    state: "NC",
+    status: "active",
+    payer_issued_id: null,
+    created_at: "2026-07-12T00:00:00Z",
+    ...extra,
+  };
+}
+
 function assignmentRow(id: string, payerId: string): Row {
   return { id, org_id: ORG_ID, payer_id: payerId, starter: false, status: "active" };
 }
@@ -155,6 +169,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     profiles: [{ id: USER_ID, full_name: "Owner Dillon", email: "owner.dillon@example.test" }],
     payers: [],
     org_payer_assignments: [],
+    payer_network_targets: [],
     sop_templates: [
       // The payerless fallback — the default-template card's row (always
       // present; the card is edit-only by design).
@@ -185,6 +200,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       const id = `00000000-0000-4000-a000-0000000000${(60 + i).toString(16)}`;
       db.payers.push(payerRow(id, `Payer ${String(i).padStart(2, "0")}`));
       db.org_payer_assignments.push(assignmentRow(`as-${i}`, id));
+      db.payer_network_targets.push(targetRow(`t-${i}`, id));
     }
     return db;
   }
@@ -209,6 +225,14 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     assignmentRow("as-3", BANNER_ID),
     assignmentRow("as-4", SELECT_ID),
     assignmentRow("as-5", ANTHEM_ID),
+  );
+  // OPA-RETIRE: setup inclusion is target-derived (assignments alone are not enough).
+  db.payer_network_targets.push(
+    targetRow("t-1", AETNA_ID),
+    targetRow("t-2", UHC_ID),
+    targetRow("t-3", BANNER_ID),
+    targetRow("t-4", SELECT_ID),
+    targetRow("t-5", ANTHEM_ID),
   );
   // Aetna — published + proven form (fully quiet).
   db.sop_templates.push(
