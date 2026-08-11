@@ -16,16 +16,8 @@ import { useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
+import { TokenPicker } from "@/components/templates/TokenPicker";
 import {
   classifyFieldMap,
   displayNameOf,
@@ -218,26 +210,12 @@ function RegistryRowEditor({
           with no way to fix it from the editor. */}
       {canEdit ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-          <Select
+          <TokenPicker
+            aria-label={`Map ${name} to a token`}
             value={classification.decision === "token" ? (row.token ?? "") : ""}
+            groupedTokens={groupedTokens}
             onValueChange={(token) => void onDecide(row, { kind: "token", token })}
-          >
-            <SelectTrigger className="h-7 w-56 text-[12px]" aria-label={`Map ${name} to a token`}>
-              <SelectValue placeholder="Map a token…" />
-            </SelectTrigger>
-            <SelectContent>
-              {groupedTokens.map((group) => (
-                <SelectGroup key={group.prefix}>
-                  <SelectLabel>{group.label}</SelectLabel>
-                  {group.items.map((token) => (
-                    <SelectItem key={token.token} value={token.token}>
-                      {token.token}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              ))}
-            </SelectContent>
-          </Select>
+          />
 
           {fixedOpen ? (
             <span className="flex items-center gap-1">
