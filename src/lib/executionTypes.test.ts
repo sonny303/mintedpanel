@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUTHORING_EXECUTION_TYPES,
   DEFAULT_EXECUTION_TYPE,
   EXECUTION_TYPES,
   EXECUTION_TYPE_LABELS,
+  INERT_EXECUTION_TYPES,
+  authoringExecutionTypeOptions,
   executionTypeForStorage,
   hasExtensionFillTask,
   hasOnlineFormStep,
@@ -18,6 +21,37 @@ describe("executionTypes", () => {
       expect(EXECUTION_TYPE_LABELS[t]).toBeTruthy();
     }
     expect(EXECUTION_TYPES).toEqual(["manual", "extension_fill", "auto_verify", "document_attach"]);
+  });
+
+  it("keeps full EXECUTION_TYPES for reads while authoring is Manual + Auto-fill only", () => {
+    expect(AUTHORING_EXECUTION_TYPES).toEqual(["manual", "extension_fill"]);
+    expect(INERT_EXECUTION_TYPES).toEqual(["auto_verify", "document_attach"]);
+    // Wire values stay on the full set — never deleted from the union.
+    for (const t of INERT_EXECUTION_TYPES) {
+      expect(EXECUTION_TYPES).toContain(t);
+      expect(isExecutionType(t)).toBe(true);
+    }
+  });
+
+  it("authoring picker hides inert types unless the task already has one", () => {
+    expect(authoringExecutionTypeOptions("manual")).toEqual(["manual", "extension_fill"]);
+    expect(authoringExecutionTypeOptions("extension_fill")).toEqual([
+      "manual",
+      "extension_fill",
+    ]);
+    expect(authoringExecutionTypeOptions(null)).toEqual(["manual", "extension_fill"]);
+    expect(authoringExecutionTypeOptions("auto_verify")).toEqual([
+      "manual",
+      "extension_fill",
+      "auto_verify",
+    ]);
+    expect(authoringExecutionTypeOptions("document_attach")).toEqual([
+      "manual",
+      "extension_fill",
+      "document_attach",
+    ]);
+    // Bogus / absent resolves to manual → no inert offered.
+    expect(authoringExecutionTypeOptions("bogus")).toEqual(["manual", "extension_fill"]);
   });
 
   it("guards and resolves raw values", () => {
