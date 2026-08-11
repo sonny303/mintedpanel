@@ -1,7 +1,11 @@
 // 3M Slice 6 / D6.4 (F24) — the ghost-portal predicate. Each case is a shape
 // the global registry actually accumulates.
 import { describe, expect, it } from "vitest";
-import { isListableRegistryPortal, isListableSharedPortal } from "./portalVisibility";
+import {
+  isListableBrowserPortal,
+  isListableRegistryPortal,
+  isListableSharedPortal,
+} from "./portalVisibility";
 
 const LIVE = { status: "active", archivedAt: null, mergedIntoId: null };
 
@@ -75,5 +79,37 @@ describe("isListableRegistryPortal — Work registry", () => {
 
   it("treats an absent orgId key as global (the E6.5 tier shape)", () => {
     expect(isListableRegistryPortal({ payerId: null, payer: LIVE })).toBe(false);
+  });
+});
+
+describe("isListableBrowserPortal — RLS fails open, not closed", () => {
+  const healthy = { status: "active" as const, archivedAt: null, mergedIntoId: null };
+
+  it("keeps a healthy global portal whose payer the org has NOT adopted (embed null)", () => {
+    // THE regression: under RLS payers_select hides an unadopted global payer,
+    // so the embed is null even though the payer is alive. Measured on prod:
+    // Kansas Fitness Physio lost 4 of 5 global portals to the closed predicate.
+    expect(isListableBrowserPortal({ orgId: null, payerId: "p1", payer: null })).toBe(true);
+    expect(isListableRegistryPortal({ orgId: null, payerId: "p1", payer: null })).toBe(false);
+  });
+
+  it("still drops a global portal attached to no payer at all", () => {
+    expect(isListableBrowserPortal({ orgId: null, payerId: null, payer: null })).toBe(false);
+  });
+
+  it("applies the full lifecycle check when the payer IS readable", () => {
+    expect(isListableBrowserPortal({ orgId: null, payerId: "p1", payer: healthy })).toBe(true);
+    for (const dead of [
+      { ...healthy, status: "retired" as const },
+      { ...healthy, status: "merged" as const },
+      { ...healthy, archivedAt: "2026-01-01" },
+      { ...healthy, mergedIntoId: "p2" },
+    ]) {
+      expect(isListableBrowserPortal({ orgId: null, payerId: "p1", payer: dead })).toBe(false);
+    }
+  });
+
+  it("never touches own-org rows", () => {
+    expect(isListableBrowserPortal({ orgId: "o1", payerId: null, payer: null })).toBe(true);
   });
 });

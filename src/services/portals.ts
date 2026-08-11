@@ -14,6 +14,7 @@ import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import {
   isListableRegistryPortal,
+  isListableBrowserPortal,
   isListableSharedPortal,
   type PortalPayerFacts,
 } from "@/lib/portalVisibility";
@@ -149,10 +150,13 @@ export async function listPortals(): Promise<Portal[]> {
   // catalog read pattern (portal_field_maps/payers/sop_templates). Global rows
   // are read-only here; their writes go through the authoring RPCs below.
   //
-  // D6.4 (TRAIN-DUAL D-TD.4): same ghost filter as listPortalsForApi's global
-  // leg. usePortals consumers (SOP portal selects, PortalStepLink, registry)
-  // must not offer a global portal the extension Work path would drop —
-  // otherwise TaskDrawer "Open portal" points at a form fill can never match.
+  // D6.4 (TRAIN-DUAL D-TD.4): the ghost filter, in its BROWSER form. usePortals
+  // consumers (SOP portal selects, PortalStepLink, registry) should not offer a
+  // global portal the extension Work path would drop — but this read runs under
+  // RLS, where `payers_select` hides a global payer the org has not adopted. So
+  // it uses isListableBrowserPortal, which drops only payer-less global rows and
+  // keeps a row whose payer it merely cannot see. Applying the service-role
+  // predicate here removed 4 of 5 healthy portals from a live org.
   const { data, error } = await supabase
     .from("portals")
     .select(PORTAL_API_COLUMNS)
@@ -163,7 +167,7 @@ export async function listPortals(): Promise<Portal[]> {
   return rows
     .map(unpackPortalRow)
     .filter(({ portal, payer }) =>
-      isListableRegistryPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
+      isListableBrowserPortal({ orgId: portal.orgId, payerId: portal.payerId, payer }),
     )
     .map(({ portal }) => {
       // Browser callers expect Portal[], not the API's payerName projection.
