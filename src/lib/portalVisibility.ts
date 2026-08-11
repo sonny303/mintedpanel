@@ -51,9 +51,41 @@ export function isListableSharedPortal(row: SharedPortalCandidate): boolean {
  * The Work registry's rule: keep every own-org row untouched, and hold global
  * rows to the shared-tier predicate above. `orgId` null IS the global tier
  * (the E6.5 shape).
+ *
+ * SERVICE-ROLE READS ONLY. This runs on `listPortalsForApi`/`listSharedPortals`,
+ * where the service key sees every payer, so a missing embed really does mean
+ * "this portal has no live payer". Browser reads must use
+ * `isListableBrowserPortal` — see the note there.
  */
 export function isListableRegistryPortal(
   row: SharedPortalCandidate & { orgId?: string | null },
 ): boolean {
   return row.orgId != null || isListableSharedPortal(row);
+}
+
+/**
+ * The BROWSER tier's rule. Same intent as `isListableRegistryPortal`, but it
+ * FAILS OPEN on an unreadable payer instead of closed.
+ *
+ * Under RLS, `payers_select` only exposes a global payer to an org that holds
+ * an `org_payer_assignments` row for it. So a null `payers` embed is ambiguous
+ * in the browser: it means EITHER the payer is gone OR the org simply has not
+ * adopted it yet. Failing closed there deleted healthy portals from every
+ * `usePortals()` consumer — measured on production, Kansas Fitness Physio lost
+ * 4 of its 5 global portals, none of which were ghosts.
+ *
+ * What the browser can still prove off the row itself is `payer_id IS NULL` —
+ * a portal attached to no payer at all — so that is the only global row it
+ * drops. Lifecycle ghosts (retired/merged/archived payers) are filtered on the
+ * service-role paths, which can actually see the payer to judge it; when the
+ * org HAS adopted the payer the embed resolves and the full check applies here
+ * too.
+ */
+export function isListableBrowserPortal(
+  row: SharedPortalCandidate & { orgId?: string | null },
+): boolean {
+  if (row.orgId != null) return true; // own-org rows are the org's own business
+  if (!row.payerId) return false; // provably attached to no payer
+  if (!row.payer) return true; // unreadable under RLS — not evidence of a ghost
+  return isListableSharedPortal(row);
 }
