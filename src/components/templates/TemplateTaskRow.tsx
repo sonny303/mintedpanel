@@ -24,9 +24,9 @@ import {
 } from "@/components/templates/editableTemplate";
 import { emailValuedTokenKeys } from "@/lib/sopResolver";
 import {
-  EXECUTION_TYPES,
   EXECUTION_TYPE_HINTS,
   EXECUTION_TYPE_LABELS,
+  authoringExecutionTypeOptions,
   type ExecutionType,
 } from "@/lib/executionTypes";
 import { isValidEmail } from "@/lib/contactValidation";
@@ -231,7 +231,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EXECUTION_TYPES.map((t) => (
+                {authoringExecutionTypeOptions(task.executionType).map((t) => (
                   <SelectItem key={t} value={t}>
                     {EXECUTION_TYPE_LABELS[t]}
                   </SelectItem>

@@ -39,12 +39,20 @@ _[Payer config (E4.2 F4.2.1/F4.2.3) — lives on the payer, NOT in the SOP]_
 Pick the primary path — it decides which step types the SOP uses and whether
 form onboarding (section 6) applies.
 
-- [ ] **Portal / online form** → `online_form` steps (link the portal key);
-      tasks that the extension fills get execution type `extension_fill`.
-- [ ] **PDF packet** → `pdf` steps (+ `mail` or `fax` to send).
-- [ ] **Email** → `draft_email` steps with a prefilled subject/body template.
-- [ ] **Fax / phone / mail only** → `fax` / `phone` / `mail` steps with
-      turnaround and cadence day counts.
+**Execution type (Template Editor):** author **Manual** or **Auto-fill** only.
+Do **not** pick Auto verify or Document attach — those wire values still exist
+for legacy stamps but are inert and hidden from new selections
+(BITE-SOP-TT-02).
+
+- [ ] **Portal / autofill** → Execution type **Auto-fill** (`extension_fill`) +
+      step type **Online form** (`online_form`) + a linked **Portal**. All three
+      together are what turns on form setup, readiness, and Workbench fill.
+- [ ] **PDF packet** → Execution type **Manual** + `pdf` steps (+ `mail` or
+      `fax` to send).
+- [ ] **Email** → Execution type **Manual** + `draft_email` steps with a
+      prefilled subject/body template.
+- [ ] **Fax / phone / mail only** → Execution type **Manual** + `fax` /
+      `phone` / `mail` steps with turnaround and cadence day counts.
 
 | Field                                    | Value |
 | ---------------------------------------- | ----- |
@@ -65,11 +73,11 @@ global templates are shared across orgs; org-specific ones win automatically).
 For each task, list its ordered steps. Step types: `online_form`,
 `draft_email`, `pdf`, `fax`, `phone`, `mail`.
 
-| #   | Task title | Execution type (`manual`/`extension_fill`/`auto_verify`/`document_attach`) | Steps (type — label — cadence/turnaround) | Due offset / assignee default |
-| --- | ---------- | -------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------- |
-| 1   |            |                                                                            |                                           |                               |
-| 2   |            |                                                                            |                                           |                               |
-| 3   |            |                                                                            |                                           |                               |
+| #   | Task title | Execution type (`manual` / Auto-fill=`extension_fill` only) | Steps (type — label — cadence/turnaround) | Due offset / assignee default |
+| --- | ---------- | ----------------------------------------------------------- | ----------------------------------------- | ----------------------------- |
+| 1   |            |                                                             |                                           |                               |
+| 2   |            |                                                             |                                           |                               |
+| 3   |            |                                                             |                                           |                               |
 
 Data fields per step: which provider tokens does the step consume
 (e.g. `provider.caqhId`, `provider.npi`)? These come from the closed token
@@ -125,12 +133,14 @@ _[Portal training + test runner (E4.2 F4.2.7); skip for non-portal payers]_
 
 ## Worked examples
 
-- **Portal payer (Aetna NC):** Task 1 "Prepare CAQH" (`online_form` CAQH +
-  `phone` verify) · Task 2 "Submit application" (`online_form` Aetna portal,
-  `extension_fill`) · Task 3 "Follow up" (`phone`, 14-day cadence). Requires
-  section 6.
+- **Portal payer (Aetna NC):** Task 1 "Prepare CAQH" (Manual; `online_form`
+  CAQH + `phone` verify) · Task 2 "Submit application" (Auto-fill +
+  `online_form` Aetna portal + Portal linked) · Task 3 "Follow up" (Manual;
+  `phone`, 14-day cadence). Requires section 6.
 - **Paper payer (small Medicaid MCO):** Task 1 "Complete enrollment packet"
-  (`pdf` + `mail`) · Task 2 "Fax W-9 + roster" (`fax`, 5-day turnaround) ·
-  Task 3 "Confirm receipt" (`phone`). Section 6 skipped.
-- **Email payer:** Task 1 "Send enrollment request" (`draft_email` with token
-  placeholders) · Task 2 "Follow up" (`draft_email` + `phone`).
+  (Manual; `pdf` + `mail`) · Task 2 "Fax W-9 + roster" (Manual; `fax`,
+  5-day turnaround) · Task 3 "Confirm receipt" (Manual; `phone`). Section 6
+  skipped.
+- **Email payer:** Task 1 "Send enrollment request" (Manual; `draft_email`
+  with token placeholders) · Task 2 "Follow up" (Manual; `draft_email` +
+  `phone`).
