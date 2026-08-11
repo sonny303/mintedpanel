@@ -1,7 +1,9 @@
 # Spike — SOP Tasks & steps simplification (execution type vs step type)
 
-**Status:** spike for PM decision (2026-08-11) — **no product code in this PR.**  
-**Branch / PR:** `cursor/sop-tasks-steps-3m-spike-4688`  
+**Status:** spike complete (2026-08-11) — **PM ack recorded 2026-08-11:
+`D-SOP-1 A; D-SOP-2 A; D-SOP-3 A; D-SOP-4 A`.** Build bites proceed from
+§Untangled slices. This PR stays docs-only.  
+**Branch / PR:** `cursor/sop-tasks-steps-3m-spike-4688` (#292)  
 **Lane:** 3M UX / authoring muda. Skill: `.cursor/skills/minted-3m-audit/`.  
 **Base:** `main` @ `013080a` (panel) / extension `cde90c2`.
 
@@ -178,7 +180,10 @@ portal SOP.
 | **A (recommended)** | Advanced: “Add another step under this action” for phone→fax etc.; default new SOP = one action, one step. |
 | **B** | Flatten forever: max one step per task (migrate multi-step to sibling tasks). |
 
-**Suggested PM reply:** `D-SOP-1 A; D-SOP-2 A; D-SOP-3 A; D-SOP-4 A`
+**PM ack (2026-08-11):** `D-SOP-1 A; D-SOP-2 A; D-SOP-3 A; D-SOP-4 A`
+
+Also approved: thin Cursor skill = **runbook coach / draft + validate only**
+(never auto-publish, never invent field maps, never hardcode payer SOPs in git).
 
 ---
 
