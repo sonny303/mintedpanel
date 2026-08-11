@@ -64,37 +64,37 @@ fresh; **schedule the build after daily-loop work** unless PM re-orders.
 Train and Work share **one matcher** (`matchPortalByUrl`) over **two
 registries**. Train’s dropdown and capture pointer have **two jobs by design**:
 
-| Control | Job |
-| ------- | --- |
-| `trainPortal` dropdown | Navigate — opens `formUrl` only |
-| `portal` pointer | Capture bind — set only from URL recognition |
+| Control                | Job                                          |
+| ---------------------- | -------------------------------------------- |
+| `trainPortal` dropdown | Navigate — opens `formUrl` only              |
+| `portal` pointer       | Capture bind — set only from URL recognition |
 
 Happy path works: land on the registered URL → prefix match → capture enables.
 That is **not** redundant chrome.
 
 **Genuine failure (narrower):** login walls, SSO redirects, and multi-step
 wizards whose later paths do **not** prefix-match the registered `formUrl`.
-There `refreshTrainRecognition` sets `portal = null` and shows *"New form —
-nothing matches this page yet. It will be registered as 'X Form 2'"* while the
+There `refreshTrainRecognition` sets `portal = null` and shows _"New form —
+nothing matches this page yet. It will be registered as 'X Form 2'"_ while the
 dropdown still shows the selected form. That copy is **false** — you are on a
 login/redirect page, not a new form. Trust failure, not dual-architecture.
 
-| Evidence | Path |
-| -------- | ---- |
-| Train loads `LIST_SHARED_PORTALS` → `sharedPortalRows` | extension `sidepanel/main.ts` `loadSharedRegistry` |
-| Work loads `LIST_PORTALS` → `portalRows` | extension `sidepanel/main.ts` `detectPortal` |
-| `recognizeForm` = `matchPortalByUrl` over passed rows | extension `shared/trainForms.ts` |
-| `payerName` arg used **only** for `candidateName` on `new` — does **not** scope match | `recognizeForm` / `candidatePortalName` |
-| `matchPortalByUrl` = longest prefix on `origin+pathname`; **ignores query/hash** | extension `shared/portals.ts` (+ tests) |
-| Train recognition on non-`existing` sets `portal = null` | `refreshTrainRecognition` (~3466) |
-| Dropdown change opens tab only — does not set `portal` (**design**) | `trainPortal` change (~3504) |
-| Capture gated on `portal == null` | START_CAPTURE path (~3232) |
-| Mismatch copy claims “New form … Form 2” | recognition status string (~3490) |
-| Train → no `x-org-id` | `shared/panelMode.ts` `shouldSendOrgHeader` |
-| Shared list = global only + D6.4 | panel `listSharedPortals` |
-| Work list = own-org ∪ global (D6.4 on global leg) | panel `listPortalsForApi` |
-| Browser `listPortals()` = RLS own+global, **no D6.4** | panel `services/portals.ts` |
-| Shared propose → `org_id` NULL; idempotent on `(portal_key, selector)` | `POST /api/shared-field-maps` (gate 23) |
+| Evidence                                                                              | Path                                               |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Train loads `LIST_SHARED_PORTALS` → `sharedPortalRows`                                | extension `sidepanel/main.ts` `loadSharedRegistry` |
+| Work loads `LIST_PORTALS` → `portalRows`                                              | extension `sidepanel/main.ts` `detectPortal`       |
+| `recognizeForm` = `matchPortalByUrl` over passed rows                                 | extension `shared/trainForms.ts`                   |
+| `payerName` arg used **only** for `candidateName` on `new` — does **not** scope match | `recognizeForm` / `candidatePortalName`            |
+| `matchPortalByUrl` = longest prefix on `origin+pathname`; **ignores query/hash**      | extension `shared/portals.ts` (+ tests)            |
+| Train recognition on non-`existing` sets `portal = null`                              | `refreshTrainRecognition` (~3466)                  |
+| Dropdown change opens tab only — does not set `portal` (**design**)                   | `trainPortal` change (~3504)                       |
+| Capture gated on `portal == null`                                                     | START_CAPTURE path (~3232)                         |
+| Mismatch copy claims “New form … Form 2”                                              | recognition status string (~3490)                  |
+| Train → no `x-org-id`                                                                 | `shared/panelMode.ts` `shouldSendOrgHeader`        |
+| Shared list = global only + D6.4                                                      | panel `listSharedPortals`                          |
+| Work list = own-org ∪ global (D6.4 on global leg)                                     | panel `listPortalsForApi`                          |
+| Browser `listPortals()` = RLS own+global, **no D6.4**                                 | panel `services/portals.ts`                        |
+| Shared propose → `org_id` NULL; idempotent on `(portal_key, selector)`                | `POST /api/shared-field-maps` (gate 23)            |
 
 **Matcher note:** session tokens in query/hash already do not break matching.
 The redirect / login-path case is the real gap.
@@ -109,11 +109,11 @@ rejected.
 
 ## Two layers (do not conflate)
 
-| Layer | What it is | Train | Work |
-| ----- | ---------- | ----- | ---- |
-| **Registry (API)** | Which portal rows exist | `GET /api/shared-portals` (global, D6.4) | `GET /api/portals` (own-org + global, D6.4 on global) |
-| **Capture bind** | Which `portal_key` capture/propose uses | URL match only (locked) | URL match on `portalRows` |
-| **Selection (Train)** | Nav + messaging sticky intent | Dropdown / payer filter | n/a |
+| Layer                 | What it is                              | Train                                    | Work                                                  |
+| --------------------- | --------------------------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| **Registry (API)**    | Which portal rows exist                 | `GET /api/shared-portals` (global, D6.4) | `GET /api/portals` (own-org + global, D6.4 on global) |
+| **Capture bind**      | Which `portal_key` capture/propose uses | URL match only (locked)                  | URL match on `portalRows`                             |
+| **Selection (Train)** | Nav + messaging sticky intent           | Dropdown / payer filter                  | n/a                                                   |
 
 Dual **registries** stay (different visibility). Dual Train controls stay
 (nav vs bind). Defect = **false “new form” messaging + wipe** on non-matching
@@ -125,11 +125,11 @@ transient URLs — not “dropdown must set the pointer.”
 
 ### D-TD.1 — Pointer rule → **C amended** (reject B and D as automatic)
 
-| Role | Rule |
-| ---- | ---- |
-| **URL / recognition** | Sole automatic capture bind. Capture must **never** send a `portalKey` the active tab URL contradicts. |
-| **Selection** | Sticky for navigation and messaging only. Does not set capture bind on change. |
-| **Mismatch** | Keep selection; disable capture; honest copy (see D-TD.3). |
+| Role                    | Rule                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **URL / recognition**   | Sole automatic capture bind. Capture must **never** send a `portalKey` the active tab URL contradicts.                        |
+| **Selection**           | Sticky for navigation and messaging only. Does not set capture bind on change.                                                |
+| **Mismatch**            | Keep selection; disable capture; honest copy (see D-TD.3).                                                                    |
 | **Override (optional)** | Only via explicit confirmation: “capture this page as **&lt;selected form&gt;**” — deliberate, attributable; never automatic. |
 
 Earlier draft C said “clears only when consistent with selected payer” — that
@@ -152,8 +152,8 @@ When a form is selected and the URL does not match:
 
 - Keep selection.
 - **Disable** capture.
-- Copy like: *“This page doesn’t match &lt;form&gt; — finish login or open the
-  registered form URL”* — **not** *“New form … will be registered as 'X Form 2'.”*
+- Copy like: _“This page doesn’t match &lt;form&gt; — finish login or open the
+  registered form URL”_ — **not** _“New form … will be registered as 'X Form 2'.”_
 
 Most of the bite’s value is this copy-and-condition fix (~few lines + extract
 for testability), not architecture.
@@ -198,23 +198,24 @@ not a blocker for the Train messaging extract, but not deferred indefinitely.
 and capture only under a URL-matched key, **so that** I trust Train and never
 poison the shared library.
 
-| AC | Check |
-| -- | ----- |
-| AC1.1 | Dropdown still navigates via `formUrl`; does not auto-set capture bind. |
-| AC1.2 | URL mismatch keeps selection; capture disabled; copy is D-TD.3 C1 (not “New form … Form 2”). |
-| AC1.3 | Capture enabled only when recognition matches (or after explicit override if shipped). |
-| AC1.4 | Pure helper under `src/shared/` + unit tests for mismatch + portalKey↔URL invariant. |
+| AC    | Check                                                                                             |
+| ----- | ------------------------------------------------------------------------------------------------- |
+| AC1.1 | Dropdown still navigates via `formUrl`; does not auto-set capture bind.                           |
+| AC1.2 | URL mismatch keeps selection; capture disabled; copy is D-TD.3 C1 (not “New form … Form 2”).      |
+| AC1.3 | Capture enabled only when recognition matches (or after explicit override if shipped).            |
+| AC1.4 | Pure helper under `src/shared/` + unit tests for mismatch + portalKey↔URL invariant.              |
 | AC1.5 | Optional override (if in bite): confirmation names the selected form; attributable; never silent. |
 
 ### US-2 — Work fill unchanged
 
 **As** a case worker, **I want** Work recognition to keep using `/api/portals`
-+ `matchPortalByUrl`, **so that** fill does not regress.
 
-| AC | Check |
-| -- | ----- |
-| AC2.1 | Work still loads `LIST_PORTALS` / `portalRows`. |
-| AC2.2 | Fill click re-matches URL against Work registry. |
+- `matchPortalByUrl`, **so that** fill does not regress.
+
+| AC    | Check                                             |
+| ----- | ------------------------------------------------- |
+| AC2.1 | Work still loads `LIST_PORTALS` / `portalRows`.   |
+| AC2.2 | Fill click re-matches URL against Work registry.  |
 | AC2.3 | Existing portals / fill harness tests stay green. |
 
 ### US-3 — Shared propose persistence
@@ -222,13 +223,13 @@ poison the shared library.
 **As** platform, **I want** Train capture to keep writing shared maps only under
 the URL-matched key, **so that** every org inherits without wrong-key pollution.
 
-| AC | Check |
-| -- | ----- |
-| AC3.1 | Train propose still hits `POST /api/shared-field-maps` with no org header. |
-| AC3.2 | Stored row `org_id` null (gate assert 23). |
+| AC    | Check                                                                         |
+| ----- | ----------------------------------------------------------------------------- |
+| AC3.1 | Train propose still hits `POST /api/shared-field-maps` with no org header.    |
+| AC3.2 | Stored row `org_id` null (gate assert 23).                                    |
 | AC3.3 | Re-capture same `(portal_key, selector)` does not reset an existing decision. |
-| AC3.4 | PHI: capture payload remains labels/selectors only (no values). |
-| AC3.5 | No automatic propose under dropdown key when URL does not match that row. |
+| AC3.4 | PHI: capture payload remains labels/selectors only (no values).               |
+| AC3.5 | No automatic propose under dropdown key when URL does not match that row.     |
 
 ### US-4 — Clear Train chrome
 
@@ -236,10 +237,10 @@ the URL-matched key, **so that** every org inherits without wrong-key pollution.
 intent vs page match, **so that** I know whether to finish login or open the
 registered URL.
 
-| AC | Check |
-| -- | ----- |
+| AC    | Check                                                                            |
+| ----- | -------------------------------------------------------------------------------- |
 | AC4.1 | Recognition line names the selected form on mismatch (or explains no selection). |
-| AC4.2 | No second automatic capture identity beyond the URL-matched portal. |
+| AC4.2 | No second automatic capture identity beyond the URL-matched portal.              |
 
 ### US-5 — Panel ghost portals (D-TD.4 sibling)
 
@@ -247,22 +248,22 @@ registered URL.
 globals hidden from browser `listPortals` pickers, **so that** I cannot select
 a ghost the extension would never list.
 
-| AC | Check |
-| -- | ----- |
+| AC    | Check                                                                                                     |
+| ----- | --------------------------------------------------------------------------------------------------------- |
 | AC5.1 | `listPortals()` applies the same D6.4 listability rules as the API global leg (or documented equivalent). |
-| AC5.2 | Unit coverage on visibility / list filtering. |
+| AC5.2 | Unit coverage on visibility / list filtering.                                                             |
 
 ---
 
 ## Bite map
 
-| Bite | Repo | Change | Verify | When |
-| ---- | ---- | ------ | ------ | ---- |
-| **0** | panel | This spike (docs) | CI format/docs | now |
-| **1** | extension | C1 copy + sticky selection; extract pure helper; portalKey↔URL invariant tests | unit + TE-10 train | after daily-loop |
-| **2** | extension | Optional explicit “capture as &lt;selected&gt;” confirm (only if PM wants override in same PR) | unit | with or after 1 |
-| **3** | panel | D-TD.4 `listPortals` + D6.4 for `usePortals` consumers | unit `portalVisibility` / portals | parallel XS/S OK |
-| **+** | extension #39 | Skill twin merge/sync | pack identical | ops/docs |
+| Bite  | Repo          | Change                                                                                         | Verify                            | When             |
+| ----- | ------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- | ---------------- |
+| **0** | panel         | This spike (docs)                                                                              | CI format/docs                    | now              |
+| **1** | extension     | C1 copy + sticky selection; extract pure helper; portalKey↔URL invariant tests                 | unit + TE-10 train                | after daily-loop |
+| **2** | extension     | Optional explicit “capture as &lt;selected&gt;” confirm (only if PM wants override in same PR) | unit                              | with or after 1  |
+| **3** | panel         | D-TD.4 `listPortals` + D6.4 for `usePortals` consumers                                         | unit `portalVisibility` / portals | parallel XS/S OK |
+| **+** | extension #39 | Skill twin merge/sync                                                                          | pack identical                    | ops/docs         |
 
 ---
 

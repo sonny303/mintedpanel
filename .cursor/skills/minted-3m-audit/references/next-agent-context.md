@@ -9,16 +9,16 @@
 
 ## Where we are (one screen)
 
-| Item | State | PR / id |
-| ---- | ----- | ------- |
-| Skill pack | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Keep twin identical on extension (#39 if still open) |
-| Course-correct | Docs lock R1/R2 | panel #283 |
-| **GEN-SILENT** | Product build (R2) | panel #284 — **land / verify next** |
-| LISTPORTALS | Browser `listPortals` D6.4 | panel #282 |
-| TRAIN-DUAL spike | Locked C amended | panel #281 |
-| TRAIN-DUAL build | C1 + URL bind + fresh tabId | extension #40 (TD-51 wiring gap open) |
-| **OPA-RETIRE** | R1 B locked — **not started** | After GEN-SILENT; **not** “Slice 3” |
-| OPS-PURGE / OPS-S6 / VAULT | Hosted residual | Human sign-off only |
+| Item                       | State                                                    | PR / id                                              |
+| -------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| Skill pack                 | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Keep twin identical on extension (#39 if still open) |
+| Course-correct             | Docs lock R1/R2                                          | panel #283                                           |
+| **GEN-SILENT**             | Product build (R2)                                       | panel #284 — **land / verify next**                  |
+| LISTPORTALS                | Browser `listPortals` D6.4                               | panel #282                                           |
+| TRAIN-DUAL spike           | Locked C amended                                         | panel #281                                           |
+| TRAIN-DUAL build           | C1 + URL bind + fresh tabId                              | extension #40 (TD-51 wiring gap open)                |
+| **OPA-RETIRE**             | R1 B locked — **not started**                            | After GEN-SILENT; **not** “Slice 3”                  |
+| OPS-PURGE / OPS-S6 / VAULT | Hosted residual                                          | Human sign-off only                                  |
 
 **Cadence rule:** daily provider→cases (`GEN-SILENT`, then related) before
 once-per-payer Train polish. Do not start new Train/payer-setup product while
@@ -28,25 +28,25 @@ GEN-SILENT is the open daily-loop bite unless PM re-orders.
 
 ## Locked product decisions (do not reopen)
 
-| Lock | Meaning |
-| ---- | ------- |
-| Ready = checklist SOP | #277 — not autofill/train/prove |
-| Attach defaults only | #277 — do not reverse E6.2 |
-| D3.3-G `pickTemplate` | #280 — state → group → ownership; `state='All'` |
-| **R1 B** | Retire `org_payer_assignments` **as a gate** only; table+rows **dormant** (never DROP). Not a `buildGenerationPreview` candidacy input. |
-| **R2** | **GEN-SILENT** — explain `no_facility` / `pending_verification` skips on `/generation` |
-| TRAIN-DUAL D-TD.* | URL = capture bind; selection sticky nav/messaging; C1 mismatch copy; keep two APIs; reject B/D auto-bind |
-| #275 DELETE | Code merged; hosted needs **second** PM sign-off |
+| Lock                  | Meaning                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready = checklist SOP | #277 — not autofill/train/prove                                                                                                         |
+| Attach defaults only  | #277 — do not reverse E6.2                                                                                                              |
+| D3.3-G `pickTemplate` | #280 — state → group → ownership; `state='All'`                                                                                         |
+| **R1 B**              | Retire `org_payer_assignments` **as a gate** only; table+rows **dormant** (never DROP). Not a `buildGenerationPreview` candidacy input. |
+| **R2**                | **GEN-SILENT** — explain `no_facility` / `pending_verification` skips on `/generation`                                                  |
+| TRAIN-DUAL D-TD.*     | URL = capture bind; selection sticky nav/messaging; C1 mismatch copy; keep two APIs; reject B/D auto-bind                               |
+| #275 DELETE           | Code merged; hosted needs **second** PM sign-off                                                                                        |
 
 ---
 
 ## Naming (avoid collisions)
 
-| Say this | Not this |
-| -------- | -------- |
+| Say this                         | Not this                                                             |
+| -------------------------------- | -------------------------------------------------------------------- |
 | **OPA-RETIRE** / **PS-UNIVERSE** | “Slice 3” for assignment retire (#280 owns Slice 3 = SOP All-states) |
-| **GEN-SILENT** / **TD-50** | Bare “Slice 5” (3M Slice 5 closed ≠ payer-setup generation-reason) |
-| **LISTPORTALS** | chrome.storage portals (extension fill already uses `/api/portals`) |
+| **GEN-SILENT** / **TD-50**       | Bare “Slice 5” (3M Slice 5 closed ≠ payer-setup generation-reason)   |
+| **LISTPORTALS**                  | chrome.storage portals (extension fill already uses `/api/portals`)  |
 
 ---
 
@@ -62,13 +62,13 @@ GEN-SILENT is the open daily-loop bite unless PM re-orders.
 
 ## Hot files (by bite)
 
-| Bite | Files |
-| ---- | ----- |
-| GEN-SILENT | `generationPreview.ts`, `useGenerationPreview.ts`, `GenerationGrid.tsx` |
-| OPA-RETIRE | `payers` RLS / select policies, attach WITH CHECK, `create_payer` side-effect; **no DROP** |
-| LISTPORTALS | `services/portals.ts` `listPortals`, `portalVisibility.ts` |
-| TRAIN-DUAL | extension `shared/trainForms.ts`, `sidepanel/main.ts` (wire only) |
-| DOC-PICK | `SCHEMA.md`, `CLAUDE.md` pickTemplate prose scrub |
+| Bite        | Files                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| GEN-SILENT  | `generationPreview.ts`, `useGenerationPreview.ts`, `GenerationGrid.tsx`                    |
+| OPA-RETIRE  | `payers` RLS / select policies, attach WITH CHECK, `create_payer` side-effect; **no DROP** |
+| LISTPORTALS | `services/portals.ts` `listPortals`, `portalVisibility.ts`                                 |
+| TRAIN-DUAL  | extension `shared/trainForms.ts`, `sidepanel/main.ts` (wire only)                          |
+| DOC-PICK    | `SCHEMA.md`, `CLAUDE.md` pickTemplate prose scrub                                          |
 
 ---
 

@@ -4,12 +4,12 @@ Use after drafting an action list. Fail closed — do not invent missing pieces.
 
 ## Mode rules
 
-| Mode | Must have | Must not |
-| ---- | --------- | -------- |
-| **Portal form** (`online_form`) | Non-empty `portalKey` (existing registry key); Auto-fill / `extension_fill` when the intent is extension fill | Invented selectors, fake mapping %, guessed portal keys |
-| **Draft email** (`draft_email`) | ≥1 **To** (literal valid email and/or email-valued token, e.g. `provider.email`); subject/body as needed | Empty To; BCC; auto-send; non-email tokens as recipients |
-| **Phone / Fax / Mail** | Clear label; optional turnaround / follow-up cadence days | Portal keys or autofill |
-| **PDF** | Packet intent; send channel (mail/fax) when applicable | Treating PDF as live if product still marks it coming-soon |
+| Mode                            | Must have                                                                                                     | Must not                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Portal form** (`online_form`) | Non-empty `portalKey` (existing registry key); Auto-fill / `extension_fill` when the intent is extension fill | Invented selectors, fake mapping %, guessed portal keys    |
+| **Draft email** (`draft_email`) | ≥1 **To** (literal valid email and/or email-valued token, e.g. `provider.email`); subject/body as needed      | Empty To; BCC; auto-send; non-email tokens as recipients   |
+| **Phone / Fax / Mail**          | Clear label; optional turnaround / follow-up cadence days                                                     | Portal keys or autofill                                    |
+| **PDF**                         | Packet intent; send channel (mail/fax) when applicable                                                        | Treating PDF as live if product still marks it coming-soon |
 
 ## Coupling (portal ↔ autofill)
 

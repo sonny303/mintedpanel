@@ -41,10 +41,10 @@ step “Fill out online form” / Online form / portal proven+broken.
 
 ## Canonical definitions (code-verified)
 
-| Concept | Grain | Closed set | Job | Live effect today |
-| ------- | ----- | ---------- | --- | ----------------- |
+| Concept            | Grain                                                                  | Closed set                                                                    | Job                                                                                                 | Live effect today                                                                                                                  |
+| ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | **Execution type** | **Task** (`tasks.execution_type` + `task_definitions[].executionType`) | `manual` · `extension_fill` (“Auto-fill”) · `auto_verify` · `document_attach` | **Where the work is performed** — the entry point / automation lane at case time (`R6-workflow.md`) | **Only Auto-fill** gates form-setup / TE-16 form readiness (`hasExtensionFillTask`). Others are captured config (“no effect yet”). |
-| **Step type** | **Step** (`sop_content` / `task_definitions[].steps[].stepType`) | `online_form` · `draft_email` · `phone` · `fax` · `mail` · `pdf` (disabled) | **What medium/channel the step uses** — drives step body UI, portal link, email To/CC, cadence | Online form → portal + FormStepPanel; draft email → Gmail handoff; phone/fax/mail → channel body; pdf coming soon |
+| **Step type**      | **Step** (`sop_content` / `task_definitions[].steps[].stepType`)       | `online_form` · `draft_email` · `phone` · `fax` · `mail` · `pdf` (disabled)   | **What medium/channel the step uses** — drives step body UI, portal link, email To/CC, cadence      | Online form → portal + FormStepPanel; draft email → Gmail handoff; phone/fax/mail → channel body; pdf coming soon                  |
 
 Sources of truth:
 
@@ -73,14 +73,14 @@ That is the mismatch: **one intent, five fields.**
 
 ## How peer products avoid this
 
-| Product | Model | Why it feels lighter |
-| ------- | ----- | -------------------- |
-| **Jira** | Issue (+ optional sub-tasks). One **Issue Type** dimension; workflow is status, not a second type on every child. | Sub-tasks are opt-in detail, not required twin of every issue. |
-| **ClickUp** | Task + optional checklist / nested tasks. **Custom Task Types** drive automation; checklists are not typed. | Type lives once; sub-items are content, not a second enum. |
-| **Linear** | Issue; sub-issues rare. Labels/projects for routing. | Flat by default; hierarchy is opt-in. |
-| **Asana** | Task + subtasks; sections group. No dual “execution × channel” enums. | Checklist items inherit parent context. |
-| **ServiceNow / ITSM** | Catalog item → tasks; **fulfillment type** is one field. | Channel and automation collapse into one mode. |
-| **Zapier / Workato** | Ordered **actions**; the action kind *is* the execution mode. | No parent “execution type” separate from step kind. |
+| Product               | Model                                                                                                             | Why it feels lighter                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Jira**              | Issue (+ optional sub-tasks). One **Issue Type** dimension; workflow is status, not a second type on every child. | Sub-tasks are opt-in detail, not required twin of every issue. |
+| **ClickUp**           | Task + optional checklist / nested tasks. **Custom Task Types** drive automation; checklists are not typed.       | Type lives once; sub-items are content, not a second enum.     |
+| **Linear**            | Issue; sub-issues rare. Labels/projects for routing.                                                              | Flat by default; hierarchy is opt-in.                          |
+| **Asana**             | Task + subtasks; sections group. No dual “execution × channel” enums.                                             | Checklist items inherit parent context.                        |
+| **ServiceNow / ITSM** | Catalog item → tasks; **fulfillment type** is one field.                                                          | Channel and automation collapse into one mode.                 |
+| **Zapier / Workato**  | Ordered **actions**; the action kind _is_ the execution mode.                                                     | No parent “execution type” separate from step kind.            |
 
 **Credentialing takeaway:** treat the SOP as an **ordered list of actions**.
 The action’s **mode** (portal / email / phone / …) implies how it runs.
@@ -92,16 +92,16 @@ typed child for every one-step portal fill.
 
 ## 3M register (Tasks & steps / case-setup authoring)
 
-| ID | 3M | Area | Finding | Evidence | Sev | Effort | Rec | Why it still hurts |
-| -- | -- | ---- | ------- | -------- | --- | ------ | --- | ------------------ |
-| SOP-TT-1 | **Mura** | panel authoring | Two type systems for one intent (Auto-fill vs Online form) | `executionTypes.ts`; `TemplateTaskRow` Execution type + Step type selects; runbook §3–4 | S1 | M | fix | Authors guess which dropdown “turns on” Workbench; wrong combo = Ready SOP that never fills |
-| SOP-TT-2 | **Muda** | panel authoring | Title / description / step instruction triple for 1-step portal tasks | Screenshot pattern; wizard seeds both levels (`TemplateWizard` add task/step) | S1 | S | fix | Cognitive tax on every payer SOP; copy drift (“Fill out…” ×3) |
-| SOP-TT-3 | **Mura** | readiness | Two “needs form” signals: execution_fill vs online_form step | `payerReadiness.ts` `hasExtensionFillTask` vs `payerReadinessFunnel.ts` `hasOnlineForm` / `sopOnlineFormNeeds` | S1 | S | fix | Funnel CTAs and TE-16 form readiness can disagree when Auto-fill unset but online_form present (or reverse) |
-| SOP-TT-4 | **Muri** | publish | No lint: Auto-fill without online_form+portal (or online_form without Auto-fill) | `sopPublishLint.ts` — email/To only; no execution↔step coupling | S1 | S | fix | Silent misconfig; extension never tees up; form badges lie |
-| SOP-TT-5 | **Muda** | panel authoring | Auto verify / Document attach offered while inert | `EXECUTION_TYPE_HINTS` “Recorded now, no effect yet” | S2 | XS | fix | Choice paralysis; looks like broken product |
-| SOP-TT-6 | **Muri** | IA | Forced Task→Step tree + dual reorder chrome for the common 1:1 case | `TemplateTaskRow` task card + nested steps; design §4 still describes hierarchy | S1 | L→slices | fix | Over-architecture vs “author payer process once” (#280 intent) |
-| SOP-TT-7 | **Muda** | docs | Runbook + R6 still teach both columns as first-class | `payer-onboarding-runbook.md`; `R6-workflow.md` | S2 | XS | fix | Training re-teaches the bloat |
-| SOP-TT-8 | **Mura** | case UI | Case detail shows execution badge; step body is by stepType — operators never see the coupling explained | `CaseTasksPanel.tsx` labels; `StepDetails.tsx` by `stepType` | S2 | S | postpone | Secondary once authoring is fixed; don’t dual-fix case UI first |
+| ID       | 3M       | Area            | Finding                                                                                                  | Evidence                                                                                                       | Sev | Effort   | Rec      | Why it still hurts                                                                                          |
+| -------- | -------- | --------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --- | -------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| SOP-TT-1 | **Mura** | panel authoring | Two type systems for one intent (Auto-fill vs Online form)                                               | `executionTypes.ts`; `TemplateTaskRow` Execution type + Step type selects; runbook §3–4                        | S1  | M        | fix      | Authors guess which dropdown “turns on” Workbench; wrong combo = Ready SOP that never fills                 |
+| SOP-TT-2 | **Muda** | panel authoring | Title / description / step instruction triple for 1-step portal tasks                                    | Screenshot pattern; wizard seeds both levels (`TemplateWizard` add task/step)                                  | S1  | S        | fix      | Cognitive tax on every payer SOP; copy drift (“Fill out…” ×3)                                               |
+| SOP-TT-3 | **Mura** | readiness       | Two “needs form” signals: execution_fill vs online_form step                                             | `payerReadiness.ts` `hasExtensionFillTask` vs `payerReadinessFunnel.ts` `hasOnlineForm` / `sopOnlineFormNeeds` | S1  | S        | fix      | Funnel CTAs and TE-16 form readiness can disagree when Auto-fill unset but online_form present (or reverse) |
+| SOP-TT-4 | **Muri** | publish         | No lint: Auto-fill without online_form+portal (or online_form without Auto-fill)                         | `sopPublishLint.ts` — email/To only; no execution↔step coupling                                                | S1  | S        | fix      | Silent misconfig; extension never tees up; form badges lie                                                  |
+| SOP-TT-5 | **Muda** | panel authoring | Auto verify / Document attach offered while inert                                                        | `EXECUTION_TYPE_HINTS` “Recorded now, no effect yet”                                                           | S2  | XS       | fix      | Choice paralysis; looks like broken product                                                                 |
+| SOP-TT-6 | **Muri** | IA              | Forced Task→Step tree + dual reorder chrome for the common 1:1 case                                      | `TemplateTaskRow` task card + nested steps; design §4 still describes hierarchy                                | S1  | L→slices | fix      | Over-architecture vs “author payer process once” (#280 intent)                                              |
+| SOP-TT-7 | **Muda** | docs            | Runbook + R6 still teach both columns as first-class                                                     | `payer-onboarding-runbook.md`; `R6-workflow.md`                                                                | S2  | XS       | fix      | Training re-teaches the bloat                                                                               |
+| SOP-TT-8 | **Mura** | case UI         | Case detail shows execution badge; step body is by stepType — operators never see the coupling explained | `CaseTasksPanel.tsx` labels; `StepDetails.tsx` by `stepType`                                                   | S2  | S        | postpone | Secondary once authoring is fixed; don’t dual-fix case UI first                                             |
 
 Locked nearby (do **not** reopen in this spike): Ready = checklist SOP (#277);
 autofill badges soft; form mapper stays; D3.3-G / All-states (#280); TD-42
@@ -124,7 +124,7 @@ An SOP is an **ordered list of Actions**. Each Action has:
 **Auto-fill** becomes a **derived or mode-local** flag:
 
 - Default **on** when Mode = Portal form and a portal is linked
-- Shown as a single checkbox/toggle *on that action*, not a sibling enum of Manual/Auto verify/Document attach
+- Shown as a single checkbox/toggle _on that action_, not a sibling enum of Manual/Auto verify/Document attach
 - Stored as today’s `execution_type = extension_fill | null` under the hood for generation/extension contracts
 
 **Multi-step under one due date** stays supported as an advanced “Add sub-step”
@@ -152,33 +152,33 @@ portal SOP.
 
 ### D-SOP-1 — Collapse surface (required)
 
-| Option | Meaning |
-| ------ | ------- |
+| Option              | Meaning                                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **A (recommended)** | **Action list UX**: one row = one action; Mode dropdown; Auto-fill toggle only on Portal form. Keep task+step JSON storage; synthesize a single step when authoring 1:1. |
-| **B** | Keep Task→Step hierarchy, but **derive execution type** from steps (any `online_form`+portal ⇒ Auto-fill; else Manual). Remove execution-type control from UI. |
-| **C** | Keep both controls; only add lint + copy (minimal change). |
+| **B**               | Keep Task→Step hierarchy, but **derive execution type** from steps (any `online_form`+portal ⇒ Auto-fill; else Manual). Remove execution-type control from UI.           |
+| **C**               | Keep both controls; only add lint + copy (minimal change).                                                                                                               |
 
 ### D-SOP-2 — Inert execution types
 
-| Option | Meaning |
-| ------ | ------- |
+| Option              | Meaning                                                            |
+| ------------------- | ------------------------------------------------------------------ |
 | **A (recommended)** | Hide Auto verify + Document attach until R7/E4.5 automation ships. |
-| **B** | Keep visible with stronger “no effect yet” (status quo + copy). |
+| **B**               | Keep visible with stronger “no effect yet” (status quo + copy).    |
 
 ### D-SOP-3 — Readiness “needs form” signal
 
-| Option | Meaning |
-| ------ | ------- |
+| Option              | Meaning                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **A (recommended)** | One helper: form follow-ups when SOP has `online_form` **and** (Auto-fill **or** linked portal). Align `payerReadiness` + funnel. |
-| **B** | Execution type only (TE-16 strict) — online_form without Auto-fill never shows form CTAs. |
-| **C** | online_form only — ignore execution type for badges (execution type becomes stamp-only). |
+| **B**               | Execution type only (TE-16 strict) — online_form without Auto-fill never shows form CTAs.                                         |
+| **C**               | online_form only — ignore execution type for badges (execution type becomes stamp-only).                                          |
 
 ### D-SOP-4 — Multi-step tasks
 
-| Option | Meaning |
-| ------ | ------- |
+| Option              | Meaning                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **A (recommended)** | Advanced: “Add another step under this action” for phone→fax etc.; default new SOP = one action, one step. |
-| **B** | Flatten forever: max one step per task (migrate multi-step to sibling tasks). |
+| **B**               | Flatten forever: max one step per task (migrate multi-step to sibling tasks).                              |
 
 **PM ack (2026-08-11):** `D-SOP-1 A; D-SOP-2 A; D-SOP-3 A; D-SOP-4 A`
 
@@ -233,20 +233,20 @@ Also approved: thin Cursor skill = **runbook coach / draft + validate only**
 
 ## Lanes
 
-| Code (agentable) | Ops | Epic / R7 | Backlog |
-| ---------------- | --- | --------- | ------- |
+| Code (agentable)                                                                        | Ops                 | Epic / R7                                                                   | Backlog                                                            |
+| --------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Lint + unify needs-form helper; hide inert types; collapse 1:1 Action UI; seeds/runbook | None for this spike | Real auto_verify engine; document_attach vault pull; platform roles (TD-42) | SOP-TT-8 case-detail copy; TECH-DEBT if we open a TD row after ack |
 
 ---
 
 ## Keep / Improve / Kill
 
-| Keep | Improve | Kill (from operator surface) |
-| ---- | ------- | ---------------------------- |
-| Task/step storage + stamping | One Mode + derived/local Auto-fill | Dual mandatory enums on every card |
-| Portal key + FormStepPanel | Publish lint for mismatches | Auto verify / Document attach until live |
-| Versioned publish | Single readiness “needs form” predicate | Triple title/description/instruction on 1-step SOPs |
-| Extension `extension_fill` contract | Action presets for portal/email | Runbook teaching two columns as primary |
+| Keep                                | Improve                                 | Kill (from operator surface)                        |
+| ----------------------------------- | --------------------------------------- | --------------------------------------------------- |
+| Task/step storage + stamping        | One Mode + derived/local Auto-fill      | Dual mandatory enums on every card                  |
+| Portal key + FormStepPanel          | Publish lint for mismatches             | Auto verify / Document attach until live            |
+| Versioned publish                   | Single readiness “needs form” predicate | Triple title/description/instruction on 1-step SOPs |
+| Extension `extension_fill` contract | Action presets for portal/email         | Runbook teaching two columns as primary             |
 
 ---
 
@@ -285,14 +285,14 @@ Stop: draft PR with AC checklist; unit tests for mismatch fixtures.
 
 ## Evidence appendix (paths)
 
-| Claim | Path |
-| ----- | ---- |
-| Execution type union + Auto-fill-only hint | `src/lib/executionTypes.ts` |
-| Step type select + nested steps UI | `src/components/templates/TemplateTaskRow.tsx` |
-| Publish lint ignores execution↔step | `src/lib/sopPublishLint.ts` |
-| TE-16 uses execution type | `src/lib/payerReadiness.ts` |
-| Funnel uses online_form steps | `src/lib/payerReadinessFunnel.ts` |
-| Case badge uses execution labels | `src/components/cases/CaseTasksPanel.tsx` |
-| Step body switches on stepType | `src/components/cases/StepDetails.tsx` |
-| Design: only Auto-fill changes anything | `docs/redesign/design-reference/payer-and-cases/README.md` §4 |
-| R6: execution = entry point | `docs/redesign/R6-workflow.md` |
+| Claim                                      | Path                                                          |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| Execution type union + Auto-fill-only hint | `src/lib/executionTypes.ts`                                   |
+| Step type select + nested steps UI         | `src/components/templates/TemplateTaskRow.tsx`                |
+| Publish lint ignores execution↔step        | `src/lib/sopPublishLint.ts`                                   |
+| TE-16 uses execution type                  | `src/lib/payerReadiness.ts`                                   |
+| Funnel uses online_form steps              | `src/lib/payerReadinessFunnel.ts`                             |
+| Case badge uses execution labels           | `src/components/cases/CaseTasksPanel.tsx`                     |
+| Step body switches on stepType             | `src/components/cases/StepDetails.tsx`                        |
+| Design: only Auto-fill changes anything    | `docs/redesign/design-reference/payer-and-cases/README.md` §4 |
+| R6: execution = entry point                | `docs/redesign/R6-workflow.md`                                |
