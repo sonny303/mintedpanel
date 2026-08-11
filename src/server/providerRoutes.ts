@@ -33,14 +33,20 @@ export async function handleListProviders(url: URL, ctx: AuthContext): Promise<R
   const pageSize = Math.min(parsePositiveInt(params.get("pageSize"), 25), 100);
 
   const statusParam = params.get("status");
+  const status =
+    statusParam && PROVIDER_STATUSES.has(statusParam) ? (statusParam as ProviderStatus) : undefined;
   const filters: ProviderFilters = {
     groupId: params.get("groupId") ?? undefined,
     state: params.get("state") ?? undefined,
     payerId: params.get("payerId") ?? undefined,
-    status:
-      statusParam && PROVIDER_STATUSES.has(statusParam)
-        ? (statusParam as ProviderStatus)
-        : undefined,
+    status,
+    // Terminated providers are hidden by default (mirrors every browser
+    // surface — providers.index.tsx, ManualCaseModal — which filter them
+    // client-side after fetching "everyone"). An API consumer with no such
+    // filter of its own, like the extension's provider picker/search, would
+    // otherwise surface providers the webapp treats as gone. An explicit
+    // ?status= (including ?status=terminated) always overrides this.
+    excludeStatus: status ? undefined : "terminated",
     search: params.get("search") ?? undefined,
   };
   const sortColumn = params.get("sort") ?? undefined;

@@ -75,6 +75,26 @@ describe("provider route handlers", () => {
     );
   });
 
+  it("list excludes terminated providers by default", async () => {
+    listProvidersMock.mockResolvedValue({ rows: [], total: 0 });
+    await handleListProviders(new URL("https://x.test/api/providers"), ctx());
+    expect(listProvidersMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: undefined, excludeStatus: "terminated" }),
+      expect.anything(),
+    );
+  });
+
+  it("list respects an explicit ?status=terminated request", async () => {
+    listProvidersMock.mockResolvedValue({ rows: [], total: 0 });
+    await handleListProviders(new URL("https://x.test/api/providers?status=terminated"), ctx());
+    expect(listProvidersMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ status: "terminated", excludeStatus: undefined }),
+      expect.anything(),
+    );
+  });
+
   it("get returns 404 when the provider is missing", async () => {
     getProviderMock.mockResolvedValue(null);
     const res = await handleGetProvider("nope", ctx());
