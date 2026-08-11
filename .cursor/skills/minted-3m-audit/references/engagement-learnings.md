@@ -28,18 +28,18 @@ Lessons that repeatedly bit us. Encode into recommendations and PR review.
 
 Do **not** paste a full 3M audit into handoffs; bind this skill and cite paths.
 
-| Lock                              | Status                 | Implication                                                                                                               |
-| --------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Ready = checklist SOP**         | #277 merged            | Portal train/prove/drift = badges, not Ready gate                                                                         |
-| **Attach: defaults only**         | #277 merged            | Do not reverse E6.2                                                                                                       |
-| **`org_payer_assignments` table** | **#285** (this PR)     | Gate retired in product; table dormant; never DROP. E2e harness retarget may remain (OPA-E2E). Not Slice 3.               |
-| **Catalog DELETE**                | #275 code              | Hosted = second PM sign-off (OPS-PURGE)                                                                                   |
-| **`create_payer` 10-arg**         | #274                   | No resurrect `p_assign_to_org`                                                                                            |
-| **SOP All-states + D3.3-G**       | #280                   | Owns the name **Slice 3**; do not reuse for OPA-RETIRE                                                                    |
-| **GEN-SILENT**                    | **R2 locked** / #284   | Daily-loop: explain `no_facility` + `pending_verification` skips                                                          |
-| **TRAIN-DUAL**                    | Spike #281 + build #40 | URL bind; C1 copy; once-per-payer; TD-51 open                                                                             |
-| **LISTPORTALS**                   | closed #282            | Browser `listPortals` = D6.4 (same predicate as Work API)                                                                 |
-| **3M Slice 5**                    | closed                 | TD-41/49/50 park — ≠ GEN-SILENT                                                                                           |
+| Lock                              | Status                 | Implication                                                                                                 |
+| --------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Ready = checklist SOP**         | #277 merged            | Portal train/prove/drift = badges, not Ready gate                                                           |
+| **Attach: defaults only**         | #277 merged            | Do not reverse E6.2                                                                                         |
+| **`org_payer_assignments` table** | **#285** (this PR)     | Gate retired in product; table dormant; never DROP. E2e harness retarget may remain (OPA-E2E). Not Slice 3. |
+| **Catalog DELETE**                | #275 code              | Hosted = second PM sign-off (OPS-PURGE)                                                                     |
+| **`create_payer` 10-arg**         | #274                   | No resurrect `p_assign_to_org`                                                                              |
+| **SOP All-states + D3.3-G**       | #280                   | Owns the name **Slice 3**; do not reuse for OPA-RETIRE                                                      |
+| **GEN-SILENT**                    | **R2 locked** / #284   | Daily-loop: explain `no_facility` + `pending_verification` skips                                            |
+| **TRAIN-DUAL**                    | Spike #281 + build #40 | URL bind; C1 copy; once-per-payer; TD-51 open                                                               |
+| **LISTPORTALS**                   | closed #282            | Browser `listPortals` = D6.4 (same predicate as Work API)                                                   |
+| **3M Slice 5**                    | closed                 | TD-41/49/50 park — ≠ GEN-SILENT                                                                             |
 
 ## TRAIN-DUAL lessons (code-verified)
 

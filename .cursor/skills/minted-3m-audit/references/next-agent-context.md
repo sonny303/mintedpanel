@@ -10,21 +10,21 @@ merged CAP/LISTPORTALS/SOP-TT/Add Provider; #285 is the last panel product PR).
 
 ## Where we are (one screen)
 
-| Item                       | State                                                    | PR / id                       |
-| -------------------------- | -------------------------------------------------------- | ----------------------------- |
-| Skill pack                 | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Twin on extension (#41)       |
-| Course-correct             | Docs lock R1/R2                                          | panel #283 merged             |
-| **GEN-SILENT**             | Merged                                                   | panel #284                    |
-| 24h audit skill + wiki     | Merged                                                   | panel #299 / #301             |
-| LISTPORTALS                | Merged                                                   | panel #282                    |
-| CAP panel                  | Merged (#290 / #289)                                     | —                             |
-| SOP-TT                     | Merged tip                                               | panel #297                    |
-| Add Provider harden        | Merged                                                   | panel #288                    |
-| **OPA-RETIRE**             | Open — rebase + merge last; hosted apply = ops           | panel #285                    |
-| TRAIN-DUAL spike           | Locked C amended                                         | panel #281 merged             |
-| TRAIN-DUAL build           | Open (rebase onto CAP-05 main)                           | extension #40                 |
-| CAP extension              | Merged (#42 / #43 / #44 / #46)                           | —                             |
-| OPS-PURGE / OPS-S6 / VAULT | Hosted residual                                          | Human sign-off only           |
+| Item                       | State                                                    | PR / id                 |
+| -------------------------- | -------------------------------------------------------- | ----------------------- |
+| Skill pack                 | Canonical in **panel** `.cursor/skills/minted-3m-audit/` | Twin on extension (#41) |
+| Course-correct             | Docs lock R1/R2                                          | panel #283 merged       |
+| **GEN-SILENT**             | Merged                                                   | panel #284              |
+| 24h audit skill + wiki     | Merged                                                   | panel #299 / #301       |
+| LISTPORTALS                | Merged                                                   | panel #282              |
+| CAP panel                  | Merged (#290 / #289)                                     | —                       |
+| SOP-TT                     | Merged tip                                               | panel #297              |
+| Add Provider harden        | Merged                                                   | panel #288              |
+| **OPA-RETIRE**             | Open — rebase + merge last; hosted apply = ops           | panel #285              |
+| TRAIN-DUAL spike           | Locked C amended                                         | panel #281 merged       |
+| TRAIN-DUAL build           | Open (rebase onto CAP-05 main)                           | extension #40           |
+| CAP extension              | Merged (#42 / #43 / #44 / #46)                           | —                       |
+| OPS-PURGE / OPS-S6 / VAULT | Hosted residual                                          | Human sign-off only     |
 
 **Cadence rule:** daily provider→cases unblocked by GEN-SILENT. Land
 OPA-RETIRE (#285) next on panel; TRAIN-DUAL (#40) on extension. Hosted ≠ merged.
@@ -33,15 +33,15 @@ OPA-RETIRE (#285) next on panel; TRAIN-DUAL (#40) on extension. Hosted ≠ merge
 
 ## Locked product decisions (do not reopen)
 
-| Lock                  | Meaning                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Ready = checklist SOP | #277 — not autofill/train/prove                                                                                                         |
-| Attach defaults only  | #277 — do not reverse E6.2                                                                                                              |
-| D3.3-G `pickTemplate` | #280 — state → group → ownership; `state='All'`                                                                                         |
+| Lock                  | Meaning                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Ready = checklist SOP | #277 — not autofill/train/prove                                                                                                           |
+| Attach defaults only  | #277 — do not reverse E6.2                                                                                                                |
+| D3.3-G `pickTemplate` | #280 — state → group → ownership; `state='All'`                                                                                           |
 | **R1 B**              | `#285` retires `org_payer_assignments` **as a gate** only; table+rows **dormant** (never DROP). Network = active `payer_network_targets`. |
-| **R2**                | **GEN-SILENT** — explain `no_facility` / `pending_verification` skips on `/generation`                                                  |
-| TRAIN-DUAL D-TD.*     | URL = capture bind; selection sticky nav/messaging; C1 mismatch copy; keep two APIs; reject B/D auto-bind                               |
-| #275 DELETE           | Code merged; hosted needs **second** PM sign-off                                                                                        |
+| **R2**                | **GEN-SILENT** — explain `no_facility` / `pending_verification` skips on `/generation`                                                    |
+| TRAIN-DUAL D-TD.*     | URL = capture bind; selection sticky nav/messaging; C1 mismatch copy; keep two APIs; reject B/D auto-bind                                 |
+| #275 DELETE           | Code merged; hosted needs **second** PM sign-off                                                                                          |
 
 ---
 
