@@ -5,7 +5,9 @@ import {
   EXECUTION_TYPE_LABELS,
   executionTypeForStorage,
   hasExtensionFillTask,
+  hasOnlineFormStep,
   isExecutionType,
+  needsFormFollowUp,
   resolveExecutionType,
 } from "./executionTypes";
 
@@ -45,5 +47,34 @@ describe("executionTypes", () => {
     expect(hasExtensionFillTask([])).toBe(false);
     // absent executionType defaults to manual, so not extension_fill
     expect(hasExtensionFillTask([{}])).toBe(false);
+  });
+
+  it("detects online_form steps", () => {
+    expect(hasOnlineFormStep([{ steps: [{ stepType: "fax" }] }])).toBe(false);
+    expect(hasOnlineFormStep([{ steps: [{ stepType: "online_form" }] }])).toBe(true);
+    expect(hasOnlineFormStep([{ steps: undefined }])).toBe(false);
+    expect(hasOnlineFormStep([])).toBe(false);
+  });
+
+  // BITE-SOP-TT-01 — needsFormFollowUp = hasExtensionFillTask OR hasOnlineForm.
+  it("needsFormFollowUp is true for Auto-fill alone, online_form alone, or both", () => {
+    expect(
+      needsFormFollowUp([{ executionType: "extension_fill", steps: [{ stepType: "phone" }] }]),
+    ).toBe(true);
+    expect(needsFormFollowUp([{ executionType: "manual", steps: [{ stepType: "online_form" }] }])).toBe(
+      true,
+    );
+    expect(
+      needsFormFollowUp([
+        {
+          executionType: "extension_fill",
+          steps: [{ stepType: "online_form" }],
+        },
+      ]),
+    ).toBe(true);
+    expect(needsFormFollowUp([{ executionType: "manual", steps: [{ stepType: "fax" }] }])).toBe(
+      false,
+    );
+    expect(needsFormFollowUp([])).toBe(false);
   });
 });

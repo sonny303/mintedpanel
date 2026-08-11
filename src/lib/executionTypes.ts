@@ -67,3 +67,29 @@ export interface HasExecutionType {
 export function hasExtensionFillTask(tasks: readonly HasExecutionType[]): boolean {
   return tasks.some((t) => resolveExecutionType(t.executionType) === "extension_fill");
 }
+
+/** Narrow step shape for the online_form presence check. */
+export interface HasOnlineFormStep {
+  steps?: readonly { stepType?: string | null }[] | null;
+}
+
+/** Does a SOP contain at least one online_form step? The funnel's historical
+ * "needs portal" signal — kept as a named predicate so readiness surfaces
+ * share vocabulary with BITE-SOP-TT-01. */
+export function hasOnlineFormStep(tasks: readonly HasOnlineFormStep[]): boolean {
+  for (const task of tasks) {
+    for (const step of Array.isArray(task.steps) ? task.steps : []) {
+      if (step?.stepType === "online_form") return true;
+    }
+  }
+  return false;
+}
+
+/** BITE-SOP-TT-01 / D-SOP-3 interim — unify the dual "needs form" signals.
+ * Form follow-ups apply when the SOP has Auto-fill OR an online_form step.
+ * Both `payerReadiness` and `payerReadinessFunnel` consume this helper. */
+export function needsFormFollowUp(
+  tasks: readonly (HasExecutionType & HasOnlineFormStep)[],
+): boolean {
+  return hasExtensionFillTask(tasks) || hasOnlineFormStep(tasks);
+}

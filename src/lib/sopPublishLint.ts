@@ -8,11 +8,15 @@
 //     literal recipient is a valid email address, and every token recipient is
 //     an email-valued token (source validity, not value — an authored
 //     provider.email is valid before generation).
+//   - BITE-SOP-TT-01: every Auto-fill (extension_fill) task has ≥1 online_form
+//     step with a non-empty portalKey (so Workbench/form readiness can bind).
 // Pure; enforced in the wizard — the only publish surface.
 
 import type { SOPTaskDefinition } from "@/types";
+import { resolveExecutionType } from "@/lib/executionTypes";
 import { emailValuedTokenKeys } from "@/lib/sopResolver";
 import { isValidEmail } from "@/lib/contactValidation";
+import { normalizePortalKey } from "@/lib/tokenFormat";
 
 /** Default placeholder labels the wizard seeds a fresh row with — these must be
  * renamed before publish. Compared case-insensitively after trimming. */
@@ -101,6 +105,32 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
         }
       }
     });
+
+    // BITE-SOP-TT-01 — Auto-fill requires ≥1 online_form step with a portal.
+    // Hard-blocks publish the same way draft-email To does: without a linked
+    // portal the extension cannot tee up and form readiness is a lie.
+    if (resolveExecutionType(task.executionType) === "extension_fill") {
+      const onlineFormIndexes: number[] = [];
+      steps.forEach((step, si) => {
+        if (step.stepType === "online_form") onlineFormIndexes.push(si);
+      });
+      if (onlineFormIndexes.length === 0) {
+        errors.push({
+          taskIndex: taskNo,
+          message: `Task ${taskNo} (Auto-fill) needs at least one online form step.`,
+        });
+      } else {
+        for (const si of onlineFormIndexes) {
+          if (normalizePortalKey(steps[si].portalKey)) continue;
+          const stepNo = si + 1;
+          errors.push({
+            taskIndex: taskNo,
+            stepIndex: stepNo,
+            message: `Task ${taskNo}, step ${stepNo} (online form) needs a portal.`,
+          });
+        }
+      }
+    }
   });
 
   return { ok: errors.length === 0, errors };

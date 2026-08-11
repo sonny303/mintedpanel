@@ -113,6 +113,52 @@ describe("buildPayerReadiness", () => {
     expect(rows[0].hasExtensionFill).toBe(true);
   });
 
+  it("flags online_form-only SOPs for form follow-up (BITE-SOP-TT-01)", () => {
+    const templates = [
+      fallback,
+      tpl({
+        id: "t-of",
+        payerId: "pay1",
+        state: "NC",
+        groupId: null,
+        taskDefinitions: [
+          {
+            title: "Submit",
+            executionType: "manual",
+            steps: [{ label: "Fill", stepType: "online_form", portalKey: "availity" }],
+          },
+        ] as never,
+      }),
+    ];
+    const rows = buildPayerReadiness({
+      targets: [{ payerId: "pay1", groupId: "g1", state: "NC" }],
+      templates,
+      payerName,
+    });
+    expect(rows[0].hasExtensionFill).toBe(true);
+  });
+
+  it("does not flag fax-only manual SOPs for form follow-up", () => {
+    const templates = [
+      fallback,
+      tpl({
+        id: "t-fax",
+        payerId: "pay1",
+        state: "NC",
+        groupId: null,
+        taskDefinitions: [
+          { title: "Fax packet", executionType: "manual", steps: [{ label: "Fax", stepType: "fax" }] },
+        ] as never,
+      }),
+    ];
+    const rows = buildPayerReadiness({
+      targets: [{ payerId: "pay1", groupId: "g1", state: "NC" }],
+      templates,
+      payerName,
+    });
+    expect(rows[0].hasExtensionFill).toBe(false);
+  });
+
   it("summarizes ready vs needs-sop", () => {
     const templates = [fallback, tpl({ id: "t1", payerId: "pay1", state: "NC" })];
     const rows = buildPayerReadiness({

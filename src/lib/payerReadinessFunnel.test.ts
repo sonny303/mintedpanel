@@ -204,6 +204,20 @@ describe("buildPayerReadinessFunnel Ready = checklist SOP", () => {
     expect(row.readyNote).toMatch(/no portal required/i);
   });
 
+  it("Auto-fill without online_form still needs form follow-up (BITE-SOP-TT-01)", () => {
+    const defs: SOPTaskDefinition[] = [
+      {
+        title: "Submit",
+        executionType: "extension_fill",
+        steps: [{ label: "Call payer", stepType: "phone" }],
+      },
+    ];
+    const row = build({ sops: [sop({ taskDefinitions: defs })] });
+    expect(row.needsPortal).toBe(true);
+    expect(row.nextAction).toBe("ready");
+    expect(row.formSuggestion).toBe("register_portal");
+  });
+
   it("a portal matches by SOP step key even without a payer link", () => {
     const row = build({
       sops: [sop()],
