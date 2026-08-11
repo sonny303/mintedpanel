@@ -228,7 +228,6 @@ test("admin adopts a payer via group attach — detail offers Attach to a group;
   ).toBeVisible({ timeout: 30000 });
   await expect(page.getByRole("link", { name: "Attach to a group" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Attach to a group" })).toHaveCount(0);
 
   // Seed an active target (what Attach writes) — membership is target-derived.
   (fixtures.payer_network_targets as Array<Record<string, unknown>>).push({
