@@ -39,12 +39,6 @@ export const PROFILE_ATTRIBUTES: readonly ProfileAttributeDef[] = [
   { key: "npi", label: "NPI", satisfied: (f) => f.npiPresent },
   { key: "dob", label: "Date of birth", satisfied: (f) => f.dobPresent },
   { key: "ssn_last4", label: "SSN (last 4)", satisfied: (f) => f.ssnLast4Present },
-  { key: "home_address", label: "Home address", satisfied: (f) => f.homeAddressPresent },
-  {
-    key: "malpractice_coverage",
-    label: "Malpractice coverage",
-    satisfied: (f) => f.malpracticeCoverageEnd !== null,
-  },
 ];
 
 const BY_KEY = new Map<ProfileAttributeKey, ProfileAttributeDef>(
