@@ -21,13 +21,13 @@ slice merged.
 **Start here for residual work** (progressive disclosure — do not reload the
 whole chat):
 
-| File | When |
-| ---- | ---- |
-| [references/next-agent-context.md](references/next-agent-context.md) | **First** — live locks, open PRs, next mandate |
-| [references/architecture-truth.md](references/architecture-truth.md) | Always before contradicting stack/grain |
-| [references/engagement-learnings.md](references/engagement-learnings.md) | Locked decisions + traps |
-| [references/bite-size-rules.md](references/bite-size-rules.md) | How to slice recommendations |
-| [references/known-debt-map.md](references/known-debt-map.md) | Ranking residual — re-verify in code |
+| File                                                                     | When                                           |
+| ------------------------------------------------------------------------ | ---------------------------------------------- |
+| [references/next-agent-context.md](references/next-agent-context.md)     | **First** — live locks, open PRs, next mandate |
+| [references/architecture-truth.md](references/architecture-truth.md)     | Always before contradicting stack/grain        |
+| [references/engagement-learnings.md](references/engagement-learnings.md) | Locked decisions + traps                       |
+| [references/bite-size-rules.md](references/bite-size-rules.md)           | How to slice recommendations                   |
+| [references/known-debt-map.md](references/known-debt-map.md)             | Ranking residual — re-verify in code           |
 
 Also bind: panel `AGENTS.md`, `docs/ops/repo-workflow.md`,
 `docs/ops/audit-course-correct-2026-08-10.md`, extension `CLAUDE.md`.
@@ -50,11 +50,11 @@ approving a slice / locking D-decisions.
 
 ## 3M definitions (Minted-specific)
 
-| Lens     | Meaning here                                    | Typical signals                                                                                                                          |
-| -------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Muri** | Overburden / reliability / trust failure        | Silent no-ops, wrong cases, PHI leaks, hosted schema cliffs, untested hot paths, godfiles that block safe change                         |
-| **Mura** | Unevenness / incoherent operator or agent model | Two UIs for one job, three payer universes, API filtered but browser list not, Train dropdown vs URL bind, docs lying about stack        |
-| **Muda** | Waste                                           | Orphan components, unreachable UI, seed catalog mass, stale comments, duplicate create doors, hand-maintained API mirrors                |
+| Lens     | Meaning here                                    | Typical signals                                                                                                                   |
+| -------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Muri** | Overburden / reliability / trust failure        | Silent no-ops, wrong cases, PHI leaks, hosted schema cliffs, untested hot paths, godfiles that block safe change                  |
+| **Mura** | Unevenness / incoherent operator or agent model | Two UIs for one job, three payer universes, API filtered but browser list not, Train dropdown vs URL bind, docs lying about stack |
+| **Muda** | Waste                                           | Orphan components, unreachable UI, seed catalog mass, stale comments, duplicate create doors, hand-maintained API mirrors         |
 
 Severity: **S0** stop-ship/ops cliff · **S1** trust or **daily-path** · **S2** scale/DX · **S3** cleanup.  
 Effort: **XS** <½ day · **S** small PR · **M** multi-file · **L** epic — **must** be broken into sub-slices.
@@ -78,16 +78,16 @@ alone shipped TRAIN-DUAL before GEN-SILENT — that was a process miss.
 
 ### 2. Probe the live architecture (code-verified)
 
-| Probe | Panel | Extension |
-| ----- | ----- | --------- |
-| Two doors | Browser → services → Supabase; `/api/*` for extension + documents | JWT → `/api` only; never service role |
-| Payer create | `create_payer` **10-arg** (#274); no resurrected `p_assign_to_org` | n/a |
-| Assignments gate | R1 B: retiring gate is **OPA-RETIRE**; table stays; not candidacy input | n/a |
-| Generation skips | `buildGenerationSkips` / GEN-SILENT banner vs silent drops | n/a |
-| Portal ghosts | `listPortals` + API paths use `portalVisibility`? | Work = `/api/portals`; Train = shared |
-| Train bind | n/a | URL match binds capture; dropdown = nav; C1 mismatch copy |
-| Open cases | `case_status` | `OPEN_CASE_STATUSES` |
-| Hot files | `generationPreview.ts`, `portals.ts`, `payers.ts`, `extensionRoutes.ts` | `trainForms.ts`, `sidepanel/main.ts`, `portals.ts` |
+| Probe            | Panel                                                                   | Extension                                                 |
+| ---------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
+| Two doors        | Browser → services → Supabase; `/api/*` for extension + documents       | JWT → `/api` only; never service role                     |
+| Payer create     | `create_payer` **10-arg** (#274); no resurrected `p_assign_to_org`      | n/a                                                       |
+| Assignments gate | R1 B: retiring gate is **OPA-RETIRE**; table stays; not candidacy input | n/a                                                       |
+| Generation skips | `buildGenerationSkips` / GEN-SILENT banner vs silent drops              | n/a                                                       |
+| Portal ghosts    | `listPortals` + API paths use `portalVisibility`?                       | Work = `/api/portals`; Train = shared                     |
+| Train bind       | n/a                                                                     | URL match binds capture; dropdown = nav; C1 mismatch copy |
+| Open cases       | `case_status`                                                           | `OPEN_CASE_STATUSES`                                      |
+| Hot files        | `generationPreview.ts`, `portals.ts`, `payers.ts`, `extensionRoutes.ts` | `trainForms.ts`, `sidepanel/main.ts`, `portals.ts`        |
 
 ### 3. Produce the register
 
@@ -103,12 +103,12 @@ hot files / verify / stop). Follow [bite-size-rules.md](references/bite-size-rul
 
 ### 5. Separate lanes
 
-| Lane | Examples |
-| ---- | -------- |
+| Lane                 | Examples                                                    |
+| -------------------- | ----------------------------------------------------------- |
 | **Code (agentable)** | GEN-SILENT, LISTPORTALS, DOC-PICK, OPA-RETIRE (careful RLS) |
-| **Ops (human)** | OPS-PURGE, OPS-S6, Vault, CORS |
-| **Epic / R7** | Platform roles, FormStepPanel completion |
-| **Backlog** | TD-41, TD-49, TD-50, TD-51 |
+| **Ops (human)**      | OPS-PURGE, OPS-S6, Vault, CORS                              |
+| **Epic / R7**        | Platform roles, FormStepPanel completion                    |
+| **Backlog**          | TD-41, TD-49, TD-50, TD-51                                  |
 
 ### 6. Close with Keep / Improve / Kill + **one** next tranche (2–5 bites max)
 

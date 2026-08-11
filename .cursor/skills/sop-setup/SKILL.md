@@ -16,11 +16,11 @@ Tasks & steps simplification target model. You do **not** publish, invent
 
 Read these before drafting or validating (progressive disclosure):
 
-| File                                                                                         | When                                              |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| [`docs/redesign/payer-onboarding-runbook.md`](../../../docs/redesign/payer-onboarding-runbook.md) | Always — operator worksheet; sections map 1:1 to config |
-| [`docs/ops/sop-tasks-steps-simplification-spike.md`](../../../docs/ops/sop-tasks-steps-simplification-spike.md) | Always — Action-list model; D-SOP-1..4; hard refusals |
-| [references/validation-checklist.md](references/validation-checklist.md)                     | Always — mode rules + refuse list                 |
+| File                                                                                                            | When                                                    |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`docs/redesign/payer-onboarding-runbook.md`](../../../docs/redesign/payer-onboarding-runbook.md)               | Always — operator worksheet; sections map 1:1 to config |
+| [`docs/ops/sop-tasks-steps-simplification-spike.md`](../../../docs/ops/sop-tasks-steps-simplification-spike.md) | Always — Action-list model; D-SOP-1..4; hard refusals   |
+| [references/validation-checklist.md](references/validation-checklist.md)                                        | Always — mode rules + refuse list                       |
 
 Also bind: panel `AGENTS.md`, `docs/ops/repo-workflow.md`. Prefer live Template
 Editor / publish lint code over chat memory when they disagree with prose.
@@ -54,22 +54,22 @@ separate build bite after approving scope.
 
 Produce an **ordered Action list**. Each action has:
 
-| Field | Required | Notes |
-| ----- | -------- | ----- |
-| **Name** | Yes | One string (task title; step instruction defaults to it) |
-| **Mode** | Yes | Portal form · Draft email · Phone · Fax · Mail · PDF (when live) |
-| **Mode config** | Mode-dependent | See validation below |
-| Due offset / notes | Optional | Collapsed notes; not a second mandatory type system |
+| Field              | Required       | Notes                                                            |
+| ------------------ | -------------- | ---------------------------------------------------------------- |
+| **Name**           | Yes            | One string (task title; step instruction defaults to it)         |
+| **Mode**           | Yes            | Portal form · Draft email · Phone · Fax · Mail · PDF (when live) |
+| **Mode config**    | Mode-dependent | See validation below                                             |
+| Due offset / notes | Optional       | Collapsed notes; not a second mandatory type system              |
 
 Map modes to stored shapes the product still stamps (do not rewrite storage in
 this skill):
 
-| Mode | Step type | Typical execution |
-| ---- | --------- | ----------------- |
-| Portal form | `online_form` | `extension_fill` when autofill is on |
-| Draft email | `draft_email` | `manual` |
-| Phone / Fax / Mail | `phone` / `fax` / `mail` | `manual` |
-| PDF | `pdf` | `manual` (+ mail/fax to send) |
+| Mode               | Step type                | Typical execution                    |
+| ------------------ | ------------------------ | ------------------------------------ |
+| Portal form        | `online_form`            | `extension_fill` when autofill is on |
+| Draft email        | `draft_email`            | `manual`                             |
+| Phone / Fax / Mail | `phone` / `fax` / `mail` | `manual`                             |
+| PDF                | `pdf`                    | `manual` (+ mail/fax to send)        |
 
 **Portal form mode config must include `portalKey`** (bare/normalized registry
 key) when the submission path is a portal. Do not invent a portal registry row
@@ -134,14 +134,14 @@ trains maps, and runs dry-tests per runbook §6–7.
 
 ## Hard refusals
 
-| Refuse | Why |
-| ------ | --- |
-| Inventing or committing `portal_field_maps` / fill selectors / token bindings | Maps are captured + human-approved; inventing them breaks Trust/fill |
-| Auto-publish / calling publish RPCs / flipping template `current_version` | Human-in-loop only |
-| Hardcoding payer SOPs into git as canonical source of truth | Catalog + versioned `sop_templates` in DB are source of truth; git seeds/fixtures are not the operator runbook |
-| Redefining **Ready** as published + proven (or reopening #277) | Locked: **Ready = checklist SOP** (≥1 active global SOP with ≥1 task). Portal train / prove / drift = soft CTAs / autofill **badges**, not the Ready gate |
-| Surfacing Auto verify / Document attach as live | D-SOP-2 A — hide until an engine exists |
-| Rewriting `sopResolver` / generation stamping / Train dual-registry in a "setup coach" turn | Out of skill scope |
+| Refuse                                                                                      | Why                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inventing or committing `portal_field_maps` / fill selectors / token bindings               | Maps are captured + human-approved; inventing them breaks Trust/fill                                                                                      |
+| Auto-publish / calling publish RPCs / flipping template `current_version`                   | Human-in-loop only                                                                                                                                        |
+| Hardcoding payer SOPs into git as canonical source of truth                                 | Catalog + versioned `sop_templates` in DB are source of truth; git seeds/fixtures are not the operator runbook                                            |
+| Redefining **Ready** as published + proven (or reopening #277)                              | Locked: **Ready = checklist SOP** (≥1 active global SOP with ≥1 task). Portal train / prove / drift = soft CTAs / autofill **badges**, not the Ready gate |
+| Surfacing Auto verify / Document attach as live                                             | D-SOP-2 A — hide until an engine exists                                                                                                                   |
+| Rewriting `sopResolver` / generation stamping / Train dual-registry in a "setup coach" turn | Out of skill scope                                                                                                                                        |
 
 ---
 
@@ -165,8 +165,8 @@ trains maps, and runs dry-tests per runbook §6–7.
 
 ## Draft action list
 
-| # | Name | Mode | Mode config | Notes |
-| - | ---- | ---- | ----------- | ----- |
+| #   | Name | Mode | Mode config | Notes |
+| --- | ---- | ---- | ----------- | ----- |
 
 ## Validation
 
