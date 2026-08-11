@@ -1,4 +1,5 @@
 import { test, expect, type Route } from "@playwright/test";
+import { withPortalPayerEmbed } from "./portalPayerEmbed";
 
 // E6.9 — the unified field registry inside the Submit-form task editor
 // (TS-144 … TS-149), over the mock harness.
@@ -473,7 +474,13 @@ async function fulfillSupabase(route: Route) {
     return json(rows);
   }
 
-  const rows = (db[table] ?? []).filter(matchFilters);
+  const select = url.searchParams.get("select");
+  const rows = withPortalPayerEmbed(
+    table,
+    select,
+    (db[table] ?? []).filter(matchFilters),
+    db.payers ?? [],
+  );
   if (wantsObject) {
     if (rows.length === 0) return json({ code: "PGRST116", message: "no rows" }, 406);
     return json(rows[0]);

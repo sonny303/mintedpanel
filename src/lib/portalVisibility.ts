@@ -9,9 +9,10 @@
 // unfiltered they surface as GHOSTS: Train lists forms nobody can act on, and
 // Work-case recognition can match a page to a portal whose payer is gone.
 //
-// The rule is one predicate, applied in both places a global portal is
-// listed (listSharedPortals for Train, the global leg of listPortalsForApi
-// for Work), so the two can never disagree about what exists.
+// The rule is one predicate, applied wherever a global portal is listed
+// (listSharedPortals for Train, the global leg of listPortalsForApi for Work,
+// and browser listPortals for panel pickers), so API and webapp can never
+// disagree about what exists.
 //
 // It FAILS CLOSED on purpose: an absent or unreadable payer embed reads as
 // "not listable" rather than "assume fine". A ghost that stays hidden costs a

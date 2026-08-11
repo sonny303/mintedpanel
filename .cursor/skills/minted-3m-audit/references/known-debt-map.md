@@ -6,18 +6,17 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 
 ## P0 — correctness / security / hosted blockers
 
-| ID          | 3M   | Cadence     | Area       | Symptom                                              | Likely bites                                                                    |
-| ----------- | ---- | ----------- | ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
-| GEN-SILENT  | Muri | daily       | panel      | Pre-candidacy skips silent on `/generation`          | **R2 locked — #284 build**; `no_facility` + `pending_verification`              |
-| OPA-RETIRE  | Muri | setup       | panel/db   | Assignments still gate catalog/attach/`create_payer` | **R1 B locked** — retire gate; table dormant; after GEN-SILENT; **not Slice 3** |
-| OPS-S6      | Muri | ops         | ops        | `20260809120100` SOP read may be unapplied; vault    | Apply only that migration; regen types; vault checklist                         |
-| OPS-PURGE   | Muri | ops         | ops        | #275 DELETE merged, not hosted (~270 payers)         | Second PM sign-off; never agent-apply                                           |
-| TRAIN-DUAL  | Mura | once-payer  | extension  | Login/redirect false “New form”; URL bind            | Spike #281 + build #40; no further Train until daily-loop clear                 |
-| TD-51       | Muri | rare        | extension  | Capture click “wiring” = source tripwire only        | jsdom click or effect-owner extract (TD-50 Train phase)                         |
-| LISTPORTALS | Mura | daily/setup | panel      | Browser `listPortals` vs API D6.4                    | **#282** — close when merged                                                    |
-| CAPTURE-PHI | Muri | once-payer  | extension  | Labels/values risk in capture                        | Audit payload; redact; no value logging                                         |
-| VAULT       | Muri | ops         | panel/ops  | E4.4 vault not verified hosted                       | Ops checklist only                                                              |
-| DOC-PICK    | Mura | rare        | panel docs | SCHEMA/CLAUDE pre–D3.3-G prose                       | Truth scrub only                                                                |
+| ID          | 3M   | Cadence    | Area       | Symptom                                              | Likely bites                                                                    |
+| ----------- | ---- | ---------- | ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| GEN-SILENT  | Muri | daily      | panel      | Pre-candidacy skips silent on `/generation`          | **R2 locked — #284 build**; `no_facility` + `pending_verification`              |
+| OPA-RETIRE  | Muri | setup      | panel/db   | Assignments still gate catalog/attach/`create_payer` | **R1 B locked** — retire gate; table dormant; after GEN-SILENT; **not Slice 3** |
+| OPS-S6      | Muri | ops        | ops        | `20260809120100` SOP read may be unapplied; vault    | Apply only that migration; regen types; vault checklist                         |
+| OPS-PURGE   | Muri | ops        | ops        | #275 DELETE merged, not hosted (~270 payers)         | Second PM sign-off; never agent-apply                                           |
+| TRAIN-DUAL  | Mura | once-payer | extension  | Login/redirect false “New form”; URL bind            | Spike #281 + build #40; no further Train until daily-loop clear                 |
+| TD-51       | Muri | rare       | extension  | Capture click “wiring” = source tripwire only        | jsdom click or effect-owner extract (TD-50 Train phase)                         |
+| CAPTURE-PHI | Muri | once-payer | extension  | Labels/values risk in capture                        | Audit payload; redact; no value logging                                         |
+| VAULT       | Muri | ops        | panel/ops  | E4.4 vault not verified hosted                       | Ops checklist only                                                              |
+| DOC-PICK    | Mura | rare       | panel docs | SCHEMA/CLAUDE pre–D3.3-G prose                       | Truth scrub only                                                                |
 
 ## P1 — active muda / mura
 
@@ -47,6 +46,7 @@ Use as a **seed**, not a ceiling. Re-verify in code; mark fixed/obsolete when ev
 - Workflow doc + UAT checklist · Postman skipped (D4)
 - Payer create S0 (#274) · Ready + attach defaults (#277) · Catalog purge **code** (#275)
 - **TD-47 / SOP All-states + D3.3-G** (#280)
+- **LISTPORTALS / D-TD.4** — browser `listPortals` + `usePortals` pickers use D6.4 `isListableRegistryPortal` (same predicate as Work API global leg)
 
 ## Open spikes (awaiting PM)
 
