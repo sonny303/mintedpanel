@@ -16,22 +16,22 @@ Run this skill end-to-end for a last-24-hours audit. Prefer the baked-in
 context below over re-reading `CLAUDE.md` / epics unless a PR is schema-heavy
 or crosses a trust boundary.
 
-| Repo | GitHub | Docs |
-| ---- | ------ | ---- |
-| Panel | `sonny303/mintedpanel` | `docs/wiki/*.md` (source) → `npm run wiki:build` → `docs/wiki/site/` + `public/wiki/` (`/wiki/`) |
-| Extension | `sonny303/minted-extension` | No wiki; Train/Work/fill/capture/touches → panel wiki pages |
+| Repo      | GitHub                      | Docs                                                                                             |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| Panel     | `sonny303/mintedpanel`      | `docs/wiki/*.md` (source) → `npm run wiki:build` → `docs/wiki/site/` + `public/wiki/` (`/wiki/`) |
+| Extension | `sonny303/minted-extension` | No wiki; Train/Work/fill/capture/touches → panel wiki pages                                      |
 
 **Base = `main`** (redesign branch retired). Never self-merge. Never invent
 hosted-ops green.
 
 Progressive disclosure (read these; do not re-derive):
 
-| File | When |
-| ---- | ---- |
+| File                                                             | When                                               |
+| ---------------------------------------------------------------- | -------------------------------------------------- |
 | [references/product-snapshot.md](references/product-snapshot.md) | Always — IA, vocabulary, what “product does” means |
-| [references/wiki-page-map.md](references/wiki-page-map.md) | Always — path globs → wiki pages + skip rules |
-| [references/gh-recipes.md](references/gh-recipes.md) | Always — copy-paste `gh` one-shots |
-| [references/report-template.md](references/report-template.md) | Final reply only |
+| [references/wiki-page-map.md](references/wiki-page-map.md)       | Always — path globs → wiki pages + skip rules      |
+| [references/gh-recipes.md](references/gh-recipes.md)             | Always — copy-paste `gh` one-shots                 |
+| [references/report-template.md](references/report-template.md)   | Final reply only                                   |
 
 ---
 
@@ -79,23 +79,23 @@ Always fetch for each inventoried PR:
 - `statusCheckRollup` (failing check **names**)
 - GraphQL `reviewThreads` → any `isResolved: false` blocks `merged-clean`
 
-| Label | Criteria |
-| ----- | -------- |
-| `merged-clean` | Merged to `main`; checks green or explained; threads resolved; wiki OK or N/A |
-| `merged-wiki-gap` | Merged cleanly but wiki stale/wrong for shipped behavior |
-| `open-blocking` | Failing CI, unresolved threads, conflicts, wrong base |
-| `open-waiting` | Healthy open/draft awaiting human/PM merge |
-| `closed-intentional` | Closed unmerged with explicit reason |
-| `closed-unclear` | Closed unmerged, no disposition |
+| Label                | Criteria                                                                      |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `merged-clean`       | Merged to `main`; checks green or explained; threads resolved; wiki OK or N/A |
+| `merged-wiki-gap`    | Merged cleanly but wiki stale/wrong for shipped behavior                      |
+| `open-blocking`      | Failing CI, unresolved threads, conflicts, wrong base                         |
+| `open-waiting`       | Healthy open/draft awaiting human/PM merge                                    |
+| `closed-intentional` | Closed unmerged with explicit reason                                          |
+| `closed-unclear`     | Closed unmerged, no disposition                                               |
 
 Lane hints (branch name → expectations):
 
-| Pattern | Lane | Notes |
-| ------- | ---- | ----- |
-| `EX.X:…` title / epic branch | Epic | FR trace in body; wiki often in same PR |
-| `cursor/3m-…` | 3M | Draft; PM merges; wiki if UX/API changed |
-| `cursor/…-dc2b` | Cloud agent | Same as 3M unless titled docs-only |
-| `claude/…` | Builder | Devin reviews; never self-merge |
+| Pattern                      | Lane        | Notes                                    |
+| ---------------------------- | ----------- | ---------------------------------------- |
+| `EX.X:…` title / epic branch | Epic        | FR trace in body; wiki often in same PR  |
+| `cursor/3m-…`                | 3M          | Draft; PM merges; wiki if UX/API changed |
+| `cursor/…-dc2b`              | Cloud agent | Same as 3M unless titled docs-only       |
+| `claude/…`                   | Builder     | Devin reviews; never self-merge          |
 
 Panel CI to name in notes: `format`, `typecheck`, `lint`, `lint:epics`,
 `test`, `build`, `migration dry-run`; isolation gate on `/api` deploys.

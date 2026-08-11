@@ -12,9 +12,9 @@ Copy into the final reply. Use `none` instead of omitting sections.
 
 ## PR inventory
 
-| Repo | PR | Title | Created | State | Classification | Notes |
-| ---- | -- | ----- | ------- | ----- | -------------- | ----- |
-| panel | #N | … | ISO | merged/open/… | merged-clean / … | CI / threads / wiki N/A |
+| Repo  | PR  | Title | Created | State         | Classification   | Notes                   |
+| ----- | --- | ----- | ------- | ------------- | ---------------- | ----------------------- |
+| panel | #N  | …     | ISO     | merged/open/… | merged-clean / … | CI / threads / wiki N/A |
 
 ## Resolution checklist
 
@@ -31,17 +31,17 @@ differently in the app/extension). `none` if no merges.
 
 ## Wiki sync
 
-| Page | Needed? | Status | Evidence |
-| ---- | ------- | ------ | -------- |
-| cases.md | Y/N | current / updated / gap / n/a | PR #… or “no product paths” |
-| payer-setup.md | Y/N | … | … |
-| groups.md | Y/N | … | … |
-| providers.md | Y/N | … | … |
-| org-detail.md | Y/N | … | … |
-| reporting-center.md | Y/N | … | … |
-| data-definitions.md | Y/N | … | … |
-| where-did-it-go.md | Y/N | … | … |
-| `npm run wiki:build` | Y/N | done / n/a / gap | … |
+| Page                 | Needed? | Status                        | Evidence                    |
+| -------------------- | ------- | ----------------------------- | --------------------------- |
+| cases.md             | Y/N     | current / updated / gap / n/a | PR #… or “no product paths” |
+| payer-setup.md       | Y/N     | …                             | …                           |
+| groups.md            | Y/N     | …                             | …                           |
+| providers.md         | Y/N     | …                             | …                           |
+| org-detail.md        | Y/N     | …                             | …                           |
+| reporting-center.md  | Y/N     | …                             | …                           |
+| data-definitions.md  | Y/N     | …                             | …                           |
+| where-did-it-go.md   | Y/N     | …                             | …                           |
+| `npm run wiki:build` | Y/N     | done / n/a / gap              | …                           |
 
 ## Ops residual (not docs)
 
