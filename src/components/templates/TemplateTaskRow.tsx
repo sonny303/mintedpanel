@@ -551,8 +551,12 @@ function StepModeBody({
   const selectedPortal = selectedPortalKey
     ? portals.find((p) => normalizePortalKey(p.portalKey) === selectedPortalKey)
     : undefined;
-  const needsPortalRegistration =
-    portals.length === 0 || Boolean(selectedPortalKey && !selectedPortal);
+  // Orphan key only — an empty list while portals are still loading must not
+  // force every Form setup panel open. Zero-portal authors use the amber
+  // "Register portal" CTA, which bumps registerSignal.
+  const needsPortalRegistration = Boolean(
+    portals.length > 0 && selectedPortalKey && !selectedPortal,
+  );
 
   return (
     <>
