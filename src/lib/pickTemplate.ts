@@ -33,8 +33,16 @@
 // PM decision (E4.2 hardening): the supported organization-authored match key is
 // payer + state + group. Specialty is preserved as legacy / non-routing metadata
 // but is NOT a runtime match key. Slice 3 adds All-states as a state wildcard.
+//
+// Multi-state (2026-08-12): a template targets a SET of states (`states text[]`),
+// so "exact state" means the requested state is a MEMBER of that set. The tiers
+// are unchanged — a template covering {NC, SC} is exactly as specific for a NC
+// case as one covering only {NC}, because both name NC deliberately. `All`
+// remains a one-element sentinel and keeps its lower tiers; it is never stored
+// as an expanded 50-code list, which would rank as exact-state and quietly
+// outrank genuinely targeted templates.
 import type { SOPTemplate } from "@/types";
-import { ALL_STATES_SENTINEL } from "@/lib/sopMatchKey";
+import { ALL_STATES_SENTINEL, isAllStates, templateStates } from "@/lib/sopMatchKey";
 
 export { ALL_STATES_SENTINEL };
 
@@ -91,8 +99,13 @@ function candidateRank(
   if (isFallbackTemplate(t)) return 9;
   // Payer must match exactly — never another payer.
   if (t.payerId !== payerId) return null;
-  const exactState = t.state === state;
-  const allState = t.state === ALL_STATES_SENTINEL;
+  // A template carries a SET of states. `All` stays a sentinel rather than an
+  // expanded 50-code list precisely so it keeps ranking BELOW an exact-state
+  // match: naming a state explicitly is a stronger signal than covering
+  // everything, and an expanded list would be indistinguishable from the former.
+  const states = templateStates(t);
+  const allState = isAllStates(states);
+  const exactState = !allState && states.includes(state);
   if (!exactState && !allState) return null;
   const exactGroup = t.groupId === groupId; // the requested group (or both null)
   const anyGroup = t.groupId === null; // group-agnostic template

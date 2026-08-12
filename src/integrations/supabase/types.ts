@@ -3265,6 +3265,7 @@ export type Database = {
           required_profile_attributes: Json;
           specialty: string | null;
           state: string | null;
+          states: string[] | null;
           task_definitions: Json;
           updated_at: string | null;
         };
@@ -3280,6 +3281,7 @@ export type Database = {
           required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
+          states?: string[] | null;
           task_definitions?: Json;
           updated_at?: string | null;
         };
@@ -3295,6 +3297,7 @@ export type Database = {
           required_profile_attributes?: Json;
           specialty?: string | null;
           state?: string | null;
+          states?: string[] | null;
           task_definitions?: Json;
           updated_at?: string | null;
         };
@@ -3825,7 +3828,7 @@ export type Database = {
           p_name: string;
           p_payer_id: string;
           p_required_profile_attributes?: Json;
-          p_state: string;
+          p_states: string[];
           p_task_definitions?: Json;
         };
         Returns: {

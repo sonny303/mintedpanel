@@ -155,6 +155,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       name: "BCBS Kansas NC Enrollment",
       payer_id: BCBS_ID,
       state: "NC",
+      states: ["NC"],
       specialty: null,
       group_id: null,
       archived: false,
@@ -312,7 +313,9 @@ async function fulfillSupabase(route: Route) {
         if (!row) return json({ message: "Template not found" }, 400);
         Object.assign(row, {
           payer_id: body.p_payer_id ?? null,
-          state: body.p_state ?? null,
+          states: body.p_states ?? null,
+          // The RPC keeps the frozen scalar in step with states[0].
+          state: (body.p_states as string[] | null)?.[0] ?? null,
           group_id: body.p_group_id ?? null,
           archived: Boolean(body.p_archived),
           updated_at: nowIso(),
@@ -324,7 +327,8 @@ async function fulfillSupabase(route: Route) {
         org_id: null,
         name: body.p_name,
         payer_id: body.p_payer_id ?? null,
-        state: body.p_state ?? null,
+        states: body.p_states ?? null,
+        state: (body.p_states as string[] | null)?.[0] ?? null,
         specialty: null,
         group_id: body.p_group_id ?? null,
         archived: Boolean(body.p_archived),
@@ -546,9 +550,14 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
     .first()
     .locator("input")
     .fill("Aetna NC Enrollment");
-  // Match key: the payer arrived fixed from the detail; pick the state.
-  await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
-  await page.getByRole("option", { name: "NC", exact: true }).click();
+  // Match key: the payer arrived fixed from the detail; pick the states.
+  // Multi-state (20260812140000) — a popover of toggles, not a single Select.
+  await page.getByRole("button", { name: /Select states/ }).click();
+  await page.getByRole("button", { name: "NC", exact: true }).click();
+  // A second state proves the control is genuinely multi-select and that both
+  // ride the RPC — the whole point of the change.
+  await page.getByRole("button", { name: "SC", exact: true }).click();
+  await page.keyboard.press("Escape");
 
   // Step 2 (Actions): Portal preset seeds one collapsed action;
   // rename it and link the payer's portal (BITE-SOP-TT-01/03/04 — Auto-fill
@@ -575,7 +584,7 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   const body = authored[0].body as Record<string, unknown>;
   expect(body.p_id ?? null).toBeNull();
   expect(body.p_payer_id).toBe(AETNA_ID);
-  expect(body.p_state).toBe("NC");
+  expect(body.p_states).toEqual(["NC", "SC"]);
   expect(body.p_archived).toBe(false);
   expect(Array.isArray(body.p_task_definitions)).toBe(true);
   // No direct table write ever carried the head (RPC-only path).

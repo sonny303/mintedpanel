@@ -1183,7 +1183,19 @@ export interface SOPTemplate {
   orgId: string | null;
   name: string;
   groupId: string | null;
+  /**
+   * FROZEN MIRROR of `states[0]` (multi-state migration `20260812140000`) —
+   * kept per the additive rule so pre-migration readers still see a state.
+   * No new readers: resolution and display read `states`.
+   */
   state: string | null;
+  /**
+   * The states this template applies to. A lone `'All'` is the All-states
+   * wildcard (never an expanded 50-code list — see pickTemplate). Optional so
+   * cached pre-migration rows stay assignable; read it through
+   * `templateStates()`, which falls back to the `state` mirror.
+   */
+  states?: string[] | null;
   specialty: string | null;
   payerId: string | null;
   taskDefinitions: SOPTaskDefinition[];

@@ -2733,6 +2733,61 @@ hosted probes (the contact becomes visible; a non-member org still sees zero
 contacts on an org-scoped payer) and by a full CI-procedure migration dry-run on
 a throwaway Postgres, whose rebuilt DB carries the intended shape.
 
+### Multi-state SOP templates (2026-08-12)
+
+A template targets a SET of states. Before, `sop_templates.state` was a single
+`text`, so an SOP that applies in NC, SC and VA had to be authored three times
+or widened to All-states (dragging in the other 47). ONE repo-only migration
+(`20260812140000_sop_template_multi_state.sql`; **hosted apply is the operator
+step**), verified by a full CI-procedure rebuild on a throwaway Postgres 16 plus
+seven behavioural probes — not by reasoning about the SQL.
+
+- **`states text[]`**, the `payers.states` shape (identical concept, already in
+  this schema, and it let the authoring UI reuse the shipped states multi-select
+  idiom). SCHEMA.md's grain rule nominally points at a child table, but that
+  rule governs facts that VARY BY state (a per-state fee); here the state set IS
+  the match key. Shape CHECK: non-empty, no NULL members, either the lone `'All'`
+  or two-letter codes — expressed over `array_to_string(states, ',')` because **a
+  CHECK cannot contain a subquery** (the first cut used `NOT EXISTS (SELECT …)`
+  and was rejected outright).
+- **`'All'` stays a one-element SENTINEL and is never expanded to 50 codes.**
+  `pickTemplate` ranks All-states BELOW an exact-state match (tiers 5–8 vs 1–4);
+  an expanded list would rank as exact-state and silently start outranking
+  genuinely targeted templates, with no error to notice. Pinned by a test.
+- **`state` (scalar) is a FROZEN MIRROR** of `states[0]` (`providers.group_id`
+  precedent), written by `templatePayload` and by `author_global_sop` on every
+  write. No new readers — resolution goes through `templateStates()` in
+  `sopMatchKey.ts`, which falls back to the mirror so pre-migration rows (and
+  caches) keep resolving. That fallback is why the whole existing
+  `pickTemplate.test.ts` passed unchanged.
+- **`uq_sop_templates_active_org_match` was DROPPED.** Under the mirror,
+  {NC,SC} and {NC,VA} both mirror `state='NC'` and would falsely collide. The
+  replacement invariant is OVERLAP: no two ACTIVE templates for the same (org,
+  payer, group) may share a state. **Not an exclusion constraint** —
+  `EXCLUDE USING gist (… states WITH &&)` needs a gist opclass for `text[]` that
+  `btree_gist` does not provide (array overlap is GIN; GIN cannot back an
+  exclusion constraint; `&` is intarray-only). Enforced instead by BEFORE
+  INSERT/UPDATE trigger `trg_sop_template_state_overlap`, which takes a
+  transaction-scoped **advisory lock** on (org, payer, group) so two concurrent
+  authors cannot both pass the check — proven with two live sessions: the second
+  blocked until the first committed, then failed, leaving exactly one row. The
+  trigger also covers GLOBAL rows, which the dropped index never did.
+  Named error `sop_template_state_overlap: <states>` → `dbErrors.ts`.
+- **`author_global_sop` reissued** `p_state text` → `p_states text[]` (DROP +
+  CREATE, the no-overload precedent); its in-body duplicate check is now an
+  overlap check that names the clashing states.
+- App: `orgSopMatchKeyError` takes `states` (≥1 required; All-mixed-with-codes
+  rejected), `isAllStates`/`templateStates`/`formatSopStateLabel` added;
+  `assertUniqueActiveMatch` uses PostgREST `.overlaps()` and names the actual
+  clashing states; `payerDetailView` counts coverage across ALL of a template's
+  states and marks `isActiveMatch` only when the template wins for EVERY state it
+  claims (winning some would be a half-truth on a badge that reads "this is what
+  runs"). New `TemplateStatesField` (DESIGN-DEBT logged — it duplicates
+  `PayerStatesField`, which the payer-admin module boundary forbids importing).
+  `types.ts` was HAND-EDITED (4 insertions, 1 deletion), not regenerated: hosted
+  apply is the operator step, so a regen would reflect the pre-migration schema
+  and delete the new column.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

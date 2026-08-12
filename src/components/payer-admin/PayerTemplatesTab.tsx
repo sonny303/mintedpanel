@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/StatusPill";
 import { useSops } from "@/hooks/useAdmin";
 import { useProviderGroups } from "@/hooks/useLookups";
+import { formatSopStateLabel } from "@/lib/sopMatchKey";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
 import { fmtDate } from "@/lib/format";
 import {
@@ -172,7 +173,7 @@ export function PayerTemplatesTab({ payer }: { payer: Payer }) {
                           </div>
                         </td>
                         <td className="px-3 py-2.5 text-[13px] text-muted-foreground">
-                          {row.state ?? "Any state"}
+                          {row.states.length === 0 ? "Any state" : formatSopStateLabel(row.states)}
                         </td>
                         <td className="px-3 py-2.5 text-[13px] text-muted-foreground">
                           {row.groupId ? (groupNames.get(row.groupId) ?? "One group") : "Any group"}
