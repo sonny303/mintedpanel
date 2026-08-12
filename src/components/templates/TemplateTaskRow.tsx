@@ -19,6 +19,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { FormStepPanel } from "@/components/templates/FormStepPanel";
 import {
   actionNamePatch,
+  AUTHORING_ACTION_MODES,
+  authoringModeValue,
   executionTypeForActionMode,
   isCollapsedAction,
   newEditableRecipient,
@@ -347,7 +349,7 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
             <div>
               <Label className="text-xs">Mode</Label>
               <Select
-                value={soleStep.stepType}
+                value={authoringModeValue(soleStep.stepType)}
                 onValueChange={(v) => setActionMode(soleStep.id, v as SOPStepType)}
                 disabled={!canEdit}
               >
@@ -355,14 +357,11 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="online_form">Portal form</SelectItem>
-                  <SelectItem value="draft_email">Draft email</SelectItem>
-                  <SelectItem value="phone">Phone</SelectItem>
-                  <SelectItem value="fax">Fax</SelectItem>
-                  <SelectItem value="mail">Mail</SelectItem>
-                  <SelectItem value="pdf" disabled>
-                    PDF (coming soon)
-                  </SelectItem>
+                  {AUTHORING_ACTION_MODES.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -455,9 +454,9 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                     </div>
 
                     <div>
-                      <Label className="text-xs">Step type</Label>
+                      <Label className="text-xs">Mode</Label>
                       <Select
-                        value={step.stepType}
+                        value={authoringModeValue(step.stepType)}
                         onValueChange={(v) => setActionMode(step.id, v as SOPStepType)}
                         disabled={!canEdit}
                       >
@@ -465,14 +464,11 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="online_form">Online form</SelectItem>
-                          <SelectItem value="draft_email">Draft email</SelectItem>
-                          <SelectItem value="phone">Phone</SelectItem>
-                          <SelectItem value="fax">Fax</SelectItem>
-                          <SelectItem value="mail">Mail</SelectItem>
-                          <SelectItem value="pdf" disabled>
-                            PDF (coming soon)
-                          </SelectItem>
+                          {AUTHORING_ACTION_MODES.map((m) => (
+                            <SelectItem key={m.value} value={m.value}>
+                              {m.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

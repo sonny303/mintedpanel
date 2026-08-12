@@ -316,7 +316,7 @@ test.describe("E1.7b SOP versioning (TS-45/46/47)", () => {
 
     await page.getByRole("button", { name: "Actions" }).click();
     await page.getByRole("button", { name: "Add action" }).click();
-    await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
+    await page.getByRole("menuitem", { name: /^Portal$/ }).click();
     await page
       .locator('div:has(> label:text-is("Action 1 name"))')
       .first()

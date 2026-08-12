@@ -326,7 +326,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   }, []);
 
   // --- task-level edits (Actions, via TemplateTaskRow) ---
-  // BITE-SOP-TT-04: Add action opens presets (portal/email/channel), never an
+  // BITE-SOP-TT-04: Add action opens presets (Portal / Email / Custom), never an
   // empty Manual shell with zero steps.
   function addAction(preset: ActionPresetId) {
     setTasks((prev) => [...prev, createActionFromPreset(preset, prev.length * 7)]);
@@ -1246,7 +1246,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
             <div>
               <h2 className="text-sm font-semibold">Actions</h2>
               <p className="text-xs text-muted-foreground">
-                Each action is one checklist item — Mode chooses portal, email, or a channel. A
+                Each action is one checklist item — Mode chooses Portal, Email, or Custom. A
                 single-step action collapses to one name; add another step only when you need a
                 multi-step checklist under the same due date.
               </p>
@@ -1283,7 +1283,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
             <div className="rounded-md border border-dashed border-[#E8E5E0] p-6">
               <EmptyState
                 message="No actions yet"
-                description="Add a portal, email, or channel action to start"
+                description="Add a Portal, Email, or Custom action to start"
               />
             </div>
           ) : (

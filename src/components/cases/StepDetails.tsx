@@ -7,7 +7,7 @@
 // highlighting and the human-in-loop Gmail hand-off — F1.7b.5, never
 // auto-sent), pdf (upload a fillable AcroForm -> field_dictionary mapping ->
 // fill from the case's provider data -> local download), and the E1.7b plain
-// channels (fax/phone/mail). StepBody renders one step's body by stepType —
+// channels (fax/phone/mail/custom). StepBody renders one step's body by stepType —
 // label/checkbox chrome belongs to the caller (the drawer's rows).
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -412,7 +412,7 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
   );
 }
 
-// E1.7b: fax/phone/mail steps render as plain instructions — label/detail,
+// E1.7b: fax/phone/mail/custom steps render as plain instructions — label/detail,
 // data fields, and the turnaround/cadence/artifact metadata; deliberately no
 // portal affordances (those belong to online_form steps only).
 function PlainChannelStep({ step }: { step: SOPStep }) {
@@ -463,7 +463,7 @@ export function StepBody({
   const stepType = step.stepType ?? "online_form";
   if (stepType === "draft_email") return <DraftEmailStep step={step} />;
   if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
-  if (stepType === "fax" || stepType === "phone" || stepType === "mail") {
+  if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
     return <PlainChannelStep step={step} />;
   }
   return <OnlineFormStep step={step} />;
