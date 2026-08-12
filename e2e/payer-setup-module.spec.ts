@@ -133,7 +133,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     user_table_prefs: [],
   };
 
-  // Aetna portal is always present — TS-114b authors a Portal / Auto-fill
+  // Aetna portal is always present — TS-114b authors a Portal
   // action and BITE-SOP-TT-01 hard-blocks publish without a linked portal.
   db.portals.push({
     id: "portal-aetna",
@@ -552,12 +552,12 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.locator('div:has(> label:text-is("State"))').first().getByRole("combobox").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
 
-  // Step 2 (Actions): Portal / Auto-fill preset seeds one collapsed action;
+  // Step 2 (Actions): Portal preset seeds one collapsed action;
   // rename it and link the payer's portal (BITE-SOP-TT-01/03/04 — Auto-fill
   // publish lint requires a portalKey).
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: "Add action" }).click();
-  await page.getByRole("menuitem", { name: /Portal \/ Auto-fill/ }).click();
+  await page.getByRole("menuitem", { name: /^Portal$/ }).click();
   await page
     .locator('div:has(> label:text-is("Action 1 name"))')
     .first()

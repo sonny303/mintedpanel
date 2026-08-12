@@ -932,9 +932,12 @@ export interface SOPStepDataField {
  * How a step is carried out. Absent = "online_form" (backward compat).
  * `fax | phone | mail` added by E1.7b (authorized in its §5 TE-6) so the real
  * business SOPs are representable; they render as plain steps (no portal or
- * email affordances).
+ * email affordances). `custom` is the authoring catch-all that replaces
+ * phone/fax/mail as Add-action / Mode choices (legacy channel values still
+ * round-trip and render the same plain body).
  */
-export type SOPStepType = "draft_email" | "online_form" | "pdf" | "fax" | "phone" | "mail";
+export type SOPStepType =
+  "draft_email" | "online_form" | "pdf" | "fax" | "phone" | "mail" | "custom";
 
 /**
  * E1.7b F1.7b.5 (TE-13) — an AUTHORED draft-email recipient. A recipient is

@@ -70,15 +70,16 @@ Match key: payer = section 1, state = section 1, specialty = ______,
 group = ______ (leave "Any" unless a customer-specific override is needed —
 global templates are shared across orgs; org-specific ones win automatically).
 
-**Add action presets:** use **Add action → Portal / Auto-fill** (or Draft
-email / Phone / Fax / Mail) so each checklist item starts with Mode +
-execution already paired — do not begin from an empty Manual shell. Rename
-the action; pick the portal on the portal path. Add another step under an
-action only when you need a multi-step checklist under the same due date
-(D-SOP-4 A).
+**Add action presets:** use **Add action → Portal** (or Email / Custom) so
+each checklist item starts with Mode + execution already paired — do not
+begin from an empty Manual shell. Rename the action; pick the portal on the
+portal path. Add another step under an action only when you need a multi-step
+checklist under the same due date (D-SOP-4 A).
 
-For each action, list its ordered steps. Step types: `online_form`,
-`draft_email`, `pdf`, `fax`, `phone`, `mail`.
+For each action, list its ordered steps. Modes: Portal (`online_form`),
+Email (`draft_email`), Custom (`custom`). Legacy SOPs may still carry
+`fax` / `phone` / `mail` / `pdf` step types — they remain readable and map to
+Custom in the editor.
 
 | #   | Action name | Execution type (`manual` / Auto-fill=`extension_fill` only) | Steps (type — label — cadence/turnaround) | Due offset / assignee default |
 | --- | ----------- | ----------------------------------------------------------- | ----------------------------------------- | ----------------------------- |

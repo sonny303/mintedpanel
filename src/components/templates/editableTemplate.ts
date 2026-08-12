@@ -216,9 +216,11 @@ export function executionTypeForActionMode(stepType: SOPStepType): ExecutionType
 // BITE-SOP-TT-04 / D-SOP-4 A — "Add action" presets so authors never start from
 // an empty Manual shell. Storage stays task+steps; each preset is one collapsed
 // action (title ≡ sole step label) with Mode/execution derived from step type.
+// Authoring offers Portal · Email · Custom only — phone/fax/mail stay readable
+// on legacy rows but are no longer seed options.
 
 /** Closed preset ids offered by the Template Editor Add-action menu. */
-export type ActionPresetId = "portal_fill" | "draft_email" | "phone" | "fax" | "mail";
+export type ActionPresetId = "portal_fill" | "draft_email" | "custom";
 
 export interface ActionPresetMeta {
   id: ActionPresetId;
@@ -228,49 +230,55 @@ export interface ActionPresetMeta {
   hint: string;
 }
 
-/** Menu order for Add action — portal/email first, then channel seeds. */
+/** Menu order for Add action — Portal, Email, Custom. */
 export const ACTION_PRESETS: readonly ActionPresetMeta[] = [
   {
     id: "portal_fill",
-    label: "Portal / Auto-fill",
-    hint: "Auto-fill · Portal form",
+    label: "Portal",
+    hint: "Auto-fill · online form",
   },
   {
     id: "draft_email",
-    label: "Draft email",
-    hint: "Manual · Draft email",
+    label: "Email",
+    hint: "Manual · draft email",
   },
   {
-    id: "phone",
-    label: "Phone call",
-    hint: "Manual · Phone",
-  },
-  {
-    id: "fax",
-    label: "Fax",
-    hint: "Manual · Fax",
-  },
-  {
-    id: "mail",
-    label: "Mail",
-    hint: "Manual · Mail",
+    id: "custom",
+    label: "Custom",
+    hint: "Manual · freeform checklist item",
   },
 ] as const;
+
+/** Mode select options (same three choices as Add action). */
+export const AUTHORING_ACTION_MODES: readonly {
+  value: "online_form" | "draft_email" | "custom";
+  label: string;
+}[] = [
+  { value: "online_form", label: "Portal" },
+  { value: "draft_email", label: "Email" },
+  { value: "custom", label: "Custom" },
+] as const;
+
+/** Map any stored step type onto the three authoring Modes. Legacy
+ * phone/fax/mail/pdf rows display as Custom without rewriting storage until
+ * the author changes Mode. */
+export function authoringModeValue(
+  stepType: SOPStepType,
+): "online_form" | "draft_email" | "custom" {
+  if (stepType === "online_form" || stepType === "draft_email") return stepType;
+  return "custom";
+}
 
 const PRESET_TITLES: Record<ActionPresetId, string> = {
   portal_fill: "Fill online form",
   draft_email: "Draft email",
-  phone: "Phone call",
-  fax: "Fax",
-  mail: "Mail",
+  custom: "Custom action",
 };
 
 const PRESET_STEP_TYPES: Record<ActionPresetId, SOPStepType> = {
   portal_fill: "online_form",
   draft_email: "draft_email",
-  phone: "phone",
-  fax: "fax",
-  mail: "mail",
+  custom: "custom",
 };
 
 function emptyEditableStep(stepType: SOPStepType, label: string): EditableStep {

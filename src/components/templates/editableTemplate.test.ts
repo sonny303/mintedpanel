@@ -5,7 +5,9 @@
 // stays minimal, exactly like portalKey.
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_PRESETS,
   actionNamePatch,
+  authoringModeValue,
   createActionFromPreset,
   executionTypeForActionMode,
   fromEditable,
@@ -298,9 +300,10 @@ describe("collapsed Action row helpers (BITE-SOP-TT-03)", () => {
     expect(actionNamePatch(multi, "Renamed")).toEqual({ title: "Renamed" });
   });
 
-  it("maps Portal form Mode to Auto-fill and channel Modes to Manual", () => {
+  it("maps Portal Mode to Auto-fill and other Modes to Manual", () => {
     expect(executionTypeForActionMode("online_form")).toBe("extension_fill");
     expect(executionTypeForActionMode("draft_email")).toBe("manual");
+    expect(executionTypeForActionMode("custom")).toBe("manual");
     expect(executionTypeForActionMode("phone")).toBe("manual");
     expect(executionTypeForActionMode("fax")).toBe("manual");
     expect(executionTypeForActionMode("mail")).toBe("manual");
@@ -309,7 +312,7 @@ describe("collapsed Action row helpers (BITE-SOP-TT-03)", () => {
 });
 
 describe("action presets (BITE-SOP-TT-04)", () => {
-  it("seeds Portal / Auto-fill with extension_fill and one online_form step", () => {
+  it("seeds Portal with extension_fill and one online_form step", () => {
     const action = createActionFromPreset("portal_fill", 14);
     expect(action.title).toBe("Fill online form");
     expect(action.dueOffsetDays).toBe(14);
@@ -325,7 +328,7 @@ describe("action presets (BITE-SOP-TT-04)", () => {
     expect(isCollapsedAction(action)).toBe(true);
   });
 
-  it("seeds Draft email with Manual, draft_email, and one empty To row", () => {
+  it("seeds Email with Manual, draft_email, and one empty To row", () => {
     const action = createActionFromPreset("draft_email", 0);
     expect(action.title).toBe("Draft email");
     expect(action.executionType).toBe("manual");
@@ -347,20 +350,29 @@ describe("action presets (BITE-SOP-TT-04)", () => {
     expect(stored.steps[0].emailTemplate).toEqual({ subject: "", body: "" });
   });
 
-  it("seeds Phone / Fax / Mail as Manual + matching stepType", () => {
-    for (const [preset, stepType, title] of [
-      ["phone", "phone", "Phone call"],
-      ["fax", "fax", "Fax"],
-      ["mail", "mail", "Mail"],
-    ] as const) {
-      const action = createActionFromPreset(preset, 7);
-      expect(action.title).toBe(title);
-      expect(action.executionType).toBe("manual");
-      expect(action.steps).toHaveLength(1);
-      expect(action.steps[0].stepType).toBe(stepType);
-      expect(action.steps[0].label).toBe(title);
-      expect(action.steps[0].portalKey).toBe("");
-    }
+  it("seeds Custom as Manual + custom stepType", () => {
+    const action = createActionFromPreset("custom", 7);
+    expect(action.title).toBe("Custom action");
+    expect(action.executionType).toBe("manual");
+    expect(action.steps).toHaveLength(1);
+    expect(action.steps[0].stepType).toBe("custom");
+    expect(action.steps[0].label).toBe("Custom action");
+    expect(action.steps[0].portalKey).toBe("");
+  });
+
+  it("maps legacy channel Modes onto Custom in authoringModeValue", () => {
+    expect(authoringModeValue("online_form")).toBe("online_form");
+    expect(authoringModeValue("draft_email")).toBe("draft_email");
+    expect(authoringModeValue("custom")).toBe("custom");
+    expect(authoringModeValue("phone")).toBe("custom");
+    expect(authoringModeValue("fax")).toBe("custom");
+    expect(authoringModeValue("mail")).toBe("custom");
+    expect(authoringModeValue("pdf")).toBe("custom");
+  });
+
+  it("offers only Portal / Email / Custom in ACTION_PRESETS", () => {
+    expect(ACTION_PRESETS.map((p) => p.id)).toEqual(["portal_fill", "draft_email", "custom"]);
+    expect(ACTION_PRESETS.map((p) => p.label)).toEqual(["Portal", "Email", "Custom"]);
   });
 
   it("assigns distinct ids per seed so React keys never collide", () => {

@@ -8,8 +8,9 @@ import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPEmailRecipient, SOPTaskDefinition } from "@/types";
 
 const STEP_TYPE_LABELS: Record<string, string> = {
-  online_form: "Online form",
-  draft_email: "Draft email",
+  online_form: "Portal",
+  draft_email: "Email",
+  custom: "Custom",
   pdf: "PDF",
   fax: "Fax",
   phone: "Phone",
