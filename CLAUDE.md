@@ -2699,6 +2699,40 @@ change would have failed every payer attach against the old WITH CHECK).
 (OPS-PURGE) — 260 unreferenced global payers await a SECOND PM sign-off. Never
 agent-apply.
 
+### Hotfix 2026-08-12 — payer contacts saved but never appeared
+
+Adding a contact on Payer Detail toasted "Contact added", then the list
+refetched and rendered "No contacts yet". The **write was fine** (row in the
+table, audit row written); the **read** was blocked, which is why the toast was
+honest and the screen was not.
+
+`payer_contacts_select` (`20260727120200`) RESTATES the parent payer's
+visibility — policies do not compose across tables — so it carried a private
+copy of the THEN-current `payers_select`: a global payer is visible only via an
+`org_payer_assignments` row. **OPA-RETIRE (`20260810220000`) widened
+`payers_select` to own-org OR `org_id IS NULL` and stopped `create_payer`
+writing the assignment row, but did not carry the widening into that copy.**
+Post-retirement every manually-created payer has zero assignment rows, so its
+contacts were invisible to every org — including the one that had just written
+them. Migration `20260812130000_payer_contacts_select_opa_retire.sql`
+(**repo-only; hosted apply is the operator step**) restates the current shape.
+SELECT only — the RPC-only write posture is untouched, and it grants no
+visibility the parent payer row does not already have.
+
+**The general lesson, and the guard:** a restated policy is a COPY, and copies
+drift silently — the original migration is not where the bug lives, so
+per-migration assertions cannot catch it. `payerGovernance.test.ts` gained a
+FINAL-STATE sweep: it resolves the last definition of every policy across all
+migrations (filename order = apply order) and fails if any policy **on another
+table** still reads `org_payer_assignments`. The table's own policies are
+exempt — it stays dormant but readable; what must not survive is another
+resource gating THROUGH it. Verified to redden on the real bug (removing the
+fix names `payer_contacts_select` and its file). At authoring time this was the
+LAST such policy in the database; both halves were proven by rollback-wrapped
+hosted probes (the contact becomes visible; a non-member org still sees zero
+contacts on an org-scoped payer) and by a full CI-procedure migration dry-run on
+a throwaway Postgres, whose rebuilt DB carries the intended shape.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

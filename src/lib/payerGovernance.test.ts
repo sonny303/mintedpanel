@@ -468,3 +468,77 @@ describe("OPA-RETIRE — assignment gate retirement (`20260810220000`)", () => {
     expect(body).toContain("'assignedtoorg', false");
   });
 });
+
+// The gate retirement above is only true if NOTHING still gates on the table.
+// It shipped incomplete: `payer_contacts_select` (20260727120200) RESTATES the
+// parent payer's visibility — policies do not compose across tables — so it
+// carried its own private copy of the old assignment-gated rule, and the
+// OPA-RETIRE sweep missed it. Every manually-created payer has zero assignment
+// rows post-retirement, so its contacts were invisible to every org, including
+// the one that had just written them: "Contact added", then "No contacts yet".
+//
+// Per-migration assertions could not catch that — the stale copy lived in a
+// migration OPA-RETIRE never touched. This resolves the FINAL definition of
+// every policy across all migrations (last writer wins, filename order = apply
+// order) and asserts the surviving bodies are assignment-free.
+describe("no policy still gates on org_payer_assignments (final state)", () => {
+  const migrationsDir = join(ROOT, "supabase/migrations");
+
+  /** Latest surviving body per policy name, in apply order. */
+  function resolveFinalPolicies(): Map<string, { body: string; table: string; file: string }> {
+    const final = new Map<string, { body: string; table: string; file: string }>();
+    const files = readdirSync(migrationsDir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    for (const file of files) {
+      const sql = readFileSync(join(migrationsDir, file), "utf8")
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("--"))
+        .join("\n");
+      // Policy definitions carry no statement-internal semicolons, so the next
+      // `;` is a sound terminator.
+      const re = /create\s+policy\s+([a-z0-9_]+)\s+on\s+(?:public\.)?([a-z0-9_]+)[^;]*?;/gis;
+      for (const match of sql.matchAll(re)) {
+        final.set(match[1].toLowerCase(), {
+          body: match[0].toLowerCase(),
+          table: match[2].toLowerCase(),
+          file,
+        });
+      }
+    }
+    return final;
+  }
+
+  it("resolves the policies this rule is about (guards the parser)", () => {
+    const final = resolveFinalPolicies();
+    // If a rename ever makes these lookups miss, the sweep below would pass
+    // vacuously — so assert the parser still sees them.
+    expect(final.has("payers_select")).toBe(true);
+    expect(final.has("payer_contacts_select")).toBe(true);
+    expect(final.has("sop_templates_select")).toBe(true);
+  });
+
+  it("leaves no live policy on ANOTHER table reading org_payer_assignments", () => {
+    // The table's own policies legitimately name it — it stays dormant but
+    // readable. What must not survive is another resource gating THROUGH it.
+    const offenders = [...resolveFinalPolicies().entries()]
+      .filter(
+        ([, def]) =>
+          def.table !== "org_payer_assignments" && def.body.includes("org_payer_assignments"),
+      )
+      .map(([name, def]) => `${name} on ${def.table} (last defined in ${def.file})`);
+    expect(offenders).toEqual([]);
+  });
+
+  it("payer_contacts_select still restates the CURRENT payers_select shape", () => {
+    const final = resolveFinalPolicies();
+    const contacts = final.get("payer_contacts_select");
+    expect(contacts).toBeDefined();
+    // Visibility follows the parent payer — own-org OR any global row — and
+    // the restatement stays SELECT-only (writes are RPC-only).
+    expect(contacts?.body).toContain("public.payers");
+    expect(contacts?.body).toMatch(/org_id\s+in\s+\(select\s+user_org_ids\(\)\)/);
+    expect(contacts?.body).toMatch(/p\.org_id\s+is\s+null/);
+    expect(contacts?.body).toContain("for select");
+  });
+});
