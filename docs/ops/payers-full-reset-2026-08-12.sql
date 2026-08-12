@@ -1,0 +1,30 @@
+-- Payers full reset (2026-08-12).
+--
+-- Ran manually against hosted (fkvuhfsqcmujywzgczmc) via Supabase MCP, NOT as
+-- a repo migration -- this is a data reset for a fresh testing pass, not a
+-- schema change, and AGENTS.md's additive-migration rule governs DDL, not a
+-- one-off DML reset like this.
+--
+-- Context: PR #275 (20260810120000_purge_unreferenced_catalog_payers.sql)
+-- had already trimmed the global catalog from 270 payers to 2
+-- (Aetna, source='manual'; Cigna Healthcare, held by one payer_contacts row)
+-- earlier the same day. PM/founder then asked to clear the remaining two and
+-- start testing fresh, scoped explicitly to payers only -- orgs, providers,
+-- and all other org-scoped data were left untouched.
+--
+-- Pre-flight (both rows checked against all fifteen FK columns that
+-- reference payers, per the purge migration's own referencing-table list):
+-- Aetna had zero references anywhere; Cigna Healthcare had exactly one
+-- payer_contacts row (ON DELETE CASCADE). No blocking references existed on
+-- either row, so a plain DELETE was safe.
+--
+-- Result: payers 2 -> 0, payer_contacts 1 -> 0 (cascade, expected).
+-- organizations stayed at 2, credential_cases stayed at 0, providers stayed
+-- at 7 -- confirms the reset touched only what was asked.
+--
+-- New payers are created via the create_payer RPC only (payers is
+-- member-SELECT-only per the 20260718120000 lockdown + E6.7's RPC-only
+-- write path) -- there is no bulk reseed script for this table by design;
+-- the catalog is meant to be built by using the app, not seeded.
+
+DELETE FROM public.payers;
