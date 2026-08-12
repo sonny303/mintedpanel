@@ -2,7 +2,6 @@
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
 import { memo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -545,6 +544,16 @@ function StepModeBody({
   removeDataField: TemplateTaskRowProps["removeDataField"];
   onPortalKeyChange: (portalKey: string) => void;
 }) {
+  // Portal registration lives in Form setup (E6.5) — Admin > Portals redirects
+  // away. The picker CTA bumps this signal so FormStepPanel opens the dialog.
+  const [registerSignal, setRegisterSignal] = useState(0);
+  const selectedPortalKey = normalizePortalKey(step.portalKey);
+  const selectedPortal = selectedPortalKey
+    ? portals.find((p) => normalizePortalKey(p.portalKey) === selectedPortalKey)
+    : undefined;
+  const needsPortalRegistration =
+    portals.length === 0 || Boolean(selectedPortalKey && !selectedPortal);
+
   return (
     <>
       {step.stepType === "draft_email" ? (
@@ -643,16 +652,19 @@ function StepModeBody({
                 templatePayerId={templatePayerId}
                 canEdit={canEdit}
                 onChange={onPortalKeyChange}
+                onRequestRegister={canEdit ? () => setRegisterSignal((n) => n + 1) : undefined}
               />
               {/* E6.5 F6.5.2 — register/train/prove without leaving the
                   editor. Self-contained (own cached hooks); renders
-                  collapsed so Step 3 typing never pays for it. */}
+                  collapsed so Step 3 typing never pays for it. Auto-opens
+                  when nothing is registered yet so Register portal is visible. */}
               <FormStepPanel
-                portalKey={normalizePortalKey(step.portalKey)}
+                portalKey={selectedPortalKey}
                 templatePayerId={templatePayerId}
                 canEdit={canEdit}
                 isGlobalAuthoring={isGlobalAuthoring}
-                defaultOpen={autoOpenStepId === step.id}
+                defaultOpen={autoOpenStepId === step.id || needsPortalRegistration}
+                openRegisterSignal={registerSignal}
                 onPortalKeyChange={onPortalKeyChange}
               />
             </>
@@ -984,12 +996,16 @@ function PortalStepSelect({
   templatePayerId,
   canEdit,
   onChange,
+  onRequestRegister,
 }: {
   step: EditableStep;
   portals: Portal[];
   templatePayerId: string | null;
   canEdit: boolean;
   onChange: (portalKey: string) => void;
+  /** Opens Form setup's Register portal dialog — the live registration path
+   * after Admin > Portals became a redirect shell. */
+  onRequestRegister?: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
 
@@ -1011,6 +1027,18 @@ function PortalStepSelect({
   const canToggle =
     Boolean(templatePayerId) && matching.length > 0 && portals.length > matching.length;
 
+  const registerCta = onRequestRegister ? (
+    <button
+      type="button"
+      onClick={onRequestRegister}
+      className="font-medium underline underline-offset-2 hover:opacity-80"
+    >
+      Register portal
+    </button>
+  ) : (
+    <span className="font-medium">Form setup</span>
+  );
+
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
@@ -1028,11 +1056,12 @@ function PortalStepSelect({
 
       {portals.length === 0 ? (
         <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
-          No portal registered{templatePayerId ? " for this payer" : ""} — add one in{" "}
-          <Link to="/admin/portals" className="underline underline-offset-2">
-            Admin &gt; Portals
-          </Link>
-          .
+          No portal registered{templatePayerId ? " for this payer" : ""}.{" "}
+          {onRequestRegister ? (
+            <>{registerCta} in Form setup below.</>
+          ) : (
+            <>Open Form setup below to register one.</>
+          )}
         </div>
       ) : (
         <>
@@ -1055,17 +1084,14 @@ function PortalStepSelect({
           </Select>
 
           {!selectedKey ? (
-            <p className="text-[11px] text-[#92400E]">
-              This step won&apos;t be linked for extension fill.
-            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[#92400E]">
+              <span>This step won&apos;t be linked for extension fill.</span>
+              {onRequestRegister ? <>{registerCta} to link one.</> : null}
+            </div>
           ) : !selected ? (
             <div className="rounded-md border border-[#FDE68A] bg-[#FEF3C7] px-3 py-2 text-[11px] text-[#92400E]">
               Saved portal key <code>{selectedKey}</code> isn&apos;t in your registry — pick one
-              above or add it in{" "}
-              <Link to="/admin/portals" className="underline underline-offset-2">
-                Admin &gt; Portals
-              </Link>
-              .
+              above or {registerCta}.
             </div>
           ) : null}
         </>

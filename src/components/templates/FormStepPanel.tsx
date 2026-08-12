@@ -15,7 +15,7 @@
 // auto-fillable mapping; a pass stamps the portal `proven_at` (the funnel's
 // Proven state). Capture itself stays extension-side (propose maps from the
 // live page); this panel takes over from there.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, ChevronDown, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,10 @@ export interface FormStepPanelProps {
    * panel EXPANDED so the link lands on the work. Read once at mount; every
    * other panel keeps the collapsed default (the latency contract). */
   defaultOpen?: boolean;
+  /** Bumped by the portal picker's "Register portal" CTA — expands Form setup
+   * and opens the register dialog. Admin > Portals is a redirect shell; this
+   * is the only live registration surface. */
+  openRegisterSignal?: number;
   /** Writes the registered portal's key back onto the step. */
   onPortalKeyChange?: (portalKey: string) => void;
 }
@@ -94,11 +98,21 @@ export function FormStepPanel({
   canEdit,
   isGlobalAuthoring,
   defaultOpen,
+  openRegisterSignal = 0,
   onPortalKeyChange,
 }: FormStepPanelProps) {
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
   const [running, setRunning] = useState(false);
+
+  // PortalStepSelect's "Register portal" button (and the empty-registry path)
+  // bumps the signal so registration stays one click away without a dead
+  // Admin > Portals hop. Ignore the initial 0 so ordinary mounts stay quiet.
+  useEffect(() => {
+    if (openRegisterSignal <= 0) return;
+    setOpen(true);
+    setRegisterOpen(true);
+  }, [openRegisterSignal]);
 
   const orgId = useActiveOrgId() ?? "no-org";
   const qc = useQueryClient();
