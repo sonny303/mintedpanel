@@ -64,7 +64,17 @@
 
 - **All listed open PRs** — ready for human merge in the order above (CI build + Playwright/ci green as of audit close).
 - **OPA #285 / LISTPORTALS #282 / CAP #290** — code merge ≠ hosted migration live; operator apply separately.
-- **#275 catalog DELETE** — still needs second PM sign-off (ops residual).
+- **#275 catalog DELETE** — ✅ signed off and applied to hosted 2026-08-12. Live
+  result: 270 → 2 payers remaining (Aetna, `source='manual'`; Cigna Healthcare,
+  held by a `payer_contacts` row). Lower than the PR's rolled-back dry-run
+  (which projected 8) because a full org/data wipe ran on hosted between the
+  PR's 2026-08-10 dry run and this apply, so nearly all the referencing rows
+  (`credential_cases`, `payer_network_targets`, `org_payer_assignments`,
+  `enrollment_facts`, `case_generation_run_rows` all at 0) were already gone —
+  not a defect in the guard, which re-derives its referenced set live rather
+  than trusting the PR snapshot. Re-verified post-apply that every survivor
+  is legitimately kept (manual source or a live FK) and that no referencing
+  table lost rows it shouldn't have.
 
 ## Merged changes → product understanding
 
@@ -92,7 +102,7 @@
 
 ## Ops residual (not docs)
 
-- Hosted apply: OPA-RETIRE migration (#285), CAP-02 propose refresh (#290), #275 purge second sign-off, vault checklist.
+- Hosted apply: OPA-RETIRE migration (#285), CAP-02 propose refresh (#290), vault checklist. #275 purge is now DONE (see checklist above).
 - Never claim production-live from repo-green alone.
 
 ## Follow-ups opened this run
