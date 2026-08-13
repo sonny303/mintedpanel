@@ -5,6 +5,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, currentUserRole, requireActiveOrg, writeAudit } from "@/lib/audit";
+import { isEligibleCaseFacility } from "@/lib/caseFacility";
 import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -345,6 +346,85 @@ export async function setPayerReference(caseId: string, value: string | null): P
     before: { payerReferenceId: priorValue },
     after: { payerReferenceId: trimmed },
     description: "Updated payer reference ID",
+  });
+}
+
+/** Overwrite the case's facility_id (latest wins). Must be a facility the
+ * provider is assigned to under the case's group — or null to clear. Mirrors
+ * setPayerReference: org-scoped read, audited before→after, no status change. */
+export async function setCaseFacility(caseId: string, facilityId: string | null): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const { data: prior, error: readErr } = await supabase
+    .from("credential_cases")
+    .select("id, provider_id, group_id, facility_id")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!prior) throw new Error("Case not found");
+
+  const priorFacilityId = (prior.facility_id as string | null) ?? null;
+  const providerId = prior.provider_id as string;
+  const groupId = (prior.group_id as string | null) ?? null;
+
+  if (facilityId === priorFacilityId) return;
+
+  if (facilityId != null) {
+    const [{ data: facilities, error: facErr }, { data: assignments, error: asnErr }] =
+      await Promise.all([
+        supabase
+          .from("facilities")
+          .select("id, group_id, is_active")
+          .eq("org_id", orgId),
+        supabase
+          .from("provider_facility_assignments")
+          .select("provider_id, facility_id, is_primary")
+          .eq("org_id", orgId)
+          .eq("provider_id", providerId),
+      ]);
+    if (facErr) throw facErr;
+    if (asnErr) throw asnErr;
+
+    const eligible = isEligibleCaseFacility(
+      facilityId,
+      providerId,
+      groupId,
+      (assignments ?? []).map((a) => ({
+        providerId: (a.provider_id as string | null) ?? null,
+        facilityId: (a.facility_id as string | null) ?? null,
+        isPrimary: (a.is_primary as boolean | null) ?? null,
+      })),
+      (facilities ?? []).map((f) => ({
+        id: f.id as string,
+        groupId: (f.group_id as string | null) ?? null,
+        isActive: Boolean(f.is_active),
+      })),
+    );
+    if (!eligible) {
+      throw new Error(
+        "Facility must be one of this provider's locations under the case's group.",
+      );
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("credential_cases")
+    .update({ facility_id: facilityId } as CredentialCaseUpdate)
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .select("id, facility_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Case not found");
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "case",
+    entityId: caseId,
+    before: { facilityId: priorFacilityId },
+    after: { facilityId },
+    description: "Updated case facility",
   });
 }
 

@@ -47,6 +47,9 @@ export interface GenerationConfirmEntry {
     sopVersion: number | null;
     sopResolutionTier: SopResolutionTier | null;
   } | null;
+  /** Facility stamped at confirm time (primary or sole under the case's
+   * group; null when ambiguous / none). Editable after create on case detail. */
+  facilityId?: string | null;
 }
 
 export interface GenerationConfirmResult {
@@ -136,6 +139,7 @@ export async function confirmGenerationBatch(
           payerId: row.payerId,
           state: row.state,
           groupId: row.groupId,
+          facilityId: entry.facilityId ?? null,
           generationRunId: run.id,
         },
         entry.tasks,

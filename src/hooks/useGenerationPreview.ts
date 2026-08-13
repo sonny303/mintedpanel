@@ -12,6 +12,7 @@ import { useActiveOrgId } from "@/lib/auth-store";
 import { FIVE_MINUTES, queryKeys } from "@/hooks/queryKeys";
 import { useFacilities, useOrgStateLicenses, useProviderGroups } from "@/hooks/useLookups";
 import { useProviderAssignments, useProviderGroupAssignments } from "@/hooks/useProviders";
+import { resolveCaseFacilityId } from "@/lib/caseFacility";
 import { usePayers, useStatusConfigs } from "@/hooks/useAdmin";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import {
@@ -362,16 +363,25 @@ export function useConfirmGeneration() {
   const providersQ = useProviders();
   const groupsQ = useProviderGroups();
   const templatesQ = useSops();
+  const facilitiesQ = useFacilities();
+  const facilityAssignmentsQ = useProviderAssignments();
 
   const ready =
-    providersQ.data !== undefined && groupsQ.data !== undefined && templatesQ.data !== undefined;
+    providersQ.data !== undefined &&
+    groupsQ.data !== undefined &&
+    templatesQ.data !== undefined &&
+    facilitiesQ.data !== undefined &&
+    facilityAssignmentsQ.data !== undefined;
 
   const mutation = useMutation({
     mutationFn: async (vars: ConfirmGenerationVars): Promise<GenerationConfirmResult> => {
       const rows = vars.rows;
       const providerById = new Map((providersQ.data ?? []).map((p) => [p.id, p]));
       const groupById = new Map((groupsQ.data ?? []).map((g) => [g.id, g]));
+      const facilityById = new Map((facilitiesQ.data ?? []).map((f) => [f.id, f]));
       const templates = templatesQ.data ?? [];
+      const facilities = facilitiesQ.data ?? [];
+      const facilityAssignments = facilityAssignmentsQ.data ?? [];
 
       const basePlan = planGenerationConfirm(rows);
       // E4.2 TE-14 — narrow the CREATE set to the released subset (gated rows
@@ -397,6 +407,15 @@ export function useConfirmGeneration() {
       const entries: GenerationConfirmEntry[] = plan.toCreate.map((row) => {
         const provider = providerById.get(row.providerId);
         const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
+        // Stamp the group's primary (or sole) facility onto the case so
+        // detail/profile/fill resolve a location; leave null when ambiguous.
+        const facilityId = resolveCaseFacilityId(
+          row.providerId,
+          row.groupId,
+          facilityAssignments,
+          facilities,
+        );
+        const facility = facilityId ? (facilityById.get(facilityId) ?? null) : null;
         const tasks =
           provider && template
             ? stampExecutionTypes(
@@ -405,7 +424,7 @@ export function useConfirmGeneration() {
                     template,
                     provider,
                     groupById.get(row.groupId) ?? null,
-                    null,
+                    facility,
                     null,
                   ),
                   template,
@@ -415,7 +434,12 @@ export function useConfirmGeneration() {
             : [];
         // Record the resolution provenance from the SAME selection the tasks
         // were stamped from — the created run row snapshots it (E4.2).
-        return { row, tasks, provenance: templateProvenance(template) };
+        return {
+          row,
+          tasks,
+          provenance: templateProvenance(template),
+          facilityId,
+        };
       });
       const scopeRecord = releaseScopeRecord(scope, released.length, basePlan.toCreate.length);
       return confirmGenerationBatch(plan, entries, scopeRecord);

@@ -30,10 +30,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCases, useCreateCase } from "@/hooks/useCases";
-import { useProviders, useProviderGroupAssignments } from "@/hooks/useProviders";
-import { useProviderGroups } from "@/hooks/useLookups";
+import {
+  useProviders,
+  useProviderAssignments,
+  useProviderGroupAssignments,
+} from "@/hooks/useProviders";
+import { useFacilities, useProviderGroups } from "@/hooks/useLookups";
 import { usePayers, useSops } from "@/hooks/useAdmin";
 import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
+import { resolveCaseFacilityId } from "@/lib/caseFacility";
 import { networkPayerIdsFromTargets } from "@/lib/payerSetup";
 import { pickTemplate } from "@/lib/pickTemplate";
 import { resolveTemplate } from "@/lib/sopResolver";
@@ -53,6 +58,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
   const providersQ = useProviders();
   const groupsQ = useProviderGroups();
   const providerAssignmentsQ = useProviderGroupAssignments();
+  const facilityAssignmentsQ = useProviderAssignments();
+  const facilitiesQ = useFacilities();
   const payersQ = usePayers();
   const targetsQ = usePayerNetworkTargets();
   const templatesQ = useSops();
@@ -127,6 +134,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     providersQ.isLoading ||
     groupsQ.isLoading ||
     providerAssignmentsQ.isLoading ||
+    facilityAssignmentsQ.isLoading ||
+    facilitiesQ.isLoading ||
     payersQ.isLoading ||
     targetsQ.isLoading ||
     templatesQ.isLoading ||
@@ -135,6 +144,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     providersQ.isError ||
     groupsQ.isError ||
     providerAssignmentsQ.isError ||
+    facilityAssignmentsQ.isError ||
+    facilitiesQ.isError ||
     payersQ.isError ||
     targetsQ.isError ||
     templatesQ.isError ||
@@ -145,6 +156,8 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
     void providersQ.refetch();
     void groupsQ.refetch();
     void providerAssignmentsQ.refetch();
+    void facilityAssignmentsQ.refetch();
+    void facilitiesQ.refetch();
     void payersQ.refetch();
     void targetsQ.refetch();
     void templatesQ.refetch();
@@ -162,9 +175,21 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
       selection.state,
       selection.groupId,
     );
+    // Stamp primary-or-sole facility under the selected group (null when
+    // ambiguous); case detail can edit it after create.
+    const facilityId = resolveCaseFacilityId(
+      selection.providerId,
+      selection.groupId,
+      facilityAssignmentsQ.data ?? [],
+      facilitiesQ.data ?? [],
+    );
+    const facility =
+      facilityId != null
+        ? ((facilitiesQ.data ?? []).find((f) => f.id === facilityId) ?? null)
+        : null;
     // E2.2 F2.2.1: stamp the version resolved here (same head row, TE-2).
     const tasks = template
-      ? stampTasks(resolveTemplate(template, provider, group, null, null), template)
+      ? stampTasks(resolveTemplate(template, provider, group, facility, null), template)
       : [];
 
     createCase.mutate(
@@ -174,6 +199,7 @@ export function ManualCaseModal({ onClose }: ManualCaseModalProps) {
           payerId: selection.payerId,
           state: selection.state,
           groupId: selection.groupId,
+          facilityId,
           // generationRunId stays unset — the F2.1.4 run-less trail.
         },
         tasks,
