@@ -3,6 +3,7 @@ import {
   classifyFieldMap,
   displayNameOf,
   sectionNameOf,
+  sectionRenamePatches,
   groupRegistryRows,
   registryCoverage,
   isManualSelector,
@@ -133,6 +134,22 @@ describe("display name and section fallbacks", () => {
   it("ignores whitespace-only names rather than rendering a blank heading", () => {
     expect(sectionNameOf(row({ section: "   ", formSection: "Billing" }))).toBe("Billing");
     expect(displayNameOf(row({ displayLabel: "  ", fieldLabel: "Tax ID" }))).toBe("Tax ID");
+  });
+
+  it("sectionRenamePatches writes every row id and clears on blank", () => {
+    const rows = [row({ id: "a" }), row({ id: "b" })];
+    expect(sectionRenamePatches(rows, "Provider info")).toEqual([
+      { id: "a", section: "Provider info" },
+      { id: "b", section: "Provider info" },
+    ]);
+    expect(sectionRenamePatches(rows, "   ")).toEqual([
+      { id: "a", section: null },
+      { id: "b", section: null },
+    ]);
+    expect(sectionRenamePatches(rows, null)).toEqual([
+      { id: "a", section: null },
+      { id: "b", section: null },
+    ]);
   });
 });
 

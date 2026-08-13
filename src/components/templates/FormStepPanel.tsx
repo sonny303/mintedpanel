@@ -64,7 +64,12 @@ import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
 import type { PortalFieldMap } from "@/types";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
-import { classifyFieldMap, registryCoverage, type RegistryRow } from "@/lib/fieldRegistry";
+import {
+  classifyFieldMap,
+  registryCoverage,
+  sectionRenamePatches,
+  type RegistryRow,
+} from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
 
@@ -259,6 +264,27 @@ export function FormStepPanel({
       invalidateMaps();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not rename the field");
+    }
+  }
+
+  // Section headings write the admin `section` column on every row in the
+  // group (same shared-tier gate as field rename). Clearing falls back to the
+  // captured form_section / page step.
+  async function renameRegistrySection(rows: RegistryRow[], section: string | null) {
+    if (rows.length === 0) return;
+    const shared = rows
+      .map((row) => maps.find((m) => m.id === row.id))
+      .filter((m): m is NonNullable<typeof m> => Boolean(m));
+    if (shared.length === 0) return;
+    if (shared.some((m) => m.orgId !== null)) {
+      toast.error("Renaming sections applies to the shared form library, not to an org override.");
+      return;
+    }
+    try {
+      await renameMut.mutateAsync(sectionRenamePatches(shared, section));
+      invalidateMaps();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rename the section");
     }
   }
 
@@ -463,6 +489,7 @@ export function FormStepPanel({
                 groupedTokens={groupedTokens}
                 onDecide={decideRegistry}
                 onRename={renameRegistryRow}
+                onRenameSection={renameRegistrySection}
               />
             ) : null}
             {portal && maps.length > 0 && coverage.needsDecision === 0 ? (

@@ -140,6 +140,18 @@ export function sectionNameOf(row: RegistryRow): string {
   return row.section?.trim() || row.formSection?.trim() || row.pageStep?.trim() || DEFAULT_SECTION;
 }
 
+/** Batch patches that rename every row in a section group. Empty / whitespace
+ * clears the admin `section` so the locked fallback (formSection → pageStep →
+ * Fields) takes over again — same clear semantic as field display_label. */
+export function sectionRenamePatches(
+  rows: readonly Pick<RegistryRow, "id">[],
+  section: string | null,
+): { id: string; section: string | null }[] {
+  const next = typeof section === "string" ? section.trim() : "";
+  const value = next === "" ? null : next;
+  return rows.map((row) => ({ id: row.id, section: value }));
+}
+
 export interface RegistrySection {
   name: string;
   rows: RegistryRow[];

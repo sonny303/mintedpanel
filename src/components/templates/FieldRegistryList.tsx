@@ -42,6 +42,8 @@ interface Props {
   groupedTokens: TokenGroup[];
   onDecide: (row: RegistryRow, decision: RegistryDecision) => void | Promise<void>;
   onRename: (row: RegistryRow, displayLabel: string | null) => void | Promise<void>;
+  /** Rename the admin section for every row in a group (writes `section`). */
+  onRenameSection: (rows: RegistryRow[], section: string | null) => void | Promise<void>;
 }
 
 const PILL: Record<FieldDecision, { label: string; tone: StatusColor }> = {
@@ -60,6 +62,7 @@ export function FieldRegistryList({
   groupedTokens,
   onDecide,
   onRename,
+  onRenameSection,
 }: Props) {
   const sections = groupRegistryRows(rows, staleIds);
   if (sections.length === 0) return null;
@@ -69,11 +72,16 @@ export function FieldRegistryList({
       {sections.map((section) => (
         <div key={section.name} className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[12px] font-medium">{section.name}</p>
+            <SectionHeader
+              name={section.name}
+              rows={section.rows}
+              canEdit={canEdit}
+              onRenameSection={onRenameSection}
+            />
             {/* Per-section progress: "Tax ID: 2 of 5 mapped" is the level a
                 trainer actually works at — one aggregate count over 23 fields
                 says nothing about which part of the form is unfinished. */}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="shrink-0 text-[11px] text-muted-foreground">
               {section.mapped} of {section.total} mapped in section
             </p>
           </div>
@@ -93,6 +101,96 @@ export function FieldRegistryList({
         </div>
       ))}
     </div>
+  );
+}
+
+/** Inline rename for a section heading. Writes the admin `section` column on
+ * every row in the group — the captured `form_section` / page step stay as
+ * fallback evidence, mirroring field display_label vs field_label (D6/D7). */
+function SectionHeader({
+  name,
+  rows,
+  canEdit,
+  onRenameSection,
+}: {
+  name: string;
+  rows: RegistryRow[];
+  canEdit: boolean;
+  onRenameSection: Props["onRenameSection"];
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
+
+  // Evidence under a rename: the payer's captured heading, when it differs.
+  const captured =
+    rows
+      .map((r) => r.formSection?.trim() || r.pageStep?.trim() || "")
+      .find((s) => s !== "" && s !== name) ?? null;
+
+  function startRename() {
+    setDraftName(name);
+    setRenaming(true);
+  }
+
+  function commitRename() {
+    const next = draftName.trim();
+    setRenaming(false);
+    if (next === name) return;
+    // Empty clears the admin section and falls back to the captured heading.
+    void onRenameSection(rows, next === "" ? null : next);
+  }
+
+  if (renaming) {
+    return (
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+        <Input
+          autoFocus
+          value={draftName}
+          onChange={(e) => setDraftName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitRename();
+            if (e.key === "Escape") setRenaming(false);
+          }}
+          placeholder={captured ?? name}
+          aria-label={`Rename section ${name}`}
+          className="h-7 w-64 text-[12px]"
+        />
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={commitRename}>
+          <Check className="h-3.5 w-3.5" />
+          <span className="sr-only">Save section name</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
+          onClick={() => setRenaming(false)}
+        >
+          <X className="h-3.5 w-3.5" />
+          <span className="sr-only">Cancel section rename</span>
+        </Button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span className="flex items-center gap-1 text-[12px] font-medium">
+        {name}
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={startRename}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={`Rename section ${name}`}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        ) : null}
+      </span>
+      {captured ? (
+        <span className="text-[11px] text-muted-foreground">Captured: {captured}</span>
+      ) : null}
+    </span>
   );
 }
 
