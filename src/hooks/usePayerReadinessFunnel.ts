@@ -39,7 +39,14 @@ export function usePayerReadinessFunnel(): PayerReadinessFunnelData {
       fieldMaps: fieldMapsQ.data ?? [],
       driftByPortal: drift.driftByPortal,
     });
-  }, [resolved, payersQ.data, templatesQ.data, portalsQ.data, fieldMapsQ.data, drift.driftByPortal]);
+  }, [
+    resolved,
+    payersQ.data,
+    templatesQ.data,
+    portalsQ.data,
+    fieldMapsQ.data,
+    drift.driftByPortal,
+  ]);
 
   return {
     rows,
