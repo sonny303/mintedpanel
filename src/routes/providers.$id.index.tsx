@@ -67,6 +67,7 @@ import {
 } from "@/hooks/useLookups";
 import type { StateLicense } from "@/services/lookups";
 import { useCases, useCaseDenialEntries, useDenialReasonCodes } from "@/hooks/useCases";
+import { useEnrollmentReadiness } from "@/hooks/useEnrollmentReadiness";
 import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { usePayers } from "@/hooks/useAdmin";
 import { useCanWrite } from "@/lib/permissions";
@@ -115,6 +116,11 @@ function ProviderRecordPage() {
   const canWrite = useCanWrite();
   const location = useLocation();
   const navigate = useNavigate();
+  // Warm the Cases-tab caches on landing. Radix unmounts inactive tab
+  // content, so without this the readiness/generation inputs only start
+  // fetching when the user clicks Cases — and a stale 5-minute facts
+  // cache then looks like "no group / payer" until refresh.
+  useEnrollmentReadiness();
 
   const [activeTab, setActiveTab] = useState<string>(
     () => tabFromHash(location.hash) ?? "identity",

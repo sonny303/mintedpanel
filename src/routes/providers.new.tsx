@@ -10,23 +10,20 @@
 // `starter` column stays dormant per the additive rule.
 import { useEffect, useMemo } from "react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useActiveOrgId, useAuthStore, useRole } from "@/lib/auth-store";
-import { queryKeys } from "@/hooks/queryKeys";
+import { useAuthStore, useRole } from "@/lib/auth-store";
+import { useCreateProviderWithDetails } from "@/hooks/useProviders";
 import { useLaunchLocation } from "@/hooks/useLaunches";
 import {
   ProviderForm,
   emptyProviderFormState,
   type ProviderFormState,
 } from "@/components/providers/ProviderForm";
-import {
-  createProviderWithDetails,
-  type CreateProviderWithDetailsInput,
-  type CreateProviderWithDetailsResult,
-  type LicenseInput,
-  type ProviderInput,
+import type {
+  CreateProviderWithDetailsResult,
+  LicenseInput,
+  ProviderInput,
 } from "@/services/providers";
 
 export const Route = createFileRoute("/providers/new")({
@@ -93,20 +90,10 @@ function Page() {
   useEffect(() => {
     if (role === "billing") navigate({ to: "/providers", replace: true });
   }, [role, navigate]);
-  const qc = useQueryClient();
-  const orgId = useActiveOrgId() ?? "no-org";
   const { locationId } = Route.useSearch();
   const locationQ = useLaunchLocation(locationId);
   const launchLocation = locationId ? (locationQ.data ?? null) : null;
-
-  const create = useMutation({
-    mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
-    },
-  });
+  const create = useCreateProviderWithDetails();
 
   const initial = useMemo(
     () =>
