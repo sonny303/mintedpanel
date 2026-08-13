@@ -52,7 +52,8 @@ export function TemplateStatesField({
             type="button"
             variant="outline"
             disabled={disabled}
-            aria-labelledby="tpl-states-label"
+            id="tpl-states-trigger"
+            aria-labelledby="tpl-states-label tpl-states-trigger"
             aria-expanded={open}
             className={cn(
               "w-full justify-between font-normal",
