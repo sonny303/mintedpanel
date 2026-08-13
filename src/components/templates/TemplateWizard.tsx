@@ -68,6 +68,7 @@ import {
 import { EmptyState } from "@/components/EmptyState";
 import { TemplateTaskRow } from "@/components/templates/TemplateTaskRow";
 import { TemplatePreviewTasks } from "@/components/templates/TemplatePreviewTasks";
+import { TemplateStatesField } from "@/components/templates/TemplateStatesField";
 import { TemplateVersionHistoryDialog } from "@/components/templates/TemplateVersionHistory";
 import { useDiscardConfirm } from "@/components/templates/DiscardConfirmDialog";
 import {
@@ -89,7 +90,13 @@ import { useTokenCatalog } from "@/hooks/useMappingReview";
 import { usePortalFieldMaps, usePortals } from "@/hooks/usePortals";
 import { useIsAdmin } from "@/lib/permissions";
 import { isFallbackTemplate } from "@/lib/pickTemplate";
-import { ALL_STATES_SENTINEL, formatSopStateLabel, orgSopMatchKeyError } from "@/lib/sopMatchKey";
+import {
+  ALL_STATES_SENTINEL,
+  formatSopStateLabel,
+  isAllStates,
+  orgSopMatchKeyError,
+  templateStates,
+} from "@/lib/sopMatchKey";
 
 import { filterAuthoringTokens } from "@/lib/sopAuthoringTokens";
 import {
@@ -182,12 +189,30 @@ interface WizardPrefill {
 interface DraftPayload {
   name: string;
   payerId: string;
-  state: string;
+  /** Multi-state. A draft saved before the migration carries `state` instead —
+   *  `draftStates()` reads either. */
+  states?: string[];
+  state?: string;
   specialty: string;
   groupId: string;
   tasks: EditableTask[];
   requiredProfileAttributes: ProfileAttributeKey[];
   isArchived: boolean;
+}
+
+/** Order-insensitive comparison — the author's click order must not read as an
+ *  edit, or the wizard would offer to save a match key that did not change. */
+function statesDiffer(a: readonly string[] | null, b: readonly string[]): boolean {
+  const left = a ?? [];
+  if (left.length !== b.length) return true;
+  return left.some((s) => !b.includes(s));
+}
+
+/** A draft's state set, tolerating one serialized before the multi-state change. */
+function draftStates(payload: DraftPayload | null): string[] {
+  if (!payload) return [];
+  if (Array.isArray(payload.states)) return payload.states;
+  return payload.state ? [payload.state] : [];
 }
 
 interface TemplateWizardProps {
@@ -259,9 +284,15 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const [payerId, setPayerId] = useState<string>(
     draftPayload?.payerId ?? initial?.payerId ?? prefill?.payerId ?? "none",
   );
-  const [state, setState] = useState<string>(
-    draftPayload?.state ?? initial?.state ?? prefill?.state ?? "none",
-  );
+  // Multi-state: the template targets a SET of states. Empty = nothing picked
+  // yet (the old "none" sentinel); a lone ALL_STATES_SENTINEL = All states.
+  const [states, setStates] = useState<string[]>(() => {
+    const fromDraft = draftStates(draftPayload);
+    if (fromDraft.length > 0) return fromDraft;
+    const fromInitial = templateStates(initial ?? null);
+    if (fromInitial.length > 0) return fromInitial;
+    return prefill?.state ? [prefill.state] : [];
+  });
   // Specialty is preserved (stored + displayed) but is NOT an editable runtime
   // match key any more (E4.2 hardening) — no setter is wired.
   const [specialty] = useState<string>(draftPayload?.specialty ?? initial?.specialty ?? "");
@@ -557,14 +588,14 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     () => ({
       name: name.trim(),
       payerId: payerId === "none" ? null : payerId,
-      state: state === "none" ? null : state,
+      states: states.length === 0 ? null : states,
       specialty: specialty.trim() || null,
       groupId: groupId === "none" ? null : groupId,
       taskDefinitions: previewTasks,
       requiredProfileAttributes: requiredAttrs,
       archived: isArchived,
     }),
-    [name, payerId, state, specialty, groupId, previewTasks, requiredAttrs, isArchived],
+    [name, payerId, states, specialty, groupId, previewTasks, requiredAttrs, isArchived],
   );
 
   // The DERIVED tier line (screen 4): a pure read of the match key. Group only
@@ -592,17 +623,32 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const groupOptions = useMemo(() => {
     const all = groupsQ.data ?? [];
     // All-states (and unset) do not narrow the group list to one US state.
-    if (state === "none" || state === ALL_STATES_SENTINEL) return all;
-    return all.filter((g) => g.id === groupId || (g.states ?? []).includes(state));
-  }, [groupsQ.data, state, groupId]);
+    if (states.length === 0 || isAllStates(states)) return all;
+    // Multi-state: a group qualifies if it operates in ANY selected state —
+    // narrowing to groups present in EVERY state would hide legitimate picks.
+    return all.filter((g) => g.id === groupId || (g.states ?? []).some((s) => states.includes(s)));
+  }, [groupsQ.data, states, groupId]);
 
-  function handleStateChange(next: string) {
-    setState(next);
-    if (groupId !== "none" && next !== "none" && next !== ALL_STATES_SENTINEL) {
+  function applyStates(next: string[]) {
+    setStates(next);
+    // Drop a group pick that no longer operates in any selected state.
+    if (groupId !== "none" && next.length > 0 && !isAllStates(next)) {
       const g = (groupsQ.data ?? []).find((x) => x.id === groupId);
-      if (g && !(g.states ?? []).includes(next)) setGroupId("none");
+      if (g && !(g.states ?? []).some((s) => next.includes(s))) setGroupId("none");
     }
     markDirty();
+  }
+
+  /** Toggle one state. Picking a specific state clears the All sentinel (and
+   *  vice versa) — the two are mutually exclusive by the storage CHECK, so the
+   *  UI enforces it rather than letting the DB reject the save. */
+  function toggleState(code: string) {
+    if (code === ALL_STATES_SENTINEL) {
+      applyStates(isAllStates(states) ? [] : [ALL_STATES_SENTINEL]);
+      return;
+    }
+    const base = states.filter((s) => s !== ALL_STATES_SENTINEL);
+    applyStates(base.includes(code) ? base.filter((s) => s !== code) : [...base, code]);
   }
 
   // --- Slice F: the derived context banner for a readiness deep-link. The
@@ -662,7 +708,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         payload: {
           name,
           payerId,
-          state,
+          states,
           specialty,
           groupId,
           tasks,
@@ -710,14 +756,14 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   const matchKeyChanged =
     isEdit && initial
       ? payload.payerId !== initial.payerId ||
-        payload.state !== initial.state ||
+        statesDiffer(payload.states, templateStates(initial)) ||
         payload.specialty !== (initial.specialty ?? null) ||
         payload.groupId !== initial.groupId
       : false;
   const routingMatchKeyChanged =
     isEdit && initial
       ? payload.payerId !== initial.payerId ||
-        payload.state !== initial.state ||
+        statesDiffer(payload.states, templateStates(initial)) ||
         payload.groupId !== initial.groupId
       : false;
 
@@ -744,7 +790,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         id: initial.id,
         name: payload.name,
         payerId: payload.payerId,
-        state: payload.state,
+        states: payload.states,
         groupId: payload.groupId,
         archived: payload.archived,
       });
@@ -771,7 +817,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       const created = await authorGlobalMut.mutateAsync({
         name: payload.name,
         payerId: payload.payerId,
-        state: payload.state,
+        states: payload.states,
         groupId: payload.groupId,
         taskDefinitions: payload.taskDefinitions,
         requiredProfileAttributes: payload.requiredProfileAttributes,
@@ -862,7 +908,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   function matchKeyIncompleteBlocked(): boolean {
     const err = orgSopMatchKeyError({
       payerId: payerId === "none" ? null : payerId,
-      state: state === "none" ? null : state,
+      states: states.length === 0 ? null : states,
     });
     if (err && isEdit && initial && !routingMatchKeyChanged) return false;
     if (err) {
@@ -908,7 +954,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
         ? await authorGlobalMut.mutateAsync({
             name: `${name} (copy)`,
             payerId: payload.payerId,
-            state: payload.state,
+            states: payload.states,
             groupId: payload.groupId,
             taskDefinitions: payload.taskDefinitions,
             requiredProfileAttributes: payload.requiredProfileAttributes,
@@ -940,7 +986,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           id: initial.id,
           name: payload.name,
           payerId: payload.payerId,
-          state: payload.state,
+          states: payload.states,
           groupId: payload.groupId,
           archived: next,
         });
@@ -1152,23 +1198,17 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                   )}
                 </div>
                 <div>
-                  <Label>State</Label>
-                  <Select value={state} onValueChange={handleStateChange} disabled={!canEdit}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* No null "Any state" — use All states (sentinel) or a
-                          two-letter code (D3.1 A / D3.5). */}
-                      {!canEdit ? <SelectItem value="none">Not state-specific</SelectItem> : null}
-                      <SelectItem value={ALL_STATES_SENTINEL}>All states</SelectItem>
-                      {US_STATES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label id="tpl-states-label">States</Label>
+                  {/* Multi-select: a template applies to a SET of states. "All
+                      states" is mutually exclusive with specific codes (the
+                      storage CHECK enforces it too) — toggling one clears the
+                      other rather than letting the save fail. */}
+                  <TemplateStatesField
+                    states={states}
+                    onToggle={toggleState}
+                    onClear={() => applyStates([])}
+                    disabled={!canEdit}
+                  />
                 </div>
                 <div>
                   <Label>Group</Label>
@@ -1193,12 +1233,12 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                     </SelectContent>
                   </Select>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {state === "none"
-                      ? "Pick a state to scope the group list."
+                    {states.length === 0
+                      ? "Pick at least one state to scope the group list."
                       : groupId === "none"
-                        ? state === ALL_STATES_SENTINEL
+                        ? isAllStates(states)
                           ? "Applies to every group for this payer, any case state."
-                          : `Applies to every group operating in ${state}.`
+                          : `Applies to every group operating in ${formatSopStateLabel(states)}.`
                         : "Wins over the all-groups template for this group."}
                   </p>
                 </div>
@@ -1340,8 +1380,10 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
               <>
                 <dt className="text-muted-foreground">Payer</dt>
                 <dd>{payerId === "none" ? "— (required)" : (payerName ?? "—")}</dd>
-                <dt className="text-muted-foreground">State</dt>
-                <dd>{state === "none" ? "— (required)" : formatSopStateLabel(state)}</dd>
+                <dt className="text-muted-foreground">
+                  {states.length > 1 && !isAllStates(states) ? "States" : "State"}
+                </dt>
+                <dd>{states.length === 0 ? "— (required)" : formatSopStateLabel(states)}</dd>
                 <dt className="text-muted-foreground">Group</dt>
                 <dd>
                   {groupId === "none"

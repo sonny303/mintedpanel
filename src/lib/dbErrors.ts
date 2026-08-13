@@ -61,11 +61,11 @@ const UNIQUE_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string
     "uq_group_insurance_policies_one_primary",
     "This group already has a primary policy of this type. Mark this one secondary, or change the existing primary first.",
   ],
-  // E4.2 SOP hardening — active-org template match-key uniqueness (20260716120000).
-  [
-    "uq_sop_templates_active_org_match",
-    "An active SOP template already exists for this payer, state, and group. Archive or edit the existing template instead of creating a duplicate.",
-  ],
+  // E4.2's uq_sop_templates_active_org_match was DROPPED by the multi-state
+  // migration (20260812140000) — its single-state grain would reject
+  // {NC,SC} vs {NC,VA}, which are legitimately different templates. The
+  // replacement overlap invariant is a trigger raising a named error; see
+  // SOP_STATE_OVERLAP_CODE below.
 ];
 
 const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]> = [
@@ -86,7 +86,14 @@ const CHECK_MESSAGES: ReadonlyArray<readonly [fragment: string, message: string]
     "A facility assignment requires a start date.",
   ],
   ["state_licenses_provider_id_not_null", "A license requires a provider."],
+  ["sop_templates_states_shape_check", "Pick either “All states” or specific states — not both."],
 ];
+
+/** The multi-state overlap trigger's named error (migration 20260812140000).
+ *  It is a plpgsql RAISE, not a constraint violation, so it arrives with no
+ *  SQLSTATE we can key on — the prefix IS the wire contract, the
+ *  `sop_version_conflict` precedent. */
+export const SOP_STATE_OVERLAP_CODE = "sop_template_state_overlap";
 
 function matchFragment(
   message: string,
@@ -110,6 +117,16 @@ export function translateDbError(error: unknown): unknown {
   const pg = pgShape(error);
   if (!pg?.message) return error;
 
+  // Checked before the SQLSTATE branches: a plpgsql RAISE carries a generic
+  // code, so only the message prefix identifies it.
+  if (pg.message.includes(SOP_STATE_OVERLAP_CODE)) {
+    const clash = pg.message.split(`${SOP_STATE_OVERLAP_CODE}:`)[1]?.trim();
+    return new Error(
+      clash
+        ? `Another active SOP template already covers ${clash} for this payer and group. Remove those states here, or edit that template instead.`
+        : "Another active SOP template already covers one of these states for this payer and group.",
+    );
+  }
   if (pg.code === "23505") {
     const friendly = matchFragment(pg.message, UNIQUE_MESSAGES);
     return new UniqueViolationError(friendly ?? "This record already exists.");

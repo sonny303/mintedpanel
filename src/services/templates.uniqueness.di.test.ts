@@ -28,6 +28,7 @@ interface Captured {
   op?: "insert" | "update";
   filters: Array<[string, unknown]>;
   isFilters: Array<[string, unknown]>;
+  overlapFilters: Array<[string, unknown]>;
 }
 
 function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
@@ -36,7 +37,7 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
   const take = () => results[Math.min(cursor++, results.length - 1)] ?? { data: null };
 
   const from = (table: string) => {
-    const cap: Captured = { table, filters: [], isFilters: [] };
+    const cap: Captured = { table, filters: [], isFilters: [], overlapFilters: [] };
     captures.push(cap);
     const builder: Record<string, unknown> = {
       select() {
@@ -65,6 +66,11 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
         cap.filters.push([`neq:${col}`, val]);
         return builder;
       },
+      // Multi-state: the collision test is an array OVERLAP, not equality.
+      overlaps(col: string, val: unknown) {
+        cap.overlapFilters.push([col, val]);
+        return builder;
+      },
       limit: () => Promise.resolve(take()),
       single: () => Promise.resolve(take()),
       maybeSingle: () => Promise.resolve(take()),
@@ -85,17 +91,20 @@ beforeEach(() => writeAuditMock.mockClear());
 describe("createTemplate — active-org match-key uniqueness", () => {
   it("blocks a duplicate at the same (payer, state, group) with a clear message", async () => {
     // Conflict check finds an existing active template → reject before insert.
-    const captures = installDb([{ data: [{ id: "existing", name: "Aetna NC" }] }]);
+    const captures = installDb([
+      { data: [{ id: "existing", name: "Aetna NC", states: ["NC", "SC"] }] },
+    ]);
 
     await expect(
       createTemplate({
         name: "Aetna NC (dupe)",
         payerId: "pay1",
-        state: "NC",
+        states: ["NC"],
         groupId: "g1",
         taskDefinitions: [],
       }),
-    ).rejects.toThrow(/already exists for this payer, state, and group/i);
+      // The message names the ACTUAL clashing state, not "these states".
+    ).rejects.toThrow(/“Aetna NC” already covers NC for this payer and group/i);
 
     // Only the conflict check ran — no insert, no audit.
     expect(captures).toHaveLength(1);
@@ -103,7 +112,7 @@ describe("createTemplate — active-org match-key uniqueness", () => {
     expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
     expect(captures[0].filters).toContainEqual(["archived", false]);
     expect(captures[0].filters).toContainEqual(["payer_id", "pay1"]);
-    expect(captures[0].filters).toContainEqual(["state", "NC"]);
+    expect(captures[0].overlapFilters).toContainEqual(["states", ["NC"]]);
     expect(captures[0].filters).toContainEqual(["group_id", "g1"]);
     expect(writeAuditMock).not.toHaveBeenCalled();
   });
@@ -115,7 +124,7 @@ describe("createTemplate — active-org match-key uniqueness", () => {
       org_id: "org-1",
       name: "Aetna NC (any group)",
       payer_id: "pay1",
-      state: "NC",
+      states: ["NC"],
       group_id: null,
       archived: false,
       task_definitions: [],
@@ -125,7 +134,7 @@ describe("createTemplate — active-org match-key uniqueness", () => {
     const result = await createTemplate({
       name: "Aetna NC (any group)",
       payerId: "pay1",
-      state: "NC",
+      states: ["NC"],
       groupId: null,
       taskDefinitions: [],
     });

@@ -10,6 +10,7 @@
 //   · case openness → OPEN_CASE_STATUSES (caseStatus.ts).
 import { isOpenCaseStatus } from "@/lib/caseStatus";
 import { pickTemplate } from "@/lib/pickTemplate";
+import { templateStates } from "@/lib/sopMatchKey";
 import { enrollmentIdBadge, type EnrollmentIdBadge } from "@/lib/payerIssuedIds";
 import type { FunnelFormSuggestion, FunnelNextAction } from "@/lib/payerReadinessFunnel";
 import type { TemplateEditorIntent } from "@/lib/templateEditorIntent";
@@ -122,7 +123,9 @@ export function autofillSuggestionStep(row: {
 export interface PayerTemplateRow {
   id: string;
   name: string;
-  state: string | null;
+  /** Every state this template targets (multi-state). A lone `'All'` is the
+   *  All-states wildcard; empty = a state-less legacy / fallback row. */
+  states: string[];
   groupId: string | null;
   taskCount: number;
   updatedAt: string;
@@ -147,17 +150,21 @@ export function payerTemplateRows(
     .map((t) => ({
       id: t.id,
       name: t.name,
-      state: t.state,
+      states: templateStates(t),
       groupId: t.groupId,
       taskCount: t.taskDefinitions.length,
       updatedAt: t.updatedAt,
+      // Multi-state: the row is the active match when it wins for EVERY state
+      // it claims. Winning only some would be a half-truth on a badge that
+      // reads as "this is what runs".
       isActiveMatch:
-        t.state !== null && pickTemplate(all, payerId, t.state, t.groupId)?.id === t.id,
+        templateStates(t).length > 0 &&
+        templateStates(t).every((s) => pickTemplate(all, payerId, s, t.groupId)?.id === t.id),
     }))
     .sort(
       (a, b) =>
         Number(b.groupId !== null) - Number(a.groupId !== null) ||
-        (a.state ?? "").localeCompare(b.state ?? "") ||
+        (a.states[0] ?? "").localeCompare(b.states[0] ?? "") ||
         a.name.localeCompare(b.name),
     );
 }
@@ -178,7 +185,7 @@ export function templateStateCoverage(
   rows: readonly PayerTemplateRow[],
 ): TemplateStateCoverage {
   const states = payer?.states ?? [];
-  const withTemplate = new Set(rows.map((r) => r.state).filter((s): s is string => s !== null));
+  const withTemplate = new Set(rows.flatMap((r) => r.states));
   const covered = states.filter((s) => withTemplate.has(s)).length;
   const total = states.length;
   return {

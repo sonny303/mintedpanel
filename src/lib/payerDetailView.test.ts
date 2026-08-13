@@ -160,7 +160,7 @@ describe("payerTemplateRows", () => {
       PAYER_ID,
     );
     expect(rows.map((r) => r.id)).toEqual(["t-grp", "t-any"]);
-    expect(rows[0]).toMatchObject({ taskCount: 1, state: "AZ" });
+    expect(rows[0]).toMatchObject({ taskCount: 1, states: ["AZ"] });
   });
 
   it("flags the row the LOCKED resolver actually runs — an org override shadows the global row on the same key", () => {
@@ -186,7 +186,7 @@ describe("templateStateCoverage", () => {
   const row = (state: string | null, id = state ?? "none") => ({
     id,
     name: id,
-    state,
+    states: state === null ? [] : [state],
     groupId: null,
     taskCount: 1,
     updatedAt: "",
@@ -324,5 +324,34 @@ describe("payerMergeCandidates", () => {
       PAYER_ID,
     );
     expect(candidates.map((p) => p.id)).toEqual(["p-b"]);
+  });
+});
+
+describe("templateStateCoverage — multi-state templates", () => {
+  const multiRow = (states: string[], id = states.join("-")) => ({
+    id,
+    name: id,
+    states,
+    groupId: null,
+    taskCount: 1,
+    updatedAt: "",
+    isActiveMatch: true,
+  });
+  const payerWith = (states: string[]) => ({ states });
+
+  it("credits EVERY state a template covers, not just the first", () => {
+    // The whole point of multi-state: one template covering AZ+CO+NV must read
+    // as full coverage, not 1 of 3.
+    const coverage = templateStateCoverage(payerWith(["AZ", "CO", "NV"]), [
+      multiRow(["AZ", "CO", "NV"]),
+    ]);
+    expect(coverage).toMatchObject({ covered: 3, total: 3 });
+  });
+
+  it("still ignores covered states outside the payer's footprint", () => {
+    const coverage = templateStateCoverage(payerWith(["AZ", "CO"]), [
+      multiRow(["AZ", "CO", "TX", "NV"]),
+    ]);
+    expect(coverage).toMatchObject({ covered: 2, total: 2 });
   });
 });

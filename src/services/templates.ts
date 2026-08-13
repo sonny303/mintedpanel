@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
-import { orgSopMatchKeyError } from "@/lib/sopMatchKey";
+import { orgSopMatchKeyError, templateStates } from "@/lib/sopMatchKey";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SOPTaskDefinition, SOPTemplate, SOPTemplateVersion } from "@/types";
 
@@ -17,7 +17,9 @@ type SopTemplateUpdate = Database["public"]["Tables"]["sop_templates"]["Update"]
 export interface TemplateInput {
   name: string;
   groupId?: string | null;
-  state?: string | null;
+  /** The states this template applies to (a lone `'All'` = All-states). The
+   * scalar `state` column is written as a frozen mirror of `states[0]`. */
+  states?: string[] | null;
   specialty?: string | null;
   payerId?: string | null;
   taskDefinitions: SOPTaskDefinition[];
@@ -42,6 +44,12 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
   payload.org_id = orgId;
   const archiveValue = archived ?? isArchived;
   if (archiveValue !== undefined) payload.archived = archiveValue;
+  // Keep the frozen `state` scalar in step with `states` on every write, so a
+  // reader that predates the multi-state migration still sees a real state
+  // rather than NULL. Never the reverse — `states` is authoritative.
+  if (input.states !== undefined) {
+    payload.state = input.states?.[0] ?? null;
+  }
   return payload as unknown as SopTemplateInsert;
 }
 
@@ -55,11 +63,11 @@ function templatePayload(input: Partial<TemplateInput>, orgId: string): SopTempl
  * SAME pure `orgSopMatchKeyError` rule the wizard blocks on. */
 function assertActiveOrgMatchKeyComplete(key: {
   payerId: string | null;
-  state: string | null;
+  states: string[] | null;
   archived: boolean;
 }): void {
   if (key.archived) return;
-  const err = orgSopMatchKeyError({ payerId: key.payerId, state: key.state });
+  const err = orgSopMatchKeyError({ payerId: key.payerId, states: key.states });
   if (err) throw new Error(err);
 }
 
@@ -74,29 +82,34 @@ async function assertUniqueActiveMatch(
   orgId: string,
   key: {
     payerId: string | null;
-    state: string | null;
+    states: string[] | null;
     groupId: string | null;
     archived: boolean;
   },
   excludeId?: string,
 ): Promise<void> {
-  if (key.archived || !key.payerId || !key.state) return;
+  if (key.archived || !key.payerId || !key.states || key.states.length === 0) return;
   let query = supabase
     .from("sop_templates")
-    .select("id, name")
+    .select("id, name, states")
     .eq("org_id", orgId)
     .eq("archived", false)
     .eq("payer_id", key.payerId)
-    .eq("state", key.state);
+    // Multi-state: the collision is an OVERLAP, not equality — `overlaps` is
+    // PostgREST's `&&`. The DB trigger is the race-proof backstop; this pre-check
+    // exists so the author gets a message naming the actual clashing states.
+    .overlaps("states", key.states);
   query = key.groupId === null ? query.is("group_id", null) : query.eq("group_id", key.groupId);
   if (excludeId) query = query.neq("id", excludeId);
   const { data, error } = await query.limit(1);
   if (error) throw error;
-  const existing = data?.[0];
+  const existing = data?.[0] as { name: string; states: string[] | null } | undefined;
   if (existing) {
+    const clashing = (existing.states ?? []).filter((s) => key.states?.includes(s));
+    const which = clashing.length > 0 ? clashing.slice().sort().join(", ") : "these states";
     throw new Error(
-      `An active SOP template already exists for this payer, state, and group ("${existing.name}"). ` +
-        `Archive or edit that template instead of creating a duplicate.`,
+      `“${existing.name}” already covers ${which} for this payer and group. ` +
+        `Remove ${clashing.length === 1 ? "that state" : "those states"} here, or edit that template instead.`,
     );
   }
 }
@@ -238,7 +251,7 @@ export interface GlobalSopInput {
   id?: string | null;
   name: string;
   payerId: string | null;
-  state: string | null;
+  states: string[] | null;
   groupId?: string | null;
   /** Create only — ignored on update (publish owns content). */
   taskDefinitions?: SOPTaskDefinition[];
@@ -254,7 +267,7 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
     p_id: (input.id ?? null) as unknown as string,
     p_name: input.name.trim(),
     p_payer_id: input.payerId as unknown as string,
-    p_state: input.state as unknown as string,
+    p_states: (input.states ?? null) as unknown as string[],
     p_group_id: (input.groupId ?? null) as unknown as string,
     p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
     p_archived: (input.archived ?? false) as boolean,
@@ -262,13 +275,18 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
   });
   if (error) {
     if (error.message.includes("global_sop_duplicate_match")) {
+      // The RPC appends the clashing states after the code — surface them, since
+      // "somewhere in your selection" is not actionable.
+      const clash = error.message.split("global_sop_duplicate_match:")[1]?.trim();
       throw new Error(
-        "An active global SOP already exists for this payer, state, and group. " +
-          "Edit that SOP instead of creating a duplicate.",
+        clash
+          ? `An active global SOP already covers ${clash} for this payer and group. Edit that SOP instead of creating a duplicate.`
+          : "An active global SOP already exists for this payer, state, and group. " +
+              "Edit that SOP instead of creating a duplicate.",
       );
     }
     if (error.message.includes("global_sop_match_key_incomplete")) {
-      throw new Error("A global SOP requires a payer and a state.");
+      throw new Error("A global SOP requires a payer and at least one state.");
     }
     if (error.message.includes("fallback_sop_locked")) {
       throw new Error("The generic fallback SOP is platform-managed and cannot be edited here.");
@@ -283,12 +301,12 @@ export async function createTemplate(input: TemplateInput): Promise<SOPTemplate>
   const archived = Boolean(input.archived ?? input.isArchived ?? false);
   assertActiveOrgMatchKeyComplete({
     payerId: input.payerId ?? null,
-    state: input.state ?? null,
+    states: input.states ?? null,
     archived,
   });
   await assertUniqueActiveMatch(orgId, {
     payerId: input.payerId ?? null,
-    state: input.state ?? null,
+    states: input.states ?? null,
     groupId: input.groupId ?? null,
     archived,
   });
@@ -323,22 +341,25 @@ export async function updateTemplate(
   if (before) {
     const nextArchived = Boolean(patch.archived ?? patch.isArchived ?? before.archived);
     const destPayerId = patch.payerId !== undefined ? patch.payerId : before.payerId;
-    const destState = patch.state !== undefined ? patch.state : before.state;
+    const destStates = patch.states !== undefined ? patch.states : templateStates(before);
     const destGroupId = patch.groupId !== undefined ? patch.groupId : before.groupId;
+    const beforeStates = templateStates(before);
+    const statesChanged =
+      destStates === null ||
+      destStates.length !== beforeStates.length ||
+      destStates.some((s) => !beforeStates.includes(s));
     const routingMatchKeyChanged =
-      destPayerId !== before.payerId ||
-      destState !== before.state ||
-      destGroupId !== before.groupId;
+      destPayerId !== before.payerId || statesChanged || destGroupId !== before.groupId;
     const restoring = Boolean(before.archived ?? before.isArchived) && !nextArchived;
     if (routingMatchKeyChanged || restoring) {
       assertActiveOrgMatchKeyComplete({
         payerId: destPayerId,
-        state: destState,
+        states: destStates,
         archived: nextArchived,
       });
       await assertUniqueActiveMatch(
         orgId,
-        { payerId: destPayerId, state: destState, groupId: destGroupId, archived: nextArchived },
+        { payerId: destPayerId, states: destStates, groupId: destGroupId, archived: nextArchived },
         id,
       );
     }

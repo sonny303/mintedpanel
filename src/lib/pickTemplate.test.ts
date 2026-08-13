@@ -272,3 +272,84 @@ describe("resolutionTier", () => {
     expect(resolutionTier(fallbackTmpl())).toBe("generic_fallback");
   });
 });
+
+// --- Multi-state (migration 20260812140000) --------------------------------
+// A template targets a SET of states. "Exact state" means membership in that
+// set, so {NC, SC} is exactly as specific for an NC case as {NC} — both name
+// NC deliberately. These cases pin the parts that could silently regress.
+describe("pickTemplate — multi-state templates", () => {
+  it("resolves for every state in the set", () => {
+    const multi = tmpl({ id: "multi", states: ["NC", "SC", "VA"], state: "NC" });
+    expect(pickTemplate([multi], "p1", "NC", null)?.id).toBe("multi");
+    expect(pickTemplate([multi], "p1", "SC", null)?.id).toBe("multi");
+    expect(pickTemplate([multi], "p1", "VA", null)?.id).toBe("multi");
+  });
+
+  it("does NOT resolve for a state outside the set", () => {
+    const multi = tmpl({ id: "multi", states: ["NC", "SC"], state: "NC" });
+    expect(pickTemplate([multi], "p1", "TX", null)).toBeNull();
+  });
+
+  it("ranks a multi-state member exactly like a single-state match", () => {
+    // Both name NC explicitly, so neither outranks the other on specificity;
+    // the within-tier tiebreak (createdAt) decides. The older row wins.
+    const multi = tmpl({
+      id: "multi",
+      states: ["NC", "SC"],
+      state: "NC",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    const single = tmpl({
+      id: "single",
+      states: ["NC"],
+      state: "NC",
+      createdAt: "2026-02-01T00:00:00Z",
+    });
+    expect(pickTemplate([single, multi], "p1", "NC", null)?.id).toBe("multi");
+    expect(pickTemplate([multi, single], "p1", "NC", null)?.id).toBe("multi");
+  });
+
+  it("a multi-state template still BEATS an All-states one (specificity holds)", () => {
+    const multi = tmpl({ id: "multi", states: ["NC", "SC"], state: "NC" });
+    const all = tmpl({
+      id: "all",
+      states: [ALL_STATES_SENTINEL],
+      state: ALL_STATES_SENTINEL,
+      createdAt: "2020-01-01T00:00:00Z", // older, so only tiering can win this
+    });
+    expect(pickTemplate([all, multi], "p1", "NC", null)?.id).toBe("multi");
+  });
+
+  it("an exact-group multi-state template beats an any-group one", () => {
+    const anyGroup = tmpl({ id: "any", states: ["NC", "SC"], groupId: null });
+    const exact = tmpl({ id: "exact", states: ["NC", "SC"], groupId: "g1" });
+    expect(pickTemplate([anyGroup, exact], "p1", "NC", "g1")?.id).toBe("exact");
+  });
+
+  it("a 50-state list is NOT treated as the All-states wildcard", () => {
+    // This is the trap the sentinel exists to prevent: if an expanded list were
+    // read as All-states it would drop to the lower tiers and lose to a
+    // genuinely broad template. It must rank as exact-state and win.
+    const expanded = tmpl({ id: "expanded", states: ["NC", "SC", "VA", "TX"], state: "NC" });
+    const all = tmpl({
+      id: "all",
+      states: [ALL_STATES_SENTINEL],
+      state: ALL_STATES_SENTINEL,
+      createdAt: "2020-01-01T00:00:00Z",
+    });
+    expect(pickTemplate([all, expanded], "p1", "NC", null)?.id).toBe("expanded");
+  });
+
+  it("falls back to the frozen `state` scalar when `states` is absent", () => {
+    // Pre-migration rows (and any cache written before it) must keep resolving.
+    const legacy = tmpl({ id: "legacy", states: null, state: "NC" });
+    expect(pickTemplate([legacy], "p1", "NC", null)?.id).toBe("legacy");
+    expect(pickTemplate([legacy], "p1", "SC", null)).toBeNull();
+  });
+
+  it("ignores an empty state set rather than matching everything", () => {
+    // An empty set must never behave like a wildcard — it is an incomplete row.
+    const empty = tmpl({ id: "empty", states: [], state: null });
+    expect(pickTemplate([empty], "p1", "NC", null)).toBeNull();
+  });
+});
