@@ -2788,6 +2788,68 @@ seven behavioural probes — not by reasoning about the SQL.
   apply is the operator step, so a regen would reflect the pre-migration schema
   and delete the new column.
 
+### Hotfix 2026-08-13 — an admin could demote themselves out of admin
+
+Kansas Fitness Physio sat at **zero admins**. An admin picked Billing for their
+own row in Org Detail → People → Access, and the control that would undo it is
+`canEdit = useIsAdmin()`-gated, so it vanished with the role. Sole admin ⇒
+nobody in the org could reverse it. Restored by direct SQL (audited UPDATE +
+a matching `audit_log` row describing the MCP channel).
+
+- `MembersPanel.tsx` computed `isSelf` but used it ONLY to hide the Remove
+  button; the role `Select` was ungated (a dead `void me;` sat where a guard
+  looks like it was once intended). Now the own-row select is **disabled** with
+  the reason on hover and in its accessible name — kept visible, because a
+  control that disappears reads as broken. `updateMembershipRole` rejects a
+  self role change at the service boundary too (`SELF_ROLE_CHANGE_MESSAGE`,
+  single-sourced and imported by the panel).
+- **The DB still permits it.** `memberships_delete_admin` has always carried
+  `user_id <> auth.uid()` — you have never been able to REMOVE yourself — but
+  `memberships_update_admin` has no self-restriction, so the role path was the
+  unguarded twin of a hole someone had already thought about. The durable
+  invariant ("an org always keeps an admin") is **E6.11 F6.11.2**.
+- **Membership role changes are UNAUDITED** — a search of `audit_log` for the
+  membership, the user, and any `member`-ish entity type returned zero rows,
+  and `memberships` has no `updated_at`, so nothing recorded who demoted whom
+  or when. That is why the defect was invisible until a human noticed. E6.11
+  OQ-3 proposes fixing it.
+
+### Two epics drafted 2026-08-13 (both `status: draft`, neither approved)
+
+- **`docs/redesign/E6.10-structured-control-autofill.md`** — the P1 slice of
+  the PM's "Autofill beyond free-text" design: capture a `<select>`/radio/
+  checkbox's OPTION VOCABULARY, show the trainer the control type, and let a
+  fixed value be picked from the portal's own list. Cross-repo (2-PR map).
+  Its spike corrected three premises worth knowing regardless of whether the
+  epic ships: (1) `fillEngine.ts` already has `applySelect`/`applyRadio`/
+  `applyCheckbox` with value-or-label matching; (2) **`field_type` is already
+  captured, stored on `portal_field_maps` and read by `planFill`, but rendered
+  NOWHERE in the training UI** — `FieldRegistryList.tsx` and `FormStepPanel.tsx`
+  contain zero references, so a dropdown and a text box are trained through an
+  identical control; (3) **`transform` is dead code in production** —
+  `applyTransform` (extension) implements `state_abbrev` (Kansas → KS) and
+  `date_mmddyyyy` and both the real fill and the mock dry run apply it, but
+  `transform` appears in this repo ONLY inside the `PORTAL_FIELD_MAP_COLUMNS`
+  select list. No service, hook, or RPC writes it; every live row is NULL. The
+  one shipped fix for "Kansas" → `KS` cannot be switched on from any surface.
+  The epic's direction follows from (3): activate the existing transform before
+  adding a per-map `valueBinding` (deferred as a P2 non-goal).
+- **`docs/redesign/E6.11-team-access-user-record.md`** — invite restoration, the
+  zero-admin invariant, and user identity as fillable tokens. Its spike found
+  most of it already built: **the invite chain is intact AND deployed** —
+  `pending_invites` (email/role/full_name), `claim_invites()`, the invites
+  service + hooks, and the **`invite-member` edge function, status ACTIVE
+  version 6 on hosted** — removed UI-only on 2026-07-19 with the backend
+  deliberately kept; `profiles` already carries `profiles_update_self`, so the
+  write path an identity editor needs exists; and `ProfilePanel`/`useUserProfile`/
+  `userProfile.ts` were DELETED on 2026-07-21, not never built. `profiles` has
+  only `id`/`email`/`full_name`, and `userTokens.ts` resolves only `user.name`
+  - `user.email`. One repo — the extension picker renders from the SERVED
+    quick-card catalog, so new `{{user.*}}` keys need no extension release.
+    **OQ-1 is blocking and unanswered:** "user role" is either a job description
+    (what a payer form wants) or the access level (per-org; filling `billing` into
+    a payer form would be wrong in a way nobody catches).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
