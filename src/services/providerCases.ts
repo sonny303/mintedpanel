@@ -252,18 +252,23 @@ export interface CaseSearchRow {
   status: string | null;
   payerReferenceId: string | null;
   payerPipelineState: string;
+  /** Case's practice location (`credential_cases.facility_id`) — extension
+   * pre-selects this when opening a case from search so facility.* cards
+   * resolve without a second manual pick. Null when the case has none. */
+  facilityId: string | null;
 }
 
 const CASE_SEARCH_MAX = 50;
 
 const CASE_SEARCH_COLUMNS =
-  "id, state, provider_id, payer_reference_id, case_status, payer_pipeline_state, " +
+  "id, state, provider_id, facility_id, payer_reference_id, case_status, payer_pipeline_state, " +
   "providers(id, first_name, last_name), payers(name)";
 
 interface CaseSearchDbRow {
   id: string;
   state: string;
   provider_id: string;
+  facility_id: string | null;
   payer_reference_id: string | null;
   case_status: string | null;
   payer_pipeline_state: string | null;
@@ -310,6 +315,7 @@ export async function searchOrgCases(
       status: displayStatus(row.case_status),
       payerReferenceId: row.payer_reference_id,
       payerPipelineState: row.payer_pipeline_state ?? "not_started",
+      facilityId: row.facility_id,
     });
   }
 

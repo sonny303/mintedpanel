@@ -409,6 +409,7 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     id: "c1",
     state: "KS",
     provider_id: "p1",
+    facility_id: "fac-1",
     payer_reference_id: null,
     case_status: "in_progress",
     payer_pipeline_state: "drafting",
@@ -430,6 +431,7 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     expect(captures.map((c) => c.table)).toEqual(["credential_cases"]);
     expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
     expect(captures[0].selectCols).toContain("case_status");
+    expect(captures[0].selectCols).toContain("facility_id");
   });
 
   it("matches on provider name, payer name, and tracking id (case-insensitive), mapping display fields", async () => {
@@ -458,7 +460,14 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
       state: "KS",
       status: "In Progress",
       payerPipelineState: "drafting",
+      facilityId: "fac-1",
     });
+  });
+
+  it("carries a null facilityId when the case has no facility_id", async () => {
+    const { db } = makeFakeDb([{ data: [searchCaseRow({ facility_id: null })] }]);
+    const result = await searchOrgCases(ctxWith(db), "brooke");
+    expect(result[0].facilityId).toBeNull();
   });
 
   it("resolves the case_status label and defaults pipeline to not_started", async () => {
