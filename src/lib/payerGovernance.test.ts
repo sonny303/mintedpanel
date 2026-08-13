@@ -369,7 +369,9 @@ describe("E6.10 control_options migration — grant + signature shape", () => {
 
   it("adds control_options additively and never re-grants table DML", () => {
     expect(sql).toContain("add column if not exists control_options jsonb");
-    expect(sql).not.toMatch(/grant\s+[a-z, ]*(insert|update|delete)[a-z, ]*on\s+(table\s+)?public\.portal_field_maps/);
+    expect(sql).not.toMatch(
+      /grant\s+[a-z, ]*(insert|update|delete)[a-z, ]*on\s+(table\s+)?public\.portal_field_maps/,
+    );
   });
 
   it("drops the prior propose/train signatures (no PostgREST overload)", () => {
@@ -390,9 +392,7 @@ describe("E6.10 control_options migration — grant + signature shape", () => {
     expect(sql).toMatch(
       /grant execute on function public\.propose_shared_field_map\([\s\S]*?jsonb\) to authenticated/,
     );
-    expect(sql).toMatch(
-      /revoke all on function public\.train_global_field_map\([^)]+\) from anon/,
-    );
+    expect(sql).toMatch(/revoke all on function public\.train_global_field_map\([^)]+\) from anon/);
     expect(sql).toMatch(
       /grant execute on function public\.train_global_field_map\([^)]+\) to authenticated/,
     );

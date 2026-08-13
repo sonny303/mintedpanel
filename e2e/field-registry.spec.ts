@@ -906,9 +906,9 @@ test("TS-160 — a fixed value is picked from the portal's captured options", as
   expect(trained?.source).toBe("hardcoded");
   expect(trained?.status).toBe("approved");
   const trainCalls = calls.filter((c) => c.kind === "rpc" && c.path === "train_global_field_map");
-  expect(trainCalls.some((c) => (c.body as { p_hardcoded_value?: string }).p_hardcoded_value === "KS")).toBe(
-    true,
-  );
+  expect(
+    trainCalls.some((c) => (c.body as { p_hardcoded_value?: string }).p_hardcoded_value === "KS"),
+  ).toBe(true);
 
   const radio = rowFor(page, "Accepting new patients");
   await expect(pillIn(radio, "Radio")).toBeVisible();

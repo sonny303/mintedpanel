@@ -250,7 +250,8 @@ function RegistryRowEditor({
   const staleHardcoded = hardcodedValueMissingFromOptions(row.hardcodedValue, capturedOptions);
   const shapingCopy = transformEffectCopy(row.transform);
   const checkboxBoolean = (row.fieldType ?? "") === "checkbox" && capturedOptions.length === 0;
-  const pickerOptions = capturedOptions.length > 0 ? capturedOptions : checkboxBoolean ? CHECKBOX_BOOLEAN_OPTIONS : [];
+  const pickerOptions =
+    capturedOptions.length > 0 ? capturedOptions : checkboxBoolean ? CHECKBOX_BOOLEAN_OPTIONS : [];
 
   function startRename() {
     setDraftName(row.displayLabel?.trim() ?? "");
@@ -391,7 +392,9 @@ function RegistryRowEditor({
                   .filter((opt) => opt.value !== "")
                   .map((opt) => (
                     <SelectItem key={`${opt.value}:${opt.label}`} value={opt.value}>
-                      {opt.label && opt.label !== opt.value ? `${opt.value} — ${opt.label}` : opt.value}
+                      {opt.label && opt.label !== opt.value
+                        ? `${opt.value} — ${opt.label}`
+                        : opt.value}
                     </SelectItem>
                   ))}
               </SelectContent>

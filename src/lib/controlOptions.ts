@@ -27,7 +27,9 @@ export const CONTROL_OPTIONS_CAP = 50;
 /** Sample size for skip-reason lines (F6.10.6 / OQ-3). */
 export const OPTION_SAMPLE_SIZE = 3;
 
-export function isAuthorableTransform(value: string | null | undefined): value is AuthorableTransform {
+export function isAuthorableTransform(
+  value: string | null | undefined,
+): value is AuthorableTransform {
   return value === "state_abbrev" || value === "date_mmddyyyy";
 }
 
@@ -77,7 +79,10 @@ export function validateControlOptionsInput(
   }
   const parsed = parseControlOptions(raw);
   if (parsed == null) {
-    return { kind: "rejected", message: "control_options must be an array of { value, label } strings" };
+    return {
+      kind: "rejected",
+      message: "control_options must be an array of { value, label } strings",
+    };
   }
   return { kind: "ok", options: parsed };
 }
