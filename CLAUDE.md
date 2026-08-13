@@ -456,8 +456,9 @@ UNIQUE (org_id, track, label)`); all fourteen CHECKs VALIDATEd (BD-1/BD-2
   modules (tested): `src/lib/groupAssignments.ts` (≥1 assignment, exactly one
   primary, `planAssignmentSync` demote→delete→promote→insert order so the
   partial unique never trips) and `src/lib/licensePsv.ts`
-  (`resolvePsvColumns` — verify/fail REQUIRES the board URL, stamps
-  verified_at/by service-side, **expiration edit resets to unverified**).
+  (`resolvePsvColumns` — verify/fail stamps verified_at/by service-side;
+  the board URL is optional so a team can record email or other proof;
+  **expiration edit resets to unverified**).
   `createProviderWithDetails`/`updateProviderWithLicenses` gained
   `groupAssignments` + PSV threading; `LicenseInput` carries
   `verifiedStatus`/`verificationSourceUrl`. Wizard section:
@@ -1972,7 +1973,7 @@ providers write when the payload is empty (`after = before`). (b) Licenses
 UI rebuilt to the standard pattern: "+ Add license" + per-row Edit/Remove
 (single-license dialog + remove-confirm; every write composes the FULL list
 through the same audited sync; blank state-board URL accepted for
-unverified — required only for verify/fail; `LicenseListEditor` remains the
+verified/failed as well as unverified; `LicenseListEditor` remains the
 wizard create-flow editor). (c) Identity is ONE master "Edit details" →
 whole-form edit → "Save changes" committing a DIFF-ONLY audited
 `updateProvider` patch (per-field `InlineField` pencils retired; component

@@ -533,8 +533,8 @@ export async function updateProviderWithLicenses(
       const cand = existingByNatural.get(key);
       if (cand && !matchedIds.has(cand.id)) match = cand;
     }
-    // PSV columns via the pure rule module: URL required to (re)verify,
-    // stamps server-side, renewal reset on expiration change (TE-5).
+    // PSV columns via the pure rule module: stamps server-side, board URL
+    // optional, renewal reset on expiration change (TE-5).
     const psv = resolvePsvColumns(
       {
         verifiedStatus: l.verifiedStatus ?? "unverified",

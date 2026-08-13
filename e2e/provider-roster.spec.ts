@@ -8,7 +8,8 @@ import { test, expect, type Route } from "@playwright/test";
 //         → two assignment rows, roster lists both groups; removing the
 //         last assignment is blocked
 //   TS-35 Outer Banks PSV trail: record the NC board URL + mark verified
-//         (stamped), then edit the expiration date → back to unverified
+//         (stamped), then edit the expiration date → back to unverified;
+//         add a second license as Verified with a blank board URL
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -447,7 +448,7 @@ test("TS-34: two-TIN provider — both groups assigned, first primary; last-assi
   await expect(page.getByLabel(/Remove group/)).toHaveCount(0);
 });
 
-test("TS-35: per-row license editing — PSV verify with board URL, renewal reset, add with blank URL, remove; ZERO providers PATCHes", async ({
+test("TS-35: per-row license editing — PSV verify with board URL, renewal reset, add verified with blank URL, remove; ZERO providers PATCHes", async ({
   context,
   page,
 }) => {
@@ -527,14 +528,17 @@ test("TS-35: per-row license editing — PSV verify with board URL, renewal rese
   expect(lic.verified_at).toBeNull();
   expect(lic.expiration_date).toBe("2029-01-31");
 
-  // Add a second license with a BLANK state-board URL — the URL is optional
-  // for unverified rows (2026-07-21 handoff issue 3); the save must succeed
-  // and the unchanged NC row must pass through the sync untouched.
+  // Add a second license as Verified with a BLANK state-board URL — the URL
+  // is optional even when recording Verified (email / other source). The
+  // save must succeed, stamp the trail, and leave the NC row untouched.
   await page.getByRole("button", { name: "+ Add license" }).click();
   const addDialog = page.getByRole("dialog", { name: "Add license" });
   await addDialog.locator("#license-state").click();
   await page.getByRole("option", { name: "AZ", exact: true }).click();
   await addDialog.locator("#license-number").fill("5678");
+  await addDialog.locator("#license-psv").click();
+  await page.getByRole("option", { name: "Verified", exact: true }).click();
+  await expect(addDialog).not.toContainText("requires the state board URL");
   await addDialog.getByRole("button", { name: "Add license" }).click();
   await expect(page.getByRole("dialog", { name: "Add license" })).toHaveCount(0, {
     timeout: 15000,
@@ -544,6 +548,8 @@ test("TS-35: per-row license editing — PSV verify with board URL, renewal rese
     (l) => l.state === "AZ",
   )!;
   expect(added.license_number).toBe("5678");
+  expect(added.verified_status).toBe("verified");
+  expect(added.verified_at).toBeTruthy();
   expect(added.verification_source_url).toBeNull();
   expect(lic.expiration_date).toBe("2029-01-31");
   await expect(page.getByRole("row", { name: /AZ/ })).toBeVisible({ timeout: 15000 });

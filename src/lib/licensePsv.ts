@@ -1,7 +1,8 @@
 // License primary-source-verification rules (E1.3 F1.3.3 / TE-5) as pure,
 // unit-tested logic. The service applies these when writing state_licenses:
-// - Marking verified/failed REQUIRES the state-board lookup URL; the
-//   verifier and timestamp are stamped server-side, never client-supplied.
+// - Marking verified/failed stamps verifier and timestamp server-side, never
+//   client-supplied. The state-board lookup URL is optional — verification
+//   may come from email or another source.
 // - Renewal reset: editing a license's expiration date resets the row to
 //   unverified (feeds the R9 Expiration Radar re-verify workflow).
 // - An unchanged row keeps its stored PSV trail untouched.
@@ -29,10 +30,6 @@ export interface PsvColumns {
   verified_by: string | null;
   verification_source_url: string | null;
 }
-
-/** Thrown message for a verify attempt without the lookup URL. */
-export const PSV_URL_REQUIRED_MESSAGE =
-  "Recording a verification requires the state-board lookup URL";
 
 /**
  * Resolve the PSV columns to write for one license row.
@@ -70,9 +67,9 @@ export function resolvePsvColumns(
     };
   }
 
-  // verified | failed — a recorded verification attempt.
+  // verified | failed — a recorded verification attempt. URL may be null
+  // when the team verified by email or another source.
   if (statusChanged) {
-    if (!url) throw new Error(PSV_URL_REQUIRED_MESSAGE);
     return {
       verified_status: incoming.verifiedStatus,
       verified_at: nowIso,
