@@ -29,6 +29,13 @@ import { isWriter, type AuthContext, type UserContext } from "./guard";
 import { resolveUserTokens } from "./userTokens";
 import { resolveOrgContactProfileTokens } from "@/services/orgContacts";
 import { proposeSharedFieldMap, type SharedProposeBody } from "@/services/sharedFieldMaps";
+import {
+  proveSharedPortal,
+  recordSharedTestFill,
+  type ProveSharedPortalInput,
+  type SharedTestFillInput,
+} from "@/services/sharedDryRun";
+import type { FillSkippedField } from "@/types";
 
 // Date-only ISO (YYYY-MM-DD) for the pure queue reducer — a server clock read
 // at the route boundary, never inside the pure module.
@@ -310,6 +317,55 @@ export async function handleProposeSharedFieldMap(
   const result = await proposeSharedFieldMap(user.db, body as SharedProposeBody);
   if (result.kind === "rejected") return fail(result.status, result.message);
   return ok({ map: result.map });
+}
+
+// POST /api/shared-test-fills — Train mock dry-run machine log (is_test).
+// USER-scoped: training has no org header. Telemetry org comes from body.orgId
+// (required for multi-org) or the caller's sole membership. Never stamps
+// proven_at — that is POST /api/shared-portals/prove, a separate manual act.
+export async function handleRecordSharedTestFill(
+  body: unknown,
+  user: UserContext,
+): Promise<Response> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const raw = body as Record<string, unknown>;
+  const input: SharedTestFillInput = {
+    id: String(raw.id ?? ""),
+    portalKey: String(raw.portalKey ?? raw.portal_key ?? ""),
+    fieldsFilled: typeof raw.fieldsFilled === "number" ? raw.fieldsFilled : Number.NaN,
+    fieldsSkipped: (raw.fieldsSkipped ?? raw.fields_skipped ?? null) as FillSkippedField[] | null,
+    startedAt: (raw.startedAt ?? raw.started_at ?? null) as string | null,
+    completedAt: (raw.completedAt ?? raw.completed_at ?? null) as string | null,
+    orgId: (raw.orgId ?? raw.org_id ?? null) as string | null,
+    mockProfileVersion:
+      typeof raw.mockProfileVersion === "number"
+        ? raw.mockProfileVersion
+        : typeof raw.mock_profile_version === "number"
+          ? raw.mock_profile_version
+          : null,
+  };
+  const result = await recordSharedTestFill({ db: user.db, userId: user.userId }, input);
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok({ session: result.session }, null, result.kind === "created" ? 201 : 200);
+}
+
+// POST /api/shared-portals/prove — MANUAL proven_at stamp for a GLOBAL portal.
+// A dry-run pass must never call this; the trainer reviews the filled form and
+// marks proven explicitly. JWT is the gate (same interim posture as shared propose).
+export async function handleProveSharedPortal(body: unknown, user: UserContext): Promise<Response> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return fail(422, "Request body must be a JSON object");
+  }
+  const raw = body as Record<string, unknown>;
+  const input: ProveSharedPortalInput = {
+    portalKey: (raw.portalKey ?? raw.portal_key ?? null) as string | null,
+    id: (raw.id ?? null) as string | null,
+  };
+  const result = await proveSharedPortal({ db: user.db, userId: user.userId }, input);
+  if (result.kind === "rejected") return fail(result.status, result.message);
+  return ok({ portal: result.portal });
 }
 
 export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Promise<Response> {

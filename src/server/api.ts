@@ -38,6 +38,11 @@ const SHARED_FIELD_MAPS_ROUTE = /^\/api\/shared-field-maps\/?$/;
 // `/api/shared-portals` — the GLOBAL registry read that pairs with it, so a
 // trainer can recognize the open page without ever naming an org.
 const SHARED_PORTALS_ROUTE = /^\/api\/shared-portals\/?$/;
+// Manual proven_at stamp for a GLOBAL portal (Train "Mark proven"). Separate
+// from the dry-run fill log — a pass never auto-proves.
+const SHARED_PORTALS_PROVE_ROUTE = /^\/api\/shared-portals\/prove\/?$/;
+// Train mock dry-run machine log (is_test fill_sessions, case/provider null).
+const SHARED_TEST_FILLS_ROUTE = /^\/api\/shared-test-fills\/?$/;
 // `/api/portals` — the DB-driven payer-portal registry the extension matches
 // the current tab against.
 const PORTALS_ROUTE = /^\/api\/portals\/?$/;
@@ -123,6 +128,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isMeViewPrefs = ME_VIEW_PREFS_ROUTE.test(pathname);
   const isSharedFieldMaps = SHARED_FIELD_MAPS_ROUTE.test(pathname);
   const isSharedPortals = SHARED_PORTALS_ROUTE.test(pathname);
+  const isSharedPortalsProve = SHARED_PORTALS_PROVE_ROUTE.test(pathname);
+  const isSharedTestFills = SHARED_TEST_FILLS_ROUTE.test(pathname);
   const isDocumentUploadIntent = DOCUMENT_UPLOAD_INTENT_ROUTE.test(pathname);
   const isDocumentFinalize = DOCUMENT_FINALIZE_ROUTE.test(pathname);
   const documentDownloadMatch =
@@ -144,6 +151,8 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isMeViewPrefs &&
     !isSharedFieldMaps &&
     !isSharedPortals &&
+    !isSharedPortalsProve &&
+    !isSharedTestFills &&
     !isDocumentUploadIntent &&
     !isDocumentFinalize &&
     !documentDownloadMatch
@@ -206,6 +215,31 @@ async function routeApiRequest(request: Request): Promise<Response> {
       const user = await authenticateUser(request);
       const routes = await loadExtensionRoutes();
       return await routes.handleListSharedPortals(user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
+  }
+
+  // Manual prove for a GLOBAL portal — never auto-called from a dry-run pass.
+  if (isSharedPortalsProve) {
+    if (method !== "POST") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      return await routes.handleProveSharedPortal(await readJsonBody(request), user);
+    } catch (error) {
+      return toErrorResponse(error);
+    }
+  }
+
+  // Train mock dry-run fill log (is_test). Telemetry org from body.orgId /
+  // sole membership — not an implicit multi-org guess.
+  if (isSharedTestFills) {
+    if (method !== "POST") return fail(405, "Method not allowed");
+    try {
+      const user = await authenticateUser(request);
+      const routes = await loadExtensionRoutes();
+      return await routes.handleRecordSharedTestFill(await readJsonBody(request), user);
     } catch (error) {
       return toErrorResponse(error);
     }

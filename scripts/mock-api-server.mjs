@@ -445,6 +445,53 @@ export async function createMockApiServer(options = {}) {
       const rows = PORTALS.filter((r) => r.orgId === null || leak === "sharedtier");
       return envelope(res, 200, rows, null, { total: rows.length });
     }
+    if (/^\/api\/shared-portals\/prove\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const portalKey = String(body.portalKey ?? body.portal_key ?? "")
+        .trim()
+        .toLowerCase();
+      const id = body.id ? String(body.id) : "";
+      let portal = id
+        ? PORTALS.find((r) => r.id === id)
+        : PORTALS.find((r) => r.portalKey === portalKey);
+      // Honest 404 for org-scoped ids — prove is GLOBAL only.
+      if (!portal || (portal.orgId != null && leak !== "sharedtier")) {
+        return envelope(res, 404, null, "Shared portal not found");
+      }
+      // Leak "sharedtier": proving an org-scoped portal succeeds (isolation
+      // breach the gate must catch).
+      if (portal.orgId != null && leak !== "sharedtier") {
+        return envelope(res, 404, null, "Shared portal not found");
+      }
+      portal = { ...portal, provenAt: new Date().toISOString() };
+      const idx = PORTALS.findIndex((r) => r.id === portal.id);
+      if (idx >= 0) PORTALS[idx] = portal;
+      return envelope(res, 200, { portal });
+    }
+    if (/^\/api\/shared-test-fills\/?$/.test(url.pathname)) {
+      if (method !== "POST") return envelope(res, 405, null, "Method not allowed");
+      const body = (await readBody(req)) ?? {};
+      const id = String(body.id ?? "");
+      const portalKey = String(body.portalKey ?? body.portal_key ?? "")
+        .trim()
+        .toLowerCase();
+      if (!/^[0-9a-f-]{36}$/i.test(id)) {
+        return envelope(res, 422, null, "id must be a uuid");
+      }
+      if (!portalKey) return envelope(res, 422, null, "portalKey is required");
+      const session = {
+        id,
+        orgId: user.orgId,
+        caseId: null,
+        providerId: null,
+        portalKey,
+        fieldsFilled: body.fieldsFilled ?? 0,
+        fieldsSkipped: body.fieldsSkipped ?? null,
+        isTest: true,
+      };
+      return envelope(res, 201, { session });
+    }
     if (/^\/api\/shared-field-maps\/?$/.test(url.pathname)) {
       if (method === "GET") {
         // Leak "sharedtier": a private org row leaks into the shared read.

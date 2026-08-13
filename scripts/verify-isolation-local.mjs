@@ -102,7 +102,7 @@ const EXPECTED_FAILS = {
   // E6.9: the org-free training tier can only fail two ways — the shared
   // registry read hands back a private org row (22), or the shared propose
   // writes under the caller's org (23).
-  sharedtier: ["22", "22b", "23"],
+  sharedtier: ["22", "22b", "23", "24"],
 };
 
 function failedAssertions(output) {

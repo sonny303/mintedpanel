@@ -39,7 +39,7 @@ export const INTENT_BANNERS: Record<TemplateEditorIntent, IntentBanner> = {
   },
   prove: {
     title: "Check field coverage",
-    body: "Every captured field is mapped. Run the check to prove the form.",
+    body: "Every captured field is mapped. Prove the form in the Workbench Train forms tab (mock dry run, then Mark proven).",
   },
 };
 
@@ -54,7 +54,7 @@ export interface IntentStepFacts {
   fieldCount: number;
   /** Broken (drifted) mappings for that portal key. */
   brokenCount: number;
-  /** The portal carries a proven_at stamp (a passing mock dry run). */
+  /** The portal carries a proven_at stamp (manual Mark proven after a dry run). */
   proven: boolean;
 }
 

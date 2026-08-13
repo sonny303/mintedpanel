@@ -1,7 +1,7 @@
-// E6.5 F6.5.2/F6.5.3/F6.5.4 — the in-editor form machinery for an online_form
-// SOP step: register/pick the portal, train its captured mappings (broken
-// mappings queue FIRST), and prove the form with a MOCK-DATA dry run — the
-// whole capture → train → prove loop without leaving the SOP editor.
+// E6.5 F6.5.2/F6.5.4 — the in-editor form machinery for an online_form SOP
+// step: register/pick the portal and train its captured mappings (broken
+// mappings queue FIRST). Capture and mock dry-run / Mark proven live in the
+// Workbench extension Train forms tab — proven is never stamped from here.
 //
 // Self-contained by design: it fetches through its own org-cached hooks (keyed
 // by portalKey) and takes only primitives + row-local callbacks from
@@ -9,15 +9,9 @@
 // intact (TemplateTaskRow.test.ts + template-typing-latency.spec.ts). The
 // panel renders COLLAPSED by default — a summary line only — so Step 3 typing
 // never pays for its content.
-//
-// Dry runs fill from the versioned synthetic mock profile (mockFillProfile.ts)
-// — never a provider row, never PHI. Pass = every captured field has a decided,
-// auto-fillable mapping; a pass stamps the portal `proven_at` (the funnel's
-// Proven state). Capture itself stays extension-side (propose maps from the
-// live page); this panel takes over from there.
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronDown, FlaskConical } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,13 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { useQueryClient } from "@tanstack/react-query";
@@ -53,16 +40,11 @@ import {
   useSetGlobalPortalFlags,
   useTrainGlobalFieldMap,
   useUpsertGlobalPortal,
-  useMarkPortalProven,
 } from "@/hooks/useGlobalAuthoring";
 import { useCreatePortal } from "@/hooks/usePortals";
-import { useRecordTestFill, useTestFills } from "@/hooks/useFormOnboarding";
 import { useFormDrift } from "@/hooks/useFormDrift";
-import { buildMockTokenMap, MOCK_FILL_PROFILE_VERSION } from "@/lib/mockFillProfile";
-import { computeTestRun, summarizeTestFill, type DryRunFieldMap } from "@/lib/testRunResults";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { queryKeys } from "@/hooks/queryKeys";
-import type { PortalFieldMap } from "@/types";
 import { FieldRegistryList, type RegistryDecision } from "./FieldRegistryList";
 import {
   classifyFieldMap,
@@ -72,11 +54,6 @@ import {
 } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
 import type { GlobalTrainPatch } from "@/services/portalFieldMaps";
-
-// Hardcoded-source maps auto-fill from their stored value, not a token; a
-// pseudo-token keeps them on computeTestRun's "filled" path (the mock profile
-// resolves any token to a non-empty synthetic value).
-const HARDCODED_PSEUDO_TOKEN = "hardcoded.value";
 
 export interface FormStepPanelProps {
   /** The step's portal key, already normalized (null = no portal linked). */
@@ -108,7 +85,6 @@ export function FormStepPanel({
 }: FormStepPanelProps) {
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [running, setRunning] = useState(false);
 
   // PortalStepSelect's "Register portal" button (and the empty-registry path)
   // bumps the signal so registration stays one click away without a dead
@@ -125,7 +101,6 @@ export function FormStepPanel({
   const mapsQ = usePortalFieldMaps(portalKey ?? undefined);
   const tokensQ = useTokenCatalog();
   const drift = useFormDrift();
-  const testFillsQ = useTestFills(portalKey ?? undefined);
 
   const approveMut = useApproveField();
   const manualMut = useManualField();
@@ -136,8 +111,6 @@ export function FormStepPanel({
   const [addFieldLabel, setAddFieldLabel] = useState("");
   const finishTrainingMut = useFinishTraining();
   const globalFlagsMut = useSetGlobalPortalFlags();
-  const provenOrgMut = useMarkPortalProven();
-  const recordMut = useRecordTestFill();
 
   const portal = useMemo(
     () =>
@@ -160,9 +133,9 @@ export function FormStepPanel({
   // (proposed) captures. Decided, unbroken rows need no attention.
   const approvedCount = useMemo(() => maps.filter((m) => m.status === "approved").length, [maps]);
 
-  // E6.9: ONE derivation for the read-out, shared with the dry run and the list
-  // via the classifier. `brokenIds` doubles as the stale set — map ids the
-  // latest real fill reported as not found on the page (form drift, D7).
+  // E6.9: ONE derivation for the coverage read-out and the registry list via
+  // the classifier. `brokenIds` doubles as the stale set — map ids the latest
+  // real fill reported as not found on the page (form drift, D7).
   const coverage = useMemo(
     () => registryCoverage(maps as RegistryRow[], brokenIds),
     [maps, brokenIds],
@@ -303,73 +276,6 @@ export function FormStepPanel({
     }
   }
 
-  // F6.5.3 — the mock-data dry run. Proposed rows are deliberately fed a null
-  // token so they fail as "needs a decision"; deliberate manual fields are
-  // excluded (a human fills them by design); hardcoded rows auto-fill. Pass =
-  // zero skipped fields → stamp proven_at.
-  async function runDryTest() {
-    if (!portal || !portalKey) return;
-    setRunning(true);
-    try {
-      // E6.9 F6.9.4: classify the (status, source) PAIR. The old code filtered
-      // `source !== "manual"` BEFORE checking status — and capture writes
-      // (proposed, manual), so every undecided captured row vanished from the
-      // run meant to surface it, which is how this passed at 4 of 23 mapped.
-      // Decided human-fill rows are the ones that legitimately sit out.
-      const included = maps.filter((m) => {
-        const c = classifyFieldMap(m);
-        return c.decision !== "human" && c.decision !== "stale";
-      });
-      const dryRunMaps: DryRunFieldMap[] = included.map((m) => {
-        const c = classifyFieldMap(m);
-        return {
-          selector: m.selector,
-          fieldLabel: m.fieldLabel,
-          status: m.status,
-          // Autofillable rows carry a fillable key; everything else is fed null
-          // so it reports as needing a decision instead of disappearing.
-          token: c.autofillable
-            ? c.decision === "fixed"
-              ? HARDCODED_PSEUDO_TOKEN
-              : m.token
-            : null,
-        };
-      });
-      const tokenMap = buildMockTokenMap(dryRunMaps.map((d) => d.token));
-      const run = computeTestRun(dryRunMaps, tokenMap);
-      await recordMut.mutateAsync({
-        providerId: null,
-        portalKey,
-        fieldsFilled: run.fieldsFilled,
-        fieldsSkipped: run.fieldsSkipped,
-      });
-      const pass = run.results.length > 0 && run.fieldsSkipped.length === 0;
-      if (pass) {
-        if (portal.orgId === null) {
-          await globalFlagsMut.mutateAsync({ id: portal.id, proven: true });
-        } else {
-          await provenOrgMut.mutateAsync(portal.id);
-        }
-        toast.success(`Mock dry run passed — ${run.fieldsFilled} fields filled. Form proven.`);
-      } else if (run.results.length === 0) {
-        toast.error("No fillable mappings yet — capture the form fields first.");
-      } else {
-        toast.error(
-          `Mock dry run: ${run.fieldsSkipped.length} field${run.fieldsSkipped.length === 1 ? "" : "s"} unmatched — train them, then re-run.`,
-        );
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Dry run failed");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  const latestTest = testFillsQ.data?.[0];
-  const latestSummary = latestTest
-    ? summarizeTestFill(latestTest.fieldsFilled, latestTest.fieldsSkipped)
-    : null;
-
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="rounded-md border border-[#E8E5E0] bg-muted/20">
@@ -500,42 +406,12 @@ export function FormStepPanel({
             ) : null}
 
             {portal ? (
-              <div className="space-y-1.5 border-t border-[#E8E5E0] pt-2">
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    disabled={!canEdit || running || maps.length === 0}
-                    onClick={() => void runDryTest()}
-                  >
-                    <FlaskConical className="mr-1 h-3.5 w-3.5" />
-                    {running ? "Running…" : "Run mock dry run"}
-                  </Button>
-                  <span className="text-[11px] text-muted-foreground">
-                    Fills from a synthetic profile (v{MOCK_FILL_PROFILE_VERSION}) — no provider data
-                    involved. A pass proves the form.
-                  </span>
-                </div>
-                {latestSummary ? (
-                  <p className="text-[11.5px] text-muted-foreground">
-                    Last run: {latestSummary.filled} filled
-                    {latestSummary.unmapped.length > 0 ? (
-                      <span className="text-[#B91C1C]">
-                        {" "}
-                        · {latestSummary.unmapped.length} unmatched (
-                        {latestSummary.unmapped
-                          .slice(0, 3)
-                          .map((f) => f.label)
-                          .join(", ")}
-                        {latestSummary.unmapped.length > 3 ? ", …" : ""})
-                      </span>
-                    ) : (
-                      " · 0 unmatched"
-                    )}
-                  </p>
-                ) : null}
-              </div>
+              <p className="border-t border-[#E8E5E0] pt-2 text-[12px] text-muted-foreground">
+                To prove this form, open the portal in the Workbench extension’s{" "}
+                <span className="font-medium">Train forms</span> tab, run the mock dry run there,
+                then <span className="font-medium">Mark proven</span> manually — proven is never
+                automatic.
+              </p>
             ) : null}
           </div>
         </CollapsibleContent>

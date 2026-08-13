@@ -596,20 +596,9 @@ test("TS-145 — the (status, source) PAIR decides state; status is read before 
   await expect(page.getByText(/4 of 7 mapped/)).toBeVisible();
   await expect(page.getByText(/2 to decide/).first()).toBeVisible();
 
-  // A dry run cannot pass while undecided rows remain, and the run itself is
-  // synthetic — `is_test` with NO provider row behind it (mock profile, never
-  // PHI).
-  await page.getByRole("button", { name: "Run mock dry run" }).click();
-  await expect(async () => {
-    const fill = (db?.fill_sessions ?? [])[0];
-    expect(fill).toBeTruthy();
-    expect(fill?.is_test).toBe(true);
-    expect(fill?.provider_id ?? null).toBeNull();
-    // The two undecided rows are what stopped it — a pass would have stamped
-    // the portal proven.
-    expect((fill?.fields_skipped as unknown[])?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect((db?.portals ?? [])[0]?.proven_at ?? null).toBeNull();
-  }).toPass({ timeout: 25000 });
+  // Prove lives in the Workbench — the editor never auto-stamps proven_at.
+  await expect(page.getByRole("button", { name: "Run mock dry run" })).toHaveCount(0);
+  expect((db?.portals ?? [])[0]?.proven_at ?? null).toBeNull();
 });
 
 test("TS-146 — sections group the list in form order with per-section progress", async ({
