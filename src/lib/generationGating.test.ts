@@ -32,8 +32,6 @@ function facts(over: Partial<ProviderReadinessFacts>): ProviderReadinessFacts {
     caqhLastAttestedDate: "2026-06-01",
     dobPresent: true,
     ssnLast4Present: true,
-    homeAddressPresent: true,
-    malpracticeCoverageEnd: "2027-01-01",
     ...over,
   };
 }

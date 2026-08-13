@@ -16,8 +16,6 @@ function facts(overrides: Partial<ProviderReadinessFacts>): ProviderReadinessFac
     caqhLastAttestedDate: "2026-06-01",
     dobPresent: true,
     ssnLast4Present: true,
-    homeAddressPresent: true,
-    malpracticeCoverageEnd: "2027-01-01",
     ...overrides,
   };
 }
@@ -40,11 +38,11 @@ describe("profileGating", () => {
 
   it("blocks with the exact unmet attributes in catalog order (TS-96)", () => {
     const r = evaluateProfileGate(
-      ["npi", "caqh_id", "malpractice_coverage"],
-      facts({ caqhIdPresent: false, malpracticeCoverageEnd: null }),
+      ["npi", "caqh_id", "dob"],
+      facts({ caqhIdPresent: false, dobPresent: false }),
     );
     expect(r.passed).toBe(false);
-    expect(r.unmet.map((u) => u.key)).toEqual(["caqh_id", "malpractice_coverage"]);
+    expect(r.unmet.map((u) => u.key)).toEqual(["caqh_id", "dob"]);
     expect(r.unmet[0].label).toBe("CAQH ID");
   });
 
@@ -68,8 +66,6 @@ describe("profileGating", () => {
         caqhLastAttestedDate: null,
         dobPresent: false,
         ssnLast4Present: false,
-        homeAddressPresent: false,
-        malpracticeCoverageEnd: null,
       });
       expect(evaluateProfileGate([key], allMissing).passed).toBe(false);
     }

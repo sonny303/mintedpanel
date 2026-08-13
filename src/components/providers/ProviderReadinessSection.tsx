@@ -47,7 +47,6 @@ const GAP_OPTIONS: Array<{ key: ReadinessCheckKey; label: string }> = [
   { key: "caqh_current", label: "CAQH stale" },
   { key: "npi", label: "NPI missing" },
   { key: "demographics", label: "Demographics incomplete" },
-  { key: "malpractice_current", label: "Malpractice lapsed" },
   { key: "state_facility", label: "No facility in state" },
   { key: "w9", label: "W-9 missing" },
   { key: "group_coi", label: "Group COI missing/expired" },

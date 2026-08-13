@@ -24,8 +24,6 @@ const facts = (over: Partial<ProviderReadinessFacts> = {}): ProviderReadinessFac
   caqhLastAttestedDate: "2026-06-15",
   dobPresent: true,
   ssnLast4Present: true,
-  homeAddressPresent: true,
-  malpracticeCoverageEnd: "2027-01-01",
   ...over,
 });
 
@@ -76,7 +74,7 @@ describe("provider checklist", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].ready).toBe(true);
     expect(rows[0].openGaps).toBe(0);
-    expect(rows[0].checks).toHaveLength(12);
+    expect(rows[0].checks).toHaveLength(11);
   });
 
   it("license expiration is date-only inclusive: today passes, yesterday fails", () => {
@@ -152,11 +150,11 @@ describe("provider checklist", () => {
 
   it("demographics permutations list exactly what is missing (presence only)", () => {
     const missingAll = baseInput({
-      providers: [facts({ dobPresent: false, ssnLast4Present: false, homeAddressPresent: false })],
+      providers: [facts({ dobPresent: false, ssnLast4Present: false })],
     });
     const c = check(missingAll, "demographics");
     expect(c.pass).toBe(false);
-    expect(c.detail).toBe("Missing: date of birth, SSN last 4, home address");
+    expect(c.detail).toBe("Missing: date of birth, SSN last 4");
 
     const missingOne = baseInput({ providers: [facts({ ssnLast4Present: false })] });
     expect(check(missingOne, "demographics").detail).toBe("Missing: SSN last 4");
@@ -362,7 +360,7 @@ describe("group contract check (E2.0 TE-8 — optional, additive)", () => {
   it("emits no group_contract check when the contracts input is omitted", () => {
     const rows = evaluateEnrollmentReadiness(baseInput());
     expect(rows[0].checks.some((c) => c.key === "group_contract")).toBe(false);
-    expect(rows[0].checks).toHaveLength(12);
+    expect(rows[0].checks).toHaveLength(11);
   });
 
   it("passes when a contract at the exact group × payer × state is Contracted", () => {

@@ -32,8 +32,7 @@ export type ProviderCheckKey =
   | "caqh_id"
   | "caqh_current"
   | "npi"
-  | "demographics"
-  | "malpractice_current";
+  | "demographics";
 
 export type GroupCheckKey =
   "state_facility" | "w9" | "group_coi" | "voided_check" | "group_contract";
@@ -67,8 +66,6 @@ export interface ProviderReadinessFacts {
   /** Presence booleans only — computed at the service boundary (TE-9). */
   dobPresent: boolean;
   ssnLast4Present: boolean;
-  homeAddressPresent: boolean;
-  malpracticeCoverageEnd: string | null;
 }
 
 export interface ReadinessLicenseInput {
@@ -184,7 +181,6 @@ function providerChecks(
   const missingDemographics = [
     ...(facts.dobPresent ? [] : ["date of birth"]),
     ...(facts.ssnLast4Present ? [] : ["SSN last 4"]),
-    ...(facts.homeAddressPresent ? [] : ["home address"]),
   ];
 
   const checks: ReadinessCheck[] = [
@@ -245,16 +241,6 @@ function providerChecks(
       pass: missingDemographics.length === 0,
       detail:
         missingDemographics.length === 0 ? null : `Missing: ${missingDemographics.join(", ")}`,
-      fixTarget: "providers_section",
-    },
-    {
-      key: "malpractice_current",
-      owner: "provider",
-      label: "Malpractice coverage current",
-      pass: onOrAfter(facts.malpracticeCoverageEnd, today),
-      detail: facts.malpracticeCoverageEnd
-        ? `Coverage ends ${facts.malpracticeCoverageEnd}`
-        : "No coverage end date",
       fixTarget: "providers_section",
     },
   ];

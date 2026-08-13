@@ -133,10 +133,6 @@ interface ReadinessFactsRow {
   caqh_last_attested_date: string | null;
   date_of_birth: string | null;
   ssn_last4: string | null;
-  home_street: string | null;
-  home_city: string | null;
-  home_state: string | null;
-  home_zip: string | null;
   malpractice_coverage_end: string | null;
 }
 
@@ -218,7 +214,7 @@ export async function getNextBestAction(
     db
       .from("providers")
       .select(
-        "id, first_name, last_name, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4, home_street, home_city, home_state, home_zip, malpractice_coverage_end",
+        "id, first_name, last_name, npi, caqh_id, caqh_last_attested_date, date_of_birth, ssn_last4",
       )
       .eq("org_id", orgId)
       .neq("status", "terminated")
@@ -278,10 +274,6 @@ export async function getNextBestAction(
       caqhLastAttestedDate: r.caqh_last_attested_date,
       dobPresent: Boolean(r.date_of_birth),
       ssnLast4Present: Boolean(r.ssn_last4?.trim()),
-      homeAddressPresent: Boolean(
-        r.home_street?.trim() && r.home_city?.trim() && r.home_state?.trim() && r.home_zip?.trim(),
-      ),
-      malpracticeCoverageEnd: r.malpractice_coverage_end,
     }),
   );
 
