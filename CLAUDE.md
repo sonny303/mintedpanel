@@ -3209,7 +3209,22 @@ x-org-id`.
   columns (street/city/zip); `home_state` is deliberately included for
   routing/display, not an address); never `select('*')` in a list payload.
   Writes set `org_id` from the authenticated membership (**never the request
-  body** — it's stripped) and audit through the service layer. `PATCH
+  body** — it's stripped) and audit through the service layer. **`GET
+/api/providers` excludes `terminated` providers by default** (bugfix
+  2026-08-11): every browser surface that reads the shared `listProviders`
+  service filters terminated providers out itself at the call site
+  (`providers.index.tsx`, `ManualCaseModal`) — the API route had no such
+  filter, so the extension's provider picker/search (`listProviders`/
+  `searchProviders` in `minted-extension` `src/background/api.ts`, both
+  calling `/api/providers` with no `?status=`) surfaced providers the webapp
+  treats as gone. Fixed at the shared-service boundary via a new
+  `ProviderFilters.excludeStatus` (`.neq` filter, applied only when `status`
+  isn't set — an explicit request always wins); `handleListProviders`
+  defaults it to `"terminated"` whenever the caller omits `?status=`, and
+  `?status=terminated` still works to view them explicitly. Browser hooks
+  that call `listProviders`/`getProviders` directly are unaffected (they
+  don't set `excludeStatus`, so they keep getting "everyone, I'll filter
+  myself" as before). `PATCH
 /api/providers/:id` mirrors the GET handler's not-found detection: a
   cross-org or nonexistent id is a 404 (never the 500 the raw `.single()`
   would raise), pinned by gate assertion 12.

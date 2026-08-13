@@ -25,6 +25,7 @@ interface Captured {
   selectOpts?: { count?: string };
   payload?: Record<string, unknown>;
   filters: Array<[string, unknown]>;
+  excludeFilters: Array<[string, unknown]>;
   range?: [number, number];
   order?: [string, { ascending: boolean }];
 }
@@ -36,7 +37,7 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown; count?: num
 
   const db = {
     from(table: string) {
-      const cap: Captured = { table, op: "select", filters: [] };
+      const cap: Captured = { table, op: "select", filters: [], excludeFilters: [] };
       captures.push(cap);
       const builder: Record<string, unknown> = {
         select(cols: string, opts?: { count?: string }) {
@@ -56,6 +57,10 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown; count?: num
         },
         eq(col: string, val: unknown) {
           cap.filters.push([col, val]);
+          return builder;
+        },
+        neq(col: string, val: unknown) {
+          cap.excludeFilters.push([col, val]);
           return builder;
         },
         or() {
@@ -103,6 +108,26 @@ describe("provider service — injected server context", () => {
     expect(cap.selectOpts).toEqual({ count: "exact" });
     expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     expect(cap.range).toEqual([10, 19]); // page 2, size 10 => rows 10..19
+  });
+
+  it("listProviders applies excludeStatus as a neq filter", async () => {
+    const { db, captures } = makeFakeDb([{ data: [], count: 0 }]);
+    const { ctx } = ctxWith(db);
+    await listProviders(ctx, { excludeStatus: "terminated" }, { page: 1, pageSize: 25 });
+    expect(captures[0].excludeFilters).toContainEqual(["status", "terminated"]);
+    expect(captures[0].filters).not.toContainEqual(["status", "terminated"]);
+  });
+
+  it("an explicit status filter wins over excludeStatus (caller shouldn't set both, but status is authoritative)", async () => {
+    const { db, captures } = makeFakeDb([{ data: [], count: 0 }]);
+    const { ctx } = ctxWith(db);
+    await listProviders(
+      ctx,
+      { status: "terminated", excludeStatus: "terminated" },
+      { page: 1, pageSize: 25 },
+    );
+    expect(captures[0].filters).toContainEqual(["status", "terminated"]);
+    expect(captures[0].excludeFilters).toEqual([]);
   });
 
   it("the list projection never leaks PHI (no ssn / dob / home street-city-zip)", async () => {

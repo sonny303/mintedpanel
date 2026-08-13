@@ -32,6 +32,14 @@ export interface ProviderFilters {
   state?: string;
   payerId?: string;
   status?: ProviderStatus;
+  // Excludes a single status (e.g. "terminated") without pinning the result
+  // to one status the way `status` does. Ignored when `status` is also set —
+  // an explicit status request always wins. Consumers that want "everyone,
+  // I'll filter myself" (most browser hooks — see providers.index.tsx,
+  // ManualCaseModal) simply omit this; it exists for callers, like the
+  // /api/providers route, that want a sane default without forcing every
+  // client to remember to filter terminated providers itself.
+  excludeStatus?: ProviderStatus;
   search?: string;
 }
 
@@ -143,6 +151,7 @@ export async function listProviders(
 
   if (filters.groupId) query = query.eq("group_id", filters.groupId);
   if (filters.status) query = query.eq("status", filters.status);
+  else if (filters.excludeStatus) query = query.neq("status", filters.excludeStatus);
   if (filters.search) {
     const term = `%${filters.search}%`;
     query = query.or(
