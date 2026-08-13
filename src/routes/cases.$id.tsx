@@ -23,11 +23,14 @@ import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
   useCase,
   useDenialReasonCodes,
+  useSetCaseFacility,
   useSetCaseStatus,
   useSetPayerReference,
 } from "@/hooks/useCases";
-import { useCoordinators } from "@/hooks/useLookups";
+import { useCoordinators, useFacilities } from "@/hooks/useLookups";
+import { useProviderAssignments } from "@/hooks/useProviders";
 import { useCorrectTouch, useLogNote, useLogTouch } from "@/hooks/useTouches";
+import { caseFacilityOptions } from "@/lib/caseFacility";
 import { useCanWrite, useIsAdmin } from "@/lib/permissions";
 import { CaseHeader } from "@/components/cases/CaseHeader";
 import { CaseStatusControl } from "@/components/cases/CaseStatusControl";
@@ -52,6 +55,8 @@ function CaseDetailPage() {
   const caseQ = useCase(id);
   const coordinatorsQ = useCoordinators();
   const reasonCodesQ = useDenialReasonCodes();
+  const facilitiesQ = useFacilities();
+  const facilityAssignmentsQ = useProviderAssignments();
   const c = caseQ.data;
 
   const setStatusM = useSetCaseStatus();
@@ -59,12 +64,30 @@ function CaseDetailPage() {
   const correctTouchM = useCorrectTouch();
   const logNoteM = useLogNote();
   const setReferenceM = useSetPayerReference();
+  const setFacilityM = useSetCaseFacility();
 
   const coordinatorName = useMemo(() => {
     if (!c?.assignedTo) return "—";
     const found = (coordinatorsQ.data ?? []).find((x) => x.id === c.assignedTo);
     return found?.fullName ?? found?.email ?? "—";
   }, [c?.assignedTo, coordinatorsQ.data]);
+
+  const facilityOptions = useMemo(() => {
+    if (!c?.providerId) return [];
+    return caseFacilityOptions(
+      c.providerId,
+      c.groupId,
+      facilityAssignmentsQ.data ?? [],
+      facilitiesQ.data ?? [],
+      c.facilityId,
+    );
+  }, [
+    c?.providerId,
+    c?.groupId,
+    c?.facilityId,
+    facilityAssignmentsQ.data,
+    facilitiesQ.data,
+  ]);
 
   // token -> value map for the TaskDrawer's pdf-step form filler, from the
   // data this page already holds (no extra fetch). PHI stays in the browser.
@@ -222,7 +245,23 @@ function CaseDetailPage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Case facts · identifiers (incl. the payer-issued IDs an
                 approval captured) · provenance — one card, three groups. */}
-            <CaseDetailsPanel c={c} tasks={tasks} coordinatorName={coordinatorName} />
+            <CaseDetailsPanel
+              c={c}
+              tasks={tasks}
+              coordinatorName={coordinatorName}
+              facilityOptions={facilityOptions}
+              canEditFacility={canEdit}
+              savingFacility={setFacilityM.isPending}
+              onSaveFacility={async (facilityId) => {
+                try {
+                  await setFacilityM.mutateAsync({ caseId: c.id, facilityId });
+                  toast.success("Facility saved");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  throw e;
+                }
+              }}
+            />
             {/* E6.0 — the unified timeline is the ONE history surface: the two
                 pre-unification ledgers are a §2.7 removal from this screen. */}
             <CaseStatusHistoryPanel history={c.caseStatusHistory ?? []} touches={touches} />

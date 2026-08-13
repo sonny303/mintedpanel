@@ -11,6 +11,7 @@ import {
   getContractFor,
   listCaseDenialEntries,
   listDenialReasonCodes,
+  setCaseFacility,
   setCaseStatus,
   setPayerReference,
   type CaseFilters,
@@ -85,6 +86,25 @@ export function useSetPayerReference() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (vars: SetPayerReferenceVars) => setPayerReference(vars.caseId, vars.value),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface SetCaseFacilityVars {
+  caseId: string;
+  facilityId: string | null;
+}
+
+/** Overwrite the case's facility (provider×group assignment scoped). */
+export function useSetCaseFacility() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: SetCaseFacilityVars) => setCaseFacility(vars.caseId, vars.facilityId),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });

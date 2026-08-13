@@ -1,25 +1,25 @@
 // Slice E (payer-and-cases screen 6) — the case's right-column Details card:
 // ONE card, three labeled groups.
 //   Case         — the dates the case carries, days open, coordinator, group,
-//                  the facility WITH its full address, forwarding ID.
+//                  the facility WITH its full address (editable for writers —
+//                  provider×group assignment scoped), forwarding ID.
 //   Identifiers  — provider/group identifiers, each copyable, plus the
 //                  payer-issued IDs an approval captured. A payer that expects
 //                  an ID whose approval acked it missing reads "Awaiting ID"
 //                  (Slice D's derivation, reused verbatim — never re-derived).
 //   Provenance   — the E2.4 origin + SOP version lines + reapply cycles
 //                  (CaseProvenancePanel composed, never re-implemented).
-// Read-only throughout; every value comes from the already-loaded case detail.
 import { differenceInDays, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusPill } from "@/components/StatusPill";
+import { CaseFacilityField } from "@/components/cases/CaseFacilityField";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
-import { facilityAddressLine } from "@/lib/caseDetailView";
 import { fmtDate } from "@/lib/format";
 import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveGroupIdentifierConfig } from "@/lib/payerResolutionIdentifier";
-import type { CaseDetail, Task } from "@/types";
+import type { CaseDetail, Facility, Task } from "@/types";
 
 const GROUP_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
 
@@ -27,13 +27,21 @@ export function CaseDetailsPanel({
   c,
   tasks,
   coordinatorName,
+  facilityOptions = [],
+  canEditFacility = false,
+  savingFacility = false,
+  onSaveFacility,
 }: {
   c: CaseDetail;
   tasks: Task[];
   coordinatorName: string;
+  /** Provider×group facilities offered by the editor (empty = read-only dash). */
+  facilityOptions?: Facility[];
+  canEditFacility?: boolean;
+  savingFacility?: boolean;
+  onSaveFacility?: (facilityId: string | null) => Promise<void>;
 }) {
   const daysOpen = c.submittedDate ? differenceInDays(new Date(), parseISO(c.submittedDate)) : null;
-  const facilityAddress = facilityAddressLine(c.facility);
   const approved = c.caseStatus === "approved";
   // The provider-side badge is Slice D's shared derivation; the group side
   // mirrors it against the payer's own group-ID expectation.
@@ -64,22 +72,12 @@ export function CaseDetailsPanel({
           <Separator className="my-2" />
           <Row label="Coordinator" value={coordinatorName} />
           <Row label="Group" value={c.group?.name ?? "—"} />
-          <Row
-            label="Facility"
-            value={
-              c.facility ? (
-                <span className="block">
-                  {c.facility.name}
-                  {facilityAddress ? (
-                    <span className="mt-0.5 block text-[11.5px] font-normal text-muted-foreground">
-                      {facilityAddress}
-                    </span>
-                  ) : null}
-                </span>
-              ) : (
-                "—"
-              )
-            }
+          <CaseFacilityField
+            facility={c.facility}
+            options={facilityOptions}
+            canEdit={Boolean(canEditFacility && onSaveFacility)}
+            saving={savingFacility}
+            onSave={onSaveFacility ?? (async () => undefined)}
           />
           {c.caseEmailToken ? <IdRow label="Forwarding ID" value={c.caseEmailToken} /> : null}
         </dl>
