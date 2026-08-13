@@ -2571,12 +2571,20 @@ NULL`), and a tier-partitioned `sort_order` backfill. `display_label` is the
 
 Spike + locked decisions: `docs/ops/slice-6-platform-org-spike.md` (D6.1–D6.7);
 audit trail `docs/ops/3m-slice-4-sowmya-audit.md` §F23–F26. TWO additive
-migrations, **REPO-ONLY — hosted apply is an operator step** (3M lane rule,
-`docs/ops/repo-workflow.md` § Human-only ops); every behavioural claim below was
-proven on a throwaway Postgres running CI's exact dry-run procedure, not a fake.
+migrations were written; **D6.1 was RETIRED unapplied and D6.5 is now LIVE on
+hosted (applied 2026-08-11)** — see each bullet.
 
-- **D6.1 (`20260809120000_slice6_create_payer_assign_flag`) — `create_payer`
-  gained `p_assign_to_org boolean DEFAULT true`.** E6.7's "creating = adding"
+- **D6.1 (`20260809120000_slice6_create_payer_assign_flag`) — RETIRED, NEVER
+  APPLIED (`.superseded`).** The app half shipped to `main` and sent
+  `p_assign_to_org` on every `create_payer` call while hosted still declared the
+  10-arg function. PostgREST resolves an RPC by its named-argument SET, so the
+  call was unresolvable: **every "+ Set up payer" returned PGRST202 and no payer
+  could be created at all.** The fix was to converge the CODE on the live
+  signature (the smaller, reversible direction), not to apply the file —
+  `payers.governance.di.test.ts` now PINS that `p_assign_to_org` is never sent,
+  and the "Also add to my network" checkbox is gone from `/admin/payers/new`.
+  The flag is moot anyway now that OPA-RETIRE stops assignments gating payer
+  visibility. Historical shape, for context — it E6.7's "creating = adding"
   is now the DEFAULT, not the only option: `true` is today's behaviour byte for
   byte (identity insert + the caller org's `org_payer_assignments` upsert + the
   same audit row, one transaction); `false` writes the GLOBAL identity alone, so
@@ -2590,7 +2598,10 @@ proven on a throwaway Postgres running CI's exact dry-run procedure, not a fake.
   record — the `after` payload carries `assignedToOrg` and the description
   distinguishes the two intents.
 - **D6.5 Option A (`20260809120100_slice6_global_sop_read_without_assignment`)
-  — the read-back that D6.1 exposes.** `author_global_sop` never required an
+  — APPLIED TO HOSTED 2026-08-11, alongside OPA-RETIRE (it is the read-back
+  BOTH need: OPA-RETIRE stops creating assignment rows, and
+  `sop_templates_select` still gated global SOPs on them, so without this a
+  newly attached payer's global SOPs would vanish).** `author_global_sop` never required an
   assignment but `sop_templates_select` did, so a SOP authored for an unadopted
   payer was written and then invisible to its author (write-then-vanish).
   **Both `sop_templates_select` and `sop_template_versions_select` now admit
@@ -2637,10 +2648,11 @@ proven on a throwaway Postgres running CI's exact dry-run procedure, not a fake.
   "added to your network", because the payer is genuinely not in the list that
   claim would send the user to. Adoption stays Payer Detail's "Add to my
   network".
-- **types.ts was HAND-EDITED** (`create_payer.Args` gained
-  `p_assign_to_org?: boolean`), not regenerated: hosted apply is an operator
-  step in this lane, so a regen would reflect the PRE-migration hosted schema
-  and delete the new arg. Regenerate after the operator applies both files.
+- **types.ts is STALE and a regen is now the CORRECT move.** It was hand-edited
+  to add `create_payer.Args.p_assign_to_org?: boolean` for a migration that was
+  then retired — hosted has never had that argument, so the checked-in type is
+  ahead of reality in a direction that can only mislead. Regenerate via MCP
+  `generate_typescript_types` and let the arg disappear.
   Table-register rows updated for `payers`, `org_payer_assignments`,
   `sop_templates`, `sop_template_versions`, `portals`.
 - Tests: `portalVisibility.test.ts`, `authoringPayers.test.ts`,
@@ -2651,6 +2663,41 @@ proven on a throwaway Postgres running CI's exact dry-run procedure, not a fake.
   `e2e/payer-form.spec.ts` (checkbox on → assignment + "In my network";
   off → no assignment, honest toast, Add CTA on detail — its `create_payer`
   handler mirrors the RPC's own branch).
+
+### OPA-RETIRE — org_payer_assignments retired as a GATE (2026-08-11, #285)
+
+The table and its rows STAY (13 live rows; never DROP — additive rule); what is
+retired is its use as a **gate**. Migration `20260810220000_opa_retire_assignment_gate.sql`
+— **APPLIED TO HOSTED 2026-08-11, before the PR merged** (the ordering matters:
+the app stops writing assignment rows, so shipping code ahead of the policy
+change would have failed every payer attach against the old WITH CHECK).
+
+- **`payers_select` widened** to `own-org OR org_id IS NULL` — every global payer
+  is readable. Verified live under an impersonated authenticated admin: **270
+  payers visible against 13 assignment rows** (previously capped at the 13).
+  Consequence worth knowing: `usePayers()`/`listPayers` now means "the whole
+  global catalog", NOT "my network" — **"in my network" is now ≥1 ACTIVE
+  `payer_network_targets` row** (`activeOrgPayers`, `networkPayerIdsFromTargets`).
+- **`payer_network_targets` INSERT/UPDATE WITH CHECKs** drop the assignment
+  `EXISTS`; org scoping, the `user_role = 'admin'` gate, and the same-org
+  `provider_groups` check are all PRESERVED (verified 2/2).
+- **`create_payer` reissued at the SAME 10-arg signature** (CREATE OR REPLACE,
+  still exactly one overload) — no `org_payer_assignments` upsert, so "creating =
+  adding" is gone; the audit row's `assignedToOrg:false` is the only record.
+  Adoption is now group attach.
+- **Paired with D6.5** (`20260809120100`, applied the same day): without it,
+  `sop_templates_select` still gated global SOPs on assignment rows nobody
+  creates any more, so a newly attached payer's SOPs would go invisible —
+  write-then-vanish at scale. Verified live: 6 global SOPs + 9 version rows
+  readable.
+- `activeOrgPayers` requiring an active target means a freshly created payer is
+  NOT on Payer Setup until attached; the loop closes because
+  `GroupAttachPayerDialog` reads `useGlobalPayers()` (the full catalog), not
+  `activeOrgPayers`.
+
+**Still unapplied by design:** `20260810120000_purge_unreferenced_catalog_payers.sql`
+(OPS-PURGE) — 260 unreferenced global payers await a SECOND PM sign-off. Never
+agent-apply.
 
 ## What this is
 
@@ -2737,6 +2784,18 @@ all 23 hosted migrations. Consequences:
   the two ever diverge, regenerate a baseline from live rather than trusting the
   file. Check the live DB (MCP `list_migrations` / information_schema) before
   assuming a column/function's presence.
+- **NEVER decide "is this migration applied?" by comparing repo FILENAMES to
+  `supabase_migrations.schema_migrations.version`.** They are different
+  numbering spaces: MCP `apply_migration` mints its own timestamp, so
+  `20260809120100_*.sql` can be live under version `20260808024259`. That
+  comparison reports healthy migrations as missing and has already cost one
+  audit a false "nothing is applied" conclusion (and a false P0). **Verify the
+  OBJECT** — `pg_policies.qual`/`with_check` for a policy,
+  `pg_get_function_arguments`/`prosrc` for a function,
+  `information_schema.columns` for columns. For RLS behaviour, impersonate a
+  real member in a rolled-back transaction (`set_config('request.jwt.claims',…)`
+  - `set local role authenticated`); a shape check cannot prove what a user can
+    SEE. Recipes: `docs/ops/3m-uat-readiness-checklist.md`.
 - `src/integrations/supabase/types.ts` is **generated from the live schema**.
   After any DDL, regenerate via MCP `generate_typescript_types`, overwrite the
   file, and run prettier on it. It is not hand-edited.
