@@ -29,7 +29,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useEnrollmentReadiness } from "@/hooks/useEnrollmentReadiness";
+import {
+  localTodayIso,
+  useEnrollmentReadiness,
+  useProviderReadinessFacts,
+} from "@/hooks/useEnrollmentReadiness";
+import { useProviderGroupAssignments } from "@/hooks/useProviders";
 import {
   filterReadinessRows,
   type ReadinessCheck,
@@ -116,6 +121,8 @@ function CheckList({ checks, owner }: { checks: ReadinessCheck[]; owner: "provid
 
 export function ProviderReadinessSection({ providerId }: { providerId: string }) {
   const readiness = useEnrollmentReadiness();
+  const assignmentsQ = useProviderGroupAssignments();
+  const factsQ = useProviderReadinessFacts();
   const [filters, setFilters] = useState<ReadinessFilters>(ALL_FILTERS);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -135,8 +142,31 @@ export function ProviderReadinessSection({ providerId }: { providerId: string })
 
   // The record's slice of the org matrix: this provider's rows only.
   const myRows = readiness.rows.filter((r) => r.providerId === providerId);
+  const today = localTodayIso();
+  const hasGroup = (assignmentsQ.data ?? []).some(
+    (a) => a.providerId === providerId && (a.endDate == null || a.endDate.slice(0, 10) >= today),
+  );
+  const hasFacts = (factsQ.data ?? []).some((f) => f.providerId === providerId);
 
   if (myRows.length === 0) {
+    // Assignment is in but the 5-minute facts cache hasn't caught up yet —
+    // keep the skeleton up rather than the misleading "attach payers" empty.
+    if (hasGroup && !hasFacts && factsQ.isFetching) {
+      return <Skeleton className="h-16 w-full" />;
+    }
+    if (!hasGroup) {
+      return (
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-[13px] text-muted-foreground">
+            This provider isn&apos;t on a group yet. Add a group on Groups &amp; facilities —
+            readiness rows appear once that group has active payer targets.
+          </p>
+          <Button asChild variant="outline">
+            <a href="#groups-facilities">Open Groups &amp; facilities</a>
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-start gap-3">
         <p className="text-[13px] text-muted-foreground">

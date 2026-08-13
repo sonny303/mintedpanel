@@ -26,6 +26,7 @@ import {
   setPrimaryAssignment,
 } from "@/services/providerAssignments";
 import type { AssignmentDraft } from "@/lib/assignmentScope";
+import { invalidateProviderRosterCaches } from "@/lib/providerRosterCaches";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -54,8 +55,8 @@ export function useCreateProvider() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (input: ProviderInput) => createProvider(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
     },
   });
 }
@@ -94,12 +95,11 @@ export function useTerminateProvider(id: string) {
   return useMutation({
     mutationFn: (input: Omit<TerminateProviderInput, "providerId">) =>
       terminateProvider({ ...input, providerId: id }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
       qc.invalidateQueries({ queryKey: queryKeys.provider(orgId, id) });
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });
 }
@@ -116,18 +116,15 @@ export function useProviderGroupAssignments() {
 }
 
 // E1.3 — the wizard's create path: provider + licenses (PSV) + group
-// assignments in one service call.
+// assignments in one service call. Awaits the roster/readiness refetch so
+// /providers/new can navigate to the record without a stale Cases tab.
 export function useCreateProviderWithDetails() {
   const qc = useQueryClient();
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (input: CreateProviderWithDetailsInput) => createProviderWithDetails(input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
-      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
-      qc.invalidateQueries({ queryKey: queryKeys.orgStateLicenses(orgId) });
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
     },
   });
 }
@@ -149,9 +146,8 @@ export function useSetAssignments(providerId: string) {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (drafts: AssignmentDraft[]) => setAssignments(providerId, drafts),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
     },
   });
 }
@@ -162,9 +158,8 @@ export function useSetPrimaryAssignment() {
   return useMutation({
     mutationFn: (vars: { providerId: string; assignmentId: string }) =>
       setPrimaryAssignment(vars.providerId, vars.assignmentId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["facility-assignments", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
     },
   });
 }
@@ -179,10 +174,8 @@ export function useSetGroupAssignments(providerId: string) {
   return useMutation({
     mutationFn: (assignments: { groupId: string; isPrimary: boolean }[]) =>
       setGroupAssignments(providerId, assignments),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.providerGroupAssignments(orgId) });
-      qc.invalidateQueries({ queryKey: ["providers", orgId] });
-      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    onSuccess: async () => {
+      await invalidateProviderRosterCaches(qc, orgId);
     },
   });
 }
