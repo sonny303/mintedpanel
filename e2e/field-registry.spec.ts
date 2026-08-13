@@ -625,10 +625,13 @@ test("TS-146 — sections group the list in form order with per-section progress
   await expect(identityHeader.getByText("2 of 2 mapped")).toBeVisible();
 
   // Undecided AND human-fill rows stay in the denominator — a section is not
-  // "done" because the unfinished fields were filtered out of it.
+  // "done" because the unfinished fields were filtered out of it. Section
+  // headings expose a rename control (aria-label "Rename section …").
   const sectionLabels = await page
-    .locator("div.space-y-1\\.5 > div.flex.items-baseline p.font-medium")
-    .allInnerTexts();
+    .getByRole("button", { name: /^Rename section / })
+    .evaluateAll((buttons) =>
+      buttons.map((b) => (b.getAttribute("aria-label") ?? "").replace(/^Rename section /, "")),
+    );
   expect(sectionLabels).toEqual(["Identity", "Tax ID"]);
 
   // Real-form order inside a section is `sort_order`, not decision state.
