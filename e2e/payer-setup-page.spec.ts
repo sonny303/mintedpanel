@@ -23,6 +23,7 @@ const UHC_ID = "00000000-0000-4000-a000-0000000000bc";
 const BANNER_ID = "00000000-0000-4000-a000-0000000000bd";
 const SELECT_ID = "00000000-0000-4000-a000-0000000000be";
 const ANTHEM_ID = "00000000-0000-4000-a000-0000000000bf";
+const CIGNA_ID = "00000000-0000-4000-a000-0000000000c1";
 const FALLBACK_TPL_ID = "00000000-0000-4000-a000-00000000e17b";
 
 const SESSION = {
@@ -218,6 +219,9 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       states: ["CO"],
       archived_at: "2026-07-25T00:00:00Z",
     }),
+    // Catalog-only: no group attach. Setup must still list it — attach lives
+    // on Groups → Payer Network, not here.
+    payerRow(CIGNA_ID, "Cigna", { states: ["KS"] }),
   );
   db.org_payer_assignments.push(
     assignmentRow("as-1", AETNA_ID),
@@ -226,7 +230,8 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
     assignmentRow("as-4", SELECT_ID),
     assignmentRow("as-5", ANTHEM_ID),
   );
-  // OPA-RETIRE: setup inclusion is target-derived (assignments alone are not enough).
+  // Group-attach rows still exist for generation/board surfaces; Setup no
+  // longer filters on them. Cigna is deliberately omitted.
   db.payer_network_targets.push(
     targetRow("t-1", AETNA_ID),
     targetRow("t-2", UHC_ID),
@@ -420,8 +425,8 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
 }) => {
   await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  // Live count includes the archived row (it is still a payer in the network).
-  await expect(page.getByText("5 payers in your network")).toBeVisible();
+  // Live count includes the archived row (it is still a catalog payer).
+  await expect(page.getByText("6 payers in the catalog")).toBeVisible();
 
   // Single view: no tab strip, no funnel head, no catalog browse (all
   // superseded by this screen).
@@ -430,13 +435,13 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
   // The four KPI cards carry honest counts over ACTIVE payers.
-  await expect(page.getByRole("button", { name: /All payers/ })).toContainText("4");
-  await expect(page.getByRole("button", { name: /Needs template/ })).toContainText("1");
+  await expect(page.getByRole("button", { name: /All payers/ })).toContainText("5");
+  await expect(page.getByRole("button", { name: /Needs template/ })).toContainText("2");
   await expect(page.getByRole("button", { name: /Form not proven/ })).toContainText("1");
   await expect(page.getByRole("button", { name: /Drift detected/ })).toContainText("1");
 
-  // Table: 4 active rows; per-row template status is ONE badge.
-  await expect(page.locator("tbody tr")).toHaveCount(4);
+  // Table: 5 active rows (Cigna has no group attach and still lists).
+  await expect(page.locator("tbody tr")).toHaveCount(5);
   const aetnaRow = page.locator("tbody tr", { hasText: "Aetna (CVS Health)" });
   await expect(aetnaRow.getByText("Published")).toBeVisible();
   await expect(aetnaRow).toContainText("AZ, CA, CO, NY");
@@ -444,16 +449,20 @@ test("populated list — table columns, live count, KPI cards filter and toggle"
   const bannerRow = page.locator("tbody tr", { hasText: "Banner Health Plans" });
   await expect(bannerRow.getByText("Needs template")).toBeVisible();
   await expect(bannerRow).toContainText("Medicare Advantage");
+  const cignaRow = page.locator("tbody tr", { hasText: "Cigna" });
+  await expect(cignaRow.getByText("Needs template")).toBeVisible();
+  await expect(cignaRow).toContainText("KS");
 
   // KPI cards are filter TOGGLES (aria-pressed; click again clears).
   const needsCard = page.getByRole("button", { name: /Needs template/ });
   await needsCard.click();
   await expect(needsCard).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("tbody tr")).toHaveCount(1);
-  await expect(page.locator("tbody tr").first()).toContainText("Banner Health Plans");
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(page.locator("tbody tr", { hasText: "Banner Health Plans" })).toBeVisible();
+  await expect(page.locator("tbody tr", { hasText: "Cigna" })).toBeVisible();
   await needsCard.click();
   await expect(needsCard).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator("tbody tr")).toHaveCount(4);
+  await expect(page.locator("tbody tr")).toHaveCount(5);
 
   await page.getByRole("button", { name: /Form not proven/ }).click();
   await expect(page.locator("tbody tr")).toHaveCount(1);
@@ -493,13 +502,13 @@ test("search + State + Kind filters; filtered-to-none offers Clear filters, neve
   await expect(page.locator("tbody tr").first()).toContainText("Banner Health Plans");
 
   // Filters that match nothing → the honest empty state with Clear filters
-  // (the org HAS payers, so no "add a payer" pitch here).
+  // (the catalog HAS payers, so no "add a payer" pitch here).
   await page.getByLabel("Search payers").fill("no such payer");
   await expect(page.getByText("No payers match these filters")).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear filters" })).toBeVisible();
   await expect(page.getByText("Add your first payer")).toHaveCount(0);
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(4);
+  await expect(page.locator("tbody tr")).toHaveCount(5);
 });
 
 test("archived rows — hidden by default; Show archived reveals badge + Reactivate on the wire", async ({
@@ -539,7 +548,7 @@ test("archived rows — hidden by default; Show archived reveals badge + Reactiv
     )
     .toBe(1);
   await expect(anthemRow.getByText("Needs template")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole("button", { name: /All payers/ })).toContainText("5");
+  await expect(page.getByRole("button", { name: /All payers/ })).toContainText("6");
   // Never a direct payers table write — the RPC is the only writer.
   expect(calls.filter((c) => c.kind === "rest" && c.path === "payers")).toEqual([]);
 });
@@ -550,12 +559,12 @@ test("zero payers — three-step orientation; Add your first payer opens the cre
   scenario = "empty";
   await page.goto("/admin/payer-admin/setup");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({ timeout: 30000 });
-  await expect(page.getByText("0 payers in your network")).toBeVisible();
+  await expect(page.getByText("0 payers in the catalog")).toBeVisible();
 
   await expect(page.getByText("No payers yet")).toBeVisible();
   await expect(page.getByText("Add a payer", { exact: true })).toBeVisible();
   await expect(page.getByText("Author a template", { exact: true })).toBeVisible();
-  await expect(page.getByText("Generate cases", { exact: true })).toBeVisible();
+  await expect(page.getByText("Attach to a group", { exact: true })).toBeVisible();
 
   // Slice B: the CTA lands on step 1 of the guided create flow (name +
   // near-match), whose Cancel returns to this page.

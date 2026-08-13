@@ -52,17 +52,16 @@ Journeys B and C — the working entity for payer attach and generation.
   joined Sep 3"). **Review & generate** (on the banner, and per payer row)
   opens the shared generation grid pre-scoped to this group — the payer-row
   entry additionally scopes to that payer and opens grouped by payer.
-- **Attach payers to the group**: the picker offers only catalog payers
-  whose covered states intersect the group's operating states (zero-overlap
+- **Attach payers to the group**: the picker offers catalog payers whose
+  covered states intersect the group's operating states (zero-overlap
   payers are named in an explainer, never offered); proposed states = payer
-  coverage ∩ group operating states, reviewed before save. The org-level
-  enablement is created implicitly — no screen manages it. A CSV
-  alternative (one row per group × payer, `;`-delimited states) rides the
-  staged-import engine with the same eligibility checks at scan time and an
-  idempotent skip-on-match commit.
-- **Removing a payer archives** the group's targets (never deletes); the
-  org-level enablement archives only when no other group still works the
-  payer. Re-attaching restores the archived targets without duplicates.
+  coverage ∩ group operating states, reviewed before save. There is no
+  org↔payer assignment — attach is payer↔group only. A CSV alternative
+  (one row per group × payer, `;`-delimited states) rides the staged-import
+  engine with the same eligibility checks at scan time and an idempotent
+  skip-on-match commit.
+- **Removing a payer archives** the group's targets (never deletes).
+  Re-attaching restores the archived targets without duplicates.
 
 ## Enrollment facts (the migration model)
 

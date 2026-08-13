@@ -78,7 +78,7 @@ function fixtures(): Record<string, unknown[]> {
         created_at: "2026-07-12T00:00:00Z",
       },
     ],
-    // OPA-RETIRE: setup inclusion is target-derived; assignments stay dormant.
+    // OPA-RETIRE: assignments stay dormant. Setup lists the catalog.
     org_payer_assignments: [],
     payer_network_targets: [
       {

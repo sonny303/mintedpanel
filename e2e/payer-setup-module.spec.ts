@@ -97,7 +97,7 @@ function buildDb(scenario: Scenario): Record<string, Row[]> {
       { id: "as-1", org_id: ORG_ID, payer_id: AETNA_ID, starter: false, status: "active" },
       { id: "as-2", org_id: ORG_ID, payer_id: BCBS_ID, starter: false, status: "active" },
     ],
-    // OPA-RETIRE: Payer Setup inclusion is target-derived.
+    // OPA-RETIRE: assignments stay dormant. Setup lists the catalog.
     payer_network_targets: [
       {
         id: "t-aetna",

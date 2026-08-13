@@ -179,6 +179,11 @@ describe("payer writes are RPC-only at the service boundary (E6.7)", () => {
     expect(page).not.toContain("useCreatePayer");
     expect(page).not.toContain("useUpdatePayer");
     expect(page).toContain("/admin/payers/new");
+    // Setup lists the global catalog — no org↔payer assignment, no group-attach filter.
+    expect(page).toContain("catalogSetupPayers");
+    expect(page).not.toContain("activeOrgPayers");
+    expect(page).not.toContain("usePayerNetworkTargets");
+    expect(page).not.toContain("in your network");
   });
 
   it("delegation_note is written ONLY through the payers RPC seam", () => {

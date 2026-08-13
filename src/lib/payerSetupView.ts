@@ -1,7 +1,8 @@
 // Payer & Cases design bundle, screen 1 (Slice A) — pure view logic for the
-// single-view Payer Setup page. The page lists the org's payers (the shared
-// activeOrgPayers inclusion rule, archived rows opt-in via Show archived) with
-// FOUR KPI filter cards, a search · State · Kind toolbar, and pagination.
+// single-view Payer Setup page. The page lists the global catalog
+// (catalogSetupPayers; archived rows opt-in via Show archived) with FOUR KPI
+// filter cards, a search · State · Kind toolbar, and pagination. There is no
+// org↔payer assignment — group attach lives on Groups → Payer Network.
 //
 // Template/form/drift facts are CONSUMED from the E6.5 readiness funnel rows
 // (buildPayerReadinessFunnel) — this module never re-derives them, it only
@@ -65,7 +66,7 @@ export const PAYER_SETUP_PAGE_SIZES = [5, 10, 25, 50, 100] as const;
 export const DEFAULT_PAYER_SETUP_PAGE_SIZE = 10;
 
 /**
- * Join the included payers (activeOrgPayers with includeArchived: true) to
+ * Join the included payers (catalogSetupPayers with includeArchived: true) to
  * their funnel rows. A payer with no funnel row (archived rows are excluded
  * from the funnel derivation) projects to needs_template/quiet — the archived
  * branch renders its own badge instead.
@@ -140,7 +141,7 @@ export function filterPayerSetupRows(
   });
 }
 
-/** The State dropdown offers only states that actually appear on the org's
+/** The State dropdown offers only states that actually appear on catalog
  * payers (archived included, so an archived payer stays findable). */
 export function payerSetupStateOptions(rows: readonly PayerSetupViewRow[]): string[] {
   const states = new Set<string>();
@@ -148,7 +149,7 @@ export function payerSetupStateOptions(rows: readonly PayerSetupViewRow[]): stri
   return [...states].sort((a, b) => a.localeCompare(b));
 }
 
-/** Kind options present on the org's payers, ordered by display label. */
+/** Kind options present on catalog payers, ordered by display label. */
 export function payerSetupKindOptions(rows: readonly PayerSetupViewRow[]): PayerKind[] {
   const kinds = new Set<PayerKind>();
   for (const row of rows) kinds.add(row.kind);

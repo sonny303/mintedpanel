@@ -2142,11 +2142,13 @@ NOT NULL` column on `credential_cases` — a globally-sequential (ONE
   RPC-only governance pin hold unchanged.
   - **Slice A — Payer Setup (screen 1), `/admin/payer-admin/setup`.** ONE
     list, no tabs: `payer-admin/PayerSetupPage.tsx` over pure
-    `src/lib/payerSetupView.ts` (+tests) — the shared `activeOrgPayers`
-    inclusion rule with archived rows opt-in behind "Show archived" (the
-    E6.8 seam), FOUR KPI filter cards, search · State · Kind toolbar,
-    pagination. Template/form/drift facts are CONSUMED from the E6.5
-    readiness funnel rows, never re-derived.
+    `src/lib/payerSetupView.ts` (+tests) — originally the shared
+    `activeOrgPayers` inclusion rule; **superseded 2026-08-13**: Setup lists
+    `catalogSetupPayers` (the global catalog). Group attach stays on Groups
+    → Payer Network. Archived rows opt-in behind "Show archived" (the E6.8
+    seam), FOUR KPI filter cards, search · State · Kind toolbar, pagination.
+    Template/form/drift facts are CONSUMED from the E6.5 readiness funnel
+    rows, never re-derived.
   - **Slice B — Add / Edit Payer (screen 2).** `PayerNameStep` (name +
     `findPayerNearMatches`, duplicates surfaced BEFORE anything is written)
     → `PayerDetailsForm` + `PayerStatesField`. ID expectations hydrate
@@ -2705,10 +2707,11 @@ change would have failed every payer attach against the old WITH CHECK).
   creates any more, so a newly attached payer's SOPs would go invisible —
   write-then-vanish at scale. Verified live: 6 global SOPs + 9 version rows
   readable.
-- `activeOrgPayers` requiring an active target means a freshly created payer is
-  NOT on Payer Setup until attached; the loop closes because
-  `GroupAttachPayerDialog` reads `useGlobalPayers()` (the full catalog), not
-  `activeOrgPayers`.
+- `activeOrgPayers` still means "payers this org's groups already work with"
+  (generation, attach pickers, manual case). **Payer Setup lists the catalog**
+  (`catalogSetupPayers` over `usePayers()`) — a freshly created payer appears
+  there immediately. Group attach stays on Groups → Payer Network
+  (`GroupAttachPayerDialog` reads `useGlobalPayers()`).
 
 **Still unapplied by design:** `20260810120000_purge_unreferenced_catalog_payers.sql`
 (OPS-PURGE) — 260 unreferenced global payers await a SECOND PM sign-off. Never
