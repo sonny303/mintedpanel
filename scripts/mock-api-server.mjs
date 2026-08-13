@@ -512,7 +512,13 @@ export async function createMockApiServer(options = {}) {
       if (!selector) return envelope(res, 422, null, "selector is required");
       const key = `shared:${portalKey}:${selector}`;
       const existing = proposedMaps.get(key);
-      if (existing) return envelope(res, 200, { map: existing });
+      if (existing) {
+        // E6.10: a non-empty re-capture refreshes vocabulary; empty leaves it.
+        if (Array.isArray(body.control_options) && body.control_options.length > 0) {
+          existing.controlOptions = body.control_options;
+        }
+        return envelope(res, 200, { map: existing });
+      }
       const row = {
         id: `fm-shared-${proposedMaps.size + 1}`,
         // Leak "sharedtier": the shared write lands under the caller's org,
@@ -522,6 +528,11 @@ export async function createMockApiServer(options = {}) {
         selector,
         pageStep: body.page_step ?? null,
         sortOrder: body.sort_order ?? null,
+        fieldType: body.field_type ?? "text",
+        controlOptions:
+          Array.isArray(body.control_options) && body.control_options.length > 0
+            ? body.control_options
+            : null,
         source: "manual",
         token: null,
         status: "proposed",

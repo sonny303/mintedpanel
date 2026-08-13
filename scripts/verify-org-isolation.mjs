@@ -819,8 +819,12 @@ function looksLikeVercelGate(r) {
       selector: `#gate-probe-shared-${Date.now()}`,
       field_label: "Gate probe (shared tier)",
       page_step: "Page 1",
-      field_type: "text",
+      field_type: "select",
       sort_order: 1,
+      control_options: [
+        { value: "KS", label: "Kansas" },
+        { value: "MO", label: "Missouri" },
+      ],
     },
     { token: kansasTok },
   );
@@ -829,7 +833,7 @@ function looksLikeVercelGate(r) {
     "23. Shared field-map propose lands org_id null, never under the caller's org",
     sharedProposal.status < 400 && sharedRow != null && sharedRow.orgId == null,
     `status=${sharedProposal.status} orgId=${sharedRow?.orgId ?? "null"} ` +
-      `token=${sharedRow?.token ?? "null"}`,
+      `token=${sharedRow?.token ?? "null"} fieldType=${sharedRow?.fieldType ?? "null"}`,
     { leak: true },
   );
 

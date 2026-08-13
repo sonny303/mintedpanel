@@ -33,6 +33,8 @@ import {
   useManualField,
   useTokenCatalog,
   useReproposeField,
+  useSetFieldMapHardcoded,
+  useSetFieldMapTransform,
   useUpdateSharedFieldRegistry,
   useAddSharedRegistryField,
 } from "@/hooks/useMappingReview";
@@ -104,6 +106,8 @@ export function FormStepPanel({
 
   const approveMut = useApproveField();
   const manualMut = useManualField();
+  const hardcodedMut = useSetFieldMapHardcoded();
+  const transformMut = useSetFieldMapTransform();
   const trainGlobalMut = useTrainGlobalFieldMap();
   const reproposeMut = useReproposeField();
   const renameMut = useUpdateSharedFieldRegistry();
@@ -183,12 +187,25 @@ export function FormStepPanel({
       if (map.orgId === null) {
         const patch: GlobalTrainPatch =
           decision.kind === "token"
-            ? { status: "approved", source: "token", token: decision.token }
+            ? {
+                status: "approved",
+                source: "token",
+                token: decision.token,
+                // Remapping a token must not wipe authored shaping.
+                transform: map.transform ?? null,
+              }
             : decision.kind === "fixed"
               ? { status: "approved", source: "hardcoded", hardcodedValue: decision.value }
               : decision.kind === "human"
                 ? { status: "approved", source: "manual" }
-                : { status: "proposed", source: "manual" };
+                : decision.kind === "transform"
+                  ? {
+                      status: "approved",
+                      source: "token",
+                      token: map.token,
+                      transform: decision.transform,
+                    }
+                  : { status: "proposed", source: "manual" };
         await trainGlobalMut.mutateAsync({ id: map.id, patch });
       } else if (decision.kind === "token") {
         await approveMut.mutateAsync({
@@ -203,12 +220,14 @@ export function FormStepPanel({
           id: map.id,
           previous: { token: map.token, source: map.source },
         });
+      } else if (decision.kind === "fixed") {
+        await hardcodedMut.mutateAsync({
+          id: map.id,
+          value: decision.value,
+          fieldLabel: map.fieldLabel,
+        });
       } else {
-        // A fixed value on an ORG row has no RLS-safe write path today — the
-        // shared tier is where trained forms live (D12). Say so rather than
-        // failing silently at the database.
-        toast.error("Fixed values are set on the shared form library, not on an org override.");
-        return;
+        await transformMut.mutateAsync({ id: map.id, transform: decision.transform });
       }
       invalidateMaps();
       // Keep the E6.5 verification stamp working: a decision that empties the

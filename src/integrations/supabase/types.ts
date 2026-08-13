@@ -2233,6 +2233,7 @@ export type Database = {
       portal_field_maps: {
         Row: {
           confidence: number | null;
+          control_options: Json | null;
           created_at: string;
           field_label: string | null;
           field_type: string;
@@ -2258,6 +2259,7 @@ export type Database = {
         };
         Insert: {
           confidence?: number | null;
+          control_options?: Json | null;
           created_at?: string;
           field_label?: string | null;
           field_type: string;
@@ -2283,6 +2285,7 @@ export type Database = {
         };
         Update: {
           confidence?: number | null;
+          control_options?: Json | null;
           created_at?: string;
           field_label?: string | null;
           field_type?: string;
@@ -4150,6 +4153,7 @@ export type Database = {
       };
       propose_shared_field_map: {
         Args: {
+          p_control_options?: Json;
           p_field_label?: string;
           p_field_type?: string;
           p_form_section?: string;
@@ -4161,6 +4165,7 @@ export type Database = {
         };
         Returns: {
           confidence: number | null;
+          control_options: Json | null;
           created_at: string;
           display_label: string | null;
           field_label: string | null;
@@ -4197,6 +4202,7 @@ export type Database = {
         };
         Returns: {
           confidence: number | null;
+          control_options: Json | null;
           created_at: string;
           display_label: string | null;
           field_label: string | null;
@@ -4235,9 +4241,11 @@ export type Database = {
           p_source: string;
           p_status: string;
           p_token?: string;
+          p_transform?: string;
         };
         Returns: {
           confidence: number | null;
+          control_options: Json | null;
           created_at: string;
           display_label: string | null;
           field_label: string | null;
