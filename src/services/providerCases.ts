@@ -242,7 +242,9 @@ export async function listOpenProviderCases(
 // One case-search result row — ids + display fields only, never beyond the
 // existing list projections (TE-11). Provider display name is first+last (both
 // in PROVIDER_LIST_COLUMNS); status is the E6.0 case_status label; payerPipeline
-// is the E4.0 pipeline-display input.
+// is the E4.0 pipeline-display input. `caseNumber` is the globally-sequential
+// C-<n> display key (migration 20260722120000) so coordinators can search the
+// same way the /cases table shows cases.
 export interface CaseSearchRow {
   id: string;
   providerId: string;
@@ -252,6 +254,7 @@ export interface CaseSearchRow {
   status: string | null;
   payerReferenceId: string | null;
   payerPipelineState: string;
+  caseNumber: number | null;
   /** Case's practice location (`credential_cases.facility_id`) — extension
    * pre-selects this when opening a case from search so facility.* cards
    * resolve without a second manual pick. Null when the case has none. */
@@ -261,11 +264,12 @@ export interface CaseSearchRow {
 const CASE_SEARCH_MAX = 50;
 
 const CASE_SEARCH_COLUMNS =
-  "id, state, provider_id, facility_id, payer_reference_id, case_status, payer_pipeline_state, " +
+  "id, case_number, state, provider_id, facility_id, payer_reference_id, case_status, payer_pipeline_state, " +
   "providers(id, first_name, last_name), payers(name)";
 
 interface CaseSearchDbRow {
   id: string;
+  case_number: number | null;
   state: string;
   provider_id: string;
   facility_id: string | null;
@@ -276,14 +280,25 @@ interface CaseSearchDbRow {
   payers: { name: string | null } | null;
 }
 
+/** When the query looks like a case number (`1001`, `C-1001`, `c1001`), return
+ * the bare digits so search hits `case_number`. Returns null for ordinary
+ * name/payer/ref queries — never strip a leading "c" from words like "cigna". */
+export function caseNumberSearchDigits(raw: string): string | null {
+  const q = raw.trim().toLowerCase();
+  // Optional "c" / "c-" prefix, then digits — so 1001, C-1001, and c1001 hit
+  // case_number, while "cigna" (non-digits after c) does not.
+  const match = /^(?:c-?)?(\d+)$/.exec(q);
+  return match?.[1] ?? null;
+}
+
 // E4.3 TE-11 — the case half of the unified standalone search. Org-scoped from
 // ctx, matching payer name / provider name / tracking id (payer_reference_id —
-// the E4.0 case-list search precedent) as a case-insensitive substring, capped
-// at CASE_SEARCH_MAX. Filtering is in memory over the org's own cases (the
-// providerCases.ts idiom, robust across the provider/payer FK embeds); the
-// service-role client is org-scoped by the eq(org_id) on the read, so a
-// cross-org row can never appear. Returns [] for a blank query (no full-table
-// dump).
+// the E4.0 case-list search precedent) AND case number (C-<n> / bare digits) as
+// a case-insensitive substring, capped at CASE_SEARCH_MAX. Filtering is in
+// memory over the org's own cases (the providerCases.ts idiom, robust across
+// the provider/payer FK embeds); the service-role client is org-scoped by the
+// eq(org_id) on the read, so a cross-org row can never appear. Returns [] for
+// a blank query (no full-table dump).
 export async function searchOrgCases(
   ctx: ProviderCasesServiceCtx,
   query: string,
@@ -291,6 +306,7 @@ export async function searchOrgCases(
   const { db, orgId } = ctx;
   const q = query.trim().toLowerCase();
   if (q === "") return [];
+  const caseDigitsQuery = caseNumberSearchDigits(query);
 
   const { data: cases, error: caseErr } = await db
     .from("credential_cases")
@@ -304,8 +320,13 @@ export async function searchOrgCases(
       `${row.providers?.first_name ?? ""} ${row.providers?.last_name ?? ""}`.trim();
     const payerName = row.payers?.name ?? null;
     const ref = row.payer_reference_id ?? "";
+    const caseNumber = row.case_number ?? null;
+    const caseDigits = caseNumber != null ? String(caseNumber) : "";
     const haystack = `${providerName} ${payerName ?? ""} ${ref}`.toLowerCase();
-    if (!haystack.includes(q)) continue;
+    const matchesText = haystack.includes(q);
+    const matchesCaseNumber =
+      caseDigitsQuery != null && caseDigits !== "" && caseDigits.includes(caseDigitsQuery);
+    if (!matchesText && !matchesCaseNumber) continue;
     rows.push({
       id: row.id,
       providerId: row.provider_id,
@@ -315,6 +336,7 @@ export async function searchOrgCases(
       status: displayStatus(row.case_status),
       payerReferenceId: row.payer_reference_id,
       payerPipelineState: row.payer_pipeline_state ?? "not_started",
+      caseNumber,
       facilityId: row.facility_id,
     });
   }
