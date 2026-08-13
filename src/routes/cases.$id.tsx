@@ -81,13 +81,7 @@ function CaseDetailPage() {
       facilitiesQ.data ?? [],
       c.facilityId,
     );
-  }, [
-    c?.providerId,
-    c?.groupId,
-    c?.facilityId,
-    facilityAssignmentsQ.data,
-    facilitiesQ.data,
-  ]);
+  }, [c?.providerId, c?.groupId, c?.facilityId, facilityAssignmentsQ.data, facilitiesQ.data]);
 
   // token -> value map for the TaskDrawer's pdf-step form filler, from the
   // data this page already holds (no extra fetch). PHI stays in the browser.

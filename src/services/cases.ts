@@ -373,10 +373,7 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
   if (facilityId != null) {
     const [{ data: facilities, error: facErr }, { data: assignments, error: asnErr }] =
       await Promise.all([
-        supabase
-          .from("facilities")
-          .select("id, group_id, is_active")
-          .eq("org_id", orgId),
+        supabase.from("facilities").select("id, group_id, is_active").eq("org_id", orgId),
         supabase
           .from("provider_facility_assignments")
           .select("provider_id, facility_id, is_primary")
@@ -402,9 +399,7 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
       })),
     );
     if (!eligible) {
-      throw new Error(
-        "Facility must be one of this provider's locations under the case's group.",
-      );
+      throw new Error("Facility must be one of this provider's locations under the case's group.");
     }
   }
 

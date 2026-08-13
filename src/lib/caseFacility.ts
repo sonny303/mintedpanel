@@ -42,9 +42,7 @@ export function facilitiesForCaseProvider(
   return facilities
     .filter(
       (f) =>
-        assigned.has(f.id) &&
-        f.groupId === groupId &&
-        (f.isActive || includeInactive.has(f.id)),
+        assigned.has(f.id) && f.groupId === groupId && (f.isActive || includeInactive.has(f.id)),
     )
     .map((f) => f.id);
 }
@@ -79,8 +77,7 @@ export function caseFacilityOptions(
   facilities: readonly Facility[],
   currentFacilityId?: string | null,
 ): Facility[] {
-  const includeInactiveIds =
-    currentFacilityId != null ? new Set([currentFacilityId]) : undefined;
+  const includeInactiveIds = currentFacilityId != null ? new Set([currentFacilityId]) : undefined;
   const ids = new Set(
     facilitiesForCaseProvider(providerId, groupId, assignments, facilities, {
       includeInactiveIds,
