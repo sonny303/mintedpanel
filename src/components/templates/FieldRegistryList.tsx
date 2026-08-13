@@ -16,8 +16,24 @@ import { useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusPill, type StatusColor } from "@/components/StatusPill";
 import { TokenPicker } from "@/components/templates/TokenPicker";
+import {
+  AUTHORABLE_TRANSFORMS,
+  STRUCTURED_FIELD_TYPES,
+  controlTypeLabel,
+  hardcodedValueMissingFromOptions,
+  parseControlOptions,
+  transformEffectCopy,
+  type ControlOption,
+} from "@/lib/controlOptions";
 import {
   classifyFieldMap,
   displayNameOf,
@@ -27,12 +43,20 @@ import {
 } from "@/lib/fieldRegistry";
 import type { TokenGroup } from "@/lib/tokenGroups";
 
-/** The three decisions a trainer actually has (D2), plus the reversal. */
+/** The three decisions a trainer actually has (D2), plus the reversal, plus
+ * E6.10 value-shaping on a token-mapped row. */
 export type RegistryDecision =
   | { kind: "token"; token: string }
   | { kind: "fixed"; value: string }
   | { kind: "human" }
-  | { kind: "unmap" };
+  | { kind: "unmap" }
+  | { kind: "transform"; transform: string | null };
+
+/** Literals `applyCheckbox` already treats as checked / unchecked. */
+const CHECKBOX_BOOLEAN_OPTIONS: ControlOption[] = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
 
 interface Props {
   rows: readonly RegistryRow[];
@@ -220,6 +244,14 @@ function RegistryRowEditor({
   // Only worth showing when it differs — otherwise it is the same string twice.
   const rawLabel = row.fieldLabel?.trim();
   const showRaw = Boolean(rawLabel) && rawLabel !== name;
+  const capturedOptions = parseControlOptions(row.controlOptions) ?? [];
+  const isStructured = STRUCTURED_FIELD_TYPES.has(row.fieldType ?? "");
+  const typeChip = controlTypeLabel(row.fieldType);
+  const staleHardcoded = hardcodedValueMissingFromOptions(row.hardcodedValue, capturedOptions);
+  const shapingCopy = transformEffectCopy(row.transform);
+  const checkboxBoolean = (row.fieldType ?? "") === "checkbox" && capturedOptions.length === 0;
+  const pickerOptions =
+    capturedOptions.length > 0 ? capturedOptions : checkboxBoolean ? CHECKBOX_BOOLEAN_OPTIONS : [];
 
   function startRename() {
     setDraftName(row.displayLabel?.trim() ?? "");
@@ -289,6 +321,7 @@ function RegistryRowEditor({
           </span>
         )}
         <StatusPill status={pill.tone} label={pill.label} />
+        <StatusPill status="neutral" label={typeChip} />
         {row.section == null && row.formSection ? (
           <span className="text-[11px] text-muted-foreground">from “{row.formSection}”</span>
         ) : null}
@@ -300,6 +333,34 @@ function RegistryRowEditor({
         <p className="text-[11px] text-muted-foreground">Payer’s label: {rawLabel}</p>
       ) : null}
       <p className="text-[11px] text-muted-foreground">{classification.reason}</p>
+      {shapingCopy && classification.decision === "token" ? (
+        <p className="text-[11px] text-muted-foreground">Shapes the value: {shapingCopy}</p>
+      ) : null}
+      {staleHardcoded ? (
+        <p className="text-[11px] text-[#B91C1C]">
+          Fixed value “{row.hardcodedValue}” is not in the captured options.
+        </p>
+      ) : null}
+      {capturedOptions.length > 0 ? (
+        <details className="text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer">
+            {capturedOptions.length} option{capturedOptions.length === 1 ? "" : "s"} this control
+            accepts
+          </summary>
+          <ul className="mt-1 space-y-0.5 pl-4">
+            {capturedOptions.map((opt) => (
+              <li key={`${opt.value}:${opt.label}`}>
+                {opt.value}
+                {opt.label && opt.label !== opt.value ? ` — ${opt.label}` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : isStructured ? (
+        <p className="text-[11px] text-muted-foreground">
+          No captured options — re-capture this page to read what the control accepts.
+        </p>
+      ) : null}
 
       {/* Stale rows keep their controls. Staleness is INFORMATION — the latest
           real fill did not find this field on the page — not a lock: a drifted
@@ -315,7 +376,30 @@ function RegistryRowEditor({
             onValueChange={(token) => void onDecide(row, { kind: "token", token })}
           />
 
-          {fixedOpen ? (
+          {pickerOptions.length > 0 ? (
+            <Select
+              value={row.hardcodedValue ?? undefined}
+              onValueChange={(value) => void onDecide(row, { kind: "fixed", value })}
+            >
+              <SelectTrigger
+                className="h-7 w-56 text-[12px]"
+                aria-label={`Fixed value for ${name}`}
+              >
+                <SelectValue placeholder="Fixed value…" />
+              </SelectTrigger>
+              <SelectContent>
+                {pickerOptions
+                  .filter((opt) => opt.value !== "")
+                  .map((opt) => (
+                    <SelectItem key={`${opt.value}:${opt.label}`} value={opt.value}>
+                      {opt.label && opt.label !== opt.value
+                        ? `${opt.value} — ${opt.label}`
+                        : opt.value}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          ) : fixedOpen ? (
             <span className="flex items-center gap-1">
               <Input
                 autoFocus
@@ -354,6 +438,25 @@ function RegistryRowEditor({
               Fixed value…
             </Button>
           )}
+
+          {classification.decision === "token" ? (
+            <select
+              aria-label={`Value shaping for ${name}`}
+              className="h-7 rounded-[4px] border border-[#E8E5E0] bg-white px-2 text-[12px]"
+              value={row.transform ?? ""}
+              onChange={(e) => {
+                const next = e.target.value;
+                void onDecide(row, {
+                  kind: "transform",
+                  transform: next === "" ? null : next,
+                });
+              }}
+            >
+              <option value="">No shaping</option>
+              <option value={AUTHORABLE_TRANSFORMS[0]}>State name → 2-letter code</option>
+              <option value={AUTHORABLE_TRANSFORMS[1]}>Date → MM/DD/YYYY</option>
+            </select>
+          ) : null}
 
           <Button
             size="sm"

@@ -23,7 +23,7 @@ interface Captured {
   or?: string;
   filters: Array<[string, unknown]>;
   orders: Array<[string, { ascending: boolean }]>;
-  op?: "insert";
+  op?: "insert" | "update";
   payload?: Record<string, unknown>;
 }
 
@@ -63,10 +63,16 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown }>) {
           cap.payload = payload;
           return builder;
         },
+        update(payload: Record<string, unknown>) {
+          cap.op = "update";
+          cap.payload = payload;
+          return builder;
+        },
         limit() {
           return builder;
         },
         single: () => Promise.resolve(take()),
+        maybeSingle: () => Promise.resolve(take()),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
           Promise.resolve(take()).then(res, rej),
       };
@@ -146,6 +152,7 @@ describe("portal field map service — injected server context", () => {
       "field_type",
       "notes",
       "status",
+      "control_options",
       "created_at",
       "updated_at",
     ]) {
@@ -288,6 +295,70 @@ describe("proposeFieldMap — propose-only write", () => {
     expect(captures.some((c) => c.op === "insert")).toBe(false);
   });
 
+  it("writes a non-empty option list on first sighting", async () => {
+    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    await proposeFieldMap(proposeCtx(db), {
+      ...input,
+      field_type: "select",
+      control_options: [
+        { value: "KS", label: "Kansas" },
+        { value: "MO", label: "Missouri" },
+      ],
+    });
+    const payload = inserted(captures);
+    expect(payload?.control_options).toEqual([
+      { value: "KS", label: "Kansas" },
+      { value: "MO", label: "Missouri" },
+    ]);
+  });
+
+  it("ignores an empty option list on insert so 'never captured' stays null", async () => {
+    const { db, captures } = makeFakeDb([{ data: [] }, { data: proposedRow }]);
+    await proposeFieldMap(proposeCtx(db), { ...input, control_options: [] });
+    expect(inserted(captures)?.control_options).toBeNull();
+  });
+
+  it("refreshes a non-empty vocabulary on an own-org re-capture without inserting", async () => {
+    const own = { ...dbRow, org_id: "org-1", status: "approved", source: "token" };
+    const refreshed = {
+      ...own,
+      control_options: [{ value: "KS", label: "Kansas" }],
+    };
+    const { db, captures } = makeFakeDb([{ data: [own] }, { data: refreshed }]);
+    const result = await proposeFieldMap(proposeCtx(db), {
+      ...input,
+      field_type: "select",
+      control_options: [{ value: "KS", label: "Kansas" }],
+    });
+    expect(result.kind).toBe("existing");
+    expect(captures.some((c) => c.op === "insert")).toBe(false);
+    expect(captures.some((c) => c.op === "update")).toBe(true);
+    const update = captures.find((c) => c.op === "update")?.payload;
+    expect(update?.control_options).toEqual([{ value: "KS", label: "Kansas" }]);
+  });
+
+  it("does not erase a stored vocabulary when re-capture returns an empty list", async () => {
+    const own = {
+      ...dbRow,
+      org_id: "org-1",
+      control_options: [{ value: "KS", label: "Kansas" }],
+    };
+    const { db, captures } = makeFakeDb([{ data: [own] }]);
+    const result = await proposeFieldMap(proposeCtx(db), { ...input, control_options: [] });
+    expect(result.kind).toBe("existing");
+    expect(captures.some((c) => c.op === "update")).toBe(false);
+  });
+
+  it("leaves a GLOBAL hit unchanged even when a vocabulary is offered", async () => {
+    const { db, captures } = makeFakeDb([{ data: [{ ...dbRow, org_id: null }] }]);
+    await proposeFieldMap(proposeCtx(db), {
+      ...input,
+      control_options: [{ value: "KS", label: "Kansas" }],
+    });
+    expect(captures.some((c) => c.op === "update")).toBe(false);
+    expect(captures.some((c) => c.op === "insert")).toBe(false);
+  });
+
   it("treats a GLOBAL row as already-covered (the shared catalog is authoritative)", async () => {
     // dbRow is org_id null — a global catalog entry for this very selector.
     const { db, captures } = makeFakeDb([{ data: [{ ...dbRow, org_id: null }] }]);
@@ -333,6 +404,10 @@ describe("proposeFieldMap — propose-only write", () => {
     ["a missing selector", { portal_key: "availity" }],
     ["an unknown field_type", { portal_key: "availity", selector: "#a", field_type: "textarea" }],
     ["a non-string field_label", { portal_key: "availity", selector: "#a", field_label: 42 }],
+    [
+      "a malformed control_options list",
+      { portal_key: "availity", selector: "#a", control_options: [{ value: "KS" }] },
+    ],
   ])("rejects %s with 422 before any query", async (_name, bad) => {
     const { db, captures } = makeFakeDb([]);
     const writeAudit = audit();

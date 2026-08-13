@@ -361,6 +361,44 @@ describe("the Slice 6 SOP-read widening — grant + policy shape", () => {
   });
 });
 
+describe("E6.10 control_options migration — grant + signature shape", () => {
+  const sql = readFileSync(
+    join(ROOT, "supabase/migrations/20260813120000_e610_control_options.sql"),
+    "utf8",
+  ).toLowerCase();
+
+  it("adds control_options additively and never re-grants table DML", () => {
+    expect(sql).toContain("add column if not exists control_options jsonb");
+    expect(sql).not.toMatch(
+      /grant\s+[a-z, ]*(insert|update|delete)[a-z, ]*on\s+(table\s+)?public\.portal_field_maps/,
+    );
+  });
+
+  it("drops the prior propose/train signatures (no PostgREST overload)", () => {
+    expect(sql).toContain(
+      "drop function if exists public.propose_shared_field_map(text, text, text, text, text, text, integer, text)",
+    );
+    expect(sql).toContain(
+      "drop function if exists public.train_global_field_map(uuid, text, text, text, text, text)",
+    );
+    expect(sql).toContain("p_control_options jsonb");
+    expect(sql).toContain("p_transform text");
+  });
+
+  it("revokes anon and grants EXECUTE to authenticated on the new signatures", () => {
+    expect(sql).toMatch(
+      /revoke all on function public\.propose_shared_field_map\([\s\S]*?jsonb\) from anon/,
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.propose_shared_field_map\([\s\S]*?jsonb\) to authenticated/,
+    );
+    expect(sql).toMatch(/revoke all on function public\.train_global_field_map\([^)]+\) from anon/);
+    expect(sql).toMatch(
+      /grant execute on function public\.train_global_field_map\([^)]+\) to authenticated/,
+    );
+  });
+});
+
 describe("the payers write-lockdown migration (20260718120000) — grant definitions", () => {
   const sql = lockdownMigration.toLowerCase();
 

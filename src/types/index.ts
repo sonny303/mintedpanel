@@ -1309,6 +1309,8 @@ export interface PortalFieldMap {
   /** Position within (tier, portalKey, pageStep); re-derived from live DOM
    * order on re-capture. */
   sortOrder?: number | null;
+  /** E6.10 — captured option vocabulary `{ value, label }[]`. Null = never captured. */
+  controlOptions?: { value: string; label: string }[] | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -23,6 +23,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { camelizeRow } from "@/lib/case";
+import { validateControlOptionsInput } from "@/lib/controlOptions";
 import { normalizeFieldLabel, normalizePortalKey, normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 
@@ -36,6 +37,7 @@ export interface SharedProposeBody {
   page_step?: unknown;
   field_type?: unknown;
   sort_order?: unknown;
+  control_options?: unknown;
 }
 
 export type SharedProposeResult =
@@ -91,6 +93,15 @@ export async function proposeSharedFieldMap(
     return { kind: "rejected", status: 422, message: "sort_order must be a number" };
   }
 
+  const optionsCheck = validateControlOptionsInput(
+    body?.control_options === undefined ? null : body.control_options,
+  );
+  if (optionsCheck.kind === "rejected") {
+    return { kind: "rejected", status: 422, message: optionsCheck.message };
+  }
+  const controlOptions =
+    optionsCheck.options && optionsCheck.options.length > 0 ? optionsCheck.options : null;
+
   const rpc = db.rpc.bind(db);
   const { data, error } = await rpc("propose_shared_field_map", {
     p_portal_key: portalKey,
@@ -103,6 +114,7 @@ export async function proposeSharedFieldMap(
     p_page_step: (asOptionalString(body?.page_step)?.trim() || null) as unknown as string,
     p_field_type: fieldType,
     p_sort_order: (typeof sortOrderRaw === "number" ? sortOrderRaw : null) as unknown as number,
+    p_control_options: (controlOptions as unknown as string) ?? null,
   });
   if (error) throw error;
 

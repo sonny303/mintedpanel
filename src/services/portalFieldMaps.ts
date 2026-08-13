@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import type { Database } from "@/integrations/supabase/types";
 import { requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow } from "@/lib/case";
+import { validateControlOptionsInput } from "@/lib/controlOptions";
 import { normalizeFieldLabel, normalizePortalKey, normalizeTokenKey } from "@/lib/tokenFormat";
 import {
   suggestTokenForLabel,
@@ -31,7 +32,7 @@ export interface PortalFieldMapFilters {
 }
 
 const PORTAL_FIELD_MAP_COLUMNS =
-  "id, org_id, portal_key, url_pattern, page_step, map_type, selector, selector_fallbacks, source, token, hardcoded_value, transform, field_type, notes, status, created_at, updated_at";
+  "id, org_id, portal_key, url_pattern, page_step, map_type, selector, selector_fallbacks, source, token, hardcoded_value, transform, field_type, notes, status, control_options, created_at, updated_at";
 
 // Global catalog rows plus the caller's own org overrides. Another org's
 // org-scoped rows can never match the filter.
@@ -95,6 +96,8 @@ export interface ProposeFieldMapInput {
   url_pattern?: string | null;
   page_step?: string | null;
   sort_order?: number | null;
+  /** E6.10 — captured option vocabulary. Snake_case wire. */
+  control_options?: unknown;
 }
 
 export type ProposeFieldMapResult =
@@ -234,6 +237,15 @@ export async function proposeFieldMap(
   if (input.sort_order != null && typeof input.sort_order !== "number") {
     return { kind: "rejected", status: 422, message: "sort_order must be a number" };
   }
+  const optionsCheck = validateControlOptionsInput(
+    input.control_options === undefined ? null : input.control_options,
+  );
+  if (optionsCheck.kind === "rejected") {
+    return { kind: "rejected", status: 422, message: optionsCheck.message };
+  }
+  // Empty list is ignored (AJAX select not loaded); null = key absent.
+  const controlOptions =
+    optionsCheck.options && optionsCheck.options.length > 0 ? optionsCheck.options : null;
 
   // Already known? Global rows count: the shared catalog is authoritative for
   // portal truths, so a selector it already covers needs no org proposal.
@@ -247,6 +259,27 @@ export async function proposeFieldMap(
   if (lookupError) throw lookupError;
   const fieldLabel = normalizeFieldLabel(input.field_label ?? "") || null;
   if (existing && existing.length > 0) {
+    const prior = existing[0] as { id: string; org_id: string | null };
+    // Re-capture on an OWN org row refreshes a non-empty vocabulary without
+    // touching the decision. A global hit is returned as-is (shared catalog).
+    if (prior.org_id === ctx.orgId && controlOptions) {
+      const { data: refreshed, error: refreshErr } = await ctx.db
+        .from("portal_field_maps")
+        .update({ control_options: controlOptions } as never)
+        .eq("id", prior.id)
+        .eq("org_id", ctx.orgId)
+        .select(PORTAL_FIELD_MAP_COLUMNS)
+        .maybeSingle();
+      if (refreshErr) throw refreshErr;
+      if (refreshed) {
+        const row = camelizeRow<PortalFieldMap>(refreshed);
+        return {
+          kind: "existing",
+          map: { ...row, token: normalizeTokenKey(row.token) },
+          suggestion: fieldLabel ? await learnedSuggestion(ctx, fieldLabel, portalKey) : null,
+        };
+      }
+    }
     const row = camelizeRow<PortalFieldMap>(existing[0]);
     return {
       kind: "existing",
@@ -278,6 +311,7 @@ export async function proposeFieldMap(
       // the extension observed is its own column.
       notes: PROPOSED_BY_EXTENSION_NOTE,
       token: null,
+      control_options: controlOptions,
     } as never)
     .select(PORTAL_FIELD_MAP_COLUMNS)
     .single();
@@ -360,6 +394,7 @@ export async function approveFieldMap(
     status: "approved",
     source: "token",
     token: bare,
+    hardcoded_value: null,
   });
   await writeAudit({
     actionType: "UPDATE",
@@ -396,6 +431,7 @@ export async function markFieldMapManual(
     status: "approved",
     source: "manual",
     token: null,
+    transform: null,
     ...(existingNote ? {} : { notes: MARKED_MANUAL_NOTE }),
   });
   await writeAudit({
@@ -404,6 +440,53 @@ export async function markFieldMapManual(
     entityId: id,
     after: { source: "manual", status: "approved" },
     description: `Marked "${fieldLabel ?? row.fieldLabel ?? id}" manual`,
+  });
+  return row;
+}
+
+/** E6.10 F6.10.4 — org-tier fixed value. Shared rows use train_global_field_map. */
+export async function setFieldMapHardcoded(
+  id: string,
+  value: string,
+  fieldLabel?: string | null,
+): Promise<PortalFieldMap> {
+  const orgId = requireActiveOrg();
+  const literal = value.trim();
+  if (!literal) throw new Error("A fixed value cannot be empty");
+  const row = await updateFieldMapRow(orgId, id, {
+    status: "approved",
+    source: "hardcoded",
+    token: null,
+    hardcoded_value: literal,
+    transform: null,
+  });
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal_field_map",
+    entityId: id,
+    after: { source: "hardcoded", status: "approved", hardcodedValue: literal },
+    description: `Set fixed value on "${fieldLabel ?? row.fieldLabel ?? id}"`,
+  });
+  return row;
+}
+
+/** E6.10 F6.10.5 — org-tier transform on a token-mapped row. */
+export async function setFieldMapTransform(
+  id: string,
+  transform: string | null,
+): Promise<PortalFieldMap> {
+  const orgId = requireActiveOrg();
+  const next = transform?.trim() || null;
+  if (next && next !== "state_abbrev" && next !== "date_mmddyyyy") {
+    throw new Error("Invalid transform");
+  }
+  const row = await updateFieldMapRow(orgId, id, { transform: next });
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "portal_field_map",
+    entityId: id,
+    after: { transform: next },
+    description: `Set value shaping on "${row.fieldLabel ?? id}"`,
   });
   return row;
 }
@@ -418,6 +501,7 @@ export async function reproposeFieldMap(
     status: "proposed",
     source: previous.source,
     token: previous.token,
+    transform: null,
   });
   await writeAudit({
     actionType: "UPDATE",
@@ -444,6 +528,8 @@ export interface GlobalTrainPatch {
   /** E6.9 F6.9.4: the fixed-literal decision. Required when
    * `source === 'hardcoded'`; the RPC rejects an empty one. */
   hardcodedValue?: string | null;
+  /** E6.10 F6.10.5 — `state_abbrev` | `date_mmddyyyy` | null (no shaping). */
+  transform?: string | null;
 }
 
 export async function trainGlobalFieldMap(
@@ -459,6 +545,7 @@ export async function trainGlobalFieldMap(
     p_token: (patch.token ? normalizeTokenKey(patch.token) : null) as unknown as string,
     p_field_label: (patch.fieldLabel ?? null) as unknown as string,
     p_hardcoded_value: (patch.hardcodedValue ?? null) as unknown as string,
+    p_transform: (patch.transform ?? null) as unknown as string,
   });
   if (error) throw error;
   const row = camelizeRow<PortalFieldMap>(data);
@@ -483,6 +570,7 @@ export interface SharedProposeInput {
   fieldType?: string | null;
   sortOrder?: number | null;
   notes?: string | null;
+  controlOptions?: { value: string; label: string }[] | null;
 }
 
 /** Create (or resolve, if capture already saw it) a shared registry row.
@@ -500,6 +588,9 @@ export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<
     p_field_type: (input.fieldType ?? "text") as unknown as string,
     p_sort_order: (input.sortOrder ?? null) as unknown as number,
     p_notes: (input.notes ?? null) as unknown as string,
+    p_control_options: (input.controlOptions && input.controlOptions.length > 0
+      ? input.controlOptions
+      : null) as unknown as string,
   });
   if (error) throw error;
   const row = camelizeRow<PortalFieldMap>(data);

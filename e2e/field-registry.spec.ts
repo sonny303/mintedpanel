@@ -71,6 +71,9 @@ interface MapSeed {
   displayLabel?: string | null;
   pageStep?: string | null;
   sortOrder?: number | null;
+  fieldType?: string | null;
+  controlOptions?: { value: string; label: string }[] | null;
+  transform?: string | null;
 }
 
 function mapRow(seed: MapSeed): Row {
@@ -86,8 +89,8 @@ function mapRow(seed: MapSeed): Row {
     source: seed.source,
     token: seed.token ?? null,
     hardcoded_value: seed.hardcodedValue ?? null,
-    transform: null,
-    field_type: "text",
+    transform: seed.transform ?? null,
+    field_type: seed.fieldType ?? "text",
     // The notes CHECK requires a note on manual/manual_partial rows.
     notes:
       seed.source === "manual" || seed.source === "manual_partial"
@@ -100,6 +103,7 @@ function mapRow(seed: MapSeed): Row {
     sort_order: seed.sortOrder ?? null,
     form_section: null,
     confidence: 60,
+    control_options: seed.controlOptions ?? null,
     created_at: "2026-07-13T00:00:00Z",
     updated_at: "2026-07-13T00:00:00Z",
   };
@@ -345,11 +349,19 @@ async function fulfillSupabase(route: Route) {
       const row = db.portal_field_maps.find((m) => m.id === body.p_id && m.org_id === null);
       if (!row) return json({ message: "Field map not found" }, 400);
       const source = String(body.p_source ?? "");
+      const transformRaw = String(body.p_transform ?? "").trim();
+      const transform =
+        source === "token" || source === "manual_partial"
+          ? transformRaw === "state_abbrev" || transformRaw === "date_mmddyyyy"
+            ? transformRaw
+            : null
+          : null;
       Object.assign(row, {
         status: body.p_status,
         source,
         token: body.p_token ?? null,
         hardcoded_value: source === "hardcoded" ? (body.p_hardcoded_value ?? null) : null,
+        transform,
         updated_at: nowIso(),
       });
       if ((source === "manual" || source === "manual_partial") && row.notes == null) {
@@ -367,7 +379,15 @@ async function fulfillSupabase(route: Route) {
       const existing = db.portal_field_maps.find(
         (m) => m.org_id === null && m.portal_key === portalKey && m.selector === selector,
       );
-      if (existing) return json(existing);
+      if (existing) {
+        if (body.p_field_label) existing.field_label = body.p_field_label;
+        if (body.p_sort_order != null) existing.sort_order = body.p_sort_order;
+        const options = body.p_control_options;
+        if (Array.isArray(options) && options.length > 0) {
+          existing.control_options = options;
+        }
+        return json(existing);
+      }
       const row = mapRow({
         id: `m-new-${(seq += 1)}`,
         selector,
@@ -376,6 +396,11 @@ async function fulfillSupabase(route: Route) {
         source: "manual",
         pageStep: (body.p_page_step as string | null) ?? null,
         sortOrder: (body.p_sort_order as number | null) ?? null,
+        fieldType: (body.p_field_type as string | null) ?? "text",
+        controlOptions:
+          Array.isArray(body.p_control_options) && body.p_control_options.length > 0
+            ? (body.p_control_options as { value: string; label: string }[])
+            : null,
       });
       row.portal_key = portalKey;
       db.portal_field_maps.push(row);
@@ -823,4 +848,77 @@ test("TS-149 — Data fields are folded into the ONE registry; Add field writes 
   const tpl = (db?.sop_templates ?? []).find((t) => t.id === TPL_ID);
   const tasks = tpl?.task_definitions as Array<{ steps: Array<Record<string, unknown>> }>;
   expect(tasks[0].steps[0].dataFields).toEqual(["provider.npi", "provider.firstName", "group.tin"]);
+});
+
+test("TS-160 — a fixed value is picked from the portal's captured options", async ({ page }) => {
+  seedMaps = [
+    {
+      id: "m-state",
+      selector: "#practice-state",
+      label: "Practice State",
+      status: "proposed",
+      source: "manual",
+      section: "Identity",
+      sortOrder: 1,
+      fieldType: "select",
+      controlOptions: [
+        { value: "KS", label: "Kansas" },
+        { value: "MO", label: "Missouri" },
+        { value: "NE", label: "Nebraska" },
+      ],
+    },
+    {
+      id: "m-npi",
+      selector: "#npi",
+      label: "NPI Number",
+      status: "approved",
+      source: "token",
+      token: "provider.npi",
+      section: "Identity",
+      sortOrder: 2,
+    },
+    {
+      id: "m-radio",
+      selector: 'input[name="accepting"]',
+      label: "Accepting new patients",
+      status: "proposed",
+      source: "manual",
+      section: "Identity",
+      sortOrder: 3,
+      fieldType: "radio",
+    },
+  ];
+  await openRegistry(page);
+
+  const state = rowFor(page, "Practice State");
+  await expect(state).toBeVisible();
+  await expect(pillIn(state, "Dropdown")).toBeVisible();
+  await expect(state.getByText("3 options this control accepts")).toBeVisible();
+  await state.getByText("3 options this control accepts").click();
+  await expect(state.getByText("KS — Kansas")).toBeVisible();
+
+  await state.getByRole("combobox", { name: "Fixed value for Practice State" }).click();
+  await page.getByRole("option", { name: "KS — Kansas" }).click();
+
+  await expect(pillIn(state, "Fixed value")).toBeVisible({ timeout: 15000 });
+  const trained = (db?.portal_field_maps ?? []).find((m) => m.id === "m-state");
+  expect(trained?.hardcoded_value).toBe("KS");
+  expect(trained?.source).toBe("hardcoded");
+  expect(trained?.status).toBe("approved");
+  const trainCalls = calls.filter((c) => c.kind === "rpc" && c.path === "train_global_field_map");
+  expect(
+    trainCalls.some((c) => (c.body as { p_hardcoded_value?: string }).p_hardcoded_value === "KS"),
+  ).toBe(true);
+
+  const radio = rowFor(page, "Accepting new patients");
+  await expect(pillIn(radio, "Radio")).toBeVisible();
+  await expect(radio.getByText(/No captured options/)).toBeVisible();
+
+  const npi = rowFor(page, "NPI Number");
+  await expect(pillIn(npi, "Text")).toBeVisible();
+  await npi.getByLabel("Value shaping for NPI Number").selectOption("state_abbrev");
+  await expect(npi.getByText("Shapes the value: Kansas → KS")).toBeVisible({ timeout: 15000 });
+  const npiRow = (db?.portal_field_maps ?? []).find((m) => m.id === "m-npi");
+  expect(npiRow?.transform).toBe("state_abbrev");
+  expect(npiRow?.token).toBe("provider.npi");
 });

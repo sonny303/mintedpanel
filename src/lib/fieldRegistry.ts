@@ -121,6 +121,9 @@ export interface RegistryRow extends ClassifiableFieldMap {
   pageStep?: string | null;
   sortOrder?: number | null;
   selector: string;
+  fieldType?: string | null;
+  controlOptions?: { value: string; label: string }[] | null;
+  transform?: string | null;
 }
 
 /** What the editor shows as the field's name: the admin's rename if there is

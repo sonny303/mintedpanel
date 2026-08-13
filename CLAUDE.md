@@ -2564,8 +2564,22 @@ NULL`), and a tier-partitioned `sort_order` backfill. `display_label` is the
   that sends none. Their isolation property is GLOBAL ONLY (there is no org in
   scope to widen to): gate assertions **22 / 22b / 23** + the `sharedtier`
   leak mode. `GET /api/portals` also embeds the payer's display name.
-- e2e `e2e/field-registry.spec.ts` (TS-144…TS-149);
+- e2e `e2e/field-registry.spec.ts` (TS-144…TS-149, TS-160);
   `payer-setup-module.spec.ts` TS-132/TS-134 retargeted off the retired queue.
+
+### E6.10 — Structured Control Autofill (2026-08-13, cross-repo)
+
+Epic `docs/redesign/E6.10-structured-control-autofill.md` (merged #315). Additive
+`portal_field_maps.control_options jsonb` (`20260813120000`, repo-only — hosted
+apply is an operator step). Capture records `{value,label}[]` for select / radio
+/ valued checkbox (never selected/checked/typed). Re-capture refreshes a
+**non-empty** list only. The registry chips `field_type`, reveals options, and
+picks a fixed value from the portal's own list (checkbox-without-options →
+`yes`/`no`). Token rows can author `transform` `state_abbrev` | `date_mmddyyyy`
+via `train_global_field_map` (DROP+CREATE 7th arg) and the org RLS writers.
+Skip reasons name the control + a 3-option sample; `FIELD_NOT_FOUND_REASON` is
+unmoved. Isolation assertions 22/22b/23 unchanged (extra column on the same
+payload).
 
 ### 3M Slice 6 — platform authoring vs org adoption (2026-08-09)
 

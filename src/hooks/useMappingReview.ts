@@ -10,6 +10,8 @@ import {
   approveFieldMap,
   markFieldMapManual,
   reproposeFieldMap,
+  setFieldMapHardcoded,
+  setFieldMapTransform,
   batchApproveFieldMaps,
   type BatchApproveItem,
   updateSharedFieldRegistry,
@@ -72,6 +74,27 @@ export function useManualField() {
   return useMutation({
     mutationFn: ({ id, fieldLabel }: { id: string; fieldLabel: string | null }) =>
       markFieldMapManual(id, fieldLabel),
+  });
+}
+
+export function useSetFieldMapHardcoded() {
+  return useMutation({
+    mutationFn: ({
+      id,
+      value,
+      fieldLabel,
+    }: {
+      id: string;
+      value: string;
+      fieldLabel: string | null;
+    }) => setFieldMapHardcoded(id, value, fieldLabel),
+  });
+}
+
+export function useSetFieldMapTransform() {
+  return useMutation({
+    mutationFn: ({ id, transform }: { id: string; transform: string | null }) =>
+      setFieldMapTransform(id, transform),
   });
 }
 
