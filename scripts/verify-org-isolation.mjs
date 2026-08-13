@@ -833,6 +833,45 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 24. Manual prove is GLOBAL only — naming a cross-org private portal id
+  //     must 404 (never stamp proven_at on another tenant's row).
+  const spPortalId = process.env.SOUTHPARK_PORTAL_ID || "portal-sp-1";
+  const proveProbe = await apiPost(
+    "/api/shared-portals/prove",
+    { id: spPortalId },
+    { token: kansasTok },
+  );
+  check(
+    "24. Shared portal prove cannot stamp an org-scoped / foreign portal",
+    proveProbe.status === 404,
+    `status=${proveProbe.status}`,
+    { leak: true },
+  );
+
+  // 24b. Shared test fill is is_test with null case/provider (telemetry only).
+  const testFillId = crypto.randomUUID();
+  const testFill = await apiPost(
+    "/api/shared-test-fills",
+    {
+      id: testFillId,
+      portalKey: "gate_probe_shared",
+      fieldsFilled: 0,
+      fieldsSkipped: [],
+    },
+    { token: kansasTok },
+  );
+  const testSession = testFill.body?.data?.session ?? null;
+  check(
+    "24b. Shared test fill records is_test with null case/provider",
+    testFill.status < 400 &&
+      testSession != null &&
+      testSession.isTest === true &&
+      testSession.caseId == null &&
+      testSession.providerId == null,
+    `status=${testFill.status} isTest=${testSession?.isTest} caseId=${testSession?.caseId}`,
+    { leak: false },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";
