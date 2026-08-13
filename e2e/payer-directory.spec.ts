@@ -191,8 +191,8 @@ test("TS-36 (retargeted): the org payer list filters by name, State, and Kind �
   context,
   page,
 }) => {
-  // The org's own payers now feed the page (payers ∩ active targets —
-  // OPA-RETIRE), not the retired catalog browse / assignment subscription.
+  // The org's catalog payers feed the page (listPayers / catalogSetupPayers),
+  // not a group-attach filter or the retired assignment subscription.
   const fixtures = makeFixtures();
   fixtures.payers = fixtures.global_payers;
   fixtures.org_payer_assignments = [];

@@ -38,8 +38,8 @@ function NextStepCard({ payer }: { payer: Payer }) {
   );
 
   if (isLoading) return <Skeleton className="h-16 w-full rounded-[6px]" />;
-  // A payer outside the org's network has no readiness row — the templates
-  // list below still renders, and authoring still works from its CTA.
+  // A payer missing from the catalog funnel has no readiness row — the
+  // templates list below still renders, and authoring still works from its CTA.
   if (isError || !row) return null;
 
   const step = templateNextStep(row);

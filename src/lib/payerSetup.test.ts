@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { activeOrgPayers, archivedPayerIds, networkPayerIdsFromTargets } from "./payerSetup";
+import {
+  activeOrgPayers,
+  archivedPayerIds,
+  catalogSetupPayers,
+  networkPayerIdsFromTargets,
+} from "./payerSetup";
 import type { Payer, PayerNetworkTarget } from "@/types";
 
 function payer(over: Partial<Payer> = {}): Payer {
@@ -66,6 +71,33 @@ describe("activeOrgPayers — archived payers (E6.8)", () => {
   it("non-archived still included", () => {
     const rows = activeOrgPayers([payer({ archivedAt: null })], [target()]);
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("catalogSetupPayers — Payer Setup lists the catalog, not group attach", () => {
+  it("includes a payer with no targets", () => {
+    const rows = catalogSetupPayers([payer()]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.payer.id).toBe("pay-1");
+  });
+
+  it("still excludes the Pre-Cred sentinel", () => {
+    const rows = catalogSetupPayers([payer({ name: "Pre-Credentialing Setup" }), payer()]);
+    expect(rows.map((r) => r.payer.id)).toEqual(["pay-1"]);
+  });
+
+  it("excludes archived payers by default and opts them in", () => {
+    const archived = payer({ archivedAt: "2026-07-27T00:00:00Z" });
+    expect(catalogSetupPayers([archived])).toEqual([]);
+    expect(catalogSetupPayers([archived], { includeArchived: true })).toHaveLength(1);
+  });
+
+  it("sorts by payer name", () => {
+    const rows = catalogSetupPayers([
+      payer({ id: "b", name: "Beta" }),
+      payer({ id: "a", name: "Alpha" }),
+    ]);
+    expect(rows.map((r) => r.payer.name)).toEqual(["Alpha", "Beta"]);
   });
 });
 

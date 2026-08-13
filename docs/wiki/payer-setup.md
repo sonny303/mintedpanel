@@ -1,9 +1,17 @@
 # Payer Setup
 
-_Updated for: E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10); Form Setup / Train capture notes (2026-08-11)._
+_Updated for: catalog list (2026-08-13); E6.5 plus 3M payer-setup cleanup slices 1–3 (2026-08-10); Form Setup / Train capture notes (2026-08-11)._
 
 Journey A — payer readiness: catalog + SOPs with embedded form setup.
 Global: authored once, inherited by every org.
+
+## Grain
+
+**Payer Setup lists the global catalog.** There is no org↔payer assignment.
+A newly created payer appears here immediately. The operational attach is
+**payer↔group** on Groups → [group] → Payer Network (`+ Attach payer`).
+Generation, attach pickers, and the manual-case door still read payers a
+group already works with (`activeOrgPayers` over live `payer_network_targets`).
 
 ## Shipped (E6.5)
 
@@ -58,17 +66,13 @@ Global: authored once, inherited by every org.
 
 The cleanup removes two sources of friction from the shipped journey:
 
-- **Set up payer** is one intent: enter the payer details and create it. The
-  old “Also add to my network” choice is not part of this flow; a successful
-  create adds the payer to the active organization and the confirmation says
-  so. The backend performs the identity insert and organization assignment in
-  one transaction.
-- _(Lands with #285 OPA-RETIRE)_ **Network membership is group attach
-  (active `payer_network_targets`), not the dormant
-  `org_payer_assignments` subscription gate.** Create still authorizes under
-  the caller org; “in my network” / attach pickers follow live targets. The
-  assignments table is **not dropped**. Hosted migration apply stays an
-  operator step.
+- **Set up payer** is one intent: enter the payer details and create it. A
+  successful create writes the global catalog row. It does **not** assign
+  the payer to the org — attach a group from Groups → Payer Network when
+  that group credentials with it.
+- **Network membership is group attach** (active `payer_network_targets`).
+  The dormant `org_payer_assignments` table is **not dropped**. Hosted
+  migration apply stays an operator step.
 - **The catalog is curated, not a seed inventory.** The retired catalog-sync
   rows that are not referenced by cases, targets, enrollment facts, SOPs,
   portals, generation records, contacts, settings, or other payer links are

@@ -1,19 +1,18 @@
 import { test, expect, type Route } from "@playwright/test";
 
-// E4.2 hardening — canonical payer selection & org assignment, retargeted by
-// the payer-and-cases Slice A (the catalog browse is retired; the
-// subscription actions live on the read-only payer DETAIL page, and the
-// Payer Setup list shows only the org's own payers). Same stateful harness
-// (payer_network_targets gate — OPA-RETIRE; assignments dormant):
-//   - An admin adds a catalog payer from its detail page; the header flips to
-//     "In my network" + "Configure credentialing scope", the subscription row
-//     is written, and the payer joins the Payer Setup list.
+// E4.2 hardening — canonical payer selection, retargeted by the
+// payer-and-cases Slice A (the catalog browse is retired). Payer Setup lists
+// the global catalog; group attach lives on Groups → Payer Network. Same
+// stateful harness (assignments dormant):
+//   - Catalog payers appear on Setup even with zero group attaches.
+//   - An admin attaches from the payer detail ("Attach to a group"); the
+//     header flips to "In my network" once a target exists.
 //   - Retired/merged payers cannot be newly added; the detail explains why
 //     and names the canonical successor.
 //   - A non-admin browses list + detail but sees no mutation controls.
-//   - Remove archives the subscription AND its active targets (cascade) and
-//     the detail offers Reactivate; reactivating flips the subscription back
-//     WITHOUT recreating the archived scope.
+//   - Remove archives the group's targets (cascade) and the detail offers
+//     Reactivate; reactivating flips the subscription back WITHOUT recreating
+//     the archived scope.
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -204,7 +203,7 @@ function seedAuth(context: {
   );
 }
 
-test("admin adopts a payer via group attach — detail offers Attach to a group; targets put it In my network", async ({
+test("admin sees catalog payers on Setup before any group attach; detail offers Attach to a group", async ({
   context,
   page,
 }) => {
@@ -214,12 +213,16 @@ test("admin adopts a payer via group attach — detail offers Attach to a group;
   await context.route(/\/(rest|auth)\/v1\//, handler);
   await seedAuth(context);
 
-  // With no active targets yet, Payer Setup is honestly empty (OPA-RETIRE).
+  // Catalog rows list on Setup with zero targets — attach is payer↔group.
   await page.goto("/payer-directory");
   await expect(page.getByRole("heading", { name: "Payer Setup" })).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText("No payers yet")).toBeVisible();
+  await expect(
+    page.locator("tbody tr", { hasText: "Blue Cross and Blue Shield of North Carolina" }),
+  ).toBeVisible();
+  await expect(page.locator("tbody tr", { hasText: "UnitedHealthcare" })).toBeVisible();
+  await expect(page.getByText("No payers yet")).toHaveCount(0);
 
   // Detail no longer one-click assigns — adoption is group attach on /groups.
   await page.goto("/admin/payer-admin/setup/gp-bcbsnc");
@@ -229,7 +232,7 @@ test("admin adopts a payer via group attach — detail offers Attach to a group;
   await expect(page.getByRole("link", { name: "Attach to a group" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to my network" })).toHaveCount(0);
 
-  // Seed an active target (what Attach writes) — membership is target-derived.
+  // Seed an active target (what Attach writes) — detail membership is target-derived.
   (fixtures.payer_network_targets as Array<Record<string, unknown>>).push({
     id: "t-bcbsnc",
     org_id: ORG,

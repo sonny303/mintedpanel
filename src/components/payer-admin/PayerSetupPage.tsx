@@ -32,10 +32,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePayers, useReactivatePayer, useSops } from "@/hooks/useAdmin";
-import { usePayerNetworkTargets } from "@/hooks/usePayerNetworkTargets";
 import { usePayerReadinessFunnel } from "@/hooks/usePayerReadinessFunnel";
 import { fmtDate } from "@/lib/format";
-import { activeOrgPayers } from "@/lib/payerSetup";
+import { catalogSetupPayers } from "@/lib/payerSetup";
 import {
   DEFAULT_PAYER_SETUP_FILTERS,
   DEFAULT_PAYER_SETUP_PAGE_SIZE,
@@ -138,11 +137,11 @@ function TemplateStatusCell({
   );
 }
 
-/** Three-step orientation for a brand-new org (design zero-payers state). */
+/** Three-step orientation for an empty catalog (design zero-payers state). */
 const ZERO_STEPS = [
   { n: 1, title: "Add a payer", desc: "Name, states, and the IDs it issues." },
   { n: 2, title: "Author a template", desc: "The tasks a case follows for that payer." },
-  { n: 3, title: "Generate cases", desc: "Each case follows the template's tasks." },
+  { n: 3, title: "Attach to a group", desc: "From that group's Payer Network board." },
 ];
 
 function ZeroPayersCard({ isAdmin }: { isAdmin: boolean }) {
@@ -150,8 +149,8 @@ function ZeroPayersCard({ isAdmin }: { isAdmin: boolean }) {
     <div className="rounded-[6px] border border-[#E8E5E0] bg-white px-6 py-12 text-center">
       <div className="text-[17px] font-semibold text-foreground">No payers yet</div>
       <p className="mx-auto mt-1 max-w-md text-[13.5px] text-muted-foreground">
-        Add the payers your organization credentials with. Each one needs a template before it can
-        generate cases.
+        Add payers to the catalog. Attach a payer to a group from Groups → Payer Network when that
+        group credentials with it.
       </p>
       <div className="mx-auto mt-6 flex max-w-xl flex-wrap items-start justify-center">
         {ZERO_STEPS.map((step, i) => (
@@ -197,7 +196,7 @@ function FilteredToNoneCard({ onClear }: { onClear: () => void }) {
     <div className="rounded-[6px] border border-[#E8E5E0] bg-white px-6 py-10 text-center">
       <div className="text-[15px] font-semibold text-foreground">No payers match these filters</div>
       <p className="mx-auto mt-1 max-w-sm text-[13.5px] text-muted-foreground">
-        Your organization has payers — none of them match what you&apos;ve selected.
+        There are payers in the catalog — none of them match what you&apos;ve selected.
       </p>
       <Button variant="outline" className="mt-4" onClick={onClear}>
         Clear filters
@@ -248,7 +247,6 @@ function DefaultTemplateCard() {
 
 export function PayerSetupPage() {
   const payersQ = usePayers();
-  const targetsQ = usePayerNetworkTargets();
   const funnel = usePayerReadinessFunnel();
   const isAdmin = useIsAdmin();
   const reactivateMut = useReactivatePayer();
@@ -262,14 +260,13 @@ export function PayerSetupPage() {
     setPage(1);
   };
 
-  // Archived rows ride the SAME inclusion rule with the opt-in flag; the
-  // funnel rows (active payers only) carry the readiness facts.
+  // Catalog inclusion (no group-attach filter). Archived rows ride the same
+  // rule with the opt-in flag; funnel rows (active payers only) carry the
+  // readiness facts.
   const rows = useMemo(() => {
-    const included = activeOrgPayers(payersQ.data ?? [], targetsQ.data ?? [], {
-      includeArchived: true,
-    });
+    const included = catalogSetupPayers(payersQ.data ?? [], { includeArchived: true });
     return buildPayerSetupRows(included, funnel.rows ?? []);
-  }, [payersQ.data, targetsQ.data, funnel.rows]);
+  }, [payersQ.data, funnel.rows]);
 
   const kpis = useMemo(() => countPayerSetupKpis(rows), [rows]);
   const visible = useMemo(() => filterPayerSetupRows(rows, filters), [rows, filters]);
@@ -278,8 +275,8 @@ export function PayerSetupPage() {
   const kindOptions = useMemo(() => payerSetupKindOptions(rows), [rows]);
 
   const totalCount = rows.length;
-  const isLoading = funnel.isLoading || payersQ.isLoading || targetsQ.isLoading;
-  const isError = funnel.isError || payersQ.isError || targetsQ.isError;
+  const isLoading = funnel.isLoading || payersQ.isLoading;
+  const isError = funnel.isError || payersQ.isError;
 
   const handleReactivate = (row: PayerSetupViewRow) => {
     reactivateMut.mutate(row.payerId, {
@@ -303,7 +300,7 @@ export function PayerSetupPage() {
         description={
           isLoading
             ? "Loading payers…"
-            : `${totalCount} payer${totalCount === 1 ? "" : "s"} in your network`
+            : `${totalCount} payer${totalCount === 1 ? "" : "s"} in the catalog`
         }
       />
 
