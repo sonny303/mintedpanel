@@ -36,7 +36,11 @@ import {
   useUpdateSharedFieldRegistry,
   useAddSharedRegistryField,
 } from "@/hooks/useMappingReview";
-import { useSetGlobalPortalFlags, useTrainGlobalFieldMap, useUpsertGlobalPortal } from "@/hooks/useGlobalAuthoring";
+import {
+  useSetGlobalPortalFlags,
+  useTrainGlobalFieldMap,
+  useUpsertGlobalPortal,
+} from "@/hooks/useGlobalAuthoring";
 import { useCreatePortal } from "@/hooks/usePortals";
 import { useFormDrift } from "@/hooks/useFormDrift";
 import { normalizePortalKey } from "@/lib/tokenFormat";

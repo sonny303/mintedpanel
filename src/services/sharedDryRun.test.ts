@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  proveSharedPortal,
-  recordSharedTestFill,
-  resolveTelemetryOrgId,
-} from "./sharedDryRun";
+import { proveSharedPortal, recordSharedTestFill, resolveTelemetryOrgId } from "./sharedDryRun";
 
 function membershipsDb(orgs: Array<{ orgId: string; orgName: string }>) {
   return {

@@ -335,9 +335,7 @@ export async function handleRecordSharedTestFill(
     id: String(raw.id ?? ""),
     portalKey: String(raw.portalKey ?? raw.portal_key ?? ""),
     fieldsFilled: typeof raw.fieldsFilled === "number" ? raw.fieldsFilled : Number.NaN,
-    fieldsSkipped: (raw.fieldsSkipped ?? raw.fields_skipped ?? null) as
-      | FillSkippedField[]
-      | null,
+    fieldsSkipped: (raw.fieldsSkipped ?? raw.fields_skipped ?? null) as FillSkippedField[] | null,
     startedAt: (raw.startedAt ?? raw.started_at ?? null) as string | null,
     completedAt: (raw.completedAt ?? raw.completed_at ?? null) as string | null,
     orgId: (raw.orgId ?? raw.org_id ?? null) as string | null,
@@ -348,10 +346,7 @@ export async function handleRecordSharedTestFill(
           ? raw.mock_profile_version
           : null,
   };
-  const result = await recordSharedTestFill(
-    { db: user.db, userId: user.userId },
-    input,
-  );
+  const result = await recordSharedTestFill({ db: user.db, userId: user.userId }, input);
   if (result.kind === "rejected") return fail(result.status, result.message);
   return ok({ session: result.session }, null, result.kind === "created" ? 201 : 200);
 }
@@ -359,10 +354,7 @@ export async function handleRecordSharedTestFill(
 // POST /api/shared-portals/prove — MANUAL proven_at stamp for a GLOBAL portal.
 // A dry-run pass must never call this; the trainer reviews the filled form and
 // marks proven explicitly. JWT is the gate (same interim posture as shared propose).
-export async function handleProveSharedPortal(
-  body: unknown,
-  user: UserContext,
-): Promise<Response> {
+export async function handleProveSharedPortal(body: unknown, user: UserContext): Promise<Response> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return fail(422, "Request body must be a JSON object");
   }
