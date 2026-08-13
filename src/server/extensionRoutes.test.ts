@@ -698,6 +698,7 @@ describe("provider cases handler", () => {
         status: "In Progress",
         payerReferenceId: "REF-9",
         payerPipelineState: "submitted",
+        facilityId: "fac-1",
       },
     ];
     searchCasesMock.mockResolvedValue(rows);

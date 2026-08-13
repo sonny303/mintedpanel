@@ -736,6 +736,7 @@ export async function createMockApiServer(options = {}) {
                     status: c.status,
                     payerReferenceId: c.payerReferenceId ?? null,
                     payerPipelineState: c.payerPipelineState ?? "not_started",
+                    facilityId: c.facilityId ?? null,
                   };
                 })
                 .filter((r) => {
