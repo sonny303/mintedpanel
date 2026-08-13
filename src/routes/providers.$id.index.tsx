@@ -591,9 +591,9 @@ function IdentitySection({ provider, canWrite }: { provider: Provider; canWrite:
 // Every write composes the FULL license list (unchanged rows pass through
 // verbatim) into the ONE audited updateProviderWithLicenses sync with an
 // EMPTY provider patch — identity fields and assignments are untouchable
-// from here, and the PSV rules (verify/fail requires the board URL; renewal
-// resets to Unverified) ride the same service path as before. The URL is
-// OPTIONAL for unverified rows.
+// from here, and the PSV rules (verify/fail stamps server-side; the board
+// URL is optional; renewal resets to Unverified) ride the same service path
+// as before.
 
 const licenseToInput = (l: StateLicense): LicenseInput => ({
   id: l.id,
@@ -760,13 +760,6 @@ function LicenseDialog({
       setError("State is required.");
       return;
     }
-    if (
-      (draft.verifiedStatus === "verified" || draft.verifiedStatus === "failed") &&
-      !draft.verificationSourceUrl.trim()
-    ) {
-      setError("PSV verify/fail requires the state board URL.");
-      return;
-    }
     const edited: LicenseInput = {
       id: license?.id ?? null,
       state: draft.state,
@@ -899,8 +892,8 @@ function LicenseDialog({
               className="h-9"
             />
             <p className="text-[11.5px] text-muted-foreground">
-              Link to the state board&apos;s verification page. You can add it later — required only
-              to record Verified or Failed.
+              Link to the state board&apos;s verification page if you have one. You can also record
+              Verified or Failed from email or another source and add the URL later.
             </p>
           </div>
           {willReset ? (

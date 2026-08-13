@@ -1,10 +1,9 @@
 // State-license editor with the PSV trail (E1.3 F1.3.3). Multiple licenses
 // per provider; each row carries state, number, type (full/compact),
 // issue/expiration dates, and the verification controls: status select +
-// the state-board lookup URL (REQUIRED to record verified/failed — the
-// service enforces it and stamps verifier/timestamp server-side). Editing an
-// expiration date resets the row to unverified on save (renewal reset) — the
-// row shows an inline note when that will happen.
+// the optional state-board lookup URL. The service stamps verifier/timestamp
+// server-side. Editing an expiration date resets the row to unverified on
+// save (renewal reset) — the row shows an inline note when that will happen.
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -172,7 +171,7 @@ export function LicenseListEditor({ value, onChange, errors }: LicenseListEditor
             </div>
             <div>
               <Label htmlFor={`lic-${i}-url`} className="text-[12px]">
-                State-board lookup URL
+                State-board lookup URL (optional)
               </Label>
               <Input
                 id={`lic-${i}-url`}

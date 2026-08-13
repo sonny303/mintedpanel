@@ -194,12 +194,6 @@ function FormBody({
     licenses.forEach((l, i) => {
       if (!l.state.trim() && (l.licenseNumber.trim() || l.expirationDate.trim())) {
         licErrs[i] = "Select the license state";
-      } else if (
-        l.verifiedStatus !== "unverified" &&
-        !l.verificationSourceUrl.trim() &&
-        l.state.trim()
-      ) {
-        licErrs[i] = "Recording a verification requires the state-board lookup URL";
       }
     });
 

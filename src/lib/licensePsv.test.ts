@@ -1,7 +1,7 @@
-// E1.3 TE-10 — PSV rule truth table: URL required to verify, server-side
+// E1.3 TE-10 — PSV rule truth table: optional board URL, server-side
 // stamping, renewal reset, and stored-trail preservation.
 import { describe, expect, it } from "vitest";
-import { PSV_URL_REQUIRED_MESSAGE, resolvePsvColumns, type PsvStored } from "./licensePsv";
+import { resolvePsvColumns, type PsvStored } from "./licensePsv";
 
 const NOW = "2026-07-12T12:00:00Z";
 const P1 = "user-p1";
@@ -23,15 +23,34 @@ const storedUnverified: PsvStored = {
 };
 
 describe("resolvePsvColumns", () => {
-  it("marking verified requires the lookup URL", () => {
-    expect(() =>
-      resolvePsvColumns(
-        { verifiedStatus: "verified", verificationSourceUrl: "  ", expirationDate: "2027-01-31" },
-        storedUnverified,
-        NOW,
-        P1,
-      ),
-    ).toThrow(PSV_URL_REQUIRED_MESSAGE);
+  it("marking verified with a blank URL still stamps the trail", () => {
+    const cols = resolvePsvColumns(
+      { verifiedStatus: "verified", verificationSourceUrl: "  ", expirationDate: "2027-01-31" },
+      storedUnverified,
+      NOW,
+      P1,
+    );
+    expect(cols).toEqual({
+      verified_status: "verified",
+      verified_at: NOW,
+      verified_by: P1,
+      verification_source_url: null,
+    });
+  });
+
+  it("records a failed verification with a blank URL the same way", () => {
+    const cols = resolvePsvColumns(
+      { verifiedStatus: "failed", verificationSourceUrl: null, expirationDate: "2027-01-31" },
+      storedUnverified,
+      NOW,
+      P1,
+    );
+    expect(cols).toEqual({
+      verified_status: "failed",
+      verified_at: NOW,
+      verified_by: P1,
+      verification_source_url: null,
+    });
   });
 
   it("stamps verifier and timestamp server-side on a new verification", () => {
