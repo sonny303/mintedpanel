@@ -557,7 +557,7 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   // publish lint requires a portalKey).
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: "Add action" }).click();
-  await page.getByRole("menuitem", { name: /^Portal$/ }).click();
+  await page.getByRole("menuitem", { name: /^Portal\b/ }).click();
   await page
     .locator('div:has(> label:text-is("Action 1 name"))')
     .first()
