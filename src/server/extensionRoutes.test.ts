@@ -698,6 +698,7 @@ describe("provider cases handler", () => {
         status: "In Progress",
         payerReferenceId: "REF-9",
         payerPipelineState: "submitted",
+        caseNumber: 1001,
         facilityId: "fac-1",
       },
     ];

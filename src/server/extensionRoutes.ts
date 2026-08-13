@@ -394,7 +394,8 @@ export async function handleProposeFieldMap(body: unknown, ctx: AuthContext): Pr
 //                       cross-org providerId is a 404.
 //   ?q=<text>           E4.3 TE-11 — the case half of the unified standalone
 //                       search: org-scoped, matching payer name / provider
-//                       name / tracking id, ids + display fields only.
+//                       name / tracking id / case number (C-<n>), ids +
+//                       display fields only.
 // providerId takes precedence when both are present (the fill flow's primary
 // path). Neither present is a 422 — the route never dumps the whole org.
 export async function handleListProviderCases(url: URL, ctx: AuthContext): Promise<Response> {

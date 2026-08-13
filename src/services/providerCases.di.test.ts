@@ -407,6 +407,7 @@ describe("listOpenProviderCases — dropdown ordering", () => {
 describe("searchOrgCases — E4.3 TE-11 case search", () => {
   const searchCaseRow = (over: Record<string, unknown> = {}) => ({
     id: "c1",
+    case_number: 1001,
     state: "KS",
     provider_id: "p1",
     facility_id: "fac-1",
@@ -431,6 +432,7 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     expect(captures.map((c) => c.table)).toEqual(["credential_cases"]);
     expect(captures[0].filters).toContainEqual(["org_id", "org-1"]);
     expect(captures[0].selectCols).toContain("case_status");
+    expect(captures[0].selectCols).toContain("case_number");
     expect(captures[0].selectCols).toContain("facility_id");
   });
 
@@ -439,12 +441,14 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
       searchCaseRow({ id: "c1" }),
       searchCaseRow({
         id: "c2",
+        case_number: 1002,
         providers: { id: "p2", first_name: "Stan", last_name: "Marsh" },
         payers: { name: "Humana" },
         payer_reference_id: "REF-BROOKE-9",
       }),
       searchCaseRow({
         id: "c3",
+        case_number: 1003,
         providers: { id: "p3", first_name: "Kyle", last_name: "Broflovski" },
         payers: { name: "Aetna" },
       }),
@@ -460,6 +464,7 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
       state: "KS",
       status: "In Progress",
       payerPipelineState: "drafting",
+      caseNumber: 1001,
       facilityId: "fac-1",
     });
   });
@@ -468,6 +473,25 @@ describe("searchOrgCases — E4.3 TE-11 case search", () => {
     const { db } = makeFakeDb([{ data: [searchCaseRow({ facility_id: null })] }]);
     const result = await searchOrgCases(ctxWith(db), "brooke");
     expect(result[0].facilityId).toBeNull();
+  });
+
+  it("matches case number as C-1001, c1001, or bare 1001 without breaking payer names like cigna", async () => {
+    const rows = [
+      searchCaseRow({ id: "c1", case_number: 1001 }),
+      searchCaseRow({
+        id: "c2",
+        case_number: 1002,
+        providers: { id: "p2", first_name: "Addie", last_name: "Jones" },
+        payers: { name: "Cigna" },
+      }),
+    ];
+    const run = (q: string) => searchOrgCases(ctxWith(makeFakeDb([{ data: rows }]).db), q);
+
+    expect((await run("C-1001")).map((r) => r.id)).toEqual(["c1"]);
+    expect((await run("1002")).map((r) => r.id)).toEqual(["c2"]);
+    expect((await run("c1001")).map((r) => r.id)).toEqual(["c1"]);
+    // Leading "c" in a payer name must still match as text, not as a case #.
+    expect((await run("cigna")).map((r) => r.id)).toEqual(["c2"]);
   });
 
   it("resolves the case_status label and defaults pipeline to not_started", async () => {

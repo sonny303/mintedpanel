@@ -164,6 +164,7 @@ const CASES = [
     state: "CO",
     status: "In Progress",
     submittedDate: null,
+    caseNumber: 2001,
     // Phase 4: a portal-linked open task. Its task_id must never leak into a
     // Kansas caller's response (assertion 8d) — same isolation as the row.
     portalTasks: [
@@ -184,6 +185,7 @@ const CASES = [
     state: "KS",
     status: "Submitted",
     submittedDate: "2026-06-01",
+    caseNumber: 1001,
     portalTasks: [
       {
         taskId: FIXTURES.KANSAS_TASK_ID,
@@ -764,9 +766,11 @@ export async function createMockApiServer(options = {}) {
       }
       if (q != null) {
         // E4.3 TE-11 — case search: org-scoped, matching payer name / provider
-        // name / tracking id. Leak "casesearch": the org filter is skipped and
-        // another org's case leaks into the results (assertion 15b red).
+        // name / tracking id / case number (C-<n>). Leak "casesearch": the org
+        // filter is skipped and another org's case leaks into the results
+        // (assertion 15b red).
         const needle = q.trim().toLowerCase();
+        const caseDigits = /^(?:c-?)?(\d+)$/.exec(needle)?.[1] ?? null;
         const rows =
           needle === ""
             ? []
@@ -783,13 +787,18 @@ export async function createMockApiServer(options = {}) {
                     status: c.status,
                     payerReferenceId: c.payerReferenceId ?? null,
                     payerPipelineState: c.payerPipelineState ?? "not_started",
+                    caseNumber: c.caseNumber ?? null,
                     facilityId: c.facilityId ?? null,
                   };
                 })
                 .filter((r) => {
                   const hay =
                     `${r.providerName} ${r.payerName ?? ""} ${r.payerReferenceId ?? ""}`.toLowerCase();
-                  return hay.includes(needle);
+                  const digits = r.caseNumber != null ? String(r.caseNumber) : "";
+                  return (
+                    hay.includes(needle) ||
+                    (caseDigits != null && digits !== "" && digits.includes(caseDigits))
+                  );
                 });
         return envelope(res, 200, rows, null, { total: rows.length });
       }
