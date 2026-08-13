@@ -34,6 +34,7 @@ import { fmtDate } from "@/lib/format";
 import { useAuthStore, useActiveMembership, type AppRole } from "@/lib/auth-store";
 import { useIsAdmin } from "@/lib/permissions";
 import { useMemberships, useUpdateMembershipRole } from "@/hooks/useOrgSettings";
+import { SELF_ROLE_CHANGE_MESSAGE } from "@/services/orgSettings";
 import { usePendingInvites, useRemoveMembership, useRevokePendingInvite } from "@/hooks/useInvites";
 import type { PendingInvite } from "@/services/invites";
 import type { MembershipRow } from "@/services/orgSettings";
@@ -190,11 +191,29 @@ export function MembersPanel() {
                     <td className="px-3 h-10 align-middle text-right">
                       {canEdit ? (
                         <div className="flex items-center justify-end gap-2">
+                          {/* Your OWN role is not editable here. Demoting
+                              yourself is a one-way door — the control that
+                              would undo it is admin-only, so the change locks
+                              you out of reversing it, and an org whose only
+                              admin does this is left with nobody who can
+                              manage it. The select stays visible but disabled
+                              so the row reads as intentional rather than
+                              broken. Same rule the delete policy has always
+                              had (`user_id <> auth.uid()`). */}
                           <Select
                             value={m.role}
+                            disabled={isSelf}
                             onValueChange={(v) => handleRoleChange(m.id, v as AppRole)}
                           >
-                            <SelectTrigger className="h-8 w-[130px] text-[12px]">
+                            <SelectTrigger
+                              className="h-8 w-[130px] text-[12px]"
+                              title={isSelf ? SELF_ROLE_CHANGE_MESSAGE : undefined}
+                              aria-label={
+                                isSelf
+                                  ? SELF_ROLE_CHANGE_MESSAGE
+                                  : `Access level for ${m.email ?? "member"}`
+                              }
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

@@ -3,6 +3,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
+import { useAuthStore } from "@/lib/auth-store";
 import { normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { AdaCompliance, AppRole, Facility, Organization, ProviderGroup } from "@/types";
@@ -320,9 +321,25 @@ async function getMembership(id: string): Promise<MembershipRow | null> {
   return list.find((m) => m.id === id) ?? null;
 }
 
+/** The message the UI shows when an admin tries to change their own access
+ * level. Exported so the panel and this guard can never drift apart. */
+export const SELF_ROLE_CHANGE_MESSAGE =
+  "You can't change your own access level. Ask another admin in this organization to do it.";
+
 export async function updateMembershipRole(id: string, role: AppRole): Promise<MembershipRow> {
   const orgId = requireActiveOrg();
   const before = await getMembership(id);
+  // Self-demotion is a ONE-WAY DOOR: the moment an admin drops themselves to
+  // billing/specialist, `memberships_update_admin` (and the panel's own
+  // useIsAdmin gate) stops them changing it back — and if they were the org's
+  // only admin, nobody in the org can. That is not a hypothetical: it happened
+  // on Kansas Fitness Physio, which sat at zero admins until the role was
+  // restored by direct SQL. This mirrors `memberships_delete_admin`, which has
+  // always carried `user_id <> auth.uid()` for exactly the same reason.
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  if (before && currentUserId && before.userId === currentUserId && before.role !== role) {
+    throw new Error(SELF_ROLE_CHANGE_MESSAGE);
+  }
   const { error } = await supabase
     .from("memberships")
     .update({ role })
