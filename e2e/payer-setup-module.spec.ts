@@ -20,10 +20,8 @@ import { withPortalPayerEmbed } from "./portalPayerEmbed";
 //            (repaired-since rule); nothing is ever blocked by drift.
 //   TS-133 — delegation renders as a curated catalog fact; NO request ever
 //            touches the retired MSO routing tables.
-//   TS-134 — failing mock dry run lists the unmatched field → train → re-run
-//            green → proven_at flips via set_global_portal_flags. The dry run
-//            records is_test with provider_id NULL (synthetic profile — no
-//            provider row involved).
+//   TS-134 — in-editor mock dry run / auto-prove is gone; Form setup points
+//            trainers to the Workbench Train forms tab (manual Mark proven).
 
 const AUTH_KEY = "sb-example-auth-token";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -696,7 +694,7 @@ test("TS-133 — delegation renders as a catalog fact; the MSO routing engine is
   expect(msoCalls).toEqual([]);
 });
 
-test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run green flips proven", async ({
+test("TS-134 — Form setup has no in-editor dry run; points to Workbench Train forms", async ({
   page,
 }) => {
   scenario = "form-setup";
@@ -707,29 +705,12 @@ test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run gre
   await page.getByRole("button", { name: /^2 Actions$/ }).click();
   await page.getByRole("button", { name: /Form setup/ }).click();
 
-  // Run 1: the proposed CAQH mapping is undecided → the run fails honestly and
-  // records a synthetic-profile dry run (is_test, provider_id NULL — no
-  // provider row involved).
-  await page.getByRole("button", { name: "Run mock dry run" }).click();
-  await expect(page.getByText(/1 field unmatched — train them, then re-run/)).toBeVisible({
-    timeout: 15000,
-  });
-  const dryRuns = () =>
-    calls.filter((c) => c.kind === "rest" && c.path === "fill_sessions" && c.method === "POST");
-  await expect.poll(() => dryRuns().length).toBe(1);
-  const firstRun = dryRuns()[0].body as Record<string, unknown>;
-  expect(firstRun.is_test).toBe(true);
-  expect(firstRun.provider_id).toBeNull();
-  expect(firstRun.case_id).toBeNull();
-  const skipped = firstRun.fields_skipped as Array<Record<string, unknown>>;
-  expect(skipped).toHaveLength(1);
-  expect(skipped[0]).toMatchObject({ label: "CAQH ID", reason: "unmapped" });
-  // No proven flip on a failing run.
-  expect(calls.filter((c) => c.path === "set_global_portal_flags")).toEqual([]);
-  await expect(page.getByText(/Last run: 1 filled.*1 unmatched/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run mock dry run" })).toHaveCount(0);
+  await expect(page.getByText(/Workbench extension/)).toBeVisible();
+  await expect(page.getByText(/Mark proven/)).toBeVisible();
+  await expect(page.getByText(/proven is never automatic/i)).toBeVisible();
 
-  // Decide the unmatched field in the registry: picking the token IS the
-  // decision (E6.9 folded the separate Approve step into the picker).
+  // Training still works in the editor — only prove moved out.
   const caqhRow = page.locator("div.space-y-1\\.5.px-3.py-2", { hasText: "CAQH ID" }).first();
   await caqhRow.getByRole("combobox", { name: /Map CAQH ID to a token/i }).click();
   await page.getByRole("option", { name: "provider.caqhId", exact: true }).click();
@@ -740,22 +721,16 @@ test("TS-134 — mock dry run: fail lists the unmatched field, train, re-run gre
     )
     .toBe(1);
 
-  // Run 2: everything decided → pass, and proven_at flips through the RPC.
-  await page.getByRole("button", { name: "Run mock dry run" }).click();
-  await expect(page.getByText(/Mock dry run passed — 2 fields filled/)).toBeVisible({
-    timeout: 15000,
-  });
-  await expect
-    .poll(
-      () =>
-        calls.filter(
-          (c) =>
-            c.kind === "rpc" &&
-            c.path === "set_global_portal_flags" &&
-            (c.body as Record<string, unknown>).p_proven === true,
-        ).length,
-      { timeout: 15000 },
-    )
-    .toBe(1);
-  await expect(page.getByText("Proven").first()).toBeVisible({ timeout: 15000 });
+  // Mapping never auto-stamps proven_at.
+  expect(
+    calls.filter(
+      (c) =>
+        c.kind === "rpc" &&
+        c.path === "set_global_portal_flags" &&
+        (c.body as Record<string, unknown>).p_proven === true,
+    ),
+  ).toEqual([]);
+  expect(
+    calls.filter((c) => c.kind === "rest" && c.path === "fill_sessions" && c.method === "POST"),
+  ).toEqual([]);
 });
