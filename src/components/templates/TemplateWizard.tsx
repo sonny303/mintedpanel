@@ -105,6 +105,7 @@ import {
   type TemplateEditorIntent,
 } from "@/lib/templateEditorIntent";
 import { normalizePortalKey } from "@/lib/tokenFormat";
+import { errorMessage } from "@/lib/dbErrors";
 import { SopVersionConflictError } from "@/services/templates";
 import { lintSopForPublish } from "@/lib/sopPublishLint";
 import {
@@ -828,8 +829,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       toast.success("Template created");
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed";
-      toast.error(msg);
+      toast.error(errorMessage(err, "Save failed"));
     } finally {
       setSaving(false);
     }
@@ -874,8 +874,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       if (err instanceof SopVersionConflictError) {
         toast.error("Someone else published a newer version — reload to see it.");
       } else {
-        const msg = err instanceof Error ? err.message : "Publish failed";
-        toast.error(msg);
+        toast.error(errorMessage(err, "Publish failed"));
       }
     } finally {
       setSaving(false);
@@ -971,8 +970,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       setDirty(false);
       navigate({ to: "/admin/templates/$id", params: { id: created.id } });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Duplicate failed";
-      toast.error(msg);
+      toast.error(errorMessage(err, "Duplicate failed"));
     }
   }
 
@@ -996,8 +994,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       toast.success(next ? "Template archived" : "Template restored");
     } catch (err) {
       setIsArchived(!next);
-      const msg = err instanceof Error ? err.message : "Update failed";
-      toast.error(msg);
+      toast.error(errorMessage(err, "Update failed"));
     }
   }
 

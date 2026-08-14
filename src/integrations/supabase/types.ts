@@ -3826,35 +3826,15 @@ export type Database = {
       author_global_sop: {
         Args: {
           p_archived?: boolean;
-          p_group_id: string;
-          p_id: string;
+          p_group_id?: string | null;
+          p_id?: string | null;
           p_name: string;
-          p_payer_id: string;
+          p_payer_id?: string | null;
           p_required_profile_attributes?: Json;
-          p_states: string[];
+          p_states?: string[] | null;
           p_task_definitions?: Json;
         };
-        Returns: {
-          archived: boolean;
-          created_at: string | null;
-          current_version: number;
-          group_id: string | null;
-          id: string;
-          name: string;
-          org_id: string | null;
-          payer_id: string | null;
-          required_profile_attributes: Json;
-          specialty: string | null;
-          state: string | null;
-          task_definitions: Json;
-          updated_at: string | null;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "sop_templates";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
+        Returns: Json;
       };
       check_rpc_throttle: {
         Args: {

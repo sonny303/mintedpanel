@@ -9,6 +9,8 @@
 interface PgErrorLike {
   code?: string;
   message?: string;
+  details?: string;
+  hint?: string;
 }
 
 function pgShape(error: unknown): PgErrorLike | null {
@@ -16,8 +18,20 @@ function pgShape(error: unknown): PgErrorLike | null {
   const e = error as Record<string, unknown>;
   const code = typeof e.code === "string" ? e.code : undefined;
   const message = typeof e.message === "string" ? e.message : undefined;
-  if (!code && !message) return null;
-  return { code, message };
+  const details = typeof e.details === "string" ? e.details : undefined;
+  const hint = typeof e.hint === "string" ? e.hint : undefined;
+  if (!code && !message && !details) return null;
+  return { code, message, details, hint };
+}
+
+/** Concatenate PostgREST message/details/hint so plpgsql RAISE text is found
+ *  whether it landed in `message` or `details`. */
+export function pgWireText(error: unknown): string {
+  const pg = pgShape(error);
+  if (!pg) return typeof error === "string" ? error : "";
+  return [pg.message, pg.details, pg.hint]
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .join(" ");
 }
 
 // Constraint-name fragment → human message. Postgres names the violated
@@ -115,32 +129,50 @@ export class UniqueViolationError extends Error {}
  *  `if (error) throw translateDbError(error);` */
 export function translateDbError(error: unknown): unknown {
   const pg = pgShape(error);
-  if (!pg?.message) return error;
+  const haystack = pgWireText(error);
+  if (!haystack) return error;
 
   // Checked before the SQLSTATE branches: a plpgsql RAISE carries a generic
-  // code, so only the message prefix identifies it.
-  if (pg.message.includes(SOP_STATE_OVERLAP_CODE)) {
-    const clash = pg.message.split(`${SOP_STATE_OVERLAP_CODE}:`)[1]?.trim();
+  // code, so only the message prefix identifies it. PostgREST may put that
+  // text in `details` rather than `message`.
+  if (haystack.includes(SOP_STATE_OVERLAP_CODE)) {
+    const clash = haystack.split(`${SOP_STATE_OVERLAP_CODE}:`)[1]?.trim();
     return new Error(
       clash
         ? `Another active SOP template already covers ${clash} for this payer and group. Remove those states here, or edit that template instead.`
         : "Another active SOP template already covers one of these states for this payer and group.",
     );
   }
-  if (pg.code === "23505") {
-    const friendly = matchFragment(pg.message, UNIQUE_MESSAGES);
+  if (pg?.code === "23505") {
+    const friendly = matchFragment(haystack, UNIQUE_MESSAGES);
     return new UniqueViolationError(friendly ?? "This record already exists.");
   }
-  if (pg.code === "23514") {
-    const friendly = matchFragment(pg.message, CHECK_MESSAGES);
+  if (pg?.code === "23514") {
+    const friendly = matchFragment(haystack, CHECK_MESSAGES);
     return friendly ? new Error(friendly) : error;
   }
-  if (pg.code === "23502") {
+  if (pg?.code === "23502") {
     // `null value in column "group_id" of relation "contracts" ...`
-    const column = /null value in column "([^"]+)"/.exec(pg.message)?.[1];
+    const column = /null value in column "([^"]+)"/.exec(haystack)?.[1];
     return new Error(
       column ? `${column.replaceAll("_", " ")} is required.` : "A required field is missing.",
     );
   }
   return error;
+}
+
+/** Always an Error with a non-empty message. PostgREST failures are plain
+ *  objects (not `instanceof Error`), which the wizard used to collapse to a
+ *  generic "Save failed" toast. */
+export function toError(error: unknown, fallback = "Save failed"): Error {
+  const translated = translateDbError(error);
+  if (translated instanceof Error && translated.message.trim()) return translated;
+  const text = pgWireText(translated !== error ? translated : error) || pgWireText(error);
+  if (text.trim()) return new Error(text);
+  if (typeof error === "string" && error.trim()) return new Error(error);
+  return new Error(fallback);
+}
+
+export function errorMessage(error: unknown, fallback: string): string {
+  return toError(error, fallback).message;
 }
