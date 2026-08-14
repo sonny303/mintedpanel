@@ -1,6 +1,6 @@
 # Providers
 
-_Updated for: Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: provider CSV first-facility-as-primary (2026-08-14); Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journey B — the consolidated people record.
 
@@ -20,7 +20,10 @@ Journey B — the consolidated people record.
   enrollments). The template download comes with a **reference sheet of
   your real group/facility/payer names**; unknown names are row errors
   naming the column, and the post-commit summary counts every relationship
-  attached.
+  attached. **Copy `facility_name` from that sheet** to assign the location
+  in the same upload — the first facility on the file is the primary
+  (same rule as Add Provider). Facilities themselves are created by the
+  Facilities CSV first; this column attaches, it does not create a clinic.
 
 ## Add provider — shipped
 

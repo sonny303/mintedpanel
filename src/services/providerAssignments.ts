@@ -11,6 +11,7 @@ import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
 import {
+  firstAssignmentIdsToPromote,
   planFacilityAssignmentSync,
   type AssignmentDraft,
   type StoredFacilityAssignment,
@@ -67,6 +68,35 @@ export async function insertAssignmentRows(rows: AssignmentRowInput[]): Promise<
     { onConflict: "provider_id,facility_id", ignoreDuplicates: true },
   );
   if (error) throw translateDbError(error);
+}
+
+/** After import (or any bulk insert that wrote is_primary=false), promote
+ * the first assignment for any provider who still has none. No-op when
+ * every listed provider already has a primary or has no assignments. */
+export async function ensureFirstFacilityPrimary(providerIds: string[]): Promise<void> {
+  if (providerIds.length === 0) return;
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("provider_facility_assignments")
+    .select("id, provider_id, is_primary, created_at")
+    .eq("org_id", orgId)
+    .in("provider_id", providerIds);
+  if (error) throw translateDbError(error);
+  const promoteIds = firstAssignmentIdsToPromote(
+    (data ?? []).map((r) => ({
+      id: String(r.id),
+      providerId: String(r.provider_id),
+      isPrimary: Boolean(r.is_primary),
+      createdAt: String(r.created_at ?? ""),
+    })),
+  );
+  if (promoteIds.length === 0) return;
+  const { error: updateError } = await supabase
+    .from("provider_facility_assignments")
+    .update({ is_primary: true })
+    .eq("org_id", orgId)
+    .in("id", promoteIds);
+  if (updateError) throw translateDbError(updateError);
 }
 
 async function listProviderAssignmentRows(

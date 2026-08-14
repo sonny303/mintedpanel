@@ -40,6 +40,37 @@ export function markFirstFacilityPrimary(
     .map((facilityId, index) => ({ facilityId, isPrimary: index === 0 }));
 }
 
+export interface AssignmentPrimaryCandidate {
+  id: string;
+  providerId: string;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+/** Providers with assignments and no primary: promote the earliest row
+ * (created_at, then id). Providers that already have a primary are left
+ * alone. Used after roster import, where the commit RPC inserts every
+ * facility as non-primary. */
+export function firstAssignmentIdsToPromote(rows: readonly AssignmentPrimaryCandidate[]): string[] {
+  const byProvider = new Map<string, AssignmentPrimaryCandidate[]>();
+  for (const row of rows) {
+    const list = byProvider.get(row.providerId) ?? [];
+    list.push(row);
+    byProvider.set(row.providerId, list);
+  }
+  const ids: string[] = [];
+  for (const list of byProvider.values()) {
+    if (list.some((r) => r.isPrimary)) continue;
+    const first = [...list].sort((a, b) =>
+      a.createdAt === b.createdAt
+        ? a.id.localeCompare(b.id)
+        : a.createdAt.localeCompare(b.createdAt),
+    )[0];
+    if (first) ids.push(first.id);
+  }
+  return ids;
+}
+
 /** Returns an error message, or null when the draft set is valid. An empty
  * set is valid here — the wizard surfaces the gap as section progress (the
  * PM's "no unassigned resting state" is a readiness concern, not a DB block). */

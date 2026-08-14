@@ -5,6 +5,7 @@ import {
   ONE_PRIMARY_ASSIGNMENT_MESSAGE,
   START_DATE_REQUIRED_MESSAGE,
   facilitiesForProviderGroups,
+  firstAssignmentIdsToPromote,
   markFirstFacilityPrimary,
   planFacilityAssignmentSync,
   validateAssignmentDrafts,
@@ -105,6 +106,31 @@ describe("markFirstFacilityPrimary (Add Provider default)", () => {
 
   it("drops blank ids so a lone real facility is still primary", () => {
     expect(markFirstFacilityPrimary(["", "f-1"])).toEqual([{ facilityId: "f-1", isPrimary: true }]);
+  });
+});
+
+describe("firstAssignmentIdsToPromote (import backfill)", () => {
+  it("promotes the only assignment when none is primary", () => {
+    expect(
+      firstAssignmentIdsToPromote([
+        { id: "a1", providerId: "p1", isPrimary: false, createdAt: "2026-08-14T00:00:00Z" },
+      ]),
+    ).toEqual(["a1"]);
+  });
+
+  it("promotes the earliest assignment per provider and skips those with a primary", () => {
+    expect(
+      firstAssignmentIdsToPromote([
+        { id: "b", providerId: "p1", isPrimary: false, createdAt: "2026-08-14T00:00:02Z" },
+        { id: "a", providerId: "p1", isPrimary: false, createdAt: "2026-08-14T00:00:01Z" },
+        { id: "c", providerId: "p2", isPrimary: true, createdAt: "2026-08-14T00:00:00Z" },
+        { id: "d", providerId: "p2", isPrimary: false, createdAt: "2026-08-14T00:00:01Z" },
+      ]),
+    ).toEqual(["a"]);
+  });
+
+  it("returns empty when there are no assignments", () => {
+    expect(firstAssignmentIdsToPromote([])).toEqual([]);
   });
 });
 
