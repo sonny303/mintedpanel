@@ -366,6 +366,42 @@ describe("the Slice 6 SOP-read widening — grant + policy shape", () => {
   });
 });
 
+describe("author_global_sop jsonb return (20260814180000) — create round-trip", () => {
+  const sql = readFileSync(
+    join(ROOT, "supabase/migrations/20260814180000_author_global_sop_returns_jsonb.sql"),
+    "utf8",
+  ).toLowerCase();
+  const statements = sql
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+
+  it("reasserts D6.5 global SOP readability without touching write policies", () => {
+    expect(statements).toContain("drop policy if exists sop_templates_select");
+    expect(statements).toContain("or (org_id is null)");
+    expect(statements).toContain("drop policy if exists sop_template_versions_select");
+    expect(statements).not.toMatch(
+      /create policy [a-z_]+ on public\.sop_templates?\w*\s*for (insert|update|delete)/,
+    );
+    expect(statements).not.toContain("org_payer_assignments");
+  });
+
+  it("reissues author_global_sop as jsonb (no table-typed return, no leftover overload)", () => {
+    expect(statements).toContain(
+      "drop function if exists public.author_global_sop(uuid, text, uuid, text[], uuid, jsonb, boolean, jsonb)",
+    );
+    expect(statements).toMatch(/create function public\.author_global_sop\([\s\S]*?returns jsonb/);
+    expect(statements).toContain("return to_jsonb(v_row)");
+    expect(statements).not.toMatch(/returns public\.sop_templates/);
+    expect(statements).toMatch(
+      /revoke all on function public\.author_global_sop\([\s\S]*?\) from anon/,
+    );
+    expect(statements).toMatch(
+      /grant execute on function public\.author_global_sop\([\s\S]*?\) to authenticated/,
+    );
+  });
+});
+
 describe("E6.10 control_options migration — grant + signature shape", () => {
   const sql = readFileSync(
     join(ROOT, "supabase/migrations/20260813120000_e610_control_options.sql"),

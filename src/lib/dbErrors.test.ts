@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { translateDbError, UniqueViolationError } from "./dbErrors";
+import { errorMessage, toError, translateDbError, UniqueViolationError } from "./dbErrors";
 
 const pgError = (code: string, message: string) => ({ code, message });
 
@@ -150,5 +150,26 @@ describe("translateDbError — everything else passes through", () => {
     expect(translateDbError(plain)).toBe(plain);
     expect(translateDbError(null)).toBeNull();
     expect(translateDbError("boom")).toBe("boom");
+  });
+
+  it("finds the overlap RAISE when PostgREST puts it in details", () => {
+    const result = translateDbError({
+      code: "P0001",
+      message: "",
+      details: "sop_template_state_overlap: NC",
+    });
+    expect(messageOf(result)).toMatch(/already covers NC/);
+  });
+});
+
+describe("toError — PostgREST objects become Error", () => {
+  it("wraps a plain object so instanceof Error succeeds", () => {
+    const err = toError({ message: "JSON object requested, multiple (or no) rows returned" });
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain("JSON object requested");
+  });
+
+  it("falls back when the payload has no message", () => {
+    expect(errorMessage({ code: "PGRST116" }, "Save failed")).toBe("Save failed");
   });
 });

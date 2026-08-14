@@ -6,7 +6,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { requireActiveOrg, writeAudit } from "@/lib/audit";
-import { translateDbError } from "@/lib/dbErrors";
+import { pgWireText, toError, translateDbError } from "@/lib/dbErrors";
 import { orgSopMatchKeyError, templateStates } from "@/lib/sopMatchKey";
 import type { Database, Json } from "@/integrations/supabase/types";
 import type { SOPTaskDefinition, SOPTemplate, SOPTemplateVersion } from "@/types";
@@ -264,20 +264,21 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
   const { data, error } = await rpc("author_global_sop", {
-    p_id: (input.id ?? null) as unknown as string,
+    p_id: input.id ?? null,
     p_name: input.name.trim(),
-    p_payer_id: input.payerId as unknown as string,
-    p_states: (input.states ?? null) as unknown as string[],
-    p_group_id: (input.groupId ?? null) as unknown as string,
+    p_payer_id: input.payerId,
+    p_states: input.states ?? null,
+    p_group_id: input.groupId ?? null,
     p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
     p_archived: (input.archived ?? false) as boolean,
     p_required_profile_attributes: (input.requiredProfileAttributes ?? []) as unknown as Json,
   });
   if (error) {
-    if (error.message.includes("global_sop_duplicate_match")) {
+    const text = pgWireText(error);
+    if (text.includes("global_sop_duplicate_match")) {
       // The RPC appends the clashing states after the code — surface them, since
       // "somewhere in your selection" is not actionable.
-      const clash = error.message.split("global_sop_duplicate_match:")[1]?.trim();
+      const clash = text.split("global_sop_duplicate_match:")[1]?.trim();
       throw new Error(
         clash
           ? `An active global SOP already covers ${clash} for this payer and group. Edit that SOP instead of creating a duplicate.`
@@ -285,13 +286,25 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
               "Edit that SOP instead of creating a duplicate.",
       );
     }
-    if (error.message.includes("global_sop_match_key_incomplete")) {
+    if (text.includes("global_sop_match_key_incomplete")) {
       throw new Error("A global SOP requires a payer and at least one state.");
     }
-    if (error.message.includes("fallback_sop_locked")) {
+    if (text.includes("fallback_sop_locked")) {
       throw new Error("The generic fallback SOP is platform-managed and cannot be edited here.");
     }
-    throw error;
+    // PostgREST applies sop_templates_select to a composite RETURNS row. When
+    // that policy still requires org_payer_assignments, the INSERT commits and
+    // the round-trip comes back as 0 rows (PGRST116) — a plain object, not an
+    // Error, which the wizard collapsed to "Save failed".
+    if (error.code === "PGRST116" || text.includes("JSON object requested")) {
+      throw new Error(
+        "The template was written but could not be read back. Apply pending database migrations and refresh Payer Templates.",
+      );
+    }
+    throw toError(translateDbError(error), "Save failed");
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Save failed — the server returned an empty template.");
   }
   return normalizeTemplate(camelizeRow<SOPTemplate>(data));
 }

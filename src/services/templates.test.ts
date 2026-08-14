@@ -22,7 +22,7 @@ vi.mock("@/lib/audit", () => ({
   writeAudit: writeAuditMock,
 }));
 
-import { publishTemplate, SopVersionConflictError } from "./templates";
+import { publishTemplate, authorGlobalSop, SopVersionConflictError } from "./templates";
 
 describe("publishTemplate", () => {
   beforeEach(() => {
@@ -69,5 +69,87 @@ describe("publishTemplate", () => {
     await publishTemplate("t1", 1, "Humana KS", []);
     expect(writeAuditMock).not.toHaveBeenCalled();
     expect(fromMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("authorGlobalSop", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    fromMock.mockReset();
+    writeAuditMock.mockReset();
+  });
+
+  const createdRow = {
+    id: "tpl-1",
+    org_id: null,
+    name: "Alignment NC",
+    payer_id: "payer-1",
+    states: ["NC"],
+    state: "NC",
+    group_id: null,
+    archived: false,
+    task_definitions: [],
+    required_profile_attributes: [],
+  };
+
+  it("creates with a null id and returns the camelized head", async () => {
+    rpcMock.mockResolvedValue({ data: createdRow, error: null });
+    const result = await authorGlobalSop({
+      name: "Alignment NC",
+      payerId: "payer-1",
+      states: ["NC"],
+      groupId: null,
+      taskDefinitions: [],
+    });
+    expect(result.id).toBe("tpl-1");
+    expect(result.payerId).toBe("payer-1");
+    expect(rpcMock).toHaveBeenCalledWith("author_global_sop", {
+      p_id: null,
+      p_name: "Alignment NC",
+      p_payer_id: "payer-1",
+      p_states: ["NC"],
+      p_group_id: null,
+      p_task_definitions: [],
+      p_archived: false,
+      p_required_profile_attributes: [],
+    });
+  });
+
+  it("maps a duplicate-match RAISE even when PostgREST puts it in details", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: "", details: "global_sop_duplicate_match: NC", code: "P0001" },
+    });
+    await expect(
+      authorGlobalSop({ name: "Alignment NC", payerId: "payer-1", states: ["NC"] }),
+    ).rejects.toThrow(/already covers NC/);
+  });
+
+  it("maps PGRST116 (composite return filtered by RLS) to a readable Error", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: {
+        code: "PGRST116",
+        message: "JSON object requested, multiple (or no) rows returned",
+        details: "The result contains 0 rows",
+      },
+    });
+    await expect(
+      authorGlobalSop({ name: "Alignment NC", payerId: "payer-1", states: ["NC"] }),
+    ).rejects.toThrow(/could not be read back/);
+  });
+
+  it("wraps a plain PostgREST object so the wizard does not collapse to Save failed", async () => {
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: "column states does not exist", code: "42703" },
+    });
+    const err = await authorGlobalSop({
+      name: "Alignment NC",
+      payerId: "payer-1",
+      states: ["NC"],
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toBe("column states does not exist");
   });
 });
