@@ -35,6 +35,25 @@ export function isValidNpi(value: string): boolean {
   return normalizeNpi(value).length === 10;
 }
 
+/** Trim; prefix https:// when the value has no scheme. Empty → "". */
+export function normalizeWebsiteUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+export function isValidWebsiteUrl(value: string): boolean {
+  const normalized = normalizeWebsiteUrl(value);
+  if (!normalized) return true;
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // ---------- address + contact blocks ----------
 
 export type GroupBlockKey = "billing" | "correspondence" | "credentialing";
@@ -68,6 +87,7 @@ export interface GroupFormValue {
   tin: string;
   npiType2: string;
   states: string[];
+  websiteUrl: string;
   billing: GroupContactBlock;
   correspondence: GroupContactBlock;
   credentialing: GroupContactBlock;
@@ -78,6 +98,7 @@ export const EMPTY_GROUP_FORM: GroupFormValue = {
   tin: "",
   npiType2: "",
   states: [],
+  websiteUrl: "",
   billing: EMPTY_GROUP_BLOCK,
   correspondence: EMPTY_GROUP_BLOCK,
   credentialing: EMPTY_GROUP_BLOCK,
@@ -92,6 +113,7 @@ export function groupToFormValue(g: ProviderGroup): GroupFormValue {
     tin: formatTin(g.tin),
     npiType2: s(g.npiType2),
     states: g.states ?? [],
+    websiteUrl: s(g.websiteUrl),
     billing: {
       street: s(g.billingStreet),
       suite: s(g.billingSuite),
@@ -137,6 +159,7 @@ export function formValueToInput(v: GroupFormValue): ProviderGroupInput {
     tin: normalizeTin(v.tin) || null,
     npiType2: normalizeNpi(v.npiType2) || null,
     states: v.states.length > 0 ? v.states : null,
+    websiteUrl: t(normalizeWebsiteUrl(v.websiteUrl)),
     billingStreet: t(v.billing.street),
     billingSuite: t(v.billing.suite),
     billingCity: t(v.billing.city),
@@ -174,6 +197,7 @@ export interface GroupFormErrors {
   tin?: string;
   npiType2?: string;
   states?: string;
+  websiteUrl?: string;
   billingStreet?: string;
   billingCity?: string;
   billingState?: string;
@@ -192,6 +216,9 @@ export function groupFormErrors(v: GroupFormValue): GroupFormErrors {
   else if (!isValidTin(v.tin)) e.tin = "TIN must be 9 digits";
   if (v.npiType2.trim() && !isValidNpi(v.npiType2)) e.npiType2 = "Type 2 NPI must be 10 digits";
   if (v.states.length === 0) e.states = "Select at least one operating state";
+  if (v.websiteUrl.trim() && !isValidWebsiteUrl(v.websiteUrl)) {
+    e.websiteUrl = "Enter a valid website URL";
+  }
   if (!v.billing.street.trim()) e.billingStreet = "Billing street is required";
   if (!v.billing.city.trim()) e.billingCity = "Billing city is required";
   if (!v.billing.state.trim()) e.billingState = "Billing state is required";

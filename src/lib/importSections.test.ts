@@ -148,6 +148,12 @@ describe("provider_group scan (TE-2/TE-3)", () => {
     expect(noStates.errorColumn).toBe("operating_states");
   });
 
+  it("stages an optional website_url", () => {
+    const row = scanRow(GROUP_DESCRIPTOR, { ...GROUP_ROW, website_url: "https://bestptnc.com" });
+    expect(row.rowState).toBe("staged");
+    expect(row.mapped?.website_url).toBe("https://bestptnc.com");
+  });
+
   it("rejects a bad operating-state code", () => {
     const row = scanRow(GROUP_DESCRIPTOR, { ...GROUP_ROW, operating_states: "NC;XXX" });
     expect(row.rowState).toBe("error");

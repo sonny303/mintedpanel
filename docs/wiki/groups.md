@@ -1,6 +1,6 @@
 # Groups
 
-_Updated for: generation state-footprint (2026-08-14); E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: group website URL (2026-08-14); generation state-footprint (2026-08-14); E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journeys B and C — the working entity for payer attach and generation.
 
@@ -14,9 +14,10 @@ Journeys B and C — the working entity for payer attach and generation.
 
 ## The group hub
 
-- **Group facts** — legal name, TIN (shown XX-XXXXXXX), operating states —
-  editable inline by admins (audited through the same group update the
-  wizard uses). Address/contact blocks stay in the wizard's full group form.
+- **Group facts** — legal name, TIN (shown XX-XXXXXXX), Type 2 NPI, operating
+  states, **website URL** (the same `group.websiteUrl` the Workbench fills),
+  and the address summary — editable by admins through the same group form
+  the wizard uses. Correspondence and credentialing blocks live in that form.
 - Two area doors with live counts: **Facilities** and **Payer Network**.
 
 ## Facilities (`Groups › {Group} › Facilities`)

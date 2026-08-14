@@ -48,6 +48,7 @@ const GROUP_HEADER_LINE = [
   "group_tin",
   "npi_type2",
   "operating_states",
+  "website_url",
   "billing_street",
   "billing_suite",
   "billing_city",

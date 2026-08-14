@@ -83,6 +83,7 @@ export interface ProviderGroupInput {
   credentialingPhone?: string | null;
   credentialingFax?: string | null;
   credentialingEmail?: string | null;
+  websiteUrl?: string | null;
 }
 
 export async function listProviderGroups(): Promise<ProviderGroup[]> {
