@@ -29,6 +29,17 @@ export interface AssignmentDraft {
 export const START_DATE_REQUIRED_MESSAGE = "Every assignment needs a start date";
 export const ONE_PRIMARY_ASSIGNMENT_MESSAGE = "Exactly one location must be marked primary";
 
+/** Add Provider has no primary picker (F1.4.3). The first selected facility
+ * is primary until the coordinator changes it on the record. Empty ids are
+ * dropped so a lone real facility still becomes primary. */
+export function markFirstFacilityPrimary(
+  facilityIds: readonly string[],
+): Array<{ facilityId: string; isPrimary: boolean }> {
+  return facilityIds
+    .filter((id) => id.length > 0)
+    .map((facilityId, index) => ({ facilityId, isPrimary: index === 0 }));
+}
+
 /** Returns an error message, or null when the draft set is valid. An empty
  * set is valid here — the wizard surfaces the gap as section progress (the
  * PM's "no unassigned resting state" is a readiness concern, not a DB block). */

@@ -1,6 +1,6 @@
 # Providers
 
-_Updated for: E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journey B — the consolidated people record.
 
@@ -30,6 +30,10 @@ Journey B — the consolidated people record.
 - **Facility assignment requires a start date.** Saving without one used to
   fail with a raw database toast; the form now collects the date and the
   error reads as a sentence if anything else is missing.
+- **The first facility you pick is the primary location** (payer forms ask
+  for one). A lone location is marked primary automatically; with several,
+  the first stays primary until you change it on the record with **Make
+  primary**.
 - **Creating a provider creates ZERO cases** (E6.3) — open **Generate
   cases** from the record (or the readiness section) to enter the shared
   grid scoped to this provider.

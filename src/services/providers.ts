@@ -7,14 +7,15 @@
 // routes pass a ctx built from the service-role client and the org resolved from
 // the authenticated membership. The query logic itself is written once.
 import { supabase } from "@/integrations/supabase/externalClient";
-import { camelizeRow, snakeizeRow } from "@/lib/case";
+import { markFirstFacilityPrimary } from "@/lib/assignmentScope";
 import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
-import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
+import { camelizeRow, snakeizeRow } from "@/lib/case";
 import {
   planAssignmentSync,
   validateGroupAssignments,
   type GroupAssignmentInput,
 } from "@/lib/groupAssignments";
+import { resolvePsvColumns, type PsvStatus, type PsvStored } from "@/lib/licensePsv";
 import { insertAssignmentRows } from "@/services/providerAssignments";
 import { normalizeStateCode, normalizeOptionalStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
@@ -374,19 +375,22 @@ export async function createProviderWithDetails(
   // E1.4 TE-3: assignment writes route through the shared service.
   // Prefer the provider's employment start date when present; insertAssignmentRows
   // defaults a missing date to today so the start_date NOT NULL CHECK never trips.
-  const facilityIds = input.facilityIds.filter((fid) => fid);
+  // F1.4.3: first selected facility is primary until the coordinator changes
+  // it on the record — Add Provider has no primary picker.
+  const facilityRows = markFirstFacilityPrimary(input.facilityIds);
   const assignmentStart = input.provider.startDate?.trim() || null;
   let insertedFacilityIds: string[] = [];
-  if (facilityIds.length > 0) {
+  if (facilityRows.length > 0) {
     try {
       await insertAssignmentRows(
-        facilityIds.map((facilityId) => ({
+        facilityRows.map(({ facilityId, isPrimary }) => ({
           providerId: created.id,
           facilityId,
           startDate: assignmentStart,
+          isPrimary,
         })),
       );
-      insertedFacilityIds = facilityIds;
+      insertedFacilityIds = facilityRows.map((r) => r.facilityId);
     } catch (facErr) {
       const detail =
         facErr instanceof Error
