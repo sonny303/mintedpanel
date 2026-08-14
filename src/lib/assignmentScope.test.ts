@@ -5,6 +5,7 @@ import {
   ONE_PRIMARY_ASSIGNMENT_MESSAGE,
   START_DATE_REQUIRED_MESSAGE,
   facilitiesForProviderGroups,
+  markFirstFacilityPrimary,
   planFacilityAssignmentSync,
   validateAssignmentDrafts,
 } from "./assignmentScope";
@@ -82,6 +83,28 @@ describe("validateAssignmentDrafts", () => {
 
   it("an empty set is valid (the wizard reflects the gap as progress)", () => {
     expect(validateAssignmentDrafts([])).toBeNull();
+  });
+});
+
+describe("markFirstFacilityPrimary (Add Provider default)", () => {
+  it("marks a single facility as primary", () => {
+    expect(markFirstFacilityPrimary(["f-1"])).toEqual([{ facilityId: "f-1", isPrimary: true }]);
+  });
+
+  it("marks the first of several as primary until the coordinator changes it", () => {
+    expect(markFirstFacilityPrimary(["f-a", "f-b", "f-c"])).toEqual([
+      { facilityId: "f-a", isPrimary: true },
+      { facilityId: "f-b", isPrimary: false },
+      { facilityId: "f-c", isPrimary: false },
+    ]);
+  });
+
+  it("returns empty when no facilities are selected", () => {
+    expect(markFirstFacilityPrimary([])).toEqual([]);
+  });
+
+  it("drops blank ids so a lone real facility is still primary", () => {
+    expect(markFirstFacilityPrimary(["", "f-1"])).toEqual([{ facilityId: "f-1", isPrimary: true }]);
   });
 });
 

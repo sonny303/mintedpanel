@@ -296,7 +296,12 @@ export function EmploymentSection({ form, errors, update }: SectionProps) {
                   checked={form.facilityIds.includes(f.id)}
                   onCheckedChange={() => toggleFacility(f.id)}
                 />
-                {f.name}
+                <span>{f.name}</span>
+                {form.facilityIds[0] === f.id ? (
+                  <span className="ml-auto text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Primary
+                  </span>
+                ) : null}
               </label>
             ))}
           </div>

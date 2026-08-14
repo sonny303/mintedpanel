@@ -50,7 +50,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Providers</h1>
-<p><em>Updated for: E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p><em>Updated for: Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
 <p>Journey B — the consolidated people record.</p>
 <h2>The roster — shipped with E6.4</h2>
 <ul>
@@ -62,6 +62,7 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 <ul>
 <li><strong>Taxonomy is a dropdown</strong>, not free text: NUCC codes for the specialties we enroll (PT + dietitian today). Specialty label stays editable beside it when needed.</li>
 <li><strong>Facility assignment requires a start date.</strong> Saving without one used to fail with a raw database toast; the form now collects the date and the error reads as a sentence if anything else is missing.</li>
+<li><strong>The first facility you pick is the primary location</strong> (payer forms ask for one). A lone location is marked primary automatically; with several, the first stays primary until you change it on the record with <strong>Make primary</strong>.</li>
 <li><strong>Creating a provider creates ZERO cases</strong> (E6.3) — open <strong>Generate cases</strong> from the record (or the readiness section) to enter the shared grid scoped to this provider.</li>
 <li><em>(Lands with PR #288)</em> Onboarding harden: clearer group join on create and a trimmed create-field set so the first save matches what the roster actually needs.</li>
 </ul>

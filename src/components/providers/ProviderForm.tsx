@@ -187,14 +187,12 @@ function ReviewStep({ form, jumpTo }: { form: ProviderFormState; jumpTo: (s: num
     () => groups.data?.find((g) => g.id === form.groupId)?.name ?? "—",
     [groups.data, form.groupId],
   );
-  const facilityNames = useMemo(
-    () =>
-      (facilities.data ?? [])
-        .filter((f) => form.facilityIds.includes(f.id))
-        .map((f) => f.name)
-        .join(", ") || "—",
-    [facilities.data, form.facilityIds],
-  );
+  const facilityNames = useMemo(() => {
+    const selected = (facilities.data ?? []).filter((f) => form.facilityIds.includes(f.id));
+    if (selected.length === 0) return "—";
+    const primaryId = form.facilityIds[0];
+    return selected.map((f) => (f.id === primaryId ? `${f.name} (primary)` : f.name)).join(", ");
+  }, [facilities.data, form.facilityIds]);
 
   const Section = ({
     title,

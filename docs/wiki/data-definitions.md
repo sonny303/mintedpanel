@@ -1,6 +1,6 @@
 # Data definitions
 
-_Updated for: E6.4 (PR #207) plus GEN-SILENT skip reasons (2026-08-11). Plain-English definitions of the
+_Updated for: Add Provider first-facility-as-primary (2026-08-14); E6.4 (PR #207) plus GEN-SILENT skip reasons (2026-08-11). Plain-English definitions of the
 data the app shows and stores. Terms are grouped by the surface where you
 meet them; each definition describes the SHIPPED behavior on `redesign`._
 
@@ -121,6 +121,9 @@ Every case shows exactly ONE status; the list is fixed and code-owned:
   older than the readiness window.
 - **Primary group** — exactly one of a provider's group memberships is
   primary (starred). A provider always keeps at least one group.
+- **Primary location** — exactly one of a provider's facility assignments
+  is primary (starred). Add Provider marks the first picked facility as
+  primary; change it later with **Make primary** on the record.
 - **Reference-only** — a provider kept for records but excluded from active
   work queues, generation, and gap pills.
 
