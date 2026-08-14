@@ -1,6 +1,6 @@
 # Groups
 
-_Updated for: E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
+_Updated for: generation state-footprint (2026-08-14); E6.3 plus GEN-SILENT skip reasons (2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic._
 
 Journeys B and C — the working entity for payer attach and generation.
 
@@ -48,10 +48,15 @@ Journeys B and C — the working entity for payer attach and generation.
   one-click Restore), or an awaiting-generation candidate.
 - **The candidates banner** counts the buffer (targets − enrollment facts −
   existing cases − standing exclusions, per eligible provider — the same
-  math the grid consumes) and names its most recent cause ("Dr. Chen
-  joined Sep 3"). **Review & generate** (on the banner, and per payer row)
-  opens the shared generation grid pre-scoped to this group — the payer-row
-  entry additionally scopes to that payer and opens grouped by payer.
+  math the grid consumes). Eligible means the provider is in the group, works
+  at a clinic of that group, **and has a footprint in the target state**
+  (an active clinic of that group in that state, or a license on file for
+  that state). A group targeting Aetna in seven states does not propose
+  all seven for a provider who only works/is licensed in one. The banner
+  names its most recent cause ("Dr. Chen joined Sep 3"). **Review & generate**
+  (on the banner, and per payer row) opens the shared generation grid
+  pre-scoped to this group — the payer-row entry additionally scopes to that
+  payer and opens grouped by payer.
 - **Attach payers to the group**: the picker offers catalog payers whose
   covered states intersect the group's operating states (zero-overlap
   payers are named in an explainer, never offered); proposed states = payer
@@ -105,5 +110,7 @@ record all open the ONE shared preview grid, pre-scoped to their slice:
   (not yet eligible to generate). Each line links to the provider so the fix
   is one click away. This explains drops; it is NOT a new gate and it changes
   no count — the buffer math is unchanged. Terminated, reference-only and
-  test providers are never listed, and a license gap is not a skip reason:
-  it rides readiness on a row that DOES generate.
+  test providers are never listed. Out-of-state keys (no license and no
+  clinic in the target state) are not candidates and are not skip-banner
+  rows. A license gap on a state the provider DOES work in still rides
+  readiness on a row that DOES generate.

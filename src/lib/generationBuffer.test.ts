@@ -25,7 +25,7 @@ function baseInput(overrides: Partial<GenerationPreviewInput> = {}): GenerationP
     ],
     groupAssignments: [{ providerId: "prov1", groupId: "g1", endDate: null }],
     facilityAssignments: [{ providerId: "prov1", facilityId: "fac1" }],
-    facilities: [{ id: "fac1", groupId: "g1" }],
+    facilities: [{ id: "fac1", groupId: "g1", state: "NC" }],
     providers: [{ providerId: "prov1", providerName: "Dr. Chen" }],
     groups: [{ id: "g1", name: "Outer Banks Rehab Group" }],
     payers: [
@@ -114,8 +114,8 @@ describe("generationCandidates", () => {
         { providerId: "prov1", facilityId: "fac2" },
       ],
       facilities: [
-        { id: "fac1", groupId: "g1" },
-        { id: "fac2", groupId: "g2" },
+        { id: "fac1", groupId: "g1", state: "NC" },
+        { id: "fac2", groupId: "g2", state: "NC" },
       ],
       groups: [
         { id: "g1", name: "Group One" },

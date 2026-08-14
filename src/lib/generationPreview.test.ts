@@ -37,8 +37,14 @@ const baseInput = (over: Partial<GenerationPreviewInput> = {}): GenerationPrevie
     { providerId: "amir", facilityId: "f-g2" },
   ],
   facilities: [
-    { id: "f-g1", groupId: "g1" },
-    { id: "f-g2", groupId: "g2" },
+    { id: "f-g1", groupId: "g1", state: "NC" },
+    { id: "f-g2", groupId: "g2", state: "NC" },
+  ],
+  licenses: [
+    { providerId: "jane", state: "NC" },
+    { providerId: "jane", state: "KS" },
+    { providerId: "amir", state: "NC" },
+    { providerId: "amir", state: "KS" },
   ],
   providers: [
     { providerId: "jane", providerName: "Jane Whitaker" },
@@ -100,7 +106,7 @@ describe("buildGenerationPreview", () => {
     const rows = buildGenerationPreview(baseInput());
     const jane = rows.find((r) => previewRowKey(r) === "jane|g1|bcbs-nc|NC");
     expect(jane?.reason).toBe(
-      "Jane Whitaker works at a Group 1 clinic; Group 1 targets BCBS-NC in NC",
+      "Jane Whitaker works at a Group 1 clinic in NC; Group 1 targets BCBS-NC in NC",
     );
   });
 
@@ -253,6 +259,12 @@ describe("buildGenerationPreview", () => {
         { providerId: "nora", facilityId: "f-g2" },
         { providerId: "theo", facilityId: "f-g1" },
       ],
+      licenses: [
+        ...(withExclusion.licenses ?? []),
+        { providerId: "nora", state: "NC" },
+        { providerId: "nora", state: "KS" },
+        { providerId: "theo", state: "NC" },
+      ],
     });
     const firstKeys = new Set(firstRun.map(previewRowKey));
     const newRows = secondRun.filter((r) => !firstKeys.has(previewRowKey(r)));
@@ -266,6 +278,85 @@ describe("buildGenerationPreview", () => {
     expect(secondRun.find((r) => previewRowKey(r) === "jane|g2|bcbs-nc|NC")?.disposition).toBe(
       "excluded",
     );
+  });
+
+  it("Sunday Test: KS license + OR clinic → only KS and OR targets, not every group state", () => {
+    const input = baseInput({
+      targets: [
+        { groupId: "g1", payerId: "aetna", state: "CO", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "KS", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "NC", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "OR", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "SC", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "TX", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "WI", status: "active" },
+        { groupId: "g1", payerId: "cigna", state: "KS", status: "active" },
+      ],
+      groupAssignments: [{ providerId: "sunday", groupId: "g1" }],
+      facilityAssignments: [{ providerId: "sunday", facilityId: "f-or" }],
+      facilities: [{ id: "f-or", groupId: "g1", state: "OR", isActive: true }],
+      licenses: [{ providerId: "sunday", state: "KS" }],
+      providers: [{ providerId: "sunday", providerName: "Sunday Test" }],
+      groups: [{ id: "g1", name: "BEST Physical Therapy, LLC" }],
+      payers: [
+        { id: "aetna", name: "Aetna" },
+        { id: "cigna", name: "Cigna" },
+      ],
+    });
+    const rows = buildGenerationPreview(input);
+    expect(rows.map(previewRowKey)).toEqual([
+      "sunday|g1|aetna|KS",
+      "sunday|g1|cigna|KS",
+      "sunday|g1|aetna|OR",
+    ]);
+    expect(rows.find((r) => r.state === "KS" && r.payerId === "aetna")?.reason).toBe(
+      "Sunday Test is licensed in KS; BEST Physical Therapy, LLC targets Aetna in KS",
+    );
+    expect(rows.find((r) => r.state === "OR")?.reason).toBe(
+      "Sunday Test works at a BEST Physical Therapy, LLC clinic in OR; BEST Physical Therapy, LLC targets Aetna in OR",
+    );
+  });
+
+  it("Jim Apple: CO license + CO clinic → only Aetna CO, not the group's other states", () => {
+    const input = baseInput({
+      targets: [
+        { groupId: "g1", payerId: "aetna", state: "CO", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "KS", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "NC", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "OR", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "SC", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "TX", status: "active" },
+        { groupId: "g1", payerId: "aetna", state: "WI", status: "active" },
+        { groupId: "g1", payerId: "cigna", state: "KS", status: "active" },
+      ],
+      groupAssignments: [{ providerId: "jim", groupId: "g1" }],
+      facilityAssignments: [{ providerId: "jim", facilityId: "f-co" }],
+      facilities: [{ id: "f-co", groupId: "g1", state: "CO", isActive: true }],
+      licenses: [{ providerId: "jim", state: "CO" }],
+      providers: [{ providerId: "jim", providerName: "Jim Apple" }],
+      groups: [{ id: "g1", name: "BEST Physical Therapy, LLC" }],
+      payers: [
+        { id: "aetna", name: "Aetna" },
+        { id: "cigna", name: "Cigna" },
+      ],
+    });
+    const rows = buildGenerationPreview(input);
+    expect(rows.map(previewRowKey)).toEqual(["jim|g1|aetna|CO"]);
+    expect(rows[0]?.reason).toBe(
+      "Jim Apple works at a BEST Physical Therapy, LLC clinic in CO; BEST Physical Therapy, LLC targets Aetna in CO",
+    );
+  });
+
+  it("an inactive clinic in the target state does not qualify without a license there", () => {
+    const input = baseInput({
+      targets: [{ groupId: "g1", payerId: "bcbs-nc", state: "NC", status: "active" }],
+      groupAssignments: [{ providerId: "jane", groupId: "g1" }],
+      facilityAssignments: [{ providerId: "jane", facilityId: "f-g1" }],
+      facilities: [{ id: "f-g1", groupId: "g1", state: "NC", isActive: false }],
+      licenses: [],
+      providers: [{ providerId: "jane", providerName: "Jane Whitaker" }],
+    });
+    expect(buildGenerationPreview(input)).toEqual([]);
   });
 });
 
