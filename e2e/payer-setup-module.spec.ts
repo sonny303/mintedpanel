@@ -578,6 +578,11 @@ test("TS-114b — authoring a global SOP writes through author_global_sop (org_i
   await page.getByRole("button", { name: /^3 Review$/ }).click();
   await page.getByRole("button", { name: "Create template" }).click();
   await expect(page.getByText("Template created")).toBeVisible({ timeout: 15000 });
+  // Create finishes by returning to the payer's Templates tab — not the new
+  // head's edit URL (screen 4 exit destination).
+  await expect(page).toHaveURL(new RegExp(`/admin/payer-admin/setup/${AETNA_ID}.*tab=templates`), {
+    timeout: 15000,
+  });
 
   const authored = calls.filter((c) => c.kind === "rpc" && c.path === "author_global_sop");
   expect(authored).toHaveLength(1);

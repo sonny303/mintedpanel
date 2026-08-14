@@ -769,14 +769,22 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       : false;
 
   // Where leaving the editor lands (screen 4): the default template belongs to
-  // no payer, so it exits to Payer Setup; a payer template exits to its payer;
-  // everything else falls back to the templates list.
-  const exitPayerId = isEdit ? initial?.payerId : (prefill?.payerId ?? null);
+  // no payer, so it exits to Payer Setup; a payer template exits to that payer's
+  // Templates tab (the + New template entry point); everything else falls back
+  // to the templates list. Create uses the saved match-key payer, not only the
+  // entry prefill — a context-free create that picks a payer still returns there.
+  const exitPayerId = isEdit
+    ? (initial?.payerId ?? null)
+    : (payload.payerId ?? prefill?.payerId ?? null);
   function exitEditor() {
     if (isFallback) {
       navigate({ to: "/admin/payer-admin/setup" });
     } else if (exitPayerId) {
-      navigate({ to: "/admin/payer-admin/setup/$payerId", params: { payerId: exitPayerId } });
+      navigate({
+        to: "/admin/payer-admin/setup/$payerId",
+        params: { payerId: exitPayerId },
+        search: { tab: "templates" },
+      });
     } else {
       navigate({ to: "/admin/templates" });
     }
@@ -815,7 +823,7 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
     setSaving(true);
     try {
       // Create is ALWAYS the global tier — the editor never creates org rows.
-      const created = await authorGlobalMut.mutateAsync({
+      await authorGlobalMut.mutateAsync({
         name: payload.name,
         payerId: payload.payerId,
         states: payload.states,
@@ -827,7 +835,9 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       await discardDraftIfAny();
       setDirty(false);
       toast.success("Template created");
-      navigate({ to: "/admin/templates/$id", params: { id: created.id } });
+      // Land on the payer's Templates tab, not the new head's edit URL —
+      // create is finished work, not a hand-off into continued authoring.
+      exitEditor();
     } catch (err) {
       toast.error(errorMessage(err, "Save failed"));
     } finally {
