@@ -4,15 +4,19 @@
 // existing cases; output is typed preview rows with a human-readable
 // derivation reason. No Supabase here, no clock reads — `today` is passed in.
 //
-// Candidacy ([r4-review] Q1, the buildable rule from the epic's Purpose ¶2):
+// Candidacy ([r4-review] Q1, then state-footprint 2026-08-14):
 // candidate = TE-4's membership universe (a provider whose
 // provider_group_assignments row in the target's group is not end-dated
 // before today — the exact E1.8 derivation) FURTHER FILTERED to providers
 // holding at least one provider_facility_assignments row at a facility of
-// the group. The facility filter is PRESENCE-BASED — that table has no
-// end_date/status, and no "active" semantic is invented for it. Because the
-// candidate set is a subset of the E1.8 readiness universe, every candidate
-// key resolves in the readiness matrix.
+// the group (presence-based — that table has no end_date/status). THEN
+// intersected with the provider's footprint in the TARGET STATE: an active
+// assigned clinic of that group in that state, OR a license on file for
+// that state. Group-wide "works at any clinic" is not enough — proposing
+// Aetna-TX for a CO-only provider is work that cannot create value.
+// Because the candidate set is a subset of the E1.8 readiness universe,
+// every candidate key resolves in the readiness matrix. A license gap on
+// a state they DO work in still rides readiness; it is not a skip.
 //
 // Existing-case matching (TE-6, the pre-E2.1 3-part reality): a NULL-group
 // case (every legacy row) covers ALL candidate rows at its (provider, payer,
@@ -59,6 +63,15 @@ export interface GenerationFacilityAssignmentInput {
 export interface GenerationFacilityInput {
   id: string;
   groupId: string | null;
+  /** Facility operating state. Null/absent never matches a target state. */
+  state?: string | null;
+  /** Inactive clinics do not count toward the provider's state footprint. */
+  isActive?: boolean;
+}
+
+export interface GenerationLicenseInput {
+  providerId: string | null;
+  state: string;
 }
 
 export interface GenerationProviderInput {
@@ -102,6 +115,9 @@ export interface GenerationPreviewInput {
   groupAssignments: readonly GenerationGroupAssignmentInput[];
   facilityAssignments: readonly GenerationFacilityAssignmentInput[];
   facilities: readonly GenerationFacilityInput[];
+  /** License states on file — a provider qualifies for a target state with a
+   * license there even when their group clinic is in a different state. */
+  licenses?: readonly GenerationLicenseInput[];
   /** Non-terminated roster (service pre-filters terminated providers). */
   providers: readonly GenerationProviderInput[];
   groups: readonly GenerationLookupInput[];
@@ -150,6 +166,65 @@ export function previewRowKey(
   return `${row.providerId}|${row.groupId}|${row.payerId}|${row.state}`;
 }
 
+function clinicStatesByProviderGroup(
+  facilities: readonly GenerationFacilityInput[],
+  assignments: readonly GenerationFacilityAssignmentInput[],
+): Map<string, Set<string>> {
+  const facilityById = new Map(facilities.map((f) => [f.id, f]));
+  const out = new Map<string, Set<string>>();
+  for (const fa of assignments) {
+    if (!fa.providerId || !fa.facilityId) continue;
+    const facility = facilityById.get(fa.facilityId);
+    if (!facility?.groupId) continue;
+    if (facility.isActive === false) continue;
+    const state = facility.state?.trim();
+    if (!state) continue;
+    const key = `${fa.providerId}|${facility.groupId}`;
+    if (!out.has(key)) out.set(key, new Set());
+    out.get(key)?.add(state);
+  }
+  return out;
+}
+
+function licenseStatesByProvider(
+  licenses: readonly GenerationLicenseInput[],
+): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const license of licenses) {
+    if (!license.providerId) continue;
+    const state = license.state.trim();
+    if (!state) continue;
+    if (!out.has(license.providerId)) out.set(license.providerId, new Set());
+    out.get(license.providerId)?.add(state);
+  }
+  return out;
+}
+
+function qualifiesForTargetState(
+  providerId: string,
+  groupId: string,
+  state: string,
+  clinicStates: Map<string, Set<string>>,
+  licenseStates: Map<string, Set<string>>,
+): { clinic: boolean; licensed: boolean } {
+  const clinic = clinicStates.get(`${providerId}|${groupId}`)?.has(state) === true;
+  const licensed = licenseStates.get(providerId)?.has(state) === true;
+  return { clinic, licensed };
+}
+
+function derivationReason(
+  providerName: string,
+  groupName: string,
+  payerName: string,
+  state: string,
+  footprint: { clinic: boolean; licensed: boolean },
+): string {
+  const why = footprint.clinic
+    ? `works at a ${groupName} clinic in ${state}`
+    : `is licensed in ${state}`;
+  return `${providerName} ${why}; ${groupName} targets ${payerName} in ${state}`;
+}
+
 // ---------- derivation ----------
 
 /** Derive the full preview: every candidate provider × group × payer × state
@@ -181,6 +256,9 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
     clinicProvidersByGroup.get(groupId)?.add(fa.providerId);
   }
 
+  const clinicStates = clinicStatesByProviderGroup(input.facilities, input.facilityAssignments);
+  const licenseStates = licenseStatesByProvider(input.licenses ?? []);
+
   // Existing-case indexes for the TE-6 two-branch match.
   const nullGroupCases = new Map<string, GenerationExistingCaseInput>();
   const groupedCases = new Map<string, GenerationExistingCaseInput>();
@@ -207,6 +285,15 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
       const provider = providerById.get(providerId);
       if (!provider) continue; // terminated / unknown providers never produce rows
 
+      const footprint = qualifiesForTargetState(
+        providerId,
+        target.groupId,
+        target.state,
+        clinicStates,
+        licenseStates,
+      );
+      if (!footprint.clinic && !footprint.licensed) continue;
+
       const key = `${providerId}|${target.groupId}|${target.payerId}|${target.state}`;
       if (rows.has(key)) continue; // every valid combination appears exactly once
 
@@ -227,7 +314,13 @@ export function buildGenerationPreview(input: GenerationPreviewInput): Generatio
         groupName,
         payerName,
         disposition: existing ? "existing" : exclusion ? "excluded" : "proposed",
-        reason: `${provider.providerName} works at a ${groupName} clinic; ${groupName} targets ${payerName} in ${target.state}`,
+        reason: derivationReason(
+          provider.providerName,
+          groupName,
+          payerName,
+          target.state,
+          footprint,
+        ),
         existingCase: existing
           ? {
               caseId: existing.id,
@@ -351,8 +444,10 @@ export function generationSkipKey(
 /**
  * Emit one skip row per active target × group member that candidacy drops
  * with no preview row: pending_verification (facts fence) or no_facility
- * (member of group, no clinic under that group). License gaps stay on
- * readiness for rows that DO generate — never emitted here.
+ * (member of group, no clinic under that group). Out-of-state (no license
+ * and no clinic in the target state) is not a skip — those keys are simply
+ * not candidates. A license gap on a state they DO work in still rides
+ * readiness for rows that DO generate.
  */
 export function buildGenerationSkips(
   input: GenerationPreviewInput,

@@ -1,7 +1,9 @@
 // E6.2 F6.2.3 / E6.3 F6.3.1 — the candidate buffer math, computed live and
 // stored nowhere: candidates = the group's payer targets × eligible providers
 // (the locked E2.0 candidacy: un-ended group membership + ≥1 facility
-// assignment at a facility of the group) − enrollment facts − existing cases −
+// assignment at a facility of the group, then the provider's footprint in
+// the target state — an active clinic of that group in that state, or a
+// license on file for that state) − enrollment facts − existing cases −
 // standing exclusions. This module deliberately COMPOSES the locked
 // buildGenerationPreview derivation (which already subtracts existing cases by
 // the TE-6 two-branch rule and active exclusions) and adds the E6.2

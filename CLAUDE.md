@@ -754,8 +754,12 @@ p_expected_version`; the RAISE prefix `sop_version_conflict` is the wire
   group membership **further filtered to providers with ≥1
   `provider_facility_assignments` row at a facility of the group**
   (presence-based, the [r4-review] Q1 candidacy — a strict subset of the E1.8
-  readiness universe, so every candidate joins a readiness row);
-  existing-case matching is the TE-6 two-branch rule (NULL-group case covers
+  readiness universe, so every candidate joins a readiness row). **Superseded
+  2026-08-14:** candidacy also requires a footprint in the **target state**
+  (active assigned clinic of that group in that state, or a license on file
+  for that state) — group-wide "works at any clinic" no longer proposes
+  every payer×state the group targets.
+  Existing-case matching is the TE-6 two-branch rule (NULL-group case covers
   all groups at its 3-part key — every pre-E2.1 row; group-stamped covers its
   exact 4-part key); dispositions `proposed|existing|excluded` with
   human-readable derivation reasons; suppression is status-linked and derived

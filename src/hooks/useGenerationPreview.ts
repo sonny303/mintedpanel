@@ -220,6 +220,7 @@ export function useGenerationPreview(scope?: GenerationScope): GenerationPreview
       groupAssignments: groupAssignmentsQ.data ?? [],
       facilityAssignments: facilityAssignmentsQ.data ?? [],
       facilities: facilitiesQ.data ?? [],
+      licenses: licensesQ.data ?? [],
       providers: factsQ.data ?? [],
       groups: (groupsQ.data ?? []).map((g) => ({ id: g.id, name: g.name })),
       payers: (payersQ.data ?? []).map((p) => ({ id: p.id, name: p.name })),
