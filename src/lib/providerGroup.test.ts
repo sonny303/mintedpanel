@@ -22,6 +22,7 @@ const validForm: GroupFormValue = {
   tin: "12-3456789",
   npiType2: "1234567890",
   states: ["NC"],
+  websiteUrl: "",
   billing: {
     ...EMPTY_GROUP_BLOCK,
     street: "500 River Court",
@@ -82,6 +83,17 @@ describe("groupFormErrors", () => {
     // NPI is optional — blank is fine.
     expect(groupFormErrors({ ...validForm, npiType2: "" }).npiType2).toBeUndefined();
   });
+
+  it("website URL is optional; a value must be a valid http(s) URL", () => {
+    expect(groupFormErrors({ ...validForm, websiteUrl: "" }).websiteUrl).toBeUndefined();
+    expect(
+      groupFormErrors({ ...validForm, websiteUrl: "bestptnc.com" }).websiteUrl,
+    ).toBeUndefined();
+    expect(
+      groupFormErrors({ ...validForm, websiteUrl: "https://bestptnc.com" }).websiteUrl,
+    ).toBeUndefined();
+    expect(groupFormErrors({ ...validForm, websiteUrl: "not a url" }).websiteUrl).toBeTruthy();
+  });
 });
 
 describe("block mapping", () => {
@@ -106,9 +118,19 @@ describe("block mapping", () => {
     expect(input.billingStreet).toBe("500 River Court");
     expect(input.credentialingContactName).toBe("Casey Credential");
     expect(input.credentialingEmail).toBe("cred@treehill.example.test");
+    expect(input.websiteUrl).toBeNull();
     // Empty correspondence block folds to nulls, not empty strings.
     expect(input.correspondenceStreet).toBeNull();
     expect(input.correspondenceEmail).toBeNull();
+  });
+
+  it("stores a website URL and prefixes https when the scheme is omitted", () => {
+    expect(formValueToInput({ ...validForm, websiteUrl: "https://bestptnc.com" }).websiteUrl).toBe(
+      "https://bestptnc.com",
+    );
+    expect(formValueToInput({ ...validForm, websiteUrl: "bestptnc.com" }).websiteUrl).toBe(
+      "https://bestptnc.com",
+    );
   });
 
   it("round-trips a saved row into an editable form value", () => {
@@ -132,6 +154,7 @@ describe("block mapping", () => {
     expect(v.states).toEqual(["TN", "AL"]);
     expect(v.billing.street).toBe("1 Main St");
     expect(v.billing.contactName).toBe("Bobby Blanton");
+    expect(v.websiteUrl).toBe("");
     // Absent columns come back as empty strings for editing.
     expect(v.credentialing.street).toBe("");
   });

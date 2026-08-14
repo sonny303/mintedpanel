@@ -317,6 +317,7 @@ test("TS-108: multi-group A→Z list → hub with editable group facts + navigat
   await expect(page.getByRole("heading", { name: "Group facts" })).toBeVisible();
   await expect(page.getByText("12-3456789")).toBeVisible();
   await expect(page.getByText("NC, SC")).toBeVisible();
+  await expect(page.getByText("Website URL")).toBeVisible();
 
   // Facts are editable (admin) through the audited group update — and it is
   // the SAME full form the onboarding wizard uses (2026-07-29), so the fields
@@ -324,6 +325,7 @@ test("TS-108: multi-group A→Z list → hub with editable group facts + navigat
   await page.getByRole("button", { name: "Edit" }).first().click();
   const editDialog = page.getByRole("dialog", { name: "Edit provider group" });
   await expect(editDialog.locator("#group-npi")).toBeVisible();
+  await expect(editDialog.locator("#group-website")).toBeVisible();
   await expect(editDialog.getByText("Credentialing address & contact")).toBeVisible();
   await page.getByLabel("Legal name").fill("Carolina Coast Rehab, LLC");
   await editDialog.getByRole("button", { name: "Save changes" }).click();

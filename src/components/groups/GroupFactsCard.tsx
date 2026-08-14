@@ -55,6 +55,7 @@ export function GroupFactsCard({ group }: { group: ProviderGroup }) {
       label: "Operating states",
       value: (group.states ?? []).length > 0 ? (group.states ?? []).join(", ") : "—",
     },
+    { label: "Website URL", value: group.websiteUrl || "—" },
     { label: "Address", value: contactSummary(group) },
   ];
 

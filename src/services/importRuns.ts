@@ -19,6 +19,7 @@ import {
   type ProviderGroupInput,
 } from "@/services/orgSettings";
 import { decodeDelimited } from "@/lib/importSections";
+import { normalizeWebsiteUrl } from "@/lib/providerGroup";
 import { attachGroupPayer, listPayerNetworkTargets } from "@/services/payerNetworkTargets";
 import type { ScannedRow } from "@/lib/rosterImport";
 import type {
@@ -514,6 +515,7 @@ function groupInputFromMapped(m: Record<string, string | null>): ProviderGroupIn
     tin: m.tin ?? null,
     npiType2: m.npi_type2 ?? null,
     states: states.length > 0 ? states : null,
+    websiteUrl: m.website_url?.trim() ? normalizeWebsiteUrl(m.website_url) : null,
     billingStreet: m.billing_street ?? null,
     billingSuite: m.billing_suite ?? null,
     billingCity: m.billing_city ?? null,

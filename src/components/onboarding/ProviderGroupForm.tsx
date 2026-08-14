@@ -1,8 +1,9 @@
 // Provider Group form dialog (E1.1 F1.1.1). Captures the legal billing
-// entity over the EXISTING provider_groups columns — legal name, TIN
-// (required, 9 digits, shown XX-XXXXXXX, stored bare), Type 2 NPI (10
-// digits), operating states (multi-select, ≥1), and the three purpose-keyed
-// address + contact blocks. This form is the group's HIGH-LEVEL METADATA only:
+// entity over the EXISTING provider_groups columns
+// — legal name, TIN (required, 9 digits, shown XX-XXXXXXX, stored bare), Type 2
+// NPI (10 digits), operating states (multi-select, ≥1), website URL (optional;
+// fill token group.websiteUrl), and the three purpose-keyed address + contact
+// blocks. This form is the group's HIGH-LEVEL METADATA only:
 // malpractice coverage moved out to the group's own InsurancePanel (2026-07-29)
 // because a group carries a primary policy AND any number of secondaries,
 // which one set of fields here cannot hold. Billing is required; correspondence and
@@ -40,6 +41,7 @@ import {
   groupFormErrors,
   groupToFormValue,
   hasGroupFormErrors,
+  normalizeWebsiteUrl,
   type GroupContactBlock,
   type GroupFormErrors,
   type GroupFormValue,
@@ -313,6 +315,25 @@ export function ProviderGroupForm({
               invalid={Boolean(errors.states)}
             />
             <FieldError message={errors.states} />
+          </div>
+          <div>
+            <Label htmlFor="group-website" className="text-[12px]">
+              Website URL
+            </Label>
+            <Input
+              id="group-website"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              value={value.websiteUrl}
+              onChange={(e) => set({ websiteUrl: e.target.value })}
+              onBlur={(e) => {
+                const next = e.currentTarget.value.trim();
+                set({ websiteUrl: next ? normalizeWebsiteUrl(next) : "" });
+              }}
+              className="h-9"
+            />
+            <FieldError message={errors.websiteUrl} />
           </div>
 
           <div className="space-y-3 rounded-md border border-[#E8E5E0] p-3">

@@ -116,6 +116,7 @@ const groupRow = (orgId: string, id: string, over: Record<string, unknown> = {})
   credentialing_phone: null,
   credentialing_fax: null,
   credentialing_email: null,
+  website_url: null,
   ...over,
 });
 
@@ -265,6 +266,7 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await dialog.locator("#billing-state").click();
   await page.getByRole("option", { name: "NC", exact: true }).click();
   await dialog.locator("#billing-zip").fill("27514");
+  await dialog.locator("#group-website").fill("treehill.example.test");
   // The group form is high-level metadata ONLY (2026-07-29) — malpractice
   // coverage is captured in the group's own panel, below.
   await expect(dialog.getByText("Malpractice coverage")).toHaveCount(0);
@@ -276,6 +278,9 @@ test("TS-29: single-group capture — save flips the section, dual-path exits, G
   await expect(groupCard).toContainText("Tree Hill Sports Therapy LLC");
   await expect(groupCard).toContainText("TIN 12-3456789");
   await expect(groupCard.getByRole("button", { name: "Add another group" })).toBeVisible();
+  expect((fixtures.provider_groups![0] as { website_url: string | null }).website_url).toBe(
+    "https://treehill.example.test",
+  );
 
   // The wizard-level next action advances past the group section — and it is
   // the ONLY "Next: Facilities" CTA: the E1.1 inline section-body exit was

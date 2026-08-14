@@ -392,6 +392,8 @@ export interface ProviderGroup {
   credentialingPhone?: string | null;
   credentialingFax?: string | null;
   credentialingEmail?: string | null;
+  /** Group website — fill token `group.websiteUrl` (baseline column). */
+  websiteUrl?: string | null;
 }
 
 export type LaunchStatus =
