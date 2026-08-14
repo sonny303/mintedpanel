@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { translateDbError } from "@/lib/dbErrors";
-import { insertAssignmentRows } from "@/services/providerAssignments";
+import { ensureFirstFacilityPrimary, insertAssignmentRows } from "@/services/providerAssignments";
 import { createEnrollmentFact, listEnrollmentFacts } from "@/services/enrollmentFacts";
 import {
   createFacility,
@@ -362,6 +362,7 @@ async function applyProviderRelationships(
     );
     summary.facilityAssignments = facilityInserts.length;
   }
+  await ensureFirstFacilityPrimary(providerIds);
   if (groupInserts.length > 0) {
     // Idempotent non-primary upserts under UNIQUE (provider_id, group_id) —
     // the commit plan already set each provider's primary group.
@@ -430,6 +431,7 @@ export async function commitImportRun(
       ...result.createdProviderIds,
       ...result.updatedProviderIds,
     ]);
+    await ensureFirstFacilityPrimary([...result.createdProviderIds, ...result.updatedProviderIds]);
   }
   return { ...result, relationships };
 }
@@ -468,13 +470,21 @@ export async function applyBatchAssignment(input: {
   }
   if (input.plan.facilityInserts.length > 0) {
     await insertAssignmentRows(
-      input.plan.facilityInserts.map((f) => ({
+      input.plan.facilityInserts.map((f, i, all) => ({
         providerId: f.providerId,
         facilityId: f.facilityId,
         startDate: input.startDate,
+        isPrimary: all.findIndex((x) => x.providerId === f.providerId) === i,
       })),
     );
   }
+  const touchedProviderIds = [
+    ...new Set([
+      ...input.plan.groupInserts.map((g) => g.providerId),
+      ...input.plan.facilityInserts.map((f) => f.providerId),
+    ]),
+  ];
+  await ensureFirstFacilityPrimary(touchedProviderIds);
   const result: BatchAssignmentResult = {
     groupsAdded: input.plan.groupInserts.length,
     facilitiesAdded: input.plan.facilityInserts.length,

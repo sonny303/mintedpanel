@@ -50,13 +50,13 @@ footer.pagefoot a { color:#1B4D3E; text-decoration:none; }
 </nav>
 <main>
 <h1>Providers</h1>
-<p><em>Updated for: Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
+<p><em>Updated for: provider CSV first-facility-as-primary (2026-08-14); Add Provider first-facility-as-primary (2026-08-14); group website URL (2026-08-14); E6.4 plus Add Provider taxonomy / facility start-date fixes (PR #286 / #287, 2026-08-11). Pages describe the shipped app; target-state notes are marked with their epic.</em></p>
 <p>Journey B — the consolidated people record.</p>
 <h2>The roster — shipped with E6.4</h2>
 <ul>
 <li><strong>A→Z by last name, always</strong> (stated on screen; search and filters never change the sort). PHI-safe list: no DOB, SSN, or home address ever rides the roster read. Filters: group, license state, has-gaps; free search on name/NPI; Export roster CSV.</li>
 <li><strong>Gap pills are ambient</strong>: no facility assignment (the provider cannot generate cases), missing NPI/CAQH, stale CAQH attestation (the readiness window), expiring/expired license. Clicking a pill opens the record on the matching tab (<code>#identity</code> / <code>#groups-facilities</code> / <code>#licenses</code>, and readiness under Cases).</li>
-<li>The provider CSV <strong>lives on this page</strong> (one row per relationship — repeat identity columns for extra facilities, groups, licenses, and enrollments). The template download comes with a <strong>reference sheet of your real group/facility/payer names</strong>; unknown names are row errors naming the column, and the post-commit summary counts every relationship attached.</li>
+<li>The provider CSV <strong>lives on this page</strong> (one row per relationship — repeat identity columns for extra facilities, groups, licenses, and enrollments). The template download comes with a <strong>reference sheet of your real group/facility/payer names</strong>; unknown names are row errors naming the column, and the post-commit summary counts every relationship attached. <strong>Copy <code>facility_name</code> from that sheet</strong> to assign the location in the same upload — the first facility on the file is the primary (same rule as Add Provider). Facilities themselves are created by the Facilities CSV first; this column attaches, it does not create a clinic.</li>
 </ul>
 <h2>Add provider — shipped</h2>
 <ul>

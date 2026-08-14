@@ -732,6 +732,11 @@ test("TS-62: per-field conflict review blocks only its row; resolve + commit →
   const nora = fixtures.providers.find((p) => p.npi === "1112223334");
   expect(nora?.verification_state).toBe("pending_verification");
   expect(fixtures.providers.find((p) => p.id === JANE_ID)?.specialty).toBe("Physical Therapy");
+  const noraFacilities = fixtures.provider_facility_assignments.filter(
+    (a) => a.provider_id === nora?.id,
+  );
+  expect(noraFacilities.length).toBeGreaterThan(0);
+  expect(noraFacilities.some((a) => a.is_primary === true)).toBe(true);
 
   // Run-level + per-entity audit rows exist; staged rows purged.
   const audit = fixtures.audit_log;

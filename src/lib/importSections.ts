@@ -490,7 +490,7 @@ export const PROVIDER_DESCRIPTOR: SectionDescriptor = {
   headers: PROVIDER_TEMPLATE_HEADERS,
   templateFilename: "provider-import-template.csv",
   helperText:
-    "One row per provider × license (repeat rows per license — they fold into one provider). Only the last 4 SSN digits in ssn_last4. The parent group is matched by group_tin then group_name.",
+    "One row per provider × license (repeat identity columns for extra licenses, facilities, groups, or enrollments). Copy facility_name from the reference sheet to assign an existing location — the first facility on the file is the primary. Only the last 4 SSN digits in ssn_last4. The parent group is matched by group_tin then group_name.",
   spec: {
     required: ["provider_first_name", "provider_last_name", "npi"],
     requireGroupKey: true,
