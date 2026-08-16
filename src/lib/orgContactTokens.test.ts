@@ -6,7 +6,7 @@ import {
   resolveOrgContactTokens,
   contactFamilyLabel,
 } from "./orgContactTokens";
-import { emailValuedTokenKeys, resolvableTokenKeys } from "./sopResolver";
+import { emailValuedTokenKeys, isResolvableToken } from "./sopResolver";
 import type { Party, PartyRoleKey } from "@/types";
 
 function party(over: Partial<Party> = {}): Party {
@@ -133,9 +133,8 @@ describe("D12 — fill-time only, never baked into a SOP body", () => {
     // A token in buildTokenMap reaches the authoring picker and gets INTERPOLATED
     // into tasks.sop_content at case creation — a snapshot that would go stale
     // the moment the contact changed. Contacts resolve at fill time instead.
-    const sopKeys = resolvableTokenKeys();
     for (const key of orgContactTokenKeys()) {
-      expect(sopKeys).not.toContain(key);
+      expect(isResolvableToken(key)).toBe(false);
     }
   });
 });

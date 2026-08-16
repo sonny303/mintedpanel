@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emailValuedTokenKeys, resolvableTokenKeys, resolveTemplate } from "./sopResolver";
+import { emailValuedTokenKeys, isResolvableToken, resolveTemplate } from "./sopResolver";
 import type { Facility, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 function provider(over: Partial<Provider> = {}): Provider {
@@ -260,6 +260,36 @@ describe("buildTokenMap catalog aliases (via resolveTemplate)", () => {
       { label: "Zip", value: "78701" },
     ]);
   });
+
+  it("resolves entity columns the old hand-written map never listed", () => {
+    const tpl = template([
+      {
+        label: "PSV",
+        dataFields: [
+          { label: "DEA", token: "provider.deaNumber" },
+          { label: "Carrier", token: "provider.malpracticeCarrier" },
+          { label: "Board certified", token: "provider.boardCertified" },
+          { label: "Type 2 NPI", token: "group.npiType2" },
+        ],
+      },
+    ]);
+    const [task] = resolveTemplate(
+      tpl,
+      provider({
+        deaNumber: "BJ1234563",
+        malpracticeCarrier: "MedPro",
+        boardCertified: true,
+      }),
+      GROUP,
+      richFacility,
+    );
+    expect(task.sopContent[0].dataFields).toEqual([
+      { label: "DEA", value: "BJ1234563" },
+      { label: "Carrier", value: "MedPro" },
+      { label: "Board certified", value: "Yes" },
+      { label: "Type 2 NPI", value: "9876543210" },
+    ]);
+  });
 });
 
 // E1.7b F1.7b.5 (TE-14) — structured draft-email recipients resolve alongside
@@ -348,21 +378,19 @@ describe("emailValuedTokenKeys (E1.7b F1.7b.5 / TE-14)", () => {
     expect(emailValuedTokenKeys()).toEqual(["provider.email"]);
   });
 
-  it("is a strict subset of resolvableTokenKeys and excludes non-email tokens", () => {
-    const resolvable = new Set(resolvableTokenKeys());
-    for (const k of emailValuedTokenKeys()) expect(resolvable.has(k)).toBe(true);
-    // resolvableTokenKeys advertises non-email tokens (provider.npi); those are
-    // never offered as recipients.
+  it("is a strict subset of what resolves, and excludes non-email tokens", () => {
+    for (const k of emailValuedTokenKeys()) expect(isResolvableToken(k)).toBe(true);
+    // Resolution substitutes plenty of non-email tokens (provider.npi); those
+    // are never offered as recipients.
     expect(emailValuedTokenKeys()).not.toContain("provider.npi");
+    expect(isResolvableToken("provider.npi")).toBe(true);
     expect(emailValuedTokenKeys().some((k) => k.startsWith("payer."))).toBe(false);
-    expect(emailValuedTokenKeys().length).toBeLessThan(resolvableTokenKeys().length);
   });
 });
 
-describe("resolvableTokenKeys", () => {
-  it("exposes the closed resolver map including the catalog aliases", () => {
-    const keys = resolvableTokenKeys();
-    for (const expected of [
+describe("isResolvableToken", () => {
+  it("admits the entity families and the composed/alias tokens", () => {
+    for (const token of [
       "provider.firstName",
       "provider.licenseNumber",
       "license.licenseNumber",
@@ -374,10 +402,33 @@ describe("resolvableTokenKeys", () => {
       "group.tin",
       "mso.portalUrl",
     ]) {
-      expect(keys).toContain(expected);
+      expect(isResolvableToken(token)).toBe(true);
     }
-    // Case-scoped families never resolve client-side.
-    expect(keys.some((k) => k.startsWith("payer."))).toBe(false);
-    expect(keys.some((k) => k.startsWith("contract."))).toBe(false);
+  });
+
+  it("admits a column the resolver never named, so the picker widens with the schema", () => {
+    for (const token of [
+      "provider.deaNumber",
+      "provider.malpracticeCarrier",
+      "group.npiType2",
+      "facility.phone",
+    ]) {
+      expect(isResolvableToken(token)).toBe(true);
+    }
+  });
+
+  it("rejects families with no row in hand at case creation", () => {
+    for (const token of [
+      "payer.name",
+      "contract.effectiveDate",
+      "assignment.startDate",
+      "groupInsurance.policyNumber",
+      "user.email",
+      "billingContact.email",
+      // license.* resolves ONLY through the aliased number, not as a row.
+      "license.expirationDate",
+    ]) {
+      expect(isResolvableToken(token)).toBe(false);
+    }
   });
 });

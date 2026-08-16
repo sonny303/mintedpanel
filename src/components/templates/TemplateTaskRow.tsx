@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { FormStepPanel } from "@/components/templates/FormStepPanel";
+import { TokenPicker } from "@/components/templates/TokenPicker";
 import {
   actionNamePatch,
   AUTHORING_ACTION_MODES,
@@ -599,8 +600,13 @@ function StepModeBody({
             <div className="flex items-center justify-between mb-1">
               <Label className="text-xs">Body</Label>
               {canEdit ? (
-                <Select
+                <TokenPicker
+                  aria-label="Insert token into the email body"
                   value=""
+                  clearOnSelect
+                  placeholder="Insert token"
+                  groupedTokens={groupedTokens}
+                  className="w-[160px]"
                   onValueChange={(token) =>
                     updateStep(taskId, step.id, {
                       emailTemplate: {
@@ -609,25 +615,7 @@ function StepModeBody({
                       },
                     })
                   }
-                >
-                  <SelectTrigger className="h-7 w-[160px] text-xs">
-                    <SelectValue placeholder="Insert token" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groupedTokens.map((grp) => (
-                      <div key={grp.prefix}>
-                        <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                          {grp.label}
-                        </div>
-                        {grp.items.map((t) => (
-                          <SelectItem key={t.token} value={t.token}>
-                            {t.token}
-                          </SelectItem>
-                        ))}
-                      </div>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               ) : null}
             </div>
             <Textarea
@@ -704,29 +692,14 @@ function StepModeBody({
                       }
                       disabled={!canEdit}
                     />
-                    <Select
+                    <TokenPicker
+                      aria-label={`Token for data field ${field.label || i + 1}`}
                       value={field.token}
-                      onValueChange={(v) => updateDataField(taskId, step.id, i, { token: v })}
+                      groupedTokens={groupedTokens}
                       disabled={!canEdit}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {groupedTokens.map((grp) => (
-                          <div key={grp.prefix}>
-                            <div className="px-2 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                              {grp.label}
-                            </div>
-                            {grp.items.map((t) => (
-                              <SelectItem key={t.token} value={t.token}>
-                                {t.token}
-                              </SelectItem>
-                            ))}
-                          </div>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      className="h-9 w-full"
+                      onValueChange={(v) => updateDataField(taskId, step.id, i, { token: v })}
+                    />
                     {canEdit ? (
                       <Button
                         size="icon"
