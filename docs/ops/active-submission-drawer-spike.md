@@ -2,8 +2,8 @@
 
 **Status:** spike / audit — **no product code in this PR.** Awaiting PM ack of
 `D-ASD-1 … D-ASD-10`, then the bites in §Untangled slices build in order.  
-**Trigger:** PM PRD *"Frictionless Active Submission Drawer & On-The-Fly
-Document Bridge"* (2026-08-16) landing on top of three open PRs.  
+**Trigger:** PM PRD _"Frictionless Active Submission Drawer & On-The-Fly
+Document Bridge"_ (2026-08-16) landing on top of three open PRs.  
 **Lane:** 3M — Mura (two documents surfaces disagreeing) + Muda (a built panel
 mounted nowhere) + Muri (a browser-supplied `case_id` with no gate proof).  
 **Skill:** `.cursor/skills/minted-3m-audit/` · **Base:** `main` @ `36f0da5`.
@@ -25,13 +25,13 @@ is the same place the open build got wrong: it stores a second copy of the
 bytes. `SOPStepAttachment.storagePath` (PRD §2A) plus "auto-promote/update the
 provider's document" (PRD §2B/TE-7) describes **two artifacts per file** — a
 task-owned object and a vault document — which is exactly what the PM ruled
-out on #328 (*"be mindful to not just create additional duplicate documents to
-store, that is not needed and is not effective"*). #328 ships the same shape
+out on #328 (_"be mindful to not just create additional duplicate documents to
+store, that is not needed and is not effective"_). #328 ships the same shape
 with a manual checkbox instead of an automatic promote.
 
 Corrected model, one line: **there is exactly one document, it lives in the
 provider/group vault, the case points at it, and the step points at it.** The
-step drawer is a *reference and replace* surface, never a parallel store. Ten
+step drawer is a _reference and replace_ surface, never a parallel store. Ten
 `D-ASD` decisions below; the net effect on #328 is a **deletion** plus two
 genuinely new behaviors (attach-existing, replace-supersede).
 
@@ -44,11 +44,11 @@ is not optional the way TD-53 assumed.
 
 ## PR-by-PR verdict
 
-| PR                                                  | Relation to the PRD                          | Verdict                                                                                                                        |
-| --------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **#328** TS-163 SOP step artifact attach            | This *is* the PRD's Story 1 + 2 surface      | **Right instinct, wrong grain.** Rework per `D-ASD-1/2/3/4/5/7/8/9`. Roughly a net deletion; do not merge as-is.                |
-| **#327** `/account` settings + `user.*` token split | Unrelated to the PRD                         | **Merge on its own gates.** No overlap with documents/tasks; `user.*` tokens don't feed `requiredArtifacts`.                    |
-| **#326** return to Templates after create           | Unrelated to the PRD                         | **Merge.** 22-line navigation fix.                                                                                             |
+| PR                                                  | Relation to the PRD                     | Verdict                                                                                                          |
+| --------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **#328** TS-163 SOP step artifact attach            | This _is_ the PRD's Story 1 + 2 surface | **Right instinct, wrong grain.** Rework per `D-ASD-1/2/3/4/5/7/8/9`. Roughly a net deletion; do not merge as-is. |
+| **#327** `/account` settings + `user.*` token split | Unrelated to the PRD                    | **Merge on its own gates.** No overlap with documents/tasks; `user.*` tokens don't feed `requiredArtifacts`.     |
+| **#326** return to Templates after create           | Unrelated to the PRD                    | **Merge.** 22-line navigation fix.                                                                               |
 
 ---
 
@@ -56,15 +56,15 @@ is not optional the way TD-53 assumed.
 
 Measured in code on `main`, not inferred:
 
-| PRD ask                                             | Already exists                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 120s signed download URL                            | `DOWNLOAD_URL_TTL_SECONDS = 120` (`src/lib/documents.ts:181`), minted by `signDocumentDownload` + audited READ row   |
-| `/api/documents/upload-intent` / `finalize`          | `src/server/documentRoutes.ts`, service-role behind `guard.ts`, `no-store`, one audit row per action                 |
-| Replace = new version of the same family             | `UploadIntentInput.familyId` → `supersedes` head link (`src/services/documentStorage.ts`)                            |
-| Green / amber / red credential status                | `classifyExpiration` + `caseDocumentStatus` (`src/lib/documents.ts`)                                                 |
-| "The documents this task requires", live-derived     | **`src/components/documents/CaseRequiredDocuments.tsx`** — built in E4.5 F4.5.3 and **imported by nothing** (muda)   |
-| Gmail body → clipboard past a URL bound              | `planGmailHandoff` + `GMAIL_URL_SAFE_MAX = 1900` (`src/lib/gmailCompose.ts`)                                         |
-| Step completion not gated on files                   | `planStepCompletion` gates on **step order only** — there is no artifact gate to remove (PRD Story 3 already holds)  |
+| PRD ask                                          | Already exists                                                                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 120s signed download URL                         | `DOWNLOAD_URL_TTL_SECONDS = 120` (`src/lib/documents.ts:181`), minted by `signDocumentDownload` + audited READ row  |
+| `/api/documents/upload-intent` / `finalize`      | `src/server/documentRoutes.ts`, service-role behind `guard.ts`, `no-store`, one audit row per action                |
+| Replace = new version of the same family         | `UploadIntentInput.familyId` → `supersedes` head link (`src/services/documentStorage.ts`)                           |
+| Green / amber / red credential status            | `classifyExpiration` + `caseDocumentStatus` (`src/lib/documents.ts`)                                                |
+| "The documents this task requires", live-derived | **`src/components/documents/CaseRequiredDocuments.tsx`** — built in E4.5 F4.5.3 and **imported by nothing** (muda)  |
+| Gmail body → clipboard past a URL bound          | `planGmailHandoff` + `GMAIL_URL_SAFE_MAX = 1900` (`src/lib/gmailCompose.ts`)                                        |
+| Step completion not gated on files               | `planStepCompletion` gates on **step order only** — there is no artifact gate to remove (PRD Story 3 already holds) |
 
 Two consequences. First, the PRD's "Active Documents Panel" is ~80% written
 and simply unmounted — the fix is to mount and extend it, not to author a
@@ -123,7 +123,7 @@ mint a second family for the same `(owner, kind)`.
 
 Guardrail: replace is only offered on a row whose current document the org
 owns; a step never replaces a document it merely references from another case
-context (the `case_id` on the *new version* is this case — usage context, per
+context (the `case_id` on the _new version_ is this case — usage context, per
 E4.5 TE-1).
 
 ### `D-ASD-4` — `filled_form` is the catch-all, and it is **visible** in the vault
@@ -140,7 +140,7 @@ extension would each have had to repeat it.
 
 Guardrail replacing it: keep the vault's manual upload picker unchanged by
 listing picker kinds explicitly rather than by re-purposing `uploadable`.
-`uploadable` means *the server accepts it*; the picker is a UI list. #328
+`uploadable` means _the server accepts it_; the picker is a UI list. #328
 overloaded `uploadable: false` and then branched around it in
 `validateOwnerKindFile`, which is how a validator stops being readable.
 
@@ -186,8 +186,8 @@ because the harness permits popups. Use sequential hidden-anchor `download`
 clicks from the single gesture, one signed URL each, per-file failure toast,
 and an `aria-live="polite"` count. The email bar reads **"Download N
 attachments for email"** next to **"Open in Gmail"**, with the PRD's advisory
-copy verbatim: *"Attachments downloaded to your device — drag them into Gmail
-after compose opens."* Leave the body→clipboard fallback alone.
+copy verbatim: _"Attachments downloaded to your device — drag them into Gmail
+after compose opens."_ Leave the body→clipboard fallback alone.
 
 ### `D-ASD-9` — the isolation gate is in scope, TD-53 does not stand
 
@@ -221,18 +221,18 @@ where the daily path actually lives. Everything else uploads with zero fields.
 
 ## Residual register (3M, current)
 
-| ID              | 3M   | Cadence | Area          | Finding                                                                              | Evidence                                                     | Sev | Effort | Rec    |
-| --------------- | ---- | ------- | ------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | --- | ------ | ------ |
-| **ASD-DUP**     | Muda | daily   | panel/storage | Promote writes a second family + second copy of the same bytes                       | `StepArtifactsPanel.tsx` `submit()` second `uploadM` call     | S1  | S      | delete |
-| **ASD-NOEXIST** | Mura | daily   | panel         | No way to attach a credential that already exists — upload is the only path           | same file, `MissingArtifactRow`                               | S1  | M      | fix    |
-| **ASD-ORPHAN**  | Muda | daily   | panel         | `CaseRequiredDocuments` built, imported nowhere                                       | zero importers repo-wide                                      | S1  | S      | fix    |
-| **ASD-HIDE**    | Muri | daily   | panel         | "Never in the vault" enforced by one client filter                                    | `DocumentsPanel.tsx` `caseArtifact` filter                    | S2  | XS     | delete |
-| **ASD-JOIN**    | Muri | daily   | panel         | Name-keyed `Map` + appending planner hides the earlier attachment; duplicate React key | `documents.ts` `stepArtifactRows` vs `sopStepAttachments.ts`  | S1  | XS     | fix    |
-| **ASD-POPUP**   | Muri | daily   | panel         | `downloadAll` popup-blocked outside the e2e harness                                   | `StepArtifactsPanel.tsx` `downloadAll`                        | S1  | XS     | fix    |
-| **ASD-GATE**    | Muri | daily   | panel/api     | `caseId` accepted from the browser with no isolation-gate assertion (TD-53)           | `scripts/verify-org-isolation.mjs`                            | S0  | S      | fix    |
-| **ASD-COPY**    | Mura | daily   | panel         | Attach-succeeded-but-promote-failed reports "Couldn't attach this file"               | `submit()` `catch`                                            | S2  | XS     | fix    |
-| **ASD-DOC**     | Mura | rare    | docs          | `SCHEMA.md` `provider_documents` prose still calls `filled_form` legacy-only          | `SCHEMA.md`                                                   | S3  | XS     | fix    |
-| **ASD-RACE**    | Muri | daily   | panel         | `sop_content` read-modify-write races two coordinators (TD-52)                        | `services/tasks.ts`                                           | S2  | M      | monitor |
+| ID              | 3M   | Cadence | Area          | Finding                                                                                | Evidence                                                     | Sev | Effort | Rec     |
+| --------------- | ---- | ------- | ------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --- | ------ | ------- |
+| **ASD-DUP**     | Muda | daily   | panel/storage | Promote writes a second family + second copy of the same bytes                         | `StepArtifactsPanel.tsx` `submit()` second `uploadM` call    | S1  | S      | delete  |
+| **ASD-NOEXIST** | Mura | daily   | panel         | No way to attach a credential that already exists — upload is the only path            | same file, `MissingArtifactRow`                              | S1  | M      | fix     |
+| **ASD-ORPHAN**  | Muda | daily   | panel         | `CaseRequiredDocuments` built, imported nowhere                                        | zero importers repo-wide                                     | S1  | S      | fix     |
+| **ASD-HIDE**    | Muri | daily   | panel         | "Never in the vault" enforced by one client filter                                     | `DocumentsPanel.tsx` `caseArtifact` filter                   | S2  | XS     | delete  |
+| **ASD-JOIN**    | Muri | daily   | panel         | Name-keyed `Map` + appending planner hides the earlier attachment; duplicate React key | `documents.ts` `stepArtifactRows` vs `sopStepAttachments.ts` | S1  | XS     | fix     |
+| **ASD-POPUP**   | Muri | daily   | panel         | `downloadAll` popup-blocked outside the e2e harness                                    | `StepArtifactsPanel.tsx` `downloadAll`                       | S1  | XS     | fix     |
+| **ASD-GATE**    | Muri | daily   | panel/api     | `caseId` accepted from the browser with no isolation-gate assertion (TD-53)            | `scripts/verify-org-isolation.mjs`                           | S0  | S      | fix     |
+| **ASD-COPY**    | Mura | daily   | panel         | Attach-succeeded-but-promote-failed reports "Couldn't attach this file"                | `submit()` `catch`                                           | S2  | XS     | fix     |
+| **ASD-DOC**     | Mura | rare    | docs          | `SCHEMA.md` `provider_documents` prose still calls `filled_form` legacy-only           | `SCHEMA.md`                                                  | S3  | XS     | fix     |
+| **ASD-RACE**    | Muri | daily   | panel         | `sop_content` read-modify-write races two coordinators (TD-52)                         | `services/tasks.ts`                                          | S2  | M      | monitor |
 
 ---
 
@@ -276,9 +276,9 @@ where the daily path actually lives. Everything else uploads with zero fields.
   (`@container`, side-by-side → stacked, no layout shift), add `[ ↻ ]` and
   non-resolvable artifact rows; replace `downloadAll`'s `window.open` loop
   with anchor `download` clicks; email bar "Download N attachments for email"
-  + the PRD advisory copy; `aria-live="polite"` announcements; keyboard path
-  Tab/Enter/Space; HTML5 drag-and-drop onto a row; `DESIGN-DEBT.md` entry for
-  the unspecced rail.
+  - the PRD advisory copy; `aria-live="polite"` announcements; keyboard path
+    Tab/Enter/Space; HTML5 drag-and-drop onto a row; `DESIGN-DEBT.md` entry for
+    the unspecced rail.
 - **AC:** opening any case task shows required credentials with live
   green/amber/red · bulk download yields N files with no popup block · every
   row is reachable and operable by keyboard · no page layout shift at the
@@ -306,9 +306,9 @@ where the daily path actually lives. Everything else uploads with zero fields.
 
 ## Lanes
 
-| Code (agentable)                     | Ops (human)                  | Backlog          |
-| ------------------------------------ | ---------------------------- | ---------------- |
-| BITE-ASD-01 … 05 (all panel-only)    | none — no migration required | TD-52 (ASD-RACE) |
+| Code (agentable)                  | Ops (human)                  | Backlog          |
+| --------------------------------- | ---------------------------- | ---------------- |
+| BITE-ASD-01 … 05 (all panel-only) | none — no migration required | TD-52 (ASD-RACE) |
 
 No migration, no hosted apply, no `types.ts` regen: every column this needs
 (`case_id`, the provider-OR-group-OR-case owner CHECK, `family_id`,
