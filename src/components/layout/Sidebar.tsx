@@ -15,8 +15,9 @@
 // stay exactly as shipped. The switcher menu keeps the E0.9 behavior
 // (lifecycle group headings ONLY, never a per-org status label; search above
 // 10 orgs; footer Add organization → /onboarding + View all organizations).
-// User footer unchanged; its Settings item lands on Org Detail (member
-// management's F6.1.4 home — /admin/settings itself is a redirect stub).
+// User footer: its Settings item lands on /account, the user's own name/title
+// page (2026-08-16). It pointed at Org Detail only while no personal settings
+// page existed; /admin/settings itself remains a redirect stub.
 //
 // Focus on the dark rail uses a white-alpha ring — the app's soft green ring
 // is invisible on forest. Renders in both the desktop rail and mobile drawer.
@@ -33,6 +34,7 @@ import { useAuthStore, useActiveMembership, type MembershipEntry } from "@/lib/a
 import { useCases } from "@/hooks/useCases";
 import { useStatusConfigs } from "@/hooks/useAdmin";
 import { useFormDrift } from "@/hooks/useFormDrift";
+import { ROLE_LABELS } from "@/lib/permissions";
 // The approved white layered-jack mark (E1.0 F1.0.4 / TE-8), copied from
 // docs/redesign/design-system/design-system-reference/assets/logo-white.png —
 // pinned untouched by E6.1 F6.1.1 (the decision-mock gradient square is a
@@ -69,12 +71,6 @@ function initialsOf(name: string | null, email: string | null): string {
   const parts = source.split(/[\s._-]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "U";
 }
-
-const roleLabel: Record<string, string> = {
-  specialist: "Specialist",
-  billing: "Billing",
-  admin: "Admin",
-};
 
 // Nav focus uses a white-alpha ring — the global soft green ring is invisible
 // on the forest rail (F0.9.3, preserved by E6.1).
@@ -337,8 +333,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         )}
       </div>
 
-      {/* User footer — unchanged (F6.1.1); Settings lands on Org Detail, the
-          F6.1.4 home of member management (the /admin/settings page retired). */}
+      {/* User footer (F6.1.1). Settings lands on /account — personal name and
+          title; org-level management stays on Org Detail in the nav above. */}
       <div className="border-t border-white/10 p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -355,7 +351,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
                   {fullName ?? user?.email ?? "Signed in"}
                 </div>
                 <div className="truncate text-[11px] text-white/50">
-                  {active ? (roleLabel[active.role] ?? active.role) : ""}
+                  {active ? (ROLE_LABELS[active.role] ?? active.role) : ""}
                 </div>
               </div>
               <ChevronDown className="w-4 h-4 text-white/40" />
@@ -372,7 +368,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             <DropdownMenuItem
               onSelect={() => {
                 onNavigate?.();
-                navigate({ to: "/org-detail" });
+                navigate({ to: "/account" });
               }}
               className="gap-2.5"
             >

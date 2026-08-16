@@ -267,7 +267,7 @@ test.describe("admin (P1)", () => {
     await expect(rail.getByText("Shelby Sports Rehab")).toBeVisible({ timeout: 15000 });
   });
 
-  test("user menu offers Settings (→ Org Detail) above Sign out", async ({ page }) => {
+  test("user menu offers Settings (→ /account) above Sign out", async ({ page }) => {
     await page.goto("/cases");
     const rail = page.locator("aside").first();
     await rail.getByRole("button", { name: "Account menu" }).click({ timeout: 30000 });
@@ -278,7 +278,9 @@ test.describe("admin (P1)", () => {
     await expect(items.filter({ hasText: "Settings" })).toBeVisible();
     await expect(items.filter({ hasText: "Sign out" })).toBeVisible();
     await menu.getByText("Settings").click();
-    await expect(page).toHaveURL(/\/org-detail\/?$/, { timeout: 15000 });
+    // 2026-08-16: personal settings live on /account; Org Detail stays the
+    // ORG-level surface and keeps its own nav entry in the org zone.
+    await expect(page).toHaveURL(/\/account\/?$/, { timeout: 15000 });
   });
 
   test("TS-121: narrow viewport follows the shell rules with no horizontal scroll", async ({

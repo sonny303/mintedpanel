@@ -2235,9 +2235,9 @@ export type Database = {
           confidence: number | null;
           control_options: Json | null;
           created_at: string;
+          display_label: string | null;
           field_label: string | null;
           field_type: string;
-          display_label: string | null;
           form_section: string | null;
           hardcoded_value: string | null;
           id: string;
@@ -2261,9 +2261,9 @@ export type Database = {
           confidence?: number | null;
           control_options?: Json | null;
           created_at?: string;
+          display_label?: string | null;
           field_label?: string | null;
           field_type: string;
-          display_label?: string | null;
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
@@ -2287,9 +2287,9 @@ export type Database = {
           confidence?: number | null;
           control_options?: Json | null;
           created_at?: string;
+          display_label?: string | null;
           field_label?: string | null;
           field_type?: string;
-          display_label?: string | null;
           form_section?: string | null;
           hardcoded_value?: string | null;
           id?: string;
@@ -2318,6 +2318,84 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      portal_field_maps_aetna_direct_backup_20260812: {
+        Row: {
+          confidence: number | null;
+          created_at: string | null;
+          display_label: string | null;
+          field_label: string | null;
+          field_type: string | null;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string | null;
+          map_type: string | null;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string | null;
+          section: string | null;
+          selector: string | null;
+          selector_fallbacks: Json | null;
+          sort_order: number | null;
+          source: string | null;
+          status: string | null;
+          token: string | null;
+          transform: string | null;
+          updated_at: string | null;
+          url_pattern: string | null;
+        };
+        Insert: {
+          confidence?: number | null;
+          created_at?: string | null;
+          display_label?: string | null;
+          field_label?: string | null;
+          field_type?: string | null;
+          form_section?: string | null;
+          hardcoded_value?: string | null;
+          id?: string | null;
+          map_type?: string | null;
+          notes?: string | null;
+          org_id?: string | null;
+          page_step?: string | null;
+          portal_key?: string | null;
+          section?: string | null;
+          selector?: string | null;
+          selector_fallbacks?: Json | null;
+          sort_order?: number | null;
+          source?: string | null;
+          status?: string | null;
+          token?: string | null;
+          transform?: string | null;
+          updated_at?: string | null;
+          url_pattern?: string | null;
+        };
+        Update: {
+          confidence?: number | null;
+          created_at?: string | null;
+          display_label?: string | null;
+          field_label?: string | null;
+          field_type?: string | null;
+          form_section?: string | null;
+          hardcoded_value?: string | null;
+          id?: string | null;
+          map_type?: string | null;
+          notes?: string | null;
+          org_id?: string | null;
+          page_step?: string | null;
+          portal_key?: string | null;
+          section?: string | null;
+          selector?: string | null;
+          selector_fallbacks?: Json | null;
+          sort_order?: number | null;
+          source?: string | null;
+          status?: string | null;
+          token?: string | null;
+          transform?: string | null;
+          updated_at?: string | null;
+          url_pattern?: string | null;
+        };
+        Relationships: [];
       };
       portals: {
         Row: {
@@ -2383,20 +2461,29 @@ export type Database = {
         Row: {
           created_at: string;
           email: string | null;
+          first_name: string | null;
           full_name: string | null;
           id: string;
+          last_name: string | null;
+          title: string | null;
         };
         Insert: {
           created_at?: string;
           email?: string | null;
+          first_name?: string | null;
           full_name?: string | null;
           id: string;
+          last_name?: string | null;
+          title?: string | null;
         };
         Update: {
           created_at?: string;
           email?: string | null;
+          first_name?: string | null;
           full_name?: string | null;
           id?: string;
+          last_name?: string | null;
+          title?: string | null;
         };
         Relationships: [];
       };
@@ -3826,12 +3913,12 @@ export type Database = {
       author_global_sop: {
         Args: {
           p_archived?: boolean;
-          p_group_id?: string | null;
-          p_id?: string | null;
+          p_group_id: string;
+          p_id: string;
           p_name: string;
-          p_payer_id?: string | null;
+          p_payer_id: string;
           p_required_profile_attributes?: Json;
-          p_states?: string[] | null;
+          p_states: string[];
           p_task_definitions?: Json;
         };
         Returns: Json;
@@ -3886,7 +3973,6 @@ export type Database = {
       create_payer: {
         Args: {
           p_aliases?: string[];
-          p_assign_to_org?: boolean;
           p_delegation_note?: string;
           p_group_id_expected?: boolean;
           p_group_id_label?: string;
@@ -4002,6 +4088,51 @@ export type Database = {
         Args: { p_loser_id: string; p_org_id: string; p_survivor_id: string };
         Returns: Json;
       };
+      propose_shared_field_map: {
+        Args: {
+          p_control_options?: Json;
+          p_field_label?: string;
+          p_field_type?: string;
+          p_form_section?: string;
+          p_notes?: string;
+          p_page_step?: string;
+          p_portal_key: string;
+          p_selector: string;
+          p_sort_order?: number;
+        };
+        Returns: {
+          confidence: number | null;
+          control_options: Json | null;
+          created_at: string;
+          display_label: string | null;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          section: string | null;
+          selector: string;
+          selector_fallbacks: Json | null;
+          sort_order: number | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "portal_field_maps";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       publish_sop_template_version: {
         Args: {
           p_change_note?: string;
@@ -4080,11 +4211,7 @@ export type Database = {
         Returns: Json;
       };
       set_default_party_role: {
-        Args: {
-          p_org_id: string;
-          p_party_id: string;
-          p_role_key: string;
-        };
+        Args: { p_org_id: string; p_party_id: string; p_role_key: string };
         Returns: undefined;
       };
       set_global_portal_flags: {
@@ -4130,88 +4257,6 @@ export type Database = {
       submit_ssn_intake: {
         Args: { p_ssn: string; p_token: string };
         Returns: Json;
-      };
-      propose_shared_field_map: {
-        Args: {
-          p_control_options?: Json;
-          p_field_label?: string;
-          p_field_type?: string;
-          p_form_section?: string;
-          p_notes?: string;
-          p_page_step?: string;
-          p_portal_key: string;
-          p_selector: string;
-          p_sort_order?: number;
-        };
-        Returns: {
-          confidence: number | null;
-          control_options: Json | null;
-          created_at: string;
-          display_label: string | null;
-          field_label: string | null;
-          field_type: string;
-          form_section: string | null;
-          hardcoded_value: string | null;
-          id: string;
-          map_type: string;
-          notes: string | null;
-          org_id: string | null;
-          page_step: string | null;
-          portal_key: string;
-          section: string | null;
-          selector: string;
-          selector_fallbacks: Json | null;
-          sort_order: number | null;
-          source: string;
-          status: string;
-          token: string | null;
-          transform: string | null;
-          updated_at: string;
-          url_pattern: string | null;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "portal_field_maps";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
-      };
-      update_shared_field_registry: {
-        Args: {
-          p_entries: Json;
-        };
-        Returns: {
-          confidence: number | null;
-          control_options: Json | null;
-          created_at: string;
-          display_label: string | null;
-          field_label: string | null;
-          field_type: string;
-          form_section: string | null;
-          hardcoded_value: string | null;
-          id: string;
-          map_type: string;
-          notes: string | null;
-          org_id: string | null;
-          page_step: string | null;
-          portal_key: string;
-          section: string | null;
-          selector: string;
-          selector_fallbacks: Json | null;
-          sort_order: number | null;
-          source: string;
-          status: string;
-          token: string | null;
-          transform: string | null;
-          updated_at: string;
-          url_pattern: string | null;
-        }[];
-        SetofOptions: {
-          from: "*";
-          to: "portal_field_maps";
-          isOneToOne: false;
-          isSetofReturn: true;
-        };
       };
       train_global_field_map: {
         Args: {
@@ -4301,6 +4346,41 @@ export type Database = {
           to: "payers";
           isOneToOne: true;
           isSetofReturn: false;
+        };
+      };
+      update_shared_field_registry: {
+        Args: { p_entries: Json };
+        Returns: {
+          confidence: number | null;
+          control_options: Json | null;
+          created_at: string;
+          display_label: string | null;
+          field_label: string | null;
+          field_type: string;
+          form_section: string | null;
+          hardcoded_value: string | null;
+          id: string;
+          map_type: string;
+          notes: string | null;
+          org_id: string | null;
+          page_step: string | null;
+          portal_key: string;
+          section: string | null;
+          selector: string;
+          selector_fallbacks: Json | null;
+          sort_order: number | null;
+          source: string;
+          status: string;
+          token: string | null;
+          transform: string | null;
+          updated_at: string;
+          url_pattern: string | null;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "portal_field_maps";
+          isOneToOne: false;
+          isSetofReturn: true;
         };
       };
       upsert_global_portal: {

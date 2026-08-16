@@ -30,6 +30,7 @@ import { Route as FixItRouteImport } from './routes/fix-it'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ClientProgressRouteImport } from './routes/client-progress'
 import { Route as CasesRouteImport } from './routes/cases'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReportingIndexRouteImport } from './routes/reporting.index'
 import { Route as ProvidersIndexRouteImport } from './routes/providers.index'
@@ -195,6 +196,11 @@ const ClientProgressRoute = ClientProgressRouteImport.update({
 const CasesRoute = CasesRouteImport.update({
   id: '/cases',
   path: '/cases',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -512,6 +518,7 @@ const AdminPayerAdminCatalogPayerIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
@@ -596,6 +603,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
   '/fix-it': typeof FixItRoute
@@ -672,6 +680,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/cases': typeof CasesRouteWithChildren
   '/client-progress': typeof ClientProgressRoute
   '/contact': typeof ContactRoute
@@ -758,6 +767,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/cases'
     | '/client-progress'
     | '/contact'
@@ -842,6 +852,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/client-progress'
     | '/contact'
     | '/fix-it'
@@ -917,6 +928,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/cases'
     | '/client-progress'
     | '/contact'
@@ -1002,6 +1014,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   CasesRoute: typeof CasesRouteWithChildren
   ClientProgressRoute: typeof ClientProgressRoute
   ContactRoute: typeof ContactRoute
@@ -1206,6 +1219,13 @@ declare module '@tanstack/react-router' {
       path: '/cases'
       fullPath: '/cases'
       preLoaderRoute: typeof CasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -1780,6 +1800,7 @@ const GroupsGroupIdRouteWithChildren = GroupsGroupIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   CasesRoute: CasesRouteWithChildren,
   ClientProgressRoute: ClientProgressRoute,
   ContactRoute: ContactRoute,

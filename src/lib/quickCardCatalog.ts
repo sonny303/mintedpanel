@@ -113,11 +113,24 @@ export const QUICK_CARD_EXCLUDED_FIELDS: readonly string[] = [
   "groupInsurance.coverageLevel",
 ];
 
-/** The two {{user.*}} tokens the profile route appends after the catalog (R2
- * locked decision 5). They have no schema backing, so the RPC never emits
- * them — they are added here so the picker offers exactly what the profile
- * resolves. */
-export const USER_TOKEN_FIELDS: readonly string[] = ["user.name", "user.email"];
+/** The {{user.*}} tokens the profile route appends after the catalog (R2 locked
+ * decision 5). The RPC never emits them — `get_sop_field_tokens()` sweeps
+ * information_schema over nine domain tables and `profiles` is not one of them —
+ * so they are added here to keep the picker exactly equal to what the profile
+ * resolves.
+ *
+ * firstName/lastName/title joined 2026-08-16 with the /account page: payer forms
+ * ask for the preparer's name in two boxes and their title in a third, which one
+ * composite `user.name` could not fill. `user.name` REMAINS the composite (a
+ * separate `user.fullName` would be a second key for one value, and a trained
+ * mapping could pick either). */
+export const USER_TOKEN_FIELDS: readonly string[] = [
+  "user.name",
+  "user.firstName",
+  "user.lastName",
+  "user.title",
+  "user.email",
+];
 
 /** The org contact families (2026-08-07, decisions D9/D10). Like {{user.*}},
  * these have no schema backing the RPC can sweep — `parties` would emit

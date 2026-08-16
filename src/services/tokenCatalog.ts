@@ -11,11 +11,19 @@ export interface TokenCatalogEntry {
   column: string;
 }
 
-// Mirrors src/server/userTokens.ts: user.name from auth user_metadata, user.email
-// from the JWT claim. Shown in the picker so a form's name/email fields map to
-// the signed-in user, matching the profile endpoint.
+// Mirrors src/server/userTokens.ts — KEEP THE TWO IN LOCKSTEP: a key offered
+// here that the server does not resolve maps a payer field to a permanent
+// blank. Since 2026-08-16 the name/title tokens resolve from the caller's own
+// `profiles` row (set on /account), with auth metadata as the fallback;
+// user.email still prefers the JWT claim.
+//
+// No `user.fullName`: `user.name` IS the composite, and two keys resolving to
+// one value would let a trained mapping pick either.
 const USER_TOKENS: TokenCatalogEntry[] = [
-  { token: "user.name", table: "auth", column: "user_metadata.full_name" },
+  { token: "user.name", table: "profiles", column: "full_name" },
+  { token: "user.firstName", table: "profiles", column: "first_name" },
+  { token: "user.lastName", table: "profiles", column: "last_name" },
+  { token: "user.title", table: "profiles", column: "title" },
   { token: "user.email", table: "auth", column: "jwt.email" },
 ];
 

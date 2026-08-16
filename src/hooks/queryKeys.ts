@@ -109,6 +109,11 @@ export const queryKeys = {
   ssnIntakeLink: (orgId: string, providerId: string) =>
     ["ssn-intake-link", orgId, providerId] as const,
   inboundLeads: () => ["inbound-leads"] as const,
+  // The signed-in user's own profile (2026-08-16, /account). USER-scoped, not
+  // org-scoped: your name and title follow you across every org you belong to,
+  // so switching orgs must not invalidate it. The row is resolved from the
+  // session inside the service — no id rides the key.
+  myProfile: () => ["my-profile"] as const,
   // Reporting Center (redesign E0.6). CROSS-org (renders without an active org):
   // per-org geography for the state breakdown, and the caller's shares per report.
   orgStates: () => ["org-states"] as const,

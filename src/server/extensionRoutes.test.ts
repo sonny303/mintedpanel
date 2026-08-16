@@ -124,11 +124,20 @@ describe("provider profile handler", () => {
   const PROVIDER_ID = "0f0f0f0f-1111-4222-8333-444444444444";
   const FACILITY_ID = "aaaa1111-2222-4333-8444-555566667777";
   const url = (qs = "") => new URL(`https://x.test/api/providers/${PROVIDER_ID}/profile${qs}`);
-  // What the ctx() JWT resolves to (see resolveUserTokens).
+  // What the ctx() caller resolves to (see resolveUserTokens). ctx().db is an
+  // empty stub, so the profiles read fails and resolution falls back to auth
+  // metadata + the JWT email — the documented degradation. name/email land;
+  // firstName/lastName/title have no metadata source and resolve empty, each
+  // with a note. The profiles-backed path is covered in userTokens.test.ts.
   const USER_TOKENS = [
     { token: "user.name", value: "Tess Tester" },
+    { token: "user.firstName", value: "" },
+    { token: "user.lastName", value: "" },
+    { token: "user.title", value: "" },
     { token: "user.email", value: "tester@minted.com" },
   ];
+  // firstName + lastName + title.
+  const CTX_NOTE_COUNT = 3;
 
   // The service's ok result: single facility, auto-selected (the common case).
   function okResult(
@@ -179,8 +188,10 @@ describe("provider profile handler", () => {
       facilities: [{ id: FACILITY_ID, name: "Main Clinic" }],
       selected_facility_id: FACILITY_ID,
     });
-    // Both user tokens resolved, facility selected -> no meta at all.
-    expect(b.meta).toBeNull();
+    // Facility auto-selected, so no needs_facility; the only meta is the
+    // resolution notes for the tokens with no source on this ctx.
+    expect(b.meta?.needs_facility).toBeUndefined();
+    expect(b.meta?.notes).toHaveLength(CTX_NOTE_COUNT);
   });
 
   it("appends user tokens AFTER the catalog tokens without disturbing them", async () => {
@@ -202,9 +213,13 @@ describe("provider profile handler", () => {
     const b = await body(res);
     expect((b.data as { tokens: unknown }).tokens).toEqual([
       { token: "user.name", value: "" },
+      { token: "user.firstName", value: "" },
+      { token: "user.lastName", value: "" },
+      { token: "user.title", value: "" },
       { token: "user.email", value: "" },
     ]);
-    expect(b.meta?.notes).toHaveLength(2);
+    // One honest note per empty token — never a silently blank form field.
+    expect(b.meta?.notes).toHaveLength(5);
   });
 
   it("writes exactly one READ audit row per successful read — never the body or token values", async () => {
@@ -299,7 +314,7 @@ describe("provider profile handler", () => {
     const res = await handleProviderProfile(PROVIDER_ID, url(), c);
     expect(res.status).toBe(200);
     const b = await body(res);
-    expect(b.meta).toEqual({ needs_facility: true });
+    expect(b.meta?.needs_facility).toBe(true);
     expect((b.data as { selected_facility_id: unknown }).selected_facility_id).toBeNull();
     expect((b.data as { facilities: unknown }).facilities).toEqual(facilities);
     // Still a PHI read (non-facility tokens are served): audited, no facility.
@@ -314,7 +329,7 @@ describe("provider profile handler", () => {
     const res = await handleProviderProfile(PROVIDER_ID, url(), bare);
     const b = await body(res);
     expect(b.meta?.needs_facility).toBe(true);
-    expect(b.meta?.notes).toHaveLength(2);
+    expect(b.meta?.notes).toHaveLength(5);
   });
 });
 

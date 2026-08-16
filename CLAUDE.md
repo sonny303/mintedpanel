@@ -1989,7 +1989,9 @@ and both enrollment add buttons say "+ Add enrollment" (the "+ Add" design).
 **Org Detail consolidation (same day, Tasks A+B):** the Org Detail Profile
 card is GONE (whole setter chain deleted — `ProfilePanel`/`useUserProfile`/
 `userProfile` service; `{{user.name}}` still resolves from auth
-user_metadata, NO in-app setter remains); `AccountDetailSummary` is
+user_metadata, NO in-app setter remains — **superseded 2026-08-16: `/account`
+is that setter's proper home, see the entry at the end of this file**);
+`AccountDetailSummary` is
 ORG-IDENTITY only (name + organization address — people are never restated
 there); `PartiesManager` is headed **"People"** (was "People Enroll") and is
 the ONE people surface: contacts with role chips — the governed labels now
@@ -2810,6 +2812,63 @@ seven behavioural probes — not by reasoning about the SQL.
   apply is the operator step, so a regen would reflect the pre-migration schema
   and delete the new column.
 
+### User settings page + the `{{user.*}}` name split (2026-08-16)
+
+`/account` is the signed-in user's own settings page — first name, last name,
+free-text title, read-only email, read-only role badge for the active org. The
+sidebar footer's **Settings** item now lands here (it went to `/org-detail`
+only while no personal page existed); `/org-detail` stays purely org-level and
+keeps its own nav entry. ONE additive migration (repo + hosted,
+`20260816120000_profile_name_split_and_title.sql`): `profiles` gains
+`first_name` / `last_name` / `title`.
+
+- **Why the prior removal does not block this.** PR #228 (2026-07-21) deleted a
+  "Your name" card from Org Detail _by user request_ as part of "Org Detail is
+  about the ORG, not people" — a PLACEMENT decision, not a policy one. This
+  page is where that setting belongs; the deleted `userProfile` service is
+  restored and widened.
+- **THE reason this page matters: two name stores were never synced.**
+  `profiles.full_name` drives every DISPLAY surface (sidebar, Org Detail's
+  Access table, `audit_log` actor names, case provenance, touch authors), while
+  auth `user_metadata.full_name` was what `{{user.name}}` FILLED INTO payer
+  forms. The deleted panel wrote only metadata, so editing your name changed
+  what filled and not what displayed. **`profiles` is now the source of
+  truth**: one save writes the profiles row AND mirrors the composed name into
+  auth metadata (`updateMyProfile`, non-fatal on the metadata leg), and
+  `userTokens.ts` reads profiles FIRST with metadata as fallback.
+- **`full_name` is a FROZEN MIRROR, not a generated column.** The migration
+  deliberately does not backfill first/last (an unattended whitespace split
+  turns "Mary Van Der Berg" into last name "Berg"), so a generated column would
+  have blanked every existing display name until each user visited the page.
+  The service composes it from the parts on save, and skips the write when both
+  parts are blank.
+- **Token family: five keys, no `user.fullName`.** `user.name` already IS the
+  composite and is a locked wire contract the extension joins on; a second key
+  resolving to the same value would let a trained portal mapping pick either.
+  New keys `user.firstName` / `user.lastName` / `user.title` are registered in
+  BOTH pickers — `quickCardCatalog.ts` `USER_TOKEN_FIELDS` (extension quick
+  cards) and `services/tokenCatalog.ts` `USER_TOKENS` (the field-registry /
+  portal-mapping picker). **Keep those two in lockstep with
+  `resolveUserTokens`** — a key offered but not resolved maps a payer field to
+  a permanent blank.
+- **Deliberately NOT in `sopResolver.buildTokenMap`** (scope decision): SOP-body
+  tokens are baked into `tasks.sop_content` at case creation, so a preparer name
+  frozen there would misattribute every later touch by a different specialist.
+  Fill-time only — the same reasoning as the D12 org-contact families.
+- `ROLE_LABELS` / `ROLE_DESCRIPTIONS` moved into `src/lib/permissions.ts` (the
+  role-semantics module) and `Sidebar.tsx` imports them instead of keeping a
+  private copy.
+- **types.ts regen exposed a latent bug worth knowing:** the previous hand-edit
+  had typed `author_global_sop`'s RPC args non-nullable. Postgres function
+  arguments carry NO nullability, and that RPC genuinely accepts NULL for
+  `p_id` (create), `p_group_id` ("Any group"), and `p_payer_id`/`p_states` (the
+  generic fallback). The generator cannot express it, so the cast now lives at
+  the CALL SITE in `templates.ts` where a regen cannot silently revert it.
+- e2e `e2e/account-settings.spec.ts` (loads the row; Save writes profiles AND
+  mirrors metadata — asserted at the wire, since the sync is invisible on
+  screen; a name-less save is blocked). `sidebar-ia.spec.ts` retargeted to
+  `/account`.
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -3115,15 +3174,16 @@ built only when a real consumer pulls them. The current surface:
   primary-assignment heuristic is deliberately gone; `assignment.*` follows
   the same selection because the assignment is the link row). The snake_case
   keys (`selected_facility_id`, `needs_facility`) are the locked wire
-  contract, like the touches body. The `{{user.*}}` token family (`user.name` from
-  user_metadata full_name/name, `user.email` from the JWT claim — no schema
-  backing) is appended by the route via `src/server/userTokens.ts`. NB there
-  is NO in-app setter for user_metadata full_name anymore — the Org Detail
-  Profile section and its whole chain (`ProfilePanel` →
-  `useUserProfile` → `src/services/userProfile.ts`) were removed by user
-  request 2026-07-21 (already-set names persist; `profiles.full_name`, which
-  the sidebar/store display reads, is separate and unaffected);
-  empty-resolution notes surface in the envelope's `meta.notes`. **The most
+  contract, like the touches body. The `{{user.*}}` token family is appended by
+  the route via `src/server/userTokens.ts` — **five keys since 2026-08-16**:
+  `user.name` (the COMPOSITE; there is deliberately NO `user.fullName` synonym,
+  since two keys resolving to one value let a trained portal mapping pick
+  either), `user.firstName`, `user.lastName`, `user.title`, `user.email`. They
+  resolve from the CALLER'S OWN `profiles` row (read scoped by `ctx.userId` —
+  the view-prefs pattern; never a client-supplied id), falling back to auth
+  `user_metadata` and then the JWT email claim. `/account` is the setter — see
+  the 2026-08-16 entry for why profiles is primary. Empty-resolution notes
+  surface in the envelope's `meta.notes`, ONE per empty token. **The most
   PHI-dense response in the system** (SSN last-4, DOB, home address, unmasked
   by design): `Cache-Control: no-store`, never log the body. Every successful
   profile read writes one `audit_log` row (`action_type 'READ'`, actor,

@@ -98,7 +98,26 @@ id)` rejects every cross-org link, including service-role writes. A BEFORE
 
 ### profiles
 
-`id, full_name, email, created_at` — `id` mirrors `auth.users.id`.
+`id, full_name, first_name, last_name, title, email, created_at` — `id` mirrors
+`auth.users.id`. The user's own identity, edited on `/account`
+(`src/services/userProfile.ts`); RLS `profiles_update_self` scopes writes to
+`id = auth.uid()`.
+
+`first_name`/`last_name`/`title` landed 2026-08-16 (migration
+`20260816120000_profile_name_split_and_title.sql`, repo + hosted): payer forms
+ask for the preparer's name in two boxes and a title in a third, which the
+single composite `{{user.name}}` could not fill. **`full_name` is RETAINED as a
+frozen mirror** — every display surface reads it (sidebar, Org Detail's Access
+table, `audit_log` actor names, case provenance, touch authors), and the service
+writes it from first+last on every save. It is deliberately NOT a generated
+column: the migration does **not** backfill first/last (splitting existing names
+on whitespace unattended is how "Mary Van Der Berg" becomes last name "Berg"),
+so a generated column would have blanked every existing display name.
+
+`profiles` is the SOURCE OF TRUTH for the `{{user.*}}` token family; each save
+also mirrors the composed name into auth `user_metadata.full_name`, which
+`src/server/userTokens.ts` keeps only as a fallback. Before /account those two
+stores were never synced.
 
 ### provider_groups
 
