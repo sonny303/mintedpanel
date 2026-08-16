@@ -165,8 +165,10 @@ export async function handleProviderProfile(
   const { profile, needsFacility } = result;
 
   // {{user.*}} tokens ride along with the catalog tokens (R2 locked decision
-  // 5); resolution notes surface in meta, never as errors.
-  const userTokens = resolveUserTokens(ctx);
+  // 5); resolution notes surface in meta, never as errors. Since 2026-08-16
+  // this reads the caller's own profiles row (name/title set on /account), so
+  // it is async; auth metadata remains the fallback.
+  const userTokens = await resolveUserTokens(ctx);
   profile.tokens.push(...userTokens.tokens);
 
   // Org contact families (billingContact.* / credentialingContact.* /

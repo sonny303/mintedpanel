@@ -263,7 +263,16 @@ export interface GlobalSopInput {
 export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplate> {
   requireActiveOrg();
   const rpc = supabase.rpc.bind(supabase);
-  const { data, error } = await rpc("author_global_sop", {
+  // NULLABILITY CAST — read before "fixing" this. Postgres function arguments
+  // carry no nullability, and this RPC genuinely accepts NULL for four of them:
+  // p_id null = create (vs. update), p_group_id null = "Any group", and
+  // p_payer_id/p_states are null on the generic fallback row. The type
+  // generator cannot express that — it emits every argument without a SQL
+  // DEFAULT as a non-nullable TS property — so the generated Args type is
+  // narrower than the function. This was previously papered over by hand-editing
+  // types.ts, which every regen silently reverts (and did, 2026-08-16). The cast
+  // lives here instead, where it survives regeneration and states its reason.
+  const args = {
     p_id: input.id ?? null,
     p_name: input.name.trim(),
     p_payer_id: input.payerId,
@@ -272,7 +281,11 @@ export async function authorGlobalSop(input: GlobalSopInput): Promise<SOPTemplat
     p_task_definitions: (input.taskDefinitions ?? []) as unknown as Json,
     p_archived: (input.archived ?? false) as boolean,
     p_required_profile_attributes: (input.requiredProfileAttributes ?? []) as unknown as Json,
-  });
+  };
+  const { data, error } = await rpc(
+    "author_global_sop",
+    args as unknown as Parameters<typeof rpc<"author_global_sop">>[1],
+  );
   if (error) {
     const text = pgWireText(error);
     if (text.includes("global_sop_duplicate_match")) {

@@ -354,13 +354,30 @@ describe("quick-card catalog — exclusion policy", () => {
     }
   });
 
-  it("appends the two {{user.*}} tokens the profile route resolves", () => {
+  it("appends every {{user.*}} token the profile route resolves", () => {
     const catalog = buildQuickCardCatalog([
       { table: "providers", token: "provider.npi", column: "npi" },
     ]);
-    expect(catalog.map((f) => f.key)).toContain("user.name");
-    expect(catalog.map((f) => f.key)).toContain("user.email");
+    const keys = catalog.map((f) => f.key);
+    // firstName/lastName/title joined 2026-08-16 with the /account page:
+    // payer forms ask for the preparer's name in two boxes and a title in a
+    // third. Keep this list equal to userTokens.resolveUserTokens — a key
+    // offered here that the server does not resolve maps a payer field to a
+    // permanent blank.
+    for (const key of [
+      "user.name",
+      "user.firstName",
+      "user.lastName",
+      "user.title",
+      "user.email",
+    ]) {
+      expect(keys, `${key} should be offered`).toContain(key);
+    }
+    // `user.name` IS the composite. A second key resolving to the same value
+    // would let a trained portal mapping pick either one.
+    expect(keys).not.toContain("user.fullName");
     expect(catalog.find((f) => f.key === "user.name")?.group).toBe("user");
+    expect(catalog.find((f) => f.key === "user.title")?.group).toBe("user");
   });
 
   it("normalizes a braced token to the bare join form", () => {
