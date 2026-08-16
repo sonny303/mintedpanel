@@ -943,8 +943,8 @@ export type SOPStepType =
 
 /**
  * E1.7b F1.7b.5 (TE-13) — an AUTHORED draft-email recipient. A recipient is
- * explicitly EITHER a fixed literal email address OR a closed email-valued token
- * key (currently only `provider.email`; see `emailValuedTokenKeys`). It is never
+ * explicitly EITHER a fixed literal email address OR an email-valued token key
+ * of an entity resolution holds (see `isEmailValuedToken`). It is never
  * inferred by parsing free text, and there is no BCC and no send variant.
  */
 export type SOPEmailRecipient =

@@ -1,7 +1,7 @@
 // Editor card for a single template task, including its SOP steps and
 // per-step data field rows. Drag state is owned by the parent so
 // cross-task reordering keeps working exactly as before.
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +28,7 @@ import {
   taskPortalKeys,
   type EditableRecipient,
 } from "@/components/templates/editableTemplate";
-import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import { emailTokenFromLiteral, filterEmailRecipientTokens } from "@/lib/sopAuthoringTokens";
 import {
   EXECUTION_TYPE_HINTS,
   EXECUTION_TYPE_LABELS,
@@ -65,11 +65,6 @@ interface EditableStep {
   followUpEveryDays: number | null;
   requiredArtifacts: string[];
 }
-
-// E1.7b F1.7b.5 (TE-15) — the closed email-valued token set the recipient token
-// picker offers (a strict subset of the body "Insert token" catalog). Resolver-
-// derived so it never drifts from what actually resolves to an address.
-const EMAIL_TOKENS = emailValuedTokenKeys();
 
 const NO_PORTAL = "__none__";
 
@@ -567,6 +562,7 @@ function StepModeBody({
             label="To"
             required
             recipients={step.emailTemplate.to}
+            groupedTokens={groupedTokens}
             canEdit={canEdit}
             onChange={(to) =>
               updateStep(taskId, step.id, {
@@ -577,6 +573,7 @@ function StepModeBody({
           <RecipientListEditor
             label="Cc"
             recipients={step.emailTemplate.cc}
+            groupedTokens={groupedTokens}
             canEdit={canEdit}
             onChange={(cc) =>
               updateStep(taskId, step.id, {
@@ -730,23 +727,41 @@ function StepModeBody({
 // E1.7b F1.7b.5 (TE-15) — the To/CC recipient editor for a draft-email step.
 // Every row has an explicit "Recipient source" selector (Email address | Profile
 // token) and, for that source, either a validated literal-address input or a
-// token select narrowed to the closed email-valued set (never the full authoring
-// catalog). No recipient is inferred from prose; BCC is not offered.
+// searchable token picker narrowed to the catalog's email columns (never the
+// full authoring catalog). No recipient is inferred from prose; BCC is not
+// offered.
 function RecipientListEditor({
   label,
   recipients,
+  groupedTokens,
   canEdit,
   onChange,
   required = false,
 }: {
   label: string;
   recipients: EditableRecipient[];
+  groupedTokens: TokenGroup[];
   canEdit: boolean;
   onChange: (next: EditableRecipient[]) => void;
   required?: boolean;
 }) {
+  const emailTokenGroups = useMemo(
+    () =>
+      groupedTokens
+        .map((group) => ({ ...group, items: filterEmailRecipientTokens(group.items) }))
+        .filter((group) => group.items.length > 0),
+    [groupedTokens],
+  );
+
   function update(id: string, patch: Partial<EditableRecipient>) {
     onChange(recipients.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  // An address box holding exactly one email token is the author naming a token
+  // recipient by hand: retag the row rather than reject it as a bad address.
+  function updateAddress(id: string, address: string) {
+    const token = emailTokenFromLiteral(address);
+    update(id, token ? { source: "token", token, address: "" } : { address });
   }
   function remove(id: string) {
     onChange(recipients.filter((r) => r.id !== id));
@@ -772,7 +787,7 @@ function RecipientListEditor({
       {recipients.length === 0 ? (
         <p className="text-[11px] text-[#92400E]">
           {required
-            ? "Add at least one recipient — a fixed email address or the provider.email token."
+            ? "Add at least one recipient — a fixed email address or an email token."
             : "No Cc recipients."}
         </p>
       ) : (
@@ -798,35 +813,27 @@ function RecipientListEditor({
                 <div>
                   {r.source === "literal" ? (
                     <Input
-                      type="email"
-                      placeholder="name@example.com"
+                      placeholder="name@example.com or {{group.credentialingEmail}}"
                       value={r.address}
-                      onChange={(e) => update(r.id, { address: e.target.value })}
+                      onChange={(e) => updateAddress(r.id, e.target.value)}
                       disabled={!canEdit}
                       aria-label={`${label} email address`}
                       aria-invalid={literalInvalid || undefined}
                     />
                   ) : (
-                    <Select
+                    <TokenPicker
+                      aria-label={`${label} recipient token`}
                       value={r.token}
-                      onValueChange={(v) => update(r.id, { token: v })}
+                      groupedTokens={emailTokenGroups}
                       disabled={!canEdit}
-                    >
-                      <SelectTrigger aria-label={`${label} recipient token`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EMAIL_TOKENS.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      className="h-9 w-full"
+                      onValueChange={(v) => update(r.id, { token: v })}
+                    />
                   )}
                   {literalInvalid ? (
                     <p className="mt-0.5 text-[11px] text-[#B91C1C]">
-                      Enter a valid email address.
+                      Enter a valid email address, or an email token like{" "}
+                      {"{{group.credentialingEmail}}"}.
                     </p>
                   ) : null}
                 </div>

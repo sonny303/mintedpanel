@@ -2,7 +2,12 @@
 // authoring picker advertises is one the client resolver can substitute, and
 // the case-scoped catalog families are excluded from dataFields authoring.
 import { describe, expect, it } from "vitest";
-import { AUTHORING_EXCLUDED_TOKENS, filterAuthoringTokens } from "./sopAuthoringTokens";
+import {
+  AUTHORING_EXCLUDED_TOKENS,
+  emailTokenFromLiteral,
+  filterAuthoringTokens,
+  filterEmailRecipientTokens,
+} from "./sopAuthoringTokens";
 import { isResolvableToken } from "./sopResolver";
 
 // A representative slice of the live get_sop_field_tokens() catalog plus the
@@ -27,6 +32,10 @@ const CATALOG = [
   { token: "user.name", table: "auth", column: "user_metadata.full_name" },
   { token: "user.email", table: "auth", column: "jwt.email" },
   { token: "provider.ssnLast4", table: "providers", column: "ssn_last4" },
+  { token: "provider.email", table: "providers", column: "email" },
+  { token: "group.credentialingEmail", table: "provider_groups", column: "credentialing_email" },
+  { token: "group.billingEmail", table: "provider_groups", column: "billing_email" },
+  { token: "payer.email", table: "payers", column: "email" },
 ];
 
 describe("filterAuthoringTokens", () => {
@@ -67,5 +76,26 @@ describe("filterAuthoringTokens", () => {
     expect(kept).not.toContain("groupInsurance.policyNumber");
     expect(kept).not.toContain("user.name");
     expect(kept).not.toContain("user.email");
+  });
+});
+
+describe("filterEmailRecipientTokens", () => {
+  it("offers every email column of the entities in hand, not just provider.email", () => {
+    const kept = filterEmailRecipientTokens(CATALOG).map((e) => e.token);
+    expect(kept).toEqual(["provider.email", "group.credentialingEmail", "group.billingEmail"]);
+  });
+});
+
+describe("emailTokenFromLiteral", () => {
+  it("reads a hand-typed email token out of the literal-address box", () => {
+    expect(emailTokenFromLiteral("{{group.credentialingEmail}}")).toBe("group.credentialingEmail");
+    expect(emailTokenFromLiteral("  {{ provider.email }}  ")).toBe("provider.email");
+  });
+
+  it("leaves a real address, a partial token, and a non-email token alone", () => {
+    expect(emailTokenFromLiteral("payer@example.com")).toBeNull();
+    expect(emailTokenFromLiteral("{{group.credentialing")).toBeNull();
+    expect(emailTokenFromLiteral("{{group.name}}")).toBeNull();
+    expect(emailTokenFromLiteral("cc {{provider.email}} too")).toBeNull();
   });
 });

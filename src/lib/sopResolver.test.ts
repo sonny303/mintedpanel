@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { emailValuedTokenKeys, isResolvableToken, resolveTemplate } from "./sopResolver";
+import {
+  DEFAULT_EMAIL_RECIPIENT_TOKEN,
+  isEmailValuedToken,
+  isResolvableToken,
+  resolveTemplate,
+} from "./sopResolver";
 import type { Facility, Provider, ProviderGroup, SOPTemplate } from "@/types";
 
 function provider(over: Partial<Provider> = {}): Provider {
@@ -335,6 +340,34 @@ describe("resolveTemplate draft-email recipients (E1.7b F1.7b.5)", () => {
     expect(email?.to).toEqual([{ source: "token", token: "provider.email", address: null }]);
   });
 
+  it("resolves a group email token CC from the group row in hand", () => {
+    const tpl = template([
+      {
+        label: "Apply to Optum",
+        stepType: "draft_email",
+        emailTemplate: {
+          subject: "s",
+          body: "b",
+          to: [{ source: "token", token: "provider.email" }],
+          cc: [{ source: "token", token: "group.credentialingEmail" }],
+        },
+      },
+    ]);
+    const [task] = resolveTemplate(
+      tpl,
+      provider(),
+      { ...GROUP, credentialingEmail: "creds@bestpt.example.com" },
+      FACILITY,
+    );
+    expect(task.sopContent[0].emailTemplate?.cc).toEqual([
+      {
+        source: "token",
+        token: "group.credentialingEmail",
+        address: "creds@bestpt.example.com",
+      },
+    ]);
+  });
+
   it("resolves an unknown/unsupported token recipient to a null address (never a fake value)", () => {
     const tpl = template([
       {
@@ -373,18 +406,32 @@ describe("resolveTemplate draft-email recipients (E1.7b F1.7b.5)", () => {
   });
 });
 
-describe("emailValuedTokenKeys (E1.7b F1.7b.5 / TE-14)", () => {
-  it("is the closed { provider.email } set today", () => {
-    expect(emailValuedTokenKeys()).toEqual(["provider.email"]);
+describe("isEmailValuedToken (E1.7b F1.7b.5 / TE-14)", () => {
+  it("admits every email column of the entities in hand, not just provider.email", () => {
+    for (const token of [
+      "provider.email",
+      "group.credentialingEmail",
+      "group.billingEmail",
+      "group.correspondenceEmail",
+      "facility.email",
+    ]) {
+      expect(isEmailValuedToken(token)).toBe(true);
+    }
+    expect(isEmailValuedToken(DEFAULT_EMAIL_RECIPIENT_TOKEN)).toBe(true);
   });
 
-  it("is a strict subset of what resolves, and excludes non-email tokens", () => {
-    for (const k of emailValuedTokenKeys()) expect(isResolvableToken(k)).toBe(true);
-    // Resolution substitutes plenty of non-email tokens (provider.npi); those
-    // are never offered as recipients.
-    expect(emailValuedTokenKeys()).not.toContain("provider.npi");
+  it("is a strict subset of what resolves", () => {
+    // Resolution substitutes plenty of non-email tokens; none may be a recipient.
     expect(isResolvableToken("provider.npi")).toBe(true);
-    expect(emailValuedTokenKeys().some((k) => k.startsWith("payer."))).toBe(false);
+    expect(isEmailValuedToken("provider.npi")).toBe(false);
+    expect(isEmailValuedToken("provider.firstName")).toBe(false);
+  });
+
+  it("rejects an email field on a family the resolver holds no row for", () => {
+    // A payer/contact address has no value at case creation, so accepting it
+    // would draft an email to nobody.
+    expect(isEmailValuedToken("payer.email")).toBe(false);
+    expect(isEmailValuedToken("credentialingContact.email")).toBe(false);
   });
 });
 

@@ -88,18 +88,26 @@ export function isResolvableToken(token: string): boolean {
   return ENTITY_TOKEN_FAMILIES.includes(token.split(".")[0]);
 }
 
-// E1.7b F1.7b.5 (TE-14) — the closed set of email-valued token keys a
-// draft-email recipient may resolve. A STRICT SUBSET of what
-// isResolvableToken() admits: that set advertises every substitutable token
-// (provider.npi, facility.city, …), but only these carry an actual email
-// address. Today that is
-// `provider.email` alone — facility/group/mso and payer-contact tokens are
-// deferred (AQ2, additive later once a resolver value exists), and `payer.*` has
-// no resolver value at all and must NEVER be accepted as a recipient token. The
+// The token a fresh token-source recipient row starts on — every case has a
+// provider, so it is the one recipient token guaranteed to have a holder.
+export const DEFAULT_EMAIL_RECIPIENT_TOKEN = "provider.email";
+
+// E1.7b F1.7b.5 (TE-14) — whether a token may be a draft-email recipient. A
+// STRICT SUBSET of isResolvableToken(): that admits every substitutable token
+// (provider.npi, facility.city, …), and only these carry an actual address.
+//
+// Schema-following like resolution itself: an email column is named `*_email`
+// (`providers.email`, `provider_groups.credentialing_email`,
+// `facilities.email`), so the recipient set widens with the schema. A family
+// with no row in hand is still rejected — `payer.*` has no resolver value at
+// all and must NEVER be accepted as a recipient token — and so are the D12
+// org-contact families, which resolve at fill time, not at case creation. The
 // authoring picker (TE-15) and the publish lint (TE-16) both read this as the
-// single authority; keep it a subset of the map keys above.
-export function emailValuedTokenKeys(): string[] {
-  return ["provider.email"];
+// single authority.
+export function isEmailValuedToken(token: string): boolean {
+  if (!isResolvableToken(token)) return false;
+  const [, local = ""] = token.split(".");
+  return local === "email" || /[a-z]Email$/.test(local);
 }
 
 const TOKEN_PATTERN = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;

@@ -6,7 +6,7 @@ import {
   resolveOrgContactTokens,
   contactFamilyLabel,
 } from "./orgContactTokens";
-import { emailValuedTokenKeys, isResolvableToken } from "./sopResolver";
+import { isEmailValuedToken, isResolvableToken } from "./sopResolver";
 import type { Party, PartyRoleKey } from "@/types";
 
 function party(over: Partial<Party> = {}): Party {
@@ -141,12 +141,13 @@ describe("D12 — fill-time only, never baked into a SOP body", () => {
 
 describe("D13 — contacts are values, not email recipients", () => {
   it("no contact token is an email-valued recipient token", () => {
-    const recipients = emailValuedTokenKeys();
     for (const key of orgContactTokenKeys()) {
-      expect(recipients).not.toContain(key);
+      expect(isEmailValuedToken(key)).toBe(false);
     }
-    // The closed recipient set stays exactly what it was.
-    expect(recipients).toEqual(["provider.email"]);
+    // A contact email is spelled like a recipient token but resolves to nothing
+    // at case creation, so the family gate — not the name — decides.
+    expect(isEmailValuedToken("credentialingContact.email")).toBe(false);
+    expect(isEmailValuedToken("provider.email")).toBe(true);
   });
 });
 

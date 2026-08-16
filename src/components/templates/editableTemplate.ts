@@ -9,7 +9,7 @@
 // that contract; case creation depends on it.
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import { resolveExecutionType, type ExecutionType } from "@/lib/executionTypes";
-import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import { DEFAULT_EMAIL_RECIPIENT_TOKEN } from "@/lib/sopResolver";
 import type { SOPEmailRecipient, SOPStepType, SOPTaskDefinition } from "@/types";
 
 export interface DataField {
@@ -37,16 +37,12 @@ export interface EmailTemplate {
   cc: EditableRecipient[];
 }
 
-// The default email-valued token a fresh token-source row starts on. Keeping it
-// resolver-derived means the picker and this default can never drift.
-const DEFAULT_EMAIL_TOKEN = emailValuedTokenKeys()[0] ?? "provider.email";
-
 function toEditableRecipients(list: SOPEmailRecipient[] | undefined): EditableRecipient[] {
   return (list ?? []).map((r) => ({
     id: randId(),
     source: r.source,
     address: r.source === "literal" ? r.address : "",
-    token: r.source === "token" ? r.token : DEFAULT_EMAIL_TOKEN,
+    token: r.source === "token" ? r.token : DEFAULT_EMAIL_RECIPIENT_TOKEN,
   }));
 }
 
@@ -67,7 +63,7 @@ function fromEditableRecipients(list: EditableRecipient[]): SOPEmailRecipient[] 
 // A fresh recipient row for the "Add" affordance — literal by default (the
 // common case is a fixed payer inbox, e.g. worked example 1's Optum address).
 export function newEditableRecipient(): EditableRecipient {
-  return { id: randId(), source: "literal", address: "", token: DEFAULT_EMAIL_TOKEN };
+  return { id: randId(), source: "literal", address: "", token: DEFAULT_EMAIL_RECIPIENT_TOKEN };
 }
 
 export interface EditableStep {

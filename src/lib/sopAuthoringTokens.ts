@@ -11,7 +11,7 @@
 // providers/provider_groups/facilities/msos widens the picker on its own. What
 // remains hand-listed is the one exclusion below, which is a policy choice
 // rather than a resolution limit.
-import { isResolvableToken } from "@/lib/sopResolver";
+import { isEmailValuedToken, isResolvableToken } from "@/lib/sopResolver";
 
 /** Resolvable, but deliberately NOT authorable in a SOP.
  *
@@ -26,4 +26,19 @@ export const AUTHORING_EXCLUDED_TOKENS: readonly string[] = ["provider.ssnLast4"
 export function filterAuthoringTokens<T extends { token: string }>(catalog: T[]): T[] {
   const excluded = new Set(AUTHORING_EXCLUDED_TOKENS);
   return catalog.filter((entry) => isResolvableToken(entry.token) && !excluded.has(entry.token));
+}
+
+/** The catalog slice a draft-email To/Cc row may address: the email columns of
+ * the entities in hand (provider.email, group.credentialingEmail, …). */
+export function filterEmailRecipientTokens<T extends { token: string }>(catalog: T[]): T[] {
+  return catalog.filter((entry) => isEmailValuedToken(entry.token));
+}
+
+/** A recipient typed as `{{group.credentialingEmail}}` into the literal-address
+ * box is a TOKEN recipient the author spelled by hand. Returning the token lets
+ * the editor retag the row instead of failing address validation on it. */
+export function emailTokenFromLiteral(raw: string): string | null {
+  const match = /^\s*{{\s*([a-zA-Z0-9_.]+)\s*}}\s*$/.exec(raw);
+  const token = match?.[1];
+  return token && isEmailValuedToken(token) ? token : null;
 }

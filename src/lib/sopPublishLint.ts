@@ -14,7 +14,7 @@
 
 import type { SOPTaskDefinition } from "@/types";
 import { resolveExecutionType } from "@/lib/executionTypes";
-import { emailValuedTokenKeys } from "@/lib/sopResolver";
+import { isEmailValuedToken } from "@/lib/sopResolver";
 import { isValidEmail } from "@/lib/contactValidation";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 
@@ -87,7 +87,6 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
             message: `Task ${taskNo}, step ${stepNo} (draft email) needs at least one "To" recipient.`,
           });
         }
-        const emailTokens = new Set(emailValuedTokenKeys());
         for (const r of [...to, ...cc]) {
           if (r.source === "literal" && !isValidEmail(r.address)) {
             errors.push({
@@ -95,7 +94,7 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
               stepIndex: stepNo,
               message: `Task ${taskNo}, step ${stepNo} has an invalid recipient email address ("${r.address}").`,
             });
-          } else if (r.source === "token" && !emailTokens.has(r.token)) {
+          } else if (r.source === "token" && !isEmailValuedToken(r.token)) {
             errors.push({
               taskIndex: taskNo,
               stepIndex: stepNo,
