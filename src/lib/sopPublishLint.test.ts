@@ -80,8 +80,24 @@ describe("lintSopForPublish", () => {
     expect(r.errors.some((e) => /invalid recipient email/.test(e.message))).toBe(true);
   });
 
+  it("accepts a group email token recipient (CC to the group's credentialing inbox)", () => {
+    const r = lintSopForPublish(
+      emailSop(
+        [{ source: "token", token: "provider.email" }],
+        [{ source: "token", token: "group.credentialingEmail" }],
+      ),
+    );
+    expect(r.ok).toBe(true);
+  });
+
   it("rejects a non-email token recipient (anti-fake-CRM guardrail)", () => {
     const r = lintSopForPublish(emailSop([{ source: "token", token: "payer.name" }]));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /not an email field/.test(e.message))).toBe(true);
+  });
+
+  it("rejects a non-email column of an entity it does hold", () => {
+    const r = lintSopForPublish(emailSop([{ source: "token", token: "group.name" }]));
     expect(r.ok).toBe(false);
     expect(r.errors.some((e) => /not an email field/.test(e.message))).toBe(true);
   });

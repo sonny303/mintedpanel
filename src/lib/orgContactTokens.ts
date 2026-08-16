@@ -23,8 +23,10 @@
 // get baked into tasks.sop_content at case creation — a snapshot that would go
 // stale the moment the contact changed. Fill-time only.
 //
-// NOT EMAIL RECIPIENTS (D13). emailValuedTokenKeys() stays ["provider.email"];
-// a contact is a value you type into a form, not someone the system emails.
+// NOT EMAIL RECIPIENTS (D13). isEmailValuedToken() gates on the entity families
+// resolution holds a row for, so a contact email never qualifies however it is
+// spelled; a contact is a value you type into a form, not someone the system
+// emails.
 import type { Party, PartyRoleKey } from "@/types";
 import { composeFullName } from "@/lib/personName";
 

@@ -2,6 +2,11 @@
 // substituting {{tokens}} with values from the provider, group, facility,
 // and optional MSO routing rule. Unknown tokens are left blank.
 
+import {
+  ENTITY_TOKEN_FAMILIES,
+  buildEntityTokenValues,
+  composeAddressToken,
+} from "@/lib/entityTokens";
 import type {
   Facility,
   Mso,
@@ -33,67 +38,76 @@ interface ResolveContext {
   stateLicenseNumber?: string | null;
 }
 
+// Tokens no column sweep can produce: a composed value, or a value that lives
+// on a row outside the entity the prefix names.
+//
+// E1.7b TE-7 catalog-name aliases: get_sop_field_tokens() advertises
+// schema-derived names, and `license.licenseNumber` names the state_licenses row
+// selected for the case's state — which this context carries as a bare string,
+// not a row. `provider.licenseNumber` is the older resolver name for the same
+// value and keeps working, since SOP bodies in the wild use it. Never rename the
+// catalog side: catalog token names are a live wire contract (portal_field_maps,
+// view-prefs, the extension's field-map ↔ profile join).
+const COMPOSED_TOKENS = ["facility.address", "license.licenseNumber"] as const;
+
 function buildTokenMap(ctx: ResolveContext): Record<string, string> {
   const { provider, group, facility, mso, stateLicenseNumber } = ctx;
-  return {
-    "provider.npi": provider.npi ?? "",
-    "provider.caqhId": provider.caqhId ?? "",
-    "provider.caqhLastAttestedDate": provider.caqhLastAttestedDate ?? "",
-    "provider.taxonomyCode": provider.taxonomyCode ?? "",
-    "provider.firstName": provider.firstName,
-    "provider.lastName": provider.lastName,
-    "provider.email": provider.email ?? "",
-    "provider.licenseNumber": stateLicenseNumber ?? "",
-    // E1.7b TE-7 catalog-name aliases: get_sop_field_tokens() advertises
-    // schema-derived names; these map them onto values this context already
-    // holds so authored catalog tokens resolve. Existing names above stay —
-    // SOP bodies in the wild use them. Never rename the catalog side: catalog
-    // token names are a live wire contract (portal_field_maps, view-prefs,
-    // the extension's field-map ↔ profile join).
-    "license.licenseNumber": stateLicenseNumber ?? "",
-    "group.tin": group?.tin ?? "",
-    "group.npiType2": group?.npiType2 ?? "",
-    "group.name": group?.name ?? "",
-    "facility.name": facility?.name ?? "",
-    "facility.address": facility
-      ? [facility.street, facility.city, facility.state, facility.zip].filter(Boolean).join(", ")
-      : "",
-    "facility.street": facility?.street ?? "",
-    "facility.city": facility?.city ?? "",
-    "facility.state": facility?.state ?? "",
-    "facility.zip": facility?.zip ?? "",
-    "mso.portalUrl": mso?.portalUrl ?? "",
-  };
+  // Every populated column of the four entities in hand, keyed exactly as the
+  // catalog names it — so a column added to `providers` is authorable and
+  // resolvable with no edit here.
+  const tokens = buildEntityTokenValues({ provider, group, facility, mso });
+
+  const address = facility
+    ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
+    : null;
+  if (address) tokens["facility.address"] = address;
+
+  // The state-specific license wins over the provider row's own column: the
+  // case is filed in one state, and that is the number the payer wants.
+  const licenseNumber = stateLicenseNumber?.trim() || provider.licenseNumber?.trim() || "";
+  if (licenseNumber) {
+    tokens["provider.licenseNumber"] = licenseNumber;
+    tokens["license.licenseNumber"] = licenseNumber;
+  }
+
+  return tokens;
 }
 
-// The closed set of token keys this resolver can substitute, for the SOP
-// authoring picker (E1.7b TE-7): the picker must advertise only tokens that
-// resolve here — case-scoped catalog families (payer.*, mso.*, contract.*
-// beyond the map below) are filtered out of `dataFields` at resolution and
-// would be silently lost.
-export function resolvableTokenKeys(): string[] {
-  return Object.keys(
-    buildTokenMap({
-      provider: {} as Provider,
-      group: null,
-      facility: null,
-      mso: null,
-      stateLicenseNumber: null,
-    }),
-  );
+// Whether the SOP authoring picker may advertise a token (E1.7b TE-7): a
+// `dataFields` entry this resolver cannot substitute is silently filtered at
+// resolution, so authoring it loses the field.
+//
+// Family-based rather than key-based, because resolution is now a lookup on the
+// entity: any column of providers/provider_groups/facilities/msos resolves, so
+// the picker widens with the schema instead of waiting for someone to extend a
+// map. Excluded families are the ones with NO row in hand at case creation —
+// case-scoped payer.*/contract.*, the child-row assignment.*/groupInsurance.*,
+// the org-contact families (fill-time only, D12), and user.*.
+export function isResolvableToken(token: string): boolean {
+  if ((COMPOSED_TOKENS as readonly string[]).includes(token)) return true;
+  return ENTITY_TOKEN_FAMILIES.includes(token.split(".")[0]);
 }
 
-// E1.7b F1.7b.5 (TE-14) — the closed set of email-valued token keys a
-// draft-email recipient may resolve. A STRICT SUBSET of resolvableTokenKeys():
-// that set advertises every substitutable token (provider.npi, facility.city,
-// …), but only these carry an actual email address. Today that is
-// `provider.email` alone — facility/group/mso and payer-contact tokens are
-// deferred (AQ2, additive later once a resolver value exists), and `payer.*` has
-// no resolver value at all and must NEVER be accepted as a recipient token. The
+// The token a fresh token-source recipient row starts on — every case has a
+// provider, so it is the one recipient token guaranteed to have a holder.
+export const DEFAULT_EMAIL_RECIPIENT_TOKEN = "provider.email";
+
+// E1.7b F1.7b.5 (TE-14) — whether a token may be a draft-email recipient. A
+// STRICT SUBSET of isResolvableToken(): that admits every substitutable token
+// (provider.npi, facility.city, …), and only these carry an actual address.
+//
+// Schema-following like resolution itself: an email column is named `*_email`
+// (`providers.email`, `provider_groups.credentialing_email`,
+// `facilities.email`), so the recipient set widens with the schema. A family
+// with no row in hand is still rejected — `payer.*` has no resolver value at
+// all and must NEVER be accepted as a recipient token — and so are the D12
+// org-contact families, which resolve at fill time, not at case creation. The
 // authoring picker (TE-15) and the publish lint (TE-16) both read this as the
-// single authority; keep it a subset of the map keys above.
-export function emailValuedTokenKeys(): string[] {
-  return ["provider.email"];
+// single authority.
+export function isEmailValuedToken(token: string): boolean {
+  if (!isResolvableToken(token)) return false;
+  const [, local = ""] = token.split(".");
+  return local === "email" || /[a-z]Email$/.test(local);
 }
 
 const TOKEN_PATTERN = /{{\s*([a-zA-Z0-9_.]+)\s*}}/g;

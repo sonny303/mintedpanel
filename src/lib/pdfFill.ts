@@ -11,6 +11,7 @@
 // server bundle). It only knows about field NAMES (strings) and value maps, so it
 // stays pure, deterministic, and unit-tested — the browser layer (pdfFillClient)
 // reads the field names off the PDF and hands them here.
+import { buildEntityTokenValues, composeAddressToken } from "@/lib/entityTokens";
 import { normalizeFieldLabel } from "@/lib/tokenFormat";
 import type { Facility, FieldDictionaryEntry, Provider, ProviderGroup } from "@/types";
 
@@ -100,80 +101,25 @@ export function resolvePdfValues(
 // Build the token -> value map from the provider/case data the case page already
 // has — NO network call. Keys are the bare catalog token form (the same the
 // field_dictionary stores), so mapPdfFields' tokens join by literal string match.
-// A subset of the full 132-token catalog: the provider/group/facility fields the
-// case detail carries (case-scoped payer/mso/contract tokens are resolved
-// server-side elsewhere and are intentionally absent here). Only non-empty string
-// values are included; an absent key resolves to "no_value", never a blank fill.
+// Case-scoped payer/mso/contract tokens are resolved server-side elsewhere and
+// are intentionally absent here. Only non-empty values are included; an absent
+// key resolves to "no_value", never a blank fill.
+//
+// The provider/group/facility keys come from the shared schema-following sweep
+// (entityTokens) rather than a hand-written list: this map used to name ~40 of
+// the catalog's provider/group/facility tokens, so a mapped field whose column
+// simply was not listed here filled as "no_value".
 export function buildProviderTokenValues(
   provider: Provider | null,
   group: ProviderGroup | null,
   facility: Facility | null,
 ): Record<string, string> {
-  const out: Record<string, string> = {};
-  const set = (token: string, raw: string | null | undefined) => {
-    if (raw == null) return;
-    const value = String(raw).trim();
-    if (value !== "") out[token] = value;
-  };
-
-  if (provider) {
-    set("provider.firstName", provider.firstName);
-    set("provider.lastName", provider.lastName);
-    set("provider.middleInitial", provider.middleInitial);
-    set("provider.suffix", provider.suffix);
-    set("provider.credentials", provider.credentials);
-    set("provider.email", provider.email);
-    set("provider.phone", provider.phone);
-    set("provider.dateOfBirth", provider.dateOfBirth);
-    set("provider.ssnLast4", provider.ssnLast4);
-    set("provider.gender", provider.gender);
-    set("provider.ethnicity", provider.ethnicity);
-    set("provider.homeStreet", provider.homeStreet);
-    set("provider.homeCity", provider.homeCity);
-    set("provider.homeState", provider.homeState);
-    set("provider.homeZip", provider.homeZip);
-    set("provider.npi", provider.npi);
-    set("provider.caqhId", provider.caqhId);
-    set("provider.caqhLastAttestedDate", provider.caqhLastAttestedDate);
-    set("provider.deaNumber", provider.deaNumber);
-    set("provider.deaExpirationDate", provider.deaExpirationDate);
-    set("provider.taxonomyCode", provider.taxonomyCode);
-    set("provider.specialty", provider.specialty);
-    set("provider.subSpecialty", provider.subSpecialty);
-    set("provider.startDate", provider.startDate);
-    set("provider.degree", provider.degree);
-    set("provider.schoolName", provider.schoolName);
-    set("provider.graduationDate", provider.graduationDate);
-    set("provider.malpracticeCarrier", provider.malpracticeCarrier);
-    set("provider.malpracticePolicyNumber", provider.malpracticePolicyNumber);
-    set("provider.malpracticeCoverageStart", provider.malpracticeCoverageStart);
-    set("provider.malpracticeCoverageEnd", provider.malpracticeCoverageEnd);
-    set("provider.licenseNumber", provider.licenseNumber);
-    set("provider.licenseState", provider.licenseState);
-    set("provider.licenseIssueDate", provider.licenseIssueDate);
-    set("provider.licenseExpirationDate", provider.licenseExpirationDate);
-  }
-
-  if (group) {
-    set("group.name", group.name);
-    set("group.tin", group.tin);
-    set("group.npiType2", group.npiType2);
-  }
-
-  if (facility) {
-    set("facility.name", facility.name);
-    set("facility.street", facility.street);
-    set("facility.city", facility.city);
-    set("facility.state", facility.state);
-    set("facility.zip", facility.zip);
-    // Composed convenience token (mirrors sopResolver's facility.address).
-    const address = [facility.street, facility.city, facility.state, facility.zip]
-      .map((part) => part?.trim())
-      .filter(Boolean)
-      .join(", ");
-    set("facility.address", address);
-  }
-
+  const out = buildEntityTokenValues({ provider, group, facility });
+  const address = facility
+    ? composeAddressToken([facility.street, facility.city, facility.state, facility.zip])
+    : null;
+  // Composed convenience token (mirrors sopResolver's facility.address).
+  if (address) out["facility.address"] = address;
   return out;
 }
 

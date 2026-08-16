@@ -21,6 +21,11 @@ interface TokenPickerProps {
   onValueChange: (token: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
+  /** Clear the trigger back to the placeholder after a pick. For an INSERT
+   * action (append `{{token}}` to an email body) there is no selected token to
+   * display — the control is a menu, not a value. */
+  clearOnSelect?: boolean;
 }
 
 export function TokenPicker({
@@ -30,11 +35,21 @@ export function TokenPicker({
   onValueChange,
   placeholder = "Map a token…",
   className,
+  disabled = false,
+  clearOnSelect = false,
 }: TokenPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const options = useMemo(() => filterTokenGroups(groupedTokens, query), [groupedTokens, query]);
+
+  function pick(token: string) {
+    onValueChange(token);
+    setOpen(false);
+    setQuery("");
+  }
+
+  const shown = clearOnSelect ? "" : value;
 
   return (
     <Popover
@@ -51,6 +66,7 @@ export function TokenPicker({
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
+          disabled={disabled}
           className={cn(
             "flex h-7 w-56 items-center gap-1.5 rounded-[4px] border border-[#E8E5E0] bg-white px-2.5 text-left text-[12px]",
             className,
@@ -59,10 +75,10 @@ export function TokenPicker({
           <span
             className={cn(
               "min-w-0 flex-1 truncate",
-              value ? "text-foreground" : "text-muted-foreground",
+              shown ? "text-foreground" : "text-muted-foreground",
             )}
           >
-            {value || placeholder}
+            {shown || placeholder}
           </span>
           <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />
         </button>
@@ -86,9 +102,7 @@ export function TokenPicker({
                 const first = options[0]?.items[0];
                 if (!first) return;
                 e.preventDefault();
-                onValueChange(first.token);
-                setOpen(false);
-                setQuery("");
+                pick(first.token);
               }
             }}
           />
@@ -116,11 +130,7 @@ export function TokenPicker({
                       type="button"
                       role="option"
                       aria-selected={selected}
-                      onClick={() => {
-                        onValueChange(token.token);
-                        setOpen(false);
-                        setQuery("");
-                      }}
+                      onClick={() => pick(token.token)}
                       className={cn(
                         "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-[#F5F4F1]",
                         selected && "bg-[#F7FAF8]",
