@@ -211,6 +211,68 @@ describe("createDocumentUploadIntent", () => {
     // folder 3's fresh in-flight object is left alone.
     expect(calls.removed).toEqual([[`${prefix}/2/old.pdf`]]);
   });
+
+  // TS-163 — filled_form (the ONE caseArtifact kind) is uploadable ONLY with
+  // a caseId; the case dimension is authorized at INTENT time, not just
+  // finalize, so a signed target is never minted for a case the caller can't
+  // see.
+  it("422s a filled_form intent with no caseId — free-floating case artifacts aren't a thing", async () => {
+    const { db, calls } = fakeDb({ providers: [orgProvider] });
+    const result = await createDocumentUploadIntent(ctx(db), {
+      ...intentInput,
+      kind: "filled_form",
+    });
+    expect(result).toMatchObject({ kind: "rejected", status: 422 });
+    expect(calls.signedUploadPaths).toEqual([]);
+  });
+
+  it("404s a filled_form intent whose caseId is cross-org, before minting a signed target", async () => {
+    const { db, calls } = fakeDb({
+      providers: [orgProvider],
+      credential_cases: [
+        { id: "case-1", org_id: OTHER_ORG, provider_id: PROVIDER, group_id: null },
+      ],
+    });
+    const result = await createDocumentUploadIntent(ctx(db), {
+      ...intentInput,
+      kind: "filled_form",
+      caseId: "case-1",
+    });
+    expect(result).toMatchObject({ kind: "rejected", status: 404 });
+    expect(calls.signedUploadPaths).toEqual([]);
+  });
+
+  it("404s a filled_form intent whose caseId is org-owned but not linked to the owner", async () => {
+    const { db, calls } = fakeDb({
+      providers: [orgProvider],
+      credential_cases: [
+        // Same org, but this case belongs to a DIFFERENT provider — never
+        // authorizes attaching to PROVIDER.
+        { id: "case-1", org_id: ORG, provider_id: "someone-else", group_id: null },
+      ],
+    });
+    const result = await createDocumentUploadIntent(ctx(db), {
+      ...intentInput,
+      kind: "filled_form",
+      caseId: "case-1",
+    });
+    expect(result).toMatchObject({ kind: "rejected", status: 404 });
+    expect(calls.signedUploadPaths).toEqual([]);
+  });
+
+  it("mints a filled_form intent when caseId links to the owner", async () => {
+    const { db, calls } = fakeDb({
+      providers: [orgProvider],
+      credential_cases: [{ id: "case-1", org_id: ORG, provider_id: PROVIDER, group_id: null }],
+    });
+    const result = await createDocumentUploadIntent(ctx(db), {
+      ...intentInput,
+      kind: "filled_form",
+      caseId: "case-1",
+    });
+    expect(result.kind).toBe("ok");
+    expect(calls.signedUploadPaths).toHaveLength(1);
+  });
 });
 
 describe("finalizeDocument", () => {

@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCanWrite } from "@/lib/permissions";
 import { fmtDate } from "@/lib/format";
 import {
+  DOCUMENT_KIND_META,
   classifyExpiration,
   currentVersions,
   documentKindLabel,
@@ -48,7 +49,17 @@ export function DocumentsPanel({ ownerType, ownerId, ownerName }: DocumentsPanel
   const providerQ = useProviderDocuments(ownerType === "provider" ? ownerId : "");
   const groupQ = useGroupDocuments(ownerType === "group" ? ownerId : "");
   const docsQ = ownerType === "provider" ? providerQ : groupQ;
-  const documents = useMemo(() => docsQ.data ?? [], [docsQ.data]);
+  // TS-163: filled_form is a case-scoped step artifact, never a canonical
+  // provider/group document — the vault list never shows it (a promoted
+  // step artifact writes a SECOND, canonical-kind row, which is what
+  // belongs here).
+  const documents = useMemo(
+    () =>
+      (docsQ.data ?? []).filter(
+        (d) => !(isDocumentKind(d.docType) && DOCUMENT_KIND_META[d.docType].caseArtifact),
+      ),
+    [docsQ.data],
+  );
   const today = localTodayIso();
 
   const [upload, setUpload] = useState<{ replaceTarget: ProviderDocument | null } | null>(null);

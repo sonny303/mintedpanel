@@ -15,6 +15,10 @@ import { Check, Copy, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PortalStepLink } from "@/components/portals/PortalStepLink";
+import {
+  StepArtifactsPanel,
+  type StepArtifactsContext,
+} from "@/components/documents/StepArtifactsPanel";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
 import { pdfFillFileStem } from "@/lib/pdfFill";
@@ -86,7 +90,13 @@ function HighlightedText({ text }: { text: string }) {
   );
 }
 
-function OnlineFormStep({ step }: { step: SOPStep }) {
+function OnlineFormStep({
+  step,
+  artifactsContext,
+}: {
+  step: SOPStep;
+  artifactsContext?: StepArtifactsContext;
+}) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
@@ -118,6 +128,7 @@ function OnlineFormStep({ step }: { step: SOPStep }) {
           Complete this step in the portal, then mark it done below.
         </p>
       )}
+      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
     </div>
   );
 }
@@ -186,7 +197,13 @@ function RecipientRow({
   );
 }
 
-function DraftEmailStep({ step }: { step: SOPStep }) {
+function DraftEmailStep({
+  step,
+  artifactsContext,
+}: {
+  step: SOPStep;
+  artifactsContext?: StepArtifactsContext;
+}) {
   const subject = step.emailTemplate?.subject ?? "";
   const body = step.emailTemplate?.body ?? "";
   const to = useMemo(() => step.emailTemplate?.to ?? [], [step.emailTemplate?.to]);
@@ -253,6 +270,8 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
         </div>
       </div>
 
+      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
+
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -264,6 +283,9 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
         </Button>
         <span className="text-[12px] text-muted-foreground">
           Opens a prefilled draft — review and send it yourself.
+          {(step.requiredArtifacts?.length ?? 0) > 0
+            ? " Gmail can't take attachments from a link — attach them above, then download and drag them into the draft."
+            : ""}
         </span>
       </div>
     </div>
@@ -274,7 +296,15 @@ function DraftEmailStep({ step }: { step: SOPStep }) {
 // confirmed field_dictionary (the SAME memory the portal mapper trains), fill
 // from this case's provider data, and download locally. pdf-lib is loaded lazily
 // (client-only) by the pdfFillClient helpers. Nothing is ever submitted.
-function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<string, string> }) {
+function PdfStep({
+  step,
+  tokenValues,
+  artifactsContext,
+}: {
+  step: SOPStep;
+  tokenValues: Record<string, string>;
+  artifactsContext?: StepArtifactsContext;
+}) {
   const dictQ = useFieldDictionary();
   const dictionary = useMemo(() => dictQ.data ?? [], [dictQ.data]);
   const [file, setFile] = useState<File | null>(null);
@@ -408,6 +438,7 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
           Downloads locally — nothing is submitted.
         </span>
       </div>
+      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
     </div>
   );
 }
@@ -415,7 +446,13 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
 // E1.7b: fax/phone/mail/custom steps render as plain instructions — label/detail,
 // data fields, and the turnaround/cadence/artifact metadata; deliberately no
 // portal affordances (those belong to online_form steps only).
-function PlainChannelStep({ step }: { step: SOPStep }) {
+function PlainChannelStep({
+  step,
+  artifactsContext,
+}: {
+  step: SOPStep;
+  artifactsContext?: StepArtifactsContext;
+}) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
@@ -431,10 +468,14 @@ function PlainChannelStep({ step }: { step: SOPStep }) {
           ))}
         </dl>
       ) : null}
+      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
     </div>
   );
 }
 
+// TS-163: the artifacts checklist itself now renders as StepArtifactsPanel
+// (attach/download/promote, not just a name list) — this stays turnaround/
+// cadence-only.
 function StepCadenceMeta({ step }: { step: SOPStep }) {
   const parts: string[] = [];
   if (typeof step.expectedTurnaroundDays === "number") {
@@ -443,28 +484,32 @@ function StepCadenceMeta({ step }: { step: SOPStep }) {
   if (typeof step.followUpEveryDays === "number") {
     parts.push(`follow up every ${step.followUpEveryDays} days`);
   }
-  const artifacts = step.requiredArtifacts ?? [];
-  if (parts.length === 0 && artifacts.length === 0) return null;
-  return (
-    <div className="space-y-1 text-[12px] text-muted-foreground">
-      {parts.length > 0 ? <p>{parts.join(" · ")}</p> : null}
-      {artifacts.length > 0 ? <p>Artifacts to save: {artifacts.join(", ")}</p> : null}
-    </div>
-  );
+  if (parts.length === 0) return null;
+  return <div className="space-y-1 text-[12px] text-muted-foreground">{parts.join(" · ")}</div>;
 }
 
 export function StepBody({
   step,
   tokenValues = {},
+  artifactsContext,
 }: {
   step: SOPStep;
   tokenValues?: Record<string, string>;
+  /** TS-163: threads the case/task/provider/group identifiers a step's
+   * StepArtifactsPanel needs to attach/promote a file. Optional — a caller
+   * that hasn't wired case context yet (or /tasks/$id's own hand-rolled
+   * renderer, which doesn't use StepBody) simply renders no attachments UI. */
+  artifactsContext?: StepArtifactsContext;
 }) {
   const stepType = step.stepType ?? "online_form";
-  if (stepType === "draft_email") return <DraftEmailStep step={step} />;
-  if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
-  if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
-    return <PlainChannelStep step={step} />;
+  if (stepType === "draft_email") {
+    return <DraftEmailStep step={step} artifactsContext={artifactsContext} />;
   }
-  return <OnlineFormStep step={step} />;
+  if (stepType === "pdf") {
+    return <PdfStep step={step} tokenValues={tokenValues} artifactsContext={artifactsContext} />;
+  }
+  if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
+    return <PlainChannelStep step={step} artifactsContext={artifactsContext} />;
+  }
+  return <OnlineFormStep step={step} artifactsContext={artifactsContext} />;
 }

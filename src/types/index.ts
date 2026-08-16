@@ -1023,6 +1023,37 @@ export interface SOPStep {
    * live here, never as token-less data fields.
    */
   requiredArtifacts?: string[];
+  /**
+   * TS-163 — files attached to satisfy this step's `requiredArtifacts`. Each
+   * entry points at a `provider_documents` row (uploaded via the E4.5
+   * signing boundary, case-scoped via `caseId`); the row itself is the
+   * source of truth, this array is a denormalized pointer + display cache so
+   * the step can render attachment state without a documents fetch. Written
+   * by `attachStepArtifact`/`detachStepArtifact` (src/services/tasks.ts),
+   * mirroring how `isCompleted`/`completedAt`/`completedBy` already live on
+   * this stamped snapshot. Absent on every pre-existing step.
+   */
+  attachments?: SOPStepAttachment[];
+}
+
+/**
+ * TS-163 — one file attached to a task's SOP step, satisfying a
+ * `requiredArtifacts` entry. `documentId` points at the `provider_documents`
+ * row that actually holds the file (owner = provider or group, `caseId` set
+ * to this step's case — see src/services/documentStorage.ts). `kind` is
+ * `"filled_form"` for a free-form case artifact, or the resolved canonical
+ * `DocumentKind` when the operator explicitly promoted the upload into the
+ * provider/group vault (`src/lib/documents.ts` `parseDocumentKind`) — the
+ * promotion is a second `provider_documents` row, never a rewrite of this
+ * one, so `kind` here always names what THIS attachment actually is.
+ */
+export interface SOPStepAttachment {
+  documentId: string;
+  artifactName: string;
+  fileName: string;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  kind: DocumentKind;
 }
 
 export interface Task {

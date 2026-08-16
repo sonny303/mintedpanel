@@ -22,6 +22,7 @@ import {
   parseDocumentKind,
   requiredDocumentKinds,
   safeFileName,
+  stepArtifactRows,
   uploadableKinds,
 } from "./documents";
 import type { SOPStep } from "@/types";
@@ -80,6 +81,13 @@ describe("kind metadata (TE-5)", () => {
     expect(group).not.toContain("state_license");
     expect(provider).not.toContain("filled_form");
     expect(group).not.toContain("filled_form");
+  });
+
+  it("marks filled_form the ONE case-artifact kind (TS-163) — nothing else qualifies", () => {
+    const caseArtifactKinds = Object.values(DOCUMENT_KIND_META)
+      .filter((m) => m.caseArtifact)
+      .map((m) => m.kind);
+    expect(caseArtifactKinds).toEqual(["filled_form"]);
   });
 
   it("expirationDateError blocks a dated kind without a date and passes others", () => {
@@ -248,6 +256,57 @@ describe("SOP required-kind matching (TE-7)", () => {
       { sopContent: [step(["w9", "state_license"])] },
     ]);
     expect(kinds).toEqual(["w9", "coi", "state_license"]);
+  });
+});
+
+describe("step artifact rows (TS-163)", () => {
+  const attachment = (documentId: string, artifactName: string) => ({
+    documentId,
+    artifactName,
+    fileName: `${documentId}.pdf`,
+    uploadedAt: "2026-08-16T10:00:00.000Z",
+    uploadedBy: "u1",
+    kind: "filled_form" as const,
+  });
+
+  it("pairs each requiredArtifacts entry with its attachment by name", () => {
+    const step = {
+      requiredArtifacts: ["Submission confirmation PDF", "State License"],
+      attachments: [attachment("d1", "Submission confirmation PDF")],
+    };
+    const { rows, orphans } = stepArtifactRows(step);
+    expect(rows).toEqual([
+      {
+        artifactName: "Submission confirmation PDF",
+        resolvedKind: null,
+        attachment: attachment("d1", "Submission confirmation PDF"),
+        state: "attached",
+      },
+      {
+        artifactName: "State License",
+        resolvedKind: "state_license",
+        attachment: null,
+        state: "missing",
+      },
+    ]);
+    expect(orphans).toEqual([]);
+  });
+
+  it("returns an attachment whose artifact name no longer exists as an orphan, never dropped", () => {
+    const step = {
+      requiredArtifacts: ["Submission confirmation PDF"],
+      attachments: [
+        attachment("d1", "Submission confirmation PDF"),
+        attachment("d2", "Retired artifact name"),
+      ],
+    };
+    const { rows, orphans } = stepArtifactRows(step);
+    expect(rows).toHaveLength(1);
+    expect(orphans).toEqual([attachment("d2", "Retired artifact name")]);
+  });
+
+  it("handles a step with no requiredArtifacts and no attachments", () => {
+    expect(stepArtifactRows({})).toEqual({ rows: [], orphans: [] });
   });
 });
 

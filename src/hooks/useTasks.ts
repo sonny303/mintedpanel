@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  attachStepArtifact,
   completeSOPStep,
   createFollowUpTask,
   createProviderOutreachTask,
+  detachStepArtifact,
   getTask,
   getTasks,
   updateTaskStatus,
@@ -13,7 +15,7 @@ import {
   type ProviderOutreachTaskInput,
   type TaskFilters,
 } from "@/services/tasks";
-import type { TaskStatus } from "@/types";
+import type { SOPStepAttachment, TaskStatus } from "@/types";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -94,6 +96,55 @@ export function useCompleteSOPStep() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (vars: CompleteSOPStepVars) => completeSOPStep(vars.taskId, vars.stepId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// TS-163 — step artifact attach/detach. The document itself is written
+// separately (useUploadDocument, the E4.5 signing boundary); these mutations
+// only link/unlink the resulting documentId onto the step's sop_content.
+// Invalidates the documents prefix too — a promoted (vault) attachment
+// changes what the provider/group DocumentsPanel and readiness derivations
+// see, same as useUploadDocument's own invalidation list.
+export interface AttachStepArtifactVars {
+  taskId: string;
+  stepId: string;
+  attachment: SOPStepAttachment;
+}
+
+export function useAttachStepArtifact() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: AttachStepArtifactVars) =>
+      attachStepArtifact(vars.taskId, vars.stepId, vars.attachment),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["documents", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface DetachStepArtifactVars {
+  taskId: string;
+  stepId: string;
+  documentId: string;
+}
+
+export function useDetachStepArtifact() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: DetachStepArtifactVars) =>
+      detachStepArtifact(vars.taskId, vars.stepId, vars.documentId),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["tasks", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });

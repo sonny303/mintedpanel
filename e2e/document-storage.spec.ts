@@ -107,6 +107,8 @@ interface DocRowInput {
   versionNumber?: number;
   supersedes?: string | null;
   fileName?: string;
+  /** TS-163: usage context (E4.5 TE-1) — the caseArtifact grain sets this. */
+  caseId?: string | null;
 }
 
 // A snake_case provider_documents fixture row in the POST-migration shape.
@@ -117,7 +119,7 @@ function docRow(input: DocRowInput) {
     org_id: ORG_ID,
     provider_id: input.providerId ?? null,
     group_id: input.groupId ?? null,
-    case_id: null,
+    case_id: input.caseId ?? null,
     doc_type: input.docType,
     file_name: input.fileName ?? `${input.docType}.pdf`,
     file_path: `org/${ORG_ID}/${input.providerId ? "provider" : "group"}/${
@@ -282,6 +284,28 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
     const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
     if (table === "provider_documents") rec.documentQueries.push(url.search);
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
+    // TS-163: tasks PATCH (attachStepArtifact/detachStepArtifact write
+    // sop_content) write-through — the house write-through-the-fixtures
+    // idiom, so the invalidate-and-refetch loop after an attach/detach
+    // reflects the real new step state instead of a stubbed {}.
+    if (req.method() === "PATCH" && table === "tasks") {
+      const idParam = url.searchParams.get("id");
+      const id = idParam?.startsWith("eq.") ? idParam.slice(3) : null;
+      let patch: Record<string, unknown> = {};
+      try {
+        patch = req.postData()
+          ? (JSON.parse(req.postData() as string) as Record<string, unknown>)
+          : {};
+      } catch {
+        patch = {};
+      }
+      fixtures.tasks = (fixtures.tasks ?? []).map((t) => {
+        const row = t as Record<string, unknown>;
+        return row.id === id ? { ...row, ...patch } : row;
+      });
+      const updated = (fixtures.tasks ?? []).find((t) => (t as Record<string, unknown>).id === id);
+      return json(wantsObject ? (updated ?? {}) : [updated ?? {}]);
+    }
     if (req.method() !== "GET") return json(wantsObject ? {} : [{}], 201);
 
     let rows = applyQuery(fixtures[table] ?? [], url);
@@ -383,6 +407,7 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
         versionNumber: body.versionNumber as number,
         supersedes: (head?.id as string | undefined) ?? null,
         fileName: body.fileName as string,
+        caseId: (body.caseId as string | null) ?? null,
       });
       fixtures.provider_documents = [...(fixtures.provider_documents ?? []), row];
       return json(camelDoc(row), 201);
@@ -804,4 +829,196 @@ test("TS-90: case detail renders no required-documents card; the current version
   await popupPromise;
   const download = rec.apiCalls.find((c) => c.path.endsWith("/doc-lic/download"));
   expect(download).toBeTruthy();
+});
+
+// TS-163: SOP step artifact attachment. A step's requiredArtifacts checklist
+// renders inside the TaskDrawer (every step type — this fixture exercises
+// online_form AND fax on the same task) with per-artifact attach/remove,
+// download-all once a step carries ≥2 attachments, and the explicit
+// promote-to-vault path for a resolvable artifact name (writes a SECOND,
+// canonical-kind document — never a rewrite of the case-scoped one).
+test("TS-163: step artifacts attach/detach, download-all, and promote to the provider's vault", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures({
+    providers: [providerRow()],
+    provider_groups: [groupRow()],
+    payers: [
+      {
+        id: PAYER_ID,
+        org_id: null,
+        name: "Blue Cross and Blue Shield of North Carolina",
+        payer_kind: "commercial",
+        states: ["NC"],
+        aliases: [],
+        status: "active",
+        payer_slug: "bcbs-nc",
+        is_active: true,
+        created_at: "2026-07-10T00:00:00Z",
+      },
+    ],
+    credential_cases: [
+      {
+        id: CASE_ID,
+        org_id: ORG_ID,
+        provider_id: PROVIDER_ID,
+        group_id: GROUP_ID,
+        payer_id: PAYER_ID,
+        state: "NC",
+        facility_id: null,
+        credentialing_status_id: null,
+        payer_pipeline_state: "assigned",
+        payer_reference_id: null,
+        submitted_date: null,
+        confirmed_effective_date: null,
+        specialty: null,
+        assigned_to: null,
+        generation_run_id: null,
+        created_by: USER_ID,
+        created_at: "2026-07-14T00:00:00Z",
+        updated_at: "2026-07-14T00:00:00Z",
+      },
+    ],
+    tasks: [
+      {
+        id: "task-1",
+        org_id: ORG_ID,
+        case_id: CASE_ID,
+        provider_id: PROVIDER_ID,
+        title: "Submit enrollment packet",
+        description: null,
+        sop_content: [
+          // Step 1 is pre-completed (isCompleted: true) so BOTH steps render
+          // their bodies simultaneously — only the first INCOMPLETE step is
+          // "active"; a completed earlier step is never locked (TaskDrawer).
+          {
+            id: "s1",
+            order: 1,
+            label: "Gather submission proof",
+            isCompleted: true,
+            stepType: "online_form",
+            requiredArtifacts: ["Submission confirmation PDF", "Fax cover sheet"],
+          },
+          {
+            id: "s2",
+            order: 2,
+            label: "Fax the roster",
+            isCompleted: false,
+            stepType: "fax",
+            requiredArtifacts: ["State License"],
+          },
+        ],
+        status: "in_progress",
+        sort_order: 1,
+        due_date: null,
+        completed_date: null,
+        is_auto_generated: true,
+        sop_template_id: null,
+        sop_version: null,
+        execution_type: null,
+        sop_resolution_tier: null,
+        created_at: "2026-07-14T00:00:00Z",
+        updated_at: "2026-07-14T00:00:00Z",
+      },
+    ],
+    provider_documents: [],
+  });
+  const rec = await mountAll(context, fixtures);
+
+  await page.goto(`/cases/${CASE_ID}`);
+  await expect(page.getByRole("button", { name: "Update status" })).toBeVisible({ timeout: 30000 });
+
+  await page.getByText("Submit enrollment packet").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // Both step-1 artifacts start Missing.
+  const proofRow = dialog.getByRole("listitem").filter({ hasText: "Submission confirmation PDF" });
+  const coverRow = dialog.getByRole("listitem").filter({ hasText: "Fax cover sheet" });
+  await expect(proofRow.getByText("Missing")).toBeVisible();
+  await expect(coverRow.getByText("Missing")).toBeVisible();
+
+  // Attach the first artifact — a case-scoped filled_form upload (never the
+  // provider's own vault).
+  await proofRow
+    .getByLabel("Attach a file for Submission confirmation PDF")
+    .setInputFiles(FAKE_PDF);
+  await proofRow.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(proofRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
+  await expect(proofRow).toContainText("license.pdf");
+
+  const firstFinalize = rec.apiCalls.find((c) => c.path.endsWith("/finalize"));
+  expect(firstFinalize?.body).toMatchObject({
+    ownerType: "provider",
+    ownerId: PROVIDER_ID,
+    kind: "filled_form",
+    caseId: CASE_ID,
+  });
+  // The step now carries the attachment on its own sop_content (the tasks
+  // write-through — a real PATCH, not the generic stub).
+  const taskAfterFirst = fixtures.tasks[0] as { sop_content: Array<{ attachments?: unknown[] }> };
+  expect(taskAfterFirst.sop_content[0].attachments).toHaveLength(1);
+
+  // "Download all attachments" is per-STEP (≥2 attachments on the SAME
+  // step) — not yet visible with only one attached.
+  await expect(dialog.getByRole("button", { name: "Download all attachments" })).toHaveCount(0);
+
+  // Attach the second artifact on the SAME step — the download-all
+  // affordance appears once the step carries 2.
+  await coverRow.getByLabel("Attach a file for Fax cover sheet").setInputFiles(FAKE_PDF);
+  await coverRow.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(coverRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
+
+  const downloadAllButton = dialog.getByRole("button", { name: "Download all attachments" });
+  await expect(downloadAllButton).toBeVisible();
+  await downloadAllButton.click();
+  await expect
+    .poll(() => rec.apiCalls.filter((c) => c.path.includes("/download")).length, { timeout: 15000 })
+    .toBe(2);
+
+  // Remove (detach) the first attachment — reverts to Missing; the
+  // underlying provider_documents row is never deleted (no delete grant),
+  // only the step's reference to it.
+  await proofRow
+    .getByRole("button", { name: "Remove Submission confirmation PDF attachment" })
+    .click();
+  await expect(proofRow.getByText("Missing")).toBeVisible({ timeout: 15000 });
+  expect(fixtures.provider_documents.length).toBeGreaterThan(0);
+
+  // Step 2's "State License" artifact resolves to a canonical machine kind —
+  // the promote checkbox offers a SECOND, provider-owned upload.
+  const licenseRow = dialog.getByRole("listitem").filter({ hasText: "State License" });
+  await expect(licenseRow.getByText("Missing")).toBeVisible();
+  await licenseRow.getByLabel("Attach a file for State License").setInputFiles(FAKE_PDF);
+  await licenseRow.getByLabel(/Also save to the provider's documents as State License/).check();
+  await licenseRow.getByRole("button", { name: "State License expiration date" }).click();
+  const monthName = new Date().toLocaleString("en-US", { month: "long" });
+  await page
+    .getByRole("button", { name: new RegExp(`${monthName} 28th`) })
+    .first()
+    .click();
+  await licenseRow.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(licenseRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
+
+  // Two finalize calls for THIS artifact: the case-scoped filled_form, then
+  // the promoted canonical state_license — two independent documents, not a
+  // rewrite of the first.
+  const licenseFinalizes = rec.apiCalls.filter(
+    (c) => c.path.endsWith("/finalize") && (c.body as { kind?: string }).kind === "state_license",
+  );
+  expect(licenseFinalizes).toHaveLength(1);
+  expect(licenseFinalizes[0].body).toMatchObject({
+    ownerType: "provider",
+    ownerId: PROVIDER_ID,
+    kind: "state_license",
+    caseId: CASE_ID,
+  });
+  const filledFormFinalizes = rec.apiCalls.filter(
+    (c) => c.path.endsWith("/finalize") && (c.body as { kind?: string }).kind === "filled_form",
+  );
+  // "Submission confirmation PDF", "Fax cover sheet", and the State License
+  // step's own case-scoped copy — three case-scoped uploads across the test,
+  // each a distinct provider_documents row (the detach never deleted one).
+  expect(filledFormFinalizes).toHaveLength(3);
 });

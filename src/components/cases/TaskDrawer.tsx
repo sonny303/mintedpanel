@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { StepBody } from "@/components/cases/StepDetails";
+import type { StepArtifactsContext } from "@/components/documents/StepArtifactsPanel";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
@@ -42,6 +43,11 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
+  /** TS-163: the case's group id (Task carries caseId/providerId itself but
+   * not groupId) — threaded from the case page so StepArtifactsPanel can
+   * resolve a group-owned artifact's owner. Null for a legacy NULL-group
+   * case (the panel falls back to the provider grain). */
+  groupId?: string | null;
 }
 
 function initialsOf(name: string | null | undefined): string {
@@ -73,12 +79,19 @@ export function TaskDrawer({
   open,
   onOpenChange,
   tokenValues,
+  groupId = null,
 }: TaskDrawerProps) {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
 
   const taskQ = useTask(open && taskId ? taskId : undefined);
   const task = taskQ.data ?? fallbackTask;
+
+  // TS-163: undefined (not built) when there's no task yet — StepBody treats
+  // "no context" as "no attachments UI", never a crash.
+  const artifactsContext: StepArtifactsContext | undefined = task
+    ? { taskId: task.id, caseId: task.caseId, providerId: task.providerId, groupId }
+    : undefined;
 
   const touchlogQ = useTaskTouchlog(open && taskId ? taskId : undefined);
   const updateStatusM = useUpdateTaskStatus();
@@ -305,7 +318,13 @@ export function TaskDrawer({
                                 the draft-email Gmail hand-off, the pdf
                                 filler — renders here for unlocked steps;
                                 locked steps stay label-only. */}
-                            {isLocked ? null : <StepBody step={step} tokenValues={tokenValues} />}
+                            {isLocked ? null : (
+                              <StepBody
+                                step={step}
+                                tokenValues={tokenValues}
+                                artifactsContext={artifactsContext}
+                              />
+                            )}
                           </div>
                           {isChecked ? (
                             <CheckCircle2 className="h-4 w-4 text-[#059669] flex-shrink-0" />

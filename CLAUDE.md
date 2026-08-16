@@ -2810,6 +2810,73 @@ seven behavioural probes — not by reasoning about the SQL.
   apply is the operator step, so a regen would reflect the pre-migration schema
   and delete the new column.
 
+### SOP step artifact attachment (TS-163, 2026-08-16)
+
+A case task's SOP step `requiredArtifacts` checklist (E1.7b) is now an actual
+attach/download surface, not just a name list. **No migration** — every
+column it needs already existed on `provider_documents` (E4.5's `case_id`
+usage-context column, the `provider OR group OR case` owner CHECK, and
+`filled_form` was already the case-linked doc_type kind).
+
+- **`filled_form` is now the ONE `caseArtifact` kind** (`DOCUMENT_KIND_META.
+caseArtifact` in `src/lib/documents.ts`) — case-scoped proof (portal
+  confirmation, screenshot, submission PDF), owner = provider or group with a
+  **REQUIRED `caseId`** (validated in `validateOwnerKindFile` at BOTH intent
+  and finalize — the intent-time check is new: `documentStorage.ts` gained
+  `verifyCaseLink`, shared by `createDocumentUploadIntent` and
+  `finalizeDocument`, so a case-scoped signed upload target is never minted
+  for a case the caller can't see). `filled_form` stays `uploadable: false`
+  (never offered by the vault's own kind picker — `uploadableKinds()`); the
+  step-artifact upload path targets it directly. It still never appears in
+  `DocumentsPanel` (the provider/group vault list) — filtered by the new
+  `caseArtifact` flag, verified safe-by-construction elsewhere
+  (`expiringCredentialRows` already drops dateless rows;
+  `listGroupReadinessDocuments` already filters `doc_type IN
+(w9,coi,voided_check)` at the SQL level).
+- **Promotion is explicit, never automatic.** An artifact NAME that resolves
+  to a canonical machine kind (`parseDocumentKind`, e.g. "State License")
+  offers a one-click "Also save to \<owner\>'s documents as \<Label\>"
+  checkbox — a SECOND, independent canonical-kind upload (own `caseId` as
+  usage context, same E4.5 signing boundary), never a rewrite of the
+  case-scoped one. Both rows are independently addressable/downloadable.
+- **Step link is JSONB, no DDL.** `SOPStep.attachments?: SOPStepAttachment[]`
+  (additive on the protected `src/types/index.ts` — each entry a
+  `{documentId, artifactName, fileName, uploadedAt, uploadedBy, kind}`
+  pointer, denormalized for render without a second documents fetch). Pure
+  planner `src/lib/sopStepAttachments.ts` (`planAttachStepArtifact`/
+  `planDetachStepArtifact`, tested) mirrors `sopStepCompletion.ts` exactly;
+  `src/services/tasks.ts` gained `attachStepArtifact`/`detachStepArtifact`
+  (re-read task → plan → PATCH `sop_content` ONLY, audited UPDATE — same
+  read-modify-write shape `completeSOPStep` already has, TD-52) →
+  `useAttachStepArtifact`/`useDetachStepArtifact` in `useTasks.ts`
+  (invalidate tasks/task/case/documents/audit-log). `stepArtifactRows(step)`
+  (`src/lib/documents.ts`) joins `requiredArtifacts` × `attachments` by exact
+  name; an attachment whose artifact name no longer exists (e.g. a reapply
+  restamped the checklist) comes back as an orphan, rendered under "Other
+  attachments" — never dropped.
+- **UI:** `src/components/documents/StepArtifactsPanel.tsx` (DESIGN-DEBT
+  logged, unspecced) renders on **every SOP step type** via `StepBody`
+  (`src/components/cases/StepDetails.tsx` — `OnlineFormStep`/`DraftEmailStep`/
+  `PdfStep`/`PlainChannelStep` all gained an optional `artifactsContext`
+  prop; `DraftEmailStep` places the panel above the Gmail button with an
+  honest "Gmail can't take attachments from a link" note when the step has
+  required artifacts; `StepCadenceMeta` dropped its old "Artifacts to save:"
+  text line, superseded by the panel). Per-step "Download all attachments"
+  appears once that ONE step carries ≥2 attachments (not global). Context
+  (`caseId`/`providerId`/`groupId`) is built in `TaskDrawer` from the task
+  itself (`caseId`/`providerId`) plus a new `groupId` prop threaded from
+  `CaseTasksPanel` ← `cases.$id.tsx` (`c.groupId` — the one piece `Task`
+  doesn't carry).
+- **Gate:** the caseId authorization check is unit-proven
+  (`documentStorage.di.test.ts`, `documentRoutes.test.ts`) but NOT added to
+  the live `/api` isolation gate — `upload-intent`/`finalize` have zero gate
+  coverage at all (pre-existing gap, TD-53; only `GET /:id/download` is
+  covered).
+- e2e `e2e/document-storage.spec.ts` (TS-163: attach/detach, per-step
+  download-all, the explicit promote-to-vault second upload — its harness
+  gained a `tasks` PATCH write-through, the house idiom for observing a real
+  refetch after a mutation).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,

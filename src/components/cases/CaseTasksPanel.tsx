@@ -42,10 +42,14 @@ function taskStatusIcon(status: Task["status"], locked: boolean) {
 export function CaseTasksPanel({
   tasks,
   tokenValues,
+  groupId = null,
 }: {
   tasks: Task[];
   /** token -> value map for the drawer's pdf-step filler (built by the case page). */
   tokenValues?: Record<string, string>;
+  /** TS-163: the case's group id, threaded to the drawer for
+   * StepArtifactsPanel's group-owned promote path. */
+  groupId?: string | null;
 }) {
   const canEdit = useCanWrite();
   const updateStatusM = useUpdateTaskStatus();
@@ -290,6 +294,7 @@ export function CaseTasksPanel({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         tokenValues={tokenValues}
+        groupId={groupId}
       />
 
       <Dialog

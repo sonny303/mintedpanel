@@ -149,6 +149,10 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
       fileSize: input.file.size,
       mimeType: input.file.type,
       familyId: input.familyId ?? null,
+      // TS-163: REQUIRED for caseArtifact kinds (filled_form) — the server
+      // now authorizes the case dimension at intent time too, not just
+      // finalize.
+      caseId: input.caseId ?? null,
     }),
   });
 
