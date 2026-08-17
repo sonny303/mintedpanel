@@ -149,6 +149,7 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Provid
       fileSize: input.file.size,
       mimeType: input.file.type,
       familyId: input.familyId ?? null,
+      caseId: input.caseId ?? null,
     }),
   });
 

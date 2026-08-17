@@ -51,6 +51,9 @@
 //                          when unset (the real gate waits for the operator to
 //                          seed + pin fixture documents); the in-sandbox mock
 //                          run always sets both.
+//   (no new env needed for 25/25b/26 — the document upload-intent + finalize
+//   write-path pair, ASD BITE-ASD-04, closing the TD-53 gap; they reuse
+//   KANSAS_PROVIDER_ID/SOUTHPARK_PROVIDER_ID as the owner ids.)
 //
 // Both users are single-org, so views 1-3 send no x-org-id (the guard resolves
 // each caller's sole org). Only the assertion-4 spoof sends an x-org-id.
@@ -874,6 +877,76 @@ function looksLikeVercelGate(r) {
       testSession.providerId == null,
     `status=${testFill.status} isTest=${testSession?.isTest} caseId=${testSession?.caseId}`,
     { leak: false },
+  );
+
+  // 25/25b/26 — document upload-intent + finalize (E4.5 TE-3, ASD
+  // BITE-ASD-02/04 closing the TD-53 gap: these two write endpoints had NO
+  // gate coverage — only the signed-download READ (17/17b) did). 25 proves
+  // the route works for Kansas's own provider (so 25b isn't vacuous against a
+  // dead route); 25b/26 are the leak checks — a South Park owner id must 404
+  // BEFORE any signing or metadata insert. Safe on production: the org-scoped
+  // owner lookup misses before a signed target is ever minted or a row ever
+  // written, so no real Storage object or provider_documents row is touched
+  // by 25b/26 regardless of leak mode. Leak "documentupload" makes both red.
+  const ownIntent = await apiPost(
+    "/api/documents/upload-intent",
+    {
+      ownerType: "provider",
+      ownerId: env.KANSAS_PROVIDER_ID,
+      kind: "state_license",
+      fileName: "gate-probe.pdf",
+      fileSize: 1024,
+      mimeType: "application/pdf",
+    },
+    { token: kansasTok },
+  );
+  check(
+    "25. Kansas mints an upload-intent for its own provider (signed target issued)",
+    ownIntent.status === 200 && typeof ownIntent.body?.data?.uploadUrl === "string",
+    `status=${ownIntent.status}` +
+      (ownIntent.status !== 200 ? ` body=${(ownIntent.raw || "").slice(0, 100)}` : ""),
+  );
+
+  const xIntent = await apiPost(
+    "/api/documents/upload-intent",
+    {
+      ownerType: "provider",
+      ownerId: env.SOUTHPARK_PROVIDER_ID,
+      kind: "state_license",
+      fileName: "gate-probe.pdf",
+      fileSize: 1024,
+      mimeType: "application/pdf",
+    },
+    { token: kansasTok },
+  );
+  const intentLeaked = xIntent.status < 400 || xIntent.body?.data != null;
+  check(
+    "25b. Kansas POST upload-intent naming a South Park provider -> 404, no signed target",
+    xIntent.status === 404 && !intentLeaked,
+    `status=${xIntent.status} (expect 404) dataPresent=${xIntent.body?.data != null}`,
+    { leak: true },
+  );
+
+  const xFinalize = await apiPost(
+    "/api/documents/finalize",
+    {
+      ownerType: "provider",
+      ownerId: env.SOUTHPARK_PROVIDER_ID,
+      kind: "state_license",
+      familyId: crypto.randomUUID(),
+      versionNumber: 1,
+      fileName: "gate-probe.pdf",
+      mimeType: "application/pdf",
+      expirationDate: "2030-01-01",
+    },
+    { token: kansasTok },
+  );
+  const finalizeLeaked = xFinalize.status < 400 || xFinalize.body?.data != null;
+  check(
+    "26. Kansas POST finalize naming a South Park provider -> 404, before any insert",
+    xFinalize.status === 404 && !finalizeLeaked,
+    `status=${xFinalize.status} (expect 404) dataPresent=${xFinalize.body?.data != null}`,
+    { leak: true },
   );
 
   // ---- Pass/fail table ----

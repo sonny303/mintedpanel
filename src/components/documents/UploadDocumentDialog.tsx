@@ -29,7 +29,7 @@ import {
   DOCUMENT_MIME_TYPES,
   checkDocumentFile,
   expirationDateError,
-  uploadableKinds,
+  vaultPickerKinds,
 } from "@/lib/documents";
 import { useUploadDocument } from "@/hooks/useDocuments";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
@@ -41,6 +41,13 @@ interface UploadDocumentDialogProps {
   /** Replace mode: the CURRENT version being superseded — locks the kind and
    * versions its family (prior versions retained, TE-1). */
   replaceTarget?: ProviderDocument | null;
+  /** ASD BITE-ASD-03 — preselect + lock the kind when there's no
+   * replaceTarget yet (the case-required-documents rail uploading a
+   * currently-MISSING kind, so there's no existing document to version).
+   * Ignored when replaceTarget is set — its docType wins. */
+  presetKind?: DocumentKind | null;
+  /** Optional usage context threaded to the upload-intent (ASD BITE-ASD-02). */
+  caseId?: string | null;
   onClose: () => void;
 }
 
@@ -49,17 +56,20 @@ export function UploadDocumentDialog({
   ownerId,
   ownerName,
   replaceTarget,
+  presetKind,
+  caseId,
   onClose,
 }: UploadDocumentDialogProps) {
   const uploadM = useUploadDocument();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [kind, setKind] = useState<DocumentKind | "">(replaceTarget?.docType ?? "");
+  const [kind, setKind] = useState<DocumentKind | "">(replaceTarget?.docType ?? presetKind ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [effectiveDate, setEffectiveDate] = useState(replaceTarget?.effectiveDate ?? "");
   const [expirationDate, setExpirationDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const kinds = uploadableKinds(ownerType);
+  const kindLocked = Boolean(replaceTarget) || Boolean(presetKind);
+  const kinds = vaultPickerKinds(ownerType);
   const expirationRequired = kind !== "" && DOCUMENT_KIND_META[kind].expirationRequired;
 
   const submit = () => {
@@ -91,6 +101,7 @@ export function UploadDocumentDialog({
         effectiveDate: effectiveDate || null,
         expirationDate: expirationDate || null,
         familyId: replaceTarget?.documentFamilyId ?? null,
+        caseId: caseId ?? null,
       },
       {
         onSuccess: (doc) => {
@@ -113,7 +124,9 @@ export function UploadDocumentDialog({
           <DialogTitle>
             {replaceTarget
               ? `Replace ${DOCUMENT_KIND_META[replaceTarget.docType].label}`
-              : "Upload document"}
+              : presetKind
+                ? `Upload ${DOCUMENT_KIND_META[presetKind].label}`
+                : "Upload document"}
           </DialogTitle>
           <DialogDescription>
             {replaceTarget
@@ -128,7 +141,7 @@ export function UploadDocumentDialog({
             <Select
               value={kind || undefined}
               onValueChange={(v) => setKind(v as DocumentKind)}
-              disabled={Boolean(replaceTarget)}
+              disabled={kindLocked}
             >
               <SelectTrigger id="doc-kind">
                 <SelectValue placeholder="Choose a kind" />

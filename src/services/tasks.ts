@@ -4,8 +4,13 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { planStepCompletion, stepCompletionPatch } from "@/lib/sopStepCompletion";
+import {
+  planAttachStepArtifact,
+  planDetachStepArtifact,
+  stepAttachmentPatch,
+} from "@/lib/sopStepAttachments";
 import { translateDbError } from "@/lib/dbErrors";
-import type { SOPStep, Task, TaskStatus } from "@/types";
+import type { SOPStep, SOPStepAttachment, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
   caseId: string;
@@ -253,6 +258,88 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
     before: { stepId, isCompleted: false },
     after: { stepId, isCompleted: true, taskStatus: after.status },
     description: `Completed SOP step "${nextSteps.find((st) => st.id === stepId)?.label ?? stepId}"`,
+  });
+  return after;
+}
+
+// ASD (Active Submission Drawer) — attach/detach a vault document pointer on
+// a step's requiredArtifacts checklist. Pure sop_content writes only: this
+// NEVER touches task status/completed_date (D-ASD-6) and never touches
+// provider_documents — the document itself is written separately via the
+// documents service (upload) or is an existing vault row (attach-existing).
+export async function attachStepArtifact(
+  taskId: string,
+  stepId: string,
+  attachment: SOPStepAttachment,
+): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const existing = await getTask(taskId);
+  if (!existing) throw new Error("Task not found");
+
+  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
+  const plan = planAttachStepArtifact(currentSteps, stepId, attachment);
+  if (!plan.ok) throw new Error("Step not found on task");
+  const patch = stepAttachmentPatch(plan);
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(patch as never)
+    .eq("id", taskId)
+    .eq("org_id", orgId)
+    .select("*")
+    .single();
+  if (error) throw translateDbError(error);
+  const after = camelizeRow<Task>(data);
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "task",
+    entityId: taskId,
+    before: { stepId, attached: false },
+    after: { stepId, documentId: attachment.documentId, fileName: attachment.fileName },
+    description: `Attached "${attachment.fileName}" to step "${attachment.artifactName}"`,
+  });
+  return after;
+}
+
+export async function detachStepArtifact(
+  taskId: string,
+  stepId: string,
+  documentId: string,
+): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const existing = await getTask(taskId);
+  if (!existing) throw new Error("Task not found");
+
+  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
+  const plan = planDetachStepArtifact(currentSteps, stepId, documentId);
+  if (!plan.ok) {
+    throw new Error(
+      plan.reason === "step_not_found" ? "Step not found on task" : "Attachment not found on step",
+    );
+  }
+  const detached = currentSteps
+    .find((s) => s.id === stepId)
+    ?.attachments?.find((a) => a.documentId === documentId);
+  const patch = stepAttachmentPatch(plan);
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(patch as never)
+    .eq("id", taskId)
+    .eq("org_id", orgId)
+    .select("*")
+    .single();
+  if (error) throw translateDbError(error);
+  const after = camelizeRow<Task>(data);
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "task",
+    entityId: taskId,
+    before: { stepId, documentId, fileName: detached?.fileName ?? null },
+    after: { stepId, attached: false },
+    description: `Removed "${detached?.fileName ?? "a file"}" from step`,
   });
   return after;
 }

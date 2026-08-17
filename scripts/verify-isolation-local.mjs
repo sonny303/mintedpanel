@@ -103,6 +103,10 @@ const EXPECTED_FAILS = {
   // registry read hands back a private org row (22), or the shared propose
   // writes under the caller's org (23).
   sharedtier: ["22", "22b", "23", "24"],
+  // ASD BITE-ASD-04: a cross-org owner is honored on BOTH document write
+  // endpoints — a signed upload target (25b) and a finalized metadata insert
+  // (26) — instead of 404ing before anything is signed or written.
+  documentupload: ["25b", "26"],
 };
 
 function failedAssertions(output) {

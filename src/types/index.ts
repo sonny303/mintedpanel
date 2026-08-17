@@ -1023,6 +1023,32 @@ export interface SOPStep {
    * live here, never as token-less data fields.
    */
   requiredArtifacts?: string[];
+  /**
+   * ASD (Active Submission Drawer rebuild, superseding TS-163) — files
+   * attached to this step's requiredArtifacts checklist. A POINTER ONLY
+   * (D-ASD-1): `documentId` is the sole identity, resolving through
+   * `/api/documents/:id/download` every time. Deliberately carries NO
+   * storage path — a path in this jsonb would go stale the moment a replace
+   * supersedes the version, and would invite a direct bucket read that skips
+   * the audited 120s signing endpoint (the one contract E4.5 TE-3 exists to
+   * hold). `fileName`/`kind`/`uploadedAt`/`uploadedBy` are a display cache
+   * only — the vault row is the source of truth for everything else
+   * (expiration, current-version status).
+   */
+  attachments?: SOPStepAttachment[];
+}
+
+/** ASD D-ASD-1 — one file attached to a step's artifact checklist. Points at
+ * a `provider_documents` row; never stores a path (see SOPStep.attachments). */
+export interface SOPStepAttachment {
+  /** provider_documents.id — the ONLY identity. */
+  documentId: string;
+  /** The requiredArtifacts entry this attachment satisfies. */
+  artifactName: string;
+  fileName: string;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  kind: DocumentKind;
 }
 
 export interface Task {

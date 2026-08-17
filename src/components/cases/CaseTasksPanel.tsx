@@ -42,10 +42,18 @@ function taskStatusIcon(status: Task["status"], locked: boolean) {
 export function CaseTasksPanel({
   tasks,
   tokenValues,
+  groupId = null,
+  providerName = "this provider",
+  groupName = null,
 }: {
   tasks: Task[];
   /** token -> value map for the drawer's pdf-step filler (built by the case page). */
   tokenValues?: Record<string, string>;
+  /** ASD — the case's group, threaded to the drawer's step-artifact panel
+   * and Active Documents rail. */
+  groupId?: string | null;
+  providerName?: string;
+  groupName?: string | null;
 }) {
   const canEdit = useCanWrite();
   const updateStatusM = useUpdateTaskStatus();
@@ -290,6 +298,10 @@ export function CaseTasksPanel({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         tokenValues={tokenValues}
+        groupId={groupId}
+        caseTasks={tasks}
+        providerName={providerName}
+        groupName={groupName}
       />
 
       <Dialog

@@ -178,7 +178,15 @@ function CaseDetailPage() {
                 list, each task's ordered steps beneath it, and the current
                 step's drawer carrying the step bodies (Gmail hand-off, pdf
                 filler, resolved fields) + Mark step done. */}
-            <CaseTasksPanel tasks={tasks} tokenValues={stepTokenValues} />
+            <CaseTasksPanel
+              tasks={tasks}
+              tokenValues={stepTokenValues}
+              groupId={c?.groupId ?? null}
+              providerName={
+                c?.provider ? `${c.provider.firstName} ${c.provider.lastName}` : "this provider"
+              }
+              groupName={c?.group?.name ?? null}
+            />
             <CaseTouchesPanel
               touches={touches}
               coordinators={coordinatorsQ.data ?? []}

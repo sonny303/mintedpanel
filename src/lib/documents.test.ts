@@ -13,6 +13,7 @@ import {
   currentVersions,
   documentFamilyPrefix,
   documentObjectPath,
+  downloadableCaseDocuments,
   expirationDateError,
   expiringCredentialRows,
   familyHistory,
@@ -21,10 +22,14 @@ import {
   orphanVersionFolders,
   parseDocumentKind,
   requiredDocumentKinds,
+  resolvableStepArtifactKind,
+  resolveDocumentOwnerTarget,
   safeFileName,
+  stepArtifactRows,
   uploadableKinds,
+  vaultPickerKinds,
 } from "./documents";
-import type { SOPStep } from "@/types";
+import type { SOPStep, SOPStepAttachment } from "@/types";
 
 const TODAY = "2026-07-17";
 
@@ -66,7 +71,7 @@ describe("kind metadata (TE-5)", () => {
     expect(DOCUMENT_KIND_META.board_cert.expiringSoonDays).toBe(30);
   });
 
-  it("offers provider kinds and group kinds per the D1 grains, never filled_form", () => {
+  it("offers provider kinds and group kinds per the D1 grains", () => {
     const provider = uploadableKinds("provider").map((m) => m.kind);
     const group = uploadableKinds("group").map((m) => m.kind);
     expect(provider).toContain("state_license");
@@ -78,8 +83,22 @@ describe("kind metadata (TE-5)", () => {
     expect(group).toContain("voided_check");
     expect(group).toContain("coi");
     expect(group).not.toContain("state_license");
-    expect(provider).not.toContain("filled_form");
-    expect(group).not.toContain("filled_form");
+  });
+
+  it("filled_form IS server-uploadable (the step-artifact write path) but never in the manual vault picker (D-ASD-4)", () => {
+    // The generic catch-all kind must be a real, storable kind — the step-
+    // artifact attach/upload flow uses it — but it must not clutter the
+    // "+ Upload" dropdown a human works from.
+    expect(uploadableKinds("provider").map((m) => m.kind)).toContain("filled_form");
+    expect(uploadableKinds("group").map((m) => m.kind)).toContain("filled_form");
+    expect(vaultPickerKinds("provider").map((m) => m.kind)).not.toContain("filled_form");
+    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain("filled_form");
+    // vaultPickerKinds otherwise matches uploadableKinds exactly (minus filled_form).
+    expect(vaultPickerKinds("provider").map((m) => m.kind)).toEqual(
+      uploadableKinds("provider")
+        .map((m) => m.kind)
+        .filter((k) => k !== "filled_form"),
+    );
   });
 
   it("expirationDateError blocks a dated kind without a date and passes others", () => {
@@ -303,6 +322,66 @@ describe("case document status (F4.5.3)", () => {
   });
 });
 
+describe("resolveDocumentOwnerTarget (ASD BITE-ASD-02/03)", () => {
+  it("routes a provider-only kind to the provider grain when one is on hand", () => {
+    expect(resolveDocumentOwnerTarget("state_license", "prov-1", "grp-1")).toEqual({
+      ownerType: "provider",
+      ownerId: "prov-1",
+    });
+  });
+
+  it("routes a group-only kind to the group grain, ignoring a present provider id", () => {
+    expect(resolveDocumentOwnerTarget("w9", "prov-1", "grp-1")).toEqual({
+      ownerType: "group",
+      ownerId: "grp-1",
+    });
+  });
+
+  it("prefers provider for a dual-grain kind (coi) when both are available", () => {
+    expect(resolveDocumentOwnerTarget("coi", "prov-1", "grp-1")).toEqual({
+      ownerType: "provider",
+      ownerId: "prov-1",
+    });
+  });
+
+  it("falls back to group for a dual-grain kind when no provider is on hand", () => {
+    expect(resolveDocumentOwnerTarget("coi", null, "grp-1")).toEqual({
+      ownerType: "group",
+      ownerId: "grp-1",
+    });
+  });
+
+  it("returns null when neither grain is available for the kind", () => {
+    expect(resolveDocumentOwnerTarget("w9", "prov-1", null)).toBeNull();
+    expect(resolveDocumentOwnerTarget("state_license", null, "grp-1")).toBeNull();
+  });
+});
+
+describe("downloadableCaseDocuments (ASD BITE-ASD-03 / D-ASD-8)", () => {
+  it("selects present and expired rows (both carry a document), never missing", () => {
+    const checks = caseDocumentStatus(
+      ["state_license", "coi", "w9"],
+      [
+        row({
+          id: "lic1",
+          documentFamilyId: "L",
+          docType: "state_license",
+          expirationDate: "2027-01-01",
+        }),
+      ],
+      [row({ id: "coi1", documentFamilyId: "C", docType: "coi", expirationDate: "2020-01-01" })],
+      TODAY,
+    );
+    const downloadable = downloadableCaseDocuments(checks);
+    expect(downloadable.map((d) => d.id)).toEqual(["lic1", "coi1"]);
+  });
+
+  it("returns an empty list when every check is missing", () => {
+    const checks = caseDocumentStatus(["w9"], [], [], TODAY);
+    expect(downloadableCaseDocuments(checks)).toEqual([]);
+  });
+});
+
 describe("readiness bridge (TE-6)", () => {
   it("reduces raw group rows to current versions in the readiness input shape", () => {
     const v1 = row({
@@ -324,6 +403,105 @@ describe("readiness bridge (TE-6)", () => {
     expect(currentGroupReadinessDocuments([v1, v2])).toEqual([
       { groupId: "g1", docType: "coi", expirationDate: "2027-01-01" },
     ]);
+  });
+});
+
+describe("vaultPickerKinds (D-ASD-4)", () => {
+  it("excludes filled_form from the manual picker even though it is uploadable", () => {
+    expect(DOCUMENT_KIND_META.filled_form.uploadable).toBe(true);
+    expect(vaultPickerKinds("provider").map((m) => m.kind)).not.toContain("filled_form");
+    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain("filled_form");
+  });
+
+  it("still offers every other uploadable kind for the owner", () => {
+    expect(vaultPickerKinds("provider").map((m) => m.kind)).toEqual(
+      uploadableKinds("provider")
+        .map((m) => m.kind)
+        .filter((k) => k !== "filled_form"),
+    );
+  });
+});
+
+describe("resolvableStepArtifactKind (D-ASD-4)", () => {
+  it("resolves a canonical name", () => {
+    expect(resolvableStepArtifactKind("State License")).toBe("state_license");
+    expect(resolvableStepArtifactKind("dea_certificate")).toBe("dea");
+  });
+
+  it("never resolves to filled_form or other, even by literal name", () => {
+    expect(resolvableStepArtifactKind("Filled Form")).toBeNull();
+    expect(resolvableStepArtifactKind("Other")).toBeNull();
+  });
+
+  it("returns null for a free-form artifact name", () => {
+    expect(resolvableStepArtifactKind("Portal confirmation screenshot")).toBeNull();
+  });
+});
+
+describe("stepArtifactRows (D-ASD-1/D-ASD-5)", () => {
+  function attachment(
+    documentId: string,
+    artifactName: string,
+    uploadedAt: string,
+  ): SOPStepAttachment {
+    return {
+      documentId,
+      artifactName,
+      fileName: `${documentId}.pdf`,
+      uploadedAt,
+      uploadedBy: "user-1",
+      kind: "state_license",
+    };
+  }
+
+  it("one row per required artifact, resolved kind attached", () => {
+    const step: Pick<SOPStep, "requiredArtifacts" | "attachments"> = {
+      requiredArtifacts: ["State License", "Portal confirmation screenshot"],
+      attachments: [],
+    };
+    const plan = stepArtifactRows(step);
+    expect(plan.rows).toEqual([
+      { artifactName: "State License", resolvedKind: "state_license", attachments: [] },
+      {
+        artifactName: "Portal confirmation screenshot",
+        resolvedKind: null,
+        attachments: [],
+      },
+    ]);
+    expect(plan.orphans).toEqual([]);
+  });
+
+  it("a second attachment under one name is never hidden — both render, newest first", () => {
+    const first = attachment("doc-1", "State License", "2026-07-01T00:00:00Z");
+    const second = attachment("doc-2", "State License", "2026-07-15T00:00:00Z");
+    const plan = stepArtifactRows({
+      requiredArtifacts: ["State License"],
+      attachments: [first, second],
+    });
+    expect(plan.rows).toHaveLength(1);
+    expect(plan.rows[0].attachments.map((a) => a.documentId)).toEqual(["doc-2", "doc-1"]);
+  });
+
+  it("an attachment whose name no longer matches any requiredArtifacts entry is an orphan, never dropped", () => {
+    const orphaned = attachment("doc-3", "Old License Copy", "2026-06-01T00:00:00Z");
+    const plan = stepArtifactRows({
+      requiredArtifacts: ["State License"],
+      attachments: [orphaned],
+    });
+    expect(plan.rows[0].attachments).toEqual([]);
+    expect(plan.orphans).toEqual([orphaned]);
+  });
+
+  it("de-dupes a template that saved a duplicate requiredArtifacts name, defensively", () => {
+    const plan = stepArtifactRows({
+      requiredArtifacts: ["State License", "State License"],
+      attachments: [],
+    });
+    expect(plan.rows).toHaveLength(1);
+  });
+
+  it("missing requiredArtifacts/attachments arrays degrade to empty, never throw", () => {
+    expect(stepArtifactRows({})).toEqual({ rows: [], orphans: [] });
   });
 });
 
