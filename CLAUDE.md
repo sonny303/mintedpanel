@@ -2942,11 +2942,14 @@ documents.ts`) is widened from `uploadable:false` to `uploadable:true` +
   the right vault grain + usage context. Per artifact-name row: attach an
   existing CURRENT vault document (filtered to the resolved kind when there
   is one), upload a fresh one and attach it in the same flow, or **Replace**
-  a specific attachment (uploads a new version into the SAME family, then
-  swaps the pointer — detach old documentId, attach new — never a duplicate
-  family); every attachment downloads via the existing
-  `DocumentDownloadButton`. Orphan attachments render under "Other
-  attachments", never hidden.
+  a specific attachment (uploads a new version into the SAME family — never a
+  duplicate family — then swaps the pointer). **The swap is ordered
+  attach-new THEN detach-old, deliberately:** attach appends, so a
+  half-completed swap leaves BOTH versions on the row (visible, one click
+  from resolution), where the reverse order would leave the step pointing at
+  nothing with the new version unreferenced in the vault. Every attachment
+  downloads via the existing `DocumentDownloadButton`. Orphan attachments
+  render under "Other attachments", never hidden.
 - **UI — the case's Active Documents rail (D-ASD-7):** `src/components/
 documents/CaseRequiredDocuments.tsx` (E4.5 F4.5.3) had been fully built since
   E4.5 but **never mounted anywhere** — it is now mounted inside
