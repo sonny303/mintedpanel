@@ -526,10 +526,11 @@ function AttachArtifactDialog({
 }
 
 // Replace-supersede (BITE-ASD-02): upload a new version into the SAME family
-// as the document being replaced, then swap the step's pointer — detach the
-// old documentId, attach the new one, same artifactName. If the swap's
-// detach half fails, the old pointer is left in place rather than silently
-// dropped (the upload itself already succeeded and is safe in the vault).
+// as the document being replaced (never a duplicate family), then swap the
+// step's pointer to it under the same artifactName. The swap is ordered
+// attach-then-detach on purpose — see the comment on the upload's onSuccess:
+// attach appends, so a half-completed swap shows BOTH versions rather than
+// leaving the step pointing at nothing.
 function ReplaceArtifactDialog({
   taskId,
   stepId,
@@ -585,29 +586,42 @@ function ReplaceArtifactDialog({
         caseId,
       },
       {
+        // ATTACH the new version BEFORE detaching the old one. Attach appends
+        // (D-ASD-5), so the intermediate state is both-attached — which is
+        // visible and recoverable. The reverse order has a strictly worse
+        // failure mode: a detach that succeeds followed by an attach that
+        // fails leaves the step pointing at NOTHING while the new version
+        // sits in the vault unreferenced.
         onSuccess: (newDoc) => {
-          detachM.mutate(
-            { taskId, stepId, documentId: attachment.documentId },
+          attachM.mutate(
+            {
+              taskId,
+              stepId,
+              attachment: attachmentFromDocument(newDoc, attachment.artifactName),
+            },
             {
               onSuccess: () => {
-                attachM.mutate(
-                  {
-                    taskId,
-                    stepId,
-                    attachment: attachmentFromDocument(newDoc, attachment.artifactName),
-                  },
+                detachM.mutate(
+                  { taskId, stepId, documentId: attachment.documentId },
                   {
                     onSuccess: () => {
                       toast.success(`Replaced with v${newDoc.versionNumber}`);
                       onClose();
                     },
+                    // The new version IS attached at this point; only the old
+                    // pointer survives. Say so plainly — the row shows both,
+                    // and removing the old one is one click away.
                     onError: (e) =>
-                      setError(e instanceof Error ? e.message : "Uploaded but could not re-attach"),
+                      setError(
+                        e instanceof Error
+                          ? `New version attached, but the old one could not be removed: ${e.message}`
+                          : "New version attached, but the old one could not be removed",
+                      ),
                   },
                 );
               },
               onError: (e) =>
-                setError(e instanceof Error ? e.message : "Could not swap the attachment"),
+                setError(e instanceof Error ? e.message : "Uploaded but could not attach"),
             },
           );
         },
