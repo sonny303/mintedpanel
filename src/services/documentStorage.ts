@@ -56,6 +56,11 @@ export interface UploadIntentInput {
   mimeType: string;
   /** Present on the replace flow — versions an existing family. */
   familyId?: string | null;
+  /** Optional usage context (ASD BITE-ASD-02) — an org-owned case linked to
+   * the owner, so the step-artifact upload can immediately attach the
+   * resulting document once finalize returns. Never the canonical owner
+   * itself — see verifyCaseLink. */
+  caseId?: string | null;
 }
 
 export interface UploadIntent {
@@ -169,6 +174,31 @@ async function validateOwnerKindFile(
   return null;
 }
 
+/** Optional usage context: the case must be org-owned AND linked to the
+ * canonical owner — never a channel to attach cross-org or unrelated rows.
+ * Shared by intent time (ASD BITE-ASD-02) and finalize time (E4.5 TE-1) so
+ * the check can't drift between the two call sites. */
+async function verifyCaseLink(
+  ctx: DocumentStorageServiceCtx,
+  caseId: string,
+  ownerType: DocumentOwnerType,
+  ownerId: string,
+): Promise<boolean> {
+  const { data: caseRow, error: caseErr } = await ctx.db
+    .from("credential_cases")
+    .select("id, provider_id, group_id")
+    .eq("id", caseId)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  if (caseErr) throw caseErr;
+  return Boolean(
+    caseRow &&
+    (ownerType === "provider"
+      ? (caseRow as { provider_id: string | null }).provider_id === ownerId
+      : (caseRow as { group_id: string | null }).group_id === ownerId),
+  );
+}
+
 /** Load a family's rows (org-scoped) and check it belongs to this owner with
  * this kind — a family never changes owner or kind (TE-1). */
 async function loadFamily(
@@ -233,6 +263,11 @@ export async function createDocumentUploadIntent(
 ): Promise<DocumentStorageResult<UploadIntent>> {
   const invalid = await validateOwnerKindFile(ctx, input);
   if (invalid) return { kind: "rejected", ...invalid };
+
+  if (input.caseId) {
+    const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
+    if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
+  }
 
   let familyId = input.familyId ?? null;
   let versionNumber = 1;
@@ -303,21 +338,8 @@ export async function finalizeDocument(
     return { kind: "rejected", status: 422, message: "versionNumber must be a positive integer" };
   }
 
-  // Optional usage context: the case must be org-owned AND linked to the
-  // canonical owner — never a channel to attach cross-org or unrelated rows.
   if (input.caseId) {
-    const { data: caseRow, error: caseErr } = await ctx.db
-      .from("credential_cases")
-      .select("id, provider_id, group_id")
-      .eq("id", input.caseId)
-      .eq("org_id", ctx.orgId)
-      .maybeSingle();
-    if (caseErr) throw caseErr;
-    const linked =
-      caseRow &&
-      (input.ownerType === "provider"
-        ? (caseRow as { provider_id: string | null }).provider_id === input.ownerId
-        : (caseRow as { group_id: string | null }).group_id === input.ownerId);
+    const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
     if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
   }
 

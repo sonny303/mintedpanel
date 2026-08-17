@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  attachStepArtifact,
   completeSOPStep,
   createFollowUpTask,
   createProviderOutreachTask,
+  detachStepArtifact,
   getTask,
   getTasks,
   updateTaskStatus,
@@ -13,7 +15,7 @@ import {
   type ProviderOutreachTaskInput,
   type TaskFilters,
 } from "@/services/tasks";
-import type { TaskStatus } from "@/types";
+import type { SOPStepAttachment, TaskStatus } from "@/types";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -99,6 +101,57 @@ export function useCompleteSOPStep() {
       qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
       qc.invalidateQueries({ queryKey: ["case", orgId] });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+// ASD — attach/detach a vault document pointer on a step's requiredArtifacts
+// checklist. Invalidates the document caches too: a fresh upload or a
+// replace changes what the vault (and Required Documents/readiness) sees,
+// and the step panel reads through the same provider/group document cache.
+export interface AttachStepArtifactVars {
+  taskId: string;
+  stepId: string;
+  attachment: SOPStepAttachment;
+}
+
+export function useAttachStepArtifact() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: AttachStepArtifactVars) =>
+      attachStepArtifact(vars.taskId, vars.stepId, vars.attachment),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+      qc.invalidateQueries({ queryKey: ["documents", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.groupReadinessDocuments(orgId) });
+    },
+  });
+}
+
+export interface DetachStepArtifactVars {
+  taskId: string;
+  stepId: string;
+  documentId: string;
+}
+
+export function useDetachStepArtifact() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: DetachStepArtifactVars) =>
+      detachStepArtifact(vars.taskId, vars.stepId, vars.documentId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.taskId) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+      // Detach never touches the vault document — nothing to invalidate
+      // there. (The document caches only need invalidating on
+      // attach/upload/replace, which change vault contents.)
     },
   });
 }

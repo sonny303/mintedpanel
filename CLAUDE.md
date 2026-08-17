@@ -2869,6 +2869,128 @@ keeps its own nav entry. ONE additive migration (repo + hosted,
   screen; a name-less save is blocked). `sidebar-ia.spec.ts` retargeted to
   `/account`.
 
+### SOP step document attachments — rebuilt (2026-08-17, closes/replaces PR #328)
+
+A SOP step's `requiredArtifacts` checklist can now hold real files, attached
+from — or uploaded straight into — the provider/group document vault. This is
+a **from-scratch rebuild**, not an iteration on PR #328 (TS-163): that PR was
+closed unmerged after review found it built a second, hidden, case-scoped
+document kind (`caseArtifact`) requiring an explicit "promote" step to become
+a real vault document — duplicate storage, and a name-keyed `Map` that
+silently hid a second file attached under one artifact name. Neither defect,
+nor the `caseArtifact` mechanism itself, exists on this branch; nothing was
+ported from #328 wholesale (a `verifyCaseLink`-shaped fix from that diff was
+independently re-derived here, correctly this time — see below). The
+corrected model, reconciling a later PRD with that review: **there is exactly
+one document, it lives in the provider or group vault
+(`provider_documents`), the case may use it, and a SOP step only ever holds a
+POINTER to it** — never a copy.
+
+- **No migration.** `SOPStep` gained `attachments?: SOPStepAttachment[]`
+  (`{documentId, artifactName, fileName, uploadedAt, uploadedBy, kind}`,
+  `types/index.ts`) — it rides the existing `tasks.sop_content` jsonb like
+  every other step field. `DOCUMENT_KIND_META.filled_form` (`src/lib/
+documents.ts`) is widened from `uploadable:false` to `uploadable:true` +
+  `owners:["provider","group"]` — the catch-all kind for an artifact name
+  that resolves to no canonical machine kind (a screenshot, a portal
+  confirmation) — but is kept OUT of the vault's manual "Upload document"
+  picker via the new `vaultPickerKinds()` (an explicit filtered list, not a
+  second meaning piggybacked on `uploadable`, which the #328 cut had done).
+- **Pure core (`src/lib/documents.ts` + `src/lib/sopStepAttachments.ts`,
+  tested):** `resolvableStepArtifactKind` (excludes `filled_form`/`other`),
+  `stepArtifactRows` (joins a step's `requiredArtifacts` against its
+  `attachments` — the fix for #328's hidden-second-file bug: rows carry an
+  ARRAY of every attachment under a name, newest first, never a single
+  nullable slot; orphan attachments whose name has no `requiredArtifacts`
+  entry are surfaced separately, never dropped),
+  `resolveDocumentOwnerTarget` (the shared provider-vs-group routing a kind's
+  upload lands in — provider preferred when a dual-grain kind and both are
+  available), `downloadableCaseDocuments` (bulk-download selection).
+  `planAttachStepArtifact`/`planDetachStepArtifact`/`stepAttachmentPatch`
+  (`sopStepAttachments.ts`) mirror `sopStepCompletion.ts`'s planner/patch
+  split: attach APPENDS (never replaces — a second file under one artifact
+  name sits alongside the first), detach unlinks only (the vault document and
+  its Storage object are untouched — reachable only through this module), and
+  **neither ever touches task status or `completed_date`** — Required
+  Documents and readiness read `provider_documents` directly, never
+  `sop_content`, so the vault stays the single source of truth for "do we
+  have this credential" regardless of a step's checklist state.
+- **Service (`src/services/tasks.ts`):** `attachStepArtifact`/
+  `detachStepArtifact`, audited, following `completeSOPStep`'s
+  read-plan-patch-write shape over the new pure planner.
+  **`src/services/documentStorage.ts`:** `UploadIntentInput` gained an
+  optional `caseId` (previously finalize-only) and a shared `verifyCaseLink`
+  helper now runs at BOTH intent time and finalize time — a real gap #328
+  also found and fixed, but coupled to a `caseArtifact`-requires-caseId
+  validation branch that is NOT carried over: `caseId` stays a fully OPTIONAL
+  usage context for every kind, never required by kind.
+  `src/server/documentRoutes.ts`'s upload-intent handler validates + threads
+  the new field; `src/services/documents.ts` `uploadDocument` sends it on the
+  intent call too (previously only finalize got it).
+- **Hooks (`src/hooks/useTasks.ts`):** `useAttachStepArtifact`/
+  `useDetachStepArtifact` invalidate tasks/case/audit-log; attach (upload or
+  existing) ALSO invalidates the `["documents", orgId]` prefix +
+  `groupReadinessDocuments` (a fresh upload changes what the vault and
+  readiness see); detach does not (it never touches the vault).
+- **UI — the step panel:** `src/components/cases/StepArtifactsPanel.tsx`,
+  mounted in `StepDetails.tsx`'s `StepCadenceMeta` (replacing the old
+  plain-text "Artifacts to save: …" line) for both `online_form` and the
+  fax/phone/mail/custom plain-channel steps — the only step types that ever
+  render `StepCadenceMeta`. `StepBody` gained `taskId`/`caseId`/`providerId`/
+  `groupId` params (threaded from `TaskDrawer` ← `CaseTasksPanel` ←
+  `cases.$id.tsx`, which has `c.groupId`) so the panel can attach/upload with
+  the right vault grain + usage context. Per artifact-name row: attach an
+  existing CURRENT vault document (filtered to the resolved kind when there
+  is one), upload a fresh one and attach it in the same flow, or **Replace**
+  a specific attachment (uploads a new version into the SAME family — never a
+  duplicate family — then swaps the pointer). **The swap is ordered
+  attach-new THEN detach-old, deliberately:** attach appends, so a
+  half-completed swap leaves BOTH versions on the row (visible, one click
+  from resolution), where the reverse order would leave the step pointing at
+  nothing with the new version unreferenced in the vault. Every attachment
+  downloads via the existing `DocumentDownloadButton`. Orphan attachments
+  render under "Other attachments", never hidden.
+- **UI — the case's Active Documents rail (D-ASD-7):** `src/components/
+documents/CaseRequiredDocuments.tsx` (E4.5 F4.5.3) had been fully built since
+  E4.5 but **never mounted anywhere** — it is now mounted inside
+  `TaskDrawer.tsx`, below the SOP steps list. This IS the "Active Documents"
+  panel; there is no second, case-scoped documents surface. It gained a
+  header **"Download all"** button (sequential anchor-click downloads — never
+  `window.open` in a loop, which is what trips a popup blocker — over
+  `downloadableCaseDocuments`), a per-row **Upload** action for a MISSING
+  required kind, and a per-row **Replace [↻]** for a present/expired one —
+  both reuse `UploadDocumentDialog` (which gained optional `presetKind`
+  — preselect + lock the kind when there's no `replaceTarget` yet — and
+  `caseId`, and now sources its kind list from `vaultPickerKinds` instead of
+  `uploadableKinds` so `filled_form` doesn't leak into the manual picker).
+  `CaseTasksPanel`/`TaskDrawer` thread `providerName`/`groupName` down for
+  the dialog's "For {name}" line.
+- **Isolation gate closed (D-ASD-9 / TD-53):** the signed-download read
+  (17/17b) had gate coverage; the two WRITE endpoints
+  (`/api/documents/upload-intent`, `/api/documents/finalize`) had none. New
+  assertions **25** (Kansas mints an intent for its own provider — proves
+  25b isn't vacuous), **25b** (a South Park owner id 404s before any signed
+  target is minted), **26** (same, for finalize, before any metadata insert)
+  in `scripts/verify-org-isolation.mjs`; a new **`documentupload`** leak mode
+  (18th) in `scripts/mock-api-server.mjs` + its `EXPECTED_FAILS` entry in
+  `scripts/verify-isolation-local.mjs`. Both new mock routes reuse the
+  existing `KANSAS_PROVIDER_ID`/`SOUTHPARK_PROVIDER_ID` fixtures — no new gate
+  env. Verified via the in-sandbox mock-and-run harness: green in pass mode,
+  red under all 18 leak modes including the new one.
+- **Process (PM decision D1, `docs/redesign/README.md`):** a rebuild
+  correcting a previously-reviewed PR may not have a fresh epic to cite — the
+  build gate's "reference exactly one epic" rule now accepts a spike or
+  decision-record doc in an epic's place for exactly that case (ordinary
+  epic-driven builds are unaffected).
+- Tests: `src/lib/sopStepAttachments.test.ts` (new), `src/lib/documents.test.ts`
+  extended (`stepArtifactRows` never-hides-a-second-attachment, orphan
+  preservation, `vaultPickerKinds`/`resolveDocumentOwnerTarget`/
+  `downloadableCaseDocuments`), `src/services/documentStorage.di.test.ts` +
+  `src/server/documentRoutes.test.ts` extended for the intent-time
+  `verifyCaseLink` check. No e2e yet (TECH-DEBT: add an
+  `e2e/step-artifacts.spec.ts` covering attach/upload/replace/detach + the
+  Active Documents rail's Upload/Replace/Download-all).
+
 ## What this is
 
 Minted Panel is a credentialing-operations SaaS for medical groups: providers,
@@ -3094,7 +3216,12 @@ built only when a real consumer pulls them. The current surface:
   fails the request). Consumers: the browser documents service today; the
   extension consumes the SAME download contract later (TE-11 — audited links
   only, never bucket credentials or object-list access; the D3
-  future-auto-attach seam).
+  future-auto-attach seam). **Since 2026-08-17 (ASD BITE-ASD-02/04):**
+  upload-intent also accepts the optional `caseId` usage context finalize
+  already had — the SAME `verifyCaseLink` org+ownership check now runs at
+  both steps, and a cross-org owner 404s before any signing OR any insert
+  (gate assertions 25/25b/26, `documentupload` leak mode — closing the TD-53
+  gap where these two write endpoints had zero gate coverage).
 - `GET /api/me/orgs` — the caller's own memberships, `{ orgId, orgName, role }`
   rows derived from the JWT user id only (`src/services/orgMemberships.ts`).
   Runs on `authenticateUser` (the guard's JWT-only step, no org resolution):

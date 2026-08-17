@@ -95,6 +95,18 @@ PRs from Claude Code must target `main` and reference exactly one epic
 Failures produce PR review comments tagging Claude Code with the specific FR/enabler
 that is unmet. Merge is blocked until remediated.
 
+**PM decision D1 (2026-08-17):** a rebuild that corrects or replaces a
+previously-reviewed PR does not always have a fresh `EX.X-<slug>.md` epic to
+cite — the triggering work is often a **spike / decision-record doc**
+(`docs/ops/*-spike.md`, a `DECISION-RECORD-*.md`) that reconciles a new
+requirement with the rejected cut's review findings. That document satisfies
+the "reference exactly one epic" gate in its place: the PR body cites the
+spike/decision-record path instead of an epic file, and carries the SAME
+thing an epic PR would — the enumerated decisions it's building against and
+which are satisfied where in the diff. This is the exception, not a way
+around epic-referencing for new feature work; ordinary epic-driven builds
+still cite an epic.
+
 ## Stages
 
 - Stages are defined by the PM. Epics are approved (merged) one at a time as they are

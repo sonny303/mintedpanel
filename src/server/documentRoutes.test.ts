@@ -78,6 +78,30 @@ describe("upload intent handler", () => {
     expect(intentMock).not.toHaveBeenCalled();
   });
 
+  it("404s a malformed caseId without touching the service (ASD BITE-ASD-02)", async () => {
+    const c = ctx();
+    const res = await handleCreateUploadIntent({ ...intentBody, caseId: "nope" }, c);
+    expect(res.status).toBe(404);
+    expect(intentMock).not.toHaveBeenCalled();
+  });
+
+  it("threads a valid caseId through to the service", async () => {
+    const c = ctx();
+    intentMock.mockResolvedValue({
+      kind: "ok",
+      value: {
+        familyId: FAMILY_ID,
+        versionNumber: 1,
+        path: `org/org-1/provider/${PROVIDER_ID}/${FAMILY_ID}/1/license.pdf`,
+        uploadUrl: "https://example.supabase.co/storage/v1/object/upload/sign/x?token=secret",
+        token: "secret-token",
+      },
+    });
+    const caseId = "cccc1111-2222-4333-8444-555566667777";
+    await handleCreateUploadIntent({ ...intentBody, caseId }, c);
+    expect(intentMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ caseId }));
+  });
+
   it("mints the intent, audits the family (never the URL/token), no-store", async () => {
     const c = ctx();
     intentMock.mockResolvedValue({

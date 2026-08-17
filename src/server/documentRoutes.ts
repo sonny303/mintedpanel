@@ -66,6 +66,9 @@ export async function handleCreateUploadIntent(body: unknown, ctx: AuthContext):
   if (b.familyId != null && (typeof b.familyId !== "string" || !UUID_RE.test(b.familyId))) {
     return fail(404, "Document family not found");
   }
+  if (b.caseId != null && (typeof b.caseId !== "string" || !UUID_RE.test(b.caseId))) {
+    return fail(404, "Case not found for this owner");
+  }
 
   const input: UploadIntentInput = {
     ownerType: b.ownerType,
@@ -75,6 +78,7 @@ export async function handleCreateUploadIntent(body: unknown, ctx: AuthContext):
     fileSize: b.fileSize,
     mimeType: b.mimeType,
     familyId: (b.familyId as string | undefined) ?? null,
+    caseId: (b.caseId as string | undefined) ?? null,
   };
   const result = await createDocumentUploadIntent(
     { db: ctx.db, orgId: ctx.orgId, userId: ctx.userId },

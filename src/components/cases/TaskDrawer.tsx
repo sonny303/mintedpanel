@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { StepBody } from "@/components/cases/StepDetails";
+import { CaseRequiredDocuments } from "@/components/documents/CaseRequiredDocuments";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
@@ -42,6 +43,17 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
+  /** ASD — the case's group, for the step-artifact panel's vault grain AND
+   * the Active Documents rail below. The task carries its own
+   * caseId/providerId; groupId lives on the case. */
+  groupId?: string | null;
+  /** ASD BITE-ASD-03 (D-ASD-7) — the case's FULL task list (not just this
+   * one), so the Active Documents rail's required-kind list reflects every
+   * task's checklist, not only the open one. Display names for the upload
+   * dialog's "For {name}" line. */
+  caseTasks?: Task[];
+  providerName?: string;
+  groupName?: string | null;
 }
 
 function initialsOf(name: string | null | undefined): string {
@@ -73,6 +85,10 @@ export function TaskDrawer({
   open,
   onOpenChange,
   tokenValues,
+  groupId = null,
+  caseTasks = [],
+  providerName = "this provider",
+  groupName = null,
 }: TaskDrawerProps) {
   const navigate = useNavigate();
   const canEdit = useCanWrite();
@@ -305,7 +321,16 @@ export function TaskDrawer({
                                 the draft-email Gmail hand-off, the pdf
                                 filler — renders here for unlocked steps;
                                 locked steps stay label-only. */}
-                            {isLocked ? null : <StepBody step={step} tokenValues={tokenValues} />}
+                            {isLocked ? null : (
+                              <StepBody
+                                step={step}
+                                tokenValues={tokenValues}
+                                taskId={task.id}
+                                caseId={task.caseId}
+                                providerId={task.providerId}
+                                groupId={groupId}
+                              />
+                            )}
                           </div>
                           {isChecked ? (
                             <CheckCircle2 className="h-4 w-4 text-[#059669] flex-shrink-0" />
@@ -318,6 +343,23 @@ export function TaskDrawer({
                   </div>
                 )}
               </div>
+
+              {/* ASD BITE-ASD-03 (D-ASD-7) — the Active Documents rail. This
+                  IS the PRD's "Active Documents Panel": the case's required
+                  documents, derived live against the provider/group vault,
+                  with Upload/Replace/Download-all right where the SOP
+                  checklist is being worked — never a second, case-scoped
+                  documents surface. */}
+              {task.providerId ? (
+                <CaseRequiredDocuments
+                  providerId={task.providerId}
+                  providerName={providerName}
+                  groupId={groupId}
+                  groupName={groupName}
+                  caseId={task.caseId}
+                  tasks={caseTasks.length > 0 ? caseTasks : [task]}
+                />
+              ) : null}
 
               {/* Activity — the task-filtered slice of the touchlog */}
               <div className="space-y-3">

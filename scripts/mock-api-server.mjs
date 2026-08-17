@@ -35,6 +35,8 @@
 //               registry read returns a private org row, and the shared
 //               propose writes under the caller's org                (22, 23)
 //   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
+//   documentupload cross-org owner honored on upload-intent/finalize instead
+//               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
 import { createServer } from "node:http";
 
 // Same fixture ids as the workflow env block, so the gate script needs no
@@ -79,6 +81,7 @@ export const LEAK_MODES = [
   "documentdownload",
   "portals",
   "taskstep",
+  "documentupload",
 ];
 
 const USERS = {
@@ -661,6 +664,96 @@ export async function createMockApiServer(options = {}) {
         url: `https://example.supabase.co/storage/v1/object/sign/provider-documents/${d.filePath}?token=fake-signed-token`,
         fileName: d.fileName,
         expiresIn: 120,
+      });
+    }
+
+    // --- /api/documents/upload-intent (E4.5 TE-3, ASD BITE-ASD-02/04) ---
+    // Writer-only. The owner (a provider, in this mock) must be the caller's
+    // org's or it's a 404 — cross-org indistinguishable from missing, and NO
+    // signed target is minted. Leak "documentupload": the org check is
+    // skipped and a cross-org owner still gets a signed target. The
+    // uploadUrl/token are FAKE fixture values — this mock never touches real
+    // storage, only the isolation contract.
+    if (url.pathname === "/api/documents/upload-intent" && method === "POST") {
+      if (user.role === "billing")
+        return envelope(res, 403, null, "Your role cannot upload documents");
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (body.ownerType !== "provider" && body.ownerType !== "group") {
+        return envelope(res, 422, null, "ownerType must be 'provider' or 'group'");
+      }
+      const owner = PROVIDERS.concat(createdProviders).find((row) => row.id === body.ownerId);
+      const visible =
+        body.ownerType === "provider" &&
+        owner &&
+        (owner.orgId === orgId || leak === "documentupload");
+      if (!visible) {
+        return envelope(
+          res,
+          404,
+          null,
+          body.ownerType === "provider" ? "Provider not found" : "Provider group not found",
+        );
+      }
+      const familyId = body.familyId || `fam-${Date.now()}`;
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, {
+        familyId,
+        versionNumber: 1,
+        path: `org/${orgId}/${body.ownerType}/${body.ownerId}/${familyId}/1/${body.fileName ?? "file"}`,
+        uploadUrl:
+          "https://example.supabase.co/storage/v1/object/upload/sign/fake?token=fake-upload-token",
+        token: "fake-upload-token",
+      });
+    }
+
+    // --- /api/documents/finalize (E4.5 TE-3, ASD BITE-ASD-02/04) ---
+    // Same owner check as upload-intent, checked BEFORE any object-existence
+    // work or metadata insert (mirrors the real service's ordering) — a
+    // cross-org owner 404s with nothing written. Leak "documentupload" skips
+    // the check here too.
+    if (url.pathname === "/api/documents/finalize" && method === "POST") {
+      if (user.role === "billing")
+        return envelope(res, 403, null, "Your role cannot upload documents");
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (body.ownerType !== "provider" && body.ownerType !== "group") {
+        return envelope(res, 422, null, "ownerType must be 'provider' or 'group'");
+      }
+      const owner = PROVIDERS.concat(createdProviders).find((row) => row.id === body.ownerId);
+      const visible =
+        body.ownerType === "provider" &&
+        owner &&
+        (owner.orgId === orgId || leak === "documentupload");
+      if (!visible) {
+        return envelope(
+          res,
+          404,
+          null,
+          body.ownerType === "provider" ? "Provider not found" : "Provider group not found",
+        );
+      }
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 201, {
+        id: `new-doc-${Date.now()}`,
+        orgId,
+        providerId: body.ownerType === "provider" ? body.ownerId : null,
+        groupId: body.ownerType === "group" ? body.ownerId : null,
+        caseId: body.caseId ?? null,
+        docType: body.kind,
+        fileName: body.fileName,
+        filePath: `org/${orgId}/${body.ownerType}/${body.ownerId}/${body.familyId}/${body.versionNumber}/${body.fileName}`,
+        effectiveDate: body.effectiveDate ?? null,
+        expirationDate: body.expirationDate ?? null,
+        uploadedBy: user.userId,
+        createdAt: new Date().toISOString(),
+        documentFamilyId: body.familyId,
+        versionNumber: body.versionNumber,
+        supersedesDocumentId: null,
       });
     }
 

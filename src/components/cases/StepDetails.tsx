@@ -15,6 +15,7 @@ import { Check, Copy, Download, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PortalStepLink } from "@/components/portals/PortalStepLink";
+import { StepArtifactsPanel } from "@/components/cases/StepArtifactsPanel";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
 import { pdfFillFileStem } from "@/lib/pdfFill";
@@ -86,13 +87,19 @@ function HighlightedText({ text }: { text: string }) {
   );
 }
 
-function OnlineFormStep({ step }: { step: SOPStep }) {
+function OnlineFormStep({
+  step,
+  artifactCtx,
+}: {
+  step: SOPStep;
+  artifactCtx: StepArtifactContext;
+}) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
       {step.portalKey ? <PortalStepLink portalKey={step.portalKey} /> : null}
       {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
-      <StepCadenceMeta step={step} />
+      <StepCadenceMeta step={step} artifactCtx={artifactCtx} />
       {fields.length > 0 ? (
         <dl className="rounded-md border border-[#E8E5E0] divide-y divide-[#E8E5E0]">
           {fields.map((f, i) => (
@@ -415,12 +422,18 @@ function PdfStep({ step, tokenValues }: { step: SOPStep; tokenValues: Record<str
 // E1.7b: fax/phone/mail/custom steps render as plain instructions — label/detail,
 // data fields, and the turnaround/cadence/artifact metadata; deliberately no
 // portal affordances (those belong to online_form steps only).
-function PlainChannelStep({ step }: { step: SOPStep }) {
+function PlainChannelStep({
+  step,
+  artifactCtx,
+}: {
+  step: SOPStep;
+  artifactCtx: StepArtifactContext;
+}) {
   const fields = step.dataFields ?? [];
   return (
     <div className="space-y-3">
       {step.detail ? <p className="text-[13px] text-muted-foreground">{step.detail}</p> : null}
-      <StepCadenceMeta step={step} />
+      <StepCadenceMeta step={step} artifactCtx={artifactCtx} />
       {fields.length > 0 ? (
         <dl className="rounded-md border border-[#E8E5E0] divide-y divide-[#E8E5E0]">
           {fields.map((f, i) => (
@@ -435,7 +448,25 @@ function PlainChannelStep({ step }: { step: SOPStep }) {
   );
 }
 
-function StepCadenceMeta({ step }: { step: SOPStep }) {
+// ASD (Active Submission Drawer rebuild) — the identifiers StepArtifactsPanel
+// needs to attach/upload/replace a document (caseId is an optional usage
+// context, provider/group is the vault grain). Threaded down from the case
+// page's task/case objects; StepBody's callers outside a case (none today)
+// would pass null for caseId/providerId/groupId.
+export interface StepArtifactContext {
+  taskId: string;
+  caseId: string | null;
+  providerId: string | null;
+  groupId: string | null;
+}
+
+function StepCadenceMeta({
+  step,
+  artifactCtx,
+}: {
+  step: SOPStep;
+  artifactCtx: StepArtifactContext;
+}) {
   const parts: string[] = [];
   if (typeof step.expectedTurnaroundDays === "number") {
     parts.push(`Expected turnaround ~${step.expectedTurnaroundDays} days`);
@@ -443,12 +474,25 @@ function StepCadenceMeta({ step }: { step: SOPStep }) {
   if (typeof step.followUpEveryDays === "number") {
     parts.push(`follow up every ${step.followUpEveryDays} days`);
   }
-  const artifacts = step.requiredArtifacts ?? [];
-  if (parts.length === 0 && artifacts.length === 0) return null;
+  // Render the panel whenever the step DEFINES an artifact checklist, or when
+  // it already carries an orphan attachment (a name outside requiredArtifacts
+  // — the pure module's stepArtifactRows never drops those, so the UI must
+  // not hide them either).
+  const hasArtifacts =
+    (step.requiredArtifacts ?? []).length > 0 || (step.attachments ?? []).length > 0;
+  if (parts.length === 0 && !hasArtifacts) return null;
   return (
-    <div className="space-y-1 text-[12px] text-muted-foreground">
+    <div className="space-y-2 text-[12px] text-muted-foreground">
       {parts.length > 0 ? <p>{parts.join(" · ")}</p> : null}
-      {artifacts.length > 0 ? <p>Artifacts to save: {artifacts.join(", ")}</p> : null}
+      {hasArtifacts ? (
+        <StepArtifactsPanel
+          taskId={artifactCtx.taskId}
+          step={step}
+          caseId={artifactCtx.caseId}
+          providerId={artifactCtx.providerId}
+          groupId={artifactCtx.groupId}
+        />
+      ) : null}
     </div>
   );
 }
@@ -456,15 +500,24 @@ function StepCadenceMeta({ step }: { step: SOPStep }) {
 export function StepBody({
   step,
   tokenValues = {},
+  taskId,
+  caseId = null,
+  providerId = null,
+  groupId = null,
 }: {
   step: SOPStep;
   tokenValues?: Record<string, string>;
+  taskId: string;
+  caseId?: string | null;
+  providerId?: string | null;
+  groupId?: string | null;
 }) {
   const stepType = step.stepType ?? "online_form";
+  const artifactCtx: StepArtifactContext = { taskId, caseId, providerId, groupId };
   if (stepType === "draft_email") return <DraftEmailStep step={step} />;
   if (stepType === "pdf") return <PdfStep step={step} tokenValues={tokenValues} />;
   if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
-    return <PlainChannelStep step={step} />;
+    return <PlainChannelStep step={step} artifactCtx={artifactCtx} />;
   }
-  return <OnlineFormStep step={step} />;
+  return <OnlineFormStep step={step} artifactCtx={artifactCtx} />;
 }

@@ -183,6 +183,27 @@ describe("createDocumentUploadIntent", () => {
     expect(mismatch).toMatchObject({ kind: "rejected", status: 422 });
   });
 
+  it("rejects a caseId that is cross-org or not linked to the owner (ASD BITE-ASD-02 — intent gets the same case-link check finalize has)", async () => {
+    const { db, calls } = fakeDb({
+      providers: [orgProvider],
+      credential_cases: [
+        { id: "case-1", org_id: OTHER_ORG, provider_id: PROVIDER, group_id: null },
+      ],
+    });
+    const result = await createDocumentUploadIntent(ctx(db), { ...intentInput, caseId: "case-1" });
+    expect(result).toMatchObject({ kind: "rejected", status: 404 });
+    expect(calls.signedUploadPaths).toEqual([]);
+  });
+
+  it("mints an intent when the caseId IS linked to the owner", async () => {
+    const { db } = fakeDb({
+      providers: [orgProvider],
+      credential_cases: [{ id: "case-1", org_id: ORG, provider_id: PROVIDER, group_id: null }],
+    });
+    const result = await createDocumentUploadIntent(ctx(db), { ...intentInput, caseId: "case-1" });
+    expect(result.kind).toBe("ok");
+  });
+
   it("sweeps only EXPIRED orphan version folders in the family prefix (TE-4)", async () => {
     const famRow = {
       id: "v1",

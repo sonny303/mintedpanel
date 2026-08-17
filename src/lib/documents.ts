@@ -9,7 +9,13 @@
 // COI advisory threshold); this module imports nothing from it, so the
 // date-only helpers are self-contained.
 
-import type { DocumentExpirationStatus, DocumentKind, DocumentOwnerType, SOPStep } from "@/types";
+import type {
+  DocumentExpirationStatus,
+  DocumentKind,
+  DocumentOwnerType,
+  SOPStep,
+  SOPStepAttachment,
+} from "@/types";
 
 // ---------------------------------------------------------------------------
 // TE-5 — the shared kind metadata map. Components never hard-code parallel
@@ -29,8 +35,13 @@ export interface DocumentKindMeta {
    * License / 60 DEA / 30 COI and any other expiration-tracked kind). A PM
    * change is one edit here — never a schema migration. */
   expiringSoonDays: number;
-  /** false = legacy compatibility kind (case-linked filled_form) — valid in
-   * storage, never offered by the E4.5 upload surfaces. */
+  /** Whether the SERVER accepts this kind as an upload target at all. This is
+   * NOT the same question as "does the vault's manual picker offer it" —
+   * `filled_form` is uploadable (the step-artifact catch-all writes it
+   * directly) but is excluded from the picker by `vaultPickerKinds`, an
+   * explicit list rather than a second meaning layered onto this flag
+   * (ASD — a prior cut overloaded `uploadable:false` for that, which made
+   * `validateOwnerKindFile` unreadable). */
   uploadable: boolean;
   /** Normalized alternate spellings for the SOP required-kind join (TE-7). */
   aliases: string[];
@@ -122,11 +133,19 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
   },
   filled_form: {
     kind: "filled_form",
+    // ASD — the catch-all for a step artifact whose name resolves to no
+    // canonical kind (a screenshot, a portal confirmation). `uploadable` is
+    // true because the SERVER genuinely accepts uploads of this kind (the
+    // step-artifact flow writes it directly); it is kept OUT of the vault's
+    // manual "Upload document" picker via `vaultPickerKinds`, which is the
+    // UI-list concern `uploadable` was never meant to also carry. Owned by
+    // provider OR group like any other document — visible in the vault like
+    // everything else (D-ASD-4; there is no case-scoped grain).
     label: "Filled Form",
-    owners: [],
+    owners: ["provider", "group"],
     expirationRequired: false,
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
-    uploadable: false,
+    uploadable: true,
     aliases: ["filled_form"],
   },
   other: {
@@ -150,11 +169,19 @@ export function documentKindLabel(kind: string): string {
   return isDocumentKind(kind) ? DOCUMENT_KIND_META[kind].label : kind;
 }
 
-/** The kinds the upload dialog offers for one owner grain (D1). */
+/** The kinds the SERVER accepts as an upload target for one owner grain. */
 export function uploadableKinds(ownerType: DocumentOwnerType): DocumentKindMeta[] {
   return ALL_DOCUMENT_KINDS.map((k) => DOCUMENT_KIND_META[k]).filter(
     (m) => m.uploadable && m.owners.includes(ownerType),
   );
+}
+
+/** ASD D-ASD-4 — the kinds the vault's MANUAL "Upload document" dialog offers.
+ * A narrower list than `uploadableKinds`: `filled_form` is a real upload
+ * target (the step-artifact catch-all writes it), but nobody manually files a
+ * document as "Filled Form" from the vault — that would just be "Other". */
+export function vaultPickerKinds(ownerType: DocumentOwnerType): DocumentKindMeta[] {
+  return uploadableKinds(ownerType).filter((m) => m.kind !== "filled_form");
 }
 
 /** D2/TE-5: a dated kind cannot be saved without its expiration date. */
@@ -403,6 +430,81 @@ export function requiredDocumentKinds(
   return kinds;
 }
 
+// ---------------------------------------------------------------------------
+// ASD (Active Submission Drawer rebuild, superseding the #328 TS-163 cut) —
+// the step-artifact join. A step's `requiredArtifacts` checklist is matched
+// against its `attachments` array (both live on the same resolved SOPStep,
+// `src/lib/sopStepAttachments.ts` appends there) by exact name. Fixes a real
+// #328-era defect (review item 5 / D-ASD-5): that cut built a name-keyed
+// `Map` (last write wins) while the planner APPENDS, so a second attachment
+// under one artifact name silently hid the first. Rows now carry every
+// attachment for their name, newest first — nothing is ever hidden.
+// ---------------------------------------------------------------------------
+
+/** D-ASD-4 — `filled_form` and `other` never count as a "resolved" kind for
+ * step-artifact purposes. That resolution now decides attach-existing vs.
+ * upload-as-catch-all (D-ASD-2), so "Filled Form" or "Other" resolving to a
+ * real kind would silently redirect where a file lands — no longer cosmetic
+ * the way it was when `parseDocumentKind` only fed a display label.
+ * `parseDocumentKind` itself stays unfiltered for its other caller
+ * (`requiredDocumentKinds`, the E4.5 required-kind join), where this
+ * distinction doesn't apply. */
+export function resolvableStepArtifactKind(artifactName: string): DocumentKind | null {
+  const kind = parseDocumentKind(artifactName);
+  if (kind === "filled_form" || kind === "other") return null;
+  return kind;
+}
+
+export interface StepArtifactRow {
+  artifactName: string;
+  /** Non-null when the artifact NAME resolves to a canonical machine kind —
+   * offers "attach current version" when one exists, else an upload filed AS
+   * that kind (D-ASD-2). Null (a free-form name) always uploads as the
+   * `filled_form` catch-all (D-ASD-4). */
+  resolvedKind: DocumentKind | null;
+  /** Every file attached under this name, NEWEST FIRST. Never truncated — a
+   * second attachment renders alongside the first, not over it (D-ASD-5). */
+  attachments: SOPStepAttachment[];
+}
+
+export interface StepArtifactPlan {
+  rows: StepArtifactRow[];
+  /** Attachments whose artifact name has no matching requiredArtifacts entry
+   * (a reapply/restamp renamed the checklist) — render under a neutral
+   * "Other attachments" heading, never dropped. */
+  orphans: SOPStepAttachment[];
+}
+
+export function stepArtifactRows(
+  step: Pick<SOPStep, "requiredArtifacts" | "attachments">,
+): StepArtifactPlan {
+  // Defensive de-dupe: a template that saved duplicate requiredArtifacts
+  // names would otherwise produce two rows sharing one React key. The
+  // authoring-side fix (never save a duplicate name) is a separate concern —
+  // this is the backstop that keeps the read side correct regardless.
+  const names = [...new Set(step.requiredArtifacts ?? [])];
+  const attachments = step.attachments ?? [];
+  const byName = new Map<string, SOPStepAttachment[]>();
+  for (const attachment of attachments) {
+    const bucket = byName.get(attachment.artifactName) ?? [];
+    bucket.push(attachment);
+    byName.set(attachment.artifactName, bucket);
+  }
+
+  const rows: StepArtifactRow[] = names.map((artifactName) => ({
+    artifactName,
+    resolvedKind: resolvableStepArtifactKind(artifactName),
+    attachments: (byName.get(artifactName) ?? [])
+      .slice()
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)),
+  }));
+
+  const claimed = new Set(names);
+  const orphans = attachments.filter((a) => !claimed.has(a.artifactName));
+
+  return { rows, orphans };
+}
+
 export type CaseDocumentState = "present" | "expired" | "missing";
 
 export interface CaseDocumentCheck<T> {
@@ -471,6 +573,37 @@ export function caseDocumentStatus<T extends CaseDocumentShape>(
       expiringSoon: false,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// ASD BITE-ASD-02/03 — the shared owner-grain resolver: which vault (provider
+// or group) a kind's upload should land in. `StepArtifactsPanel` (an artifact
+// name that may be an orphan, falling back to `filled_form`) and
+// `CaseRequiredDocuments` (an already-known machine kind, never an orphan)
+// both need this — one function, not two copies that could drift.
+// ---------------------------------------------------------------------------
+
+export function resolveDocumentOwnerTarget(
+  kind: DocumentKind,
+  providerId: string | null,
+  groupId: string | null,
+): { ownerType: DocumentOwnerType; ownerId: string } | null {
+  const owners = DOCUMENT_KIND_META[kind].owners;
+  if (owners.includes("provider") && providerId)
+    return { ownerType: "provider", ownerId: providerId };
+  if (owners.includes("group") && groupId) return { ownerType: "group", ownerId: groupId };
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// BITE-ASD-03 (D-ASD-8) — bulk download selection. The download ACTION itself
+// (sequential anchor-click downloads, never `window.open` in a loop — a loop
+// of new-tab opens is what triggers the browser's popup blocker) lives in the
+// component; this is the pure part: which checks have something to download.
+// ---------------------------------------------------------------------------
+
+export function downloadableCaseDocuments<T>(checks: readonly CaseDocumentCheck<T>[]): T[] {
+  return checks.filter((c) => c.document !== null).map((c) => c.document as T);
 }
 
 // ---------------------------------------------------------------------------
