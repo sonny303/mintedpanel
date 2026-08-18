@@ -424,6 +424,7 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
 }
 
 export interface SetCaseDatesInput {
+  submittedDate?: string | null;
   expectedEffectiveDate?: string | null;
   confirmedEffectiveDate?: string | null;
   contractExecutedDate?: string | null;
@@ -440,7 +441,9 @@ export async function setCaseDates(caseId: string, input: SetCaseDatesInput): Pr
 
   const { data: prior, error: readErr } = await supabase
     .from("credential_cases")
-    .select("id, expected_effective_date, confirmed_effective_date, contract_executed_date")
+    .select(
+      "id, submitted_date, expected_effective_date, confirmed_effective_date, contract_executed_date",
+    )
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -448,6 +451,7 @@ export async function setCaseDates(caseId: string, input: SetCaseDatesInput): Pr
   if (!prior) throw new Error("Case not found");
 
   const before = {
+    submittedDate: (prior.submitted_date as string | null) ?? null,
     expectedEffectiveDate: (prior.expected_effective_date as string | null) ?? null,
     confirmedEffectiveDate: (prior.confirmed_effective_date as string | null) ?? null,
     contractExecutedDate: (prior.contract_executed_date as string | null) ?? null,
@@ -455,6 +459,10 @@ export async function setCaseDates(caseId: string, input: SetCaseDatesInput): Pr
   const after = { ...before };
   const patch: CredentialCaseUpdate = {};
 
+  if ("submittedDate" in input) {
+    patch.submitted_date = input.submittedDate ?? null;
+    after.submittedDate = input.submittedDate ?? null;
+  }
   if ("expectedEffectiveDate" in input) {
     patch.expected_effective_date = input.expectedEffectiveDate ?? null;
     after.expectedEffectiveDate = input.expectedEffectiveDate ?? null;

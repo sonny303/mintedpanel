@@ -17,7 +17,6 @@ import { StatusPill } from "@/components/StatusPill";
 import { CaseDateField } from "@/components/cases/CaseDateField";
 import { CaseFacilityField } from "@/components/cases/CaseFacilityField";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
-import { fmtDate } from "@/lib/format";
 import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveGroupIdentifierConfig } from "@/lib/payerResolutionIdentifier";
 import type { CaseDetail, Facility, Task } from "@/types";
@@ -74,7 +73,13 @@ export function CaseDetailsPanel({
       <CardContent className="p-4">
         <p className={GROUP_LABEL}>Case</p>
         <dl className="mt-2 space-y-3 text-[13px]">
-          <Row label="Submitted" value={<Num>{fmtDate(c.submittedDate)}</Num>} />
+          <CaseDateField
+            label="Submitted"
+            value={c.submittedDate ?? null}
+            canEdit={Boolean(canEditDates && onSaveDates)}
+            saving={savingDates}
+            onSave={(next) => (onSaveDates ?? (async () => undefined))({ submittedDate: next })}
+          />
           <CaseDateField
             label="Expected effective"
             value={c.expectedEffectiveDate ?? null}
