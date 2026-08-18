@@ -14,12 +14,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusPill } from "@/components/StatusPill";
+import { CaseDateField } from "@/components/cases/CaseDateField";
 import { CaseFacilityField } from "@/components/cases/CaseFacilityField";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
 import { fmtDate } from "@/lib/format";
 import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveGroupIdentifierConfig } from "@/lib/payerResolutionIdentifier";
 import type { CaseDetail, Facility, Task } from "@/types";
+import type { SetCaseDatesInput } from "@/services/cases";
 
 const GROUP_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
 
@@ -31,6 +33,9 @@ export function CaseDetailsPanel({
   canEditFacility = false,
   savingFacility = false,
   onSaveFacility,
+  canEditDates = false,
+  savingDates = false,
+  onSaveDates,
 }: {
   c: CaseDetail;
   tasks: Task[];
@@ -40,6 +45,11 @@ export function CaseDetailsPanel({
   canEditFacility?: boolean;
   savingFacility?: boolean;
   onSaveFacility?: (facilityId: string | null) => Promise<void>;
+  /** Expected/Confirmed effective + Contract executed — direct corrections,
+   * independent of the status machine (setCaseDates). */
+  canEditDates?: boolean;
+  savingDates?: boolean;
+  onSaveDates?: (input: SetCaseDatesInput) => Promise<void>;
 }) {
   const daysOpen = c.submittedDate ? differenceInDays(new Date(), parseISO(c.submittedDate)) : null;
   const approved = c.caseStatus === "approved";
@@ -65,9 +75,33 @@ export function CaseDetailsPanel({
         <p className={GROUP_LABEL}>Case</p>
         <dl className="mt-2 space-y-3 text-[13px]">
           <Row label="Submitted" value={<Num>{fmtDate(c.submittedDate)}</Num>} />
-          <Row label="Expected effective" value={<Num>{fmtDate(c.expectedEffectiveDate)}</Num>} />
-          <Row label="Confirmed effective" value={<Num>{fmtDate(c.confirmedEffectiveDate)}</Num>} />
-          <Row label="Contract executed" value={<Num>{fmtDate(c.contractExecutedDate)}</Num>} />
+          <CaseDateField
+            label="Expected effective"
+            value={c.expectedEffectiveDate ?? null}
+            canEdit={Boolean(canEditDates && onSaveDates)}
+            saving={savingDates}
+            onSave={(next) =>
+              (onSaveDates ?? (async () => undefined))({ expectedEffectiveDate: next })
+            }
+          />
+          <CaseDateField
+            label="Confirmed effective"
+            value={c.confirmedEffectiveDate ?? null}
+            canEdit={Boolean(canEditDates && onSaveDates)}
+            saving={savingDates}
+            onSave={(next) =>
+              (onSaveDates ?? (async () => undefined))({ confirmedEffectiveDate: next })
+            }
+          />
+          <CaseDateField
+            label="Contract executed"
+            value={c.contractExecutedDate ?? null}
+            canEdit={Boolean(canEditDates && onSaveDates)}
+            saving={savingDates}
+            onSave={(next) =>
+              (onSaveDates ?? (async () => undefined))({ contractExecutedDate: next })
+            }
+          />
           <Row label="Days open" value={<Num>{daysOpen !== null ? `${daysOpen}d` : "—"}</Num>} />
           <Separator className="my-2" />
           <Row label="Coordinator" value={coordinatorName} />
