@@ -432,29 +432,20 @@ export interface SetCaseDatesInput {
 /** Direct correction of the case's date fields (latest wins), independent of
  * the E6.0 status machine — mirrors setPayerReference/setCaseFacility. Only
  * the keys present on `input` are touched, so a field left out of the call
- * is never overwritten. Once the case is terminal (approved/denied/
- * not_pursuing/oon), only an admin may edit — same post-close discipline as
- * the tracking ID. The audit row carries before -> after for every key
- * that changed. */
+ * is never overwritten. Any writer may edit these at any time, including on
+ * a closed case — these are factual corrections, not a status transition.
+ * The audit row carries before -> after for every key that changed. */
 export async function setCaseDates(caseId: string, input: SetCaseDatesInput): Promise<void> {
   const orgId = requireActiveOrg();
 
   const { data: prior, error: readErr } = await supabase
     .from("credential_cases")
-    .select(
-      "id, case_status, expected_effective_date, confirmed_effective_date, contract_executed_date",
-    )
+    .select("id, expected_effective_date, confirmed_effective_date, contract_executed_date")
     .eq("id", caseId)
     .eq("org_id", orgId)
     .maybeSingle();
   if (readErr) throw readErr;
   if (!prior) throw new Error("Case not found");
-
-  const rawStatus = prior.case_status as string | null;
-  const status = isCaseStatus(rawStatus) ? rawStatus : null;
-  if (status && isTerminalCaseStatus(status) && currentUserRole() !== "admin") {
-    throw new Error("Only an admin can edit dates on a closed case.");
-  }
 
   const before = {
     expectedEffectiveDate: (prior.expected_effective_date as string | null) ?? null,
