@@ -2869,6 +2869,46 @@ keeps its own nav entry. ONE additive migration (repo + hosted,
   screen; a name-less save is blocked). `sidebar-ia.spec.ts` retargeted to
   `/account`.
 
+### Provider group names on the list API + extension panel modes (2026-08-19, cross-repo)
+
+A user-feedback wave against the Chrome extension (`sonny303/minted-extension`),
+coordinated in one session per the E4.3 both-repos rule. **No migration** — the
+panel half is one additive field on an existing route.
+
+- **`/api/providers` rows carry `groups`** (`{id, name, isPrimary}[]`, every
+  CURRENT membership, primary first then A→Z). The extension's provider search
+  shows the group beside the name because the same human can be on two groups'
+  rosters, and `providers.group_id` could never answer that — it is the FROZEN
+  primary mirror, and the grain is M:N (`provider_group_assignments`).
+- **Opt-in, so no browser caller pays for it:** `listProviders(ctx, filters,
+{ withGroups: true })` runs a SECOND org-scoped read and folds it in through
+  the pure `indexProviderGroups` / `attachProviderGroups`
+  (`src/lib/groupAssignments.ts`, tested); every existing caller omits the flag
+  and issues exactly the query it did before. `handleListProviders` sets it —
+  the extension is the consumer. Ended memberships are dropped (a provider who
+  left a group must not be labelled with it) and so is a row whose group name
+  did not resolve; a provider with no membership gets an EMPTY array, never an
+  absent key (absent means "not requested" on the wire).
+- **The join is org-scoped on BOTH sides** — the assignment row and, via the
+  embed filter, its group. This runs under the service-role client where RLS is
+  not the wall, and it is a genuinely new read, so it gets its own gate
+  coverage: assertions **27** (the two orgs' provider-row group id sets are
+  disjoint) + **27a** (states whether 27 is vacuous) and the new
+  `providergroups` leak mode in `scripts/mock-api-server.mjs` — the join
+  forgetting the group-side org filter. The `providers` leak now reddens 27 too
+  (leaked rows drag their own groups along; recorded in `EXPECTED_FAILS`).
+  Verified in-sandbox: green in pass mode, red on all 19 modes.
+- `Provider.groups?` + `ProviderGroupRef` added to `src/types/index.ts`
+  (additive). No schema change, no types regen needed.
+
+Extension side (branch `claude/minted-extension-updates-l4nboc`): the panel
+gained a THIRD mode — Search / Work cases / Train forms, with Train forms
+admin-only via `/api/me/orgs` roles — Search replaced the Browse-providers
+dropdown (which could not show a group), the saved quick-card layout now
+follows the picker's own order, and the hard-coded Malpractice card row was
+removed (those `groupInsurance.*` fields are ordinary picker fields). See that
+repo's CLAUDE.md.
+
 ### SOP step document attachments — rebuilt (2026-08-17, closes/replaces PR #328)
 
 A SOP step's `requiredArtifacts` checklist can now hold real files, attached
@@ -3522,7 +3562,10 @@ x-org-id`.
   `?status=terminated` still works to view them explicitly. Browser hooks
   that call `listProviders`/`getProviders` directly are unaffected (they
   don't set `excludeStatus`, so they keep getting "everyone, I'll filter
-  myself" as before). `PATCH
+  myself" as before). **Since 2026-08-19 the list route also sets
+  `withGroups: true`**, so each row carries `groups` (see the cross-repo entry
+  near the end of this file) — an opt-in second org-scoped read that browser
+  callers never trigger. `PATCH
 /api/providers/:id` mirrors the GET handler's not-found detection: a
   cross-org or nonexistent id is a 404 (never the 500 the raw `.single()`
   would raise), pinned by gate assertion 12.

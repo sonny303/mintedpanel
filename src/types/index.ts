@@ -478,6 +478,16 @@ export interface ProviderGroupAssignment {
   createdAt: string;
 }
 
+// A provider's group membership reduced to what a LIST row needs to name it.
+// The provider↔group grain is M:N (a provider can work under several groups),
+// so a list row carries every un-ended membership, not the frozen
+// providers.group_id mirror.
+export interface ProviderGroupRef {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+}
+
 export interface FacilityAssignment {
   id: string;
   orgId: string;
@@ -547,6 +557,12 @@ export interface Provider {
   /** E4.2 F4.2.7 — the org's designated dry-run test provider. Excluded from
    * queue/generation/scorecard by the shared testProvider predicate. */
   isTestProvider?: boolean;
+  /** Every group this provider works under, primary first (2026-08-19). Present
+   * ONLY on list rows fetched with `withGroups` — the extension's search needs
+   * to tell two same-named providers apart by group, and `groupId` alone can't
+   * (it is the frozen primary mirror, and the grain is M:N). Absent means "not
+   * requested", never "no groups". */
+  groups?: ProviderGroupRef[];
   createdAt: string;
   updatedAt: string;
 }

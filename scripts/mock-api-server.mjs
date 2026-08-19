@@ -35,6 +35,8 @@
 //               registry read returns a private org row, and the shared
 //               propose writes under the caller's org                (22, 23)
 //   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
+//   providergroups a provider row's group names come back unscoped, naming
+//                  another tenant's group                                (27)
 //   documentupload cross-org owner honored on upload-intent/finalize instead
 //               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
 import { createServer } from "node:http";
@@ -82,6 +84,7 @@ export const LEAK_MODES = [
   "portals",
   "taskstep",
   "documentupload",
+  "providergroups",
 ];
 
 const USERS = {
@@ -136,21 +139,29 @@ function facilitiesOf(provider) {
   return FACILITIES.filter((f) => f.orgId === provider.orgId);
 }
 
-function provider(id, orgId, firstName, lastName) {
-  return { id, orgId, firstName, lastName, status: "active" };
+function provider(id, orgId, firstName, lastName, groups = []) {
+  return { id, orgId, firstName, lastName, status: "active", groups };
 }
 
+// Group memberships ride each provider row (2026-08-19 `withGroups`): the
+// extension's search names the group beside the provider. Group NAMES are the
+// leak surface here, so each org's are distinct and unmistakable.
+const KANSAS_GROUP = { id: "k-group-1", name: "Kansas Fitness Physio Group", isPrimary: true };
+const SOUTHPARK_GROUP = { id: "sp-group-1", name: "South Park Physician Group", isPrimary: true };
+
 const PROVIDERS = [
-  provider(FIXTURES.KANSAS_PROVIDER_ID, FIXTURES.KANSAS_ORG, "Kay", "One"),
-  provider("k-prov-2", FIXTURES.KANSAS_ORG, "Kay", "Two"),
-  provider("k-prov-3", FIXTURES.KANSAS_ORG, "Kay", "Three"),
-  provider("k-prov-4", FIXTURES.KANSAS_ORG, "Kay", "Four"),
-  provider("k-prov-5", FIXTURES.KANSAS_ORG, "Kay", "Five"),
-  provider("k-prov-6", FIXTURES.KANSAS_ORG, "Kay", "Six"),
-  provider(FIXTURES.SOUTHPARK_PROVIDER_ID, FIXTURES.SOUTHPARK_ORG, "Eric", "Cartman"),
-  provider("sp-prov-2", FIXTURES.SOUTHPARK_ORG, "Kenny", "McCormick"),
-  provider("sp-prov-3", FIXTURES.SOUTHPARK_ORG, "Kyle", "Broflovski"),
-  provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh"),
+  provider(FIXTURES.KANSAS_PROVIDER_ID, FIXTURES.KANSAS_ORG, "Kay", "One", [KANSAS_GROUP]),
+  provider("k-prov-2", FIXTURES.KANSAS_ORG, "Kay", "Two", [KANSAS_GROUP]),
+  provider("k-prov-3", FIXTURES.KANSAS_ORG, "Kay", "Three", [KANSAS_GROUP]),
+  provider("k-prov-4", FIXTURES.KANSAS_ORG, "Kay", "Four", [KANSAS_GROUP]),
+  provider("k-prov-5", FIXTURES.KANSAS_ORG, "Kay", "Five", [KANSAS_GROUP]),
+  provider("k-prov-6", FIXTURES.KANSAS_ORG, "Kay", "Six", [KANSAS_GROUP]),
+  provider(FIXTURES.SOUTHPARK_PROVIDER_ID, FIXTURES.SOUTHPARK_ORG, "Eric", "Cartman", [
+    SOUTHPARK_GROUP,
+  ]),
+  provider("sp-prov-2", FIXTURES.SOUTHPARK_ORG, "Kenny", "McCormick", [SOUTHPARK_GROUP]),
+  provider("sp-prov-3", FIXTURES.SOUTHPARK_ORG, "Kyle", "Broflovski", [SOUTHPARK_GROUP]),
+  provider("sp-prov-4", FIXTURES.SOUTHPARK_ORG, "Stan", "Marsh", [SOUTHPARK_GROUP]),
 ];
 
 // Case rows carry the dropdown projection of GET /api/cases (open cases only —
@@ -815,6 +826,13 @@ export async function createMockApiServer(options = {}) {
         let rows = allProviders().filter((p) => p.orgId === orgId);
         if (leak === "providers" && orgId === FIXTURES.KANSAS_ORG) {
           rows = rows.concat(PROVIDERS.filter((p) => p.orgId === FIXTURES.SOUTHPARK_ORG));
+        }
+        // Leak "providergroups": the `withGroups` join forgets to scope the
+        // group side to the caller's org, so a provider's row names ANOTHER
+        // tenant's group (assertion 27 red). The provider rows themselves stay
+        // correctly scoped — this is the second read leaking, not the first.
+        if (leak === "providergroups") {
+          rows = rows.map((p) => ({ ...p, groups: [...(p.groups ?? []), SOUTHPARK_GROUP] }));
         }
         return envelope(res, 200, rows, null, { total: rows.length, page: 1, pageSize: 100 });
       }

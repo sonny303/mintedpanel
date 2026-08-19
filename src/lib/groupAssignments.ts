@@ -5,6 +5,8 @@
 // rows so the service writes the minimum and the partial unique index
 // (one primary per provider) is never violated mid-flight.
 
+import type { ProviderGroupRef } from "@/types";
+
 export interface GroupAssignmentInput {
   groupId: string;
   isPrimary: boolean;
@@ -63,4 +65,60 @@ export function planAssignmentSync(
   const promoteId = promoteTarget && !promoteTarget.isPrimary ? promoteTarget.id : null;
 
   return { inserts, demoteIds, promoteId, deleteIds, primaryGroupId };
+}
+
+// ---------------------------------------------------------------------------
+// List-row group names (2026-08-19) — the pure half of `withGroups`.
+// ---------------------------------------------------------------------------
+
+/** One `provider_group_assignments` row reduced to what naming needs, with the
+ * group name resolved by the caller's embed. */
+export interface ProviderGroupMembershipRow {
+  providerId: string;
+  groupId: string;
+  groupName: string | null;
+  isPrimary: boolean;
+  endDate: string | null;
+}
+
+/**
+ * Index membership rows by provider, primary first then A→Z by name.
+ *
+ * ENDED memberships are dropped: a provider who left a group should not be
+ * labelled with it in a picker. A row whose group embed came back empty is
+ * dropped too — an unnamed chip is worse than no chip, and the only way to get
+ * one is a group the caller cannot read, which is exactly what should not
+ * render. A provider with several memberships keeps all of them; that plurality
+ * is the whole point (the same human can work under two groups).
+ */
+export function indexProviderGroups(
+  rows: readonly ProviderGroupMembershipRow[],
+): Map<string, ProviderGroupRef[]> {
+  const byProvider = new Map<string, ProviderGroupRef[]>();
+  for (const row of rows) {
+    if (row.endDate != null) continue;
+    const name = (row.groupName ?? "").trim();
+    if (name === "") continue;
+    const list = byProvider.get(row.providerId) ?? [];
+    if (list.some((g) => g.id === row.groupId)) continue;
+    list.push({ id: row.groupId, name, isPrimary: row.isPrimary });
+    byProvider.set(row.providerId, list);
+  }
+  for (const list of byProvider.values()) {
+    list.sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+  return byProvider;
+}
+
+/** Attach the indexed groups to their rows. Every row gets a `groups` array —
+ * an empty one means "no group on file", which is a real state the caller must
+ * be able to render honestly (absent would mean "not requested"). */
+export function attachProviderGroups<T extends { id: string }>(
+  rows: readonly T[],
+  byProvider: ReadonlyMap<string, ProviderGroupRef[]>,
+): Array<T & { groups: ProviderGroupRef[] }> {
+  return rows.map((row) => ({ ...row, groups: byProvider.get(row.id) ?? [] }));
 }
