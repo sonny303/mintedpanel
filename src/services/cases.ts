@@ -423,6 +423,80 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
   });
 }
 
+export interface SetCaseDatesInput {
+  submittedDate?: string | null;
+  expectedEffectiveDate?: string | null;
+  confirmedEffectiveDate?: string | null;
+  contractExecutedDate?: string | null;
+}
+
+/** Direct correction of the case's date fields (latest wins), independent of
+ * the E6.0 status machine — mirrors setPayerReference/setCaseFacility. Only
+ * the keys present on `input` are touched, so a field left out of the call
+ * is never overwritten. Any writer may edit these at any time, including on
+ * a closed case — these are factual corrections, not a status transition.
+ * The audit row carries before -> after for every key that changed. */
+export async function setCaseDates(caseId: string, input: SetCaseDatesInput): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const { data: prior, error: readErr } = await supabase
+    .from("credential_cases")
+    .select(
+      "id, submitted_date, expected_effective_date, confirmed_effective_date, contract_executed_date",
+    )
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!prior) throw new Error("Case not found");
+
+  const before = {
+    submittedDate: (prior.submitted_date as string | null) ?? null,
+    expectedEffectiveDate: (prior.expected_effective_date as string | null) ?? null,
+    confirmedEffectiveDate: (prior.confirmed_effective_date as string | null) ?? null,
+    contractExecutedDate: (prior.contract_executed_date as string | null) ?? null,
+  };
+  const after = { ...before };
+  const patch: CredentialCaseUpdate = {};
+
+  if ("submittedDate" in input) {
+    patch.submitted_date = input.submittedDate ?? null;
+    after.submittedDate = input.submittedDate ?? null;
+  }
+  if ("expectedEffectiveDate" in input) {
+    patch.expected_effective_date = input.expectedEffectiveDate ?? null;
+    after.expectedEffectiveDate = input.expectedEffectiveDate ?? null;
+  }
+  if ("confirmedEffectiveDate" in input) {
+    patch.confirmed_effective_date = input.confirmedEffectiveDate ?? null;
+    after.confirmedEffectiveDate = input.confirmedEffectiveDate ?? null;
+  }
+  if ("contractExecutedDate" in input) {
+    patch.contract_executed_date = input.contractExecutedDate ?? null;
+    after.contractExecutedDate = input.contractExecutedDate ?? null;
+  }
+  if (Object.keys(patch).length === 0) return;
+
+  const { data, error } = await supabase
+    .from("credential_cases")
+    .update(patch)
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Case not found");
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "case",
+    entityId: caseId,
+    before,
+    after,
+    description: "Updated case dates",
+  });
+}
+
 // E4.0's advance_payer_pipeline RPC remains in the database (additive rule)
 // but is DORMANT since E6.0: the payer pipeline is no longer a user-facing
 // machine, and its state column is a transition-shim mirror written by

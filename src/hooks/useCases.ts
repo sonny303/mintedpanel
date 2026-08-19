@@ -11,12 +11,14 @@ import {
   getContractFor,
   listCaseDenialEntries,
   listDenialReasonCodes,
+  setCaseDates,
   setCaseFacility,
   setCaseStatus,
   setPayerReference,
   type CaseFilters,
   type CaseInput,
   type CaseTaskPayload,
+  type SetCaseDatesInput,
   type SetCaseStatusInput,
 } from "@/services/cases";
 
@@ -105,6 +107,26 @@ export function useSetCaseFacility() {
   const orgId = useActiveOrgId() ?? "no-org";
   return useMutation({
     mutationFn: (vars: SetCaseFacilityVars) => setCaseFacility(vars.caseId, vars.facilityId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["cases", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface SetCaseDatesVars {
+  caseId: string;
+  input: SetCaseDatesInput;
+}
+
+/** Direct correction of the case's date fields, independent of the status
+ * machine (setCaseDates). */
+export function useSetCaseDates() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: SetCaseDatesVars) => setCaseDates(vars.caseId, vars.input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["cases", orgId] });
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });

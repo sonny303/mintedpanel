@@ -23,6 +23,7 @@ import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
   useCase,
   useDenialReasonCodes,
+  useSetCaseDates,
   useSetCaseFacility,
   useSetCaseStatus,
   useSetPayerReference,
@@ -65,6 +66,7 @@ function CaseDetailPage() {
   const logNoteM = useLogNote();
   const setReferenceM = useSetPayerReference();
   const setFacilityM = useSetCaseFacility();
+  const setDatesM = useSetCaseDates();
 
   const coordinatorName = useMemo(() => {
     if (!c?.assignedTo) return "—";
@@ -258,6 +260,17 @@ function CaseDetailPage() {
                 try {
                   await setFacilityM.mutateAsync({ caseId: c.id, facilityId });
                   toast.success("Facility saved");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  throw e;
+                }
+              }}
+              canEditDates={canEdit}
+              savingDates={setDatesM.isPending}
+              onSaveDates={async (input) => {
+                try {
+                  await setDatesM.mutateAsync({ caseId: c.id, input });
+                  toast.success("Date saved");
                 } catch (e) {
                   toast.error((e as Error).message);
                   throw e;
