@@ -26,6 +26,7 @@ interface Captured {
   payload?: Record<string, unknown>;
   filters: Array<[string, unknown]>;
   excludeFilters: Array<[string, unknown]>;
+  inFilters: Array<[string, unknown[]]>;
   range?: [number, number];
   order?: [string, { ascending: boolean }];
 }
@@ -37,7 +38,13 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown; count?: num
 
   const db = {
     from(table: string) {
-      const cap: Captured = { table, op: "select", filters: [], excludeFilters: [] };
+      const cap: Captured = {
+        table,
+        op: "select",
+        filters: [],
+        excludeFilters: [],
+        inFilters: [],
+      };
       captures.push(cap);
       const builder: Record<string, unknown> = {
         select(cols: string, opts?: { count?: string }) {
@@ -61,6 +68,10 @@ function makeFakeDb(results: Array<{ data: unknown; error?: unknown; count?: num
         },
         neq(col: string, val: unknown) {
           cap.excludeFilters.push([col, val]);
+          return builder;
+        },
+        in(col: string, vals: unknown[]) {
+          cap.inFilters.push([col, vals]);
           return builder;
         },
         or() {
@@ -139,6 +150,63 @@ describe("provider service — injected server context", () => {
     for (const phi of ["ssn_last4", "date_of_birth", "home_street", "home_city", "home_zip"]) {
       expect(cols).not.toContain(phi);
     }
+  });
+
+  // 2026-08-19 — `withGroups`: the extension's provider search names the group
+  // beside the provider, because the same human can be on two groups' rosters.
+  it("listProviders without withGroups issues exactly ONE query (browser path unchanged)", async () => {
+    const { db, captures } = makeFakeDb([{ data: [{ id: "p1" }], count: 1 }]);
+    const { ctx } = ctxWith(db);
+    const page = await listProviders(ctx, {}, { page: 1, pageSize: 25 });
+    expect(captures).toHaveLength(1);
+    expect(page.rows[0]).not.toHaveProperty("groups");
+  });
+
+  it("withGroups reads provider_group_assignments org-scoped on BOTH sides, for the fetched ids only", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: [{ id: "p1" }, { id: "p2" }], count: 2 },
+      {
+        data: [
+          {
+            provider_id: "p1",
+            group_id: "g2",
+            is_primary: false,
+            end_date: null,
+            provider_groups: { name: "Zenith Ortho", org_id: "org-1" },
+          },
+          {
+            provider_id: "p1",
+            group_id: "g1",
+            is_primary: true,
+            end_date: null,
+            provider_groups: { name: "Acme Health", org_id: "org-1" },
+          },
+        ],
+      },
+    ]);
+    const { ctx } = ctxWith(db);
+
+    const page = await listProviders(ctx, {}, { page: 1, pageSize: 25, withGroups: true });
+
+    const join = captures[1];
+    expect(join.table).toBe("provider_group_assignments");
+    // The service key bypasses RLS, so the org filter is the wall — on the
+    // assignment row AND on the embedded group.
+    expect(join.filters).toContainEqual(["org_id", "org-1"]);
+    expect(join.filters).toContainEqual(["provider_groups.org_id", "org-1"]);
+    expect(join.inFilters).toContainEqual(["provider_id", ["p1", "p2"]]);
+
+    expect(page.rows[0]?.groups?.map((g) => g.name)).toEqual(["Acme Health", "Zenith Ortho"]);
+    // A provider with no membership gets an empty list, never an absent key —
+    // absent means "not requested" on the wire.
+    expect(page.rows[1]?.groups).toEqual([]);
+  });
+
+  it("withGroups skips the second query entirely when the page is empty", async () => {
+    const { db, captures } = makeFakeDb([{ data: [], count: 0 }]);
+    const { ctx } = ctxWith(db);
+    await listProviders(ctx, {}, { page: 1, pageSize: 25, withGroups: true });
+    expect(captures).toHaveLength(1);
   });
 
   it("createProvider sets org_id from ctx (not the body) and writes an audit row", async () => {

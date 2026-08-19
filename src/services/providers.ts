@@ -11,6 +11,8 @@ import { markFirstFacilityPrimary } from "@/lib/assignmentScope";
 import { currentUserId, requireActiveOrg, writeAudit, type AuditInput } from "@/lib/audit";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import {
+  attachProviderGroups,
+  indexProviderGroups,
   planAssignmentSync,
   validateGroupAssignments,
   type GroupAssignmentInput,
@@ -116,6 +118,11 @@ export interface ListProvidersOptions {
   pageSize?: number;
   sortColumn?: string;
   sortAscending?: boolean;
+  // Attach each row's group memberships (2026-08-19). OPT-IN: it costs a second
+  // org-scoped read, and only the API list route (the extension's provider
+  // search, which must distinguish two same-named providers by group) needs it.
+  // Every browser caller omits it and issues exactly the query it did before.
+  withGroups?: boolean;
 }
 
 export interface ProviderPage {
@@ -182,7 +189,37 @@ export async function listProviders(
     return rest;
   });
   const rows = camelizeRow<Provider[]>(stripped);
-  return { rows, total: paged ? (count ?? rows.length) : rows.length };
+  const withGroups = options.withGroups ? await attachGroupsToProviders(ctx, rows) : rows;
+  return { rows: withGroups, total: paged ? (count ?? rows.length) : rows.length };
+}
+
+/** Second, org-scoped read: every current group membership of the rows just
+ * fetched, with the group's name resolved by embed. Org-scoped on BOTH sides —
+ * the assignment row and (via the embed filter) its group — because the API
+ * route runs this under the service-role client, where RLS is not the wall. */
+async function attachGroupsToProviders(
+  ctx: ProviderServiceCtx,
+  rows: Provider[],
+): Promise<Provider[]> {
+  if (rows.length === 0) return rows;
+  const { data, error } = await ctx.db
+    .from("provider_group_assignments")
+    .select("provider_id, group_id, is_primary, end_date, provider_groups(name, org_id)")
+    .eq("org_id", ctx.orgId)
+    .eq("provider_groups.org_id", ctx.orgId)
+    .in(
+      "provider_id",
+      rows.map((r) => r.id),
+    );
+  if (error) throw error;
+  const memberships = ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({
+    providerId: String(row.provider_id ?? ""),
+    groupId: String(row.group_id ?? ""),
+    groupName: (row.provider_groups as { name?: string } | null)?.name ?? null,
+    isPrimary: row.is_primary === true,
+    endDate: (row.end_date as string | null) ?? null,
+  }));
+  return attachProviderGroups(rows, indexProviderGroups(memberships));
 }
 
 export async function getProviders(

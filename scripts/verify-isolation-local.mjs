@@ -74,9 +74,10 @@ function runGate(baseUrl) {
 // would mask a dead assertion), so each leak mode also pins the exact set of
 // assertions expected to fail — any extra or missing failure is a harness bug.
 const EXPECTED_FAILS = {
-  // The "providers" leak also lets a cross-org PATCH land (assertion 12). The
+  // The "providers" leak also lets a cross-org PATCH land (assertion 12), and
+  // the leaked rows drag their own groups with them, so 27 reddens too. The
   // list is sorted lexicographically to match failedAssertions()'s .sort().
-  providers: ["1", "12", "19", "1b", "2c", "3"],
+  providers: ["1", "12", "19", "1b", "27", "2c", "3"],
   spoof: ["4"],
   // The field-map leak breaks both the shared-catalog reads and the
   // propose-only write's org scoping (20a).
@@ -107,6 +108,8 @@ const EXPECTED_FAILS = {
   // endpoints — a signed upload target (25b) and a finalized metadata insert
   // (26) — instead of 404ing before anything is signed or written.
   documentupload: ["25b", "26"],
+  // The unscoped group join names another tenant's group on every row.
+  providergroups: ["27"],
 };
 
 function failedAssertions(output) {

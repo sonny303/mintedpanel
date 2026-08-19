@@ -57,6 +57,10 @@ export async function handleListProviders(url: URL, ctx: AuthContext): Promise<R
     pageSize,
     sortColumn,
     sortAscending,
+    // The extension's provider search shows the group beside the name — the
+    // same human can be on two groups' rosters, and the row's own `groupId` is
+    // only the frozen primary mirror. Group names are not PHI.
+    withGroups: true,
   });
   return ok(rows, { total, page, pageSize });
 }

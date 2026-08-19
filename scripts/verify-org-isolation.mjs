@@ -949,6 +949,36 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 27. Provider list `groups` (2026-08-19): each row names the provider's
+  //     groups so a search can tell two same-named providers apart. That is a
+  //     SECOND org-scoped read joined onto the first, so it gets its own
+  //     check — the rows can be correctly scoped while the join is not.
+  //     Reuses the two org views already fetched above; non-vacuous as soon as
+  //     either org has a group (27a states which).
+  const groupsOf = (body) =>
+    (Array.isArray(body?.data) ? body.data : []).flatMap((row) =>
+      Array.isArray(row?.groups) ? row.groups : [],
+    );
+  const kGroups = groupsOf(k.body);
+  const sGroups = groupsOf(s.body);
+  const kGroupIds = new Set(kGroups.map((g) => g?.id).filter(Boolean));
+  const sGroupIds = new Set(sGroups.map((g) => g?.id).filter(Boolean));
+  check(
+    "27a. At least one org's provider rows carry group names (27 is non-vacuous)",
+    kGroupIds.size > 0 || sGroupIds.size > 0,
+    `kansasGroups=${kGroupIds.size} southParkGroups=${sGroupIds.size}` +
+      (kGroupIds.size + sGroupIds.size === 0
+        ? " (no groups on either roster — 27 proves nothing)"
+        : ""),
+  );
+  const groupOverlap = [...kGroupIds].filter((id) => sGroupIds.has(id));
+  check(
+    "27. Kansas and South Park provider-row group id sets are disjoint",
+    groupOverlap.length === 0,
+    `overlap=${groupOverlap.length}${groupOverlap.length ? " " + groupOverlap.slice(0, 3).join(",") : ""}`,
+    { leak: true },
+  );
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";
