@@ -1,5 +1,5 @@
 // Public privacy policy page — the hosted policy URL required by the Chrome
-// Web Store listing for the Minted Panel Filler extension.
+// Web Store listing for the Minted Panel Workbench extension.
 // Content mirrors docs/privacy-policy.md: edit that document first, then keep
 // this page in sync.
 // Fully public: __root.tsx lists /privacy as a public route (no session
@@ -51,10 +51,10 @@ function PrivacyPage() {
         <h1 className="text-3xl font-semibold text-foreground">Privacy Policy</h1>
 
         <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
-          <Lead>Effective date:</Lead> July 5, 2026
+          <Lead>Effective date:</Lead> August 21, 2026
           <br />
-          <Lead>Applies to:</Lead> the Minted Panel web application and the Minted Panel Filler
-          browser extension (together, "the Service").
+          <Lead>Applies to:</Lead> the Minted Panel web application and the Minted Panel Workbench
+          browser extension (formerly "Minted Panel Filler"; together, "the Service").
         </p>
 
         <Body>
@@ -91,7 +91,7 @@ function PrivacyPage() {
 
         <SectionTitle>How the browser extension works</SectionTitle>
         <Body>
-          The Minted Panel Filler extension fills insurance payer enrollment forms using your
+          The Minted Panel Workbench extension fills insurance payer enrollment forms using your
           organization's provider data.
         </Body>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted-foreground">
@@ -101,10 +101,25 @@ function PrivacyPage() {
             connection and enters it into form fields on supported payer websites.
           </li>
           <li>
-            It writes to forms. It does not read, collect, or transmit the content of web pages you
-            visit.
+            It writes to forms. It does not read, collect, or transmit the values you or anyone
+            else has typed into a web page.
           </li>
-          <li>It never submits a form. You review and submit every application yourself.</li>
+          <li>
+            <Lead>It never submits a form.</Lead> You review and submit every application yourself.
+          </li>
+          <li>
+            <Lead>Site access is limited and requested one payer portal at a time.</Lead> The
+            extension only works on a small, named list of insurance payer portals. Access to a
+            portal you have not yet used is requested in the extension's own permission prompt
+            before anything happens on that site — it does not have standing access to sites
+            outside that list, and it never asks for access to "all websites."
+          </li>
+          <li>
+            <Lead>Setting up a new payer form</Lead> (an admin-only activity we call
+            &ldquo;Train forms&rdquo;) reads a form's structure — its field names, field types, and
+            layout — so we can teach the extension how to fill that form correctly. This never
+            reads or stores the values in a field, including fields that already contain your data.
+          </li>
           <li>
             Your session is kept in browser session storage and is cleared when you close your
             browser.

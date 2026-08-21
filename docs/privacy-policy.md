@@ -1,7 +1,7 @@
 # Privacy Policy
 
-**Effective date:** July 5, 2026
-**Applies to:** the Minted Panel web application and the Minted Panel Filler browser extension (together, "the Service").
+**Effective date:** August 21, 2026
+**Applies to:** the Minted Panel web application and the Minted Panel Workbench browser extension (formerly "Minted Panel Filler"; together, "the Service").
 
 South Park Physician Group ("we," "us") provides Minted Panel, a credentialing and contracting management platform for healthcare practice groups. This policy explains what information the Service handles and how.
 
@@ -19,12 +19,14 @@ Minted Panel is a business tool. Our users are credentialing staff at healthcare
 
 ## How the browser extension works
 
-The Minted Panel Filler extension fills insurance payer enrollment forms using your organization's provider data.
+The Minted Panel Workbench extension fills insurance payer enrollment forms using your organization's provider data.
 
 - It works only after you sign in with your Minted Panel account.
 - It requests your organization's provider data from our servers over an encrypted connection and enters it into form fields on supported payer websites.
-- It writes to forms. It does not read, collect, or transmit the content of web pages you visit.
-- It never submits a form. You review and submit every application yourself.
+- It writes to forms. It does not read, collect, or transmit the values you or anyone else has typed into a web page.
+- **It never submits a form.** You review and submit every application yourself.
+- **Site access is limited and requested one payer portal at a time.** The extension only works on a small, named list of insurance payer portals. Access to a portal you have not yet used is requested in the extension's own permission prompt before anything happens on that site — it does not have standing access to sites outside that list, and it never asks for access to "all websites."
+- **Setting up a new payer form (an admin-only activity we call "Train forms")** reads a form's structure — its field names, field types, and layout — so we can teach the extension how to fill that form correctly. This never reads or stores the values in a field, including fields that already contain your data.
 - Your session is kept in browser session storage and is cleared when you close your browser.
 - It records each fill and each submission you confirm, so the activity appears in your organization's audit trail.
 
