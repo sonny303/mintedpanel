@@ -595,6 +595,37 @@ export function resolveDocumentOwnerTarget(
   return null;
 }
 
+/** Where a document ALREADY lives. A replacement versions an existing family,
+ * and the server rejects an intent whose owner disagrees with that family
+ * ("A replacement must keep the document's owner and kind"), so a replace
+ * must follow the document — never the kind's owner PREFERENCE, which sends a
+ * dual-owner kind (COI) to the provider whenever a case has one, even when
+ * the existing COI is the group's. `resolveDocumentOwnerTarget` stays the
+ * answer for a MISSING kind, where there is no document to follow. */
+export interface DocumentOwnerShape {
+  providerId: string | null;
+  groupId: string | null;
+}
+
+export function documentOwnerTarget(
+  document: DocumentOwnerShape,
+): { ownerType: DocumentOwnerType; ownerId: string } | null {
+  if (document.providerId) return { ownerType: "provider", ownerId: document.providerId };
+  if (document.groupId) return { ownerType: "group", ownerId: document.groupId };
+  return null;
+}
+
+/** Owner for an upload against one required-document row: the existing
+ * document's own grain when there is one, else the kind's preference. */
+export function uploadOwnerTargetForCheck<T extends DocumentOwnerShape>(
+  check: Pick<CaseDocumentCheck<T>, "kind" | "document">,
+  providerId: string | null,
+  groupId: string | null,
+): { ownerType: DocumentOwnerType; ownerId: string } | null {
+  if (check.document) return documentOwnerTarget(check.document);
+  return resolveDocumentOwnerTarget(check.kind, providerId, groupId);
+}
+
 // ---------------------------------------------------------------------------
 // BITE-ASD-03 (D-ASD-8) — bulk download selection. The download ACTION itself
 // (sequential anchor-click downloads, never `window.open` in a loop — a loop

@@ -13,6 +13,7 @@ import {
   currentVersions,
   documentFamilyPrefix,
   documentObjectPath,
+  documentOwnerTarget,
   downloadableCaseDocuments,
   expirationDateError,
   expiringCredentialRows,
@@ -26,6 +27,7 @@ import {
   resolveDocumentOwnerTarget,
   safeFileName,
   stepArtifactRows,
+  uploadOwnerTargetForCheck,
   uploadableKinds,
   vaultPickerKinds,
 } from "./documents";
@@ -354,6 +356,48 @@ describe("resolveDocumentOwnerTarget (ASD BITE-ASD-02/03)", () => {
   it("returns null when neither grain is available for the kind", () => {
     expect(resolveDocumentOwnerTarget("w9", "prov-1", null)).toBeNull();
     expect(resolveDocumentOwnerTarget("state_license", null, "grp-1")).toBeNull();
+  });
+});
+
+describe("documentOwnerTarget / uploadOwnerTargetForCheck", () => {
+  const groupCoi = { providerId: null, groupId: "grp-1" };
+  const providerCoi = { providerId: "prov-1", groupId: null };
+
+  it("follows the document's own grain", () => {
+    expect(documentOwnerTarget(groupCoi)).toEqual({ ownerType: "group", ownerId: "grp-1" });
+    expect(documentOwnerTarget(providerCoi)).toEqual({
+      ownerType: "provider",
+      ownerId: "prov-1",
+    });
+    expect(documentOwnerTarget({ providerId: null, groupId: null })).toBeNull();
+  });
+
+  // The defect this covers: a dual-grain kind whose existing version is the
+  // GROUP's was routed to the provider by kind preference, so replacing an
+  // expired group COI on a case that also has a provider sent the group's
+  // family id with ownerType "provider" — a 422 every time.
+  it("replaces an expired GROUP coi against the group, even when the case has a provider", () => {
+    expect(
+      uploadOwnerTargetForCheck({ kind: "coi", document: groupCoi }, "prov-1", "grp-1"),
+    ).toEqual({ ownerType: "group", ownerId: "grp-1" });
+  });
+
+  it("replaces a provider-held coi against the provider", () => {
+    expect(
+      uploadOwnerTargetForCheck({ kind: "coi", document: providerCoi }, "prov-1", "grp-1"),
+    ).toEqual({ ownerType: "provider", ownerId: "prov-1" });
+  });
+
+  it("falls back to the kind's preference for a MISSING kind (no document to follow)", () => {
+    expect(uploadOwnerTargetForCheck({ kind: "coi", document: null }, "prov-1", "grp-1")).toEqual({
+      ownerType: "provider",
+      ownerId: "prov-1",
+    });
+    expect(uploadOwnerTargetForCheck({ kind: "w9", document: null }, "prov-1", "grp-1")).toEqual({
+      ownerType: "group",
+      ownerId: "grp-1",
+    });
+    expect(uploadOwnerTargetForCheck({ kind: "w9", document: null }, "prov-1", null)).toBeNull();
   });
 });
 

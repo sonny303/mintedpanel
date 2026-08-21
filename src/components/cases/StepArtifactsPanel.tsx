@@ -37,6 +37,7 @@ import {
   checkDocumentFile,
   currentVersions,
   documentKindLabel,
+  documentOwnerTarget,
   expirationDateError,
   resolveDocumentOwnerTarget,
   stepArtifactRows,
@@ -553,8 +554,9 @@ function ReplaceArtifactDialog({
   const [expirationDate, setExpirationDate] = useState(document.expirationDate ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const ownerType: DocumentOwnerType = document.providerId ? "provider" : "group";
-  const ownerId = document.providerId ?? document.groupId ?? "";
+  // The replacement versions THIS document's family, so it must keep this
+  // document's owner (shared with the required-documents rail).
+  const owner = documentOwnerTarget(document);
   const kindMeta = DOCUMENT_KIND_META[document.docType];
   const busy = uploadM.isPending || attachM.isPending || detachM.isPending;
 
@@ -573,11 +575,15 @@ function ReplaceArtifactDialog({
       setError(expError);
       return;
     }
+    if (!owner) {
+      setError("That document has no provider or group owner");
+      return;
+    }
     setError(null);
     uploadM.mutate(
       {
-        ownerType,
-        ownerId,
+        ownerType: owner.ownerType,
+        ownerId: owner.ownerId,
         kind: document.docType,
         file,
         effectiveDate: document.effectiveDate,
