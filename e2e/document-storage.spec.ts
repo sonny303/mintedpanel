@@ -107,7 +107,7 @@ interface DocRowInput {
   versionNumber?: number;
   supersedes?: string | null;
   fileName?: string;
-  /** TS-163: usage context (E4.5 TE-1) — the caseArtifact grain sets this. */
+  /** Usage context (E4.5 TE-1) — a gap upload records the case it was for. */
   caseId?: string | null;
 }
 
@@ -284,10 +284,8 @@ async function mountAll(context: BrowserContext, fixtures: Record<string, unknow
     const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
     if (table === "provider_documents") rec.documentQueries.push(url.search);
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
-    // TS-163: tasks PATCH (attachStepArtifact/detachStepArtifact write
-    // sop_content) write-through — the house write-through-the-fixtures
-    // idiom, so the invalidate-and-refetch loop after an attach/detach
-    // reflects the real new step state instead of a stubbed {}.
+    // tasks PATCH write-through — the house write-through-the-fixtures
+    // idiom, kept so any step-content mutation observes a real refetch.
     if (req.method() === "PATCH" && table === "tasks") {
       const idParam = url.searchParams.get("id");
       const id = idParam?.startsWith("eq.") ? idParam.slice(3) : null;
@@ -831,16 +829,24 @@ test("TS-90: case detail renders no required-documents card; the current version
   expect(download).toBeTruthy();
 });
 
-// TS-163: SOP step artifact attachment. A step's requiredArtifacts checklist
-// renders inside the TaskDrawer (every step type — this fixture exercises
-// online_form AND fax on the same task) with per-artifact attach/remove,
-// download-all once a step carries ≥2 attachments, and the explicit
-// promote-to-vault path for a resolvable artifact name (writes a SECOND,
-// canonical-kind document — never a rewrite of the case-scoped one).
-test("TS-163: step artifacts attach/detach, download-all, and promote to the provider's vault", async ({
+// TS-164 — the specialist half. A step declares the documents the submission
+// must SEND. Each resolves live against the provider's / group's vault: on
+// file and current, expired, or absent. Present ones download (per row and as
+// a batch for the Gmail draft); a gap is fillable in place and re-derives
+// without a reload. Legacy free-text entries survive as inert notes.
+test("TS-164: required documents resolve against the vault, download for the email, and a gap is fillable in place", async ({
   context,
   page,
 }) => {
+  // On file and current — must read Ready and offer a download, never ask
+  // for an upload of a document the system already holds.
+  const currentLicense = docRow({
+    id: "doc-lic",
+    docType: "state_license",
+    providerId: PROVIDER_ID,
+    expirationDate: isoDaysFromNow(300),
+    fileName: "license.pdf",
+  });
   const fixtures = makeFixtures({
     providers: [providerRow()],
     provider_groups: [groupRow()],
@@ -886,27 +892,23 @@ test("TS-163: step artifacts attach/detach, download-all, and promote to the pro
         org_id: ORG_ID,
         case_id: CASE_ID,
         provider_id: PROVIDER_ID,
-        title: "Submit enrollment packet",
+        title: "Email the enrollment packet",
         description: null,
         sop_content: [
-          // Step 1 is pre-completed (isCompleted: true) so BOTH steps render
-          // their bodies simultaneously — only the first INCOMPLETE step is
-          // "active"; a completed earlier step is never locked (TaskDrawer).
           {
             id: "s1",
             order: 1,
-            label: "Gather submission proof",
-            isCompleted: true,
-            stepType: "online_form",
-            requiredArtifacts: ["Submission confirmation PDF", "Fax cover sheet"],
-          },
-          {
-            id: "s2",
-            order: 2,
-            label: "Fax the roster",
+            label: "Send the packet",
             isCompleted: false,
-            stepType: "fax",
-            requiredArtifacts: ["State License"],
+            stepType: "draft_email",
+            emailTemplate: {
+              subject: "Enrollment packet",
+              body: "Please find the packet attached.",
+              to: [{ source: "literal", address: "enroll@bcbsnc.example.test" }],
+            },
+            // A governed kind on file, a governed kind absent, and one legacy
+            // free-text entry authored before the picker existed.
+            requiredArtifacts: ["state_license", "w9", "Submission confirmation PDF"],
           },
         ],
         status: "in_progress",
@@ -922,103 +924,61 @@ test("TS-163: step artifacts attach/detach, download-all, and promote to the pro
         updated_at: "2026-07-14T00:00:00Z",
       },
     ],
-    provider_documents: [],
+    provider_documents: [currentLicense],
   });
   const rec = await mountAll(context, fixtures);
 
   await page.goto(`/cases/${CASE_ID}`);
   await expect(page.getByRole("button", { name: "Update status" })).toBeVisible({ timeout: 30000 });
-
-  await page.getByText("Submit enrollment packet").click();
+  await page.getByText("Email the enrollment packet").click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  // Both step-1 artifacts start Missing.
-  const proofRow = dialog.getByRole("listitem").filter({ hasText: "Submission confirmation PDF" });
-  const coverRow = dialog.getByRole("listitem").filter({ hasText: "Fax cover sheet" });
-  await expect(proofRow.getByText("Missing")).toBeVisible();
-  await expect(coverRow.getByText("Missing")).toBeVisible();
+  const licenseRow = dialog.getByRole("listitem").filter({ hasText: "State License" });
+  const w9Row = dialog.getByRole("listitem").filter({ hasText: "W-9" });
 
-  // Attach the first artifact — a case-scoped filled_form upload (never the
-  // provider's own vault).
-  await proofRow
-    .getByLabel("Attach a file for Submission confirmation PDF")
-    .setInputFiles(FAKE_PDF);
-  await proofRow.getByRole("button", { name: "Attach", exact: true }).click();
-  await expect(proofRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
-  await expect(proofRow).toContainText("license.pdf");
+  // The on-file licence is Ready and downloadable — and offers NO uploader,
+  // which is the whole point of resolving against the vault.
+  await expect(licenseRow.getByText("Ready")).toBeVisible({ timeout: 15000 });
+  await expect(licenseRow.getByRole("button", { name: /Download/ })).toBeVisible();
+  await expect(licenseRow.getByLabel("Upload State License")).toHaveCount(0);
 
-  const firstFinalize = rec.apiCalls.find((c) => c.path.endsWith("/finalize"));
-  expect(firstFinalize?.body).toMatchObject({
-    ownerType: "provider",
-    ownerId: PROVIDER_ID,
-    kind: "filled_form",
+  // The absent group W-9 is Missing, with an in-place uploader.
+  await expect(w9Row.getByText("Missing")).toBeVisible();
+  await expect(dialog.getByText("1 of 2 on file")).toBeVisible();
+
+  // The legacy free-text entry survives as a note — never a false "Missing".
+  await expect(dialog.getByText("Also noted on this step")).toBeVisible();
+  await expect(dialog.getByText("Submission confirmation PDF")).toBeVisible();
+
+  // Download-all needs two present documents; only one is on file so far.
+  await expect(dialog.getByRole("button", { name: /Download all/ })).toHaveCount(0);
+
+  // Fill the gap in place: a W-9 is group-owned, so it must land on the
+  // GROUP, under the canonical kind — not a generic one, not the provider.
+  await w9Row.getByLabel("Upload W-9").setInputFiles(FAKE_PDF);
+  await w9Row.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(w9Row.getByText("Ready")).toBeVisible({ timeout: 15000 });
+
+  const finalize = rec.apiCalls.find((c) => c.path.endsWith("/finalize"));
+  expect(finalize?.body).toMatchObject({
+    ownerType: "group",
+    ownerId: GROUP_ID,
+    kind: "w9",
     caseId: CASE_ID,
   });
-  // The step now carries the attachment on its own sop_content (the tasks
-  // write-through — a real PATCH, not the generic stub).
-  const taskAfterFirst = fixtures.tasks[0] as { sop_content: Array<{ attachments?: unknown[] }> };
-  expect(taskAfterFirst.sop_content[0].attachments).toHaveLength(1);
 
-  // "Download all attachments" is per-STEP (≥2 attachments on the SAME
-  // step) — not yet visible with only one attached.
-  await expect(dialog.getByRole("button", { name: "Download all attachments" })).toHaveCount(0);
-
-  // Attach the second artifact on the SAME step — the download-all
-  // affordance appears once the step carries 2.
-  await coverRow.getByLabel("Attach a file for Fax cover sheet").setInputFiles(FAKE_PDF);
-  await coverRow.getByRole("button", { name: "Attach", exact: true }).click();
-  await expect(coverRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
-
-  const downloadAllButton = dialog.getByRole("button", { name: "Download all attachments" });
-  await expect(downloadAllButton).toBeVisible();
-  await downloadAllButton.click();
+  // Both on file now — the batch action appears and issues one fresh signed
+  // request per document for the specialist to drag into the draft.
+  await expect(dialog.getByText("2 of 2 on file")).toBeVisible();
+  const downloadAll = dialog.getByRole("button", { name: "Download all 2 documents" });
+  await expect(downloadAll).toBeVisible();
+  await downloadAll.click();
   await expect
     .poll(() => rec.apiCalls.filter((c) => c.path.includes("/download")).length, { timeout: 15000 })
     .toBe(2);
 
-  // Remove (detach) the first attachment — reverts to Missing; the
-  // underlying provider_documents row is never deleted (no delete grant),
-  // only the step's reference to it.
-  await proofRow
-    .getByRole("button", { name: "Remove Submission confirmation PDF attachment" })
-    .click();
-  await expect(proofRow.getByText("Missing")).toBeVisible({ timeout: 15000 });
-  expect(fixtures.provider_documents.length).toBeGreaterThan(0);
-
-  // Step 2's "State License" artifact resolves to a canonical machine kind —
-  // the promote checkbox offers a SECOND, provider-owned upload.
-  const licenseRow = dialog.getByRole("listitem").filter({ hasText: "State License" });
-  await expect(licenseRow.getByText("Missing")).toBeVisible();
-  await licenseRow.getByLabel("Attach a file for State License").setInputFiles(FAKE_PDF);
-  await licenseRow.getByLabel(/Also save to the provider's documents as State License/).check();
-  await licenseRow.getByRole("button", { name: "State License expiration date" }).click();
-  const monthName = new Date().toLocaleString("en-US", { month: "long" });
-  await page
-    .getByRole("button", { name: new RegExp(`${monthName} 28th`) })
-    .first()
-    .click();
-  await licenseRow.getByRole("button", { name: "Attach", exact: true }).click();
-  await expect(licenseRow.getByText("Attached")).toBeVisible({ timeout: 15000 });
-
-  // Two finalize calls for THIS artifact: the case-scoped filled_form, then
-  // the promoted canonical state_license — two independent documents, not a
-  // rewrite of the first.
-  const licenseFinalizes = rec.apiCalls.filter(
-    (c) => c.path.endsWith("/finalize") && (c.body as { kind?: string }).kind === "state_license",
-  );
-  expect(licenseFinalizes).toHaveLength(1);
-  expect(licenseFinalizes[0].body).toMatchObject({
-    ownerType: "provider",
-    ownerId: PROVIDER_ID,
-    kind: "state_license",
-    caseId: CASE_ID,
-  });
-  const filledFormFinalizes = rec.apiCalls.filter(
-    (c) => c.path.endsWith("/finalize") && (c.body as { kind?: string }).kind === "filled_form",
-  );
-  // "Submission confirmation PDF", "Fax cover sheet", and the State License
-  // step's own case-scoped copy — three case-scoped uploads across the test,
-  // each a distinct provider_documents row (the detach never deleted one).
-  expect(filledFormFinalizes).toHaveLength(3);
+  // The Gmail hand-off is never blocked, and states the attachment limitation.
+  await expect(dialog.getByRole("button", { name: "Open in Gmail" })).toBeEnabled();
+  await expect(dialog.getByText(/Gmail can't take attachments from a link/)).toBeVisible();
 });

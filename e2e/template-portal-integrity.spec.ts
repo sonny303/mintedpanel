@@ -13,6 +13,7 @@ const USER_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const CONFLICT_ID = "33333333-3333-4333-8333-333333333331";
 const CLEAN_ID = "33333333-3333-4333-8333-333333333332";
+const DOCS_ID = "33333333-3333-4333-8333-333333333333";
 
 const SESSION = {
   access_token: "fake-access-token",
@@ -77,6 +78,27 @@ const CLEAN_DEFS = [
   },
 ];
 
+// TS-165 — a step carrying one LEGACY free-text artifact, authored before the
+// governed picker existed. It must survive editing untouched.
+const DOCS_DEFS = [
+  {
+    title: "Email the packet",
+    description: "",
+    sortOrder: 0,
+    dueOffsetDays: 3,
+    steps: [
+      {
+        label: "Send the packet",
+        detail: "",
+        stepType: "online_form",
+        portalKey: "availity",
+        dataFields: [],
+        requiredArtifacts: ["Submission confirmation PDF"],
+      },
+    ],
+  },
+];
+
 function portalRow(id: string, portalKey: string, name: string) {
   return {
     id,
@@ -130,6 +152,7 @@ const FIXTURES: Record<string, unknown[]> = {
   sop_templates: [
     templateRow(CONFLICT_ID, "Enrollment SOP (two portals)", CONFLICT_DEFS),
     templateRow(CLEAN_ID, "Enrollment SOP (one portal)", CLEAN_DEFS),
+    templateRow(DOCS_ID, "Enrollment SOP for documents", DOCS_DEFS),
   ],
   sop_template_versions: [],
 };
@@ -254,5 +277,66 @@ test.describe("E1.7b portal-task integrity", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Publish" }).click();
     await expect(page.getByText("Published version 2")).toBeVisible({ timeout: 15000 });
     expect(captured.publishCount).toBe(1);
+  });
+});
+
+// TS-165 — the admin half of payer document requirements. Requirements are
+// DECLARED from the governed vocabulary rather than typed, so what a payer
+// needs becomes machine-readable and resolves against the vault at case time.
+test.describe("TS-165 required documents authoring", () => {
+  const captured: Captured = { publishCount: 0, lastPublishBody: null };
+
+  test.beforeEach(async ({ context }) => {
+    captured.publishCount = 0;
+    captured.lastPublishBody = null;
+    await context.route(/\/(rest|auth)\/v1\//, makeFulfill(captured));
+    await seedAuth(context);
+  });
+
+  test("declares required documents from the governed list, keeping legacy free text", async ({
+    page,
+  }) => {
+    await page.goto(`/admin/templates/${DOCS_ID}`);
+    await expect(page.locator("section input").first()).toBeVisible({ timeout: 30000 });
+    await page.getByRole("button", { name: "Actions" }).click();
+
+    await expect(page.getByText("Required documents", { exact: true })).toBeVisible();
+
+    // The legacy free-text entry is still present and still editable — the
+    // picker never rewrites or drops what an admin authored before it.
+    await expect(page.getByLabel("Legacy artifact 1")).toHaveValue("Submission confirmation PDF");
+
+    // Adding a requirement is a pick from the governed vocabulary.
+    const picker = page.getByRole("combobox", { name: "Add a required document" });
+    await picker.click();
+    await expect(page.getByRole("option", { name: "State License" })).toBeVisible();
+    await expect(page.getByRole("option", { name: "W-9" })).toBeVisible();
+    // Dormant + meaningless-as-a-requirement kinds are never offered.
+    await expect(page.getByRole("option", { name: "Filled Form" })).toHaveCount(0);
+    await expect(page.getByRole("option", { name: "Other", exact: true })).toHaveCount(0);
+
+    await page.getByRole("option", { name: "State License" }).click();
+    await expect(page.getByText("State License")).toBeVisible();
+
+    // A kind already required cannot be added twice.
+    await picker.click();
+    await expect(page.getByRole("option", { name: "State License" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    // It publishes as the canonical machine key, beside the untouched legacy
+    // entry — that key is what resolves against the vault at case time.
+    await page.getByRole("button", { name: "Review" }).click();
+    await page.getByRole("button", { name: "Publish" }).click();
+    const publishDialog = page.getByRole("dialog");
+    await expect(publishDialog).toContainText("Publish version 2");
+    await publishDialog.getByRole("button", { name: "Publish" }).click();
+    await expect.poll(() => captured.publishCount, { timeout: 15000 }).toBe(1);
+
+    const defs = (captured.lastPublishBody as { p_task_definitions?: unknown[] } | null)
+      ?.p_task_definitions as Array<{ steps: Array<{ requiredArtifacts?: string[] }> }>;
+    expect(defs[0].steps[0].requiredArtifacts).toEqual([
+      "Submission confirmation PDF",
+      "state_license",
+    ]);
   });
 });

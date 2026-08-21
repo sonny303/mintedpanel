@@ -9,13 +9,7 @@
 // COI advisory threshold); this module imports nothing from it, so the
 // date-only helpers are self-contained.
 
-import type {
-  DocumentExpirationStatus,
-  DocumentKind,
-  DocumentOwnerType,
-  SOPStep,
-  SOPStepAttachment,
-} from "@/types";
+import type { DocumentExpirationStatus, DocumentKind, DocumentOwnerType, SOPStep } from "@/types";
 
 // ---------------------------------------------------------------------------
 // TE-5 — the shared kind metadata map. Components never hard-code parallel
@@ -40,17 +34,6 @@ export interface DocumentKindMeta {
   uploadable: boolean;
   /** Normalized alternate spellings for the SOP required-kind join (TE-7). */
   aliases: string[];
-  /**
-   * TS-163 — true only for `filled_form`: a case-scoped step artifact
-   * (proof of a submission, a screenshot, a confirmation PDF), never a
-   * canonical provider/group credential. `caseId` is REQUIRED for this
-   * kind (enforced in `documentStorage.ts` `validateOwnerKindFile`) and the
-   * row must never appear in the provider/group vault list
-   * (`DocumentsPanel` filters it out). Every other kind is false — a
-   * canonical document may ALSO carry a `caseId` as usage context (E4.5
-   * TE-1), but that never makes it a case artifact.
-   */
-  caseArtifact: boolean;
 }
 
 const DEFAULT_EXPIRING_SOON_DAYS = 30;
@@ -64,7 +47,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: 90,
     uploadable: true,
     aliases: ["state_license"],
-    caseArtifact: false,
   },
   dea: {
     kind: "dea",
@@ -74,7 +56,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: 60,
     uploadable: true,
     aliases: ["dea", "dea_registration", "dea_certificate"],
-    caseArtifact: false,
   },
   coi: {
     kind: "coi",
@@ -84,7 +65,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["coi", "certificate_of_insurance"],
-    caseArtifact: false,
   },
   w9: {
     kind: "w9",
@@ -94,7 +74,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["w9", "w_9"],
-    caseArtifact: false,
   },
   cms_460: {
     kind: "cms_460",
@@ -104,7 +83,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["cms_460", "cms460"],
-    caseArtifact: false,
   },
   voided_check: {
     kind: "voided_check",
@@ -114,7 +92,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["voided_check"],
-    caseArtifact: false,
   },
   cv: {
     kind: "cv",
@@ -124,7 +101,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["cv", "curriculum_vitae", "resume"],
-    caseArtifact: false,
   },
   diploma: {
     kind: "diploma",
@@ -134,7 +110,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["diploma"],
-    caseArtifact: false,
   },
   board_cert: {
     kind: "board_cert",
@@ -144,23 +119,15 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["board_cert", "board_certification"],
-    caseArtifact: false,
   },
   filled_form: {
     kind: "filled_form",
     label: "Filled Form",
-    // TS-163: filled_form is now the ONE case-artifact kind — a step's
-    // free-form attachment (portal confirmation, screenshot, submission
-    // PDF), owned by provider OR group with a REQUIRED caseId. `uploadable`
-    // stays false so it never appears in the vault's own kind picker
-    // (uploadableKinds()); the step-artifact upload path
-    // (StepArtifactsPanel) targets it directly, bypassing that picker.
-    owners: ["provider", "group"],
+    owners: [],
     expirationRequired: false,
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: false,
     aliases: ["filled_form"],
-    caseArtifact: true,
   },
   other: {
     kind: "other",
@@ -170,7 +137,6 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
     aliases: ["other"],
-    caseArtifact: false,
   },
 };
 
@@ -438,56 +404,39 @@ export function requiredDocumentKinds(
 }
 
 // ---------------------------------------------------------------------------
-// TS-163 — per-step artifact attachment state. A step's `requiredArtifacts`
-// checklist is joined against its `attachments` array (both live on the same
-// stamped SOPStep, src/services/tasks.ts attachStepArtifact) by exact name
-// match — a resolvable artifact ALSO gets its DocumentKind so the UI can
-// offer the "save to vault" promote affordance. An attachment whose artifact
-// name no longer exists (e.g. a reapply restamped the step's checklist)
-// never disappears silently — it comes back as an orphan for the caller to
-// render separately (never dropped, never merged into a row it doesn't
-// belong to).
+// TS-164/165 — the step-grain split of `requiredArtifacts`. An entry that
+// resolves to a governed kind is a REQUIRED DOCUMENT the case must send to
+// the payer (looked up live in the provider/group vault, downloadable,
+// fillable when absent). An entry that does not resolve is legacy free text
+// from before the governed picker — it renders as an inert note and is
+// NEVER dropped, rewritten, or shown as a false "Missing".
+//
+// Requirements point OUTWARD (documents we send). Nothing here captures
+// proof of submission: that is the case's tracking id + the touchlog, and
+// it stays optional (BR-7).
 // ---------------------------------------------------------------------------
 
-export interface StepArtifactRow {
-  artifactName: string;
-  /** Non-null when the artifact NAME resolves to a canonical machine kind
-   * (parseDocumentKind) — offers the promote-to-vault affordance. A
-   * free-form name (e.g. "Submission confirmation PDF") stays null. */
-  resolvedKind: DocumentKind | null;
-  attachment: SOPStepAttachment | null;
-  state: "attached" | "missing";
+export interface StepDocumentRequirements {
+  /** Governed kinds this step must send, first-appearance order, deduped. */
+  kinds: DocumentKind[];
+  /** Legacy free-text entries that resolve to no governed kind. */
+  notes: string[];
 }
 
-export interface StepArtifactPlan {
-  rows: StepArtifactRow[];
-  /** Attachments whose artifact name has no matching requiredArtifacts
-   * entry — render under a neutral "Other attachments" heading, never drop. */
-  orphans: SOPStepAttachment[];
-}
-
-export function stepArtifactRows(
-  step: Pick<SOPStep, "requiredArtifacts" | "attachments">,
-): StepArtifactPlan {
-  const artifacts = step.requiredArtifacts ?? [];
-  const attachments = step.attachments ?? [];
-  const byName = new Map<string, SOPStepAttachment>();
-  for (const attachment of attachments) byName.set(attachment.artifactName, attachment);
-
-  const rows: StepArtifactRow[] = artifacts.map((artifactName) => {
-    const attachment = byName.get(artifactName) ?? null;
-    return {
-      artifactName,
-      resolvedKind: parseDocumentKind(artifactName),
-      attachment,
-      state: attachment ? "attached" : "missing",
-    };
-  });
-
-  const claimed = new Set(artifacts);
-  const orphans = attachments.filter((a) => !claimed.has(a.artifactName));
-
-  return { rows, orphans };
+export function stepDocumentRequirements(
+  step: Pick<SOPStep, "requiredArtifacts">,
+): StepDocumentRequirements {
+  const kinds: DocumentKind[] = [];
+  const notes: string[] = [];
+  for (const entry of step.requiredArtifacts ?? []) {
+    const kind = parseDocumentKind(entry);
+    if (kind) {
+      if (!kinds.includes(kind)) kinds.push(kind);
+    } else if (!notes.includes(entry)) {
+      notes.push(entry);
+    }
+  }
+  return { kinds, notes };
 }
 
 export type CaseDocumentState = "present" | "expired" | "missing";

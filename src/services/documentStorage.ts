@@ -56,10 +56,10 @@ export interface UploadIntentInput {
   mimeType: string;
   /** Present on the replace flow — versions an existing family. */
   familyId?: string | null;
-  /** TS-163: REQUIRED for caseArtifact kinds (filled_form), optional usage
-   * context otherwise (E4.5 TE-1) — validated at INTENT time too, not just
-   * finalize, so a case-scoped intent is authorized on the case dimension
-   * before a signed upload target is ever minted. */
+  /** Optional usage context (E4.5 TE-1) — records the case an upload was
+   * made for. Validated at INTENT time as well as finalize, so a
+   * case-scoped intent is authorized on the case dimension before a signed
+   * upload target is ever minted. */
   caseId?: string | null;
 }
 
@@ -133,7 +133,7 @@ async function verifyOwner(
   return data !== null;
 }
 
-/** TS-163 — the case must be org-owned AND linked to the canonical owner —
+/** The case must be org-owned AND linked to the canonical owner —
  * never a channel to attach cross-org or unrelated rows. Shared by intent
  * AND finalize (E4.5 originally checked this only at finalize, which let an
  * upload-intent authorize a case dimension it never validated — a case-scoped
@@ -157,11 +157,7 @@ async function verifyCaseLink(
     : (caseRow as { group_id: string | null }).group_id === ownerId;
 }
 
-/** Shared input validation for intent + finalize. Returns a rejection or null.
- * TS-163: a `caseArtifact` kind (filled_form) is uploadable ONLY with a
- * caseId — free-floating case artifacts are not a thing, so the "not
- * uploadable" gate (normally `meta.uploadable`) is replaced by a required-
- * caseId gate for that one kind. Every other kind is unchanged. */
+/** Shared input validation for intent + finalize. Returns a rejection or null. */
 async function validateOwnerKindFile(
   ctx: DocumentStorageServiceCtx,
   input: {
@@ -170,20 +166,11 @@ async function validateOwnerKindFile(
     kind: DocumentKind;
     mimeType: string;
     fileSize?: number;
-    caseId?: string | null;
   },
 ): Promise<{ status: number; message: string } | null> {
   if (!isDocumentKind(input.kind)) return { status: 422, message: "Unknown document kind" };
   const meta = DOCUMENT_KIND_META[input.kind];
-  const ownerMatches = meta.owners.includes(input.ownerType);
-  if (meta.caseArtifact) {
-    if (!ownerMatches) {
-      return { status: 422, message: `${meta.label} is not a ${input.ownerType} document` };
-    }
-    if (!input.caseId) {
-      return { status: 422, message: `${meta.label} requires a case id` };
-    }
-  } else if (!meta.uploadable || !ownerMatches) {
+  if (!meta.uploadable || !meta.owners.includes(input.ownerType)) {
     return {
       status: 422,
       message: `${meta.label} is not an uploadable ${input.ownerType} document`,
@@ -276,10 +263,8 @@ export async function createDocumentUploadIntent(
   const invalid = await validateOwnerKindFile(ctx, input);
   if (invalid) return { kind: "rejected", ...invalid };
 
-  // TS-163: authorize the case dimension at intent time (validateOwnerKindFile
-  // already required a caseId for caseArtifact kinds; this confirms it's a
-  // real, org-owned case linked to the owner — never a channel to mint a
-  // signed upload target scoped to a case the caller can't see).
+  // Authorize the case dimension at intent time too — never mint a signed
+  // upload target scoped to a case the caller cannot see.
   if (input.caseId) {
     const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
     if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };
@@ -354,9 +339,9 @@ export async function finalizeDocument(
     return { kind: "rejected", status: 422, message: "versionNumber must be a positive integer" };
   }
 
-  // Optional usage context (canonical kinds) / REQUIRED context (caseArtifact
-  // kinds — see validateOwnerKindFile). Either way: the case must be
-  // org-owned AND linked to the canonical owner.
+  // Optional usage context (TE-1): the case must be org-owned AND linked to
+  // the canonical owner — never a channel to attach cross-org or unrelated
+  // rows.
   if (input.caseId) {
     const linked = await verifyCaseLink(ctx, input.caseId, input.ownerType, input.ownerId);
     if (!linked) return { kind: "rejected", status: 404, message: "Case not found for this owner" };

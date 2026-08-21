@@ -78,14 +78,14 @@ describe("upload intent handler", () => {
     expect(intentMock).not.toHaveBeenCalled();
   });
 
-  it("404s a malformed caseId without touching the service (TS-163)", async () => {
+  it("404s a malformed caseId without touching the service (TS-164/165)", async () => {
     const c = ctx();
     const res = await handleCreateUploadIntent({ ...intentBody, caseId: "not-a-uuid" }, c);
     expect(res.status).toBe(404);
     expect(intentMock).not.toHaveBeenCalled();
   });
 
-  it("threads a valid caseId to the service and into the audit row (TS-163)", async () => {
+  it("threads a valid caseId to the service and into the audit row (TS-164/165)", async () => {
     const c = ctx();
     const CASE_ID = "cccc1111-2222-4333-8444-555566667777";
     intentMock.mockResolvedValue({
@@ -98,10 +98,10 @@ describe("upload intent handler", () => {
         token: "secret-token",
       },
     });
-    await handleCreateUploadIntent({ ...intentBody, kind: "filled_form", caseId: CASE_ID }, c);
+    await handleCreateUploadIntent({ ...intentBody, caseId: CASE_ID }, c);
     expect(intentMock).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ caseId: CASE_ID, kind: "filled_form" }),
+      expect.objectContaining({ caseId: CASE_ID, kind: "state_license" }),
     );
     const audit = JSON.stringify(vi.mocked(c.writeAudit).mock.calls[0][0]);
     expect(audit).toContain(CASE_ID);

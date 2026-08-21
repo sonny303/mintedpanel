@@ -16,9 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PortalStepLink } from "@/components/portals/PortalStepLink";
 import {
-  StepArtifactsPanel,
-  type StepArtifactsContext,
-} from "@/components/documents/StepArtifactsPanel";
+  RequiredDocumentsPanel,
+  type RequiredDocumentsContext,
+} from "@/components/documents/RequiredDocumentsPanel";
 import { planGmailHandoff } from "@/lib/gmailCompose";
 import { splitOnUnresolvedTokens, findUnresolvedTokens } from "@/lib/caseWizard";
 import { pdfFillFileStem } from "@/lib/pdfFill";
@@ -92,10 +92,10 @@ function HighlightedText({ text }: { text: string }) {
 
 function OnlineFormStep({
   step,
-  artifactsContext,
+  documentsContext,
 }: {
   step: SOPStep;
-  artifactsContext?: StepArtifactsContext;
+  documentsContext?: RequiredDocumentsContext;
 }) {
   const fields = step.dataFields ?? [];
   return (
@@ -128,7 +128,7 @@ function OnlineFormStep({
           Complete this step in the portal, then mark it done below.
         </p>
       )}
-      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
+      {documentsContext ? <RequiredDocumentsPanel step={step} ctx={documentsContext} /> : null}
     </div>
   );
 }
@@ -199,10 +199,10 @@ function RecipientRow({
 
 function DraftEmailStep({
   step,
-  artifactsContext,
+  documentsContext,
 }: {
   step: SOPStep;
-  artifactsContext?: StepArtifactsContext;
+  documentsContext?: RequiredDocumentsContext;
 }) {
   const subject = step.emailTemplate?.subject ?? "";
   const body = step.emailTemplate?.body ?? "";
@@ -270,7 +270,7 @@ function DraftEmailStep({
         </div>
       </div>
 
-      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
+      {documentsContext ? <RequiredDocumentsPanel step={step} ctx={documentsContext} /> : null}
 
       <div className="flex items-center gap-2">
         <Button
@@ -284,7 +284,7 @@ function DraftEmailStep({
         <span className="text-[12px] text-muted-foreground">
           Opens a prefilled draft — review and send it yourself.
           {(step.requiredArtifacts?.length ?? 0) > 0
-            ? " Gmail can't take attachments from a link — attach them above, then download and drag them into the draft."
+            ? " Gmail can't take attachments from a link — download the documents above and drag them into the draft."
             : ""}
         </span>
       </div>
@@ -299,11 +299,11 @@ function DraftEmailStep({
 function PdfStep({
   step,
   tokenValues,
-  artifactsContext,
+  documentsContext,
 }: {
   step: SOPStep;
   tokenValues: Record<string, string>;
-  artifactsContext?: StepArtifactsContext;
+  documentsContext?: RequiredDocumentsContext;
 }) {
   const dictQ = useFieldDictionary();
   const dictionary = useMemo(() => dictQ.data ?? [], [dictQ.data]);
@@ -438,7 +438,7 @@ function PdfStep({
           Downloads locally — nothing is submitted.
         </span>
       </div>
-      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
+      {documentsContext ? <RequiredDocumentsPanel step={step} ctx={documentsContext} /> : null}
     </div>
   );
 }
@@ -448,10 +448,10 @@ function PdfStep({
 // portal affordances (those belong to online_form steps only).
 function PlainChannelStep({
   step,
-  artifactsContext,
+  documentsContext,
 }: {
   step: SOPStep;
-  artifactsContext?: StepArtifactsContext;
+  documentsContext?: RequiredDocumentsContext;
 }) {
   const fields = step.dataFields ?? [];
   return (
@@ -468,14 +468,14 @@ function PlainChannelStep({
           ))}
         </dl>
       ) : null}
-      {artifactsContext ? <StepArtifactsPanel step={step} ctx={artifactsContext} /> : null}
+      {documentsContext ? <RequiredDocumentsPanel step={step} ctx={documentsContext} /> : null}
     </div>
   );
 }
 
-// TS-163: the artifacts checklist itself now renders as StepArtifactsPanel
-// (attach/download/promote, not just a name list) — this stays turnaround/
-// cadence-only.
+// TS-164/165: the required-documents checklist renders as
+// RequiredDocumentsPanel (live vault state + download, not a name list) —
+// this stays turnaround/cadence-only.
 function StepCadenceMeta({ step }: { step: SOPStep }) {
   const parts: string[] = [];
   if (typeof step.expectedTurnaroundDays === "number") {
@@ -491,25 +491,25 @@ function StepCadenceMeta({ step }: { step: SOPStep }) {
 export function StepBody({
   step,
   tokenValues = {},
-  artifactsContext,
+  documentsContext,
 }: {
   step: SOPStep;
   tokenValues?: Record<string, string>;
-  /** TS-163: threads the case/task/provider/group identifiers a step's
-   * StepArtifactsPanel needs to attach/promote a file. Optional — a caller
-   * that hasn't wired case context yet (or /tasks/$id's own hand-rolled
-   * renderer, which doesn't use StepBody) simply renders no attachments UI. */
-  artifactsContext?: StepArtifactsContext;
+  /** TS-164/165: the case/provider/group identifiers RequiredDocumentsPanel
+   * needs to resolve this step's required documents against the vault.
+   * Optional — a caller without case context (or /tasks/$id's own
+   * hand-rolled renderer, which doesn't use StepBody) renders no panel. */
+  documentsContext?: RequiredDocumentsContext;
 }) {
   const stepType = step.stepType ?? "online_form";
   if (stepType === "draft_email") {
-    return <DraftEmailStep step={step} artifactsContext={artifactsContext} />;
+    return <DraftEmailStep step={step} documentsContext={documentsContext} />;
   }
   if (stepType === "pdf") {
-    return <PdfStep step={step} tokenValues={tokenValues} artifactsContext={artifactsContext} />;
+    return <PdfStep step={step} tokenValues={tokenValues} documentsContext={documentsContext} />;
   }
   if (stepType === "fax" || stepType === "phone" || stepType === "mail" || stepType === "custom") {
-    return <PlainChannelStep step={step} artifactsContext={artifactsContext} />;
+    return <PlainChannelStep step={step} documentsContext={documentsContext} />;
   }
-  return <OnlineFormStep step={step} artifactsContext={artifactsContext} />;
+  return <OnlineFormStep step={step} documentsContext={documentsContext} />;
 }

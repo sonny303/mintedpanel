@@ -22,7 +22,7 @@ import {
   parseDocumentKind,
   requiredDocumentKinds,
   safeFileName,
-  stepArtifactRows,
+  stepDocumentRequirements,
   uploadableKinds,
 } from "./documents";
 import type { SOPStep } from "@/types";
@@ -83,11 +83,9 @@ describe("kind metadata (TE-5)", () => {
     expect(group).not.toContain("filled_form");
   });
 
-  it("marks filled_form the ONE case-artifact kind (TS-163) — nothing else qualifies", () => {
-    const caseArtifactKinds = Object.values(DOCUMENT_KIND_META)
-      .filter((m) => m.caseArtifact)
-      .map((m) => m.kind);
-    expect(caseArtifactKinds).toEqual(["filled_form"]);
+  it("keeps filled_form dormant — never offered on either grain (E4.5)", () => {
+    expect(DOCUMENT_KIND_META.filled_form.uploadable).toBe(false);
+    expect(DOCUMENT_KIND_META.filled_form.owners).toEqual([]);
   });
 
   it("expirationDateError blocks a dated kind without a date and passes others", () => {
@@ -259,54 +257,33 @@ describe("SOP required-kind matching (TE-7)", () => {
   });
 });
 
-describe("step artifact rows (TS-163)", () => {
-  const attachment = (documentId: string, artifactName: string) => ({
-    documentId,
-    artifactName,
-    fileName: `${documentId}.pdf`,
-    uploadedAt: "2026-08-16T10:00:00.000Z",
-    uploadedBy: "u1",
-    kind: "filled_form" as const,
+describe("step document requirements (TS-164/165)", () => {
+  const step = (requiredArtifacts: string[]) => ({ requiredArtifacts });
+
+  it("splits governed kinds from legacy free text, keeping first-appearance order", () => {
+    expect(
+      stepDocumentRequirements(
+        step(["State License", "Submission confirmation PDF", "W-9", "Fax cover sheet"]),
+      ),
+    ).toEqual({
+      kinds: ["state_license", "w9"],
+      notes: ["Submission confirmation PDF", "Fax cover sheet"],
+    });
   });
 
-  it("pairs each requiredArtifacts entry with its attachment by name", () => {
-    const step = {
-      requiredArtifacts: ["Submission confirmation PDF", "State License"],
-      attachments: [attachment("d1", "Submission confirmation PDF")],
-    };
-    const { rows, orphans } = stepArtifactRows(step);
-    expect(rows).toEqual([
-      {
-        artifactName: "Submission confirmation PDF",
-        resolvedKind: null,
-        attachment: attachment("d1", "Submission confirmation PDF"),
-        state: "attached",
-      },
-      {
-        artifactName: "State License",
-        resolvedKind: "state_license",
-        attachment: null,
-        state: "missing",
-      },
-    ]);
-    expect(orphans).toEqual([]);
+  it("resolves aliases and machine keys to the same kind, deduped", () => {
+    // "W-9", "w9" and "w_9" are the same requirement — asking for it three
+    // times must not render three rows.
+    expect(stepDocumentRequirements(step(["W-9", "w9", "w_9"])).kinds).toEqual(["w9"]);
   });
 
-  it("returns an attachment whose artifact name no longer exists as an orphan, never dropped", () => {
-    const step = {
-      requiredArtifacts: ["Submission confirmation PDF"],
-      attachments: [
-        attachment("d1", "Submission confirmation PDF"),
-        attachment("d2", "Retired artifact name"),
-      ],
-    };
-    const { rows, orphans } = stepArtifactRows(step);
-    expect(rows).toHaveLength(1);
-    expect(orphans).toEqual([attachment("d2", "Retired artifact name")]);
+  it("never drops a legacy note, and never repeats one", () => {
+    const { notes } = stepDocumentRequirements(step(["Cover sheet", "Cover sheet"]));
+    expect(notes).toEqual(["Cover sheet"]);
   });
 
-  it("handles a step with no requiredArtifacts and no attachments", () => {
-    expect(stepArtifactRows({})).toEqual({ rows: [], orphans: [] });
+  it("returns empty for a step with no requiredArtifacts", () => {
+    expect(stepDocumentRequirements({})).toEqual({ kinds: [], notes: [] });
   });
 });
 

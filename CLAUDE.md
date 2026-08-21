@@ -2810,72 +2810,63 @@ seven behavioural probes — not by reasoning about the SQL.
   apply is the operator step, so a regen would reflect the pre-migration schema
   and delete the new column.
 
-### SOP step artifact attachment (TS-163, 2026-08-16)
+### Payer document requirements (TS-164/165, 2026-08-16)
 
-A case task's SOP step `requiredArtifacts` checklist (E1.7b) is now an actual
-attach/download surface, not just a name list. **No migration** — every
-column it needs already existed on `provider_documents` (E4.5's `case_id`
-usage-context column, the `provider OR group OR case` owner CHECK, and
-`filled_form` was already the case-linked doc_type kind).
+An SOP step declares the documents a submission must **send** to the payer, and
+the case-side step resolves them against the provider's/group's vault so the
+specialist can download and attach them to the outbound email. **No migration**
+— every column already existed (E4.5's `case_id` usage-context column and the
+governed `DOCUMENT_KIND_META` vocabulary).
 
-- **`filled_form` is now the ONE `caseArtifact` kind** (`DOCUMENT_KIND_META.
-caseArtifact` in `src/lib/documents.ts`) — case-scoped proof (portal
-  confirmation, screenshot, submission PDF), owner = provider or group with a
-  **REQUIRED `caseId`** (validated in `validateOwnerKindFile` at BOTH intent
-  and finalize — the intent-time check is new: `documentStorage.ts` gained
-  `verifyCaseLink`, shared by `createDocumentUploadIntent` and
-  `finalizeDocument`, so a case-scoped signed upload target is never minted
-  for a case the caller can't see). `filled_form` stays `uploadable: false`
-  (never offered by the vault's own kind picker — `uploadableKinds()`); the
-  step-artifact upload path targets it directly. It still never appears in
-  `DocumentsPanel` (the provider/group vault list) — filtered by the new
-  `caseArtifact` flag, verified safe-by-construction elsewhere
-  (`expiringCredentialRows` already drops dateless rows;
-  `listGroupReadinessDocuments` already filters `doc_type IN
-(w9,coi,voided_check)` at the SQL level).
-- **Promotion is explicit, never automatic.** An artifact NAME that resolves
-  to a canonical machine kind (`parseDocumentKind`, e.g. "State License")
-  offers a one-click "Also save to \<owner\>'s documents as \<Label\>"
-  checkbox — a SECOND, independent canonical-kind upload (own `caseId` as
-  usage context, same E4.5 signing boundary), never a rewrite of the
-  case-scoped one. Both rows are independently addressable/downloadable.
-- **Step link is JSONB, no DDL.** `SOPStep.attachments?: SOPStepAttachment[]`
-  (additive on the protected `src/types/index.ts` — each entry a
-  `{documentId, artifactName, fileName, uploadedAt, uploadedBy, kind}`
-  pointer, denormalized for render without a second documents fetch). Pure
-  planner `src/lib/sopStepAttachments.ts` (`planAttachStepArtifact`/
-  `planDetachStepArtifact`, tested) mirrors `sopStepCompletion.ts` exactly;
-  `src/services/tasks.ts` gained `attachStepArtifact`/`detachStepArtifact`
-  (re-read task → plan → PATCH `sop_content` ONLY, audited UPDATE — same
-  read-modify-write shape `completeSOPStep` already has, TD-52) →
-  `useAttachStepArtifact`/`useDetachStepArtifact` in `useTasks.ts`
-  (invalidate tasks/task/case/documents/audit-log). `stepArtifactRows(step)`
-  (`src/lib/documents.ts`) joins `requiredArtifacts` × `attachments` by exact
-  name; an attachment whose artifact name no longer exists (e.g. a reapply
-  restamped the checklist) comes back as an orphan, rendered under "Other
-  attachments" — never dropped.
-- **UI:** `src/components/documents/StepArtifactsPanel.tsx` (DESIGN-DEBT
-  logged, unspecced) renders on **every SOP step type** via `StepBody`
-  (`src/components/cases/StepDetails.tsx` — `OnlineFormStep`/`DraftEmailStep`/
-  `PdfStep`/`PlainChannelStep` all gained an optional `artifactsContext`
-  prop; `DraftEmailStep` places the panel above the Gmail button with an
-  honest "Gmail can't take attachments from a link" note when the step has
-  required artifacts; `StepCadenceMeta` dropped its old "Artifacts to save:"
-  text line, superseded by the panel). Per-step "Download all attachments"
-  appears once that ONE step carries ≥2 attachments (not global). Context
-  (`caseId`/`providerId`/`groupId`) is built in `TaskDrawer` from the task
-  itself (`caseId`/`providerId`) plus a new `groupId` prop threaded from
-  `CaseTasksPanel` ← `cases.$id.tsx` (`c.groupId` — the one piece `Task`
-  doesn't carry).
-- **Gate:** the caseId authorization check is unit-proven
-  (`documentStorage.di.test.ts`, `documentRoutes.test.ts`) but NOT added to
-  the live `/api` isolation gate — `upload-intent`/`finalize` have zero gate
-  coverage at all (pre-existing gap, TD-53; only `GET /:id/download` is
-  covered).
-- e2e `e2e/document-storage.spec.ts` (TS-163: attach/detach, per-step
-  download-all, the explicit promote-to-vault second upload — its harness
-  gained a `tasks` PATCH write-through, the house idiom for observing a real
-  refetch after a mutation).
+**Direction of travel is the whole point.** `requiredArtifacts` used to conflate
+documents going OUT with proof coming BACK. Proof capture is **withdrawn** (PM,
+2026-08-16): the case's `payer_reference_id` + the touchlog are the record and
+stay optional. `requiredArtifacts` now means outbound documents only.
+
+- **Authoring (`TemplateTaskRow.tsx`, "Required documents"):** a governed picker
+  over `uploadableKinds()` minus `other` — the SAME shared kind map the vault's
+  own upload dialog reads, so the two can never disagree about what a "W-9" is.
+  It writes the canonical machine key (`state_license`). Free text is gone as an
+  input; **legacy free-text entries stay visible, editable and never rewritten**.
+  Reached via Payer Setup → Payer Detail → Templates.
+- **Split (`stepDocumentRequirements` in `src/lib/documents.ts`, tested):** an
+  entry that resolves through `parseDocumentKind` is a tracked requirement
+  (deduped, first-appearance order); one that does not is a legacy note rendered
+  inert — never a false "Missing".
+- **Case side (`src/components/documents/RequiredDocumentsPanel.tsx`):** renders
+  under EVERY step type via `StepBody` (a fax or mail step sends the same packet
+  an email step does). Reconnects the derivation that had been **render-orphaned
+  since the payer-and-cases redesign** dropped `CaseRequiredDocuments` from case
+  detail (§2.7) — `caseDocumentStatus()` gives Ready / Expiring soon / Expired /
+  Missing plus the exact row to download. Per-row download + **"Download all N
+  documents"** (sequenced ~300ms so the browser doesn't suppress the batch; one
+  fresh signed URL and one audit row each). A gap is fillable in place, writing
+  the CANONICAL kind into the owner grain that kind allows (W-9 → the group),
+  versioning the existing family when replacing an expired document. Advisory
+  only — never blocks the Gmail hand-off, which now states plainly that Gmail
+  can't take attachments from a link.
+- **Kept from the retired work:** `verifyCaseLink` shared by upload-INTENT and
+  finalize (real hardening — intent authorized the owner but never the case), and
+  the `groupId` thread `cases.$id.tsx` → `CaseTasksPanel` → `TaskDrawer` (needed
+  for group-owned W-9/COI; `Task` doesn't carry it).
+- **Retired outright:** `SOPStepAttachment`/`SOPStep.attachments`,
+  `sopStepAttachments.ts`, `attachStepArtifact`/`detachStepArtifact` + hooks, and
+  the render-orphaned `CaseRequiredDocuments.tsx`. `filled_form` is back to its
+  dormant E4.5 shape (`owners: []`, never uploadable) — live data held **zero**
+  such rows, so nothing needed migrating. TD-52 closes with the code it named.
+- **Gate:** the caseId authorization is unit-proven (`documentStorage.di.test.ts`,
+  `documentRoutes.test.ts`); `upload-intent`/`finalize` still have no live
+  isolation-gate coverage at all (pre-existing, TD-53).
+- e2e: `document-storage.spec.ts` TS-164 (resolve → download-all → fill the gap →
+  re-derive), `template-portal-integrity.spec.ts` TS-165 (governed picker, legacy
+  entry survives, publish emits the canonical key).
+
+**Phase 2 (deferred):** payer-owned blank forms — the payer's own application
+PDF stored once and reused per case. Deferred deliberately: `provider_documents`
+is owned by provider-or-group-or-case and its object path is
+`org/{orgId}/{provider|group}/…`, so a payer-owned file has no home. Phase 1 is
+shaped so a payer form becomes one more row in the same panel from a different
+source.
 
 ## What this is
 

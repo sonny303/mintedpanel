@@ -4,9 +4,8 @@ import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { currentUserId, requireActiveOrg, writeAudit } from "@/lib/audit";
 import { planStepCompletion, stepCompletionPatch } from "@/lib/sopStepCompletion";
-import { planAttachStepArtifact, planDetachStepArtifact } from "@/lib/sopStepAttachments";
 import { translateDbError } from "@/lib/dbErrors";
-import type { SOPStep, SOPStepAttachment, Task, TaskStatus } from "@/types";
+import type { SOPStep, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
   caseId: string;
@@ -254,84 +253,6 @@ export async function completeSOPStep(taskId: string, stepId: string): Promise<T
     before: { stepId, isCompleted: false },
     after: { stepId, isCompleted: true, taskStatus: after.status },
     description: `Completed SOP step "${nextSteps.find((st) => st.id === stepId)?.label ?? stepId}"`,
-  });
-  return after;
-}
-
-// TS-163 — step artifact attach/detach. Both re-read the task, run the pure
-// planner (src/lib/sopStepAttachments.ts, the completeSOPStep pattern), and
-// PATCH sop_content ONLY — never status/completed_date, unlike step
-// completion. The attachment's underlying provider_documents row is written
-// separately via the E4.5 /api/documents/* signing boundary
-// (src/services/documents.ts uploadDocument); this call is the second half
-// that links the resulting documentId onto the step.
-export async function attachStepArtifact(
-  taskId: string,
-  stepId: string,
-  attachment: SOPStepAttachment,
-): Promise<Task> {
-  const orgId = requireActiveOrg();
-  const existing = await getTask(taskId);
-  if (!existing) throw new Error("Task not found");
-
-  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
-  const plan = planAttachStepArtifact(currentSteps, stepId, attachment);
-  if (!plan.ok) throw new Error("Step not found on task");
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ sop_content: plan.nextSteps as never })
-    .eq("id", taskId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Task>(data);
-
-  await writeAudit({
-    actionType: "UPDATE",
-    entityType: "task",
-    entityId: taskId,
-    before: {
-      stepId,
-      attachmentCount: currentSteps.find((s) => s.id === stepId)?.attachments?.length ?? 0,
-    },
-    after: { stepId, documentId: attachment.documentId, artifactName: attachment.artifactName },
-    description: `Attached "${attachment.fileName}" to step`,
-  });
-  return after;
-}
-
-export async function detachStepArtifact(
-  taskId: string,
-  stepId: string,
-  documentId: string,
-): Promise<Task> {
-  const orgId = requireActiveOrg();
-  const existing = await getTask(taskId);
-  if (!existing) throw new Error("Task not found");
-
-  const currentSteps: SOPStep[] = Array.isArray(existing.sopContent) ? existing.sopContent : [];
-  const plan = planDetachStepArtifact(currentSteps, stepId, documentId);
-  if (!plan.ok) throw new Error("Step not found on task");
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ sop_content: plan.nextSteps as never })
-    .eq("id", taskId)
-    .eq("org_id", orgId)
-    .select("*")
-    .single();
-  if (error) throw error;
-  const after = camelizeRow<Task>(data);
-
-  await writeAudit({
-    actionType: "UPDATE",
-    entityType: "task",
-    entityId: taskId,
-    before: { stepId, documentId },
-    after: { stepId, documentId: null },
-    description: "Removed step attachment",
   });
   return after;
 }

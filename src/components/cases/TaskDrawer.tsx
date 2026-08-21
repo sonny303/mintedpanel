@@ -28,7 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EmptyState } from "@/components/EmptyState";
 import { StatusPill } from "@/components/StatusPill";
 import { StepBody } from "@/components/cases/StepDetails";
-import type { StepArtifactsContext } from "@/components/documents/StepArtifactsPanel";
+import type { RequiredDocumentsContext } from "@/components/documents/RequiredDocumentsPanel";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { useCompleteSOPStep, useTask, useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useLogNote, useTaskTouchlog } from "@/hooks/useTouches";
@@ -43,10 +43,10 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
-  /** TS-163: the case's group id (Task carries caseId/providerId itself but
-   * not groupId) — threaded from the case page so StepArtifactsPanel can
-   * resolve a group-owned artifact's owner. Null for a legacy NULL-group
-   * case (the panel falls back to the provider grain). */
+  /** TS-164/165: the case's group id (Task carries caseId/providerId itself
+   * but not groupId) — threaded from the case page so a group-owned required
+   * document (W-9, COI) resolves against the right vault. Null for a legacy
+   * NULL-group case. */
   groupId?: string | null;
 }
 
@@ -87,10 +87,10 @@ export function TaskDrawer({
   const taskQ = useTask(open && taskId ? taskId : undefined);
   const task = taskQ.data ?? fallbackTask;
 
-  // TS-163: undefined (not built) when there's no task yet — StepBody treats
-  // "no context" as "no attachments UI", never a crash.
-  const artifactsContext: StepArtifactsContext | undefined = task
-    ? { taskId: task.id, caseId: task.caseId, providerId: task.providerId, groupId }
+  // undefined until the task loads — StepBody treats "no context" as "no
+  // documents panel", never a crash.
+  const documentsContext: RequiredDocumentsContext | undefined = task
+    ? { caseId: task.caseId, providerId: task.providerId, groupId }
     : undefined;
 
   const touchlogQ = useTaskTouchlog(open && taskId ? taskId : undefined);
@@ -322,7 +322,7 @@ export function TaskDrawer({
                               <StepBody
                                 step={step}
                                 tokenValues={tokenValues}
-                                artifactsContext={artifactsContext}
+                                documentsContext={documentsContext}
                               />
                             )}
                           </div>
