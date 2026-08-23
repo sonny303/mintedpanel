@@ -1492,6 +1492,18 @@ global)` READS stay — the shared-catalog pattern, own-org disjunct vestigial
   ONLY — **hosted apply is an OPERATOR task**, deliberately not applied by the
   build session since it carries a decrypt secret + needs the master-key GUC):
   `20260717120000_ssn_vault.sql` + `20260717120100_ssn_intake_links.sql`.
+  **A third migration followed one day later**
+  (`20260718020000_ssn_vault_key_via_supabase_vault.sql`, same repo-only/
+  operator-apply posture): hosted Supabase rejects the dashboard `postgres`
+  role setting a custom GUC (`ALTER DATABASE/ROLE SET
+app.settings.ssn_vault_key` → `42501`), so `_ssn_vault_key()` now reads a
+  Supabase Vault secret named `ssn_vault_key` first (`vault.decrypted_secrets`,
+  readable only by the SECURITY DEFINER owner), falling back to the original
+  GUC for local dev/CI where no Vault secret is provisioned — same fail-closed
+  behavior on a missing key from either source, same zero-client-EXECUTE
+  posture, no change to the encrypt/decrypt model or key management option.
+  Operator provisioning: Dashboard → Project Settings → Vault → add secret
+  named `ssn_vault_key`.
   **PM security decisions (2026-07-14, do not re-open):** server-only vault
   (option 1); Option A key management (in-DB pgcrypto, key from a server GUC);
   `store_ssn` ingress = specialist+admin; reveal admin-only. **Vault (TE-1/TE-2,
@@ -2575,6 +2587,21 @@ NULL`), and a tier-partitioned `sort_order` backfill. `display_label` is the
   leak mode. `GET /api/portals` also embeds the payer's display name.
 - e2e `e2e/field-registry.spec.ts` (TS-144…TS-149, TS-160);
   `payer-setup-module.spec.ts` TS-132/TS-134 retargeted off the retired queue.
+- **Two more routes on the same org-free tier (extension Train mode, #49):**
+  `POST /api/shared-test-fills` and `POST /api/shared-portals/prove`, both on
+  `authenticateUser()` like the F6.9.8 trio above. `/api/shared-test-fills`
+  records the mock dry-run's `fill_sessions` row (`is_test: true`,
+  `case_id`/`provider_id` both null, `org_id` optional off the body — pure
+  telemetry, excluded from every scorecard/form-drift reader) — this is what
+  the extension's US-5 sandbox fill posts through
+  (`postSharedTestFill`/`sandboxFillPortal` in `minted-extension`).
+  `/api/shared-portals/prove` is the MANUAL `proven_at` stamp for a GLOBAL
+  portal row ("Mark proven" in the extension's Train UI) — a dry-run pass
+  never calls it itself; a human confirms after reviewing the fill. Both ride
+  the SAME `sharedtier` leak mode (no new mode): gate assertions **24**
+  (prove 404s on an org-scoped/foreign portal id before stamping anything)
+  and **24b** (a recorded test fill really is `is_test` with null case and
+  provider).
 
 ### E6.10 — Structured Control Autofill (2026-08-13, cross-repo)
 
@@ -2589,6 +2616,19 @@ via `train_global_field_map` (DROP+CREATE 7th arg) and the org RLS writers.
 Skip reasons name the control + a 3-option sample; `FIELD_NOT_FOUND_REASON` is
 unmoved. Isolation assertions 22/22b/23 unchanged (extra column on the same
 payload).
+
+**BITE-CAP-02 amendment (2026-08-10, repo-only migration `20260810143000`,
+hosted apply an operator step).** `propose_shared_field_map` gained a second
+write after its original INSERT…ON CONFLICT DO NOTHING: a re-capture now also
+UPDATEs the row's DOM-observed presentation columns (`field_label`,
+`form_section`, `page_step`, `sort_order`) whenever the caller supplies a
+non-blank value, coalescing onto the existing value otherwise — so a payer's
+own relabeling/reordering is repaired on every re-scan, not just captured on
+first sighting. Decision fields (`status`, `token`, `source`,
+`hardcoded_value`, `notes`) are outside that UPDATE's column list and an
+admin's `display_label`/`section` rename is never touched — re-capture still
+can't reset or discard a decision, exactly as the E6.9 section above
+describes; only the drift-repair half is new.
 
 ### 3M Slice 6 — platform authoring vs org adoption (2026-08-09)
 
@@ -2811,6 +2851,47 @@ seven behavioural probes — not by reasoning about the SQL.
   `types.ts` was HAND-EDITED (4 insertions, 1 deletion), not regenerated: hosted
   apply is the operator step, so a regen would reflect the pre-migration schema
   and delete the new column.
+
+### Hotfix 2026-08-14 — Create template failed with a bare "Save failed" toast
+
+Save Draft worked; Create Template did not, for both a brand-new payer and an
+existing catalog payer (reproduced on Alignment Health). The wizard's catch
+only renders the generic "Save failed" when the thrown value isn't an
+`Error` — which is exactly what a PostgREST error object is.
+
+**Cause: a composite-typed SECURITY DEFINER return is still subject to the
+underlying table's RLS.** `author_global_sop` was declared `RETURNS
+public.sop_templates`; PostgREST treats that as a table-typed result and
+re-applies `sop_templates_select` to the row the function hands back, even
+though the INSERT itself (running as the function owner) already succeeded.
+Post-OPA-RETIRE, a freshly created or newly-adopted payer has no
+`org_payer_assignments` row, so on a hosted project whose
+`sop_templates_select` had drifted from the D6.5 shape, the invoker's
+re-SELECT of the row it had just inserted came back empty and PostgREST
+reported that as an error — a second, RPC-return-shaped instance of the same
+write-then-vanish class D6.5 already fixed for plain reads.
+
+**Fix (`20260814180000_author_global_sop_returns_jsonb.sql`):** (1)
+re-asserts the D6.5 `sop_templates_select` / `sop_template_versions_select`
+shape (`org_id IS NULL` unconditionally readable) — a no-op if a project is
+already current, the actual fix if hosted had drifted; (2) reissues
+`author_global_sop` as **`RETURNS jsonb`** (the `publish_sop_template_version`
+precedent) via DROP + CREATE (a return-type change can't `CREATE OR
+REPLACE`) — a scalar jsonb result is never filtered by table RLS, so the
+create round-trip can't be re-filtered out from under itself again regardless
+of assignment state. Same body/guards otherwise (fallback-locked, the
+match-key-complete-unless-archived rule, the multi-state overlap check).
+
+**The general lesson:** a SECURITY DEFINER function that `RETURNS <table>` is
+NOT immune to RLS on the way out — PostgREST still filters the returned row
+through that table's SELECT policy for the calling role. Any RPC whose return
+type is a table (rather than `jsonb` or a scalar) can silently "succeed but
+report failure" the moment that role can no longer see the affected row,
+independent of whatever the function body itself was permitted to do. Prefer
+`RETURNS jsonb` (`to_jsonb(v_row)`) for a SECURITY DEFINER write path whose
+caller might not hold ordinary SELECT rights on the target row —
+`publish_sop_template_version` already did this; `author_global_sop` now
+matches it.
 
 ### User settings page + the `{{user.*}}` name split (2026-08-16)
 
