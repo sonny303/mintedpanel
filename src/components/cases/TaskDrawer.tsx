@@ -43,8 +43,8 @@ interface TaskDrawerProps {
   onOpenChange: (open: boolean) => void;
   /** token -> value map for the pdf-step filler (from the case page). */
   tokenValues?: Record<string, string>;
-  /** ASD — the case's group, for the step-artifact panel's vault grain AND
-   * the Active Documents rail below. The task carries its own
+  /** The case's group, for the Active Documents rail's vault grain — a
+   * group-owned W-9/COI resolves against it. The task carries its own
    * caseId/providerId; groupId lives on the case. */
   groupId?: string | null;
   /** ASD BITE-ASD-03 (D-ASD-7) — the case's FULL task list (not just this
@@ -321,16 +321,7 @@ export function TaskDrawer({
                                 the draft-email Gmail hand-off, the pdf
                                 filler — renders here for unlocked steps;
                                 locked steps stay label-only. */}
-                            {isLocked ? null : (
-                              <StepBody
-                                step={step}
-                                tokenValues={tokenValues}
-                                taskId={task.id}
-                                caseId={task.caseId}
-                                providerId={task.providerId}
-                                groupId={groupId}
-                              />
-                            )}
+                            {isLocked ? null : <StepBody step={step} tokenValues={tokenValues} />}
                           </div>
                           {isChecked ? (
                             <CheckCircle2 className="h-4 w-4 text-[#059669] flex-shrink-0" />

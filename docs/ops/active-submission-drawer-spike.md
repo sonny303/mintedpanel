@@ -1,5 +1,15 @@
 # Spike — Active Submission Drawer & document bridge (PRD reconciliation)
 
+> **PARTLY SUPERSEDED 2026-08-23.** The product owner withdrew
+> proof-of-submission capture: the touchlog plus the case's
+> `payer_reference_id` are the record. Every decision here about step-level
+> ATTACHMENTS (`SOPStepAttachment`, `StepArtifactsPanel`, the `filled_form`
+> catch-all — D-ASD-1/2/4/5/6) is retired and the code is deleted;
+> `requiredArtifacts` is an OUTBOUND list only. The document-bridge half
+> stands: `CaseRequiredDocuments` is the one drawer surface (D-ASD-7), and
+> the `verifyCaseLink` + gate work (D-ASD-9) shipped and holds. Read the
+> "Outbound documents only" entry in `CLAUDE.md` before building from this.
+
 **Status:** spike / audit — **no product code in this PR.** Awaiting PM ack of
 `D-ASD-1 … D-ASD-10`, then the bites in §Untangled slices build in order.  
 **Trigger:** PM PRD _"Frictionless Active Submission Drawer & On-The-Fly

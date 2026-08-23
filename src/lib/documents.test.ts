@@ -21,15 +21,13 @@ import {
   nextVersionNumber,
   orphanVersionFolders,
   parseDocumentKind,
+  requireableDocumentKinds,
   requiredDocumentKinds,
-  resolvableStepArtifactKind,
   resolveDocumentOwnerTarget,
   safeFileName,
-  stepArtifactRows,
   uploadableKinds,
-  vaultPickerKinds,
 } from "./documents";
-import type { SOPStep, SOPStepAttachment } from "@/types";
+import type { SOPStep } from "@/types";
 
 const TODAY = "2026-07-17";
 
@@ -85,20 +83,16 @@ describe("kind metadata (TE-5)", () => {
     expect(group).not.toContain("state_license");
   });
 
-  it("filled_form IS server-uploadable (the step-artifact write path) but never in the manual vault picker (D-ASD-4)", () => {
-    // The generic catch-all kind must be a real, storable kind — the step-
-    // artifact attach/upload flow uses it — but it must not clutter the
-    // "+ Upload" dropdown a human works from.
-    expect(uploadableKinds("provider").map((m) => m.kind)).toContain("filled_form");
-    expect(uploadableKinds("group").map((m) => m.kind)).toContain("filled_form");
-    expect(vaultPickerKinds("provider").map((m) => m.kind)).not.toContain("filled_form");
-    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain("filled_form");
-    // vaultPickerKinds otherwise matches uploadableKinds exactly (minus filled_form).
-    expect(vaultPickerKinds("provider").map((m) => m.kind)).toEqual(
-      uploadableKinds("provider")
-        .map((m) => m.kind)
-        .filter((k) => k !== "filled_form"),
-    );
+  it("filled_form is dormant again — no owner grain, offered by no picker (proof capture withdrawn 2026-08-23)", () => {
+    // It was widened to a real upload target only to back the step-artifact
+    // catch-all. With that path retired the kind returns to its E4.5 shape:
+    // the doc_type CHECK still permits it and parseDocumentKind still knows
+    // the name, but nothing client-side can file one.
+    expect(DOCUMENT_KIND_META.filled_form.uploadable).toBe(false);
+    expect(DOCUMENT_KIND_META.filled_form.owners).toEqual([]);
+    expect(uploadableKinds("provider").map((m) => m.kind)).not.toContain("filled_form");
+    expect(uploadableKinds("group").map((m) => m.kind)).not.toContain("filled_form");
+    expect(parseDocumentKind("Filled Form")).toBe("filled_form");
   });
 
   it("expirationDateError blocks a dated kind without a date and passes others", () => {
@@ -406,102 +400,29 @@ describe("readiness bridge (TE-6)", () => {
   });
 });
 
-describe("vaultPickerKinds (D-ASD-4)", () => {
-  it("excludes filled_form from the manual picker even though it is uploadable", () => {
-    expect(DOCUMENT_KIND_META.filled_form.uploadable).toBe(true);
-    expect(vaultPickerKinds("provider").map((m) => m.kind)).not.toContain("filled_form");
-    expect(vaultPickerKinds("group").map((m) => m.kind)).not.toContain("filled_form");
+describe("requireableDocumentKinds (governed SOP authoring picker)", () => {
+  it("offers every real kind and never the catch-alls", () => {
+    const kinds = requireableDocumentKinds();
+    expect(kinds).toContain("state_license");
+    expect(kinds).toContain("w9");
+    expect(kinds).toContain("coi");
+    expect(kinds).toContain("voided_check");
+    // `other` says nothing to a specialist; `filled_form` is dormant.
+    expect(kinds).not.toContain("other");
+    expect(kinds).not.toContain("filled_form");
   });
 
-  it("still offers every other uploadable kind for the owner", () => {
-    expect(vaultPickerKinds("provider").map((m) => m.kind)).toEqual(
-      uploadableKinds("provider")
-        .map((m) => m.kind)
-        .filter((k) => k !== "filled_form"),
-    );
-  });
-});
-
-describe("resolvableStepArtifactKind (D-ASD-4)", () => {
-  it("resolves a canonical name", () => {
-    expect(resolvableStepArtifactKind("State License")).toBe("state_license");
-    expect(resolvableStepArtifactKind("dea_certificate")).toBe("dea");
-  });
-
-  it("never resolves to filled_form or other, even by literal name", () => {
-    expect(resolvableStepArtifactKind("Filled Form")).toBeNull();
-    expect(resolvableStepArtifactKind("Other")).toBeNull();
-  });
-
-  it("returns null for a free-form artifact name", () => {
-    expect(resolvableStepArtifactKind("Portal confirmation screenshot")).toBeNull();
-  });
-});
-
-describe("stepArtifactRows (D-ASD-1/D-ASD-5)", () => {
-  function attachment(
-    documentId: string,
-    artifactName: string,
-    uploadedAt: string,
-  ): SOPStepAttachment {
-    return {
-      documentId,
-      artifactName,
-      fileName: `${documentId}.pdf`,
-      uploadedAt,
-      uploadedBy: "user-1",
-      kind: "state_license",
-    };
-  }
-
-  it("one row per required artifact, resolved kind attached", () => {
-    const step: Pick<SOPStep, "requiredArtifacts" | "attachments"> = {
-      requiredArtifacts: ["State License", "Portal confirmation screenshot"],
-      attachments: [],
-    };
-    const plan = stepArtifactRows(step);
-    expect(plan.rows).toEqual([
-      { artifactName: "State License", resolvedKind: "state_license", attachments: [] },
-      {
-        artifactName: "Portal confirmation screenshot",
-        resolvedKind: null,
-        attachments: [],
-      },
-    ]);
-    expect(plan.orphans).toEqual([]);
-  });
-
-  it("a second attachment under one name is never hidden — both render, newest first", () => {
-    const first = attachment("doc-1", "State License", "2026-07-01T00:00:00Z");
-    const second = attachment("doc-2", "State License", "2026-07-15T00:00:00Z");
-    const plan = stepArtifactRows({
-      requiredArtifacts: ["State License"],
-      attachments: [first, second],
-    });
-    expect(plan.rows).toHaveLength(1);
-    expect(plan.rows[0].attachments.map((a) => a.documentId)).toEqual(["doc-2", "doc-1"]);
-  });
-
-  it("an attachment whose name no longer matches any requiredArtifacts entry is an orphan, never dropped", () => {
-    const orphaned = attachment("doc-3", "Old License Copy", "2026-06-01T00:00:00Z");
-    const plan = stepArtifactRows({
-      requiredArtifacts: ["State License"],
-      attachments: [orphaned],
-    });
-    expect(plan.rows[0].attachments).toEqual([]);
-    expect(plan.orphans).toEqual([orphaned]);
-  });
-
-  it("de-dupes a template that saved a duplicate requiredArtifacts name, defensively", () => {
-    const plan = stepArtifactRows({
-      requiredArtifacts: ["State License", "State License"],
-      attachments: [],
-    });
-    expect(plan.rows).toHaveLength(1);
-  });
-
-  it("missing requiredArtifacts/attachments arrays degrade to empty, never throw", () => {
-    expect(stepArtifactRows({})).toEqual({ rows: [], orphans: [] });
+  it("only offers kinds the case side can actually resolve back to a vault join", () => {
+    // The picker's contract: everything it can emit must round-trip through
+    // parseDocumentKind, which is what requiredDocumentKinds() joins on. A
+    // kind offered here but unresolvable there would fill nothing — exactly
+    // the free-text failure the picker replaces.
+    for (const kind of requireableDocumentKinds()) {
+      expect(parseDocumentKind(kind)).toBe(kind);
+      expect(
+        requiredDocumentKinds([{ sopContent: [{ requiredArtifacts: [kind] } as SOPStep] }]),
+      ).toEqual([kind]);
+    }
   });
 });
 

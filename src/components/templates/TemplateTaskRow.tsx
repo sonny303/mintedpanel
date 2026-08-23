@@ -37,6 +37,8 @@ import {
   type ExecutionType,
 } from "@/lib/executionTypes";
 import { isValidEmail } from "@/lib/contactValidation";
+import { DOCUMENT_KIND_META, parseDocumentKind, requireableDocumentKinds } from "@/lib/documents";
+import type { DocumentKind } from "@/types";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
 import type { TokenGroup } from "@/lib/tokenGroups";
@@ -857,11 +859,19 @@ function RecipientListEditor({
   );
 }
 
+// The documents a step's submission must SEND to the payer. A GOVERNED
+// picker, not free text: the case side joins these to the provider/group
+// vault through `parseDocumentKind`, so a hand-typed name that resolves to
+// nothing never links and never fills — silently. That was not theoretical
+// ("License" was authored on live SOPs and resolved to nothing while
+// "state_license" worked). The picker can only emit canonical machine keys.
+// Entries authored before it stay visible and editable and are NEVER
+// rewritten — renaming someone's SOP text is the admin's call, not a
+// migration's — but they are flagged so the gap is visible.
+const REQUIREABLE_DOCUMENT_KINDS = requireableDocumentKinds();
+
 // E1.7b step-shape extension editor: expected payer turnaround, follow-up
-// cadence (both optional day counts), and the required-artifacts checklist.
-// Artifacts are NAMED attachments with no backing token ("Submission
-// confirmation PDF") — they belong here, not in data fields: a data-field
-// entry without a resolvable token is silently dropped at resolution.
+// cadence (both optional day counts), and the required-documents list.
 function StepCadenceFields({
   step,
   canEdit,
@@ -875,6 +885,14 @@ function StepCadenceFields({
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   }
+  // A kind already on the step is not offered again — the checklist is a set,
+  // and a duplicate would render two rows sharing one key for one document.
+  const taken = new Set(
+    step.requiredArtifacts
+      .map((a) => parseDocumentKind(a))
+      .filter((k): k is DocumentKind => k !== null),
+  );
+  const available = REQUIREABLE_DOCUMENT_KINDS.filter((k) => !taken.has(k));
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
@@ -908,56 +926,85 @@ function StepCadenceFields({
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <Label className="text-xs">Required artifacts</Label>
-          {canEdit ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onChange({ requiredArtifacts: [...step.requiredArtifacts, ""] })}
+          <Label className="text-xs">Required documents</Label>
+          {canEdit && available.length > 0 ? (
+            <Select
+              value=""
+              onValueChange={(kind) =>
+                onChange({ requiredArtifacts: [...step.requiredArtifacts, kind] })
+              }
             >
-              <Plus className="h-4 w-4 mr-1" />
-              Add artifact
-            </Button>
+              <SelectTrigger className="h-8 w-[200px] text-xs">
+                <SelectValue placeholder="Add document…" />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((kind) => (
+                  <SelectItem key={kind} value={kind}>
+                    {DOCUMENT_KIND_META[kind].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : null}
         </div>
         {step.requiredArtifacts.length === 0 ? (
           <p className="text-[11px] text-muted-foreground">
-            Name the attachments or proofs this step must produce (e.g. &quot;Submission
-            confirmation PDF&quot;). Reference shared logins by name only — never record a password
-            in an SOP step.
+            Pick the documents this submission must send with it (a state licence, a W-9). The case
+            shows whether each one is on file and lets the specialist download it. Reference shared
+            logins by name only — never record a password in an SOP step.
           </p>
         ) : (
           <div className="space-y-2">
-            {step.requiredArtifacts.map((artifact, i) => (
-              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                <Input
-                  placeholder="Artifact name"
-                  value={artifact}
-                  onChange={(e) =>
-                    onChange({
-                      requiredArtifacts: step.requiredArtifacts.map((a, j) =>
-                        j === i ? e.target.value : a,
-                      ),
-                    })
-                  }
-                  disabled={!canEdit}
-                />
-                {canEdit ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      onChange({
-                        requiredArtifacts: step.requiredArtifacts.filter((_, j) => j !== i),
-                      })
-                    }
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-            ))}
+            {step.requiredArtifacts.map((artifact, i) => {
+              const kind = parseDocumentKind(artifact);
+              const label = kind ? DOCUMENT_KIND_META[kind].label : artifact;
+              return (
+                <div key={i} className="space-y-1">
+                  <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                    {kind ? (
+                      <span className="rounded-md border border-[#E8E5E0] bg-muted/40 px-2 py-1.5 text-[13px]">
+                        {label}
+                      </span>
+                    ) : (
+                      <Input
+                        placeholder="Document name"
+                        value={artifact}
+                        aria-label={`Unlinked document entry ${i + 1}`}
+                        onChange={(e) =>
+                          onChange({
+                            requiredArtifacts: step.requiredArtifacts.map((a, j) =>
+                              j === i ? e.target.value : a,
+                            ),
+                          })
+                        }
+                        disabled={!canEdit}
+                      />
+                    )}
+                    {canEdit ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Remove ${label || "document"}`}
+                        onClick={() =>
+                          onChange({
+                            requiredArtifacts: step.requiredArtifacts.filter((_, j) => j !== i),
+                          })
+                        }
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
+                  {kind ? null : (
+                    <p className="text-[11px] text-[#92400E]">
+                      Not a known document — this shows on the case as a note only. Pick it from Add
+                      document above to link it to the vault.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

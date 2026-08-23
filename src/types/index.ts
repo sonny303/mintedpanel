@@ -1033,38 +1033,19 @@ export interface SOPStep {
   /** E1.7b: follow-up cadence after this step ("call every 14 days"). */
   followUpEveryDays?: number;
   /**
-   * E1.7b: named artifacts to produce/attach for this step (e.g. "Submission
-   * confirmation PDF"). Token-less by design — a `dataFields` entry requires a
-   * resolvable token and is filtered at resolution, so attachment checklists
-   * live here, never as token-less data fields.
+   * The documents this step's submission must SEND to the payer. Since the
+   * 2026-08-23 product decision (proof-of-submission capture withdrawn — the
+   * touchlog and the case's payer_reference_id are the record) this is an
+   * OUTBOUND list only, never a place to record proof coming back.
+   *
+   * Authoring writes the canonical machine kind (`state_license`, `w9`) via
+   * the governed picker; entries that predate it stay as free text and are
+   * never rewritten. A name that resolves through `parseDocumentKind` joins
+   * the vault and drives the case's Active Documents rail; one that does not
+   * renders as an inert note. Token-less by design — a `dataFields` entry
+   * requires a resolvable token and is filtered at resolution.
    */
   requiredArtifacts?: string[];
-  /**
-   * ASD (Active Submission Drawer rebuild, superseding TS-163) — files
-   * attached to this step's requiredArtifacts checklist. A POINTER ONLY
-   * (D-ASD-1): `documentId` is the sole identity, resolving through
-   * `/api/documents/:id/download` every time. Deliberately carries NO
-   * storage path — a path in this jsonb would go stale the moment a replace
-   * supersedes the version, and would invite a direct bucket read that skips
-   * the audited 120s signing endpoint (the one contract E4.5 TE-3 exists to
-   * hold). `fileName`/`kind`/`uploadedAt`/`uploadedBy` are a display cache
-   * only — the vault row is the source of truth for everything else
-   * (expiration, current-version status).
-   */
-  attachments?: SOPStepAttachment[];
-}
-
-/** ASD D-ASD-1 — one file attached to a step's artifact checklist. Points at
- * a `provider_documents` row; never stores a path (see SOPStep.attachments). */
-export interface SOPStepAttachment {
-  /** provider_documents.id — the ONLY identity. */
-  documentId: string;
-  /** The requiredArtifacts entry this attachment satisfies. */
-  artifactName: string;
-  fileName: string;
-  uploadedAt: string;
-  uploadedBy: string | null;
-  kind: DocumentKind;
 }
 
 export interface Task {

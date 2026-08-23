@@ -29,7 +29,7 @@ import {
   DOCUMENT_MIME_TYPES,
   checkDocumentFile,
   expirationDateError,
-  vaultPickerKinds,
+  uploadableKinds,
 } from "@/lib/documents";
 import { useUploadDocument } from "@/hooks/useDocuments";
 import type { DocumentKind, DocumentOwnerType, ProviderDocument } from "@/types";
@@ -69,7 +69,7 @@ export function UploadDocumentDialog({
   const [error, setError] = useState<string | null>(null);
 
   const kindLocked = Boolean(replaceTarget) || Boolean(presetKind);
-  const kinds = vaultPickerKinds(ownerType);
+  const kinds = uploadableKinds(ownerType);
   const expirationRequired = kind !== "" && DOCUMENT_KIND_META[kind].expirationRequired;
 
   const submit = () => {

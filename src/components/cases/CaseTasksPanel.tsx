@@ -49,8 +49,8 @@ export function CaseTasksPanel({
   tasks: Task[];
   /** token -> value map for the drawer's pdf-step filler (built by the case page). */
   tokenValues?: Record<string, string>;
-  /** ASD — the case's group, threaded to the drawer's step-artifact panel
-   * and Active Documents rail. */
+  /** The case's group, threaded to the drawer's Active Documents rail so a
+   * group-owned W-9/COI resolves. */
   groupId?: string | null;
   providerName?: string;
   groupName?: string | null;

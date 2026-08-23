@@ -2911,6 +2911,14 @@ repo's CLAUDE.md.
 
 ### SOP step document attachments — rebuilt (2026-08-17, closes/replaces PR #328)
 
+**PARTLY SUPERSEDED 2026-08-23** — proof-of-submission capture was withdrawn
+by the product owner and the step-attachment half of this entry is RETIRED
+(see "Outbound documents only" below). What survives: `CaseRequiredDocuments`
+(now the only document surface in the drawer), the `verifyCaseLink` hardening
+at upload-intent, the `groupId` thread, and gate assertions 25/25b/26. The
+rest of this entry is history — do not build against `StepArtifactsPanel`,
+`sopStepAttachments.ts`, or `SOPStep.attachments`; none of them exist.
+
 A SOP step's `requiredArtifacts` checklist can now hold real files, attached
 from — or uploaded straight into — the provider/group document vault. This is
 a **from-scratch rebuild**, not an iteration on PR #328 (TS-163): that PR was
@@ -3030,6 +3038,69 @@ documents/CaseRequiredDocuments.tsx` (E4.5 F4.5.3) had been fully built since
   `verifyCaseLink` check. No e2e yet (TECH-DEBT: add an
   `e2e/step-artifacts.spec.ts` covering attach/upload/replace/detach + the
   Active Documents rail's Upload/Replace/Download-all).
+
+### Outbound documents only — proof capture withdrawn (2026-08-23)
+
+**Product decision (owner, this session):** the touchlog plus the case's
+`payer_reference_id` ARE the record of submission. There is no step-level
+proof-of-submission capture, and `requiredArtifacts` means one thing only —
+the documents a submission must **send**. No migration; nothing in the data
+model changed.
+
+**What was retired** (all shipped 6 days earlier by the ASD rebuild #331, so
+this removes live code, not a stale branch): `StepArtifactsPanel.tsx`,
+`src/lib/sopStepAttachments.ts` + its suite, `attachStepArtifact` /
+`detachStepArtifact` and their hooks, the `SOPStepAttachment` type and
+`SOPStep.attachments`, `stepArtifactRows` / `resolvableStepArtifactKind`, and
+the `StepArtifactContext` plumbing through `StepBody`. `filled_form` returns
+to its dormant E4.5 shape (`owners: []`, `uploadable: false`), which makes
+`vaultPickerKinds` redundant — deleted, and `UploadDocumentDialog` reads
+`uploadableKinds` again. **Safe by measurement, not assumption:** live data
+held 0 tasks with step attachments, 0 `filled_form` documents and 0
+case-linked documents, so nothing was orphaned. `services/tasks.ts` and
+`hooks/useTasks.ts` are byte-identical to their pre-ASD state — verified by
+diff against `a9d88eb^`, which is the cheapest proof that a removal is a
+removal and not a rewrite.
+
+**What survives and is now the ONE document surface:** `CaseRequiredDocuments`
+in the `TaskDrawer` — required kinds derived across the case's tasks, resolved
+live against the provider/group vault as Ready / Expiring soon / Expired /
+Missing, per-row and bulk download, in-place upload or replace. A step body
+now renders its outbound list as plain text ("Documents to send: State Licence
+· W-9"), deliberately NOT a second upload surface: two places to file a
+document is how the two drift.
+
+**Authoring is governed, and this was the real defect.** `TemplateTaskRow`'s
+"Required documents" is a `Select` over `requireableDocumentKinds()` (every
+uploadable kind minus the `other` catch-all; dormant kinds drop out via
+`uploadable`, so the list maintains itself as kinds are added) writing the
+canonical machine key. Free text could silently produce a name that resolves
+to nothing through `parseDocumentKind` — not hypothetical: of the 7 distinct
+names authored on live SOPs, **`License` (4 uses) resolved to nothing** while
+`state_license` worked, so the specialist saw an inert checklist row instead
+of "Ready · download". Legacy entries stay visible, editable and are NEVER
+rewritten (renaming an admin's SOP text is their call, not a migration's) but
+now render an amber "Not a known document — shows as a note only" line, so the
+gap is visible instead of silent. `documents.test.ts` pins the round trip:
+every kind the picker can emit must resolve back through the same join the
+case side uses — a kind offered but unresolvable would fill nothing, which is
+the exact failure the picker replaces.
+
+**Known data follow-up (NOT done — needs an owner decision):** three authored
+names still resolve to nothing — `License` (4 uses, meant to be
+`state_license`), `Submission confirmation` (4 uses, the withdrawn proof
+concept — should simply go), and `Alignment Release and Attestation Form` (3
+uses, a payer's own blank form, which has no home in the data model:
+`provider_documents` is owned by provider-or-group and a payer-owned file has
+no owner grain). Rewriting live SOP text is not a build-session call.
+
+**Related, still open:** PR #334 (`claude/task-steps-artifact-plan-i5lpve`) is
+~20 commits behind and would delete the surviving rail — it should close, not
+merge. PR #335 fixes a real bug in `CaseRequiredDocuments` (a replacement was
+routed by the KIND's owner preference rather than the document's own grain, so
+replacing an expired group-owned COI on a case that also has a provider always
+422s) and should merge; it touches `documents.ts` and the deleted
+`StepArtifactsPanel`, so merging it first makes this branch's rebase trivial.
 
 ## What this is
 
