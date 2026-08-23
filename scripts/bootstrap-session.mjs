@@ -10,7 +10,7 @@
 //   - writes .env only when absent (never overwrites an existing one)
 //   - runs `npm ci` only when node_modules is missing or package-lock.json
 //     is newer than the last install
-//   - fetches origin/redesign (best-effort: offline is a warning, not a
+//   - fetches origin/main (best-effort: offline is a warning, not a
 //     failure)
 //
 // Usage: node scripts/bootstrap-session.mjs
@@ -61,15 +61,16 @@ if (needsInstall) {
   log("node_modules up to date — skipped npm ci");
 }
 
-// 3. Freshen the long-lived branch (best-effort; sandboxes may be offline).
-const fetch = spawnSync("git", ["fetch", "origin", "redesign"], {
+// 3. Freshen the default branch (best-effort; sandboxes may be offline).
+// `redesign` was promoted to `main` and retired — fetching it always warned.
+const fetch = spawnSync("git", ["fetch", "origin", "main"], {
   cwd: root,
   stdio: "inherit",
 });
 if (fetch.status === 0) {
-  log("fetched origin/redesign");
+  log("fetched origin/main");
 } else {
-  log("warning: `git fetch origin redesign` failed — continuing without it");
+  log("warning: `git fetch origin main` failed — continuing without it");
 }
 
 log("bootstrap complete");

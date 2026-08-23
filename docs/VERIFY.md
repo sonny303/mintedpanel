@@ -13,7 +13,7 @@ node scripts/bootstrap-session.mjs
 Idempotent: writes the dummy `.env` Playwright needs (only when absent — a
 fresh clone has none, and `npx playwright test` without it silently burns the
 full 120s webServer timeout before failing), runs `npm ci` only when
-`node_modules` is missing/stale, and fetches `origin/redesign`. Cloud
+`node_modules` is missing/stale, and fetches `origin/main`. Cloud
 (Claude Code on the web) sessions run it automatically via the checked-in
 SessionStart hook (`.claude/hooks/session-start.sh`); local sessions run the
 one-liner by hand. It never writes real credentials.
