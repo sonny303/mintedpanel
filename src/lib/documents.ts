@@ -196,6 +196,25 @@ export function vaultPickerKinds(ownerType: DocumentOwnerType): DocumentKindMeta
   return uploadableKinds(ownerType).filter((m) => m.kind !== "filled_form");
 }
 
+/** TS-164 — the kinds a SOP step may name as a REQUIRED DOCUMENT during
+ * template authoring, replacing the old free-text "Required artifacts" box.
+ *
+ * Owner-agnostic by design: a template requirement has no provider or group
+ * until a case resolves it, so `vaultPickerKinds` (owner-scoped) cannot be
+ * reused here — but the two exclude the same two kinds, for the same reasons:
+ *
+ *  - `other` is a real vault kind that carries no meaning as a payer
+ *    requirement; offering it reintroduces the ambiguity the picker removes.
+ *  - `filled_form` is the ASD catch-all for a step artifact whose name
+ *    resolves to no canonical kind. Its `uploadable` flag is TRUE (the server
+ *    genuinely accepts it), so filtering on `uploadable` alone would put
+ *    "Filled Form" in the picker — it must be excluded by name. */
+export function requireableDocumentKinds(): DocumentKindMeta[] {
+  return ALL_DOCUMENT_KINDS.map((k) => DOCUMENT_KIND_META[k]).filter(
+    (m) => m.uploadable && m.kind !== "other" && m.kind !== "filled_form",
+  );
+}
+
 /** D2/TE-5: a dated kind cannot be saved without its expiration date. */
 export function expirationDateError(
   kind: DocumentKind,
