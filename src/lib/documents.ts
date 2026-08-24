@@ -131,6 +131,15 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
     uploadable: true,
     aliases: ["board_cert", "board_certification"],
   },
+  cp_575: {
+    kind: "cp_575",
+    label: "CP 575",
+    owners: ["provider"],
+    expirationRequired: false,
+    expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
+    uploadable: true,
+    aliases: ["cp_575", "cp575"],
+  },
   filled_form: {
     kind: "filled_form",
     // ASD — the catch-all for a step artifact whose name resolves to no

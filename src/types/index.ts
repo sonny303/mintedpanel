@@ -1512,6 +1512,7 @@ export type DocumentKind =
   | "cv"
   | "diploma"
   | "board_cert"
+  | "cp_575"
   | "filled_form"
   | "other";
 

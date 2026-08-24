@@ -9,13 +9,13 @@ Recipes for debugging the panel app (`sonny303/mintedpanel`) and the extension's
 
 ## Quick reference
 
-| Symptom | Tab(s) | Approach |
-|---|---|---|
-| A form field won't validate or save | Elements → Console | Inspect the input's attributes/value, then check the relevant service in `src/services/*.ts` |
-| A network request to `/api/*` fails | Network | Filter `fetch/xhr`, inspect request headers (`Authorization`, `x-org-id`) and the `{data,error,meta}` response envelope |
-| A calculation looks wrong (readiness, generation buckets, status) | Sources | Breakpoint in the relevant `src/lib/*.ts` pure module |
-| A screen feels slow | Performance | Record the interaction, look for long tasks and excess re-renders |
-| Extension message never arrives | Console (background + content) | Check `chrome://extensions` → service worker console, and the content script's own console on the page |
+| Symptom                                                           | Tab(s)                         | Approach                                                                                                                |
+| ----------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| A form field won't validate or save                               | Elements → Console             | Inspect the input's attributes/value, then check the relevant service in `src/services/*.ts`                            |
+| A network request to `/api/*` fails                               | Network                        | Filter `fetch/xhr`, inspect request headers (`Authorization`, `x-org-id`) and the `{data,error,meta}` response envelope |
+| A calculation looks wrong (readiness, generation buckets, status) | Sources                        | Breakpoint in the relevant `src/lib/*.ts` pure module                                                                   |
+| A screen feels slow                                               | Performance                    | Record the interaction, look for long tasks and excess re-renders                                                       |
+| Extension message never arrives                                   | Console (background + content) | Check `chrome://extensions` → service worker console, and the content script's own console on the page                  |
 
 ## Elements + Console: form/field state
 
