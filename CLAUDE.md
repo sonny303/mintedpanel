@@ -101,9 +101,10 @@ The **bulk of data access is browser → Supabase PostgREST under RLS.** A slice
 runs as `/api/*` routes on the nitro server behind `guard.ts` using the
 service-role client, consumed by the **Chrome extension**.
 
-**No frontend hook calls `/api`** — with one sanctioned exception: the browser
-documents service calls the three `/api/documents/*` signing endpoints, because
-a signed Storage URL cannot be minted client-side. Metadata reads stay on RLS.
+**No frontend hook calls `/api`** — with one sanctioned exception, now covering
+two file surfaces: the browser documents and payer-forms services call their
+`/api/*` signing endpoints, because a signed Storage URL cannot be minted
+client-side. Metadata reads (and the payer-form soft retire) stay on RLS.
 
 Routes get built only when a real consumer pulls them. Don't migrate existing
 screens to `/api`.
@@ -158,21 +159,22 @@ route modules so `/api/health` stays free of the Supabase graph.
 
 Org-scoped (full `authenticate()`):
 
-| Route                                                                                                  | Notes                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/health`                                                                                      | public                                                                                                                                                                                                |
-| `GET/POST /api/providers`, `GET/PATCH /api/providers/:id`                                              | list uses `PROVIDER_LIST_COLUMNS`; **excludes `terminated` by default** (`excludeStatus`, overridable via `?status=`); list sets `withGroups: true` → `groups[]` (current memberships, primary first) |
-| `GET /api/providers/:id/profile?state=&facilityId=`                                                    | the fill payload — most PHI-dense response in the system. `no-store`, never logged, one `READ` audit row per read                                                                                     |
-| `GET /api/providers/:id/ssn-release?caseId=`                                                           | fill-only full-SSN release, writer-only, audited                                                                                                                                                      |
-| `POST /api/providers/:id/caqh-attestation`                                                             | future date = 422; narrow response, never the PHI row                                                                                                                                                 |
-| `GET /api/cases?providerId=` or `?q=`                                                                  | open cases for the popup, or org-scoped case search (ids + display fields only; blank `q` → `[]`)                                                                                                     |
-| `POST /api/cases/:id/touches`                                                                          | the business log — see below                                                                                                                                                                          |
-| `GET /api/cases/:id/context`                                                                           | panel context; `no-store` + one `READ` audit row                                                                                                                                                      |
-| `GET /api/next-best-action`                                                                            | queue top/ranked list via the **same pure reducer** as the browser queue                                                                                                                              |
-| `GET /api/portals`, `GET/POST /api/portal-field-maps`                                                  | registry + shared catalog; POST is **propose-only**                                                                                                                                                   |
-| `PATCH /api/tasks/:id/steps`                                                                           | the one task-state write                                                                                                                                                                              |
-| `POST /api/fill-events`                                                                                | client-generated `id` is idempotency key **and** row PK                                                                                                                                               |
-| `POST /api/documents/upload-intent`, `POST /api/documents/finalize`, `GET /api/documents/:id/download` | the Storage signing boundary; cross-org id 404s **before** signing or inserting                                                                                                                       |
+| Route                                                                                                        | Notes                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                                                                                            | public                                                                                                                                                                                                |
+| `GET/POST /api/providers`, `GET/PATCH /api/providers/:id`                                                    | list uses `PROVIDER_LIST_COLUMNS`; **excludes `terminated` by default** (`excludeStatus`, overridable via `?status=`); list sets `withGroups: true` → `groups[]` (current memberships, primary first) |
+| `GET /api/providers/:id/profile?state=&facilityId=`                                                          | the fill payload — most PHI-dense response in the system. `no-store`, never logged, one `READ` audit row per read                                                                                     |
+| `GET /api/providers/:id/ssn-release?caseId=`                                                                 | fill-only full-SSN release, writer-only, audited                                                                                                                                                      |
+| `POST /api/providers/:id/caqh-attestation`                                                                   | future date = 422; narrow response, never the PHI row                                                                                                                                                 |
+| `GET /api/cases?providerId=` or `?q=`                                                                        | open cases for the popup, or org-scoped case search (ids + display fields only; blank `q` → `[]`)                                                                                                     |
+| `POST /api/cases/:id/touches`                                                                                | the business log — see below                                                                                                                                                                          |
+| `GET /api/cases/:id/context`                                                                                 | panel context; `no-store` + one `READ` audit row                                                                                                                                                      |
+| `GET /api/next-best-action`                                                                                  | queue top/ranked list via the **same pure reducer** as the browser queue                                                                                                                              |
+| `GET /api/portals`, `GET/POST /api/portal-field-maps`                                                        | registry + shared catalog; POST is **propose-only**                                                                                                                                                   |
+| `PATCH /api/tasks/:id/steps`                                                                                 | the one task-state write                                                                                                                                                                              |
+| `POST /api/fill-events`                                                                                      | client-generated `id` is idempotency key **and** row PK                                                                                                                                               |
+| `POST /api/documents/upload-intent`, `POST /api/documents/finalize`, `GET /api/documents/:id/download`       | the Storage signing boundary; cross-org id 404s **before** signing or inserting                                                                                                                       |
+| `POST /api/payer-forms/upload-intent`, `POST /api/payer-forms/finalize`, `GET /api/payer-forms/:id/download` | the same signing boundary for GLOBAL payer forms. Writes are **admin-only**; reads are open to any member — the rows carry no `org_id`, so the wall is role, not tenancy                              |
 
 User-scoped (`authenticateUser()`, no org resolution):
 
@@ -220,7 +222,8 @@ incident-derived rules are in the **`supabase-migrations` skill** — read it
 before any schema work.
 
 **Repo-only migrations awaiting an operator apply** (a starting hint only —
-**always verify the object on hosted**, never trust this list):
+**always verify the object on hosted**, never trust this list;
+`20260824170000_payer_forms.sql` is applied and object-verified):
 
 - `20260812130000_payer_contacts_select_opa_retire.sql`
 - `20260812140000_sop_template_multi_state.sql`
@@ -287,6 +290,7 @@ organizations
 │   ├── provider_documents             — immutable versions; "current" is derived
 │   └── enrollment_facts               — live = expired_at IS NULL
 ├── payers (GLOBAL catalog) + payer_contacts + payer_network_targets
+├── payer_forms                        — GLOBAL blank payer PDFs, per SOP template
 ├── credential_cases → tasks → touches
 └── contracts, status_configs, audit_log
 ```
@@ -432,6 +436,45 @@ Attach appends (a second file under one artifact name sits alongside the
 first); detach unlinks only. Replace is ordered **attach-new then detach-old**,
 so a half-completed swap leaves both versions visible rather than a step
 pointing at nothing.
+
+### Payer PDF
+
+Payer-specific blank forms (e.g. "PT Credentialing Supplement") attached to a
+SOP template in the Template Editor's **Actions** step, auto-attached to cases
+at generation.
+
+- **`payer_forms` is a GLOBAL table** (no `org_id`) with its own private
+  `payer-forms` bucket. Not the `provider_documents` vault: that is org-scoped
+  and provider/group-owned, and a payer's blank form is neither.
+- **Two grains.** A template action points at a form **family**; a generated
+  case task points at a concrete **row**, baked at generation. Replacing a file
+  therefore reaches newly generated cases with no republish, while a case
+  already created keeps the file it was generated with. "Current" is derived
+  (highest live version), never a flag. Rules in `src/lib/payerForms.ts`.
+- **Stored as `stepType: "pdf"` + a `payerForm` pointer**, reusing a value
+  already in `SOPStepType`. That is deliberate: no `/api` wire contract widens,
+  so the extension needs no coordinated change, and `projectTaskSteps`
+  whitelists its keys so `payerForm` never reaches the extension at all. A
+  legacy `pdf` step carrying NO pointer is an ordinary step and round-trips
+  untouched — **the pointer's presence, not the step type, is what makes an
+  action a Payer PDF action.**
+- **Payer and states are read-only context from the template**, never tagged per
+  form. A form that applies to only some of a multi-state template's states
+  belongs on its own single-state template.
+- **Attached at `/generation` only.** `ManualCaseModal` and Reapply attach SOP
+  tasks as before. An action whose family has no live form is DROPPED rather
+  than generated empty, and `hydratePayerFormTasks` must therefore run AFTER
+  both stamps — they pair tasks with definitions by index.
+- **Removal is per case and permanent by construction**: the task is marked
+  `blocked` and a `removedAt` marker is appended to its own `sop_content`;
+  `CaseTasksPanel` filters marked tasks out before anything derives from the
+  list. Nothing re-adds it — a case is generated once.
+- **Mark sent** completes the action and writes a touch, in that order (the
+  evidence outlives a failed status write). It never bumps the case status.
+- **Writes are admin-only, and the wall is ROLE, not tenancy** — one org's admin
+  changes what every org sees. Gate assertions 28/28b/28c/29 pin that, including
+  29's _positive_ assertion that a cross-org read succeeds, so a future change
+  narrowing global reads fails loudly instead of silently breaking other orgs.
 
 ### Payer governance
 

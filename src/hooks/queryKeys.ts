@@ -31,6 +31,11 @@ export const queryKeys = {
   groupInsurancePolicies: (orgId: string) => ["group-insurance-policies", orgId] as const,
   templates: (orgId: string) => ["templates", orgId] as const,
   template: (orgId: string, id: string) => ["template", orgId, id] as const,
+  // Payer PDF. The rows are GLOBAL, but the key stays org-scoped like every
+  // other key here so an org switch's removeQueries() clears it — a cached
+  // global list surviving a switch would be harmless yet inconsistent with
+  // every neighbouring cache, and the prefix invalidation idiom depends on it.
+  payerForms: (orgId: string, templateId: string) => ["payer-forms", orgId, templateId] as const,
   // E1.7b SOP versioning: history list + one immutable version's content.
   templateVersions: (orgId: string, templateId: string) =>
     ["template-versions", orgId, templateId] as const,

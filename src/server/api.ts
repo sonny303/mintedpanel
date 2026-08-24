@@ -17,6 +17,7 @@ import { handlePreflight, withCors } from "./cors";
 const loadProviderRoutes = () => import("./providerRoutes");
 const loadExtensionRoutes = () => import("./extensionRoutes");
 const loadDocumentRoutes = () => import("./documentRoutes");
+const loadPayerFormRoutes = () => import("./payerFormRoutes");
 
 // `/api/providers/:id/profile` — must be matched before the generic :id route.
 const PROVIDER_PROFILE_ROUTE = /^\/api\/providers\/([^/]+)\/profile\/?$/;
@@ -64,6 +65,10 @@ const ME_VIEW_PREFS_ROUTE = /^\/api\/me\/view-prefs\/?$/;
 const DOCUMENT_UPLOAD_INTENT_ROUTE = /^\/api\/documents\/upload-intent\/?$/;
 const DOCUMENT_FINALIZE_ROUTE = /^\/api\/documents\/finalize\/?$/;
 const DOCUMENT_DOWNLOAD_ROUTE = /^\/api\/documents\/([^/]+)\/download\/?$/;
+// Payer PDF storage: the same three signing endpoints for GLOBAL payer forms.
+const PAYER_FORM_UPLOAD_INTENT_ROUTE = /^\/api\/payer-forms\/upload-intent\/?$/;
+const PAYER_FORM_FINALIZE_ROUTE = /^\/api\/payer-forms\/finalize\/?$/;
+const PAYER_FORM_DOWNLOAD_ROUTE = /^\/api\/payer-forms\/([^/]+)\/download\/?$/;
 
 // Paths this router owns. Kept in sync with the check in src/server.ts.
 export function isApiRequest(pathname: string): boolean {
@@ -134,6 +139,12 @@ async function routeApiRequest(request: Request): Promise<Response> {
   const isDocumentFinalize = DOCUMENT_FINALIZE_ROUTE.test(pathname);
   const documentDownloadMatch =
     isDocumentUploadIntent || isDocumentFinalize ? null : pathname.match(DOCUMENT_DOWNLOAD_ROUTE);
+  const isPayerFormUploadIntent = PAYER_FORM_UPLOAD_INTENT_ROUTE.test(pathname);
+  const isPayerFormFinalize = PAYER_FORM_FINALIZE_ROUTE.test(pathname);
+  const payerFormDownloadMatch =
+    isPayerFormUploadIntent || isPayerFormFinalize
+      ? null
+      : pathname.match(PAYER_FORM_DOWNLOAD_ROUTE);
   if (
     !profileMatch &&
     !ssnReleaseMatch &&
@@ -155,7 +166,10 @@ async function routeApiRequest(request: Request): Promise<Response> {
     !isSharedTestFills &&
     !isDocumentUploadIntent &&
     !isDocumentFinalize &&
-    !documentDownloadMatch
+    !documentDownloadMatch &&
+    !isPayerFormUploadIntent &&
+    !isPayerFormFinalize &&
+    !payerFormDownloadMatch
   ) {
     return fail(404, "Not found");
   }
@@ -338,6 +352,21 @@ async function routeApiRequest(request: Request): Promise<Response> {
       if (method !== "GET") return fail(405, "Method not allowed");
       const routes = await loadDocumentRoutes();
       return await routes.handleDocumentDownload(documentDownloadMatch[1], ctx);
+    }
+    if (isPayerFormUploadIntent) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadPayerFormRoutes();
+      return await routes.handleCreatePayerFormUploadIntent(await readJsonBody(request), ctx);
+    }
+    if (isPayerFormFinalize) {
+      if (method !== "POST") return fail(405, "Method not allowed");
+      const routes = await loadPayerFormRoutes();
+      return await routes.handleFinalizePayerForm(await readJsonBody(request), ctx);
+    }
+    if (payerFormDownloadMatch) {
+      if (method !== "GET") return fail(405, "Method not allowed");
+      const routes = await loadPayerFormRoutes();
+      return await routes.handlePayerFormDownload(payerFormDownloadMatch[1], ctx);
     }
 
     const routes = await loadProviderRoutes();

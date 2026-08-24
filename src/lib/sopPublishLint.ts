@@ -10,6 +10,8 @@
 //     provider.email is valid before generation).
 //   - BITE-SOP-TT-01: every Auto-fill (extension_fill) task has ≥1 online_form
 //     step with a non-empty portalKey (so Workbench/form readiness can bind).
+//   - Payer PDF: every authored payer-form step has a form uploaded (a
+//     `payerForm` pointer with a non-empty familyId).
 // Pure; enforced in the wizard — the only publish surface.
 
 import type { SOPTaskDefinition } from "@/types";
@@ -101,6 +103,20 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
               message: `Task ${taskNo}, step ${stepNo} recipient token "${r.token}" is not an email field.`,
             });
           }
+        }
+      }
+      // Payer PDF — an action that promises the coordinator a payer form must
+      // actually carry one. `payerForm` present with an empty familyId is the
+      // authored "file not chosen yet" state; publishing it would generate a
+      // checklist item with nothing to download. A legacy "pdf" step (no
+      // payerForm key) is a plain step and is not linted.
+      if (step.stepType === "pdf" && step.payerForm !== undefined) {
+        if (!step.payerForm.familyId) {
+          errors.push({
+            taskIndex: taskNo,
+            stepIndex: stepNo,
+            message: `Task ${taskNo}, step ${stepNo} (payer PDF) needs a form uploaded.`,
+          });
         }
       }
     });

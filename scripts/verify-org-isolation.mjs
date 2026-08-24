@@ -979,6 +979,104 @@ function looksLikeVercelGate(r) {
     { leak: true },
   );
 
+  // 28/28b/28c/29 — Payer PDF (/api/payer-forms/*). These rows are GLOBAL: no
+  // org_id, one file per payer that every org credentialing with that payer
+  // sees. So the wall here is NOT tenancy — a cross-org read is the intended
+  // behavior, and asserting a 404 on one would pin the opposite of the design.
+  // The wall is ROLE: only an admin may change what every org sees. That makes
+  // the checks below the payer-form equivalent of 25/25b/26.
+  //
+  // 28 proves the route works for the Kansas ADMIN (so 28b isn't vacuous
+  // against a dead route). Safe on production: an intent mints a signed target
+  // but writes no row, and nothing is ever PUT to it — the object never exists
+  // and finalize is never called, so no payer_forms row and no storage object
+  // results from this run.
+  if (env.PAYER_FORM_TEMPLATE_ID) {
+    const ownFormIntent = await apiPost(
+      "/api/payer-forms/upload-intent",
+      {
+        templateId: env.PAYER_FORM_TEMPLATE_ID,
+        label: "Gate probe form",
+        fileName: "gate-probe.pdf",
+        fileSize: 1024,
+        mimeType: "application/pdf",
+      },
+      { token: kansasTok },
+    );
+    check(
+      "28. Kansas admin mints a payer-form upload-intent (signed target issued)",
+      ownFormIntent.status === 200 && typeof ownFormIntent.body?.data?.uploadUrl === "string",
+      `status=${ownFormIntent.status}` +
+        (ownFormIntent.status !== 200 ? ` body=${(ownFormIntent.raw || "").slice(0, 100)}` : ""),
+    );
+
+    // 28b — the role wall. South Park's user is BILLING (read-only), so this
+    // must be a 403 with nothing signed. A leak here means any member of any
+    // org can overwrite a payer form every other org depends on.
+    const spFormIntent = await apiPost(
+      "/api/payer-forms/upload-intent",
+      {
+        templateId: env.PAYER_FORM_TEMPLATE_ID,
+        label: "Gate probe form",
+        fileName: "gate-probe.pdf",
+        fileSize: 1024,
+        mimeType: "application/pdf",
+      },
+      { token: spTok },
+    );
+    const spFormLeaked = spFormIntent.status < 400 || spFormIntent.body?.data != null;
+    check(
+      "28b. Non-admin POST payer-form upload-intent -> 403, no signed target",
+      spFormIntent.status === 403 && !spFormLeaked,
+      `status=${spFormIntent.status} (expect 403) dataPresent=${spFormIntent.body?.data != null}`,
+      { leak: true },
+    );
+
+    // 28c — the same wall on finalize, which is the endpoint that would insert
+    // the row. 25b/26 pair the same way for documents.
+    const spFormFinalize = await apiPost(
+      "/api/payer-forms/finalize",
+      {
+        templateId: env.PAYER_FORM_TEMPLATE_ID,
+        familyId: crypto.randomUUID(),
+        version: 1,
+        label: "Gate probe form",
+        fileName: "gate-probe.pdf",
+        mimeType: "application/pdf",
+        fileSize: 1024,
+      },
+      { token: spTok },
+    );
+    const spFinalizeLeaked = spFormFinalize.status < 400 || spFormFinalize.body?.data != null;
+    check(
+      "28c. Non-admin POST payer-form finalize -> 403, before any insert",
+      spFormFinalize.status === 403 && !spFinalizeLeaked,
+      `status=${spFormFinalize.status} (expect 403) dataPresent=${spFormFinalize.body?.data != null}`,
+      { leak: true },
+    );
+  } else {
+    console.log("SKIP  28/28b/28c. payer-form write wall — PAYER_FORM_TEMPLATE_ID not set");
+  }
+
+  // 29. The deliberate global READ. A member of an org that did NOT upload the
+  //     form still downloads it — that is the product behavior (one blank payer
+  //     form, every org). This is asserted POSITIVELY and on purpose, so that a
+  //     future change narrowing it to the uploading org fails here loudly
+  //     instead of silently breaking every other org's cases.
+  if (env.PAYER_FORM_ID) {
+    const spDownload = await apiGet(`/api/payer-forms/${env.PAYER_FORM_ID}/download`, {
+      token: spTok,
+    });
+    check(
+      "29. Any org's member downloads a GLOBAL payer form (intended, not a leak)",
+      spDownload.status === 200 && typeof spDownload.body?.data?.url === "string",
+      `status=${spDownload.status}` +
+        (spDownload.status !== 200 ? ` body=${(spDownload.raw || "").slice(0, 100)}` : ""),
+    );
+  } else {
+    console.log("SKIP  29. global payer-form download — PAYER_FORM_ID not set");
+  }
+
   // ---- Pass/fail table ----
   const w = Math.max(...rows.map((r) => r.name.length));
   const line = "+" + "-".repeat(w + 2) + "+--------+";

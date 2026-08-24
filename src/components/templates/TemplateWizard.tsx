@@ -454,6 +454,8 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                     emailTemplate: { subject: "", body: "", to: [], cc: [] },
                     dataFields: [],
                     portalKey: "",
+                    payerFormFamilyId: "",
+                    isPayerForm: false,
                     expectedTurnaroundDays: null,
                     followUpEveryDays: null,
                     requiredArtifacts: [],
@@ -1344,6 +1346,9 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
                 groupedTokens={groupedTokens}
                 portals={portals}
                 templatePayerId={payerId === "none" ? null : payerId}
+                templateId={initial?.id ?? null}
+                templatePayerName={payerName}
+                templateStates={states}
                 isGlobalAuthoring={isGlobal}
                 autoOpenStepId={intentStepId}
                 dragTaskId={dragTaskId}

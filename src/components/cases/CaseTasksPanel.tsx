@@ -27,6 +27,8 @@ import { fmtDate } from "@/lib/format";
 import { useUpdateTaskStatus } from "@/hooks/useTasks";
 import { useCanWrite } from "@/lib/permissions";
 import { TaskDrawer } from "@/components/cases/TaskDrawer";
+import { PayerFormActionRow } from "@/components/cases/PayerFormActionRow";
+import { isPayerFormRemoved, taskPayerFormPointer } from "@/lib/payerForms";
 import { currentStepPointer, orderedSteps, summarizeTasks } from "@/lib/caseDetailView";
 import { EXECUTION_TYPE_LABELS, resolveExecutionType } from "@/lib/executionTypes";
 import type { Task, TaskStatus } from "@/types";
@@ -40,7 +42,7 @@ function taskStatusIcon(status: Task["status"], locked: boolean) {
 }
 
 export function CaseTasksPanel({
-  tasks,
+  tasks: allTasks,
   tokenValues,
   groupId = null,
   providerName = "this provider",
@@ -61,6 +63,13 @@ export function CaseTasksPanel({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reopenTask, setReopenTask] = useState<Task | null>(null);
   const undoRef = useRef<Set<string>>(new Set());
+  // Payer PDF — a removed payer form is off this case for good, so it drops out
+  // BEFORE anything derives from the list: the summary counts, the sequential
+  // lock, and the current-step pointer must all behave as though it was never
+  // attached. The row itself is untouched (status blocked + a removal marker on
+  // its own sop_content), which is where the "who removed it, when, and why"
+  // record lives.
+  const tasks = allTasks.filter((t) => !isPayerFormRemoved(t.sopContent));
   const summary = summarizeTasks(tasks);
   const currentStep = currentStepPointer(tasks);
 
@@ -224,10 +233,18 @@ export function CaseTasksPanel({
                 );
 
                 const steps = orderedSteps(t);
+                // A Payer PDF action gets its own controls instead of the step
+                // list: its single step would read "Send payer form" and carry
+                // no affordance, while what the coordinator actually needs is
+                // the file, a way to say it went out, and a way to drop it.
+                const payerFormPointer = taskPayerFormPointer(t.sopContent);
                 const body = (
                   <div>
                     {row}
-                    {steps.length > 0 && !locked ? (
+                    {payerFormPointer && !locked ? (
+                      <PayerFormActionRow task={t} pointer={payerFormPointer} canEdit={canEdit} />
+                    ) : null}
+                    {!payerFormPointer && steps.length > 0 && !locked ? (
                       <ul className="space-y-1.5 px-3 pb-3 pl-11">
                         {steps.map((s) => {
                           const isCurrent =

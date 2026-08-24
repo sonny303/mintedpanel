@@ -76,6 +76,17 @@ export interface EditableStep {
   // portal_key for an online_form step, "" = not linked. Editor value is raw;
   // normalized on write.
   portalKey: string;
+  /** Payer PDF — the form FAMILY this action hands the coordinator. "" until a
+   * file is uploaded; the publish lint rejects a Payer PDF action left empty.
+   * Family (not row) is what lets a replaced file reach newly generated cases
+   * without republishing the template. */
+  payerFormFamilyId: string;
+  /** Editor-only: this step IS a Payer PDF action. Derived on read from
+   * (stepType "pdf" AND a payerForm pointer), and set directly by the preset so
+   * a brand-new action reads as Payer PDF before its file exists. Never stored
+   * — `fromEditable` emits stepType "pdf" + the payerForm pointer instead,
+   * which is also why a LEGACY "pdf" step (no pointer) round-trips untouched. */
+  isPayerForm: boolean;
   // E1.7b step-shape extension. null = not set (omitted on write).
   expectedTurnaroundDays: number | null;
   followUpEveryDays: number | null;
@@ -122,7 +133,10 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
         expectedTurnaroundDays?: number;
         followUpEveryDays?: number;
         requiredArtifacts?: string[];
+        payerForm?: { familyId?: string };
       };
+      const payerFormFamilyId =
+        typeof raw.payerForm?.familyId === "string" ? raw.payerForm.familyId : "";
       return {
         id: randId(),
         label: raw.label ?? "",
@@ -138,6 +152,10 @@ export function toEditable(defs: SOPTaskDefinition[] | null | undefined): Editab
           (f) => typeof f.token === "string" && f.token.includes("."),
         ),
         portalKey: raw.portalKey ?? "",
+        payerFormFamilyId,
+        // A "pdf" step is a Payer PDF action when it carries a payerForm key at
+        // all — an empty familyId means "file not chosen yet", not "legacy".
+        isPayerForm: raw.stepType === "pdf" && raw.payerForm !== undefined,
         expectedTurnaroundDays:
           typeof raw.expectedTurnaroundDays === "number" ? raw.expectedTurnaroundDays : null,
         followUpEveryDays: typeof raw.followUpEveryDays === "number" ? raw.followUpEveryDays : null,
@@ -204,7 +222,9 @@ export function actionNamePatch(
   return { title, steps: [{ ...sole, label: title }] };
 }
 
-/** Portal / online_form path ⇒ Auto-fill; every other Mode ⇒ Manual. */
+/** Portal / online_form path ⇒ Auto-fill; every other Mode ⇒ Manual.
+ * A Payer PDF action is Manual: the coordinator downloads the form, sends it,
+ * and marks it sent — nothing about it is filled by the extension. */
 export function executionTypeForActionMode(stepType: SOPStepType): ExecutionType {
   return stepType === "online_form" ? "extension_fill" : "manual";
 }
@@ -216,7 +236,7 @@ export function executionTypeForActionMode(stepType: SOPStepType): ExecutionType
 // on legacy rows but are no longer seed options.
 
 /** Closed preset ids offered by the Template Editor Add-action menu. */
-export type ActionPresetId = "portal_fill" | "draft_email" | "custom";
+export type ActionPresetId = "portal_fill" | "draft_email" | "payer_pdf" | "custom";
 
 export interface ActionPresetMeta {
   id: ActionPresetId;
@@ -226,7 +246,7 @@ export interface ActionPresetMeta {
   hint: string;
 }
 
-/** Menu order for Add action — Portal, Email, Custom. */
+/** Menu order for Add action — Portal, Email, Payer PDF, Custom. */
 export const ACTION_PRESETS: readonly ActionPresetMeta[] = [
   {
     id: "portal_fill",
@@ -239,25 +259,38 @@ export const ACTION_PRESETS: readonly ActionPresetMeta[] = [
     hint: "Manual · draft email",
   },
   {
+    id: "payer_pdf",
+    label: "Payer PDF",
+    hint: "Manual · payer-specific form to send",
+  },
+  {
     id: "custom",
     label: "Custom",
     hint: "Manual · freeform checklist item",
   },
 ] as const;
 
-/** Mode select options (same three choices as Add action). */
+/** Mode select options (same four choices as Add action). */
 export const AUTHORING_ACTION_MODES: readonly {
-  value: "online_form" | "draft_email" | "custom";
+  value: AuthoringActionMode;
   label: string;
 }[] = [
   { value: "online_form", label: "Portal" },
   { value: "draft_email", label: "Email" },
+  { value: "pdf", label: "Payer PDF" },
   { value: "custom", label: "Custom" },
 ] as const;
 
-/** Map any stored step type onto the three authoring Modes. Legacy
+export type AuthoringActionMode = "online_form" | "draft_email" | "pdf" | "custom";
+
+/** Map any stored step type onto the authoring Modes. Legacy
  * phone/fax/mail/pdf rows display as Custom without rewriting storage until
- * the author changes Mode. */
+ * the author changes Mode.
+ *
+ * A legacy `pdf` step still reads as Custom here: that value predates Payer
+ * PDF and those rows carry no form, so they are plain steps. Payer PDF is
+ * decided by `isPayerForm` (see `editableActionMode`), never by the step type
+ * alone — which is what keeps a legacy row round-tripping untouched. */
 export function authoringModeValue(
   stepType: SOPStepType,
 ): "online_form" | "draft_email" | "custom" {
@@ -265,19 +298,34 @@ export function authoringModeValue(
   return "custom";
 }
 
+/** The Mode an EDITABLE step shows. A Payer PDF action reads as Payer PDF from
+ * the moment it is added — before any file exists — so the Mode select never
+ * flips to Custom while the author is still choosing the file. */
+export function editableActionMode(
+  step: Pick<EditableStep, "stepType" | "isPayerForm">,
+): AuthoringActionMode {
+  return step.isPayerForm ? "pdf" : authoringModeValue(step.stepType);
+}
+
 const PRESET_TITLES: Record<ActionPresetId, string> = {
   portal_fill: "Fill online form",
   draft_email: "Draft email",
+  payer_pdf: "Send payer form",
   custom: "Custom action",
 };
 
 const PRESET_STEP_TYPES: Record<ActionPresetId, SOPStepType> = {
   portal_fill: "online_form",
   draft_email: "draft_email",
+  payer_pdf: "pdf",
   custom: "custom",
 };
 
-function emptyEditableStep(stepType: SOPStepType, label: string): EditableStep {
+function emptyEditableStep(
+  stepType: SOPStepType,
+  label: string,
+  isPayerForm = false,
+): EditableStep {
   return {
     id: randId(),
     label,
@@ -293,6 +341,8 @@ function emptyEditableStep(stepType: SOPStepType, label: string): EditableStep {
     },
     dataFields: [],
     portalKey: "",
+    payerFormFamilyId: "",
+    isPayerForm,
     expectedTurnaroundDays: null,
     followUpEveryDays: null,
     requiredArtifacts: [],
@@ -312,7 +362,24 @@ export function createActionFromPreset(
     description: "",
     dueOffsetDays,
     executionType: executionTypeForActionMode(stepType),
-    steps: [emptyEditableStep(stepType, title)],
+    steps: [emptyEditableStep(stepType, title, preset === "payer_pdf")],
+  };
+}
+
+/** Switch a step to a new authoring Mode. Payer PDF is the one Mode that also
+ * flips an editor-only flag, so changing Mode away from it must clear both the
+ * flag and the form pointer — otherwise a step that is no longer a Payer PDF
+ * action would still write a payerForm pointer and generation would attach a
+ * file for it. */
+export function applyActionMode(step: EditableStep, mode: AuthoringActionMode): EditableStep {
+  if (mode === "pdf") {
+    return { ...step, stepType: "pdf", isPayerForm: true };
+  }
+  return {
+    ...step,
+    stepType: mode,
+    isPayerForm: false,
+    payerFormFamilyId: "",
   };
 }
 
@@ -351,6 +418,13 @@ export function fromEditable(tasks: EditableTask[]): SOPTaskDefinition[] {
             }
           : {}),
         ...(portalKey ? { portalKey } : {}),
+        // Payer PDF: the pointer is written for every step the editor knows is
+        // a Payer PDF action, INCLUDING one whose file has not been chosen yet
+        // (familyId ""). The empty pointer is what makes an unfinished action
+        // visible to the publish lint; `payerFormPointer` treats it as "no
+        // form", so nothing downstream can act on it. A legacy "pdf" step has
+        // no pointer at all and round-trips exactly as it was stored.
+        ...(s.isPayerForm ? { payerForm: { familyId: s.payerFormFamilyId } } : {}),
         ...(s.expectedTurnaroundDays !== null
           ? { expectedTurnaroundDays: s.expectedTurnaroundDays }
           : {}),

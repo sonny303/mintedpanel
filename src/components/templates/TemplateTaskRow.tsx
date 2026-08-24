@@ -17,16 +17,22 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { FormStepPanel } from "@/components/templates/FormStepPanel";
+import { PayerFormStepPanel } from "@/components/templates/PayerFormStepPanel";
 import { TokenPicker } from "@/components/templates/TokenPicker";
 import {
   actionNamePatch,
+  applyActionMode,
   AUTHORING_ACTION_MODES,
-  authoringModeValue,
+  editableActionMode,
   executionTypeForActionMode,
   isCollapsedAction,
   newEditableRecipient,
   taskPortalKeys,
+  type AuthoringActionMode,
+  type DataField,
   type EditableRecipient,
+  type EditableStep,
+  type EditableTask,
 } from "@/components/templates/editableTemplate";
 import { emailTokenFromLiteral, filterEmailRecipientTokens } from "@/lib/sopAuthoringTokens";
 import {
@@ -42,43 +48,11 @@ import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
 import type { TokenGroup } from "@/lib/tokenGroups";
 
-interface DataField {
-  label: string;
-  token: string;
-}
-
-interface EmailTemplate {
-  subject: string;
-  body: string;
-  to: EditableRecipient[];
-  cc: EditableRecipient[];
-}
-
-interface EditableStep {
-  id: string;
-  label: string;
-  detail: string;
-  stepType: SOPStepType;
-  emailTemplate: EmailTemplate;
-  dataFields: DataField[];
-  portalKey: string;
-  expectedTurnaroundDays: number | null;
-  followUpEveryDays: number | null;
-  requiredArtifacts: string[];
-}
-
+// The editable shapes are OWNED by editableTemplate.ts (which also owns the
+// converters to and from the stored jsonb). This file used to re-declare them
+// structurally; they are imported now, so a field added to the authored step —
+// a Payer PDF pointer, say — can never be silently missing here.
 const NO_PORTAL = "__none__";
-
-interface EditableTask {
-  id: string;
-  title: string;
-  description: string;
-  dueOffsetDays: number;
-  // E4.2 TE-12 — per-task execution type (edited here since the Slice F
-  // Tasks-&-steps merge folded the old Tasks step into this card).
-  executionType: ExecutionType;
-  steps: EditableStep[];
-}
 
 interface DragStep {
   taskId: string;
@@ -102,6 +76,13 @@ export interface TemplateTaskRowProps {
   // online_form step can be linked to a real portal (payer-filtered by default).
   portals: Portal[];
   templatePayerId: string | null;
+  /** Payer PDF — the saved template row a payer form attaches to, and the
+   * read-only payer/state context the panel echoes. `templateId` is null in
+   * create mode (no row yet), which is exactly when a form cannot be uploaded.
+   * All primitives / a stable array (memo-safe). */
+  templateId: string | null;
+  templatePayerName: string | null;
+  templateStates: string[];
   /** E6.5 F6.5.6 — the template is a GLOBAL row: the step's form machinery
    * registers/trains against the global tier. Primitive (memo-safe). */
   isGlobalAuthoring: boolean;
@@ -143,6 +124,9 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
   portals,
   isGlobalAuthoring,
   templatePayerId,
+  templateId,
+  templatePayerName,
+  templateStates,
   autoOpenStepId,
   dragTaskId,
   setDragTaskId,
@@ -178,13 +162,21 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
     }
   }
 
-  function setActionMode(stepId: string, stepType: SOPStepType) {
-    updateStep(task.id, stepId, { stepType });
+  function setActionMode(step: EditableStep, mode: AuthoringActionMode) {
+    // applyActionMode owns the Payer PDF flag and clears the form pointer when
+    // the author leaves that Mode — a step that is no longer a Payer PDF action
+    // must not keep writing one.
+    const next = applyActionMode(step, mode);
+    updateStep(task.id, step.id, {
+      stepType: next.stepType,
+      isPayerForm: next.isPayerForm,
+      payerFormFamilyId: next.payerFormFamilyId,
+    });
     // Collapsed Action: Mode owns Auto-fill vs Manual. Multi-step: only promote
     // to Auto-fill when an online_form step is chosen — never demote from a
     // sibling channel step while another portal step may still need Auto-fill.
-    if (collapsed || stepType === "online_form") {
-      updateTask(task.id, { executionType: executionTypeForActionMode(stepType) });
+    if (collapsed || next.stepType === "online_form") {
+      updateTask(task.id, { executionType: executionTypeForActionMode(next.stepType) });
     }
   }
 
@@ -346,8 +338,8 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
             <div>
               <Label className="text-xs">Mode</Label>
               <Select
-                value={authoringModeValue(soleStep.stepType)}
-                onValueChange={(v) => setActionMode(soleStep.id, v as SOPStepType)}
+                value={editableActionMode(soleStep)}
+                onValueChange={(v) => setActionMode(soleStep, v as AuthoringActionMode)}
                 disabled={!canEdit}
               >
                 <SelectTrigger>
@@ -369,6 +361,9 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
               groupedTokens={groupedTokens}
               portals={portals}
               templatePayerId={templatePayerId}
+              templateId={templateId}
+              templatePayerName={templatePayerName}
+              templateStates={templateStates}
               isGlobalAuthoring={isGlobalAuthoring}
               autoOpenStepId={autoOpenStepId}
               updateStep={updateStep}
@@ -453,8 +448,8 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                     <div>
                       <Label className="text-xs">Mode</Label>
                       <Select
-                        value={authoringModeValue(step.stepType)}
-                        onValueChange={(v) => setActionMode(step.id, v as SOPStepType)}
+                        value={editableActionMode(step)}
+                        onValueChange={(v) => setActionMode(step, v as AuthoringActionMode)}
                         disabled={!canEdit}
                       >
                         <SelectTrigger>
@@ -477,6 +472,9 @@ export const TemplateTaskRow = memo(function TemplateTaskRow({
                       groupedTokens={groupedTokens}
                       portals={portals}
                       templatePayerId={templatePayerId}
+                      templateId={templateId}
+                      templatePayerName={templatePayerName}
+                      templateStates={templateStates}
                       isGlobalAuthoring={isGlobalAuthoring}
                       autoOpenStepId={autoOpenStepId}
                       updateStep={updateStep}
@@ -515,6 +513,9 @@ function StepModeBody({
   groupedTokens,
   portals,
   templatePayerId,
+  templateId,
+  templatePayerName,
+  templateStates,
   isGlobalAuthoring,
   autoOpenStepId,
   updateStep,
@@ -529,6 +530,9 @@ function StepModeBody({
   groupedTokens: TokenGroup[];
   portals: Portal[];
   templatePayerId: string | null;
+  templateId: string | null;
+  templatePayerName: string | null;
+  templateStates: string[];
   isGlobalAuthoring: boolean;
   autoOpenStepId: string | null;
   updateStep: TemplateTaskRowProps["updateStep"];
@@ -628,6 +632,20 @@ function StepModeBody({
             />
           </div>
         </div>
+      ) : step.isPayerForm ? (
+        // Payer PDF: the form IS the whole configuration for this Mode — no
+        // tokens, no data fields, no portal. Payer and states come from the
+        // template and are shown read-only.
+        <PayerFormStepPanel
+          templateId={templateId}
+          familyId={step.payerFormFamilyId}
+          payerName={templatePayerName}
+          states={templateStates}
+          canEdit={canEdit}
+          onFamilyChange={(familyId) =>
+            updateStep(taskId, step.id, { payerFormFamilyId: familyId })
+          }
+        />
       ) : (
         <div className="space-y-3">
           {step.stepType === "online_form" ? (
