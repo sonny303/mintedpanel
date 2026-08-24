@@ -311,7 +311,7 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
 ### Frozen mirrors and deprecated columns (read, never write)
 
 | Column / table                                                                | State                                                                         |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                |
 | `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`      |
 | `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                |

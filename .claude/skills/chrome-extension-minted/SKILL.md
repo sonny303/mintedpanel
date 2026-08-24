@@ -42,13 +42,13 @@ An eslint rule enforces the boundary: only `src/background/` may import `@supaba
 
 ## Common bugs and fixes
 
-| Bug | Likely cause | Fix |
-|---|---|---|
-| Fill stops working after the panel has been idle | Service worker was killed and state assumed to persist in memory | Re-derive state from `chrome.storage.session` on the next message instead of relying on a module-level variable |
-| A fill or touch gets logged twice | Retry logic minting a new id instead of reusing the original | Reuse the same client-generated id across retries (idempotency key) |
-| Handoff from the web app never arrives | Extension id not in the web app's CORS/`externally_connectable` allowlist, or the app origin isn't in the extension's manifest | Check both sides — `API_CORS_ORIGINS` on the panel's Vercel project and the manifest's `externally_connectable.matches` |
-| A trained field map never fills | It's `proposed`, not `approved` — only approved maps fill, by design | Approve it in the panel's field-trainer flow; don't special-case proposed rows in the extension |
-| Extension breaks on SPA-style navigation within a portal | Content script was injected once and the page replaced its DOM without a full reload | Re-run detection/`ensureContentScript` on URL change, don't assume one injection covers the whole session |
+| Bug                                                      | Likely cause                                                                                                                   | Fix                                                                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Fill stops working after the panel has been idle         | Service worker was killed and state assumed to persist in memory                                                               | Re-derive state from `chrome.storage.session` on the next message instead of relying on a module-level variable         |
+| A fill or touch gets logged twice                        | Retry logic minting a new id instead of reusing the original                                                                   | Reuse the same client-generated id across retries (idempotency key)                                                     |
+| Handoff from the web app never arrives                   | Extension id not in the web app's CORS/`externally_connectable` allowlist, or the app origin isn't in the extension's manifest | Check both sides — `API_CORS_ORIGINS` on the panel's Vercel project and the manifest's `externally_connectable.matches` |
+| A trained field map never fills                          | It's `proposed`, not `approved` — only approved maps fill, by design                                                           | Approve it in the panel's field-trainer flow; don't special-case proposed rows in the extension                         |
+| Extension breaks on SPA-style navigation within a portal | Content script was injected once and the page replaced its DOM without a full reload                                           | Re-run detection/`ensureContentScript` on URL change, don't assume one injection covers the whole session               |
 
 ## Before shipping an extension change
 
