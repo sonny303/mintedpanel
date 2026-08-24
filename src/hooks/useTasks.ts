@@ -10,12 +10,14 @@ import {
   detachStepArtifact,
   getTask,
   getTasks,
+  markPayerFormSent,
+  removePayerFormFromCase,
   updateTaskStatus,
   type FollowUpTaskInput,
   type ProviderOutreachTaskInput,
   type TaskFilters,
 } from "@/services/tasks";
-import type { SOPStepAttachment, TaskStatus } from "@/types";
+import type { SOPStepAttachment, Task, TaskStatus } from "@/types";
 
 const THIRTY_SECONDS = 30_000;
 
@@ -152,6 +154,52 @@ export function useDetachStepArtifact() {
       // Detach never touches the vault document — nothing to invalidate
       // there. (The document caches only need invalidating on
       // attach/upload/replace, which change vault contents.)
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Payer PDF — the case-side actions on a Payer PDF task.
+// ---------------------------------------------------------------------------
+
+export interface MarkPayerFormSentVars {
+  task: Task;
+  formLabel: string;
+}
+
+/** Completes the action AND records the send on the case touchlog. */
+export function useMarkPayerFormSent() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: MarkPayerFormSentVars) => markPayerFormSent(vars.task, vars.formLabel),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.task.id) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["touches", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+    },
+  });
+}
+
+export interface RemovePayerFormVars {
+  task: Task;
+  reason: string | null;
+}
+
+/** Removes the PDF from this case. Nothing re-adds it — payer forms attach at
+ * generation, and a case is generated once. */
+export function useRemovePayerFormFromCase() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: RemovePayerFormVars) => removePayerFormFromCase(vars.task, vars.reason),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.task(orgId, vars.task.id) });
+      qc.invalidateQueries({ queryKey: ["case", orgId] });
+      qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
   });
 }

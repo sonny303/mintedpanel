@@ -1980,6 +1980,82 @@ export type Database = {
           },
         ];
       };
+      payer_forms: {
+        Row: {
+          byte_size: number;
+          created_at: string;
+          created_by: string | null;
+          family_id: string;
+          file_name: string;
+          id: string;
+          label: string;
+          mime_type: string;
+          payer_id: string;
+          retired_at: string | null;
+          retired_by: string | null;
+          storage_path: string;
+          supersedes_id: string | null;
+          template_id: string;
+          version: number;
+        };
+        Insert: {
+          byte_size: number;
+          created_at?: string;
+          created_by?: string | null;
+          family_id?: string;
+          file_name: string;
+          id?: string;
+          label: string;
+          mime_type?: string;
+          payer_id: string;
+          retired_at?: string | null;
+          retired_by?: string | null;
+          storage_path: string;
+          supersedes_id?: string | null;
+          template_id: string;
+          version?: number;
+        };
+        Update: {
+          byte_size?: number;
+          created_at?: string;
+          created_by?: string | null;
+          family_id?: string;
+          file_name?: string;
+          id?: string;
+          label?: string;
+          mime_type?: string;
+          payer_id?: string;
+          retired_at?: string | null;
+          retired_by?: string | null;
+          storage_path?: string;
+          supersedes_id?: string | null;
+          template_id?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payer_forms_payer_id_fkey";
+            columns: ["payer_id"];
+            isOneToOne: false;
+            referencedRelation: "payers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_forms_supersedes_id_fkey";
+            columns: ["supersedes_id"];
+            isOneToOne: false;
+            referencedRelation: "payer_forms";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payer_forms_template_id_fkey";
+            columns: ["template_id"];
+            isOneToOne: false;
+            referencedRelation: "sop_templates";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       payer_network_targets: {
         Row: {
           created_at: string;
@@ -4444,6 +4520,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      user_is_admin_anywhere: { Args: never; Returns: boolean };
       user_org_ids: { Args: never; Returns: string[] };
       user_role: { Args: { p_org: string }; Returns: string };
       validate_capture_token: { Args: { p_token: string }; Returns: Json };

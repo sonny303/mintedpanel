@@ -12,6 +12,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow } from "@/lib/case";
 import { requireActiveOrg } from "@/lib/audit";
+import { isPayerFormRemoved } from "@/lib/payerForms";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 
 export interface QueueProviderRow {
@@ -88,15 +89,20 @@ export async function listQueueTaskRows(): Promise<QueueTaskRow[]> {
       sopContent: unknown;
     }>
   >(data ?? []);
-  return rows.map((r) => ({
-    id: r.id,
-    caseId: r.caseId ?? null,
-    title: r.title,
-    status: r.status,
-    sortOrder: r.sortOrder,
-    dueDate: r.dueDate ?? null,
-    cadenceDays: minStepCadence(r.sopContent),
-  }));
+  // Payer PDF: a removed payer form is off its case for good. It stays on the
+  // row as `blocked` for the audit trail, and `blocked` is an OPEN status here —
+  // so without this filter the queue would rank it as work to go unblock.
+  return rows
+    .filter((r) => !isPayerFormRemoved(r.sopContent))
+    .map((r) => ({
+      id: r.id,
+      caseId: r.caseId ?? null,
+      title: r.title,
+      status: r.status,
+      sortOrder: r.sortOrder,
+      dueDate: r.dueDate ?? null,
+      cadenceDays: minStepCadence(r.sopContent),
+    }));
 }
 
 /** E4.3 F4.3.1 — per-case distinct portal keys among the case's OPEN tasks'

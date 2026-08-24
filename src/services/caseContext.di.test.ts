@@ -216,6 +216,91 @@ describe("getCaseContext — projection", () => {
     expect(captures.map((c) => c.table)).toContain("profiles");
   });
 
+  it("hides a REMOVED payer-form task from openTasks", async () => {
+    // The row stays as `blocked` for the audit trail, and `blocked` counts as
+    // open (the query only excludes `completed`) — so without the filter the
+    // extension would be handed a task for a form that is no longer part of
+    // the case.
+    const { db } = makeFakeDb([
+      { data: caseRow() },
+      {
+        data: [
+          {
+            id: "task-1",
+            title: "Enroll on BCBS portal",
+            status: "in_progress",
+            execution_type: "extension_fill",
+            sort_order: 1,
+            due_date: null,
+          },
+          {
+            id: "task-2",
+            title: "Send payer form",
+            status: "blocked",
+            execution_type: null,
+            sort_order: 2,
+            due_date: null,
+            sop_content: [
+              {
+                id: "s1",
+                label: "Send payer form",
+                stepType: "pdf",
+                payerForm: {
+                  familyId: "fam-1",
+                  formId: "f1",
+                  label: "Supplement",
+                  fileName: "s.pdf",
+                  removedAt: "2026-08-24T10:00:00Z",
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.openTasks.map((t) => t.id)).toEqual(["task-1"]);
+  });
+
+  it("keeps a payer-form task that has NOT been removed", async () => {
+    const { db } = makeFakeDb([
+      { data: caseRow() },
+      {
+        data: [
+          {
+            id: "task-2",
+            title: "Send payer form",
+            status: "not_started",
+            execution_type: null,
+            sort_order: 2,
+            due_date: null,
+            sop_content: [
+              {
+                id: "s1",
+                label: "Send payer form",
+                stepType: "pdf",
+                payerForm: {
+                  familyId: "fam-1",
+                  formId: "f1",
+                  label: "Supplement",
+                  fileName: "s.pdf",
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.openTasks.map((t) => t.id)).toEqual(["task-2"]);
+  });
+
   it("empty reference + no tasks/touchlog entries -> empty arrays and null note/touch, no profiles read", async () => {
     const { db, captures } = makeFakeDb([{ data: caseRow() }, { data: [] }, { data: [] }]);
 

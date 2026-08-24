@@ -10,6 +10,8 @@ import {
   stepAttachmentPatch,
 } from "@/lib/sopStepAttachments";
 import { translateDbError } from "@/lib/dbErrors";
+import { markPayerFormRemoved } from "@/lib/payerForms";
+import { logNote } from "@/services/touches";
 import type { SOPStep, SOPStepAttachment, Task, TaskStatus } from "@/types";
 
 export interface CaseTaskInput {
@@ -340,6 +342,78 @@ export async function detachStepArtifact(
     before: { stepId, documentId, fileName: detached?.fileName ?? null },
     after: { stepId, attached: false },
     description: `Removed "${detached?.fileName ?? "a file"}" from step`,
+  });
+  return after;
+}
+
+// ---------------------------------------------------------------------------
+// Payer PDF — the two case-side writes on a Payer PDF action.
+// ---------------------------------------------------------------------------
+
+/** "Mark sent": the coordinator has sent the payer's form with the application.
+ *
+ * Two effects, in this order: the touch FIRST, then the completion. The touch
+ * is the durable record of the send — if the status write fails, the case still
+ * shows that the form went out, whereas the reverse order could complete a task
+ * with no evidence behind it.
+ *
+ * No status bump. Sending a payer form is often part of submitting, but this
+ * write never moves the case: the case status control is the one place a
+ * coordinator advances a case, and an implicit bump from a checklist item would
+ * make the case status depend on which order the checklist was worked in.
+ */
+export async function markPayerFormSent(task: Task, formLabel: string): Promise<Task> {
+  requireActiveOrg();
+  if (task.caseId) {
+    await logNote(task.caseId, {
+      content: `Sent payer form: ${formLabel}`,
+      taskId: task.id,
+    });
+  }
+  return updateTaskStatus(task.id, "completed");
+}
+
+/** Remove a payer PDF from this case.
+ *
+ * The removal is APPENDED to the task's own sop_content (a `removedAt` marker
+ * on the form pointer) and the row is set `blocked` — the task is never
+ * deleted, so "who removed which payer form from this case, and when" survives
+ * on the row itself. The checklist filters marked tasks out, which is what
+ * makes the action disappear from the coordinator's view.
+ *
+ * Nothing re-adds it: payer forms are attached at generation, and a case is
+ * generated once (a re-run lands in the skipped-existing bucket). Reapply
+ * regenerates SOP tasks only.
+ */
+export async function removePayerFormFromCase(task: Task, reason: string | null): Promise<Task> {
+  const orgId = requireActiveOrg();
+  const existing = await getTask(task.id);
+  if (!existing) throw new Error("Task not found");
+  const nextSteps = markPayerFormRemoved(existing.sopContent, {
+    removedAt: new Date().toISOString(),
+    removedBy: currentUserId(),
+    removedReason: reason,
+  });
+  const { data, error } = await supabase
+    .from("tasks")
+    .update({
+      sop_content: nextSteps as never,
+      status: "blocked" as const,
+      completed_date: null,
+    } as never)
+    .eq("id", task.id)
+    .eq("org_id", orgId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  const after = camelizeRow<Task>(data);
+  await writeAudit({
+    actionType: "DELETE",
+    entityType: "task",
+    entityId: task.id,
+    before: { status: existing.status },
+    after: { status: after.status, removedReason: reason },
+    description: `Payer form removed from case: ${task.title}`,
   });
   return after;
 }

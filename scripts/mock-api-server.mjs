@@ -37,6 +37,9 @@
 //   taskstep    a cross-org task's SOP step is ticked instead of 404   (21)
 //   providergroups a provider row's group names come back unscoped, naming
 //                  another tenant's group                                (27)
+//   payerformwrite  a NON-ADMIN is allowed to write a GLOBAL payer form
+//                  (28b/28c) — the role wall that stands in for tenancy on
+//                  rows that belong to no org
 //   documentupload cross-org owner honored on upload-intent/finalize instead
 //               of 404 before any signing/insert (ASD BITE-ASD-04)   (25b, 26)
 import { createServer } from "node:http";
@@ -61,6 +64,13 @@ export const FIXTURES = {
   // Park document is the cross-org id a Kansas caller must be denied.
   KANSAS_DOCUMENT_ID: "b7a90000-0000-4000-a000-0000000000e1",
   SOUTHPARK_DOCUMENT_ID: "d0e40000-0000-4000-a000-000000000081",
+  // Payer PDF (28/28b/28c/29). Both are GLOBAL rows — they belong to no org,
+  // which is the whole point: the template is a global SOP row and the form is
+  // the same file for every org. So there is no "Kansas one" and "South Park
+  // one" pair here, unlike every fixture above; the wall these exercise is
+  // ROLE (admin-only writes), not tenancy.
+  PAYER_FORM_TEMPLATE_ID: "b7a90000-0000-4000-a000-0000000000f1",
+  PAYER_FORM_ID: "b7a90000-0000-4000-a000-0000000000f2",
   KANSAS_EMAIL: "testkansas@minted.com",
   SPVIEW_EMAIL: "testsouthpark@minted.com",
 };
@@ -85,6 +95,7 @@ export const LEAK_MODES = [
   "taskstep",
   "documentupload",
   "providergroups",
+  "payerformwrite",
 ];
 
 const USERS = {
@@ -765,6 +776,83 @@ export async function createMockApiServer(options = {}) {
         documentFamilyId: body.familyId,
         versionNumber: body.versionNumber,
         supersedesDocumentId: null,
+      });
+    }
+
+    // --- /api/payer-forms/* (Payer PDF) ---
+    // These rows are GLOBAL: no org_id, one blank form per payer shared by every
+    // org. That inverts the usual mock shape — there is no cross-org 404 to
+    // simulate, because a cross-org READ is the intended behavior (29). The
+    // wall is ROLE: only an admin may change what every org sees, so the leak
+    // mode to simulate is a non-admin getting through (28b/28c).
+    if (url.pathname === "/api/payer-forms/upload-intent" && method === "POST") {
+      if (user.role !== "admin" && leak !== "payerformwrite") {
+        return envelope(res, 403, null, "Only an admin can add payer forms");
+      }
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (body.templateId !== FIXTURES.PAYER_FORM_TEMPLATE_ID) {
+        return envelope(res, 404, null, "Template not found");
+      }
+      const familyId = body.familyId || `payer-fam-${Date.now()}`;
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, {
+        familyId,
+        version: 1,
+        payerId: "mock-payer",
+        path: `payer/mock-payer/${familyId}/1/${body.fileName ?? "file"}`,
+        uploadUrl:
+          "https://example.supabase.co/storage/v1/object/upload/sign/fake?token=fake-upload-token",
+        token: "fake-upload-token",
+      });
+    }
+
+    if (url.pathname === "/api/payer-forms/finalize" && method === "POST") {
+      if (user.role !== "admin" && leak !== "payerformwrite") {
+        return envelope(res, 403, null, "Only an admin can add payer forms");
+      }
+      const body = await readBody(req);
+      if (!body || typeof body !== "object") {
+        return envelope(res, 422, null, "Request body must be a JSON object");
+      }
+      if (body.templateId !== FIXTURES.PAYER_FORM_TEMPLATE_ID) {
+        return envelope(res, 404, null, "Template not found");
+      }
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 201, {
+        id: `new-payer-form-${Date.now()}`,
+        templateId: body.templateId,
+        payerId: "mock-payer",
+        familyId: body.familyId,
+        version: body.version,
+        label: body.label,
+        fileName: body.fileName,
+        storagePath: `payer/mock-payer/${body.familyId}/${body.version}/${body.fileName}`,
+        mimeType: body.mimeType,
+        byteSize: body.fileSize,
+        supersedesId: null,
+        retiredAt: null,
+        retiredBy: null,
+        createdAt: new Date().toISOString(),
+        createdBy: user.userId,
+      });
+    }
+
+    const payerFormDownloadMatch = url.pathname.match(/^\/api\/payer-forms\/([^/]+)\/download\/?$/);
+    if (payerFormDownloadMatch) {
+      if (method !== "GET") return envelope(res, 405, null, "Method not allowed");
+      // No org check BY DESIGN — any authenticated member of any org reads a
+      // global payer form. Only a nonexistent id 404s.
+      if (payerFormDownloadMatch[1] !== FIXTURES.PAYER_FORM_ID) {
+        return envelope(res, 404, null, "Payer form not found");
+      }
+      res.setHeader("cache-control", "no-store");
+      return envelope(res, 200, {
+        url: "https://example.supabase.co/storage/v1/object/sign/payer-forms/fake?token=fake-signed-token",
+        fileName: "payer-supplement.pdf",
+        expiresIn: 120,
       });
     }
 

@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_PRESETS,
   actionNamePatch,
+  applyActionMode,
   authoringModeValue,
+  editableActionMode,
   createActionFromPreset,
   executionTypeForActionMode,
   fromEditable,
@@ -370,9 +372,14 @@ describe("action presets (BITE-SOP-TT-04)", () => {
     expect(authoringModeValue("pdf")).toBe("custom");
   });
 
-  it("offers only Portal / Email / Custom in ACTION_PRESETS", () => {
-    expect(ACTION_PRESETS.map((p) => p.id)).toEqual(["portal_fill", "draft_email", "custom"]);
-    expect(ACTION_PRESETS.map((p) => p.label)).toEqual(["Portal", "Email", "Custom"]);
+  it("offers Portal / Email / Payer PDF / Custom in ACTION_PRESETS", () => {
+    expect(ACTION_PRESETS.map((p) => p.id)).toEqual([
+      "portal_fill",
+      "draft_email",
+      "payer_pdf",
+      "custom",
+    ]);
+    expect(ACTION_PRESETS.map((p) => p.label)).toEqual(["Portal", "Email", "Payer PDF", "Custom"]);
   });
 
   it("assigns distinct ids per seed so React keys never collide", () => {
@@ -380,5 +387,79 @@ describe("action presets (BITE-SOP-TT-04)", () => {
     const b = createActionFromPreset("portal_fill", 0);
     expect(a.id).not.toBe(b.id);
     expect(a.steps[0].id).not.toBe(b.steps[0].id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Payer PDF. The load-bearing distinction is that the "pdf" step type PREDATES
+// this feature: a stored step with that type and NO pointer is a legacy plain
+// step, and it must keep round-tripping untouched. The pointer's presence — not
+// the step type — is what makes an action a Payer PDF action.
+// ---------------------------------------------------------------------------
+
+describe("Payer PDF actions", () => {
+  it("seeds a Payer PDF preset as a Manual pdf action with no form yet", () => {
+    const action = createActionFromPreset("payer_pdf", 7);
+    expect(action.title).toBe("Send payer form");
+    expect(action.executionType).toBe("manual");
+    expect(action.steps).toHaveLength(1);
+    expect(action.steps[0].stepType).toBe("pdf");
+    expect(action.steps[0].isPayerForm).toBe(true);
+    expect(action.steps[0].payerFormFamilyId).toBe("");
+  });
+
+  it("reads as Payer PDF Mode BEFORE a file exists", () => {
+    // Otherwise the Mode select would flip to Custom while the author is still
+    // choosing the file.
+    const action = createActionFromPreset("payer_pdf", 0);
+    expect(editableActionMode(action.steps[0])).toBe("pdf");
+  });
+
+  it("writes an EMPTY pointer for an unfinished action so the lint can see it", () => {
+    const action = createActionFromPreset("payer_pdf", 0);
+    const [def] = fromEditable([action]);
+    expect(def.steps[0].payerForm).toEqual({ familyId: "" });
+  });
+
+  it("round-trips a chosen form through fromEditable → toEditable", () => {
+    const action = createActionFromPreset("payer_pdf", 0);
+    action.steps[0].payerFormFamilyId = "fam-9";
+    const defs = fromEditable([action]);
+    expect(defs[0].steps[0].payerForm).toEqual({ familyId: "fam-9" });
+    const back = toEditable(defs);
+    expect(back[0].steps[0].isPayerForm).toBe(true);
+    expect(back[0].steps[0].payerFormFamilyId).toBe("fam-9");
+    expect(editableActionMode(back[0].steps[0])).toBe("pdf");
+  });
+
+  it("leaves a LEGACY pdf step alone — no pointer in, no pointer out", () => {
+    const legacy = toEditable([
+      { title: "Mail packet", steps: [{ label: "Mail packet", stepType: "pdf" }] },
+    ]);
+    expect(legacy[0].steps[0].isPayerForm).toBe(false);
+    expect(editableActionMode(legacy[0].steps[0])).toBe("custom");
+    const defs = fromEditable(legacy);
+    expect(defs[0].steps[0].stepType).toBe("pdf");
+    expect(defs[0].steps[0].payerForm).toBeUndefined();
+  });
+
+  it("clears the form pointer when the author leaves Payer PDF Mode", () => {
+    // A step that is no longer a Payer PDF action must not keep writing a
+    // pointer — generation would attach a file for something that is not a
+    // payer-form action any more.
+    const action = createActionFromPreset("payer_pdf", 0);
+    action.steps[0].payerFormFamilyId = "fam-9";
+    const switched = applyActionMode(action.steps[0], "custom");
+    expect(switched.isPayerForm).toBe(false);
+    expect(switched.payerFormFamilyId).toBe("");
+    expect(fromEditable([{ ...action, steps: [switched] }])[0].steps[0].payerForm).toBeUndefined();
+  });
+
+  it("re-entering Payer PDF Mode does not resurrect a cleared form", () => {
+    const action = createActionFromPreset("payer_pdf", 0);
+    action.steps[0].payerFormFamilyId = "fam-9";
+    const back = applyActionMode(applyActionMode(action.steps[0], "custom"), "pdf");
+    expect(back.isPayerForm).toBe(true);
+    expect(back.payerFormFamilyId).toBe("");
   });
 });

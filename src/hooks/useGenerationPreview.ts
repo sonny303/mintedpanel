@@ -28,6 +28,8 @@ import {
   type ReadinessRow,
 } from "@/lib/enrollmentReadiness";
 import { archivedPayerIds } from "@/lib/payerSetup";
+import { hydratePayerFormTasks, payerFormsByFamily } from "@/lib/payerForms";
+import { listPayerFormsForTemplates } from "@/services/payerForms";
 import {
   buildGenerationPreview,
   buildGenerationSkips,
@@ -405,9 +407,26 @@ export function useConfirmGeneration() {
         },
       };
 
+      // Payer PDF — resolve every template this batch will use, then read
+      // their LIVE payer forms in ONE query (not one per candidate). The
+      // authored action points at a form FAMILY; generation bakes in the
+      // family's current row, which is what lets a replaced file reach new
+      // cases without republishing the template, while a case already created
+      // keeps the exact file it was generated with.
+      const templateByRowKey = new Map<string, ReturnType<typeof pickTemplate>>();
+      for (const row of plan.toCreate) {
+        templateByRowKey.set(
+          previewRowKey(row),
+          pickTemplate(templates, row.payerId, row.state, row.groupId),
+        );
+      }
+      const payerFormsByTemplate = await listPayerFormsForTemplates(
+        [...templateByRowKey.values()].flatMap((t) => (t ? [t.id] : [])),
+      );
+
       const entries: GenerationConfirmEntry[] = plan.toCreate.map((row) => {
         const provider = providerById.get(row.providerId);
-        const template = pickTemplate(templates, row.payerId, row.state, row.groupId);
+        const template = templateByRowKey.get(previewRowKey(row)) ?? null;
         // Stamp the group's primary (or sole) facility onto the case so
         // detail/profile/fill resolve a location; leave null when ambiguous.
         const facilityId = resolveCaseFacilityId(
@@ -417,20 +436,28 @@ export function useConfirmGeneration() {
           facilities,
         );
         const facility = facilityId ? (facilityById.get(facilityId) ?? null) : null;
+        // hydratePayerFormTasks runs LAST because it is the only pass that can
+        // DROP a task (a payer-form action whose form was retired). Both stamps
+        // pair tasks with definitions by index, so they must run while the list
+        // still aligns 1:1 with taskDefinitions.
         const tasks =
           provider && template
-            ? stampExecutionTypes(
-                stampTasks(
-                  resolveTemplate(
+            ? hydratePayerFormTasks(
+                stampExecutionTypes(
+                  stampTasks(
+                    resolveTemplate(
+                      template,
+                      provider,
+                      groupById.get(row.groupId) ?? null,
+                      facility,
+                      null,
+                    ),
                     template,
-                    provider,
-                    groupById.get(row.groupId) ?? null,
-                    facility,
-                    null,
                   ),
-                  template,
+                  template.taskDefinitions,
                 ),
                 template.taskDefinitions,
+                payerFormsByFamily(payerFormsByTemplate.get(template.id) ?? []),
               )
             : [];
         // Record the resolution provenance from the SAME selection the tasks

@@ -197,3 +197,34 @@ describe("lintSopForPublish", () => {
     expect(r.errors[0].message).toMatch(/step 2 \(online form\) needs a portal/);
   });
 });
+
+describe("Payer PDF steps", () => {
+  it("blocks publishing a payer-form action with no form uploaded", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Send payer form",
+        steps: [{ label: "Send payer form", stepType: "pdf", payerForm: { familyId: "" } }],
+      },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0].message).toMatch(/payer PDF\) needs a form uploaded/);
+  });
+
+  it("passes once a form is attached", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Send payer form",
+        steps: [{ label: "Send payer form", stepType: "pdf", payerForm: { familyId: "fam-1" } }],
+      },
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("does NOT lint a legacy pdf step — no pointer means a plain step", () => {
+    const r = lintSopForPublish([
+      { title: "Mail packet", steps: [{ label: "Mail packet", stepType: "pdf" }] },
+    ]);
+    expect(r.ok).toBe(true);
+  });
+});

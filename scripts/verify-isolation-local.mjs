@@ -47,6 +47,10 @@ function runGate(baseUrl) {
         // optional in the real gate until the operator seeds fixture documents.
         KANSAS_DOCUMENT_ID: FIXTURES.KANSAS_DOCUMENT_ID,
         SOUTHPARK_DOCUMENT_ID: FIXTURES.SOUTHPARK_DOCUMENT_ID,
+        // Assertions 28/28b/28c/29 (Payer PDF) — always set here; optional in
+        // the real gate until the operator pins a global template + form.
+        PAYER_FORM_TEMPLATE_ID: FIXTURES.PAYER_FORM_TEMPLATE_ID,
+        PAYER_FORM_ID: FIXTURES.PAYER_FORM_ID,
         // Assertion 15/15b (E4.3 case search) — a query the Kansas fixtures
         // match (15 non-vacuous) and one that would surface the South Park
         // fixture case only under the casesearch leak (15b).
@@ -110,6 +114,10 @@ const EXPECTED_FAILS = {
   documentupload: ["25b", "26"],
   // The unscoped group join names another tenant's group on every row.
   providergroups: ["27"],
+  // Payer PDF: payer_forms rows are GLOBAL, so the wall is ROLE, not tenancy —
+  // this leak lets a non-admin mint a signed target (28b) and finalize a row
+  // (28c) for a form every org depends on.
+  payerformwrite: ["28b", "28c"],
 };
 
 function failedAssertions(output) {

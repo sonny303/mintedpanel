@@ -37,6 +37,7 @@
 // Server-only surface (no browser-default ctx) — see portalFieldMaps.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
+import { isPayerFormRemoved } from "@/lib/payerForms";
 import { resolveExecutionType } from "@/lib/executionTypes";
 
 export interface CaseContextServiceCtx {
@@ -228,15 +229,23 @@ export async function getCaseContext(
       due_date: string | null;
       sop_content: unknown;
     }>
-  ).map((t) => ({
-    id: t.id,
-    title: t.title,
-    status: t.status,
-    executionType: resolveExecutionType(t.execution_type),
-    sortOrder: t.sort_order,
-    dueDate: t.due_date,
-    steps: projectTaskSteps(t.sop_content),
-  }));
+  )
+    // Payer PDF: a payer form the coordinator removed from this case is off it
+    // for good. The row stays as `blocked` for the audit trail, and `blocked`
+    // counts as OPEN above — so without this the extension would be handed a
+    // task to work for a form that is no longer part of the case. Filtered
+    // server-side rather than in the extension: the wire shape is unchanged, so
+    // no coordinated release is needed.
+    .filter((t) => !isPayerFormRemoved(t.sop_content))
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      executionType: resolveExecutionType(t.execution_type),
+      sortOrder: t.sort_order,
+      dueDate: t.due_date,
+      steps: projectTaskSteps(t.sop_content),
+    }));
 
   // The case's explicit facility relationship is the ONLY facility source —
   // the provider's other assignments are never consulted and there is no

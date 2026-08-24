@@ -1052,6 +1052,14 @@ export interface SOPStep {
    * (expiration, current-version status).
    */
   attachments?: SOPStepAttachment[];
+  /**
+   * Payer PDF — the blank payer form this step hands the coordinator. Present
+   * only on a step whose `stepType` is "pdf"; a legacy "pdf" step without one
+   * stays an ordinary step. Resolved at generation (carries the exact
+   * `formId`), and carries the removal marker once a coordinator removes the
+   * PDF from the case. See src/lib/payerForms.ts.
+   */
+  payerForm?: ResolvedPayerFormPointer;
 }
 
 /** ASD D-ASD-1 — one file attached to a step's artifact checklist. Points at
@@ -1216,6 +1224,10 @@ export interface SOPTaskDefinition {
     expectedTurnaroundDays?: number;
     followUpEveryDays?: number;
     requiredArtifacts?: string[];
+    /** Payer PDF — the FAMILY this action's form belongs to. Authored form:
+     * family only, so replacing the file reaches newly generated cases without
+     * republishing the template. Generation resolves it to a concrete row. */
+    payerForm?: AuthoredPayerFormPointer;
   }[];
 }
 
@@ -1537,4 +1549,60 @@ export interface ProviderDocument {
   documentFamilyId: string;
   versionNumber: number;
   supersedesDocumentId: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Payer PDF — payer-specific blank forms attached to a SOP template.
+//
+// GLOBAL rows: no org_id, exactly like the sop_templates the Template Editor
+// authors and the shared portal/field-map catalog. A payer's blank form is the
+// same file for every org that credentials with that payer, and it belongs to
+// no provider — which is why it lives here rather than in provider_documents
+// (org-scoped, provider/group-owned).
+//
+// Immutable versions: a replace INSERTS a new row under the same familyId;
+// "current" is derived (highest live version), never a flag. Delete is a soft
+// retire, so a case generated earlier still resolves the file it was made
+// with. Rules live in src/lib/payerForms.ts.
+// ---------------------------------------------------------------------------
+
+export interface PayerForm {
+  id: string;
+  /** The template the form was uploaded on — payer and states are read from it. */
+  templateId: string;
+  payerId: string;
+  /** Stable lineage id: the identity a TEMPLATE ACTION points at. */
+  familyId: string;
+  version: number;
+  /** The trainer's descriptive name ("PT Credentialing Supplement"). */
+  label: string;
+  fileName: string;
+  storagePath: string;
+  mimeType: string;
+  byteSize: number;
+  supersedesId: string | null;
+  retiredAt: string | null;
+  retiredBy: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+/** Authored on a template action: the FAMILY the action points at. Family
+ * rather than row is what lets a replaced form reach newly generated cases
+ * without republishing the template version. */
+export interface AuthoredPayerFormPointer {
+  familyId: string;
+}
+
+/** Baked onto a generated case task: the exact row resolved at generation
+ * time, plus the display copy the checklist needs without a second read. */
+export interface ResolvedPayerFormPointer extends AuthoredPayerFormPointer {
+  formId: string;
+  label: string;
+  fileName: string;
+  /** Set when a coordinator removes this PDF from the case. Appended, never
+   * cleared — removal is a fact about the case, not a toggle. */
+  removedAt?: string;
+  removedBy?: string | null;
+  removedReason?: string | null;
 }
