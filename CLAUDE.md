@@ -311,7 +311,7 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
 ### Frozen mirrors and deprecated columns (read, never write)
 
 | Column / table                                                                | State                                                                         |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `providers.group_id`                                                          | frozen mirror of the primary group assignment — no new readers                |
 | `sop_templates.state`                                                         | frozen mirror of `states[0]`; resolution goes through `templateStates()`      |
 | `profiles.full_name`                                                          | frozen mirror composed from first/last on save                                |
@@ -517,6 +517,23 @@ table (what to run for a given diff), measured costs, and the route→spec map.
 **Cloud sandboxes block egress to `*.supabase.co`.** Database work goes through
 the Supabase MCP tools; browser verification goes through the Playwright mock
 harness — see the **`e2e-harness`** skill.
+
+## Skills reference
+
+- **`supabase-migrations`** — schema/migration workflow and verification; read
+  before any schema work.
+- **`api-isolation-gate`** — `/api` org-isolation gate coverage and
+  verification; read before adding a resource route.
+- **`e2e-harness`** — Playwright + Supabase-mock harness for browser
+  verification in cloud sandboxes.
+- **`adhd`** — ADHD-friendly response shaping (next action first, numbered
+  steps, concrete estimates, visible wins).
+- **`minted-m3-audit`** — Lean 3M (Muda/Mura/Muri) health-check audit of a
+  live feature plus coordinator workflow efficiency.
+- **`chrome-devtools-minted`** — DevTools recipes for panel/extension
+  debugging.
+- **`chrome-extension-minted`** — MV3 architecture notes and common bugs for
+  the extension repo.
 
 ## Shared state ownership (parallel lanes)
 
