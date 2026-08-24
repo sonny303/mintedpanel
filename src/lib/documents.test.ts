@@ -22,6 +22,7 @@ import {
   nextVersionNumber,
   orphanVersionFolders,
   parseDocumentKind,
+  requireableDocumentKinds,
   requiredDocumentKinds,
   resolvableStepArtifactKind,
   resolveDocumentOwnerTarget,
@@ -447,6 +448,33 @@ describe("readiness bridge (TE-6)", () => {
     expect(currentGroupReadinessDocuments([v1, v2])).toEqual([
       { groupId: "g1", docType: "coi", expirationDate: "2027-01-01" },
     ]);
+  });
+});
+
+describe("requireableDocumentKinds (TS-164 template picker)", () => {
+  it("excludes `other` — meaningless as a payer requirement", () => {
+    expect(requireableDocumentKinds().map((m) => m.kind)).not.toContain("other");
+  });
+
+  // The regression this guards: `filled_form.uploadable` is TRUE (the server
+  // accepts it — the ASD step-artifact catch-all writes it directly), so a
+  // filter on `uploadable` alone silently puts "Filled Form" in the authoring
+  // picker. It must be excluded BY NAME, exactly as vaultPickerKinds does.
+  it("excludes `filled_form` even though it is uploadable", () => {
+    expect(DOCUMENT_KIND_META.filled_form.uploadable).toBe(true);
+    expect(requireableDocumentKinds().map((m) => m.kind)).not.toContain("filled_form");
+  });
+
+  it("offers the real payer-requirement kinds", () => {
+    const kinds = requireableDocumentKinds().map((m) => m.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["w9", "coi", "cv", "cms_460", "voided_check"]));
+  });
+
+  it("is owner-agnostic — a template requirement has no provider or group yet", () => {
+    const kinds = requireableDocumentKinds().map((m) => m.kind);
+    // w9 is group-only, cv is provider-only: both must be offerable.
+    expect(kinds).toContain("w9");
+    expect(kinds).toContain("cv");
   });
 });
 

@@ -37,6 +37,7 @@ import {
   type ExecutionType,
 } from "@/lib/executionTypes";
 import { isValidEmail } from "@/lib/contactValidation";
+import { DOCUMENT_KIND_META, parseDocumentKind, requireableDocumentKinds } from "@/lib/documents";
 import { normalizePortalKey } from "@/lib/tokenFormat";
 import type { Portal, SOPStepType } from "@/types";
 import type { TokenGroup } from "@/lib/tokenGroups";
@@ -862,6 +863,97 @@ function RecipientListEditor({
 // Artifacts are NAMED attachments with no backing token ("Submission
 // confirmation PDF") — they belong here, not in data fields: a data-field
 // entry without a resolvable token is silently dropped at resolution.
+// TS-164 — the governed picker that replaced the free-text "Required
+// artifacts" box. Requirements now name a document the submission must SEND
+// to the payer, drawn from the SAME shared kind map the vault's own upload
+// dialog reads, so the two can never disagree about what a "W-9" is.
+//
+const REQUIREABLE_KINDS = requireableDocumentKinds().map((m) => m.kind);
+
+function RequiredDocumentsEditor({
+  requiredArtifacts,
+  canEdit,
+  onChange,
+}: {
+  requiredArtifacts: string[];
+  canEdit: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  // Kinds already required on this step can't be added twice.
+  const taken = new Set(
+    requiredArtifacts
+      .map((a) => parseDocumentKind(a))
+      .filter((k): k is NonNullable<typeof k> => Boolean(k)),
+  );
+  const available = REQUIREABLE_KINDS.filter((k) => !taken.has(k));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <Label className="text-xs">Required documents</Label>
+        {canEdit && available.length > 0 ? (
+          <Select value="" onValueChange={(kind) => onChange([...requiredArtifacts, kind])}>
+            <SelectTrigger className="h-8 w-[190px] text-xs" aria-label="Add a required document">
+              <SelectValue placeholder="Add a document…" />
+            </SelectTrigger>
+            <SelectContent>
+              {available.map((kind) => (
+                <SelectItem key={kind} value={kind}>
+                  {DOCUMENT_KIND_META[kind].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
+
+      {requiredArtifacts.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          The documents this step must send to the payer. They are looked up on the provider or
+          group when the case runs, so the specialist can download and attach them.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {requiredArtifacts.map((artifact, i) => {
+            const kind = parseDocumentKind(artifact);
+            const remove = () => onChange(requiredArtifacts.filter((_, j) => j !== i));
+            return (
+              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 items-center">
+                {kind ? (
+                  <span className="flex h-9 items-center rounded-md border border-input px-3 text-[13px]">
+                    {DOCUMENT_KIND_META[kind].label}
+                  </span>
+                ) : (
+                  <Input
+                    placeholder="Artifact name"
+                    aria-label={`Legacy artifact ${i + 1}`}
+                    value={artifact}
+                    onChange={(e) =>
+                      onChange(requiredArtifacts.map((a, j) => (j === i ? e.target.value : a)))
+                    }
+                    disabled={!canEdit}
+                  />
+                )}
+                {canEdit ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Remove ${kind ? DOCUMENT_KIND_META[kind].label : artifact || "artifact"}`}
+                    onClick={remove}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepCadenceFields({
   step,
   canEdit,
@@ -906,61 +998,11 @@ function StepCadenceFields({
         </div>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <Label className="text-xs">Required artifacts</Label>
-          {canEdit ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onChange({ requiredArtifacts: [...step.requiredArtifacts, ""] })}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add artifact
-            </Button>
-          ) : null}
-        </div>
-        {step.requiredArtifacts.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">
-            Name the attachments or proofs this step must produce (e.g. &quot;Submission
-            confirmation PDF&quot;). Reference shared logins by name only — never record a password
-            in an SOP step.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {step.requiredArtifacts.map((artifact, i) => (
-              <div key={i} className="grid grid-cols-[1fr_auto] gap-2 items-center">
-                <Input
-                  placeholder="Artifact name"
-                  value={artifact}
-                  onChange={(e) =>
-                    onChange({
-                      requiredArtifacts: step.requiredArtifacts.map((a, j) =>
-                        j === i ? e.target.value : a,
-                      ),
-                    })
-                  }
-                  disabled={!canEdit}
-                />
-                {canEdit ? (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() =>
-                      onChange({
-                        requiredArtifacts: step.requiredArtifacts.filter((_, j) => j !== i),
-                      })
-                    }
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <RequiredDocumentsEditor
+        requiredArtifacts={step.requiredArtifacts}
+        canEdit={canEdit}
+        onChange={(next) => onChange({ requiredArtifacts: next })}
+      />
     </div>
   );
 }
