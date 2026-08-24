@@ -23,7 +23,7 @@ import {
   caseDocumentStatus,
   downloadableCaseDocuments,
   requiredDocumentKinds,
-  resolveDocumentOwnerTarget,
+  uploadOwnerTargetForCheck,
   type CaseDocumentCheck,
 } from "@/lib/documents";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
@@ -124,15 +124,18 @@ export function CaseRequiredDocuments({
   };
 
   const openUploadFor = (check: CaseDocumentCheck<ProviderDocument>) => {
-    if (!resolveDocumentOwnerTarget(check.kind, providerId, groupId)) {
+    if (!uploadOwnerTargetForCheck(check, providerId, groupId)) {
       toast.error(`No provider or group is linked to file ${check.label} against`);
       return;
     }
     setUploadTarget(check);
   };
 
+  // A REPLACE follows the document's own grain: a dual-owner kind (COI) whose
+  // existing version belongs to the group must version the GROUP's family, or
+  // the server rejects the intent for changing a family's owner.
   const uploadOwner = uploadTarget
-    ? resolveDocumentOwnerTarget(uploadTarget.kind, providerId, groupId)
+    ? uploadOwnerTargetForCheck(uploadTarget, providerId, groupId)
     : null;
   const uploadOwnerName =
     uploadOwner?.ownerType === "group" ? (groupName ?? "the group") : providerName;
