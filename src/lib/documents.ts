@@ -133,12 +133,15 @@ export const DOCUMENT_KIND_META: Record<DocumentKind, DocumentKindMeta> = {
   },
   cp_575: {
     kind: "cp_575",
+    // The IRS EIN confirmation letter. It evidences the TIN, which belongs to
+    // the billing entity — so this is a GROUP grain like W-9 and CMS-460, not
+    // a provider one. Never expires (the IRS issues it once per EIN).
     label: "CP 575",
-    owners: ["provider"],
+    owners: ["group"],
     expirationRequired: false,
     expiringSoonDays: DEFAULT_EXPIRING_SOON_DAYS,
     uploadable: true,
-    aliases: ["cp_575", "cp575"],
+    aliases: ["cp_575", "cp575", "irs_cp_575", "ein_letter"],
   },
   filled_form: {
     kind: "filled_form",
