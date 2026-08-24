@@ -701,6 +701,22 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
   // no placeholder labels). Blocks Create/Publish and surfaces on Review.
   const lint = useMemo(() => lintSopForPublish(previewTasks), [previewTasks]);
 
+  // Payer PDF's "needs a form uploaded" rule can never pass on a template's
+  // FIRST save — payer_forms.template_id is a real FK, so there is no row for
+  // the form to attach to until Create has already run once. Gating Create on
+  // the full lint made that rule unsatisfiable by construction (create needs
+  // the form; the form needs create). `handleCreate` blocks on every OTHER
+  // rule and lets this one through; `handlePublish` (a real templateId always
+  // exists by then) keeps enforcing the full lint, unchanged.
+  const createBlockingErrors = useMemo(
+    () => lint.errors.filter((e) => e.rule !== "payer_form_missing"),
+    [lint],
+  );
+  const hasDeferredPayerForms = useMemo(
+    () => lint.errors.some((e) => e.rule === "payer_form_missing"),
+    [lint],
+  );
+
   // E4.2 F4.2.1 — save the current wizard state as a draft (WIP, never resolves
   // for generation). Persisted for handoff; deleted on publish.
   async function handleSaveDraft() {
@@ -817,15 +833,15 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       setStep(1);
       return;
     }
-    if (!lint.ok) {
-      toast.error(lint.errors[0].message);
+    if (createBlockingErrors.length > 0) {
+      toast.error(createBlockingErrors[0].message);
       setStep(2);
       return;
     }
     setSaving(true);
     try {
       // Create is ALWAYS the global tier — the editor never creates org rows.
-      await authorGlobalMut.mutateAsync({
+      const created = await authorGlobalMut.mutateAsync({
         name: payload.name,
         payerId: payload.payerId,
         states: payload.states,
@@ -836,10 +852,21 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
       });
       await discardDraftIfAny();
       setDirty(false);
-      toast.success("Template created");
-      // Land on the payer's Templates tab, not the new head's edit URL —
-      // create is finished work, not a hand-off into continued authoring.
-      exitEditor();
+      if (hasDeferredPayerForms) {
+        // At least one Payer PDF action still has no form — the ONLY reason
+        // Create was allowed to proceed despite it. Land back in the now-real
+        // template's own editor (not the Templates tab) so the author can
+        // upload immediately, in one hop, instead of hunting the row down.
+        toast.success(
+          "Template created — upload its payer form(s) to finish the Payer PDF action(s).",
+        );
+        navigate({ to: "/admin/templates/$id", params: { id: created.id } });
+      } else {
+        toast.success("Template created");
+        // Land on the payer's Templates tab, not the new head's edit URL —
+        // create is finished work, not a hand-off into continued authoring.
+        exitEditor();
+      }
     } catch (err) {
       toast.error(errorMessage(err, "Save failed"));
     } finally {
@@ -1413,14 +1440,31 @@ export function TemplateWizard({ initial, prefill, draft, intent }: TemplateWiza
           </dl>
 
           {canEdit && !lint.ok ? (
-            <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[13px] text-[#B91C1C]">
-              <p className="font-medium">Fix before publishing:</p>
-              <ul className="mt-1 list-disc pl-5">
-                {lint.errors.map((e, i) => (
-                  <li key={i}>{e.message}</li>
-                ))}
-              </ul>
-            </div>
+            // In create mode, a payer-form-missing rule alone doesn't block —
+            // Create still succeeds and hands the author straight back into
+            // this template's own editor to upload. Say so instead of a "Fix
+            // before publishing" that would be false for that one bullet.
+            // Edit mode always enforces the full lint (a real templateId
+            // already exists by then, so there is no deferral left to make).
+            isEdit || createBlockingErrors.length > 0 ? (
+              <div className="rounded-md border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[13px] text-[#B91C1C]">
+                <p className="font-medium">Fix before publishing:</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {lint.errors.map((e, i) => (
+                    <li key={i}>{e.message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-md border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[13px] text-[#92400E]">
+                <p className="font-medium">Create template, then finish this:</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {lint.errors.map((e, i) => (
+                    <li key={i}>{e.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )
           ) : null}
 
           {requiredAttrs.length > 0 ? (

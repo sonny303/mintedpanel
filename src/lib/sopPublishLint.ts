@@ -11,7 +11,11 @@
 //   - BITE-SOP-TT-01: every Auto-fill (extension_fill) task has ≥1 online_form
 //     step with a non-empty portalKey (so Workbench/form readiness can bind).
 //   - Payer PDF: every authored payer-form step has a form uploaded (a
-//     `payerForm` pointer with a non-empty familyId).
+//     `payerForm` pointer with a non-empty familyId) — tagged
+//     `rule: "payer_form_missing"` so the wizard's initial Create can defer
+//     just this one rule (a brand-new template has no id yet for the form's
+//     FK to attach to) while every other rule, and this rule on every publish
+//     thereafter, stays a hard blocker.
 // Pure; enforced in the wizard — the only publish surface.
 
 import type { SOPTaskDefinition } from "@/types";
@@ -34,6 +38,16 @@ export interface SopLintError {
   /** 1-based step index within the task, when the error is step-scoped. */
   stepIndex?: number;
   message: string;
+  /**
+   * `"payer_form_missing"` tags the one rule a brand-new template can never
+   * satisfy on its FIRST save: `payer_forms.template_id` is a real FK, so the
+   * form cannot be uploaded before the template row exists. The wizard's
+   * initial Create is the one caller allowed to defer this specific rule
+   * (create anyway, land the author back in the now-real template to
+   * upload); every other rule, and every rule on every publish after that
+   * first create, stays a hard blocker. Untagged for every other rule.
+   */
+  rule?: "payer_form_missing";
 }
 
 export interface SopLintResult {
@@ -116,6 +130,7 @@ export function lintSopForPublish(tasks: readonly SOPTaskDefinition[]): SopLintR
             taskIndex: taskNo,
             stepIndex: stepNo,
             message: `Task ${taskNo}, step ${stepNo} (payer PDF) needs a form uploaded.`,
+            rule: "payer_form_missing",
           });
         }
       }

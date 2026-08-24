@@ -227,4 +227,24 @@ describe("Payer PDF steps", () => {
     ]);
     expect(r.ok).toBe(true);
   });
+
+  // The wizard's initial Create defers ONLY this rule (a brand-new template
+  // has no id yet for the form's FK to attach to) — it has to be able to tell
+  // this error apart from every other rule to do that.
+  it("tags the missing-form error so callers can filter it out from other rules", () => {
+    const r = lintSopForPublish([
+      {
+        title: "Send payer form",
+        steps: [
+          { label: "New step" }, // an ordinary placeholder-label error, untagged
+          { label: "Send payer form", stepType: "pdf", payerForm: { familyId: "" } },
+        ],
+      },
+    ]);
+    expect(r.errors).toHaveLength(2);
+    expect(r.errors.find((e) => /needs a label/.test(e.message))?.rule).toBeUndefined();
+    expect(r.errors.find((e) => /payer PDF\) needs a form uploaded/.test(e.message))?.rule).toBe(
+      "payer_form_missing",
+    );
+  });
 });

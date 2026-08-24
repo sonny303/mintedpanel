@@ -11,7 +11,12 @@
 //
 // A form can only be attached to a template that EXISTS (the row's FK), so in
 // create mode this panel says so rather than offering an upload that would
-// fail. That is a real ordering constraint, not a limitation worth hiding.
+// fail. That is a real ordering constraint, not a limitation worth hiding —
+// but it must not be a dead end: `sopPublishLint`'s "payer_form_missing" rule
+// is the one rule the wizard's initial Create defers, so hitting Create with
+// this panel still unresolved creates the template anyway and hands the
+// author straight back into ITS OWN editor (not the templates list) to
+// upload. "Save first" always resolves in one click, never a search.
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, FileText, Loader2, Trash2, Upload } from "lucide-react";
@@ -127,8 +132,9 @@ export function PayerFormStepPanel({
 
       {templateId === null ? (
         <p className="text-[12px] text-[#92400E]">
-          Save this template first, then upload its payer forms — a form attaches to a template that
-          exists.
+          A form attaches to a template that exists, so uploading opens up once this template is
+          created — you don&rsquo;t need to finish this first. Go to Review and create the template,
+          then come straight back here to upload.
         </p>
       ) : attached ? (
         <div className="flex items-start gap-2 rounded-md border border-[#E8E5E0] bg-card p-2">
