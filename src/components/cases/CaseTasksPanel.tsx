@@ -242,7 +242,12 @@ export function CaseTasksPanel({
                   <div>
                     {row}
                     {payerFormPointer && !locked ? (
-                      <PayerFormActionRow task={t} pointer={payerFormPointer} canEdit={canEdit} />
+                      <PayerFormActionRow
+                        task={t}
+                        pointer={payerFormPointer}
+                        canEdit={canEdit}
+                        tokenValues={tokenValues}
+                      />
                     ) : null}
                     {!payerFormPointer && steps.length > 0 && !locked ? (
                       <ul className="space-y-1.5 px-3 pb-3 pl-11">

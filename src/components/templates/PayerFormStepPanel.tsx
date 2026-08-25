@@ -30,6 +30,7 @@ import {
   usePayerFormDownload,
 } from "@/hooks/usePayerForms";
 import { payerFormFileError, payerFormLabelError } from "@/lib/payerForms";
+import { PayerFormFieldPanel } from "./PayerFormFieldPanel";
 import { fmtDate } from "@/lib/format";
 import type { PayerForm } from "@/types";
 
@@ -137,37 +138,46 @@ export function PayerFormStepPanel({
           then come straight back here to upload.
         </p>
       ) : attached ? (
-        <div className="flex items-start gap-2 rounded-md border border-[#E8E5E0] bg-card p-2">
-          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium">{attached.label}</p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {attached.fileName} · v{attached.version} · added {fmtDate(attached.createdAt)}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8"
-              onClick={() => runDownload(attached)}
-              disabled={download.isPending}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            {canEdit ? (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 rounded-md border border-[#E8E5E0] bg-card p-2">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium">{attached.label}</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {attached.fileName} · v{attached.version} · added {fmtDate(attached.createdAt)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-8 text-[#B91C1C] hover:text-[#B91C1C]"
-                onClick={() => runRetire(attached)}
-                disabled={retire.isPending}
-                aria-label={`Remove ${attached.label}`}
+                className="h-8"
+                onClick={() => runDownload(attached)}
+                disabled={download.isPending}
               >
-                <Trash2 className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </Button>
-            ) : null}
+              {canEdit ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-[#B91C1C] hover:text-[#B91C1C]"
+                  onClick={() => runRetire(attached)}
+                  disabled={retire.isPending}
+                  aria-label={`Remove ${attached.label}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
           </div>
+          {/* Map once per FORM FAMILY, right where the form was uploaded — the
+            author is already looking at the file they need to map. */}
+          <PayerFormFieldPanel
+            familyId={attached.familyId}
+            formId={attached.id}
+            canEdit={canEdit}
+          />
         </div>
       ) : (
         <p className="text-[12px] text-muted-foreground">

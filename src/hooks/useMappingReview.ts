@@ -24,6 +24,8 @@ import { markPortalVerified } from "@/services/portals";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 import { newManualSelector } from "@/lib/fieldRegistry";
+import { summarizePdfImport } from "@/lib/pdfFieldImport";
+import { fetchPdfBytes, readPdfAcroFields } from "@/lib/pdfFieldImportClient";
 
 const STATIC = { staleTime: Infinity, gcTime: Infinity } as const;
 
@@ -124,6 +126,34 @@ export function useAddSharedRegistryField() {
         pageStep: input.pageStep ?? null,
         notes: "Added by hand in the form editor",
       }),
+  });
+}
+
+// E6.11 B4 — import a blank payer PDF's AcroForm fields into the shared
+// registry, under the FORM FAMILY's portal key.
+//
+// One proposal per field, IN PARALLEL: each call targets a different
+// `selector`, so there is no row to contend over, and the RPC is idempotent
+// on the shared unique index — a re-import of a replaced blank refreshes
+// labels/sections/order on the rows the trainer already decided and adds
+// only what is new, whatever order the calls land in. A row's decision is
+// never touched here, and a suggestion is never applied — deciding stays
+// human. A real payer form can carry 60-150+ fields; sequential round trips
+// made import visibly slow for exactly the forms where it matters most.
+//
+// A file with no AcroForm fields resolves with `totalFields: 0`; that is the
+// "this PDF is a flat scan" answer, not an error, and the caller says so.
+export function useImportPdfFormFields() {
+  return useMutation({
+    mutationFn: async (input: { familyId: string; signedUrl: string }) => {
+      const bytes = await fetchPdfBytes(input.signedUrl);
+      const descriptors = await readPdfAcroFields(bytes);
+      const summary = summarizePdfImport(input.familyId, descriptors);
+      const imported = await Promise.all(
+        summary.rows.map((row) => proposeSharedFieldMap({ ...row, mapType: "pdf" })),
+      );
+      return { ...summary, imported: imported.length };
+    },
   });
 }
 

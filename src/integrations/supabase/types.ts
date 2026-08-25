@@ -4170,6 +4170,7 @@ export type Database = {
           p_field_label?: string;
           p_field_type?: string;
           p_form_section?: string;
+          p_map_type?: string;
           p_notes?: string;
           p_page_step?: string;
           p_portal_key: string;

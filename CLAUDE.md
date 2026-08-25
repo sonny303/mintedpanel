@@ -222,13 +222,13 @@ incident-derived rules are in the **`supabase-migrations` skill** — read it
 before any schema work.
 
 **Repo-only migrations awaiting an operator apply** (a starting hint only —
-**always verify the object on hosted**, never trust this list;
-`20260824170000_payer_forms.sql` is applied and object-verified):
+**always verify the object on hosted**, never trust this list. As of
+2026-08-25, object-verified applied and dropped from this list:
+`20260824170000_payer_forms.sql`, `20260812130000_payer_contacts_select_opa_retire.sql`,
+`20260812140000_sop_template_multi_state.sql`, `20260813120000_e610_control_options.sql`,
+`20260814180000_author_global_sop_returns_jsonb.sql`,
+`20260825120000_e611_pdf_field_maps.sql`):
 
-- `20260812130000_payer_contacts_select_opa_retire.sql`
-- `20260812140000_sop_template_multi_state.sql`
-- `20260813120000_e610_control_options.sql`
-- `20260814180000_author_global_sop_returns_jsonb.sql`
 - `20260810120000_purge_unreferenced_catalog_payers.sql` — **needs a second PM
   sign-off. Never agent-apply.**
 - `20260809120000_slice6_create_payer_assign_flag.sql.superseded` — retired,
