@@ -17,9 +17,11 @@ places they disagree and why.
 A fourth view on the existing `/cases` route, reached at `?pivot=matrix`,
 alongside the current Flat / By provider / By payer views. It renders a
 provider × payer grid, sectioned by group + state, where each cell is either a
-real case (status chip, clickable), a gap (no case yet, inert), or an excluded
-combination (dash, inert). It is **read-only** — no editing, no case creation,
-no touch logging from this screen.
+real case (status chip, clicks through to the case), a gap (no case yet — links
+out to `/generation`), or an excluded combination (dash, inert). It is
+**read-only**: nothing is written from this screen — no editing, no touch
+logging, and no case creation (a gap cell navigates to the existing generation
+door rather than creating anything itself).
 
 **Do not replace the existing `/cases` list.** `/`, `/home`, `/work`,
 `/welcome` and `/admin/statuses` all redirect into `/cases`, and the route
@@ -37,7 +39,7 @@ to these, not to the doc's recommendations.
 
 | # | Decision | Value |
 |---|---|---|
-| D1 | Provider eligibility | `status !== 'terminated' && !referenceOnly && !isTestProvider(p)` |
+| D1 | Provider eligibility | `status !== 'terminated' && !referenceOnly && !isTestProvider(p) && verificationState !== 'pending_verification'` |
 | D2 | Section identity | One section = **one group + one state** |
 | D3 | `Group by` control | Options `State` (default) and `Group` — picks section **nesting**, not section identity |
 | D4 | Row set | Providers with **≥1 case** in that (group, state). Not candidates. |
@@ -49,6 +51,7 @@ to these, not to the doc's recommendations.
 | D10 | Overdue definition | Match the app: **due today counts as overdue** |
 | D11 | Surface | Fourth pivot on `/cases` (`?pivot=matrix`), not a replacement |
 | D12 | Orphaned `MatrixTab` | **Leave it alone.** Deleting `src/components/reports/MatrixTab.tsx` is a separate cleanup PR. |
+| D13 | Gap cell action | Deep-links to `/generation` pre-scoped. **No case is created from the Matrix.** See §4.7. |
 
 ### Why D2 matters most
 
@@ -186,17 +189,33 @@ Put all of this in `src/lib/casesMatrix.ts` with `casesMatrix.test.ts` beside it
 ### 4.1 Provider eligibility (D1)
 
 ```ts
-p.status !== "terminated" && !p.referenceOnly && !isTestProvider(p)
+p.status !== "terminated" &&
+  !p.referenceOnly &&
+  !isTestProvider(p) &&
+  p.verificationState !== "pending_verification"
 ```
 
 Import `isTestProvider` from `src/lib/testProvider.ts`. Do not re-check the flag
 inline — that module exists specifically so the exclusion cannot drift between
 surfaces. Lionstone has a test provider today; it must not appear.
 
-`verificationState === 'pending_verification'` providers **do** appear. Generation
-and readiness fence them out because those gate *creating* work; the Matrix only
-shows work that already exists, and a pending-verification provider holding a live
-case is exactly the anomaly a coordinator should see.
+**Why `pending_verification` is excluded — this is the organising idea of the
+whole screen.** The Matrix answers one question: *what work is the credentialing
+team responsible for right now?* A pending-verification provider is work the team
+is **waiting on someone else** for — the responsibility sits with the provider,
+not the coordinator. Mixing the two makes the board unactionable, because a
+coordinator can't tell which rows they can actually move today.
+
+Providers we are waiting on are a **separate report**, not part of this feature.
+Do not add a toggle for them here.
+
+This predicate now matches `/generation`'s roster filter
+(`src/hooks/useGenerationPreview.ts:247`) and the E1.8 readiness fence exactly.
+That consistency is deliberate — three surfaces, one definition of "a provider
+the team can act on."
+
+No org on hosted has a pending-verification provider today, so this changes
+nothing visible now. It is the rule that keeps the board honest as imports grow.
 
 ### 4.2 The drop-off rule (§3.3)
 
@@ -255,12 +274,71 @@ the only chips on the screen that do nothing when clicked, with no way to predic
 which. Same appearance, different behavior.
 
 Build: same "Not Started" label and tone, but **muted** (reduced opacity or a
-dashed border — your call within the token set), `cursor: default`, and **not a
-tab stop**. It still reads as "not started"; its inertness becomes predictable.
+dashed border — your call within the token set), and `cursor: default` on the
+chip itself. It still reads as "not started"; its inertness becomes predictable.
 
-Gap and excluded cells are `not` focusable. §8 already says they do nothing on
-click and must not signal interactivity — non-focusable is the same rule applied
-to the keyboard, and it cuts BEST PT's NC section from 28 tab stops to 11.
+The gap cell is not a navigation target the way a case cell is — the whole cell
+does **not** click through. Its only action is the "Generate case →" link inside
+its tooltip (§4.7), which is the one focusable thing in the cell.
+
+Excluded cells are fully inert and **not focusable at all** — they do nothing on
+click, and §8 says they must not signal interactivity. Non-focusable is that same
+rule applied to the keyboard.
+
+### 4.7 Gap cells link to `/generation` — they do not create cases (D13)
+
+A gap means "this group works with this payer in this state, and nobody has
+started this provider yet." That is real, actionable work, and a dead-end cell
+wastes it. But **the Matrix must not create the case itself.**
+
+**Why not.** `ManualCaseModal` — the only other case-creation door — runs just two
+of the four passes `/generation` runs:
+
+| Pass | `/generation` | `ManualCaseModal` |
+|---|---|---|
+| `resolveTemplate` | ✅ | ✅ |
+| `stampTasks` (template id + version) | ✅ | ✅ |
+| `stampExecutionTypes` | ✅ | ❌ |
+| `hydratePayerFormTasks` (payer PDF forms) | ✅ | ❌ |
+| `sop_resolution_tier` provenance | ✅ | ❌ |
+| `case_generation_run_rows` ledger | ✅ | ❌ |
+
+`CLAUDE.md` states it directly: payer PDF forms are *"Attached at `/generation`
+only."* A case created through the manual path from a gap cell would silently
+ship without its payer forms and without execution types. That is a worse outcome
+than the dead end.
+
+**What to build instead.** `/generation` already accepts scope params
+(`src/routes/generation.tsx:27`): `?provider=`, `?payer=`, `?group=`, `?facility=`.
+The gap cell's tooltip carries one link:
+
+```tsx
+<Link to="/generation" search={{ provider: providerId, payer: payerId, group: groupId }}>
+  Generate case →
+</Link>
+```
+
+The coordinator lands on the real door with that candidate pre-filtered and
+confirms there. Full four-pass hydration, full run-row ledger, one `<Link>` of new
+code.
+
+**This does not trip `oneDoor.test.ts`.** That suite greps for `createCase(`,
+`create_case_with_tasks` and `useCreateCase(`. A `<Link>` matches none of them. Do
+not import `useCreateCase` into any Matrix file — the Matrix is not on the
+allowlist and must not be added to it.
+
+**Known limitation, acceptable:** generation's scope has no `state` param, so the
+link lands scoped to provider × payer across every state that group targets —
+typically one to three rows. Adding `state` would mean touching `GenerationSearch`
+and `GridScope` in `src/lib/generationGrid.ts`. **Out of scope for this PR**; note
+it as a follow-up if coordinators ask.
+
+**Useful side effect:** a gap cell is not necessarily a generation *candidate* —
+candidacy also requires a facility assignment under that group and a state
+footprint (clinic or license). When the provider fails candidacy, `/generation`
+shows them in its skip list with the reason ("No facility assignment under this
+group"). The coordinator gets an explanation instead of a silent no-op, which an
+inline modal could not have given them.
 
 ### 4.6 Urgency indicators (§5.1)
 
@@ -337,7 +415,7 @@ via Enter/Space, visible focus ring.
 | Cell | Surface | Content |
 |---|---|---|
 | `case` | **Popover** on hover (short delay) **and keyboard focus** | Case number (mono) + status pill · provider · payer · state · days open · last touch ("3d since last touch" / "Never touched" / "Touched today") · follow-up date with overdue flag · next action · "Open case →" |
-| `gap` | **Tooltip** | Payer name + "Not started" |
+| `gap` | **Tooltip** | Payer name + "Not started" + a **"Generate case →" link** to `/generation` pre-scoped (§4.7). The link is focusable; the cell around it is not. |
 | `excluded` | **Tooltip** | Exclusion reason, e.g. "Panel closed — excluded at generation" |
 
 Popover: dismiss on mouse-out / blur / Escape; never traps focus; one open at a
@@ -402,9 +480,12 @@ instead.
 ## 8. Non-goals — do not build these
 
 - No inline editing, task completion, or touch logging from the Matrix.
-- **No case creation affordance.** Gap cells are informational. A "+" here would
-  trip `src/lib/oneDoor.test.ts`, which greps the source tree for case-creating
-  call sites.
+- **No case creation from the Matrix.** A gap cell links out to `/generation`
+  (§4.7); it never calls `createCase` / `useCreateCase` /
+  `create_case_with_tasks`. Doing so would trip `src/lib/oneDoor.test.ts` and
+  would ship cases missing their payer forms and execution types.
+- **No "waiting on the provider" rows.** Pending-verification providers are a
+  separate report (D1). Do not add a toggle for them here.
 - No per-user/assignee scoping — the Matrix is org-wide.
 - No bulk actions, no multi-select.
 - No provider- or payer-level totals beyond the section header counts.
@@ -436,7 +517,8 @@ through the Playwright mock harness — see the `e2e-harness` skill.
 2. Provider whose last open case flips to `approved` disappears from **every**
    section — including sections where they had `denied` / `not_pursuing` cells.
 3. Provider all-approved in one state but open in another **stays**.
-4. `terminated`, `referenceOnly` and `isTestProvider` rows never appear.
+4. `terminated`, `referenceOnly`, `isTestProvider` and `pending_verification`
+   rows never appear — even when they hold an open case.
 5. Two groups with identical targets in one state produce **two sections**, and
    no cell holds two cases (the Kansas shape).
 6. A payer with a case but no active target still gets a column.
@@ -444,6 +526,12 @@ through the Playwright mock harness — see the `e2e-harness` skill.
 8. Red dot fires for a task due **today** (D10) and for a `blocked` overdue task.
 9. Approved cell shows no dots even with an overdue task and no touches.
 10. Dimmed cell suppresses dots.
+11. A gap cell's generate link carries the section's `groupId` and `state`'s
+    provider/payer — not a neighbouring section's.
+
+Also assert in `oneDoor.test.ts` terms: no file under `src/components/cases/`
+added by this feature imports `useCreateCase`. The existing suite already greps
+for it; keep it green rather than adding an allowlist entry.
 
 ### E2E
 
