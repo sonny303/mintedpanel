@@ -34,7 +34,6 @@ import {
 import { useTrainGlobalFieldMap } from "@/hooks/useGlobalAuthoring";
 import { useFillPayerForm, usePayerFormDownload } from "@/hooks/usePayerForms";
 import { mockValueForToken } from "@/lib/mockFillProfile";
-import { planPayerFormFill } from "@/lib/payerFormFill";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
@@ -188,9 +187,10 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
         fileStem: "SAMPLE-do-not-send",
         isTest: true,
       });
-      const plan = planPayerFormFill(maps as RegistryRow[], sampleValues);
+      // The mutation already planned the fill to run it — reuse that instead
+      // of recomputing the same plan from the same inputs a second time.
       toast.success(
-        `Sample filled ${result.written} of ${plan.entries.length} fields — synthetic data, do not send`,
+        `Sample filled ${result.written} of ${result.plan.entries.length} fields — synthetic data, do not send`,
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not run the sample fill");

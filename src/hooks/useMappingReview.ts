@@ -132,11 +132,14 @@ export function useAddSharedRegistryField() {
 // E6.11 B4 — import a blank payer PDF's AcroForm fields into the shared
 // registry, under the FORM FAMILY's portal key.
 //
-// One proposal per field, sequentially: the RPC is idempotent on the shared
-// unique index, so a re-import of a replaced blank refreshes labels/sections/
-// order on the rows the trainer already decided and adds only what is new. A
-// row's decision is never touched here, and a suggestion is never applied —
-// deciding stays human.
+// One proposal per field, IN PARALLEL: each call targets a different
+// `selector`, so there is no row to contend over, and the RPC is idempotent
+// on the shared unique index — a re-import of a replaced blank refreshes
+// labels/sections/order on the rows the trainer already decided and adds
+// only what is new, whatever order the calls land in. A row's decision is
+// never touched here, and a suggestion is never applied — deciding stays
+// human. A real payer form can carry 60-150+ fields; sequential round trips
+// made import visibly slow for exactly the forms where it matters most.
 //
 // A file with no AcroForm fields resolves with `totalFields: 0`; that is the
 // "this PDF is a flat scan" answer, not an error, and the caller says so.
@@ -146,12 +149,10 @@ export function useImportPdfFormFields() {
       const bytes = await fetchPdfBytes(input.signedUrl);
       const descriptors = await readPdfAcroFields(bytes);
       const summary = summarizePdfImport(input.familyId, descriptors);
-      let imported = 0;
-      for (const row of summary.rows) {
-        await proposeSharedFieldMap({ ...row, mapType: "pdf" });
-        imported += 1;
-      }
-      return { ...summary, imported };
+      const imported = await Promise.all(
+        summary.rows.map((row) => proposeSharedFieldMap({ ...row, mapType: "pdf" })),
+      );
+      return { ...summary, imported: imported.length };
     },
   });
 }

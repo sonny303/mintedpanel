@@ -14,15 +14,23 @@ import type { PayerFormFillPlan } from "@/lib/payerFormFill";
 
 const CHECKED = /^(y|yes|true|x|on|1|checked)$/i;
 
-/** Fill the blank form's bytes from the plan and trigger a local download.
- * Returns how many fields the document actually accepted — a field the PDF
- * rejects (an option that isn't in its list, a read-only box) is skipped, never
- * fatal, so one bad field can't cost the whole fill. */
-export async function fillAndDownloadPayerForm(
+export interface PayerFormFillResult {
+  /** The saved, filled PDF bytes — pdf-lib output, not yet handed to the browser. */
+  output: Uint8Array;
+  /** How many fields the document actually accepted — a field the PDF rejects
+   * (an option that isn't in its list, a read-only box) is skipped, never
+   * fatal, so one bad field can't cost the whole fill. */
+  written: number;
+  rejected: string[];
+}
+
+/** The pdf-lib fill itself, split out from the browser download trigger so it
+ * is unit-testable in a plain Node environment (pdf-lib needs no DOM; only
+ * `triggerDownload` below does). */
+export async function fillPayerFormBytes(
   bytes: ArrayBuffer,
   plan: PayerFormFillPlan,
-  fileStem: string,
-): Promise<{ written: number; rejected: string[] }> {
+): Promise<PayerFormFillResult> {
   const { PDFDocument, PDFTextField, PDFDropdown, PDFOptionList, PDFCheckBox, PDFRadioGroup } =
     await import("pdf-lib");
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
@@ -64,6 +72,16 @@ export async function fillAndDownloadPayerForm(
   }
 
   const output = await doc.save();
+  return { output, written, rejected };
+}
+
+/** Fill the blank form's bytes from the plan and trigger a local download. */
+export async function fillAndDownloadPayerForm(
+  bytes: ArrayBuffer,
+  plan: PayerFormFillPlan,
+  fileStem: string,
+): Promise<{ written: number; rejected: string[] }> {
+  const { output, written, rejected } = await fillPayerFormBytes(bytes, plan);
   triggerDownload(output, `${fileStem}.pdf`);
   return { written, rejected };
 }
