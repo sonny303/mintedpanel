@@ -24,6 +24,8 @@ import { markPortalVerified } from "@/services/portals";
 import { normalizeTokenKey } from "@/lib/tokenFormat";
 import type { PortalFieldMap } from "@/types";
 import { newManualSelector } from "@/lib/fieldRegistry";
+import { summarizePdfImport } from "@/lib/pdfFieldImport";
+import { fetchPdfBytes, readPdfAcroFields } from "@/lib/pdfFieldImportClient";
 
 const STATIC = { staleTime: Infinity, gcTime: Infinity } as const;
 
@@ -124,6 +126,33 @@ export function useAddSharedRegistryField() {
         pageStep: input.pageStep ?? null,
         notes: "Added by hand in the form editor",
       }),
+  });
+}
+
+// E6.11 B4 — import a blank payer PDF's AcroForm fields into the shared
+// registry, under the FORM FAMILY's portal key.
+//
+// One proposal per field, sequentially: the RPC is idempotent on the shared
+// unique index, so a re-import of a replaced blank refreshes labels/sections/
+// order on the rows the trainer already decided and adds only what is new. A
+// row's decision is never touched here, and a suggestion is never applied —
+// deciding stays human.
+//
+// A file with no AcroForm fields resolves with `totalFields: 0`; that is the
+// "this PDF is a flat scan" answer, not an error, and the caller says so.
+export function useImportPdfFormFields() {
+  return useMutation({
+    mutationFn: async (input: { familyId: string; signedUrl: string }) => {
+      const bytes = await fetchPdfBytes(input.signedUrl);
+      const descriptors = await readPdfAcroFields(bytes);
+      const summary = summarizePdfImport(input.familyId, descriptors);
+      let imported = 0;
+      for (const row of summary.rows) {
+        await proposeSharedFieldMap({ ...row, mapType: "pdf" });
+        imported += 1;
+      }
+      return { ...summary, imported };
+    },
   });
 }
 
