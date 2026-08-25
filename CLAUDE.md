@@ -519,6 +519,23 @@ and leaves decisions untouched.
   `src/shared/quickCards.ts` holds only the default layout and projection
   helpers, not a field-list mirror. (An older note here claimed otherwise —
   it was stale.)
+- **`field_dictionary` is a dead end.** The payer-PDF auto-filler (`PdfStep`,
+  `src/lib/pdfFill.ts`) reads from `field_dictionary` rows marked `status='confirmed'`.
+  The only writer (`upsertDictionaryEntry`) hardcodes `status='suggested'`, and the
+  only promoter (`decideDictionaryEntry`) has zero callers. The table is empty on
+  hosted and unreachable. PDF field mapping has moved to `portal_field_maps` (same
+  trainer UI) — see `docs/spike-payer-pdf-autofill-2026-08-24.md` Phases 1–3.
+  Deleting the `field_dictionary` table is safe after PDF mapping ships; the
+  architecture intentionally replaced it.
+- **In-app form test runner is dormant, not deleted.** E6.5 built a case-less dry
+  run (`src/lib/mockFillProfile.ts`, `computeTestRun`, `recordTestFillFromApp`)
+  for web portal training. PR #311 (Aug 12) removed its UI mount point from the
+  form-setup wizard because web training moved to the Workbench extension (which
+  has live-DOM access). The service layer remains because e2e tests reference it,
+  and PDF form validation reuses it (Phase 1.5 in the spike). Two bugs block
+  reuse: `computeTestRun` doesn't branch on field-map source (treats `hardcoded`
+  as unmapped), and `recordTestFillFromApp` hardcodes `fill_mode='web'`. Both
+  documented in the spike; fix before Phase 1.5.
 
 ## UI conventions
 
