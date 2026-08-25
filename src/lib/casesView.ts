@@ -91,14 +91,18 @@ export function rowMatchesSearch(row: CaseViewRow, q: string): boolean {
   return [row.providerName, row.payerName].some((h) => h.toLowerCase().includes(needle));
 }
 
-export function filterRows(rows: readonly CaseViewRow[], filters: CasesFilters): CaseViewRow[] {
-  return rows.filter(
-    (r) =>
-      matchesKpi(r, filters.kpi) &&
-      (filters.state === "all" || r.state === filters.state) &&
-      (filters.status === "all" || r.caseStatus === filters.status) &&
-      rowMatchesSearch(r, filters.search),
+/** The single per-case filter used by both the Flat view and the Matrix. */
+export function matchesCaseFilter(row: CaseViewRow, filters: CasesFilters): boolean {
+  return (
+    matchesKpi(row, filters.kpi) &&
+    (filters.state === "all" || row.state === filters.state) &&
+    (filters.status === "all" || row.caseStatus === filters.status) &&
+    rowMatchesSearch(row, filters.search)
   );
+}
+
+export function filterRows(rows: readonly CaseViewRow[], filters: CasesFilters): CaseViewRow[] {
+  return rows.filter((r) => matchesCaseFilter(r, filters));
 }
 
 /** Distinct states present, alphabetical — for the State dropdown. */
