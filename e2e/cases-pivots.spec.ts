@@ -497,3 +497,152 @@ test("post-generation ?run= filters to that batch with a banner; Show all cases 
   await page.goto("/cases?runId=run-9");
   await expect(page.locator("tbody tr")).toHaveCount(1);
 });
+
+// 2026-08-25 Cases Matrix — the fourth pivot (?pivot=matrix). A read-only
+// provider x payer board sectioned by group + state. These cover the three
+// things unit tests cannot reach: the semantic table markup, the gap cell's
+// "Generate case" link actually being reachable, and Group by re-nesting.
+
+/** Give (g-1, NC) an active Aetna target so Jane's empty Aetna cell is a GAP
+ *  rather than an absent column: she has no NC/Aetna case, Marco does. */
+function seedMatrixTargets(fixtures: Record<string, Record<string, unknown>[]>) {
+  fixtures.payer_network_targets.push(
+    {
+      id: "pnt-nc-aetna",
+      org_id: ORG_ID,
+      payer_id: "pay-aetna",
+      group_id: "g-1",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-07-10T00:00:00Z",
+    },
+    {
+      id: "pnt-nc-bcbs",
+      org_id: ORG_ID,
+      payer_id: "pay-bcbsnc",
+      group_id: "g-1",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-07-10T00:00:00Z",
+    },
+  );
+}
+
+test("Matrix pivot: ?pivot=matrix renders a semantic provider x payer table with case, gap and excluded cells", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  // The Matrix is a fourth tab, not a replacement — Flat is still the default.
+  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Matrix" }).click();
+  await expect(page).toHaveURL(/pivot=matrix/, { timeout: 15000 });
+
+  // §10 hard requirement: a real <table> with a 2D header relationship —
+  // payers are column headers, providers are row headers.
+  const ncTable = page.getByRole("table", { name: /Group 1 in North Carolina/ });
+  await expect(ncTable).toBeVisible({ timeout: 30000 });
+  await expect(ncTable.getByRole("columnheader", { name: "Provider" })).toBeVisible();
+  await expect(ncTable.getByRole("columnheader", { name: "Aetna" })).toBeVisible();
+  await expect(ncTable.getByRole("columnheader", { name: "BCBS-NC" })).toBeVisible();
+  await expect(ncTable.getByRole("rowheader", { name: "Jane Whitaker" })).toBeVisible();
+  await expect(ncTable.getByRole("rowheader", { name: "Marco Reyes" })).toBeVisible();
+
+  // Jane holds an NC/BCBS case but no NC/Aetna case, and Aetna is an active
+  // target there — so that cell is a gap, labelled Not started.
+  await expect(
+    ncTable.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ }),
+  ).toBeVisible();
+  // Marco's NC/Aetna case is denied — a terminal cell still renders because a
+  // sibling open case keeps him in the Matrix.
+  await expect(
+    ncTable.getByRole("link", { name: /Marco Reyes, Aetna, NC, open case/ }),
+  ).toBeVisible();
+
+  // The board is derived, never stored: rendering it wrote nothing.
+  expect(writes).toHaveLength(0);
+});
+
+test("Matrix gap cell: the Generate case link is reachable and deep-links into /generation pre-scoped", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const gap = page.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ });
+  await expect(gap).toBeVisible({ timeout: 30000 });
+
+  // A gap opens its detail on hover. The link inside must be genuinely
+  // clickable — this is why gaps use a Popover and not a Tooltip.
+  await gap.hover();
+  const generate = page.getByRole("link", { name: /Generate case/ });
+  await expect(generate).toBeVisible({ timeout: 15000 });
+
+  // The Matrix never creates a case: the link hands off to /generation, the
+  // one door, with this candidate pre-scoped.
+  await generate.click();
+  await expect(page).toHaveURL(/\/generation/, { timeout: 15000 });
+  await expect(page).toHaveURL(/provider=pr-jane/);
+  await expect(page).toHaveURL(/payer=pay-aetna/);
+  await expect(page).toHaveURL(/group=g-1/);
+});
+
+test("Matrix Group by re-nests the same sections instead of changing which sections exist", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  // Jane has open cases in NC and SC and an approved one in CO; Marco is in
+  // NC. That is three (group, state) sections under either nesting.
+  const tables = page.getByRole("table");
+  await expect(tables).toHaveCount(3, { timeout: 30000 });
+
+  // Default nesting is by state: the outer headings are the states.
+  await expect(page.getByRole("heading", { name: /North Carolina/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /South Carolina/ })).toBeVisible();
+
+  // Switching to Group re-nests: the outer heading becomes the group, and the
+  // section count is unchanged (D3 — nesting only).
+  await page.getByLabel("Group Matrix by").click();
+  await page.getByRole("option", { name: "Group by Group" }).click();
+  await expect(page.getByRole("heading", { name: "Group 1" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /North Carolina/ })).toHaveCount(0);
+  await expect(tables).toHaveCount(3);
+
+  // The payer filter narrows COLUMNS, so the CO/SC sections (BCBS + Aetna
+  // only respectively) drop out when a non-matching payer is selected.
+  await page.getByLabel("Filter Matrix by payer").click();
+  await page.getByRole("option", { name: "BCBS-NC" }).click();
+  await expect(page.getByRole("columnheader", { name: "Aetna" })).toHaveCount(0, {
+    timeout: 15000,
+  });
+  await expect(page.getByRole("columnheader", { name: "BCBS-NC" }).first()).toBeVisible();
+});

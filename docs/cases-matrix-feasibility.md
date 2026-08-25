@@ -8,7 +8,7 @@ Reviewed against the codebase and hosted data (`fkvuhfsqcmujywzgczmc`) on
 > Two decisions diverge from the recommendations here: rows are **case-driven**
 > (which removes the need for `buildGenerationPreview` entirely), and the
 > `enrolled` cell kind was **dropped** — this is an active-cases matrix, not an
-> enrollment matrix. This document remains the record of *why*.
+> enrollment matrix. This document remains the record of _why_.
 
 **Verdict: buildable, and cheaper than the spec assumes.** No new tables, no new
 RPC, no `/api` route, no server-side aggregate. The two hard derivations the spec
@@ -24,15 +24,15 @@ implemented as written.
 
 ## Summary of answers
 
-| Q | Answer | Confidence |
-|---|---|---|
-| Q1 Active provider | **`status !== 'terminated'`**, plus three exclusions the spec omits. Strict `'active'` ships an empty screen. | Certain — measured |
-| Q2 Gap vs Excluded | **Already solved.** `buildGenerationPreview` emits exactly this, batched, no N+1. Three caveats. | High |
-| Q3 Payer filter | Skip for v1. The "parity with Today's queue" premise does not exist. | High |
-| Q4 Real-time vs eventual | **No decision needed** — real-time already falls out of existing cache invalidation, free. | Certain |
-| Q5 Performance | **Not a risk.** 245 cells across all orgs today; the page already loads every input. | Certain — measured |
-| Q6 Multi-group | **BLOCKING.** Live today: 8 of 10 Kansas providers are in 2 groups with identical targets. | Certain — measured |
-| Q7 Error state | No shared component exists. Use route-local inline + Retry; log to DESIGN-DEBT. | Certain |
+| Q                        | Answer                                                                                                        | Confidence         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Q1 Active provider       | **`status !== 'terminated'`**, plus three exclusions the spec omits. Strict `'active'` ships an empty screen. | Certain — measured |
+| Q2 Gap vs Excluded       | **Already solved.** `buildGenerationPreview` emits exactly this, batched, no N+1. Three caveats.              | High               |
+| Q3 Payer filter          | Skip for v1. The "parity with Today's queue" premise does not exist.                                          | High               |
+| Q4 Real-time vs eventual | **No decision needed** — real-time already falls out of existing cache invalidation, free.                    | Certain            |
+| Q5 Performance           | **Not a risk.** 245 cells across all orgs today; the page already loads every input.                          | Certain — measured |
+| Q6 Multi-group           | **BLOCKING.** Live today: 8 of 10 Kansas providers are in 2 groups with identical targets.                    | Certain — measured |
+| Q7 Error state           | No shared component exists. Use route-local inline + Retry; log to DESIGN-DEBT.                               | Certain            |
 
 ---
 
@@ -46,11 +46,11 @@ hosted.**
 (`src/types/index.ts:69`). In practice `active` is nearly unused — providers are
 created as `onboarding` and never promoted:
 
-| Org | active | onboarding | terminated | cases | Matrix under strict `active` |
-|---|---|---|---|---|---|
-| BEST Physical Therapy LLC | 0 | 7 | 0 | 17 | **empty** |
-| Kansas Fitness Physio | 1 | 9 | 1 | 11 | 1 row (of 4 providers with cases) |
-| Lionstone Physical Therapy | 0 | 2 | 0 | 4 | **empty** |
+| Org                        | active | onboarding | terminated | cases | Matrix under strict `active`      |
+| -------------------------- | ------ | ---------- | ---------- | ----- | --------------------------------- |
+| BEST Physical Therapy LLC  | 0      | 7          | 0          | 17    | **empty**                         |
+| Kansas Fitness Physio      | 1      | 9          | 1          | 11    | 1 row (of 4 providers with cases) |
+| Lionstone Physical Therapy | 0      | 2          | 0          | 4     | **empty**                         |
 
 The spec's own reasoning for strict `active` — "`onboarding` providers without a
 start date may not yet have real payer work" — is contradicted by the data:
@@ -75,11 +75,11 @@ Recommended predicate, matching `/generation`'s roster filter
 (`src/hooks/useGenerationPreview.ts:247`):
 
 ```ts
-p.status !== "terminated" && !p.referenceOnly && !isTestProvider(p)
+p.status !== "terminated" && !p.referenceOnly && !isTestProvider(p);
 ```
 
 `pending_verification` is a separate product call: generation and readiness both
-fence it out, but those gate *creating work*, and the Matrix only *shows* work
+fence it out, but those gate _creating work_, and the Matrix only _shows_ work
 that already exists. Recommend showing them (a pending-verification provider with
 a live case is exactly the anomaly a coordinator should see).
 
@@ -168,12 +168,12 @@ The spec assumes the Matrix cross-product is "significantly larger than a flat
 list at the same org size" and that this may require a server-side aggregate,
 pagination or virtualization. Measured, on hosted:
 
-| Org | Target-driven cells | State sections | Actual cases |
-|---|---|---|---|
-| BEST Physical Therapy LLC | 183 | 8 | 17 |
-| Kansas Fitness Physio | 50 | 1 | 11 |
-| Lionstone Physical Therapy | 12 | 3 | 4 |
-| **All orgs** | **245** | — | **32** |
+| Org                        | Target-driven cells | State sections | Actual cases |
+| -------------------------- | ------------------- | -------------- | ------------ |
+| BEST Physical Therapy LLC  | 183                 | 8              | 17           |
+| Kansas Fitness Physio      | 50                  | 1              | 11           |
+| Lionstone Physical Therapy | 12                  | 3              | 4            |
+| **All orgs**               | **245**             | —              | **32**       |
 
 245 cells is not a performance problem in any rendering strategy.
 
@@ -207,10 +207,10 @@ the three orgs, and it breaks a stated invariant.**
 Kansas Fitness Physio has **8 of its 10 providers assigned to 2 groups**, and
 both groups target the **identical 5 payers in KS**:
 
-| Group | State | Payers |
-|---|---|---|
-| Kansas Fitness Physio P.A. | KS | Aetna, BCBS, Cigna, Medicare, UHC |
-| Kansas Fitness Physio, P.A. (formerly known as Mowery Rehab Consultants, P.A.) | KS | Aetna, BCBS, Cigna, Medicare, UHC |
+| Group                                                                          | State | Payers                            |
+| ------------------------------------------------------------------------------ | ----- | --------------------------------- |
+| Kansas Fitness Physio P.A.                                                     | KS    | Aetna, BCBS, Cigna, Medicare, UHC |
+| Kansas Fitness Physio, P.A. (formerly known as Mowery Rehab Consultants, P.A.) | KS    | Aetna, BCBS, Cigna, Medicare, UHC |
 
 (The second is evidently a rename/merge artifact, which does not make the problem
 go away — it makes it likely to recur.)
@@ -267,9 +267,9 @@ a separate cleanup, not part of this work.
 
 **1. §5.1 — the overdue definition is not the app's definition.**
 
-The spec states: *"existing app definition: `status !== 'completed' && dueDate <
+The spec states: _"existing app definition: `status !== 'completed' && dueDate <
 today`; a `blocked` task past its due date also counts as overdue. Due **today**
-is not overdue."*
+is not overdue."_
 
 The actual definition (`src/lib/actionState.ts:50`) is:
 
@@ -291,7 +291,7 @@ the app and amending the spec.
 
 Correct that there is no HoverCard. But `src/components/ui/tooltip.tsx` exists and
 is already used for precisely this kind of grid cell in the orphaned Enrollment
-Matrix. The spec's own §7 asks for *tooltips* on Gap and Excluded cells — those
+Matrix. The spec's own §7 asks for _tooltips_ on Gap and Excluded cells — those
 should use Tooltip; only the rich case popover needs Popover.
 
 **3. §13 Q3 — there is no "Today queue" filter set.** See Q3 above.
@@ -306,7 +306,7 @@ the spec should not cite "the existing pattern" as if it were settled.
 ## Gaps — decisions the spec does not make
 
 **A. The payer column set is undefined.** §4 makes payers the columns but never
-says *which* payers. For BEST PT in NC the candidates are: 6 (payers with a case
+says _which_ payers. For BEST PT in NC the candidates are: 6 (payers with a case
 in NC), 7 (active targets in NC), or the entire global catalog. This single
 choice drives every Gap cell. **Must be specified before implementation.**
 
@@ -328,7 +328,7 @@ with target-driven columns inside them**, but this needs an explicit decision.
 **C. `assigned_to` is NULL on all 32 cases.** The popover's Coordinator row
 (§7.3) and the mock's "Dana R." have no data behind them anywhere in the system.
 The field is on the list projection (`src/services/cases.ts:64`) and resolves via
-a separate coordinators query (`src/routes/cases.$id.tsx:72`), so it *works* —
+a separate coordinators query (`src/routes/cases.$id.tsx:72`), so it _works_ —
 it will simply render "—" for every case in every org. Either populate assignment
 first or drop the row from the popover.
 

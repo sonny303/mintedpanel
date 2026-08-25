@@ -37,21 +37,21 @@ pivot touches none of that.
 These were open questions in the requirements doc. They are now answered. Build
 to these, not to the doc's recommendations.
 
-| # | Decision | Value |
-|---|---|---|
-| D1 | Provider eligibility | `status !== 'terminated' && !referenceOnly && !isTestProvider(p) && verificationState !== 'pending_verification'` |
-| D2 | Section identity | One section = **one group + one state** |
-| D3 | `Group by` control | Options `State` (default) and `Group` — picks section **nesting**, not section identity |
-| D4 | Row set | Providers with **≥1 case** in that (group, state). Not candidates. |
-| D5 | Column set | Payers with an **active `payer_network_targets` row** for that (group, state) |
-| D6 | Cell kinds | `case` · `gap` · `excluded` — **exactly three** |
-| D7 | Enrollment facts | **Not read.** This is an active-cases matrix, not an enrollment matrix. |
-| D8 | Filters | Search · State · Status · Payer · Group by. **No Group filter** — sections already name the group. |
-| D9 | Popover Coordinator row | **Dropped from v1** (`assigned_to` is NULL on every case in every org today) |
-| D10 | Overdue definition | Match the app: **due today counts as overdue** |
-| D11 | Surface | Fourth pivot on `/cases` (`?pivot=matrix`), not a replacement |
-| D12 | Orphaned `MatrixTab` | **Leave it alone.** Deleting `src/components/reports/MatrixTab.tsx` is a separate cleanup PR. |
-| D13 | Gap cell action | Deep-links to `/generation` pre-scoped. **No case is created from the Matrix.** See §4.7. |
+| #   | Decision                | Value                                                                                                             |
+| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| D1  | Provider eligibility    | `status !== 'terminated' && !referenceOnly && !isTestProvider(p) && verificationState !== 'pending_verification'` |
+| D2  | Section identity        | One section = **one group + one state**                                                                           |
+| D3  | `Group by` control      | Options `State` (default) and `Group` — picks section **nesting**, not section identity                           |
+| D4  | Row set                 | Providers with **≥1 case** in that (group, state). Not candidates.                                                |
+| D5  | Column set              | Payers with an **active `payer_network_targets` row** for that (group, state)                                     |
+| D6  | Cell kinds              | `case` · `gap` · `excluded` — **exactly three**                                                                   |
+| D7  | Enrollment facts        | **Not read.** This is an active-cases matrix, not an enrollment matrix.                                           |
+| D8  | Filters                 | Search · State · Status · Payer · Group by. **No Group filter** — sections already name the group.                |
+| D9  | Popover Coordinator row | **Dropped from v1** (`assigned_to` is NULL on every case in every org today)                                      |
+| D10 | Overdue definition      | Match the app: **due today counts as overdue**                                                                    |
+| D11 | Surface                 | Fourth pivot on `/cases` (`?pivot=matrix`), not a replacement                                                     |
+| D12 | Orphaned `MatrixTab`    | **Leave it alone.** Deleting `src/components/reports/MatrixTab.tsx` is a separate cleanup PR.                     |
+| D13 | Gap cell action         | Deep-links to `/generation` pre-scoped. **No case is created from the Matrix.** See §4.7.                         |
 
 ### Why D2 matters most
 
@@ -97,12 +97,12 @@ Group by: Group
 The requirements doc states four things about the current system that are wrong.
 Build to this column, not to the doc.
 
-| Doc says | Reality | Build |
-|---|---|---|
-| §3.1 "use strict `status === 'active'`" | 18 of 20 providers on hosted are `onboarding`; they hold 31 of 32 cases. Strict `active` renders an **empty Matrix** for 2 of 3 orgs. | D1 |
-| §5.1 overdue is "`dueDate < today`; due today is not overdue" | `src/lib/actionState.ts:50` uses `differenceInCalendarDays(now, due) >= 0` — **due today counts**. | D10 |
-| §7 "no HoverCard — use Popover" for everything | `src/components/ui/tooltip.tsx` exists. Use **Tooltip** for gap/excluded; Popover only for the rich case card. | §5 below |
-| §13 Q3 "parity with Today's queue filters" | There is no such surface. `/work` and `/home` redirect into `/cases`; neither has filters. | D8 |
+| Doc says                                                      | Reality                                                                                                                               | Build    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| §3.1 "use strict `status === 'active'`"                       | 18 of 20 providers on hosted are `onboarding`; they hold 31 of 32 cases. Strict `active` renders an **empty Matrix** for 2 of 3 orgs. | D1       |
+| §5.1 overdue is "`dueDate < today`; due today is not overdue" | `src/lib/actionState.ts:50` uses `differenceInCalendarDays(now, due) >= 0` — **due today counts**.                                    | D10      |
+| §7 "no HoverCard — use Popover" for everything                | `src/components/ui/tooltip.tsx` exists. Use **Tooltip** for gap/excluded; Popover only for the rich case card.                        | §5 below |
+| §13 Q3 "parity with Today's queue filters"                    | There is no such surface. `/work` and `/home` redirect into `/cases`; neither has filters.                                            | D8       |
 
 Two more deviations you should know are deliberate:
 
@@ -121,17 +121,17 @@ Two more deviations you should know are deliberate:
 (`src/routes/cases.index.tsx:119`), which composes fourteen org-scoped queries.
 Cross-referenced against the Matrix's needs:
 
-| Need | Hook | Already on the route? |
-|---|---|---|
-| Cases | `useCases()` | ✅ |
-| Payers | `usePayers()` | ✅ |
-| Providers | `useProviders()` | ✅ |
-| Payer network targets | `usePayerNetworkTargets()` | ✅ via `useNextBestActions` |
-| Provider groups | `useProviderGroups()` | ✅ via `useNextBestActions` |
-| Tasks (red dot) | `useQueueTaskRows()` | ✅ via `useNextBestActions` |
-| Follow-ups + last touch | `useFollowUpsDue()` | ✅ via `useNextBestActions` |
-| Next-action text | `useNextBestActions()` | ✅ |
-| **Exclusions** | `useCaseGenerationExclusions()` | ❌ **one new query** |
+| Need                    | Hook                            | Already on the route?       |
+| ----------------------- | ------------------------------- | --------------------------- |
+| Cases                   | `useCases()`                    | ✅                          |
+| Payers                  | `usePayers()`                   | ✅                          |
+| Providers               | `useProviders()`                | ✅                          |
+| Payer network targets   | `usePayerNetworkTargets()`      | ✅ via `useNextBestActions` |
+| Provider groups         | `useProviderGroups()`           | ✅ via `useNextBestActions` |
+| Tasks (red dot)         | `useQueueTaskRows()`            | ✅ via `useNextBestActions` |
+| Follow-ups + last touch | `useFollowUpsDue()`             | ✅ via `useNextBestActions` |
+| Next-action text        | `useNextBestActions()`          | ✅                          |
+| **Exclusions**          | `useCaseGenerationExclusions()` | ❌ **one new query**        |
 
 **Marginal data cost of this feature is one query.** Do not add more.
 
@@ -139,8 +139,8 @@ Cross-referenced against the Matrix's needs:
 
 This is the single most important engineering note in the document.
 
-`buildGenerationPreview` exists to answer *"which provider × payer × state
-combinations are candidates for case creation?"* — which requires group
+`buildGenerationPreview` exists to answer _"which provider × payer × state
+combinations are candidates for case creation?"_ — which requires group
 membership, facility assignments, state footprint and licenses. **D4 makes that
 question irrelevant**: your rows are providers who already have a case.
 
@@ -148,8 +148,9 @@ Your gap/excluded derivation is a Map lookup:
 
 ```ts
 // for a section pinned to (groupId, state), and one (providerId, payerId) cell:
-const caseRow = caseByKey.get(`${providerId}|${groupId}|${payerId}|${state}`)
-             ?? caseByLegacyKey.get(`${providerId}|${payerId}|${state}`); // group_id NULL rows
+const caseRow =
+  caseByKey.get(`${providerId}|${groupId}|${payerId}|${state}`) ??
+  caseByLegacyKey.get(`${providerId}|${payerId}|${state}`); // group_id NULL rows
 if (caseRow) return { kind: "case", case: caseRow };
 
 const excl = activeExclusionByKey.get(`${providerId}|${groupId}|${payerId}|${state}`);
@@ -192,7 +193,7 @@ Put all of this in `src/lib/casesMatrix.ts` with `casesMatrix.test.ts` beside it
 p.status !== "terminated" &&
   !p.referenceOnly &&
   !isTestProvider(p) &&
-  p.verificationState !== "pending_verification"
+  p.verificationState !== "pending_verification";
 ```
 
 Import `isTestProvider` from `src/lib/testProvider.ts`. Do not re-check the flag
@@ -200,8 +201,8 @@ inline — that module exists specifically so the exclusion cannot drift between
 surfaces. Lionstone has a test provider today; it must not appear.
 
 **Why `pending_verification` is excluded — this is the organising idea of the
-whole screen.** The Matrix answers one question: *what work is the credentialing
-team responsible for right now?* A pending-verification provider is work the team
+whole screen.** The Matrix answers one question: _what work is the credentialing
+team responsible for right now?_ A pending-verification provider is work the team
 is **waiting on someone else** for — the responsibility sits with the provider,
 not the coordinator. Mixing the two makes the board unactionable, because a
 coordinator can't tell which rows they can actually move today.
@@ -219,7 +220,7 @@ nothing visible now. It is the rule that keeps the board honest as imports grow.
 
 ### 4.2 The drop-off rule (§3.3)
 
-A provider is removed from the **entire Matrix** — every section — when *all* of
+A provider is removed from the **entire Matrix** — every section — when _all_ of
 their cases are `approved`.
 
 Three things to get right:
@@ -256,11 +257,11 @@ or the header and the cards will disagree on the same screen.
 
 ### 4.4 Cell kinds (D6)
 
-| Kind | When | Renders | Interactive |
-|---|---|---|---|
-| `case` | A case exists at the 4-part key | `<CaseStatusPill>` + urgency dots | **Yes** — navigates to `/cases/$id` |
-| `gap` | Active target column, no case, no exclusion | "Not Started" chip, **visually muted** | No |
-| `excluded` | Active `case_generation_exclusions` row | `—`, muted | No |
+| Kind       | When                                        | Renders                                | Interactive                         |
+| ---------- | ------------------------------------------- | -------------------------------------- | ----------------------------------- |
+| `case`     | A case exists at the 4-part key             | `<CaseStatusPill>` + urgency dots      | **Yes** — navigates to `/cases/$id` |
+| `gap`      | Active target column, no case, no exclusion | "Not Started" chip, **visually muted** | No                                  |
+| `excluded` | Active `case_generation_exclusions` row     | `—`, muted                             | No                                  |
 
 Terminal cases (`approved` / `denied` / `not_pursuing`) **do** render in their own
 cell when the provider is kept in the Matrix by another open case. The drop-off
@@ -294,17 +295,17 @@ wastes it. But **the Matrix must not create the case itself.**
 **Why not.** `ManualCaseModal` — the only other case-creation door — runs just two
 of the four passes `/generation` runs:
 
-| Pass | `/generation` | `ManualCaseModal` |
-|---|---|---|
-| `resolveTemplate` | ✅ | ✅ |
-| `stampTasks` (template id + version) | ✅ | ✅ |
-| `stampExecutionTypes` | ✅ | ❌ |
-| `hydratePayerFormTasks` (payer PDF forms) | ✅ | ❌ |
-| `sop_resolution_tier` provenance | ✅ | ❌ |
-| `case_generation_run_rows` ledger | ✅ | ❌ |
+| Pass                                      | `/generation` | `ManualCaseModal` |
+| ----------------------------------------- | ------------- | ----------------- |
+| `resolveTemplate`                         | ✅            | ✅                |
+| `stampTasks` (template id + version)      | ✅            | ✅                |
+| `stampExecutionTypes`                     | ✅            | ❌                |
+| `hydratePayerFormTasks` (payer PDF forms) | ✅            | ❌                |
+| `sop_resolution_tier` provenance          | ✅            | ❌                |
+| `case_generation_run_rows` ledger         | ✅            | ❌                |
 
-`CLAUDE.md` states it directly: payer PDF forms are *"Attached at `/generation`
-only."* A case created through the manual path from a gap cell would silently
+`CLAUDE.md` states it directly: payer PDF forms are _"Attached at `/generation`
+only."_ A case created through the manual path from a gap cell would silently
 ship without its payer forms and without execution types. That is a worse outcome
 than the dead end.
 
@@ -333,7 +334,7 @@ typically one to three rows. Adding `state` would mean touching `GenerationSearc
 and `GridScope` in `src/lib/generationGrid.ts`. **Out of scope for this PR**; note
 it as a follow-up if coordinators ask.
 
-**Useful side effect:** a gap cell is not necessarily a generation *candidate* —
+**Useful side effect:** a gap cell is not necessarily a generation _candidate_ —
 candidacy also requires a facility assignment under that group and a state
 footprint (clinic or license). When the provider fails candidacy, `/generation`
 shows them in its skip list with the reason ("No facility assignment under this
@@ -347,8 +348,9 @@ Two independent dots, both can show at once, **only on `case` cells**.
 **Red — overdue task.** Reduce over the case's tasks from `useQueueTaskRows()`:
 
 ```ts
-task.status !== "completed" && task.dueDate != null &&
-  differenceInCalendarDays(today, parseISO(task.dueDate)) >= 0
+task.status !== "completed" &&
+  task.dueDate != null &&
+  differenceInCalendarDays(today, parseISO(task.dueDate)) >= 0;
 ```
 
 `>= 0` — due today counts (D10). `blocked` is an open status here; only
@@ -412,11 +414,11 @@ via Enter/Space, visible focus ring.
 
 ### Hover / focus behavior (§7)
 
-| Cell | Surface | Content |
-|---|---|---|
-| `case` | **Popover** on hover (short delay) **and keyboard focus** | Case number (mono) + status pill · provider · payer · state · days open · last touch ("3d since last touch" / "Never touched" / "Touched today") · follow-up date with overdue flag · next action · "Open case →" |
-| `gap` | **Tooltip** | Payer name + "Not started" + a **"Generate case →" link** to `/generation` pre-scoped (§4.7). The link is focusable; the cell around it is not. |
-| `excluded` | **Tooltip** | Exclusion reason, e.g. "Panel closed — excluded at generation" |
+| Cell       | Surface                                                   | Content                                                                                                                                                                                                           |
+| ---------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `case`     | **Popover** on hover (short delay) **and keyboard focus** | Case number (mono) + status pill · provider · payer · state · days open · last touch ("3d since last touch" / "Never touched" / "Touched today") · follow-up date with overdue flag · next action · "Open case →" |
+| `gap`      | **Tooltip**                                               | Payer name + "Not started" + a **"Generate case →" link** to `/generation` pre-scoped (§4.7). The link is focusable; the cell around it is not.                                                                   |
+| `excluded` | **Tooltip**                                               | Exclusion reason, e.g. "Panel closed — excluded at generation"                                                                                                                                                    |
 
 Popover: dismiss on mouse-out / blur / Escape; never traps focus; one open at a
 time. Must not be hover-only — §10 requires keyboard parity.
@@ -458,13 +460,13 @@ Dimmed cells suppress their urgency dots.
 
 ## 7. States (§9)
 
-| State | Render |
-|---|---|
-| Loading | Skeleton rows/columns in grid shape — not a full-page spinner |
-| Empty (no eligible providers at all) | "No active providers with open cases" |
-| Filtered-empty | "Nothing matches these filters" + Reset action |
-| Section empty under filters | Hide the section. Never an empty table shell. |
-| Error | Route-local inline panel + Retry that refetches only failed queries |
+| State                                | Render                                                              |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| Loading                              | Skeleton rows/columns in grid shape — not a full-page spinner       |
+| Empty (no eligible providers at all) | "No active providers with open cases"                               |
+| Filtered-empty                       | "Nothing matches these filters" + Reset action                      |
+| Section empty under filters          | Hide the section. Never an empty table shell.                       |
+| Error                                | Route-local inline panel + Retry that refetches only failed queries |
 
 Empty and filtered-empty must be **distinguishable** — they are different
 problems with different fixes.
@@ -548,11 +550,11 @@ harness for tests 2 and 3.
 
 Useful for sanity-checking your derivation. Do not hardcode any of it.
 
-| Org | Providers (active/onboarding/terminated) | Cases | Sections the Matrix should render |
-|---|---|---|---|
-| BEST Physical Therapy LLC | 0 / 7 / 0 | 17 | 2 — (BEST, CA) and (BEST, NC) |
-| Kansas Fitness Physio | 1 / 9 / 1 | 11 | 2 — one per group, both KS |
-| Lionstone Physical Therapy | 0 / 2 / 0 (+1 test provider) | 4 | 2 — (Lionstone, AK) and (Lionstone, WI) |
+| Org                        | Providers (active/onboarding/terminated) | Cases | Sections the Matrix should render       |
+| -------------------------- | ---------------------------------------- | ----- | --------------------------------------- |
+| BEST Physical Therapy LLC  | 0 / 7 / 0                                | 17    | 2 — (BEST, CA) and (BEST, NC)           |
+| Kansas Fitness Physio      | 1 / 9 / 1                                | 11    | 2 — one per group, both KS              |
+| Lionstone Physical Therapy | 0 / 2 / 0 (+1 test provider)             | 4     | 2 — (Lionstone, AK) and (Lionstone, WI) |
 
 Expected cell counts: BEST NC ≈ 7 payers × 4 providers = 28 cells, 11 real cases,
 17 gaps. BEST CA ≈ 6 × 1 = 6 cells. **~34 cells total for the largest org** — no
