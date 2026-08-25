@@ -19,7 +19,7 @@
 // (the FormStepPanel contract).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronDown, FileDown, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, FileDown, FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StatusPill } from "@/components/StatusPill";
@@ -32,7 +32,9 @@ import {
   useUpdateSharedFieldRegistry,
 } from "@/hooks/useMappingReview";
 import { useTrainGlobalFieldMap } from "@/hooks/useGlobalAuthoring";
-import { usePayerFormDownload } from "@/hooks/usePayerForms";
+import { useFillPayerForm, usePayerFormDownload } from "@/hooks/usePayerForms";
+import { mockValueForToken } from "@/lib/mockFillProfile";
+import { planPayerFormFill } from "@/lib/payerFormFill";
 import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
 import { registryCoverage, sectionRenamePatches, type RegistryRow } from "@/lib/fieldRegistry";
 import { groupTokens } from "@/lib/tokenGroups";
@@ -59,6 +61,7 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
   const importMut = useImportPdfFormFields();
   const trainMut = useTrainGlobalFieldMap();
   const renameMut = useUpdateSharedFieldRegistry();
+  const sampleFill = useFillPayerForm();
 
   const maps = useMemo(
     () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey && m.status !== "retired"),
@@ -160,6 +163,40 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
     }
   }
 
+  // A sample fill proves the mapping against the REAL blank form before a case
+  // ever depends on it, using the synthetic profile — no provider, no case, no
+  // PHI. Values come from the same mock source the online-form runner uses, so
+  // a token that resolves here resolves there.
+  const sampleValues = useMemo(() => {
+    const values: Record<string, string> = {};
+    for (const map of maps) {
+      const token = map.token?.trim();
+      if (token) values[token] = mockValueForToken(token);
+    }
+    return values;
+  }, [maps]);
+
+  async function runSampleFill() {
+    try {
+      const result = await sampleFill.mutateAsync({
+        formId,
+        familyId,
+        caseId: "",
+        providerId: null,
+        rows: maps as RegistryRow[],
+        tokenValues: sampleValues,
+        fileStem: "SAMPLE-do-not-send",
+        isTest: true,
+      });
+      const plan = planPayerFormFill(maps as RegistryRow[], sampleValues);
+      toast.success(
+        `Sample filled ${result.written} of ${plan.entries.length} fields — synthetic data, do not send`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not run the sample fill");
+    }
+  }
+
   const busy = download.isPending || importMut.isPending;
   const stateLabel =
     maps.length === 0
@@ -239,6 +276,28 @@ export function PayerFormFieldPanel({ familyId, formId, canEdit }: PayerFormFiel
                     <CheckCircle2 className="h-3.5 w-3.5 text-[#1B4D3E]" />
                     Every imported field has a decision.
                   </p>
+                ) : null}
+                {canEdit ? (
+                  <div className="border-t border-[#E8E5E0] pt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[12px]"
+                      onClick={() => void runSampleFill()}
+                      disabled={sampleFill.isPending}
+                    >
+                      {sampleFill.isPending ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      Download a sample fill
+                    </Button>
+                    <p className="mt-1 text-[12px] text-muted-foreground">
+                      Fills this exact blank with made-up sample data so you can see where every
+                      value lands. Never send it to a payer.
+                    </p>
+                  </div>
                 ) : null}
                 <p className="border-t border-[#E8E5E0] pt-2 text-[12px] text-muted-foreground">
                   Re-importing after a replaced form refreshes names, sections and order, and adds

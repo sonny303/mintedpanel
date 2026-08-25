@@ -9,9 +9,14 @@
 // the case activity spine beside every other thing that happened. It does NOT
 // move the case status: advancing a case stays with the case status control, so
 // the case never depends on the order the checklist was worked in.
-import { useState } from "react";
+//
+// E6.11 adds a fourth affordance, "Fill & download", when the form's family has
+// trained field mappings: the same file, with everything the panel already
+// knows written into it. The blank download stays, because a mapping can be
+// absent, partial, or simply not what this case needs.
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Download, FileText, Loader2, Send, X } from "lucide-react";
+import { Download, FileText, Loader2, Send, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,19 +27,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePayerFormDownload } from "@/hooks/usePayerForms";
+import { useFillPayerForm, usePayerFormDownload } from "@/hooks/usePayerForms";
 import { useMarkPayerFormSent, useRemovePayerFormFromCase } from "@/hooks/useTasks";
+import { usePortalFieldMaps } from "@/hooks/usePortals";
 import { payerFormDisplayName, type ResolvedPayerFormPointer } from "@/lib/payerForms";
+import { pdfFormPortalKey } from "@/lib/pdfFieldImport";
+import { planPayerFormFill } from "@/lib/payerFormFill";
+import type { RegistryRow } from "@/lib/fieldRegistry";
 import type { Task } from "@/types";
 
 export function PayerFormActionRow({
   task,
   pointer,
   canEdit,
+  tokenValues,
 }: {
   task: Task;
   pointer: ResolvedPayerFormPointer;
   canEdit: boolean;
+  /** The case's resolved token values — what a fill can write. */
+  tokenValues?: Record<string, string>;
 }) {
   const download = usePayerFormDownload();
   const markSent = useMarkPayerFormSent();
@@ -42,8 +54,22 @@ export function PayerFormActionRow({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [reason, setReason] = useState("");
 
+  const portalKey = pdfFormPortalKey(pointer.familyId);
+  const mapsQ = usePortalFieldMaps(portalKey);
+  const fill = useFillPayerForm();
+  const values = useMemo(() => tokenValues ?? {}, [tokenValues]);
+
+  const rows = useMemo(
+    () => (mapsQ.data ?? []).filter((m) => m.portalKey === portalKey) as RegistryRow[],
+    [mapsQ.data, portalKey],
+  );
+  // The plan is computed here too, not just inside the fill, so the row can say
+  // what a fill WOULD do before the coordinator commits to downloading it.
+  const plan = useMemo(() => planPayerFormFill(rows, values), [rows, values]);
+
   const label = payerFormDisplayName(pointer);
   const sent = task.status === "completed";
+  const canFill = Boolean(pointer.formId) && plan.fill.length > 0;
 
   const runDownload = async () => {
     try {
@@ -51,6 +77,28 @@ export function PayerFormActionRow({
       window.open(signed.url, "_blank", "noopener,noreferrer");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not open that form.");
+    }
+  };
+
+  const runFill = async () => {
+    try {
+      const result = await fill.mutateAsync({
+        formId: pointer.formId,
+        familyId: pointer.familyId,
+        caseId: task.caseId ?? "",
+        providerId: task.providerId,
+        rows,
+        tokenValues: values,
+        fileStem: `${label.replace(/[^\w.-]+/g, "-")}-filled`,
+      });
+      const left = result.plan.manualLabels.length + result.plan.fieldsSkipped.length;
+      toast.success(
+        left > 0
+          ? `Filled ${result.written} field${result.written === 1 ? "" : "s"} — ${left} still need${left === 1 ? "s" : ""} a person`
+          : `Filled ${result.written} field${result.written === 1 ? "" : "s"}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not fill that form.");
     }
   };
 
@@ -104,6 +152,23 @@ export function PayerFormActionRow({
           )}
           Download
         </Button>
+        {canFill ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8"
+            onClick={runFill}
+            disabled={fill.isPending}
+            title={`Writes ${plan.fill.length} mapped field${plan.fill.length === 1 ? "" : "s"}; ${plan.manualLabels.length + plan.fieldsSkipped.length} left for you`}
+          >
+            {fill.isPending ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-1 h-4 w-4" />
+            )}
+            Fill &amp; download
+          </Button>
+        ) : null}
         {canEdit && !sent ? (
           <Button size="sm" className="h-8" onClick={runMarkSent} disabled={markSent.isPending}>
             <Send className="mr-1 h-4 w-4" />
@@ -123,6 +188,14 @@ export function PayerFormActionRow({
           </Button>
         ) : null}
       </div>
+      {canFill ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          A filled copy downloads to this computer only and stays editable — nothing is uploaded.
+          {plan.manualLabels.length + plan.fieldsSkipped.length > 0
+            ? ` ${plan.manualLabels.length + plan.fieldsSkipped.length} field(s) come back blank for you to complete.`
+            : ""}
+        </p>
+      ) : null}
 
       {confirmRemove ? (
         <Dialog open onOpenChange={(o) => !o && setConfirmRemove(false)}>
