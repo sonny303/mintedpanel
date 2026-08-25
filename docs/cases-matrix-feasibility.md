@@ -3,6 +3,13 @@
 Reviewed against the codebase and hosted data (`fkvuhfsqcmujywzgczmc`) on
 2026-08-25, answering the requirements doc's Q1–Q7 plus the acceptance criteria.
 
+> **Superseded for build purposes.** Every open question below was decided on
+> 2026-08-25 — see **`docs/cases-matrix-handoff.md` §1** for the locked values.
+> Two decisions diverge from the recommendations here: rows are **case-driven**
+> (which removes the need for `buildGenerationPreview` entirely), and the
+> `enrolled` cell kind was **dropped** — this is an active-cases matrix, not an
+> enrollment matrix. This document remains the record of *why*.
+
 **Verdict: buildable, and cheaper than the spec assumes.** No new tables, no new
 RPC, no `/api` route, no server-side aggregate. The two hard derivations the spec
 worries about (Gap vs Excluded, and the urgency inputs) already exist as pure,
