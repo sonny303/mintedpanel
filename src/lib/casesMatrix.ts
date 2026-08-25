@@ -1,3 +1,7 @@
+// Cases Matrix foundation — pure section, row, column, cell, and urgency
+// derivation for the read-only active-cases board. Provider drop-off is
+// evaluated across the full case set: a provider leaves when no non-terminal
+// case remains, matching handoff §9 test 2.
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { STALLED_AFTER_DAYS } from "./actionState";
 import { CASE_STATUS_BUCKETS } from "./caseStatus";
@@ -9,6 +13,7 @@ import {
   type CasesFilters,
 } from "./casesView";
 import { isTestProvider, type HasTestProviderFlag } from "./testProvider";
+import { US_STATE_NAMES } from "./usStates";
 import type {
   CaseGenerationExclusion,
   CredentialCase,
@@ -34,7 +39,9 @@ export type CasesMatrixCase = Pick<
   | "caseStatus"
   | "confirmedEffectiveDate"
   | "createdAt"
->;
+> & {
+  caseNumber?: CredentialCase["caseNumber"];
+};
 
 export type CasesMatrixPayer = Pick<Payer, "id" | "name">;
 export type CasesMatrixGroup = Pick<ProviderGroup, "id" | "name">;
@@ -155,7 +162,7 @@ function toCaseViewRow(
   return {
     matrixCase,
     caseId: matrixCase.id,
-    caseNumber: null,
+    caseNumber: matrixCase.caseNumber ?? null,
     providerId: provider.id,
     providerName: providerName(provider),
     providerCredentials: null,
@@ -354,16 +361,6 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
           ]),
         ).values(),
       ];
-      const baseVisibleCases = rowCases.filter((matrixCase) =>
-        matchesCaseFilter(
-          toCaseViewRow(
-            matrixCase,
-            provider,
-            payersById.get(matrixCase.payerId)?.name ?? "Unknown payer",
-          ),
-          { ...filters, status: "all" },
-        ),
-      );
       const fullyVisibleCases = rowCases.filter((matrixCase) =>
         matchesCaseFilter(
           toCaseViewRow(
@@ -374,7 +371,7 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
           filters,
         ),
       );
-      if (baseVisibleCases.length === 0 || fullyVisibleCases.length === 0) continue;
+      if (fullyVisibleCases.length === 0) continue;
       const cells: Record<string, CasesMatrixCell> = {};
       for (const column of columns) {
         const matrixCase = resolvedCasesByPayer.get(column.payerId);
@@ -449,7 +446,8 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
       groupId,
       groupName,
       state,
-      stateName: state,
+      stateName:
+        US_STATE_NAMES[state as keyof typeof US_STATE_NAMES] ?? state,
       providerCount: rows.length,
       openCaseCount,
       columns,
@@ -464,5 +462,3 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
   );
   return { sections, eligibleProviderCount: keptProviderIds.size };
 }
-
-export const deriveCasesMatrix = buildCasesMatrix;

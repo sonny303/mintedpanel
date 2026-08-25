@@ -165,6 +165,40 @@ describe("buildCasesMatrix", () => {
     expect(result.sections).toHaveLength(2);
   });
 
+  it("3b. drops a provider whose only cases are denied or not pursuing", () => {
+    const result = buildCasesMatrix(
+      input({
+        cases: [
+          {
+            id: "denied",
+            providerId: "provider-1",
+            groupId: "group-1",
+            payerId: "payer-1",
+            state: "WI",
+            caseStatus: "denied",
+            confirmedEffectiveDate: null,
+            createdAt: "2026-08-20T00:00:00Z",
+          },
+          {
+            id: "not-pursuing",
+            providerId: "provider-1",
+            groupId: "group-1",
+            payerId: "payer-2",
+            state: "WI",
+            caseStatus: "not_pursuing",
+            confirmedEffectiveDate: null,
+            createdAt: "2026-08-20T00:00:00Z",
+          },
+        ],
+        payers: [
+          { id: "payer-1", name: "Aetna" },
+          { id: "payer-2", name: "BCBS" },
+        ],
+      }),
+    );
+    expect(result.sections).toEqual([]);
+  });
+
   it("4. excludes terminated, reference-only, test, and pending-verification providers", () => {
     const baseProvider = input().providers[0];
     const providers = [

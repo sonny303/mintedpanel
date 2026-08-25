@@ -1,3 +1,6 @@
+// Cases Matrix composition hook — combines the existing /cases query cache
+// with generation exclusions and passes resolved data to the pure matrix
+// derivation without adding a query or invoking generation preview.
 import { useMemo } from "react";
 import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
 import { usePayers } from "@/hooks/useAdmin";
@@ -14,15 +17,22 @@ import {
   type CasesMatrixInput,
 } from "@/lib/casesMatrix";
 import type { CasesFilters } from "@/lib/casesView";
+import type { CaseFollowUp } from "@/services/touches";
 
 export interface CasesMatrixData {
   matrix: CasesMatrix | undefined;
+  followUps: ReadonlyMap<string, CaseFollowUp> | undefined;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
 }
 
-export function useCasesMatrix(filters?: CasesFilters): CasesMatrixData {
+export interface CasesMatrixFilters extends CasesFilters {
+  caseIds?: ReadonlySet<string> | null;
+  generationRunId?: string | null;
+}
+
+export function useCasesMatrix(filters?: CasesMatrixFilters): CasesMatrixData {
   const casesQ = useCases();
   const payersQ = usePayers();
   const providersQ = useProviders();
@@ -47,13 +57,19 @@ export function useCasesMatrix(filters?: CasesFilters): CasesMatrixData {
   const state = filters?.state ?? "all";
   const status = filters?.status ?? "all";
   const search = filters?.search ?? "";
+  const caseIds = filters?.caseIds ?? null;
+  const generationRunId = filters?.generationRunId ?? null;
 
   const matrix = useMemo(() => {
     if (!resolved) return undefined;
     const input: CasesMatrixInput = {
       today,
       providers: providersQ.data ?? [],
-      cases: casesQ.data ?? [],
+      cases: (casesQ.data ?? []).filter(
+        (credentialCase) =>
+          (!generationRunId || credentialCase.generationRunId === generationRunId) &&
+          (!caseIds || caseIds.has(credentialCase.id)),
+      ),
       payers: payersQ.data ?? [],
       groups: groupsQ.data ?? [],
       targets: targetsQ.data ?? [],
@@ -78,10 +94,13 @@ export function useCasesMatrix(filters?: CasesFilters): CasesMatrixData {
     state,
     status,
     search,
+    caseIds,
+    generationRunId,
   ]);
 
   return {
     matrix,
+    followUps: followUpsQ.data,
     isLoading: sources.some((query) => query.isLoading),
     isError: sources.some((query) => query.isError),
     refetch: () => {
