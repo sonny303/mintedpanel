@@ -104,10 +104,7 @@ export interface CasesMatrixExcludedCell {
   note: string | null;
 }
 
-export type CasesMatrixCell =
-  | CasesMatrixCaseCell
-  | CasesMatrixGapCell
-  | CasesMatrixExcludedCell;
+export type CasesMatrixCell = CasesMatrixCaseCell | CasesMatrixGapCell | CasesMatrixExcludedCell;
 
 export interface CasesMatrixColumn {
   payerId: string;
@@ -210,8 +207,7 @@ function urgencyFor(
   );
   const followUp = followUps.get(matrixCase.id);
   const anchor = followUp?.touchDate ?? matrixCase.createdAt;
-  const isStale =
-    differenceInCalendarDays(parseISO(today), parseISO(anchor)) >= STALLED_AFTER_DAYS;
+  const isStale = differenceInCalendarDays(parseISO(today), parseISO(anchor)) >= STALLED_AFTER_DAYS;
   return {
     hasOverdueTask,
     stale: isStale ? (followUp ? "quiet" : "never") : null,
@@ -345,7 +341,9 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
     for (const providerId of providerIds) {
       const provider = providersById.get(providerId);
       if (!provider) continue;
-      const providerCases = sectionCases.filter((matrixCase) => matrixCase.providerId === providerId);
+      const providerCases = sectionCases.filter(
+        (matrixCase) => matrixCase.providerId === providerId,
+      );
       const resolvedCasesByPayer = new Map<string, CasesMatrixCase>();
       for (const column of columns) {
         const exact = exactCases.get(caseKey(providerId, groupId, column.payerId, state));
@@ -427,7 +425,10 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
         cells,
       });
     }
-    rows.sort((a, b) => a.providerName.localeCompare(b.providerName) || a.providerId.localeCompare(b.providerId));
+    rows.sort(
+      (a, b) =>
+        a.providerName.localeCompare(b.providerName) || a.providerId.localeCompare(b.providerId),
+    );
     if (rows.length === 0) continue;
     const displayedCases = rows.flatMap((row) => row.cases);
     const openCaseCount = displayedCases.filter(
@@ -446,8 +447,7 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
       groupId,
       groupName,
       state,
-      stateName:
-        US_STATE_NAMES[state as keyof typeof US_STATE_NAMES] ?? state,
+      stateName: US_STATE_NAMES[state as keyof typeof US_STATE_NAMES] ?? state,
       providerCount: rows.length,
       openCaseCount,
       columns,

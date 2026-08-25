@@ -1,7 +1,16 @@
-// Cases Matrix cell detail surfaces — rich case popovers plus the focused
-// gap and excluded tooltips. This surface is read-only and never creates cases.
+// Cases Matrix cell detail surfaces — rich case popovers, the gap popover that
+// carries the one "Generate case" link, and the inert excluded tooltip. This
+// surface is read-only and never creates cases: the gap link navigates to
+// /generation, which stays the one door.
+//
+// Gap cells use a Popover rather than a Tooltip (handoff §7 said Tooltip)
+// because a Radix tooltip is not interactive — a link inside one cannot be
+// clicked or tabbed to, which would have made the "Generate case →" action
+// dead. The trigger is therefore focusable so keyboard users can reach the
+// link; excluded cells stay non-focusable as §4.5 requires.
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -10,21 +19,12 @@ import {
 } from "react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { Link } from "@tanstack/react-router";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { StatusPill } from "@/components/StatusPill";
 import { EXCLUSION_REASON_LABELS } from "@/lib/generationPreview";
 import { fmtDate } from "@/lib/format";
-import { localTodayIso } from "@/hooks/useEnrollmentReadiness";
 import type { QueueEntry } from "@/lib/nextBestActions";
 import type {
   CasesMatrixCaseCell,
@@ -37,6 +37,8 @@ interface MatrixCellPopoverProps {
   cell: CasesMatrixCell;
   providerName: string;
   payerName: string;
+  /** Date-only ISO string; passed in so no cell reads the clock. */
+  today: string;
   queueEntries: readonly QueueEntry[];
   followUp?: MatrixFollowUp;
 }
@@ -47,6 +49,7 @@ interface MatrixFollowUp {
 }
 
 const closeDelay = 120;
+
 const MatrixPopoverContext = createContext<{
   openKey: string | null;
   setOpenKey: (key: string | null) => void;
@@ -64,55 +67,14 @@ export function MatrixCellPopoverProvider({ children }: { children: ReactNode })
   );
 }
 
-function lastTouchLabel(followUp: MatrixFollowUp | undefined): string {
-  if (!followUp) return "Never touched";
-  const days = differenceInCalendarDays(
-    parseISO(localTodayIso()),
-    parseISO(followUp.touchDate),
-  );
-  return days === 0 ? "Touched today" : `${days}d since last touch`;
-}
-
-function caseDetails(
-  cell: CasesMatrixCaseCell,
-  providerName: string,
-  payerName: string,
-  queueEntries: readonly QueueEntry[],
-  followUp: MatrixFollowUp | undefined,
-) {
-  const today = localTodayIso();
-  const daysOpen = Math.max(
-    0,
-    differenceInCalendarDays(parseISO(today), parseISO(cell.case.createdAt)),
-  );
-  const queueEntry = queueEntries.find((entry) => entry.caseId === cell.case.id);
-  const followUpDue =
-    followUp?.nextFollowUpDate ??
-    null;
-  const followUpOverdue = followUpDue !== null && followUpDue < today;
-
-  return {
-    daysOpen,
-    followUpDue,
-    followUpOverdue,
-    lastTouch: lastTouchLabel(followUp),
-    queueEntry,
-    providerName,
-    payerName,
-  };
-}
-
-function CaseCellPopover({
-  cell,
-  providerName,
-  payerName,
-  queueEntries,
-  followUp,
-}: MatrixCellPopoverProps & { cell: CasesMatrixCaseCell }) {
+/**
+ * Hover- and focus-driven popover state, shared by case and gap cells. Only one
+ * popover in the Matrix is open at a time; a short close delay lets the pointer
+ * travel from the cell into the popover without dismissing it.
+ */
+function useHoverPopover(popoverKey: string) {
   const { openKey, setOpenKey } = useContext(MatrixPopoverContext);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const details = caseDetails(cell, providerName, payerName, queueEntries, followUp);
-  const popoverKey = `case:${cell.case.id}`;
 
   useEffect(
     () => () => {
@@ -121,29 +83,77 @@ function CaseCellPopover({
     [],
   );
 
-  const openPopover = () => {
+  const open = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpenKey(popoverKey);
-  };
-  const closePopover = () => {
+  }, [popoverKey, setOpenKey]);
+
+  const close = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setOpenKey(null), closeDelay);
+  }, [setOpenKey]);
+
+  return {
+    isOpen: openKey === popoverKey,
+    setOpen: (nextOpen: boolean) => setOpenKey(nextOpen ? popoverKey : null),
+    open,
+    close,
+    /** Spread onto the trigger and the popover content alike. */
+    hoverProps: { onMouseEnter: open, onMouseLeave: close },
   };
+}
+
+function lastTouchLabel(followUp: MatrixFollowUp | undefined, today: string): string {
+  if (!followUp) return "Never touched";
+  const days = differenceInCalendarDays(parseISO(today), parseISO(followUp.touchDate));
+  return days === 0 ? "Touched today" : `${days}d since last touch`;
+}
+
+function caseDetails(
+  cell: CasesMatrixCaseCell,
+  today: string,
+  queueEntries: readonly QueueEntry[],
+  followUp: MatrixFollowUp | undefined,
+) {
+  const daysOpen = Math.max(
+    0,
+    differenceInCalendarDays(parseISO(today), parseISO(cell.case.createdAt)),
+  );
+  const queueEntry = queueEntries.find((entry) => entry.caseId === cell.case.id);
+  const followUpDue = followUp?.nextFollowUpDate ?? null;
+  const followUpOverdue = followUpDue !== null && followUpDue < today;
+
+  return {
+    daysOpen,
+    followUpDue,
+    followUpOverdue,
+    lastTouch: lastTouchLabel(followUp, today),
+    queueEntry,
+  };
+}
+
+function CaseCellPopover({
+  cell,
+  providerName,
+  payerName,
+  today,
+  queueEntries,
+  followUp,
+}: MatrixCellPopoverProps & { cell: CasesMatrixCaseCell }) {
+  const popover = useHoverPopover(`case:${cell.case.id}`);
+  const details = caseDetails(cell, today, queueEntries, followUp);
 
   return (
-    <Popover
-      open={openKey === popoverKey}
-      onOpenChange={(nextOpen) => setOpenKey(nextOpen ? popoverKey : null)}
-    >
+    <Popover open={popover.isOpen} onOpenChange={popover.setOpen}>
       <PopoverTrigger asChild>
         <Link
           to="/cases/$id"
           params={{ id: cell.case.id }}
-          className="flex min-h-8 w-full items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#1B4D3E] focus-visible:ring-offset-1"
-          onMouseEnter={openPopover}
-          onMouseLeave={closePopover}
-          onFocus={openPopover}
-          onBlur={closePopover}
+          className="flex min-h-8 w-full items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--mp-primary)] focus-visible:ring-offset-1"
+          onMouseEnter={popover.open}
+          onMouseLeave={popover.close}
+          onFocus={popover.open}
+          onBlur={popover.close}
           onKeyDown={(event) => {
             if (event.key === " ") {
               event.preventDefault();
@@ -156,20 +166,20 @@ function CaseCellPopover({
             <CaseStatusPill status={cell.case.caseStatus} />
             {cell.hasOverdueTask ? (
               <span
-                className="h-2 w-2 rounded-full bg-[#DC2626]"
-                title="Overdue follow-up"
-                aria-label="Overdue follow-up"
+                className="h-2 w-2 rounded-full bg-[color:var(--mp-danger)]"
+                title="Overdue task"
+                aria-label="Overdue task"
               />
             ) : null}
             {cell.stale === "never" ? (
               <span
-                className="h-2 w-2 rounded-full border border-[#D97706]"
+                className="h-2 w-2 rounded-full border border-[color:var(--mp-warn)]"
                 title="Never touched"
                 aria-label="Never touched"
               />
             ) : cell.stale === "quiet" ? (
               <span
-                className="h-2 w-2 rounded-full bg-[#D97706]"
+                className="h-2 w-2 rounded-full bg-[color:var(--mp-warn)]"
                 title="Went quiet"
                 aria-label="Went quiet"
               />
@@ -178,12 +188,7 @@ function CaseCellPopover({
           <span className="sr-only">Open case</span>
         </Link>
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-80 p-4"
-        onMouseEnter={openPopover}
-        onMouseLeave={closePopover}
-      >
+      <PopoverContent align="start" className="w-80 p-4" {...popover.hoverProps}>
         <div className="space-y-3 text-[13px]">
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-[12px] font-medium">
@@ -193,9 +198,9 @@ function CaseCellPopover({
           </div>
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             <span className="text-muted-foreground">Provider</span>
-            <span>{details.providerName}</span>
+            <span>{providerName}</span>
             <span className="text-muted-foreground">Payer</span>
-            <span>{details.payerName}</span>
+            <span>{payerName}</span>
             <span className="text-muted-foreground">State</span>
             <span>{cell.case.state}</span>
             <span className="text-muted-foreground">Days open</span>
@@ -203,7 +208,7 @@ function CaseCellPopover({
             <span className="text-muted-foreground">Last touch</span>
             <span>{details.lastTouch}</span>
             <span className="text-muted-foreground">Follow-up</span>
-            <span className={details.followUpOverdue ? "text-[#B91C1C]" : undefined}>
+            <span className={details.followUpOverdue ? "text-[color:var(--mp-danger)]" : undefined}>
               {details.followUpDue ? (
                 <>
                   {fmtDate(details.followUpDue)}
@@ -215,7 +220,7 @@ function CaseCellPopover({
             </span>
           </div>
           {details.queueEntry ? (
-            <div className="border-t border-[#E8E5E0] pt-3">
+            <div className="border-t border-mp-border pt-3">
               <div className="font-medium">{details.queueEntry.action}</div>
               <div className="mt-0.5 text-[12px] text-muted-foreground">
                 {details.queueEntry.reason}
@@ -225,7 +230,7 @@ function CaseCellPopover({
           <Link
             to="/cases/$id"
             params={{ id: cell.case.id }}
-            className="inline-flex text-[12px] font-medium text-[#1B4D3E] hover:underline"
+            className="inline-flex text-[12px] font-medium text-[color:var(--mp-primary)] hover:underline"
           >
             Open case →
           </Link>
@@ -235,17 +240,45 @@ function CaseCellPopover({
   );
 }
 
-function GapCellTooltip({ cell, payerName }: { cell: CasesMatrixGapCell; payerName: string }) {
+function GapCellPopover({
+  cell,
+  providerName,
+  payerName,
+}: {
+  cell: CasesMatrixGapCell;
+  providerName: string;
+  payerName: string;
+}) {
+  const popover = useHoverPopover(
+    `gap:${cell.generation.providerId}:${cell.generation.groupId}:${cell.generation.payerId}:${cell.generation.state}`,
+  );
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="flex min-h-8 w-full items-center justify-center">
+    <Popover open={popover.isOpen} onOpenChange={popover.setOpen}>
+      <PopoverTrigger asChild>
+        {/* Focusable so the Generate link is keyboard-reachable, but it is not a
+            navigation target itself — activating it only opens the popover. */}
+        <span
+          role="button"
+          tabIndex={0}
+          className="flex min-h-8 w-full cursor-default items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--mp-primary)] focus-visible:ring-offset-1"
+          onMouseEnter={popover.open}
+          onMouseLeave={popover.close}
+          onFocus={popover.open}
+          onBlur={popover.close}
+          aria-label={`${providerName}, ${payerName}, ${cell.generation.state}, not started`}
+        >
           <StatusPill status="gray" label="Not started" className="opacity-60" />
         </span>
-      </TooltipTrigger>
-      <TooltipContent>
-        <div className="space-y-1">
-          <div>{payerName} · Not started</div>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-3" {...popover.hoverProps}>
+        <div className="space-y-2 text-[13px]">
+          <div>
+            <div className="font-medium">{payerName}</div>
+            <div className="text-[12px] text-muted-foreground">
+              Not started · {cell.generation.state}
+            </div>
+          </div>
           <Link
             to="/generation"
             search={{
@@ -253,26 +286,27 @@ function GapCellTooltip({ cell, payerName }: { cell: CasesMatrixGapCell; payerNa
               payer: cell.generation.payerId,
               group: cell.generation.groupId,
             }}
-            className="font-medium text-white underline"
+            className="inline-flex text-[12px] font-medium text-[color:var(--mp-primary)] hover:underline"
           >
             Generate case →
           </Link>
         </div>
-      </TooltipContent>
-    </Tooltip>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function ExcludedCellTooltip({
-  cell,
-}: {
-  cell: CasesMatrixExcludedCell;
-}) {
+function ExcludedCellTooltip({ cell }: { cell: CasesMatrixExcludedCell }) {
   return (
     <Tooltip>
+      {/* Inert and non-focusable per handoff §4.5 — an excluded cell must not
+          signal interactivity to pointer or keyboard. */}
       <TooltipTrigger asChild>
-        <span className="flex min-h-8 w-full items-center justify-center">
-          <span className="text-muted-foreground opacity-60">—</span>
+        <span className="flex min-h-8 w-full cursor-default items-center justify-center">
+          <span className="text-muted-foreground opacity-60" aria-hidden="true">
+            —
+          </span>
+          <span className="sr-only">Excluded — {EXCLUSION_REASON_LABELS[cell.reason]}</span>
         </span>
       </TooltipTrigger>
       <TooltipContent>
@@ -288,7 +322,13 @@ export function MatrixCellPopover(props: MatrixCellPopoverProps) {
     case "case":
       return <CaseCellPopover {...props} cell={props.cell} />;
     case "gap":
-      return <GapCellTooltip cell={props.cell} payerName={props.payerName} />;
+      return (
+        <GapCellPopover
+          cell={props.cell}
+          providerName={props.providerName}
+          payerName={props.payerName}
+        />
+      );
     case "excluded":
       return <ExcludedCellTooltip cell={props.cell} />;
   }

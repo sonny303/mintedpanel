@@ -276,8 +276,7 @@ function CasesPage() {
   );
 
   // Pagination applies to rows (Flat) or groups (grouped views).
-  const totalItems =
-    view === "flat" ? sortedFlat.length : view === "matrix" ? 0 : groups.length;
+  const totalItems = view === "flat" ? sortedFlat.length : view === "matrix" ? 0 : groups.length;
   const pages = pageCount(totalItems, pageSize);
   const safePage = Math.min(page, pages);
   const pagedFlat = view === "flat" ? paginate(sortedFlat, safePage, pageSize) : [];
@@ -494,7 +493,10 @@ function CasesPage() {
 
         {view === "matrix" ? (
           <>
-            <Select value={matrixPayerId || "all"} onValueChange={(v) => setMatrixPayerId(v === "all" ? "" : v)}>
+            <Select
+              value={matrixPayerId || "all"}
+              onValueChange={(v) => setMatrixPayerId(v === "all" ? "" : v)}
+            >
               <SelectTrigger className="h-9 w-[160px]" aria-label="Filter Matrix by payer">
                 <SelectValue placeholder="All payers" />
               </SelectTrigger>
@@ -507,7 +509,10 @@ function CasesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={matrixGroupBy} onValueChange={(v) => setMatrixGroupBy(v as CasesMatrixGroupBy)}>
+            <Select
+              value={matrixGroupBy}
+              onValueChange={(v) => setMatrixGroupBy(v as CasesMatrixGroupBy)}
+            >
               <SelectTrigger className="h-9 w-[130px]" aria-label="Group Matrix by">
                 <SelectValue />
               </SelectTrigger>
@@ -576,6 +581,8 @@ function CasesPage() {
           refetch={matrixQ.refetch}
           payerId={matrixPayerId}
           groupBy={matrixGroupBy}
+          today={matrixQ.today}
+
           queueEntries={queue.entries ?? []}
           followUps={matrixQ.followUps}
           onReset={resetAllFilters}

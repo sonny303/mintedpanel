@@ -11,17 +11,16 @@ import { useCases } from "@/hooks/useCases";
 import { useQueueTaskRows } from "@/hooks/useNextBestActions";
 import { useFollowUpsDue } from "@/hooks/useTouches";
 import { useProviders } from "@/hooks/useProviders";
-import {
-  buildCasesMatrix,
-  type CasesMatrix,
-  type CasesMatrixInput,
-} from "@/lib/casesMatrix";
+import { buildCasesMatrix, type CasesMatrix, type CasesMatrixInput } from "@/lib/casesMatrix";
 import type { CasesFilters } from "@/lib/casesView";
 import type { CaseFollowUp } from "@/services/touches";
 
 export interface CasesMatrixData {
   matrix: CasesMatrix | undefined;
   followUps: ReadonlyMap<string, CaseFollowUp> | undefined;
+  /** Date-only ISO string the derivation used; reused by the cells so the
+   *  board and its popovers never disagree about what "today" is. */
+  today: string;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
@@ -41,16 +40,7 @@ export function useCasesMatrix(filters?: CasesMatrixFilters): CasesMatrixData {
   const tasksQ = useQueueTaskRows();
   const followUpsQ = useFollowUpsDue();
   const exclusionsQ = useCaseGenerationExclusions();
-  const sources = [
-    casesQ,
-    payersQ,
-    providersQ,
-    groupsQ,
-    targetsQ,
-    tasksQ,
-    followUpsQ,
-    exclusionsQ,
-  ];
+  const sources = [casesQ, payersQ, providersQ, groupsQ, targetsQ, tasksQ, followUpsQ, exclusionsQ];
   const resolved = sources.every((query) => query.data !== undefined);
   const today = localTodayIso();
   const kpi = filters?.kpi ?? "total";
@@ -101,6 +91,7 @@ export function useCasesMatrix(filters?: CasesMatrixFilters): CasesMatrixData {
   return {
     matrix,
     followUps: followUpsQ.data,
+    today,
     isLoading: sources.some((query) => query.isLoading),
     isError: sources.some((query) => query.isError),
     refetch: () => {
