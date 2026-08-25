@@ -571,6 +571,11 @@ export interface SharedProposeInput {
   sortOrder?: number | null;
   notes?: string | null;
   controlOptions?: { value: string; label: string }[] | null;
+  /** E6.11 — the tier the row belongs to. Omitted means `'web'`, which is what
+   * the RPC defaults to, so the argument is SENT ONLY for a PDF import: a
+   * hosted signature without the E6.11 migration keeps serving web capture
+   * (an unknown named arg is a PGRST202 400, not an ignored extra). */
+  mapType?: "web" | "pdf";
 }
 
 /** Create (or resolve, if capture already saw it) a shared registry row.
@@ -579,7 +584,9 @@ export interface SharedProposeInput {
  * (sort order, payer label/section/page) when the DOM drifted. */
 export async function proposeSharedFieldMap(input: SharedProposeInput): Promise<PortalFieldMap> {
   const rpc = supabase.rpc.bind(supabase);
+  const pdfArg = input.mapType === "pdf" ? { p_map_type: "pdf" } : {};
   const { data, error } = await rpc("propose_shared_field_map", {
+    ...pdfArg,
     p_portal_key: input.portalKey,
     p_selector: input.selector,
     p_field_label: (input.fieldLabel ?? null) as unknown as string,
