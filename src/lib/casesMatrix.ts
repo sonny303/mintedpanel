@@ -40,7 +40,11 @@ export type CasesMatrixCase = Pick<
   | "confirmedEffectiveDate"
   | "createdAt"
 > & {
+  // Both are display-only and both are in CASE_LIST_COLUMNS already, so the
+  // Matrix costs no extra read to show them — optional so a fixture that does
+  // not care about the popover need not carry them.
   caseNumber?: CredentialCase["caseNumber"];
+  submittedDate?: CredentialCase["submittedDate"];
 };
 
 export type CasesMatrixPayer = Pick<Payer, "id" | "name">;

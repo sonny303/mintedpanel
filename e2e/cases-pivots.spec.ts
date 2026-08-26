@@ -293,6 +293,9 @@ function seedCases(fixtures: Record<string, Record<string, unknown>[]>) {
       state: "NC",
       case_status: "denied",
       payer_id: "pay-aetna",
+      // Denied, but submitted first — the Matrix popover shows that date, and
+      // the sibling case-start (never submitted) shows no Submitted row.
+      submitted_date: "2026-06-20",
     }),
   );
   fixtures.tasks.push(
@@ -669,7 +672,18 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
   await expect(popper).toHaveCount(1, { timeout: 15000 });
 
   // Exactly one popover, and it is this cell's case — not a neighbour's.
-  await expect(popper.getByText("Marco Reyes", { exact: true })).toBeVisible();
+  await expect(popper.getByText("C-1005")).toBeVisible();
+
+  // Provider / payer / state are NOT repeated in the panel — the row, column
+  // and section headers already name them. Submitted shows when the case has a
+  // date; the sibling below proves it is omitted, not blanked, when it doesn't.
+  // exact:true throughout — a bare getByText is a case-insensitive substring
+  // match, and the next-action reason below says "ranked by the provider…".
+  await expect(popper.getByText("Provider", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("Payer", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("State", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(popper.getByText("Jun 20, 2026")).toBeVisible();
 
   // The root cause of the blink: hover must not move focus. Radix's non-modal
   // Content focuses itself on mount, and these triggers open on focus and close
@@ -680,6 +694,11 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
       document.activeElement.closest("[data-radix-popper-content-wrapper]") !== null,
   );
   expect(focusInsidePopover).toBe(false);
+
+  // A case that was never submitted omits the row rather than blanking it.
+  await page.getByRole("link", { name: /Marco Reyes, BCBS-NC, NC, open case/ }).hover();
+  await expect(popper.getByText("C-1003")).toBeVisible({ timeout: 15000 });
+  await expect(popper.getByText("Submitted", { exact: true })).toHaveCount(0);
 
   // Moving off dismisses it (handoff §7) — and it must STAY dismissed. This is
   // the reported symptom: Radix hands focus back to the trigger on close, the

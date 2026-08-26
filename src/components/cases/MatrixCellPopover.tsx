@@ -299,13 +299,18 @@ function CaseCellPopover({
             </span>
             <CaseStatusPill status={cell.case.caseStatus} />
           </div>
+          {/* Provider, payer and state are deliberately absent: the row header,
+              column header and section header already name all three for the
+              cell being hovered, so repeating them here is the panel's least
+              useful third. They stay in the trigger's accessible name, which is
+              the one place a screen-reader user does NOT get them from context. */}
           <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            <span className="text-muted-foreground">Provider</span>
-            <span>{providerName}</span>
-            <span className="text-muted-foreground">Payer</span>
-            <span>{payerName}</span>
-            <span className="text-muted-foreground">State</span>
-            <span>{cell.case.state}</span>
+            {cell.case.submittedDate ? (
+              <>
+                <span className="text-muted-foreground">Submitted</span>
+                <span>{fmtDate(cell.case.submittedDate)}</span>
+              </>
+            ) : null}
             <span className="text-muted-foreground">Days open</span>
             <span>{details.daysOpen}d</span>
             <span className="text-muted-foreground">Last touch</span>
