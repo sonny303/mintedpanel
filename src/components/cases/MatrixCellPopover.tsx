@@ -36,7 +36,6 @@ import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { StatusPill } from "@/components/StatusPill";
 import { EXCLUSION_REASON_LABELS } from "@/lib/generationPreview";
 import { fmtDate } from "@/lib/format";
-import type { QueueEntry } from "@/lib/nextBestActions";
 import type {
   CasesMatrixCaseCell,
   CasesMatrixCell,
@@ -50,7 +49,6 @@ interface MatrixCellPopoverProps {
   payerName: string;
   /** Date-only ISO string; passed in so no cell reads the clock. */
   today: string;
-  queueEntries: readonly QueueEntry[];
   followUp?: MatrixFollowUp;
 }
 
@@ -223,14 +221,12 @@ function lastTouchLabel(followUp: MatrixFollowUp | undefined, today: string): st
 function caseDetails(
   cell: CasesMatrixCaseCell,
   today: string,
-  queueEntries: readonly QueueEntry[],
   followUp: MatrixFollowUp | undefined,
 ) {
   const daysOpen = Math.max(
     0,
     differenceInCalendarDays(parseISO(today), parseISO(cell.case.createdAt)),
   );
-  const queueEntry = queueEntries.find((entry) => entry.caseId === cell.case.id);
   const followUpDue = followUp?.nextFollowUpDate ?? null;
   const followUpOverdue = followUpDue !== null && followUpDue < today;
 
@@ -239,7 +235,6 @@ function caseDetails(
     followUpDue,
     followUpOverdue,
     lastTouch: lastTouchLabel(followUp, today),
-    queueEntry,
   };
 }
 
@@ -248,11 +243,10 @@ function CaseCellPopover({
   providerName,
   payerName,
   today,
-  queueEntries,
   followUp,
 }: MatrixCellPopoverProps & { cell: CasesMatrixCaseCell }) {
   const popover = useHoverPopover(`case:${cell.case.id}`);
-  const details = caseDetails(cell, today, queueEntries, followUp);
+  const details = caseDetails(cell, today, followUp);
   const flags = cellFlags(cell);
 
   return (
@@ -341,14 +335,6 @@ function CaseCellPopover({
                   {flag.label}
                 </span>
               ))}
-            </div>
-          ) : null}
-          {details.queueEntry ? (
-            <div className="border-t border-mp-border pt-3">
-              <div className="font-medium">{details.queueEntry.action}</div>
-              <div className="mt-0.5 text-[12px] text-muted-foreground">
-                {details.queueEntry.reason}
-              </div>
             </div>
           ) : null}
           <Link

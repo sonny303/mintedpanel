@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/EmptyState";
 import { MatrixCellPopover, MatrixCellPopoverProvider } from "@/components/cases/MatrixCellPopover";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { QueueEntry } from "@/lib/nextBestActions";
 import type { CasesMatrix, CasesMatrixColumn, CasesMatrixSection } from "@/lib/casesMatrix";
 import type { CaseFollowUp } from "@/services/touches";
 
@@ -22,7 +21,6 @@ export interface CasesMatrixProps {
   groupBy: CasesMatrixGroupBy;
   /** Date-only ISO string; passed down so no cell reads the clock. */
   today: string;
-  queueEntries: readonly QueueEntry[];
   followUps?: ReadonlyMap<string, CaseFollowUp>;
   onReset: () => void;
 }
@@ -124,7 +122,6 @@ export function CasesMatrix({
   payerId,
   groupBy,
   today,
-  queueEntries,
   followUps,
   onReset,
 }: CasesMatrixProps) {
@@ -257,7 +254,6 @@ export function CasesMatrix({
                                       providerName={row.providerName}
                                       payerName={column.payerName}
                                       today={today}
-                                      queueEntries={queueEntries}
                                       followUp={
                                         cell.kind === "case"
                                           ? followUps?.get(cell.case.id)

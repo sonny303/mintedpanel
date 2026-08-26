@@ -678,12 +678,16 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
   // and section headers already name them. Submitted shows when the case has a
   // date; the sibling below proves it is omitted, not blanked, when it doesn't.
   // exact:true throughout — a bare getByText is a case-insensitive substring
-  // match, and the next-action reason below says "ranked by the provider…".
+  // match, so it would catch a label inside a longer sentence.
   await expect(popper.getByText("Provider", { exact: true })).toHaveCount(0);
   await expect(popper.getByText("Payer", { exact: true })).toHaveCount(0);
   await expect(popper.getByText("State", { exact: true })).toHaveCount(0);
   await expect(popper.getByText("Submitted", { exact: true })).toBeVisible();
   await expect(popper.getByText("Jun 20, 2026")).toBeVisible();
+
+  // The next-best-action block is gone with its prop: the queue is /work's
+  // surface, and threading it here cost a linear scan per case cell per render.
+  await expect(popper.getByText(/ranked by the/)).toHaveCount(0);
 
   // The root cause of the blink: hover must not move focus. Radix's non-modal
   // Content focuses itself on mount, and these triggers open on focus and close

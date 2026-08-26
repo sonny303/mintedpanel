@@ -583,7 +583,6 @@ function CasesPage() {
           groupBy={matrixGroupBy}
           today={matrixQ.today}
 
-          queueEntries={queue.entries ?? []}
           followUps={matrixQ.followUps}
           onReset={resetAllFilters}
         />
