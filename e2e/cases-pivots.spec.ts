@@ -646,3 +646,113 @@ test("Matrix Group by re-nests the same sections instead of changing which secti
   });
   await expect(page.getByRole("columnheader", { name: "BCBS-NC" }).first()).toBeVisible();
 });
+
+test("Matrix cell popover: one popover per hover, no focus theft, and it stays dismissed", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const caseCell = page.getByRole("link", { name: /Marco Reyes, Aetna, NC, open case/ });
+  await expect(caseCell).toBeVisible({ timeout: 30000 });
+  await caseCell.hover();
+
+  const popper = page.locator("[data-radix-popper-content-wrapper]");
+  await expect(popper).toHaveCount(1, { timeout: 15000 });
+
+  // Exactly one popover, and it is this cell's case — not a neighbour's.
+  await expect(popper.getByText("Marco Reyes", { exact: true })).toBeVisible();
+
+  // The root cause of the blink: hover must not move focus. Radix's non-modal
+  // Content focuses itself on mount, and these triggers open on focus and close
+  // on blur, so a hover that steals focus arms a loop.
+  const focusInsidePopover = await page.evaluate(
+    () =>
+      document.activeElement !== null &&
+      document.activeElement.closest("[data-radix-popper-content-wrapper]") !== null,
+  );
+  expect(focusInsidePopover).toBe(false);
+
+  // Moving off dismisses it (handoff §7) — and it must STAY dismissed. This is
+  // the reported symptom: Radix hands focus back to the trigger on close, the
+  // trigger's onFocus re-opened, the content stole focus again, the trigger
+  // blurred, and the cell blinked at the close-delay interval from then on,
+  // with the pointer parked somewhere else entirely.
+  await page.getByRole("heading", { name: "Cases" }).hover();
+  await expect(popper).toHaveCount(0, { timeout: 15000 });
+
+  // Count state churn rather than sampling visibility, which can land on any
+  // frame of a blink; count `data-state` flips as well as mounts, because a
+  // reopen landing mid-exit-animation replays the fade on the SAME element.
+  const churn = await page.evaluate(async () => {
+    let events = 0;
+    const isPopper = (node: Node) =>
+      node instanceof HTMLElement && node.matches("[data-radix-popper-content-wrapper]");
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") {
+          const target = record.target as HTMLElement;
+          if (target.closest("[data-radix-popper-content-wrapper]")) events += 1;
+          continue;
+        }
+        for (const node of record.addedNodes) if (isPopper(node)) events += 1;
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-state"],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    observer.disconnect();
+    return events;
+  });
+  expect(churn).toBe(0);
+  await expect(popper).toHaveCount(0);
+});
+
+test("Matrix gap cell: keyboard focus opens the popover and Enter reaches the Generate case link", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const gap = page.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ });
+  await expect(gap).toBeVisible({ timeout: 30000 });
+
+  // §10 keyboard parity: focus alone opens the popover, and the focus ring
+  // stays on the cell rather than jumping into the portalled panel.
+  await gap.focus();
+  const generate = page.getByRole("link", { name: /Generate case/ });
+  await expect(generate).toBeVisible({ timeout: 15000 });
+  await expect(gap).toBeFocused();
+
+  // The content is portalled, so Tab does not lead into it — Enter is the
+  // documented way in.
+  await page.keyboard.press("Enter");
+  await expect(generate).toBeFocused();
+
+  // Escape dismisses and returns focus to the cell WITHOUT re-opening.
+  await page.keyboard.press("Escape");
+  await expect(generate).toHaveCount(0, { timeout: 15000 });
+  await expect(gap).toBeFocused();
+  await page.waitForTimeout(500);
+  await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
+});

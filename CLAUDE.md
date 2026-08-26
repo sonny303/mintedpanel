@@ -537,6 +537,13 @@ and leaves decisions untouched.
   `src/shared/quickCards.ts` holds only the default layout and projection
   helpers, not a field-list mirror. (An older note here claimed otherwise —
   it was stale.)
+- **A hover-opened Radix `Popover` must suppress both focus hand-offs.** The
+  non-modal `Content` focuses its own container on mount and returns focus to
+  the trigger on unmount; pair that with a trigger that opens on focus and
+  closes on blur and it is a closed loop — the cell blinks forever at the
+  close-delay interval, pointer parked anywhere. `MatrixCellPopover.tsx`
+  prevents `onOpenAutoFocus` always and `onCloseAutoFocus` unless the user
+  actually put focus inside. Copy that hook, don't re-wire the handlers.
 
 ## UI conventions
 

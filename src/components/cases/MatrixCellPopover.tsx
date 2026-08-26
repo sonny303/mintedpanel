@@ -8,11 +8,22 @@
 // clicked or tabbed to, which would have made the "Generate case →" action
 // dead. The trigger is therefore focusable so keyboard users can reach the
 // link; excluded cells stay non-focusable as §4.5 requires.
+//
+// FOCUS IS OWNED HERE, NOT BY RADIX. A hover-opened popover must never move
+// focus, because these triggers open on focus: Radix's non-modal Content
+// focuses its container on mount and hands focus back to the trigger on
+// unmount, which with open-on-focus/close-on-blur triggers is a closed loop —
+// open → content steals focus → trigger blurs → close → Radix refocuses the
+// trigger → open. That loop is what made a stationary hover blink at the
+// close-delay interval. Both hand-offs are therefore suppressed unless the
+// user genuinely put focus inside the popover (the Enter/Space affordance on
+// gap cells), which is the one case where focus has somewhere to go back to.
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -50,6 +61,9 @@ interface MatrixFollowUp {
 
 const closeDelay = 120;
 
+/** The first thing a keyboard user can reach inside an open popover. */
+const focusableInContent = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const MatrixPopoverContext = createContext<{
   openKey: string | null;
   setOpenKey: (key: string | null) => void;
@@ -60,21 +74,29 @@ const MatrixPopoverContext = createContext<{
 
 export function MatrixCellPopoverProvider({ children }: { children: ReactNode }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
-  return (
-    <MatrixPopoverContext.Provider value={{ openKey, setOpenKey }}>
-      {children}
-    </MatrixPopoverContext.Provider>
-  );
+  // Memoized so an unrelated re-render of the board (any of the eight queries
+  // behind useCasesMatrix settling) doesn't re-render every cell.
+  const value = useMemo(() => ({ openKey, setOpenKey }), [openKey]);
+  return <MatrixPopoverContext.Provider value={value}>{children}</MatrixPopoverContext.Provider>;
 }
 
 /**
  * Hover- and focus-driven popover state, shared by case and gap cells. Only one
  * popover in the Matrix is open at a time; a short close delay lets the pointer
  * travel from the cell into the popover without dismissing it.
+ *
+ * The returned `triggerProps` / `contentProps` are the whole contract — spread
+ * them rather than re-wiring pointer or focus handlers per cell, or the
+ * open/blur/refocus loop documented at the top of this file comes back.
  */
 function useHoverPopover(popoverKey: string) {
   const { openKey, setOpenKey } = useContext(MatrixPopoverContext);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  /** True only while the user has deliberately moved focus into the popover. */
+  const focusInside = useRef(false);
+  /** Swallows exactly the focus Radix restores to the trigger on close. */
+  const ignoreNextFocus = useRef(false);
 
   useEffect(
     () => () => {
@@ -93,14 +115,103 @@ function useHoverPopover(popoverKey: string) {
     closeTimer.current = setTimeout(() => setOpenKey(null), closeDelay);
   }, [setOpenKey]);
 
+  const openFromFocus = useCallback(() => {
+    // Escape (or a dismissing click) closed the popover and Radix put focus
+    // back on the cell. Re-opening on that focus would undo the dismissal.
+    if (ignoreNextFocus.current) {
+      ignoreNextFocus.current = false;
+      return;
+    }
+    open();
+  }, [open]);
+
+  // Blur dismisses (handoff §7), but focus moving from the cell INTO its own
+  // popover is not a dismissal — that is the keyboard path to the link.
+  const handleBlur = useCallback(
+    (event: React.FocusEvent<HTMLElement>) => {
+      const next = event.relatedTarget as Node | null;
+      if (next && contentRef.current?.contains(next)) {
+        focusInside.current = true;
+        return;
+      }
+      focusInside.current = false;
+      close();
+    },
+    [close],
+  );
+
+  /** Hands focus to the popover's first control so the link is keyboard-reachable. */
+  const focusContent = useCallback(() => {
+    const target = contentRef.current?.querySelector<HTMLElement>(focusableInContent);
+    if (!target) return false;
+    focusInside.current = true;
+    target.focus();
+    return true;
+  }, []);
+
   return {
     isOpen: openKey === popoverKey,
     setOpen: (nextOpen: boolean) => setOpenKey(nextOpen ? popoverKey : null),
     open,
     close,
-    /** Spread onto the trigger and the popover content alike. */
-    hoverProps: { onMouseEnter: open, onMouseLeave: close },
+    focusContent,
+    triggerProps: {
+      onMouseEnter: open,
+      onMouseLeave: close,
+      onFocus: openFromFocus,
+      onBlur: handleBlur,
+    },
+    contentProps: {
+      ref: contentRef,
+      onMouseEnter: open,
+      onMouseLeave: close,
+      onBlur: handleBlur,
+      onOpenAutoFocus: (event: Event) => {
+        // Never on open. Hover must not move focus at all, and a keyboard user
+        // keeps the cell's focus ring while they read.
+        event.preventDefault();
+      },
+      onCloseAutoFocus: (event: Event) => {
+        if (focusInside.current) {
+          // Focus is about to be destroyed with the content, so let Radix put
+          // it back on the trigger — and swallow that one focus event so the
+          // popover the user just dismissed does not immediately reopen.
+          ignoreNextFocus.current = true;
+        } else {
+          event.preventDefault();
+        }
+        focusInside.current = false;
+      },
+    },
   };
+}
+
+/** The dot flags a case cell shows, and their spelled-out form in the popover. */
+interface CellFlag {
+  key: string;
+  label: string;
+  dotClassName: string;
+}
+
+function cellFlags(cell: CasesMatrixCaseCell): CellFlag[] {
+  const flags: CellFlag[] = [];
+  if (cell.hasOverdueTask) {
+    flags.push({
+      key: "overdue",
+      label: "Overdue task",
+      dotClassName: "bg-[color:var(--mp-danger)]",
+    });
+  }
+  if (cell.stale === "never") {
+    flags.push({
+      key: "never",
+      label: "Never touched",
+      dotClassName: "border border-[color:var(--mp-warn)]",
+    });
+  } else if (cell.stale === "quiet") {
+    flags.push({ key: "quiet", label: "Went quiet", dotClassName: "bg-[color:var(--mp-warn)]" });
+  }
+  return flags;
 }
 
 function lastTouchLabel(followUp: MatrixFollowUp | undefined, today: string): string {
@@ -142,6 +253,7 @@ function CaseCellPopover({
 }: MatrixCellPopoverProps & { cell: CasesMatrixCaseCell }) {
   const popover = useHoverPopover(`case:${cell.case.id}`);
   const details = caseDetails(cell, today, queueEntries, followUp);
+  const flags = cellFlags(cell);
 
   return (
     <Popover open={popover.isOpen} onOpenChange={popover.setOpen}>
@@ -150,45 +262,36 @@ function CaseCellPopover({
           to="/cases/$id"
           params={{ id: cell.case.id }}
           className="flex min-h-8 w-full items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--mp-primary)] focus-visible:ring-offset-1"
-          onMouseEnter={popover.open}
-          onMouseLeave={popover.close}
-          onFocus={popover.open}
-          onBlur={popover.close}
+          {...popover.triggerProps}
           onKeyDown={(event) => {
             if (event.key === " ") {
               event.preventDefault();
               event.currentTarget.click();
             }
           }}
-          aria-label={`${providerName}, ${payerName}, ${cell.case.state}, open case`}
+          // The flags are spelled out here rather than left on per-dot `title`
+          // attributes: a native tooltip is a second, independently-timed popup
+          // over the same pixels, and it is unreachable to a screen reader
+          // inside an aria-labelled link anyway.
+          aria-label={[
+            `${providerName}, ${payerName}, ${cell.case.state}, open case`,
+            ...flags.map((flag) => flag.label),
+          ].join(", ")}
         >
           <span className="flex items-center gap-1.5">
             <CaseStatusPill status={cell.case.caseStatus} />
-            {cell.hasOverdueTask ? (
+            {flags.map((flag) => (
               <span
-                className="h-2 w-2 rounded-full bg-[color:var(--mp-danger)]"
-                title="Overdue task"
-                aria-label="Overdue task"
+                key={flag.key}
+                className={`h-2 w-2 rounded-full ${flag.dotClassName}`}
+                aria-hidden="true"
               />
-            ) : null}
-            {cell.stale === "never" ? (
-              <span
-                className="h-2 w-2 rounded-full border border-[color:var(--mp-warn)]"
-                title="Never touched"
-                aria-label="Never touched"
-              />
-            ) : cell.stale === "quiet" ? (
-              <span
-                className="h-2 w-2 rounded-full bg-[color:var(--mp-warn)]"
-                title="Went quiet"
-                aria-label="Went quiet"
-              />
-            ) : null}
+            ))}
           </span>
           <span className="sr-only">Open case</span>
         </Link>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-4" {...popover.hoverProps}>
+      <PopoverContent align="start" className="w-80 p-4" {...popover.contentProps}>
         <div className="space-y-3 text-[13px]">
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-[12px] font-medium">
@@ -219,6 +322,22 @@ function CaseCellPopover({
               )}
             </span>
           </div>
+          {flags.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {flags.map((flag) => (
+                <span
+                  key={flag.key}
+                  className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground"
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${flag.dotClassName}`}
+                    aria-hidden="true"
+                  />
+                  {flag.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {details.queueEntry ? (
             <div className="border-t border-mp-border pt-3">
               <div className="font-medium">{details.queueEntry.action}</div>
@@ -262,16 +381,24 @@ function GapCellPopover({
           role="button"
           tabIndex={0}
           className="flex min-h-8 w-full cursor-default items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--mp-primary)] focus-visible:ring-offset-1"
-          onMouseEnter={popover.open}
-          onMouseLeave={popover.close}
-          onFocus={popover.open}
-          onBlur={popover.close}
+          {...popover.triggerProps}
+          // Radix's Trigger toggles on click; left alone, clicking the cell you
+          // are already hovering would close the panel you are reading.
+          // preventDefault is how composeEventHandlers is told to stand down.
+          onClick={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            // Enter/Space is the keyboard's way into the popover — the content
+            // is portalled, so it is not simply the next thing in tab order.
+            if (!popover.focusContent()) popover.open();
+          }}
           aria-label={`${providerName}, ${payerName}, ${cell.generation.state}, not started`}
         >
           <StatusPill status="gray" label="Not started" className="opacity-60" />
         </span>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-3" {...popover.hoverProps}>
+      <PopoverContent align="start" className="w-64 p-3" {...popover.contentProps}>
         <div className="space-y-2 text-[13px]">
           <div>
             <div className="font-medium">{payerName}</div>
