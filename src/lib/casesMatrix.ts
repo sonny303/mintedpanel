@@ -1,7 +1,7 @@
 // Cases Matrix foundation — pure section, row, column, cell, and urgency
 // derivation for the read-only active-cases board. Provider drop-off is
 // evaluated across the full case set: a provider leaves when no non-terminal
-// case remains, matching handoff §9 test 2.
+// case remains, evaluated against their UNFILTERED case set.
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { STALLED_AFTER_DAYS } from "./actionState";
 import { CASE_STATUS_BUCKETS } from "./caseStatus";
@@ -91,8 +91,6 @@ export interface CasesMatrixCaseCell {
 
 export interface CasesMatrixGapCell {
   kind: "gap";
-  dimmed: false;
-  isActiveTarget: boolean;
   generation: {
     providerId: string;
     payerId: string;
@@ -103,7 +101,6 @@ export interface CasesMatrixGapCell {
 
 export interface CasesMatrixExcludedCell {
   kind: "excluded";
-  dimmed: false;
   reason: CasesMatrixExclusion["reason"];
   note: string | null;
 }
@@ -113,13 +110,11 @@ export type CasesMatrixCell = CasesMatrixCaseCell | CasesMatrixGapCell | CasesMa
 export interface CasesMatrixColumn {
   payerId: string;
   payerName: string;
-  isActiveTarget: boolean;
 }
 
 export interface CasesMatrixRow {
   providerId: string;
   providerName: string;
-  cases: CasesMatrixCase[];
   cells: Record<string, CasesMatrixCell>;
 }
 
@@ -330,18 +325,12 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
       .map((payerId) => ({
         payerId,
         payerName: payersById.get(payerId)?.name ?? "Unknown payer",
-        isActiveTarget: input.targets.some(
-          (target) =>
-            target.status === "active" &&
-            target.groupId === groupId &&
-            target.state === state &&
-            target.payerId === payerId,
-        ),
       }))
       .sort((a, b) => a.payerName.localeCompare(b.payerName) || a.payerId.localeCompare(b.payerId));
 
     const providerIds = new Set(sectionCases.map((matrixCase) => matrixCase.providerId));
     const rows: CasesMatrixRow[] = [];
+    const displayedCases: CasesMatrixCase[] = [];
     for (const providerId of providerIds) {
       const provider = providersById.get(providerId);
       if (!provider) continue;
@@ -406,14 +395,11 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
         cells[column.payerId] = exclusion
           ? {
               kind: "excluded",
-              dimmed: false,
               reason: exclusion.reason,
               note: exclusion.note,
             }
           : {
               kind: "gap",
-              dimmed: false,
-              isActiveTarget: column.isActiveTarget,
               generation: {
                 providerId,
                 payerId: column.payerId,
@@ -422,19 +408,14 @@ export function buildCasesMatrix(input: CasesMatrixInput): CasesMatrix {
               },
             };
       }
-      rows.push({
-        providerId,
-        providerName: providerName(provider),
-        cases: rowCases,
-        cells,
-      });
+      rows.push({ providerId, providerName: providerName(provider), cells });
+      displayedCases.push(...rowCases);
     }
     rows.sort(
       (a, b) =>
         a.providerName.localeCompare(b.providerName) || a.providerId.localeCompare(b.providerId),
     );
     if (rows.length === 0) continue;
-    const displayedCases = rows.flatMap((row) => row.cases);
     const openCaseCount = displayedCases.filter(
       (matrixCase) =>
         isOpenCase(matrixCase) &&

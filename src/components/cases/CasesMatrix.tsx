@@ -1,7 +1,7 @@
 // Cases Matrix table — renders the read-only provider × payer board from the
 // pure matrix derivation and keeps case navigation separate from gap actions.
 // `Group by` re-nests the two section dimensions (state and group); it never
-// changes which sections exist (handoff D3).
+// changes which sections exist — nesting only, never membership.
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/EmptyState";

@@ -3,11 +3,12 @@
 // surface is read-only and never creates cases: the gap link navigates to
 // /generation, which stays the one door.
 //
-// Gap cells use a Popover rather than a Tooltip (handoff §7 said Tooltip)
-// because a Radix tooltip is not interactive — a link inside one cannot be
-// clicked or tabbed to, which would have made the "Generate case →" action
-// dead. The trigger is therefore focusable so keyboard users can reach the
-// link; excluded cells stay non-focusable as §4.5 requires.
+// Gap cells use a Popover rather than a Tooltip because a Radix tooltip is not
+// interactive — a link inside one cannot be clicked or tabbed to, which would
+// have made the "Generate case →" action dead. The trigger is therefore
+// focusable so keyboard users can reach the link. Excluded cells stay
+// non-focusable: an excluded cell does nothing, so it must not signal
+// interactivity to pointer or keyboard.
 //
 // FOCUS IS OWNED HERE, NOT BY RADIX. A hover-opened popover must never move
 // focus, because these triggers open on focus: Radix's non-modal Content
@@ -123,7 +124,7 @@ function useHoverPopover(popoverKey: string) {
     open();
   }, [open]);
 
-  // Blur dismisses (handoff §7), but focus moving from the cell INTO its own
+  // Blur dismisses, but focus moving from the cell INTO its own
   // popover is not a dismissal — that is the keyboard path to the link.
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLElement>) => {
@@ -417,7 +418,7 @@ function GapCellPopover({
 function ExcludedCellTooltip({ cell }: { cell: CasesMatrixExcludedCell }) {
   return (
     <Tooltip>
-      {/* Inert and non-focusable per handoff §4.5 — an excluded cell must not
+      {/* Inert and non-focusable — an excluded cell does nothing, so it must not
           signal interactivity to pointer or keyboard. */}
       <TooltipTrigger asChild>
         <span className="flex min-h-8 w-full cursor-default items-center justify-center">

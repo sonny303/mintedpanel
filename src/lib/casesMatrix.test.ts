@@ -434,8 +434,6 @@ describe("buildCasesMatrix", () => {
     const gap = wi?.rows[0].cells["payer-2"];
     expect(gap).toEqual({
       kind: "gap",
-      dimmed: false,
-      isActiveTarget: true,
       generation: {
         providerId: "provider-1",
         payerId: "payer-2",

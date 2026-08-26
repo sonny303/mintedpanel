@@ -552,7 +552,7 @@ test("Matrix pivot: ?pivot=matrix renders a semantic provider x payer table with
   await page.getByRole("tab", { name: "Matrix" }).click();
   await expect(page).toHaveURL(/pivot=matrix/, { timeout: 15000 });
 
-  // §10 hard requirement: a real <table> with a 2D header relationship —
+  // A real <table> with a 2D header relationship, not a div grid —
   // payers are column headers, providers are row headers.
   const ncTable = page.getByRole("table", { name: /Group 1 in North Carolina/ });
   await expect(ncTable).toBeVisible({ timeout: 30000 });
@@ -633,7 +633,7 @@ test("Matrix Group by re-nests the same sections instead of changing which secti
   await expect(page.getByRole("heading", { name: /South Carolina/ })).toBeVisible();
 
   // Switching to Group re-nests: the outer heading becomes the group, and the
-  // section count is unchanged (D3 — nesting only).
+  // section count is unchanged (nesting only, never membership).
   await page.getByLabel("Group Matrix by").click();
   await page.getByRole("option", { name: "Group by Group" }).click();
   await expect(page.getByRole("heading", { name: "Group 1" })).toBeVisible({ timeout: 15000 });
@@ -704,7 +704,7 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
   await expect(popper.getByText("C-1003")).toBeVisible({ timeout: 15000 });
   await expect(popper.getByText("Submitted", { exact: true })).toHaveCount(0);
 
-  // Moving off dismisses it (handoff §7) — and it must STAY dismissed. This is
+  // Moving off dismisses it — and it must STAY dismissed. This is
   // the reported symptom: Radix hands focus back to the trigger on close, the
   // trigger's onFocus re-opened, the content stole focus again, the trigger
   // blurred, and the cell blinked at the close-delay interval from then on,
@@ -760,7 +760,7 @@ test("Matrix gap cell: keyboard focus opens the popover and Enter reaches the Ge
   const gap = page.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ });
   await expect(gap).toBeVisible({ timeout: 30000 });
 
-  // §10 keyboard parity: focus alone opens the popover, and the focus ring
+  // Keyboard parity: focus alone opens the popover, and the focus ring
   // stays on the cell rather than jumping into the portalled panel.
   await gap.focus();
   const generate = page.getByRole("link", { name: /Generate case/ });
