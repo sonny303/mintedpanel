@@ -1085,6 +1085,27 @@ export async function createMockApiServer(options = {}) {
       const facility = c.facilityId
         ? (FACILITIES.find((f) => f.id === c.facilityId && f.orgId === orgId) ?? null)
         : null;
+      // E1.4: facilities[] — the case's FULL location set. Every fixture case
+      // here has exactly one location (its selectedFacility), so this is that
+      // same org-scoped lookup projected as a one-row primary array — under
+      // leak "casecontext" the facility lookup still requires the CALLER's
+      // org, so a leaked cross-org case yields [] here same as selectedFacility
+      // does; 14b is what catches the leak (the whole response, not this
+      // field alone).
+      const facilities = facility
+        ? [
+            {
+              id: facility.id,
+              name: facility.name,
+              street: facility.street,
+              suite: facility.suite,
+              city: facility.city,
+              state: facility.state,
+              zip: facility.zip,
+              isPrimary: true,
+            },
+          ]
+        : [];
       return envelope(res, 200, {
         referenceNumbers: c.payerReferenceId ? [c.payerReferenceId] : [],
         payerPipelineState: c.payerPipelineState ?? "not_started",
@@ -1099,6 +1120,7 @@ export async function createMockApiServer(options = {}) {
               zip: facility.zip,
             }
           : null,
+        facilities,
         latestNote: c.latestNote ?? null,
         latestTouch: c.latestTouch ?? null,
       });

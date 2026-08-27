@@ -905,6 +905,30 @@ describe("case context handler", () => {
         state: "KS",
         zip: "67202",
       },
+      // E1.4: the case's full location set, primary first — pass-through from
+      // the service like everything else in this projection.
+      facilities: [
+        {
+          id: "aaaa1111-2222-4333-8444-555566667777",
+          name: "Main Clinic",
+          street: "100 Main St",
+          suite: null,
+          city: "Wichita",
+          state: "KS",
+          zip: "67202",
+          isPrimary: true,
+        },
+        {
+          id: "bbbb1111-2222-4333-8444-555566667777",
+          name: "Satellite Office",
+          street: "200 Oak St",
+          suite: "Ste 4",
+          city: "Wichita",
+          state: "KS",
+          zip: "67203",
+          isPrimary: false,
+        },
+      ],
       openTasks: [
         {
           id: "task-1",

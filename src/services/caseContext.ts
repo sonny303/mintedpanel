@@ -22,6 +22,12 @@
 //     from the provider's facility set and never a fallback-to-first guess: a
 //     case with no facility link (or a link that doesn't resolve inside the
 //     caller's org) carries an explicit null.
+//   - facilities (E1.4): the case's FULL location set — `case_facilities`
+//     joined to `facilities`, org-scoped on both the join row and the joined
+//     facility. Primary row first, then alphabetical by name; `isPrimary`
+//     rides each row. Additive alongside selectedFacility, which stays the
+//     primary-only field every existing extension build depends on — this is
+//     for the Workbench to show every location while still filling one.
 //   - latestNote: the newest `note` entry in the touchlog (author-resolved).
 //     The `notes` table is DORMANT for case entities since the touchlog
 //     migration (Story 1) — case notes live in `touches` now, so this reads the
@@ -70,6 +76,10 @@ export interface CaseContextFacility {
   city: string | null;
   state: string | null;
   zip: string | null;
+  // E1.4 — set on `facilities[]` entries only (true for the case's primary
+  // row). Absent on `selectedFacility`, which is already known to be the
+  // primary by definition — no need to badge it there.
+  isPrimary?: boolean;
 }
 
 // The case's provider/payer identity for the panel header — display fields
@@ -147,6 +157,12 @@ export interface CaseContext {
   // E4.3 TE-2 — the facility the case explicitly selects, or null when the
   // case has no facility relationship.
   selectedFacility: CaseContextFacility | null;
+  // E1.4 — the case's FULL location set (`case_facilities` joined to
+  // `facilities`), primary row first then alphabetical by name. Additive
+  // alongside `selectedFacility`, which is UNCHANGED and still means "the
+  // primary" — this array is every location the case has, so the extension
+  // can show them all while still filling exactly one at a time.
+  facilities: CaseContextFacility[];
   // E4.3 TE-2 — the case's open SOP tasks with execution types (read-only).
   openTasks: CaseContextTask[];
   latestNote: CaseContextNote | null;
@@ -247,11 +263,59 @@ export async function getCaseContext(
       steps: projectTaskSteps(t.sop_content),
     }));
 
-  // The case's explicit facility relationship is the ONLY facility source —
-  // the provider's other assignments are never consulted and there is no
-  // fallback-to-first. Org-scoped like every other read here: a facility_id
-  // that doesn't resolve inside the caller's org yields the same explicit
-  // null as a case with no facility link.
+  // E1.4 — the case's FULL location set, `case_facilities` joined to
+  // `facilities`. Org-scoped on both the join row and the joined facility — a
+  // facility outside the caller's org can never appear here. Sorted
+  // primary-first then alphabetical by name, the same convention as the
+  // browser-ctx `getCaseFacilities` in src/services/cases.ts (not imported
+  // here — server routes stay on ctx.db, never the browser client). Read
+  // unconditionally (unlike selectedFacility below, which only fires when
+  // `facility_id` is set) — a case can carry locations even before one is
+  // marked primary.
+  const { data: caseFacilityRows, error: caseFacilityErr } = await db
+    .from("case_facilities")
+    .select("is_primary, facility:facilities!inner(id, name, street, suite, city, state, zip)")
+    .eq("case_id", caseId)
+    .eq("org_id", orgId)
+    .eq("facility.org_id", orgId);
+  if (caseFacilityErr) throw caseFacilityErr;
+  const facilities: CaseContextFacility[] = (
+    (caseFacilityRows ?? []) as unknown as Array<{
+      is_primary: boolean;
+      facility: {
+        id: string;
+        name: string;
+        street: string | null;
+        suite: string | null;
+        city: string | null;
+        state: string | null;
+        zip: string | null;
+      } | null;
+    }>
+  )
+    .filter((r) => r.facility != null)
+    .map((r) => ({
+      id: r.facility!.id,
+      name: r.facility!.name,
+      street: r.facility!.street,
+      suite: r.facility!.suite,
+      city: r.facility!.city,
+      state: r.facility!.state,
+      zip: r.facility!.zip,
+      isPrimary: r.is_primary === true,
+    }))
+    .sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  // The case's explicit facility relationship is the ONLY source
+  // `selectedFacility` resolves from — the provider's other assignments are
+  // never consulted and there is no fallback-to-first. Org-scoped like every
+  // other read here: a facility_id that doesn't resolve inside the caller's
+  // org yields the same explicit null as a case with no facility link. Left
+  // UNCHANGED by E1.4 — still the primary, resolved exactly as before;
+  // `facilities` above is the additive full set.
   let selectedFacility: CaseContextFacility | null = null;
   if (typedCase.facility_id) {
     const { data: facilityRow, error: facilityErr } = await db
@@ -322,6 +386,7 @@ export async function getCaseContext(
     payer,
     state: typedCase.state,
     selectedFacility,
+    facilities,
     openTasks,
     latestNote: noteRow
       ? { content: noteRow.notes as string, createdAt: noteRow.created_at, authorName }

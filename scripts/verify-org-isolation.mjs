@@ -555,28 +555,33 @@ function looksLikeVercelGate(r) {
   }
 
   // 14. Case context endpoint (P8): the Workbench reads a case's reference
-  //     number(s) + latest note/touch after selection. Kansas reading its OWN
-  //     case context works (proves 14b isn't vacuous against a dead route —
-  //     conditional on KANSAS_CASE_ID, which the in-sandbox mock run always
-  //     sets)...
+  //     number(s) + latest note/touch + (E1.4) full location set after
+  //     selection. Kansas reading its OWN case context works (proves 14b
+  //     isn't vacuous against a dead route — conditional on KANSAS_CASE_ID,
+  //     which the in-sandbox mock run always sets)...
   if (env.KANSAS_CASE_ID) {
     const ownCtx = await apiGet(`/api/cases/${env.KANSAS_CASE_ID}/context`, { token: kansasTok });
     check(
       "14. Kansas reads its own case context",
       ownCtx.status === 200 &&
         ownCtx.body?.data != null &&
-        Array.isArray(ownCtx.body.data.referenceNumbers),
+        Array.isArray(ownCtx.body.data.referenceNumbers) &&
+        // E1.4 — the case's full location set rides the same projection.
+        Array.isArray(ownCtx.body.data.facilities),
       `status=${ownCtx.status}` +
         (ownCtx.status !== 200 ? ` body=${(ownCtx.raw || "").slice(0, 100)}` : ""),
     );
   } else {
     console.log("SKIP  14. own case context — KANSAS_CASE_ID not set");
   }
-  //     ...and reading a South Park case's context must 404 with no data.
+  //     ...and reading a South Park case's context must 404 with no data —
+  //     which by construction means South Park's `facilities[]` (E1.4) can
+  //     never ride along either: the whole payload, not just selectedFacility,
+  //     is withheld before any location row is read.
   const xCtx = await apiGet(`/api/cases/${env.SOUTHPARK_CASE_ID}/context`, { token: kansasTok });
   const ctxLeaked = xCtx.status < 400 || xCtx.body?.data != null;
   check(
-    "14b. Kansas GET context of a South Park case -> 404, no data",
+    "14b. Kansas GET context of a South Park case -> 404, no data (incl. facilities[])",
     xCtx.status === 404 && !ctxLeaked,
     `status=${xCtx.status} (expect 404) dataPresent=${xCtx.body?.data != null}`,
     { leak: true },

@@ -420,8 +420,9 @@ export async function handleListProviderCases(url: URL, ctx: AuthContext): Promi
 
 // GET /api/cases/:id/context — the Workbench pulls this after case selection so
 // the filler sees everything the panel needs (identity header, open tasks with
-// execution types, pipeline state, tracking ID, selected facility, latest
-// note/touch) without leaving the portal tab. The case must belong to the
+// execution types, pipeline state, tracking ID, selected facility, the case's
+// full location set (E1.4 `facilities[]`), latest note/touch) without leaving
+// the portal tab. The case must belong to the
 // resolved org: a cross-org or nonexistent id is a 404 (the service returns
 // null), mirroring the other case handlers. Read-only, no role gate.
 // E4.3 TE-2: Cache-Control no-store, never log the body, and exactly ONE

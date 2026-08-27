@@ -324,6 +324,17 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
   input, not through this function, so as of this UI swap neither has a
   caller; left in place rather than removed, since case creation is out of
   scope for the multi-location work.
+  **Extension surface (E1.4):** `GET /api/cases/:id/context` additionally
+  serves `facilities: CaseContextFacility[]` — the same full location set,
+  org-scoped on both the `case_facilities` join row and the joined facility,
+  primary row first then alphabetical, `isPrimary` badged per row.
+  `selectedFacility` on that same response is UNCHANGED — still resolved
+  solely off `credential_cases.facility_id` and still means "the primary";
+  `facilities` is additive so the Workbench can list every location while
+  filling exactly one at a time. Mirrored in the extension's
+  `src/shared/apiTypes.ts` (optional there — an older extension against a
+  newer panel simply ignores the field, and a newer extension against an
+  older panel degrades to `selectedFacility`-only).
 - **`payer_network_targets`** = group × payer × state — "this group works with
   this payer here." Distinct from the (now largely vestigial)
   `org_payer_assignments` subscription layer.
