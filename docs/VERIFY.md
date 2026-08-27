@@ -121,14 +121,15 @@ npx playwright test e2e/<spec>.spec.ts
 
 ### Generation, cases & work queue
 
-| Surface                                                         | Spec(s)                           |
-| --------------------------------------------------------------- | --------------------------------- |
-| `/generation` preview + exclusions                              | `generation-preview.spec.ts`      |
-| Generation confirm & create (4-part key, `/work?run=` landing)  | `case-creation.spec.ts`           |
-| `/generation/runs`, run detail, case provenance                 | `generation-traceability.spec.ts` |
-| SOP stamping + "Using generic SOP" chip (`/cases`, case detail) | `sop-stamping.spec.ts`            |
-| `/work` next-best-action queue                                  | `next-best-action-queue.spec.ts`  |
-| `/cases` route render reality-check                             | `dashboard.spec.ts`               |
+| Surface                                                                  | Spec(s)                           |
+| ------------------------------------------------------------------------ | --------------------------------- |
+| `/generation` preview + exclusions                                       | `generation-preview.spec.ts`      |
+| Generation confirm & create (4-part key, `/work?run=` landing)           | `case-creation.spec.ts`           |
+| `/generation/runs`, run detail, case provenance                          | `generation-traceability.spec.ts` |
+| SOP stamping + "Using generic SOP" chip (`/cases`, case detail)          | `sop-stamping.spec.ts`            |
+| `/work` next-best-action queue                                           | `next-best-action-queue.spec.ts`  |
+| `/cases` route render reality-check                                      | `dashboard.spec.ts`               |
+| `/cases` views (Flat · By provider · By payer · Matrix), URL back-compat | `cases-pivots.spec.ts`            |
 
 ### Import (staged roster)
 
