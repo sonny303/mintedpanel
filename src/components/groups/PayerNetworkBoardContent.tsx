@@ -152,7 +152,7 @@ export function PayerNetworkBoardContent({ group }: { group: ProviderGroup }) {
             onClick={() => setAttachOpen(true)}
           >
             <Plus className="mr-1 h-4 w-4" />
-            Attach payer
+            Attach payers
           </Button>
         ) : null}
       </div>

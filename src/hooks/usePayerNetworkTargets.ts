@@ -9,6 +9,7 @@ import {
   archivePayerTargets,
   archiveTarget,
   attachGroupPayer,
+  attachGroupPayers,
   attachPayerTargets,
   listPayerNetworkTargets,
   removeGroupPayer,
@@ -16,6 +17,7 @@ import {
   setTargetIdentifier,
 } from "@/services/payerNetworkTargets";
 import type { AttachmentSavePlan } from "@/lib/payerExpansion";
+import type { PayerAttachPlan } from "@/lib/groupPayerAttach";
 
 export function usePayerNetworkTargets() {
   const orgId = useActiveOrgId() ?? "no-org";
@@ -104,6 +106,16 @@ export function useAttachGroupPayer() {
   const invalidate = useInvalidateAttachFamilies();
   return useMutation({
     mutationFn: (vars: AttachPayerVars) => attachGroupPayer(vars.payerId, vars.plan),
+    onSuccess: invalidate,
+  });
+}
+
+/** The multi-select attach: one reviewed plan per payer, saved together and
+ * invalidating the same families the single-payer attach does. */
+export function useAttachGroupPayers() {
+  const invalidate = useInvalidateAttachFamilies();
+  return useMutation({
+    mutationFn: (plans: PayerAttachPlan[]) => attachGroupPayers(plans),
     onSuccess: invalidate,
   });
 }
