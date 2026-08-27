@@ -624,10 +624,11 @@ test("TS-124: removing a payer ARCHIVES its targets (never deletes); re-attach r
 
   // Re-attach: the archived state row arrives pre-unchecked; checking it
   // RESTORES the same row — no duplicate insert under the unique key.
-  await page.getByRole("button", { name: "Attach payer", exact: true }).click();
-  await page.getByRole("button", { name: /Aetna/ }).click();
+  await page.getByRole("button", { name: "Attach payers", exact: true }).click();
+  await page.getByLabel(/^Select Aetna/).check();
+  await page.getByRole("button", { name: "Review states" }).click();
   await expect(page.getByRole("cell", { name: "Archived" })).toBeVisible();
-  await page.getByLabel("Target NC").check();
+  await page.getByLabel(/^Target NC for Aetna/).check();
   await page.getByRole("button", { name: "Save targets" }).click();
   await expect(page.getByText("Aetna attached")).toBeVisible({ timeout: 15000 });
 

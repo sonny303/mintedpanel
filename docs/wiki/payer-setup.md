@@ -9,7 +9,8 @@ Global: authored once, inherited by every org.
 
 **Payer Setup lists the global catalog.** There is no org↔payer assignment.
 A newly created payer appears here immediately. The operational attach is
-**payer↔group** on Groups → [group] → Payer Network (`+ Attach payer`).
+**payer↔group** on Groups → [group] → Payer Network (`+ Attach payers`,
+a multi-select).
 Generation, attach pickers, and the manual-case door still read payers a
 group already works with (`activeOrgPayers` over live `payer_network_targets`).
 

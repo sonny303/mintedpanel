@@ -58,10 +58,12 @@ Journeys B and C — the working entity for payer attach and generation.
   (on the banner, and per payer row) opens the shared generation grid
   pre-scoped to this group — the payer-row entry additionally scopes to that
   payer and opens grouped by payer.
-- **Attach payers to the group**: the picker offers catalog payers whose
-  covered states intersect the group's operating states (zero-overlap
-  payers are named in an explainer, never offered); proposed states = payer
-  coverage ∩ group operating states, reviewed before save. There is no
+- **Attach payers to the group**: the picker is a **multi-select** — check
+  as many payers as you need and attach them in one pass. It offers catalog
+  payers whose covered states intersect the group's operating states
+  (zero-overlap payers are named in an explainer, never offered); proposed
+  states = payer coverage ∩ group operating states, reviewed per payer in one
+  screen (one block each) before a single save. There is no
   org↔payer assignment — attach is payer↔group only. A CSV alternative
   (one row per group × payer, `;`-delimited states) rides the staged-import
   engine with the same eligibility checks at scan time and an idempotent

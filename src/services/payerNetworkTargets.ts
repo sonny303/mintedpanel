@@ -24,19 +24,30 @@ export async function listPayerNetworkTargets(): Promise<PayerNetworkTarget[]> {
 /** Apply a reviewed attachment save plan for one payer: insert the brand-new
  * group×state rows as active and flip previously archived rows back on. */
 export async function attachPayerTargets(payerId: string, plan: AttachmentSavePlan): Promise<void> {
+  await attachPayerTargetsBulk([{ payerId, plan }]);
+}
+
+/** Apply reviewed plans for MANY payers in one pass: every brand-new row across
+ * every payer goes in as ONE insert (the multi-select attach saves a whole
+ * selection, not a payer at a time), then archived rows flip back on. Each
+ * created row still gets its own audit entry. */
+export async function attachPayerTargetsBulk(
+  entries: readonly { payerId: string; plan: AttachmentSavePlan }[],
+): Promise<void> {
   const orgId = requireActiveOrg();
-  if (plan.inserts.length > 0) {
+  const inserts = entries.flatMap((entry) =>
+    entry.plan.inserts.map((row) => ({
+      org_id: orgId,
+      payer_id: entry.payerId,
+      group_id: row.groupId,
+      state: row.state,
+      status: "active",
+    })),
+  );
+  if (inserts.length > 0) {
     const { data, error } = await supabase
       .from("payer_network_targets")
-      .insert(
-        plan.inserts.map((row) => ({
-          org_id: orgId,
-          payer_id: payerId,
-          group_id: row.groupId,
-          state: row.state,
-          status: "active",
-        })),
-      )
+      .insert(inserts)
       .select("*");
     if (error) throw error;
     const created = camelizeRow<PayerNetworkTarget[]>(data ?? []);
@@ -50,8 +61,10 @@ export async function attachPayerTargets(payerId: string, plan: AttachmentSavePl
       });
     }
   }
-  for (const id of plan.restoreIds) {
-    await restoreTarget(id);
+  for (const entry of entries) {
+    for (const id of entry.plan.restoreIds) {
+      await restoreTarget(id);
+    }
   }
 }
 
@@ -105,6 +118,14 @@ export async function restoreTarget(id: string): Promise<void> {
 /** Attach a payer to a group: the reviewed target plan only. */
 export async function attachGroupPayer(payerId: string, plan: AttachmentSavePlan): Promise<void> {
   await attachPayerTargets(payerId, plan);
+}
+
+/** Attach SEVERAL payers to a group in one save — the multi-select picker's
+ * write. Same reviewed-plan shape per payer, one insert for the whole batch. */
+export async function attachGroupPayers(
+  entries: readonly { payerId: string; plan: AttachmentSavePlan }[],
+): Promise<void> {
+  await attachPayerTargetsBulk(entries);
 }
 
 /** Archive one GROUP's active targets for a payer (never a DELETE). */

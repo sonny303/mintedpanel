@@ -420,6 +420,12 @@ would go stale.
 `/cases` as an escape hatch). Starter cases and launch-driven creation are
 retired; `src/lib/oneDoor.test.ts` greps the source tree to keep it that way.
 
+The Cases Matrix respects this: a gap cell `<Link>`s to `/generation`
+pre-scoped (`?provider=&payer=&group=`) rather than creating anything. Creating
+inline would ship a case without its payer forms and execution types, which only
+generation's four passes attach. **Never import `useCreateCase` into a Matrix
+file** — it is not on the one-door allowlist and must not be added.
+
 Candidates = active `payer_network_targets` × group roster, filtered to
 providers with a facility assignment **and a footprint in the target state**.
 Buckets (candidate / enrolled / existing / excluded) are pure
@@ -447,7 +453,19 @@ latest-first, a date-less touch carries the prior follow-up forward, and only
 `src/lib/enrollmentReadiness.ts` (advisory only — never gates anything, never
 creates tasks), `src/lib/nextBestActions.ts` (fixed shipped ranking; the config
 seam was removed), `src/lib/providerGaps.ts`, `src/lib/reports.ts` (grouped
-index — adding a report is one registry entry + one route).
+index — adding a report is one registry entry + one route),
+`src/lib/casesMatrix.ts` (the `/cases` Matrix board — see below).
+
+`casesMatrix.ts` derives the provider × payer board a section at a time, where
+a section is **one group + one state**. That pinning is what makes "one cell =
+one case" true by construction: section (group, state) + row (provider) +
+column (payer) is exactly the 4-part case key. Cells are `case` / `gap` /
+`excluded`, resolved by Map lookup — it must **never** call
+`buildGenerationPreview`, whose candidacy question is irrelevant once rows are
+providers who already hold a case. A provider drops off the whole board when no
+non-terminal case remains anywhere, evaluated against their unfiltered case set.
+Columns are active `payer_network_targets` **∪** payers with a case in that
+section, so a case whose target was later archived never vanishes.
 
 All date math is date-only against a passed-in `today` — **never a clock read
 inside a pure lib.**
@@ -554,6 +572,13 @@ and leaves decisions untouched.
   `src/shared/quickCards.ts` holds only the default layout and projection
   helpers, not a field-list mirror. (An older note here claimed otherwise —
   it was stale.)
+- **A hover-opened Radix `Popover` must suppress both focus hand-offs.** The
+  non-modal `Content` focuses its own container on mount and returns focus to
+  the trigger on unmount; pair that with a trigger that opens on focus and
+  closes on blur and it is a closed loop — the cell blinks forever at the
+  close-delay interval, pointer parked anywhere. `MatrixCellPopover.tsx`
+  prevents `onOpenAutoFocus` always and `onCloseAutoFocus` unless the user
+  actually put focus inside. Copy that hook, don't re-wire the handlers.
 
 ## UI conventions
 
