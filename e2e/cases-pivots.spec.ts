@@ -674,6 +674,17 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
   // Exactly one popover, and it is this cell's case — not a neighbour's.
   await expect(popper.getByText("C-1005")).toBeVisible();
 
+  // Blink checks run before content checks so a copy regression cannot skip
+  // the focus-loop assertions. Hover must not move focus: Radix's non-modal
+  // Content focuses itself on mount, and these triggers open on focus and close
+  // on blur, so a hover that steals focus arms a loop.
+  const focusInsidePopover = await page.evaluate(
+    () =>
+      document.activeElement !== null &&
+      document.activeElement.closest("[data-radix-popper-content-wrapper]") !== null,
+  );
+  expect(focusInsidePopover).toBe(false);
+
   // Provider / payer / state are NOT repeated in the panel — the row, column
   // and section headers already name them. Submitted shows when the case has a
   // date; the sibling below proves it is omitted, not blanked, when it doesn't.
@@ -689,20 +700,15 @@ test("Matrix cell popover: one popover per hover, no focus theft, and it stays d
   // surface, and threading it here cost a linear scan per case cell per render.
   await expect(popper.getByText(/ranked by the/)).toHaveCount(0);
 
-  // The root cause of the blink: hover must not move focus. Radix's non-modal
-  // Content focuses itself on mount, and these triggers open on focus and close
-  // on blur, so a hover that steals focus arms a loop.
-  const focusInsidePopover = await page.evaluate(
-    () =>
-      document.activeElement !== null &&
-      document.activeElement.closest("[data-radix-popper-content-wrapper]") !== null,
-  );
-  expect(focusInsidePopover).toBe(false);
-
   // A case that was never submitted omits the row rather than blanking it.
+  // This is also the cell-to-cell hover: A's delayed close must not dismiss
+  // B after B has already opened.
   await page.getByRole("link", { name: /Marco Reyes, BCBS-NC, NC, open case/ }).hover();
   await expect(popper.getByText("C-1003")).toBeVisible({ timeout: 15000 });
   await expect(popper.getByText("Submitted", { exact: true })).toHaveCount(0);
+  await page.waitForTimeout(400);
+  await expect(popper.getByText("C-1003")).toBeVisible();
+  await expect(popper).toHaveCount(1);
 
   // Moving off dismisses it — and it must STAY dismissed. This is
   // the reported symptom: Radix hands focus back to the trigger on close, the

@@ -582,7 +582,6 @@ function CasesPage() {
           payerId={matrixPayerId}
           groupBy={matrixGroupBy}
           today={matrixQ.today}
-
           followUps={matrixQ.followUps}
           onReset={resetAllFilters}
         />

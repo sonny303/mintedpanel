@@ -27,7 +27,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { Link } from "@tanstack/react-router";
@@ -65,7 +67,7 @@ const focusableInContent = 'a[href], button:not([disabled]), [tabindex]:not([tab
 
 const MatrixPopoverContext = createContext<{
   openKey: string | null;
-  setOpenKey: (key: string | null) => void;
+  setOpenKey: Dispatch<SetStateAction<string | null>>;
 }>({
   openKey: null,
   setOpenKey: () => undefined,
@@ -111,8 +113,14 @@ function useHoverPopover(popoverKey: string) {
 
   const close = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = setTimeout(() => setOpenKey(null), closeDelay);
-  }, [setOpenKey]);
+    // Only dismiss if this cell still owns the open popover. Each cell has its
+    // own timer, so hovering A → B would otherwise let A's delayed close null
+    // the key after B already opened — the panel vanishes under a stationary
+    // pointer on B.
+    closeTimer.current = setTimeout(() => {
+      setOpenKey((current) => (current === popoverKey ? null : current));
+    }, closeDelay);
+  }, [popoverKey, setOpenKey]);
 
   const openFromFocus = useCallback(() => {
     // Escape (or a dismissing click) closed the popover and Radix put focus
@@ -374,10 +382,12 @@ function GapCellPopover({
           tabIndex={0}
           className="flex min-h-8 w-full cursor-default items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--mp-primary)] focus-visible:ring-offset-1"
           {...popover.triggerProps}
-          // Radix's Trigger toggles on click; left alone, clicking the cell you
-          // are already hovering would close the panel you are reading.
-          // preventDefault is how composeEventHandlers is told to stand down.
-          onClick={(event) => event.preventDefault()}
+          // Radix's Trigger toggles on click. When hover already opened the
+          // panel, preventDefault stops that toggle from closing it. When the
+          // panel is closed (touch / no hover), let the click open it.
+          onClick={(event) => {
+            if (popover.isOpen) event.preventDefault();
+          }}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
