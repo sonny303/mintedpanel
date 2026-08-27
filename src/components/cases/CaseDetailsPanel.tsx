@@ -1,8 +1,9 @@
 // Slice E (payer-and-cases screen 6) — the case's right-column Details card:
 // ONE card, three labeled groups.
 //   Case         — the dates the case carries, days open, coordinator, group,
-//                  the facility WITH its full address (editable for writers —
-//                  provider×group assignment scoped), forwarding ID.
+//                  the case's Locations (E1.3, Track B: every case_facilities
+//                  row, primary badged, editable for writers — provider×group
+//                  assignment scoped), forwarding ID.
 //   Identifiers  — provider/group identifiers, each copyable, plus the
 //                  payer-issued IDs an approval captured. A payer that expects
 //                  an ID whose approval acked it missing reads "Awaiting ID"
@@ -15,11 +16,11 @@ import { Separator } from "@/components/ui/separator";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusPill } from "@/components/StatusPill";
 import { CaseDateField } from "@/components/cases/CaseDateField";
-import { CaseFacilityField } from "@/components/cases/CaseFacilityField";
+import { CaseLocationsSection } from "@/components/cases/CaseLocationsSection";
 import { CaseProvenancePanel } from "@/components/generation/CaseProvenancePanel";
 import { enrollmentIdBadge } from "@/lib/payerIssuedIds";
 import { resolveGroupIdentifierConfig } from "@/lib/payerResolutionIdentifier";
-import type { CaseDetail, Facility, Task } from "@/types";
+import type { CaseDetail, CaseFacilityWithDetail, Facility, Task } from "@/types";
 import type { SetCaseDatesInput } from "@/services/cases";
 
 const GROUP_LABEL = "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
@@ -28,10 +29,14 @@ export function CaseDetailsPanel({
   c,
   tasks,
   coordinatorName,
+  locations = [],
+  locationsLoading = false,
   facilityOptions = [],
-  canEditFacility = false,
-  savingFacility = false,
-  onSaveFacility,
+  canEditLocations = false,
+  savingLocations = false,
+  onAddLocation,
+  onRemoveLocation,
+  onMakePrimaryLocation,
   canEditDates = false,
   savingDates = false,
   onSaveDates,
@@ -39,11 +44,18 @@ export function CaseDetailsPanel({
   c: CaseDetail;
   tasks: Task[];
   coordinatorName: string;
-  /** Provider×group facilities offered by the editor (empty = read-only dash). */
+  /** The case's full location set (case_facilities, joined to facilities). */
+  locations?: CaseFacilityWithDetail[];
+  locationsLoading?: boolean;
+  /** Provider×group facilities eligible to be added (already-attached ones
+   * are filtered out by CaseLocationsSection itself). */
   facilityOptions?: Facility[];
-  canEditFacility?: boolean;
-  savingFacility?: boolean;
-  onSaveFacility?: (facilityId: string | null) => Promise<void>;
+  canEditLocations?: boolean;
+  /** True while any of add/remove/make-primary is in flight. */
+  savingLocations?: boolean;
+  onAddLocation?: (facilityId: string) => Promise<void>;
+  onRemoveLocation?: (facilityId: string) => Promise<void>;
+  onMakePrimaryLocation?: (facilityId: string) => Promise<void>;
   /** Expected/Confirmed effective + Contract executed — direct corrections,
    * independent of the status machine (setCaseDates). */
   canEditDates?: boolean;
@@ -111,12 +123,17 @@ export function CaseDetailsPanel({
           <Separator className="my-2" />
           <Row label="Coordinator" value={coordinatorName} />
           <Row label="Group" value={c.group?.name ?? "—"} />
-          <CaseFacilityField
-            facility={c.facility}
-            options={facilityOptions}
-            canEdit={Boolean(canEditFacility && onSaveFacility)}
-            saving={savingFacility}
-            onSave={onSaveFacility ?? (async () => undefined)}
+          <CaseLocationsSection
+            locations={locations}
+            loading={locationsLoading}
+            facilityOptions={facilityOptions}
+            canEdit={Boolean(
+              canEditLocations && onAddLocation && onRemoveLocation && onMakePrimaryLocation,
+            )}
+            saving={savingLocations}
+            onAdd={onAddLocation ?? (async () => undefined)}
+            onRemove={onRemoveLocation ?? (async () => undefined)}
+            onMakePrimary={onMakePrimaryLocation ?? (async () => undefined)}
           />
           {c.caseEmailToken ? <IdRow label="Forwarding ID" value={c.caseEmailToken} /> : null}
         </dl>

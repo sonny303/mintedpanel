@@ -4,17 +4,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useActiveOrgId } from "@/lib/auth-store";
 import { queryKeys } from "@/hooks/queryKeys";
 import {
+  addCaseFacility,
   appendCaseTasks,
   createCase,
   getCase,
+  getCaseFacilities,
   getCases,
   getContractFor,
   listCaseDenialEntries,
   listDenialReasonCodes,
+  removeCaseFacility,
   setCaseDates,
   setCaseFacility,
   setCaseStatus,
   setPayerReference,
+  setPrimaryCaseFacility,
   type CaseFilters,
   type CaseInput,
   type CaseTaskPayload,
@@ -112,6 +116,73 @@ export function useSetCaseFacility() {
       qc.invalidateQueries({ queryKey: queryKeys.case(orgId, vars.caseId) });
       qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
     },
+  });
+}
+
+// E1.3 (Track B) — a case's full location set. Own query, invalidated
+// alongside "cases"/"case" (the credential_cases.facility_id mirror those
+// carry) by every add/remove/set-primary mutation below.
+export function useCaseFacilities(caseId: string | undefined) {
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useQuery({
+    queryKey: queryKeys.caseFacilities(orgId, caseId ?? ""),
+    queryFn: () => getCaseFacilities(caseId as string),
+    enabled: orgId !== "no-org" && Boolean(caseId),
+    staleTime: THIRTY_SECONDS,
+  });
+}
+
+function invalidateCaseFacilities(
+  qc: ReturnType<typeof useQueryClient>,
+  orgId: string,
+  caseId: string,
+) {
+  qc.invalidateQueries({ queryKey: ["cases", orgId] });
+  qc.invalidateQueries({ queryKey: queryKeys.case(orgId, caseId) });
+  qc.invalidateQueries({ queryKey: queryKeys.caseFacilities(orgId, caseId) });
+  qc.invalidateQueries({ queryKey: ["audit-log", orgId] });
+}
+
+export interface AddCaseFacilityVars {
+  caseId: string;
+  facilityId: string;
+}
+
+export function useAddCaseFacility() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: AddCaseFacilityVars) => addCaseFacility(vars.caseId, vars.facilityId),
+    onSuccess: (_data, vars) => invalidateCaseFacilities(qc, orgId, vars.caseId),
+  });
+}
+
+export interface RemoveCaseFacilityVars {
+  caseId: string;
+  facilityId: string;
+}
+
+export function useRemoveCaseFacility() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: RemoveCaseFacilityVars) => removeCaseFacility(vars.caseId, vars.facilityId),
+    onSuccess: (_data, vars) => invalidateCaseFacilities(qc, orgId, vars.caseId),
+  });
+}
+
+export interface SetPrimaryCaseFacilityVars {
+  caseId: string;
+  facilityId: string;
+}
+
+export function useSetPrimaryCaseFacility() {
+  const qc = useQueryClient();
+  const orgId = useActiveOrgId() ?? "no-org";
+  return useMutation({
+    mutationFn: (vars: SetPrimaryCaseFacilityVars) =>
+      setPrimaryCaseFacility(vars.caseId, vars.facilityId),
+    onSuccess: (_data, vars) => invalidateCaseFacilities(qc, orgId, vars.caseId),
   });
 }
 

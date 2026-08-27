@@ -21,12 +21,15 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { fmtDate } from "@/lib/format";
 import { buildProviderTokenValues } from "@/lib/pdfFill";
 import {
+  useAddCaseFacility,
   useCase,
+  useCaseFacilities,
   useDenialReasonCodes,
+  useRemoveCaseFacility,
   useSetCaseDates,
-  useSetCaseFacility,
   useSetCaseStatus,
   useSetPayerReference,
+  useSetPrimaryCaseFacility,
 } from "@/hooks/useCases";
 import { useCoordinators, useFacilities } from "@/hooks/useLookups";
 import { useProviderAssignments } from "@/hooks/useProviders";
@@ -58,6 +61,7 @@ function CaseDetailPage() {
   const reasonCodesQ = useDenialReasonCodes();
   const facilitiesQ = useFacilities();
   const facilityAssignmentsQ = useProviderAssignments();
+  const caseFacilitiesQ = useCaseFacilities(id);
   const c = caseQ.data;
 
   const setStatusM = useSetCaseStatus();
@@ -65,7 +69,11 @@ function CaseDetailPage() {
   const correctTouchM = useCorrectTouch();
   const logNoteM = useLogNote();
   const setReferenceM = useSetPayerReference();
-  const setFacilityM = useSetCaseFacility();
+  const addFacilityM = useAddCaseFacility();
+  const removeFacilityM = useRemoveCaseFacility();
+  const setPrimaryFacilityM = useSetPrimaryCaseFacility();
+  const savingLocations =
+    addFacilityM.isPending || removeFacilityM.isPending || setPrimaryFacilityM.isPending;
   const setDatesM = useSetCaseDates();
 
   const coordinatorName = useMemo(() => {
@@ -253,13 +261,33 @@ function CaseDetailPage() {
               c={c}
               tasks={tasks}
               coordinatorName={coordinatorName}
+              locations={caseFacilitiesQ.data ?? []}
+              locationsLoading={caseFacilitiesQ.isLoading}
               facilityOptions={facilityOptions}
-              canEditFacility={canEdit}
-              savingFacility={setFacilityM.isPending}
-              onSaveFacility={async (facilityId) => {
+              canEditLocations={canEdit}
+              savingLocations={savingLocations}
+              onAddLocation={async (facilityId) => {
                 try {
-                  await setFacilityM.mutateAsync({ caseId: c.id, facilityId });
-                  toast.success("Facility saved");
+                  await addFacilityM.mutateAsync({ caseId: c.id, facilityId });
+                  toast.success("Location added");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  throw e;
+                }
+              }}
+              onRemoveLocation={async (facilityId) => {
+                try {
+                  await removeFacilityM.mutateAsync({ caseId: c.id, facilityId });
+                  toast.success("Location removed");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                  throw e;
+                }
+              }}
+              onMakePrimaryLocation={async (facilityId) => {
+                try {
+                  await setPrimaryFacilityM.mutateAsync({ caseId: c.id, facilityId });
+                  toast.success("Primary location updated");
                 } catch (e) {
                   toast.error((e as Error).message);
                   throw e;

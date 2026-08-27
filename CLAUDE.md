@@ -311,6 +311,19 @@ group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
   the mirror in lockstep in the same call as the child-row write. Eligibility
   is the same rule as `setCaseFacility` (provider must be assigned to the
   facility under the case's group), enforced app-side, not by RLS.
+  **UI:** the case Details card's old single-value Facility row
+  (`CaseFacilityField`, retired) is now `CaseLocationsSection` — every
+  location listed, primary badged (`StatusPill`), Add/Remove/Make-primary for
+  a writer, billing stays read-only. Hooks: `useCaseFacilities` (query) +
+  `useAddCaseFacility`/`useRemoveCaseFacility`/`useSetPrimaryCaseFacility`
+  (`src/hooks/useCases.ts`), keyed by `queryKeys.caseFacilities` and
+  invalidated alongside `cases`/`case` so the list and the `facility_id`
+  mirror refresh together. `setCaseFacility`/`useSetCaseFacility` (the old
+  single-value overwrite) are untouched and kept — `resolveCaseFacilityId` at
+  `/generation` still stamps through `create_case_with_tasks`' `facilityId`
+  input, not through this function, so as of this UI swap neither has a
+  caller; left in place rather than removed, since case creation is out of
+  scope for the multi-location work.
 - **`payer_network_targets`** = group × payer × state — "this group works with
   this payer here." Distinct from the (now largely vestigial)
   `org_payer_assignments` subscription layer.
