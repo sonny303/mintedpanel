@@ -118,6 +118,22 @@ export function attachRowKey(
 }
 
 /**
+ * Payers that already hold ≥1 ACTIVE target for this group. The attach dialog
+ * opens with these pre-selected so the coordinator sees what is already on the
+ * board and can add more (or finish a partial attach) in the same pass.
+ */
+export function alreadyAttachedPayerIds(
+  existingTargets: readonly PayerNetworkTarget[],
+  groupId: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const target of existingTargets) {
+    if (target.groupId === groupId && target.status === "active") ids.add(target.payerId);
+  }
+  return ids;
+}
+
+/**
  * Review a whole selection at once: one block per payer, name-sorted, each
  * built from the SAME per-payer expansion the single-payer flow used. Targets
  * are partitioned by payer first, so one payer's rows can never annotate

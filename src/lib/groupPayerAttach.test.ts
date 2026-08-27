@@ -4,6 +4,7 @@
 // here, so scan-time errors and the dialog cannot drift).
 import { describe, expect, it } from "vitest";
 import {
+  alreadyAttachedPayerIds,
   attachPlanTotals,
   attachRowKey,
   defaultAttachSelection,
@@ -137,6 +138,22 @@ describe("multi-payer attach review", () => {
       target({ id: "t-a-nc", payerId: "a", state: "NC", status: "active" }),
     ]);
     expect(partial.fullyAttached).toBe(false);
+  });
+
+  it("alreadyAttachedPayerIds is every payer with ≥1 active target for the group", () => {
+    expect(
+      [
+        ...alreadyAttachedPayerIds(
+          [
+            target({ id: "t1", payerId: "a", state: "NC", status: "active" }),
+            target({ id: "t2", payerId: "a", state: "CO", status: "active" }),
+            target({ id: "t3", payerId: "b", state: "CO", status: "archived" }),
+            target({ id: "t4", payerId: "c", groupId: "other", state: "NC", status: "active" }),
+          ],
+          "g1",
+        ),
+      ].sort(),
+    ).toEqual(["a"]);
   });
 
   it("defaults pre-check new facility-backed rows only, payer-scoped", () => {

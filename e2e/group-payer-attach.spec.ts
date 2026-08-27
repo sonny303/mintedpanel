@@ -384,6 +384,20 @@ test("the picker is a MULTI-select: several payers reviewed together and saved i
       created_at: "2026-06-01T00:00:00Z",
     },
   ];
+  // Aetna is already on the board for NC — the dialog must open with Aetna
+  // pre-selected so the coordinator sees what is already attached.
+  fixtures.payer_network_targets = [
+    {
+      id: "t-aetna-nc",
+      org_id: ORG_ID,
+      payer_id: "pay-aetna",
+      group_id: "g-ob",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-06-15T00:00:00Z",
+    },
+  ];
   // A second eligible payer covering BOTH operating states.
   fixtures.payers = [
     ...CATALOG,
@@ -407,36 +421,31 @@ test("the picker is a MULTI-select: several payers reviewed together and saved i
   await page.goto("/groups/g-ob/payer-network");
   await page.getByRole("button", { name: "Attach payers", exact: true }).click({ timeout: 30000 });
 
-  // Two eligible payers checked in one pass — no reopening the dialog.
-  await page.getByLabel("Select Aetna").check();
+  // Already-attached Aetna is pre-checked; Cigna is not.
+  await expect(page.getByLabel("Select Aetna")).toBeChecked();
+  await expect(page.getByLabel("Select Cigna Healthcare")).not.toBeChecked();
   await page.getByLabel("Select Cigna Healthcare").check();
   await page.getByRole("button", { name: "Review 2 payers" }).click();
 
   // One block per payer, each proposing only ITS OWN payer ∩ group states:
-  // Aetna (NC, SC) → NC; Cigna (NC, CO) → NC + CO.
-  await expect(page.getByLabel("Target NC for Aetna")).toBeChecked();
+  // Aetna (NC, SC) → NC (already active); Cigna (NC, CO) → NC + CO.
+  await expect(page.getByLabel("Target NC for Aetna")).toBeDisabled();
   await expect(page.getByLabel("Target CO for Aetna")).toHaveCount(0);
   await expect(page.getByLabel("Target NC for Cigna Healthcare")).toBeChecked();
   await expect(page.getByLabel("Target CO for Cigna Healthcare")).toBeChecked();
 
   // Unchecking one payer's state leaves the other payer's identical state on.
   await page.getByLabel("Target CO for Cigna Healthcare").uncheck();
-  await page.getByRole("button", { name: "Save targets (2 payers, 2 states)" }).click();
-  await expect(page.getByText("2 payers attached")).toBeVisible({ timeout: 15000 });
+  // Aetna is fully attached → dropped from the plan; only Cigna NC saves.
+  await page.getByRole("button", { name: "Save targets" }).click();
+  await expect(page.getByText("Cigna Healthcare attached")).toBeVisible({ timeout: 15000 });
 
   const targetPosts = writes.filter(
     (w) => w.method === "POST" && w.path === "payer_network_targets",
   );
-  expect(targetPosts.map((w) => [w.body?.payer_id, w.body?.state])).toEqual([
-    ["pay-aetna", "NC"],
-    ["pay-cigna", "NC"],
-  ]);
+  expect(targetPosts.map((w) => [w.body?.payer_id, w.body?.state])).toEqual([["pay-cigna", "NC"]]);
   expect(targetPosts.every((w) => w.body?.group_id === "g-ob")).toBe(true);
   expect(targetPosts.every((w) => w.body?.status === "active")).toBe(true);
-  // Both payers now sit on the board.
-  await expect(page.getByText("2 of 2 targeted payers accounted for.")).toBeVisible({
-    timeout: 15000,
-  });
 });
 
 test("TS-110: the CSV path — exact-header gate, per-row eligibility errors at scan time, idempotent skip-on-match commit", async ({

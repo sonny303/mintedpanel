@@ -34,6 +34,7 @@ import {
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
 import { useAttachGroupPayers } from "@/hooks/usePayerNetworkTargets";
 import {
+  alreadyAttachedPayerIds,
   attachPlanTotals,
   attachRowKey,
   defaultAttachSelection,
@@ -73,9 +74,13 @@ export function GroupAttachPayerDialog({
 
   const [step, setStep] = useState<"select" | "review">(initialPayer ? "review" : "select");
   const [query, setQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(initialPayer ? [initialPayer.id] : []),
-  );
+  // Open with already-attached payers pre-checked (or just initialPayer on
+  // re-attach) so the board's current targets are visible in the same pass
+  // as any new ones the coordinator adds.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    if (initialPayer) return new Set([initialPayer.id]);
+    return alreadyAttachedPayerIds(existingTargets, group.id);
+  });
   // Checked STATE rows, payer-scoped. Seeded with each payer's defaults the
   // first time that payer reaches the review, so stepping back to change the
   // selection never discards state choices already made.
