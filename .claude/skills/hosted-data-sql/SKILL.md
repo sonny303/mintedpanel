@@ -119,11 +119,11 @@ ROLLBACK;
 | `touches`                     | NO ACTION           | `DELETE` before cases                    |
 | `tasks`                       | NO ACTION           | `DELETE` after touches, before cases     |
 | `status_history`              | NO ACTION           | `DELETE` before cases                    |
+| `case_generation_run_rows`    | SET NULL            | **`DELETE` before cases** — `disposition='created'` forbids null `case_id` (`case_generation_run_rows_created_case_check`); SET NULL 23514s |
 | `case_status_history`         | CASCADE             | automatic                                |
 | `payer_pipeline_history`      | CASCADE             | automatic                                |
 | `fill_sessions`               | CASCADE             | automatic                                |
 | `provider_documents.case_id`  | SET NULL            | automatic (doc rows kept)                |
-| `case_generation_run_rows`    | SET NULL            | automatic (disposition row kept)         |
 
 Re-check with:
 
