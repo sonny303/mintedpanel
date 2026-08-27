@@ -1,14 +1,17 @@
 // Case detail header (Slice E / payer-and-cases screen 6): one bordered card
 // carrying the case's identity — provider name (links to the record), the
 // case-type badge, the payer (links to its catalog detail) · state · specialty
-// · owning group, and the inline-editable tracking ID — with the ONE unified
-// status control + its attribution on the right. The dual credentialing +
-// payer-pipeline pills and the separate contract pill are long gone (E6.0);
-// the duplicate tracking-ID warning is deliberately not surfaced here
-// (handoff §2.7 — a collision is only ever a data-entry error).
+// · owning group, the copyable Case # (C-<caseNumber>, the immutable global
+// sequence — see 20260722120000_case_number.sql), and the inline-editable
+// tracking ID — with the ONE unified status control + its attribution on the
+// right. The dual credentialing + payer-pipeline pills and the separate
+// contract pill are long gone (E6.0); the duplicate tracking-ID warning is
+// deliberately not surfaced here (handoff §2.7 — a collision is only ever a
+// data-entry error).
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { CopyButton } from "@/components/CopyButton";
 import type { CaseDetail } from "@/types";
 
 export function CaseHeader({
@@ -70,7 +73,14 @@ export function CaseHeader({
               </>
             ) : null}
           </p>
-          {trackingId ? <div className="mt-3">{trackingId}</div> : null}
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+              Case #
+            </span>
+            <span className="text-[13px] font-medium font-mono tabular-nums">C-{c.caseNumber}</span>
+            <CopyButton value={`C-${c.caseNumber}`} label="Case number" />
+          </div>
+          {trackingId ? <div className="mt-2">{trackingId}</div> : null}
         </div>
 
         <div className="flex flex-none items-start">{statusControl}</div>
