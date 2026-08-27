@@ -841,6 +841,26 @@ export interface CredentialCase {
   generationRunId?: string | null;
 }
 
+// E1.1 (Track B) — a case's additional locations. `credential_cases.facility_id`
+// stays the PRIMARY mirror (unchanged shape, still what every existing reader
+// sees); this child table is the full set, at most one row `isPrimary: true`
+// per case. Not PHI — a location row, same posture as FacilityAssignment.
+export interface CaseFacility {
+  id: string;
+  orgId: string;
+  caseId: string;
+  facilityId: string;
+  isPrimary: boolean;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+// A case's location joined to the Facility row, for display (case detail /
+// editor). One row per case_facilities row.
+export interface CaseFacilityWithDetail extends CaseFacility {
+  facility: Pick<Facility, "id" | "name" | "street" | "city" | "state" | "zip" | "isActive">;
+}
+
 // E2.1 TE-2 — one row per confirmed generation batch (who/when/counts).
 // Immutable by omission (no UPDATE/DELETE policy or grant); the stored counts
 // are the confirm-time plan, superseded at read time by E2.4's disposition

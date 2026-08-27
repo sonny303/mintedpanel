@@ -105,3 +105,29 @@ export function isEligibleCaseFacility(
   });
   return ids.includes(facilityId);
 }
+
+// E1.1 (Track B) — multi-location cases. `case_facilities` holds the full
+// set; `credential_cases.facility_id` stays a PRIMARY MIRROR of whichever row
+// has `isPrimary: true`. These two helpers are the pure decisions the service
+// layer (`addCaseFacility`/`removeCaseFacility`) needs and nothing more —
+// eligibility for ADDING a location is still `isEligibleCaseFacility` above,
+// unrelaxed.
+
+export interface CaseFacilityNameRef {
+  facilityId: string;
+  facilityName: string;
+}
+
+/** Which facility becomes primary when the current primary is removed from a
+ * case's location set. Alphabetical by name — the same sort
+ * `caseFacilityOptions` already uses for the picker, so promotion is
+ * deterministic and never asks the coordinator to choose. `remaining` is the
+ * location set AFTER the removed row is excluded; empty → null (the case
+ * reverts to "no location", same as clearing `setCaseFacility` today). */
+export function pickNextPrimaryCaseFacility(
+  remaining: readonly CaseFacilityNameRef[],
+): string | null {
+  if (remaining.length === 0) return null;
+  const sorted = remaining.slice().sort((a, b) => a.facilityName.localeCompare(b.facilityName));
+  return sorted[0]?.facilityId ?? null;
+}

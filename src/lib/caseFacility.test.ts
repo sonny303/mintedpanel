@@ -3,6 +3,7 @@ import {
   caseFacilityOptions,
   facilitiesForCaseProvider,
   isEligibleCaseFacility,
+  pickNextPrimaryCaseFacility,
   resolveCaseFacilityId,
   type CaseFacilityAssignmentRef,
   type CaseFacilityRef,
@@ -216,5 +217,34 @@ describe("caseFacilityOptions", () => {
     ];
     const opts = caseFacilityOptions("p-1", "g-1", assignments, facilities, "f-a");
     expect(opts.map((f) => f.id)).toEqual(["f-a", "f-b"]);
+  });
+});
+
+describe("pickNextPrimaryCaseFacility", () => {
+  it("returns null when no locations remain", () => {
+    expect(pickNextPrimaryCaseFacility([])).toBeNull();
+  });
+
+  it("promotes the sole remaining location", () => {
+    expect(pickNextPrimaryCaseFacility([{ facilityId: "f-1", facilityName: "Alpha" }])).toBe("f-1");
+  });
+
+  it("promotes alphabetically by name, not insertion order", () => {
+    expect(
+      pickNextPrimaryCaseFacility([
+        { facilityId: "f-z", facilityName: "Zeta Clinic" },
+        { facilityId: "f-a", facilityName: "Alpha Clinic" },
+        { facilityId: "f-m", facilityName: "Midtown Clinic" },
+      ]),
+    ).toBe("f-a");
+  });
+
+  it("is case-insensitive-ish per localeCompare (matches caseFacilityOptions' sort)", () => {
+    expect(
+      pickNextPrimaryCaseFacility([
+        { facilityId: "f-b", facilityName: "beta" },
+        { facilityId: "f-a", facilityName: "Alpha" },
+      ]),
+    ).toBe("f-a");
   });
 });

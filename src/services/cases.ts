@@ -5,7 +5,7 @@
 import { supabase } from "@/integrations/supabase/externalClient";
 import { camelizeRow, snakeizeRow } from "@/lib/case";
 import { currentUserId, currentUserRole, requireActiveOrg, writeAudit } from "@/lib/audit";
-import { isEligibleCaseFacility } from "@/lib/caseFacility";
+import { isEligibleCaseFacility, pickNextPrimaryCaseFacility } from "@/lib/caseFacility";
 import { normalizeStateCode } from "@/lib/stateCode";
 import { translateDbError } from "@/lib/dbErrors";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -15,6 +15,7 @@ import type { CaseStatus } from "@/lib/caseStatus";
 import type { SopResolutionTier } from "@/lib/pickTemplate";
 import type {
   CaseDetail,
+  CaseFacilityWithDetail,
   Contract,
   CredentialCase,
   DenialReasonCode,
@@ -23,6 +24,8 @@ import type {
 } from "@/types";
 
 type CredentialCaseUpdate = Database["public"]["Tables"]["credential_cases"]["Update"];
+type CaseFacilityInsert = Database["public"]["Tables"]["case_facilities"]["Insert"];
+type CaseFacilityUpdate = Database["public"]["Tables"]["case_facilities"]["Update"];
 
 export interface CaseFilters {
   providerId?: string;
@@ -420,6 +423,273 @@ export async function setCaseFacility(caseId: string, facilityId: string | null)
     before: { facilityId: priorFacilityId },
     after: { facilityId },
     description: "Updated case facility",
+  });
+}
+
+// E1.1 (Track B) — multi-location cases. `case_facilities` holds the full
+// location set for a case; `credential_cases.facility_id` stays a PRIMARY
+// MIRROR (unchanged shape — still what every existing reader sees) of
+// whichever row has `isPrimary: true`. `resolveCaseFacilityId` (creation-time
+// stamp) and `setCaseFacility` (existing single-facility overwrite) are both
+// untouched — these three functions are purely additive, post-create.
+
+const CASE_FACILITY_COLUMNS =
+  "id, org_id, case_id, facility_id, is_primary, created_at, created_by, facility:facilities(id, name, street, city, state, zip, is_active)";
+
+/** A case's full location set, joined to `facilities` for display. Sorted by
+ * facility name (the `caseFacilityOptions` picker convention) — `isPrimary`
+ * rides each row so the UI can badge it without a second lookup. */
+export async function getCaseFacilities(caseId: string): Promise<CaseFacilityWithDetail[]> {
+  const orgId = requireActiveOrg();
+  const { data, error } = await supabase
+    .from("case_facilities")
+    .select(CASE_FACILITY_COLUMNS)
+    .eq("case_id", caseId)
+    .eq("org_id", orgId);
+  if (error) throw error;
+  const rows = camelizeRow<CaseFacilityWithDetail[]>(data ?? []);
+  return rows.slice().sort((a, b) => a.facility.name.localeCompare(b.facility.name));
+}
+
+interface RawCaseFacilityRow {
+  id: string;
+  facility_id: string;
+  is_primary: boolean;
+  facility?: { name?: string | null } | null;
+}
+
+/** Add a location to a case. Same eligibility rule as `setCaseFacility`: the
+ * facility must be one this provider is assigned to under the case's group.
+ * The case's FIRST location becomes primary and the `credential_cases`
+ * mirror is set to match, in this same call; every location after that is
+ * non-primary and the mirror is untouched (use `setPrimaryCaseFacility` to
+ * re-point it). Audited (CREATE). */
+export async function addCaseFacility(caseId: string, facilityId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const { data: caseRow, error: caseErr } = await supabase
+    .from("credential_cases")
+    .select("id, provider_id, group_id")
+    .eq("id", caseId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (caseErr) throw caseErr;
+  if (!caseRow) throw new Error("Case not found");
+
+  const providerId = caseRow.provider_id as string;
+  const groupId = (caseRow.group_id as string | null) ?? null;
+
+  const [
+    { data: facilities, error: facErr },
+    { data: assignments, error: asnErr },
+    { data: existingRows, error: existErr },
+  ] = await Promise.all([
+    supabase.from("facilities").select("id, group_id, is_active").eq("org_id", orgId),
+    supabase
+      .from("provider_facility_assignments")
+      .select("provider_id, facility_id, is_primary")
+      .eq("org_id", orgId)
+      .eq("provider_id", providerId),
+    supabase
+      .from("case_facilities")
+      .select("id, facility_id, is_primary")
+      .eq("org_id", orgId)
+      .eq("case_id", caseId),
+  ]);
+  if (facErr) throw facErr;
+  if (asnErr) throw asnErr;
+  if (existErr) throw existErr;
+
+  const eligible = isEligibleCaseFacility(
+    facilityId,
+    providerId,
+    groupId,
+    (assignments ?? []).map((a) => ({
+      providerId: (a.provider_id as string | null) ?? null,
+      facilityId: (a.facility_id as string | null) ?? null,
+      isPrimary: (a.is_primary as boolean | null) ?? null,
+    })),
+    (facilities ?? []).map((f) => ({
+      id: f.id as string,
+      groupId: (f.group_id as string | null) ?? null,
+      isActive: Boolean(f.is_active),
+    })),
+  );
+  if (!eligible) {
+    throw new Error("Facility must be one of this provider's locations under the case's group.");
+  }
+
+  const existing = (existingRows ?? []) as RawCaseFacilityRow[];
+  if (existing.some((r) => r.facility_id === facilityId)) {
+    throw new Error("Facility is already a location on this case.");
+  }
+  const isFirst = existing.length === 0;
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("case_facilities")
+    .insert({
+      org_id: orgId,
+      case_id: caseId,
+      facility_id: facilityId,
+      is_primary: isFirst,
+      created_by: currentUserId(),
+    } as CaseFacilityInsert)
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+
+  if (isFirst) {
+    const { error: mirrorErr } = await supabase
+      .from("credential_cases")
+      .update({ facility_id: facilityId } as CredentialCaseUpdate)
+      .eq("id", caseId)
+      .eq("org_id", orgId);
+    if (mirrorErr) throw mirrorErr;
+  }
+
+  await writeAudit({
+    actionType: "CREATE",
+    entityType: "case_facility",
+    entityId: inserted.id,
+    before: null,
+    after: { caseId, facilityId, isPrimary: isFirst },
+    description: isFirst
+      ? "Added case location (first location — set primary)"
+      : "Added case location",
+  });
+}
+
+/** Remove a location from a case. If the removed row was primary and other
+ * locations remain, the next remaining location (alphabetical by name, the
+ * `caseFacilityOptions` sort) is auto-promoted and the `credential_cases`
+ * mirror updated to match. If it was the case's last location, the mirror is
+ * cleared to null — the pre-existing "no location" state. Audited (DELETE);
+ * an auto-promotion rides the same audit row's `after` payload. */
+export async function removeCaseFacility(caseId: string, facilityId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const { data: rows, error: readErr } = await supabase
+    .from("case_facilities")
+    .select("id, facility_id, is_primary, facility:facilities(name)")
+    .eq("org_id", orgId)
+    .eq("case_id", caseId);
+  if (readErr) throw readErr;
+
+  const all = (rows ?? []) as RawCaseFacilityRow[];
+  const target = all.find((r) => r.facility_id === facilityId);
+  if (!target) throw new Error("Location not found on this case");
+  const wasPrimary = target.is_primary;
+  const remaining = all.filter((r) => r.id !== target.id);
+
+  const { error: delErr } = await supabase
+    .from("case_facilities")
+    .delete()
+    .eq("id", target.id)
+    .eq("org_id", orgId);
+  if (delErr) throw delErr;
+
+  let promotedFacilityId: string | null = null;
+  if (wasPrimary) {
+    // The target row is already gone (deleted above), so promoting a
+    // survivor to is_primary=true here can never collide with the partial
+    // unique index — there is nothing else primary at this point.
+    promotedFacilityId = pickNextPrimaryCaseFacility(
+      remaining.map((r) => ({
+        facilityId: r.facility_id,
+        facilityName: r.facility?.name ?? "",
+      })),
+    );
+
+    if (promotedFacilityId) {
+      const { error: promoteErr } = await supabase
+        .from("case_facilities")
+        .update({ is_primary: true } as CaseFacilityUpdate)
+        .eq("org_id", orgId)
+        .eq("case_id", caseId)
+        .eq("facility_id", promotedFacilityId);
+      if (promoteErr) throw promoteErr;
+    }
+
+    const { error: mirrorErr } = await supabase
+      .from("credential_cases")
+      .update({ facility_id: promotedFacilityId } as CredentialCaseUpdate)
+      .eq("id", caseId)
+      .eq("org_id", orgId);
+    if (mirrorErr) throw mirrorErr;
+  }
+
+  await writeAudit({
+    actionType: "DELETE",
+    entityType: "case_facility",
+    entityId: target.id,
+    before: { caseId, facilityId, isPrimary: wasPrimary },
+    after: wasPrimary ? { promotedFacilityId } : null,
+    description: !wasPrimary
+      ? "Removed case location"
+      : promotedFacilityId
+        ? "Removed case location (primary) — promoted next location"
+        : "Removed case location (primary, last location) — case has no location",
+  });
+}
+
+/** Re-point a case's primary location to one of its EXISTING `case_facilities`
+ * rows (throws if `facilityId` isn't already attached — this is re-pointing,
+ * not add-and-promote; call `addCaseFacility` first). Demotes the previous
+ * primary before promoting the target, so the partial "one primary per case"
+ * unique index is never transiently violated. Updates the `credential_cases`
+ * mirror to match. Audited (UPDATE). */
+export async function setPrimaryCaseFacility(caseId: string, facilityId: string): Promise<void> {
+  const orgId = requireActiveOrg();
+
+  const { data: rows, error: readErr } = await supabase
+    .from("case_facilities")
+    .select("id, facility_id, is_primary")
+    .eq("org_id", orgId)
+    .eq("case_id", caseId);
+  if (readErr) throw readErr;
+
+  const all = (rows ?? []) as RawCaseFacilityRow[];
+  const target = all.find((r) => r.facility_id === facilityId);
+  if (!target) {
+    throw new Error("Facility is not one of this case's locations.");
+  }
+  if (target.is_primary) return; // already primary — no-op, nothing to audit
+
+  const priorPrimary = all.find((r) => r.is_primary) ?? null;
+
+  // Demote first: promoting the target before the old primary is demoted
+  // would put two is_primary=true rows on the same case at once, tripping
+  // the partial unique index.
+  if (priorPrimary) {
+    const { error: demoteErr } = await supabase
+      .from("case_facilities")
+      .update({ is_primary: false } as CaseFacilityUpdate)
+      .eq("id", priorPrimary.id)
+      .eq("org_id", orgId);
+    if (demoteErr) throw demoteErr;
+  }
+
+  const { error: promoteErr } = await supabase
+    .from("case_facilities")
+    .update({ is_primary: true } as CaseFacilityUpdate)
+    .eq("id", target.id)
+    .eq("org_id", orgId);
+  if (promoteErr) throw promoteErr;
+
+  const { error: mirrorErr } = await supabase
+    .from("credential_cases")
+    .update({ facility_id: facilityId } as CredentialCaseUpdate)
+    .eq("id", caseId)
+    .eq("org_id", orgId);
+  if (mirrorErr) throw mirrorErr;
+
+  await writeAudit({
+    actionType: "UPDATE",
+    entityType: "case_facility",
+    entityId: target.id,
+    before: { primaryFacilityId: priorPrimary?.facility_id ?? null },
+    after: { primaryFacilityId: facilityId },
+    description: "Set case primary location",
   });
 }
 
