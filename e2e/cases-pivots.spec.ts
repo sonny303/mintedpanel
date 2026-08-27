@@ -293,6 +293,9 @@ function seedCases(fixtures: Record<string, Record<string, unknown>[]>) {
       state: "NC",
       case_status: "denied",
       payer_id: "pay-aetna",
+      // Denied, but submitted first — the Matrix popover shows that date, and
+      // the sibling case-start (never submitted) shows no Submitted row.
+      submitted_date: "2026-06-20",
     }),
   );
   fixtures.tasks.push(
@@ -496,4 +499,289 @@ test("post-generation ?run= filters to that batch with a banner; Show all cases 
   // The E2.1 ?runId= spelling is honored too (old links stay live).
   await page.goto("/cases?runId=run-9");
   await expect(page.locator("tbody tr")).toHaveCount(1);
+});
+
+// 2026-08-25 Cases Matrix — the fourth pivot (?pivot=matrix). A read-only
+// provider x payer board sectioned by group + state. These cover the three
+// things unit tests cannot reach: the semantic table markup, the gap cell's
+// "Generate case" link actually being reachable, and Group by re-nesting.
+
+/** Give (g-1, NC) an active Aetna target so Jane's empty Aetna cell is a GAP
+ *  rather than an absent column: she has no NC/Aetna case, Marco does. */
+function seedMatrixTargets(fixtures: Record<string, Record<string, unknown>[]>) {
+  fixtures.payer_network_targets.push(
+    {
+      id: "pnt-nc-aetna",
+      org_id: ORG_ID,
+      payer_id: "pay-aetna",
+      group_id: "g-1",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-07-10T00:00:00Z",
+    },
+    {
+      id: "pnt-nc-bcbs",
+      org_id: ORG_ID,
+      payer_id: "pay-bcbsnc",
+      group_id: "g-1",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-07-10T00:00:00Z",
+    },
+  );
+}
+
+test("Matrix pivot: ?pivot=matrix renders a semantic provider x payer table with case, gap and excluded cells", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  // The Matrix is a fourth tab, not a replacement — Flat is still the default.
+  await expect(page.getByRole("tab", { name: "Flat" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Matrix" }).click();
+  await expect(page).toHaveURL(/pivot=matrix/, { timeout: 15000 });
+
+  // A real <table> with a 2D header relationship, not a div grid —
+  // payers are column headers, providers are row headers.
+  const ncTable = page.getByRole("table", { name: /Group 1 in North Carolina/ });
+  await expect(ncTable).toBeVisible({ timeout: 30000 });
+  await expect(ncTable.getByRole("columnheader", { name: "Provider" })).toBeVisible();
+  await expect(ncTable.getByRole("columnheader", { name: "Aetna" })).toBeVisible();
+  await expect(ncTable.getByRole("columnheader", { name: "BCBS-NC" })).toBeVisible();
+  await expect(ncTable.getByRole("rowheader", { name: "Jane Whitaker" })).toBeVisible();
+  await expect(ncTable.getByRole("rowheader", { name: "Marco Reyes" })).toBeVisible();
+
+  // Jane holds an NC/BCBS case but no NC/Aetna case, and Aetna is an active
+  // target there — so that cell is a gap, labelled Not started.
+  await expect(
+    ncTable.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ }),
+  ).toBeVisible();
+  // Marco's NC/Aetna case is denied — a terminal cell still renders because a
+  // sibling open case keeps him in the Matrix.
+  await expect(
+    ncTable.getByRole("link", { name: /Marco Reyes, Aetna, NC, open case/ }),
+  ).toBeVisible();
+
+  // The board is derived, never stored: rendering it wrote nothing.
+  expect(writes).toHaveLength(0);
+});
+
+test("Matrix gap cell: the Generate case link is reachable and deep-links into /generation pre-scoped", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const gap = page.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ });
+  await expect(gap).toBeVisible({ timeout: 30000 });
+
+  // A gap opens its detail on hover. The link inside must be genuinely
+  // clickable — this is why gaps use a Popover and not a Tooltip.
+  await gap.hover();
+  const generate = page.getByRole("link", { name: /Generate case/ });
+  await expect(generate).toBeVisible({ timeout: 15000 });
+
+  // The Matrix never creates a case: the link hands off to /generation, the
+  // one door, with this candidate pre-scoped.
+  await generate.click();
+  await expect(page).toHaveURL(/\/generation/, { timeout: 15000 });
+  await expect(page).toHaveURL(/provider=pr-jane/);
+  await expect(page).toHaveURL(/payer=pay-aetna/);
+  await expect(page).toHaveURL(/group=g-1/);
+});
+
+test("Matrix Group by re-nests the same sections instead of changing which sections exist", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  // Jane has open cases in NC and SC and an approved one in CO; Marco is in
+  // NC. That is three (group, state) sections under either nesting.
+  const tables = page.getByRole("table");
+  await expect(tables).toHaveCount(3, { timeout: 30000 });
+
+  // Default nesting is by state: the outer headings are the states.
+  await expect(page.getByRole("heading", { name: /North Carolina/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /South Carolina/ })).toBeVisible();
+
+  // Switching to Group re-nests: the outer heading becomes the group, and the
+  // section count is unchanged (nesting only, never membership).
+  await page.getByLabel("Group Matrix by").click();
+  await page.getByRole("option", { name: "Group by Group" }).click();
+  await expect(page.getByRole("heading", { name: "Group 1" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /North Carolina/ })).toHaveCount(0);
+  await expect(tables).toHaveCount(3);
+
+  // The payer filter narrows COLUMNS, so the CO/SC sections (BCBS + Aetna
+  // only respectively) drop out when a non-matching payer is selected.
+  await page.getByLabel("Filter Matrix by payer").click();
+  await page.getByRole("option", { name: "BCBS-NC" }).click();
+  await expect(page.getByRole("columnheader", { name: "Aetna" })).toHaveCount(0, {
+    timeout: 15000,
+  });
+  await expect(page.getByRole("columnheader", { name: "BCBS-NC" }).first()).toBeVisible();
+});
+
+test("Matrix cell popover: one popover per hover, no focus theft, and it stays dismissed", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const caseCell = page.getByRole("link", { name: /Marco Reyes, Aetna, NC, open case/ });
+  await expect(caseCell).toBeVisible({ timeout: 30000 });
+  await caseCell.hover();
+
+  const popper = page.locator("[data-radix-popper-content-wrapper]");
+  await expect(popper).toHaveCount(1, { timeout: 15000 });
+
+  // Exactly one popover, and it is this cell's case — not a neighbour's.
+  await expect(popper.getByText("C-1005")).toBeVisible();
+
+  // Blink checks run before content checks so a copy regression cannot skip
+  // the focus-loop assertions. Hover must not move focus: Radix's non-modal
+  // Content focuses itself on mount, and these triggers open on focus and close
+  // on blur, so a hover that steals focus arms a loop.
+  const focusInsidePopover = await page.evaluate(
+    () =>
+      document.activeElement !== null &&
+      document.activeElement.closest("[data-radix-popper-content-wrapper]") !== null,
+  );
+  expect(focusInsidePopover).toBe(false);
+
+  // Provider / payer / state are NOT repeated in the panel — the row, column
+  // and section headers already name them. Submitted shows when the case has a
+  // date; the sibling below proves it is omitted, not blanked, when it doesn't.
+  // exact:true throughout — a bare getByText is a case-insensitive substring
+  // match, so it would catch a label inside a longer sentence.
+  await expect(popper.getByText("Provider", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("Payer", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("State", { exact: true })).toHaveCount(0);
+  await expect(popper.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(popper.getByText("Jun 20, 2026")).toBeVisible();
+
+  // The next-best-action block is gone with its prop: the queue is /work's
+  // surface, and threading it here cost a linear scan per case cell per render.
+  await expect(popper.getByText(/ranked by the/)).toHaveCount(0);
+
+  // A case that was never submitted omits the row rather than blanking it.
+  // This is also the cell-to-cell hover: A's delayed close must not dismiss
+  // B after B has already opened.
+  await page.getByRole("link", { name: /Marco Reyes, BCBS-NC, NC, open case/ }).hover();
+  await expect(popper.getByText("C-1003")).toBeVisible({ timeout: 15000 });
+  await expect(popper.getByText("Submitted", { exact: true })).toHaveCount(0);
+  await page.waitForTimeout(400);
+  await expect(popper.getByText("C-1003")).toBeVisible();
+  await expect(popper).toHaveCount(1);
+
+  // Moving off dismisses it — and it must STAY dismissed. This is
+  // the reported symptom: Radix hands focus back to the trigger on close, the
+  // trigger's onFocus re-opened, the content stole focus again, the trigger
+  // blurred, and the cell blinked at the close-delay interval from then on,
+  // with the pointer parked somewhere else entirely.
+  await page.getByRole("heading", { name: "Cases" }).hover();
+  await expect(popper).toHaveCount(0, { timeout: 15000 });
+
+  // Count state churn rather than sampling visibility, which can land on any
+  // frame of a blink; count `data-state` flips as well as mounts, because a
+  // reopen landing mid-exit-animation replays the fade on the SAME element.
+  const churn = await page.evaluate(async () => {
+    let events = 0;
+    const isPopper = (node: Node) =>
+      node instanceof HTMLElement && node.matches("[data-radix-popper-content-wrapper]");
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") {
+          const target = record.target as HTMLElement;
+          if (target.closest("[data-radix-popper-content-wrapper]")) events += 1;
+          continue;
+        }
+        for (const node of record.addedNodes) if (isPopper(node)) events += 1;
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-state"],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    observer.disconnect();
+    return events;
+  });
+  expect(churn).toBe(0);
+  await expect(popper).toHaveCount(0);
+});
+
+test("Matrix gap cell: keyboard focus opens the popover and Enter reaches the Generate case link", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  seedCases(fixtures);
+  seedMatrixTargets(fixtures);
+  const { handler } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases?pivot=matrix");
+  await expect(page.getByRole("heading", { name: "Cases" })).toBeVisible({ timeout: 30000 });
+
+  const gap = page.getByRole("button", { name: /Jane Whitaker, Aetna, NC, not started/ });
+  await expect(gap).toBeVisible({ timeout: 30000 });
+
+  // Keyboard parity: focus alone opens the popover, and the focus ring
+  // stays on the cell rather than jumping into the portalled panel.
+  await gap.focus();
+  const generate = page.getByRole("link", { name: /Generate case/ });
+  await expect(generate).toBeVisible({ timeout: 15000 });
+  await expect(gap).toBeFocused();
+
+  // The content is portalled, so Tab does not lead into it — Enter is the
+  // documented way in.
+  await page.keyboard.press("Enter");
+  await expect(generate).toBeFocused();
+
+  // Escape dismisses and returns focus to the cell WITHOUT re-opening.
+  await page.keyboard.press("Escape");
+  await expect(generate).toHaveCount(0, { timeout: 15000 });
+  await expect(gap).toBeFocused();
+  await page.waitForTimeout(500);
+  await expect(page.locator("[data-radix-popper-content-wrapper]")).toHaveCount(0);
 });

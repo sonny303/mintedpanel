@@ -1,5 +1,8 @@
-// 2026-07-22 Cases page redesign — ONE Cases surface with three VIEWS via a
-// segmented control: Flat (default) · By provider · By payer. The former
+// Cases route — the read-only Cases surface with Flat, grouped, and Matrix
+// pivots. The Matrix branch composes its own derived board without changing
+// the existing case, touch, generation-run, or manual-case contracts.
+// 2026-07-22 Cases page redesign — ONE Cases surface with four VIEWS via a
+// segmented control: Flat (default) · By provider · By payer · Matrix. The former
 // "to-do" pivot is retired AS A TAB, but its ranked ordering is not: Flat's
 // DEFAULT sort is the E2.3 next-best-action deadline ranking (reused via
 // useNextBestActions); clicking a column header switches to that column's sort
@@ -36,12 +39,14 @@ import {
 import { CaseStatusPill } from "@/components/cases/CaseStatusPill";
 import { AddTouchDialog, type TouchCaseCandidate } from "@/components/cases/AddTouchDialog";
 import { ManualCaseModal } from "@/components/cases/ManualCaseModal";
+import { CasesMatrix, type CasesMatrixGroupBy } from "@/components/cases/CasesMatrix";
 import { useProviders, useProviderAssignments } from "@/hooks/useProviders";
 import { useCases } from "@/hooks/useCases";
 import { useLastTouchDates } from "@/hooks/useTouches";
 import { useFacilities } from "@/hooks/useLookups";
 import { usePayers } from "@/hooks/useAdmin";
 import { useNextBestActions, useGenerationRun } from "@/hooks/useNextBestActions";
+import { useCasesMatrix } from "@/hooks/useCasesMatrix";
 import { fmtDate } from "@/lib/format";
 import { useCanWrite } from "@/lib/permissions";
 import { CASE_STATUSES, caseStatusLabel, type CaseStatus } from "@/lib/caseStatus";
@@ -62,7 +67,7 @@ import {
   type SortDir,
 } from "@/lib/casesView";
 
-type CasesView = "flat" | "provider" | "payer";
+type CasesView = "flat" | "provider" | "payer" | "matrix";
 
 // The KPI quick-filter rides ?chip (kept for back-compat); the new values are
 // inprog/awaiting/denied. Legacy needs/generic land on Total (all).
@@ -75,7 +80,7 @@ const CHIP_TO_KPI: Record<string, CasesKpi> = {
 };
 
 interface CasesSearch {
-  pivot?: "provider" | "payer";
+  pivot?: "provider" | "payer" | "matrix";
   chip?: string;
   ids?: string;
   runId?: string;
@@ -85,7 +90,10 @@ interface CasesSearch {
 export const Route = createFileRoute("/cases/")({
   component: CasesPage,
   validateSearch: (search: Record<string, unknown>): CasesSearch => ({
-    pivot: search.pivot === "provider" || search.pivot === "payer" ? search.pivot : undefined,
+    pivot:
+      search.pivot === "provider" || search.pivot === "payer" || search.pivot === "matrix"
+        ? search.pivot
+        : undefined,
     chip: typeof search.chip === "string" && search.chip in CHIP_TO_KPI ? search.chip : undefined,
     ids: typeof search.ids === "string" && search.ids.trim() ? search.ids : undefined,
     runId: typeof search.runId === "string" && search.runId ? search.runId : undefined,
@@ -130,6 +138,8 @@ function CasesPage() {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "all">("all");
+  const [matrixPayerId, setMatrixPayerId] = useState("");
+  const [matrixGroupBy, setMatrixGroupBy] = useState<CasesMatrixGroupBy>("state");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sortKey, setSortKey] = useState<FlatSortKey>("default");
@@ -144,6 +154,15 @@ function CasesPage() {
     () => (idsParam ? new Set(idsParam.split(",").filter(Boolean)) : null),
     [idsParam],
   );
+
+  const matrixQ = useCasesMatrix({
+    kpi,
+    state: stateFilter,
+    status: statusFilter,
+    search,
+    caseIds: idSet,
+    generationRunId: runFilter,
+  });
 
   // The E2.3 deadline rank: one entry per OPEN case, in queue order.
   const rankByCaseId = useMemo(() => {
@@ -239,8 +258,13 @@ function CasesPage() {
     };
   }, [payersQ.data, allRows]);
 
+  const matrixPayers = useMemo(
+    () => (payersQ.data ?? []).slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [payersQ.data],
+  );
+
   const groups = useMemo(() => {
-    if (view === "flat") return [];
+    if (view !== "provider" && view !== "payer") return [];
     return groupRows(filtered, view, {
       subtitleFor: view === "provider" ? providerSubtitle : payerSubtitle,
     });
@@ -252,7 +276,7 @@ function CasesPage() {
   );
 
   // Pagination applies to rows (Flat) or groups (grouped views).
-  const totalItems = view === "flat" ? sortedFlat.length : groups.length;
+  const totalItems = view === "flat" ? sortedFlat.length : view === "matrix" ? 0 : groups.length;
   const pages = pageCount(totalItems, pageSize);
   const safePage = Math.min(page, pages);
   const pagedFlat = view === "flat" ? paginate(sortedFlat, safePage, pageSize) : [];
@@ -299,6 +323,22 @@ function CasesPage() {
       setter(v);
     };
 
+  const hasNonDefaultFilters =
+    kpi !== "total" ||
+    search !== "" ||
+    stateFilter !== "all" ||
+    statusFilter !== "all" ||
+    matrixPayerId !== "" ||
+    matrixGroupBy !== "state";
+  const resetAllFilters = () => {
+    setSearch("");
+    setStateFilter("all");
+    setStatusFilter("all");
+    setMatrixPayerId("");
+    setMatrixGroupBy("state");
+    setKpi("total");
+  };
+
   const bulkCandidates: TouchCaseCandidate[] = useMemo(
     () =>
       allRows
@@ -318,7 +358,9 @@ function CasesPage() {
       ? `${counts.total} ${counts.total === 1 ? "case" : "cases"}`
       : view === "provider"
         ? `${groups.length} ${groups.length === 1 ? "provider" : "providers"} · ${counts.total} cases`
-        : `${groups.length} ${groups.length === 1 ? "payer" : "payers"} · ${counts.total} cases`;
+        : view === "payer"
+          ? `${groups.length} ${groups.length === 1 ? "payer" : "payers"} · ${counts.total} cases`
+          : `${matrixQ.matrix?.sections.length ?? 0} sections · ${counts.total} cases`;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -401,6 +443,9 @@ function CasesPage() {
             <TabsTrigger className="text-[12.5px]" value="payer">
               By payer
             </TabsTrigger>
+            <TabsTrigger className="text-[12.5px]" value="matrix">
+              Matrix
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -445,6 +490,45 @@ function CasesPage() {
             ))}
           </SelectContent>
         </Select>
+
+        {view === "matrix" ? (
+          <>
+            <Select
+              value={matrixPayerId || "all"}
+              onValueChange={(v) => setMatrixPayerId(v === "all" ? "" : v)}
+            >
+              <SelectTrigger className="h-9 w-[160px]" aria-label="Filter Matrix by payer">
+                <SelectValue placeholder="All payers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All payers</SelectItem>
+                {matrixPayers.map((payer) => (
+                  <SelectItem key={payer.id} value={payer.id}>
+                    {payer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={matrixGroupBy}
+              onValueChange={(v) => setMatrixGroupBy(v as CasesMatrixGroupBy)}
+            >
+              <SelectTrigger className="h-9 w-[130px]" aria-label="Group Matrix by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="state">Group by State</SelectItem>
+                <SelectItem value="group">Group by Group</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
+        ) : null}
+
+        {hasNonDefaultFilters ? (
+          <Button variant="ghost" size="sm" className="h-9" onClick={resetAllFilters}>
+            <X className="mr-1 h-4 w-4" /> Reset filters
+          </Button>
+        ) : null}
       </div>
 
       {runFilter ? (
@@ -489,7 +573,19 @@ function CasesPage() {
         </div>
       ) : null}
 
-      {failed ? (
+      {view === "matrix" ? (
+        <CasesMatrix
+          matrix={matrixQ.matrix}
+          isLoading={matrixQ.isLoading}
+          isError={matrixQ.isError}
+          refetch={matrixQ.refetch}
+          payerId={matrixPayerId}
+          groupBy={matrixGroupBy}
+          today={matrixQ.today}
+          followUps={matrixQ.followUps}
+          onReset={resetAllFilters}
+        />
+      ) : failed ? (
         <div className="rounded-md border border-mp-border bg-mp-card p-6 text-center text-[13px] text-[color:var(--mp-danger)]">
           Couldn&apos;t load cases. Refresh to retry.
         </div>
@@ -568,7 +664,7 @@ function CasesPage() {
         />
       )}
 
-      {!loading && !failed && totalItems > 0 ? (
+      {view !== "matrix" && !loading && !failed && totalItems > 0 ? (
         <Pagination
           page={safePage}
           pages={pages}
