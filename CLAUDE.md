@@ -590,6 +590,9 @@ harness — see the **`e2e-harness`** skill.
 
 - **`supabase-migrations`** — schema/migration workflow and verification; read
   before any schema work.
+- **`hosted-data-sql`** — paste-ready SQL for hosted demo/UAT row ops (delete
+  cases, inspect groups, etc.) when MCP/egress cannot run it; preview then
+  mutate in the Supabase SQL Editor.
 - **`api-isolation-gate`** — `/api` org-isolation gate coverage and
   verification; read before adding a resource route.
 - **`e2e-harness`** — Playwright + Supabase-mock harness for browser

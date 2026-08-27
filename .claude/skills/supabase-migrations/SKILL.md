@@ -5,6 +5,10 @@ description: Schema work on Minted Panel's Supabase database — writing migrati
 
 # Supabase schema work
 
+> **Row-level hosted data ops** (delete demo cases, inspect a group, fix UAT
+> fixtures) are **not** migrations — use the **`hosted-data-sql`** skill and
+> paste SQL into the Supabase SQL Editor.
+
 ## The live DB is the source of truth
 
 `supabase/migrations/` opens with a squashed baseline
