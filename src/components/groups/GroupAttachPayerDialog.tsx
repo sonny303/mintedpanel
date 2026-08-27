@@ -1,11 +1,13 @@
-// E6.2 F6.2.4 — eligibility-filtered attach TO THE GROUP. Phase 1: the picker
-// queries the CATALOG and offers only payers whose covered states intersect
-// the group's operating states (never a zero-overlap payer), with an
-// ineligible-payers explainer. Phase 2: the user-reviewed states (payer ∩
-// group operating states, with the group's facility count per state as
-// context) — reviewExpansion/planAttachmentSave reused verbatim, so archived
-// rows arrive pre-unchecked and re-attach RESTORES (never a duplicate). Save
-// runs attachGroupPayer (OPA-RETIRE: targets only — no org_payer_assignments).
+// E6.2 F6.2.4 — eligibility-filtered attach TO THE GROUP. Step 1 is a
+// MULTI-SELECT picker over the CATALOG, offering only payers whose covered
+// states intersect the group's operating states (never a zero-overlap payer),
+// with an ineligible-payers explainer. Step 2 reviews the user-checked states
+// for EVERY selected payer at once (payer ∩ group operating states, with the
+// group's facility count per state as context) — one block per payer, each
+// built by reviewExpansion/planAttachmentSave exactly as the single-payer flow
+// was, so archived rows still arrive pre-unchecked and re-attach RESTORES
+// (never a duplicate). Save runs attachGroupPayers: one insert for the whole
+// selection (OPA-RETIRE: targets only — no org_payer_assignments).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
@@ -19,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -29,11 +32,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useGlobalPayers } from "@/hooks/usePayerCatalog";
-import { useAttachGroupPayer } from "@/hooks/usePayerNetworkTargets";
-import { expansionRowKey, planAttachmentSave, reviewExpansion } from "@/lib/payerExpansion";
-import { groupAttachExpansion, splitAttachPicker } from "@/lib/groupPayerAttach";
+import { useAttachGroupPayers } from "@/hooks/usePayerNetworkTargets";
+import {
+  alreadyAttachedPayerIds,
+  attachPlanTotals,
+  attachRowKey,
+  defaultAttachSelection,
+  planMultiAttachSave,
+  reviewAttachSelection,
+  splitAttachPicker,
+  type PayerAttachReview,
+} from "@/lib/groupPayerAttach";
 import { PAYER_KIND_LABELS } from "@/lib/payerDirectory";
 import type { Facility, Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
+
+/** Above this many eligible payers the picker earns a filter box. */
+const SEARCH_THRESHOLD = 6;
 
 export function GroupAttachPayerDialog({
   group,
@@ -44,84 +58,266 @@ export function GroupAttachPayerDialog({
 }: {
   group: ProviderGroup;
   facilities: Facility[];
-  /** The org's targets — filtered per payer inside. */
+  /** The org's targets — partitioned per payer inside. */
   existingTargets: PayerNetworkTarget[];
-  /** Jump straight to the review (re-attach from the board). */
+  /** Jump straight to the review with one payer preselected (re-attach). */
   initialPayer?: Payer | null;
   onClose: () => void;
 }) {
-  const [payer, setPayer] = useState<Payer | null>(initialPayer ?? null);
   const catalogQ = useGlobalPayers();
+  const attachMut = useAttachGroupPayers();
 
   const split = useMemo(
     () => splitAttachPicker(catalogQ.data ?? [], group),
     [catalogQ.data, group],
   );
 
+  const [step, setStep] = useState<"select" | "review">(initialPayer ? "review" : "select");
+  const [query, setQuery] = useState("");
+  // Open with already-attached payers pre-checked (or just initialPayer on
+  // re-attach) so the board's current targets are visible in the same pass
+  // as any new ones the coordinator adds.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    if (initialPayer) return new Set([initialPayer.id]);
+    return alreadyAttachedPayerIds(existingTargets, group.id);
+  });
+  // Checked STATE rows, payer-scoped. Seeded with each payer's defaults the
+  // first time that payer reaches the review, so stepping back to change the
+  // selection never discards state choices already made.
+  const [checked, setChecked] = useState<Set<string>>(() =>
+    initialPayer
+      ? defaultAttachSelection(
+          reviewAttachSelection([initialPayer], group, facilities, existingTargets),
+        )
+      : new Set<string>(),
+  );
+  const [seeded, setSeeded] = useState<Set<string>>(
+    () => new Set(initialPayer ? [initialPayer.id] : []),
+  );
+
+  const selectedPayers = useMemo(() => {
+    const byId = new Map(split.eligible.map((e) => [e.payer.id, e.payer]));
+    if (initialPayer) byId.set(initialPayer.id, initialPayer);
+    return [...selectedIds].flatMap((id) => {
+      const payer = byId.get(id);
+      return payer ? [payer] : [];
+    });
+  }, [split.eligible, initialPayer, selectedIds]);
+
+  const reviews = useMemo(
+    () => reviewAttachSelection(selectedPayers, group, facilities, existingTargets),
+    [selectedPayers, group, facilities, existingTargets],
+  );
+
+  const plans = useMemo(() => planMultiAttachSave(reviews, checked), [reviews, checked]);
+  const totals = attachPlanTotals(plans);
+
+  const filtered = useMemo(() => {
+    const wanted = query.trim().toLowerCase();
+    if (!wanted) return split.eligible;
+    return split.eligible.filter((e) => e.payer.name.toLowerCase().includes(wanted));
+  }, [split.eligible, query]);
+
   // A payer whose every proposed state already holds an ACTIVE target for
   // this group is fully attached — badge it in the picker.
+  const activeStates = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const t of existingTargets) {
+      if (t.groupId !== group.id || t.status !== "active") continue;
+      const set = map.get(t.payerId);
+      if (set) set.add(t.state);
+      else map.set(t.payerId, new Set([t.state]));
+    }
+    return map;
+  }, [existingTargets, group.id]);
   const fullyAttached = (payerId: string, overlap: string[]) => {
-    const active = new Set(
-      existingTargets
-        .filter((t) => t.groupId === group.id && t.payerId === payerId && t.status === "active")
-        .map((t) => t.state),
-    );
-    return overlap.length > 0 && overlap.every((s) => active.has(s));
+    const active = activeStates.get(payerId);
+    return active !== undefined && overlap.length > 0 && overlap.every((s) => active.has(s));
   };
 
+  const toggle = (payerId: string, on: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(payerId);
+      else next.delete(payerId);
+      return next;
+    });
+
+  const goToReview = () => {
+    // Seed defaults only for payers the reviewer hasn't seen yet.
+    const fresh = reviews.filter((r) => !seeded.has(r.payer.id));
+    if (fresh.length > 0) {
+      const defaults = defaultAttachSelection(fresh);
+      setChecked((prev) => new Set([...prev, ...defaults]));
+      setSeeded((prev) => new Set([...prev, ...fresh.map((r) => r.payer.id)]));
+    }
+    setStep("review");
+  };
+
+  const handleSave = () => {
+    attachMut.mutate(plans, {
+      onSuccess: () => {
+        toast.success(
+          totals.payerCount === 1
+            ? `${reviews.find((r) => r.payer.id === plans[0]?.payerId)?.payer.name ?? "Payer"} attached`
+            : `${totals.payerCount} payers attached`,
+        );
+        onClose();
+      },
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't save the targets"),
+    });
+  };
+
+  const title =
+    step === "select"
+      ? "Attach payers"
+      : selectedPayers.length === 1
+        ? `Attach ${selectedPayers[0].name}`
+        : `Attach ${selectedPayers.length} payers`;
+
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && !attachMut.isPending && onClose()}>
       <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto border-[#E8E5E0] shadow-none">
         <DialogHeader>
-          <DialogTitle>{payer ? `Attach ${payer.name}` : "Attach a payer"}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {payer ? (
-          <GroupAttachReview
-            payer={payer}
-            group={group}
-            facilities={facilities}
-            existingTargets={existingTargets}
-            onClose={onClose}
-          />
+
+        {step === "review" ? (
+          <div className="space-y-3 py-2">
+            <p className="text-[13px] text-muted-foreground">
+              Proposed states = each payer&apos;s coverage ∩ {group.name}&apos;s operating states.
+              Review before saving; uncheck any state to leave it out.
+            </p>
+            {reviews.map((review) => (
+              <PayerReviewBlock
+                key={review.payer.id}
+                review={review}
+                groupName={group.name}
+                checked={checked}
+                onToggle={(key, on) =>
+                  setChecked((prev) => {
+                    const next = new Set(prev);
+                    if (on) next.add(key);
+                    else next.delete(key);
+                    return next;
+                  })
+                }
+              />
+            ))}
+            <DialogFooter>
+              {initialPayer ? null : (
+                <Button
+                  variant="outline"
+                  onClick={() => setStep("select")}
+                  disabled={attachMut.isPending}
+                >
+                  Back
+                </Button>
+              )}
+              <Button variant="outline" onClick={onClose} disabled={attachMut.isPending}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={attachMut.isPending || plans.length === 0}
+                className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+              >
+                {attachMut.isPending
+                  ? "Saving…"
+                  : totals.payerCount > 1
+                    ? `Save targets (${totals.payerCount} payers, ${totals.stateCount} states)`
+                    : "Save targets"}
+              </Button>
+            </DialogFooter>
+          </div>
         ) : catalogQ.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : (
           <div className="space-y-3 py-2">
             <p className="text-[13px] text-muted-foreground">
               Showing catalog payers that cover {group.name}&apos;s operating states (
-              {(group.states ?? []).join(", ") || "none set"}).
+              {(group.states ?? []).join(", ") || "none set"}). Select as many as you need — they
+              are reviewed and attached together.
             </p>
             {split.eligible.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">
                 No catalog payer covers this group&apos;s operating states.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {split.eligible.map(({ payer: p, overlap }) => (
-                  <li key={p.id}>
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {split.eligible.length > SEARCH_THRESHOLD ? (
+                    <Input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Filter payers"
+                      aria-label="Filter payers"
+                      className="h-9 max-w-[16rem]"
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  <div className="flex items-center gap-3 text-[12px]">
                     <button
                       type="button"
-                      className="w-full rounded-md border border-[#E8E5E0] px-3 py-2 text-left hover:bg-[var(--mp-neutral-tint)]"
-                      onClick={() => setPayer(p)}
+                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      onClick={() =>
+                        setSelectedIds(
+                          (prev) => new Set([...prev, ...filtered.map((e) => e.payer.id)]),
+                        )
+                      }
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-[13px] font-medium text-foreground">{p.name}</span>
-                        <span className="flex flex-none items-center gap-2 text-[12px] text-muted-foreground">
-                          {fullyAttached(p.id, overlap) ? (
-                            <span className="rounded bg-[var(--mp-ok-tint)] px-1.5 py-0.5 text-[11.5px] text-[var(--mp-ok-ink)]">
-                              Attached
-                            </span>
-                          ) : null}
-                          {PAYER_KIND_LABELS[p.payerKind ?? "commercial"]}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 text-[12px] text-muted-foreground">
-                        Overlap: {overlap.join(", ")}
-                      </div>
+                      Select all{query.trim() ? " shown" : ""}
                     </button>
-                  </li>
-                ))}
-              </ul>
+                    <button
+                      type="button"
+                      className="text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                      disabled={selectedIds.size === 0}
+                      onClick={() => setSelectedIds(new Set())}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                {filtered.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    No eligible payer matches &ldquo;{query.trim()}&rdquo;.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {filtered.map(({ payer: p, overlap }) => (
+                      <li key={p.id}>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[#E8E5E0] px-3 py-2 hover:bg-[var(--mp-neutral-tint)]">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={selectedIds.has(p.id)}
+                            onCheckedChange={(v) => toggle(p.id, v === true)}
+                            aria-label={`Select ${p.name}`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-3">
+                              <span className="text-[13px] font-medium text-foreground">
+                                {p.name}
+                              </span>
+                              <span className="flex flex-none items-center gap-2 text-[12px] text-muted-foreground">
+                                {fullyAttached(p.id, overlap) ? (
+                                  <span className="rounded bg-[var(--mp-ok-tint)] px-1.5 py-0.5 text-[11.5px] text-[var(--mp-ok-ink)]">
+                                    Attached
+                                  </span>
+                                ) : null}
+                                {PAYER_KIND_LABELS[p.payerKind ?? "commercial"]}
+                              </span>
+                            </span>
+                            <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                              Overlap: {overlap.join(", ")}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
             {split.ineligible.length > 0 ? (
               <Collapsible>
@@ -144,6 +340,13 @@ export function GroupAttachPayerDialog({
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
+              <Button
+                onClick={goToReview}
+                disabled={selectedIds.size === 0}
+                className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
+              >
+                {selectedIds.size > 1 ? `Review ${selectedIds.size} payers` : "Review states"}
+              </Button>
             </DialogFooter>
           </div>
         )}
@@ -152,126 +355,80 @@ export function GroupAttachPayerDialog({
   );
 }
 
-function GroupAttachReview({
-  payer,
-  group,
-  facilities,
-  existingTargets,
-  onClose,
+/** One payer's state table inside the review. Rows are keyed payer-scoped so
+ * two payers proposing the same state stay independent. */
+function PayerReviewBlock({
+  review,
+  groupName,
+  checked,
+  onToggle,
 }: {
-  payer: Payer;
-  group: ProviderGroup;
-  facilities: Facility[];
-  existingTargets: PayerNetworkTarget[];
-  onClose: () => void;
+  review: PayerAttachReview;
+  groupName: string;
+  checked: ReadonlySet<string>;
+  onToggle: (key: string, on: boolean) => void;
 }) {
-  const attachMut = useAttachGroupPayer();
-
-  const review = useMemo(() => {
-    const existing = existingTargets.filter(
-      (t) => t.groupId === group.id && t.payerId === payer.id,
-    );
-    return reviewExpansion(groupAttachExpansion(payer, group, facilities), existing);
-  }, [payer, group, facilities, existingTargets]);
-
-  const [checked, setChecked] = useState<Set<string>>(
-    () => new Set(review.filter((r) => r.defaultChecked).map(expansionRowKey)),
-  );
-
-  const plan = planAttachmentSave(review, checked);
-  const nothingToSave = plan.inserts.length === 0 && plan.restoreIds.length === 0;
-
-  const handleSave = () => {
-    attachMut.mutate(
-      { payerId: payer.id, plan },
-      {
-        onSuccess: () => {
-          toast.success(`${payer.name} attached`);
-          onClose();
-        },
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Couldn't save the targets"),
-      },
-    );
-  };
-
-  if (review.length === 0) {
-    return (
-      <div className="space-y-3 py-2">
-        <p className="text-[13px] text-muted-foreground">
-          {payer.name} doesn&apos;t cover any of {group.name}&apos;s operating states, so there are
-          no state targets to create.
-        </p>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </div>
-    );
-  }
+  const { payer, rows } = review;
+  const selectedCount = rows.filter(
+    (r) => r.existing === "active" || checked.has(attachRowKey(payer.id, r)),
+  ).length;
 
   return (
-    <div className="space-y-3 py-2">
-      <p className="text-[13px] text-muted-foreground">
-        Proposed states = {payer.name}&apos;s coverage ∩ {group.name}&apos;s operating states.
-        Review before saving; uncheck any state to leave it out.
-      </p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-8" />
-            <TableHead>State</TableHead>
-            <TableHead>Context</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {review.map((row) => {
-            const key = expansionRowKey(row);
-            const isActive = row.existing === "active";
-            return (
-              <TableRow key={key}>
-                <TableCell>
-                  <Checkbox
-                    checked={isActive || checked.has(key)}
-                    disabled={isActive}
-                    onCheckedChange={(v) =>
-                      setChecked((prev) => {
-                        const next = new Set(prev);
-                        if (v === true) next.add(key);
-                        else next.delete(key);
-                        return next;
-                      })
-                    }
-                    aria-label={`Target ${row.state}`}
-                  />
-                </TableCell>
-                <TableCell className="text-[13px]">{row.state}</TableCell>
-                <TableCell className="text-[12px] text-muted-foreground">
-                  {row.facilityCount > 0
-                    ? `${row.facilityCount} ${row.facilityCount === 1 ? "facility" : "facilities"} in ${row.state}`
-                    : "No facilities in this state yet"}
-                </TableCell>
-                <TableCell className="text-[12px] text-muted-foreground">
-                  {isActive ? "Already attached" : row.existing === "archived" ? "Archived" : ""}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-      <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={attachMut.isPending}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSave}
-          disabled={attachMut.isPending || nothingToSave}
-          className="bg-[#1B4D3E] text-white hover:bg-[#163F33]"
-        >
-          {attachMut.isPending ? "Saving…" : "Save targets"}
-        </Button>
-      </DialogFooter>
+    <div className="rounded-md border border-[#E8E5E0]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F0EEE9] px-3 py-2">
+        <span className="text-[13px] font-semibold text-foreground">{payer.name}</span>
+        <span className="text-[12px] text-muted-foreground">
+          {rows.length === 0
+            ? "No overlapping states"
+            : review.fullyAttached
+              ? "Already attached in every proposed state"
+              : `${selectedCount} of ${rows.length} ${rows.length === 1 ? "state" : "states"} selected`}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-3 py-2 text-[12.5px] text-muted-foreground">
+          {payer.name} doesn&apos;t cover any of {groupName}&apos;s operating states, so there are
+          no state targets to create.
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8" />
+              <TableHead>State</TableHead>
+              <TableHead>Context</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const key = attachRowKey(payer.id, row);
+              const isActive = row.existing === "active";
+              return (
+                <TableRow key={key}>
+                  <TableCell>
+                    <Checkbox
+                      checked={isActive || checked.has(key)}
+                      disabled={isActive}
+                      onCheckedChange={(v) => onToggle(key, v === true)}
+                      aria-label={`Target ${row.state} for ${payer.name}`}
+                    />
+                  </TableCell>
+                  <TableCell className="text-[13px]">{row.state}</TableCell>
+                  <TableCell className="text-[12px] text-muted-foreground">
+                    {row.facilityCount > 0
+                      ? `${row.facilityCount} ${row.facilityCount === 1 ? "facility" : "facilities"} in ${row.state}`
+                      : "No facilities in this state yet"}
+                  </TableCell>
+                  <TableCell className="text-[12px] text-muted-foreground">
+                    {isActive ? "Already attached" : row.existing === "archived" ? "Archived" : ""}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }

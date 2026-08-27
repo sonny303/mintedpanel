@@ -4,15 +4,21 @@
 // here, so scan-time errors and the dialog cannot drift).
 import { describe, expect, it } from "vitest";
 import {
+  alreadyAttachedPayerIds,
+  attachPlanTotals,
+  attachRowKey,
+  defaultAttachSelection,
   groupAttachExpansion,
+  planMultiAttachSave,
   proposedAttachStates,
   resolveAttachGroup,
   resolveAttachPayer,
+  reviewAttachSelection,
   splitAttachPicker,
   validatePayerAttachRow,
   type PayerAttachScanContext,
 } from "@/lib/groupPayerAttach";
-import type { Facility, Payer } from "@/types";
+import type { Facility, Payer, PayerNetworkTarget } from "@/types";
 
 function payer(overrides: Partial<Payer>): Payer {
   return {
@@ -85,6 +91,106 @@ describe("groupAttachExpansion", () => {
     expect(rows).toEqual([
       { groupId: "g1", state: "CO", facilityCount: 0 },
       { groupId: "g1", state: "NC", facilityCount: 2 },
+    ]);
+  });
+});
+
+describe("multi-payer attach review", () => {
+  const facility = (id: string, state: string) =>
+    ({ id, groupId: "g1", state, isActive: true }) as Facility;
+  const target = (overrides: Partial<PayerNetworkTarget>): PayerNetworkTarget =>
+    ({
+      id: "t1",
+      orgId: "org1",
+      groupId: "g1",
+      payerId: "a",
+      state: "NC",
+      status: "active",
+      ...overrides,
+    }) as PayerNetworkTarget;
+
+  const aetna = payer({ id: "a", name: "Aetna", states: ["NC", "CO", "SC"] });
+  const bcbs = payer({ id: "b", name: "BCBS", states: ["CO"] });
+  const FACILITIES = [facility("f1", "NC"), facility("f2", "CO")];
+
+  it("builds one name-sorted block per payer, each scoped to its OWN targets", () => {
+    const reviews = reviewAttachSelection([aetna, bcbs], GROUP, FACILITIES, [
+      target({ id: "t-a-nc", payerId: "a", state: "NC", status: "active" }),
+      // BCBS's CO row is archived — it must not make Aetna's CO row look used.
+      target({ id: "t-b-co", payerId: "b", state: "CO", status: "archived" }),
+      // Another group's row is invisible here.
+      target({ id: "t-x", payerId: "a", state: "CO", groupId: "g2", status: "active" }),
+    ]);
+    expect(reviews.map((r) => r.payer.id)).toEqual(["a", "b"]);
+    expect(reviews[0].rows.map((r) => [r.state, r.existing])).toEqual([
+      ["CO", "none"],
+      ["NC", "active"],
+    ]);
+    expect(reviews[1].rows.map((r) => [r.state, r.existing])).toEqual([["CO", "archived"]]);
+  });
+
+  it("fullyAttached only when every proposed state is already active", () => {
+    const [full] = reviewAttachSelection([bcbs], GROUP, FACILITIES, [
+      target({ id: "t-b-co", payerId: "b", state: "CO", status: "active" }),
+    ]);
+    expect(full.fullyAttached).toBe(true);
+    const [partial] = reviewAttachSelection([aetna], GROUP, FACILITIES, [
+      target({ id: "t-a-nc", payerId: "a", state: "NC", status: "active" }),
+    ]);
+    expect(partial.fullyAttached).toBe(false);
+  });
+
+  it("alreadyAttachedPayerIds is every payer with ≥1 active target for the group", () => {
+    expect(
+      [
+        ...alreadyAttachedPayerIds(
+          [
+            target({ id: "t1", payerId: "a", state: "NC", status: "active" }),
+            target({ id: "t2", payerId: "a", state: "CO", status: "active" }),
+            target({ id: "t3", payerId: "b", state: "CO", status: "archived" }),
+            target({ id: "t4", payerId: "c", groupId: "other", state: "NC", status: "active" }),
+          ],
+          "g1",
+        ),
+      ].sort(),
+    ).toEqual(["a"]);
+  });
+
+  it("defaults pre-check new facility-backed rows only, payer-scoped", () => {
+    const reviews = reviewAttachSelection([aetna, bcbs], GROUP, [facility("f1", "NC")], []);
+    // Aetna: NC has a facility (checked), CO has none (visible, unchecked).
+    expect([...defaultAttachSelection(reviews)]).toEqual(["a|g1|NC"]);
+  });
+
+  it("plans one entry per payer with work, dropping payers with nothing to save", () => {
+    const reviews = reviewAttachSelection([aetna, bcbs], GROUP, FACILITIES, [
+      target({ id: "t-a-nc", payerId: "a", state: "NC", status: "active" }),
+      target({ id: "t-b-co", payerId: "b", state: "CO", status: "archived" }),
+    ]);
+    const checked = new Set([
+      attachRowKey("a", { groupId: "g1", state: "CO" }),
+      attachRowKey("b", { groupId: "g1", state: "CO" }),
+    ]);
+    const plans = planMultiAttachSave(reviews, checked);
+    expect(plans).toEqual([
+      { payerId: "a", plan: { inserts: [{ groupId: "g1", state: "CO" }], restoreIds: [] } },
+      { payerId: "b", plan: { inserts: [], restoreIds: ["t-b-co"] } },
+    ]);
+    expect(attachPlanTotals(plans)).toEqual({ payerCount: 2, stateCount: 2 });
+
+    // Nothing checked → no payer carries work at all.
+    expect(planMultiAttachSave(reviews, new Set())).toEqual([]);
+  });
+
+  it("one payer's checked state never leaks into another payer's plan", () => {
+    const reviews = reviewAttachSelection([aetna, bcbs], GROUP, FACILITIES, []);
+    // Only BCBS's CO is checked; Aetna also proposes CO and must stay out.
+    const plans = planMultiAttachSave(
+      reviews,
+      new Set([attachRowKey("b", { groupId: "g1", state: "CO" })]),
+    );
+    expect(plans).toEqual([
+      { payerId: "b", plan: { inserts: [{ groupId: "g1", state: "CO" }], restoreIds: [] } },
     ]);
   });
 });

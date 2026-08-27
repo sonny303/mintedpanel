@@ -8,12 +8,28 @@
 // so archive/restore semantics are untouched: archived rows arrive
 // pre-unchecked, restore is a status flip, never a duplicate insert.
 //
+// The dialog attaches MANY payers in one pass: the picker is a multi-select and
+// the review stacks one state table per selected payer. That is a widening of
+// the same per-payer logic, not a second rule — reviewAttachSelection maps each
+// payer through groupAttachExpansion/reviewExpansion, and planMultiAttachSave
+// maps each back through planAttachmentSave, so archive/restore semantics and
+// the "already active is never re-written" rule hold identically per payer.
+// Selection keys are payer-scoped (attachRowKey) because two payers can propose
+// the same group×state row.
+//
 // The CSV path's row resolution + eligibility validation also live here (pure,
 // tested); the import descriptor in src/lib/importSections.ts delegates to
 // validatePayerAttachRow so the scan-time errors and the dialog's eligibility
 // rule can never drift apart.
-import type { ExpansionRow } from "@/lib/payerExpansion";
-import type { Facility, Payer, ProviderGroup } from "@/types";
+import {
+  expansionRowKey,
+  planAttachmentSave,
+  reviewExpansion,
+  type AttachmentSavePlan,
+  type ExpansionReviewRow,
+  type ExpansionRow,
+} from "@/lib/payerExpansion";
+import type { Facility, Payer, PayerNetworkTarget, ProviderGroup } from "@/types";
 
 /** States both the payer and the group operate in, sorted A→Z. */
 export function proposedAttachStates(
@@ -79,6 +95,124 @@ export function groupAttachExpansion(
     state,
     facilityCount: counts.get(state) ?? 0,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Multi-payer attach: one reviewable block per selected payer.
+// ---------------------------------------------------------------------------
+
+export interface PayerAttachReview {
+  payer: Payer;
+  /** The payer's proposed states, annotated against ITS OWN existing targets. */
+  rows: ExpansionReviewRow[];
+  /** Every proposed state already holds an active target — nothing to save. */
+  fullyAttached: boolean;
+}
+
+/** A payer-scoped selection key: two payers can propose the same group×state. */
+export function attachRowKey(
+  payerId: string,
+  row: Pick<ExpansionRow, "groupId" | "state">,
+): string {
+  return `${payerId}|${expansionRowKey(row)}`;
+}
+
+/**
+ * Payers that already hold ≥1 ACTIVE target for this group. The attach dialog
+ * opens with these pre-selected so the coordinator sees what is already on the
+ * board and can add more (or finish a partial attach) in the same pass.
+ */
+export function alreadyAttachedPayerIds(
+  existingTargets: readonly PayerNetworkTarget[],
+  groupId: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const target of existingTargets) {
+    if (target.groupId === groupId && target.status === "active") ids.add(target.payerId);
+  }
+  return ids;
+}
+
+/**
+ * Review a whole selection at once: one block per payer, name-sorted, each
+ * built from the SAME per-payer expansion the single-payer flow used. Targets
+ * are partitioned by payer first, so one payer's rows can never annotate
+ * another's.
+ */
+export function reviewAttachSelection(
+  payers: readonly Payer[],
+  group: Pick<ProviderGroup, "id" | "states">,
+  facilities: readonly Facility[],
+  existingTargets: readonly PayerNetworkTarget[],
+): PayerAttachReview[] {
+  const byPayer = new Map<string, PayerNetworkTarget[]>();
+  for (const target of existingTargets) {
+    if (target.groupId !== group.id) continue;
+    const list = byPayer.get(target.payerId);
+    if (list) list.push(target);
+    else byPayer.set(target.payerId, [target]);
+  }
+  return [...payers]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((payer) => {
+      const rows = reviewExpansion(
+        groupAttachExpansion(payer, group, facilities),
+        byPayer.get(payer.id) ?? [],
+      );
+      return {
+        payer,
+        rows,
+        fullyAttached: rows.length > 0 && rows.every((r) => r.existing === "active"),
+      };
+    });
+}
+
+/** The pre-checked keys for a fresh review (the per-row defaultChecked rule). */
+export function defaultAttachSelection(reviews: readonly PayerAttachReview[]): Set<string> {
+  const checked = new Set<string>();
+  for (const review of reviews) {
+    for (const row of review.rows) {
+      if (row.defaultChecked) checked.add(attachRowKey(review.payer.id, row));
+    }
+  }
+  return checked;
+}
+
+export interface PayerAttachPlan {
+  payerId: string;
+  plan: AttachmentSavePlan;
+}
+
+/** Turn the reviewed multi-payer selection into one save plan per payer.
+ * Payers with nothing to write are dropped — the caller saves only real work. */
+export function planMultiAttachSave(
+  reviews: readonly PayerAttachReview[],
+  checked: ReadonlySet<string>,
+): PayerAttachPlan[] {
+  const plans: PayerAttachPlan[] = [];
+  for (const review of reviews) {
+    // planAttachmentSave keys rows by group|state; re-scope the selection to
+    // this payer so its own checks (and only its own) reach the plan.
+    const scoped = new Set<string>();
+    for (const row of review.rows) {
+      if (checked.has(attachRowKey(review.payer.id, row))) scoped.add(expansionRowKey(row));
+    }
+    const plan = planAttachmentSave(review.rows, scoped);
+    if (plan.inserts.length === 0 && plan.restoreIds.length === 0) continue;
+    plans.push({ payerId: review.payer.id, plan });
+  }
+  return plans;
+}
+
+/** What the save button promises: how many payers and how many state rows. */
+export function attachPlanTotals(plans: readonly PayerAttachPlan[]): {
+  payerCount: number;
+  stateCount: number;
+} {
+  return {
+    payerCount: plans.length,
+    stateCount: plans.reduce((n, p) => n + p.plan.inserts.length + p.plan.restoreIds.length, 0),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -217,19 +217,29 @@ function makeHandler(fixtures: Record<string, Record<string, unknown>[]>) {
       return route.fulfill({ status: 200, headers: { "content-range": `*/${n}` }, body: "" });
     }
     if (req.method() === "POST") {
-      let body: Record<string, unknown> | null = null;
+      // PostgREST takes a single object OR an array — the multi-select attach
+      // sends every payer's new rows as ONE insert, so each row is recorded
+      // and stored separately here.
+      let bodies: (Record<string, unknown> | null)[] = [null];
       try {
         const parsed: unknown = req.postDataJSON();
-        body = Array.isArray(parsed)
-          ? ((parsed[0] ?? null) as Record<string, unknown> | null)
-          : (parsed as Record<string, unknown> | null);
+        bodies = Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>[])
+          : [parsed as Record<string, unknown> | null];
       } catch {
-        body = null;
+        bodies = [null];
       }
-      writes.push({ method: "POST", path: table, body });
-      const row = { id: `new-${(seq += 1)}`, created_at: "2026-07-19T00:00:00Z", ...(body ?? {}) };
-      if (fixtures[table]) fixtures[table].push(row);
-      return json(wantsObject ? row : [row], 201);
+      const created = bodies.map((body) => {
+        writes.push({ method: "POST", path: table, body });
+        const row = {
+          id: `new-${(seq += 1)}`,
+          created_at: "2026-07-19T00:00:00Z",
+          ...(body ?? {}),
+        };
+        if (fixtures[table]) fixtures[table].push(row);
+        return row;
+      });
+      return json(wantsObject ? created[0] : created, 201);
     }
     if (req.method() === "PATCH") {
       let body: Record<string, unknown> | null = null;
@@ -305,28 +315,29 @@ test("TS-110: the picker never offers a zero-overlap payer; proposed states = pa
   await seedAuth(context);
 
   await page.goto("/groups/g-ob/payer-network");
-  await page.getByRole("button", { name: "Attach payer", exact: true }).click({ timeout: 30000 });
+  await page.getByRole("button", { name: "Attach payers", exact: true }).click({ timeout: 30000 });
 
   // Aetna (overlap NC) is offered; zero-overlap BCBS Texas is NOT — it is
   // named in the ineligible explainer instead.
-  await expect(page.getByRole("button", { name: /Aetna/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /BCBS Texas/ })).toHaveCount(0);
+  await expect(page.getByLabel("Select Aetna")).toBeVisible();
+  await expect(page.getByLabel("Select BCBS Texas")).toHaveCount(0);
   await page.getByText(/1 catalog payer doesn't overlap/).click();
   await expect(page.getByText(/BCBS Texas.*none cover NC, CO/)).toBeVisible();
 
   // Review: proposed states = Aetna (NC, SC) ∩ group (NC, CO) = NC only.
   // Fixture has zero facilities — E6.2 still lists NC, but #277 defaults leave
   // zero-facility states unchecked (Save stays disabled until the human checks).
-  await page.getByRole("button", { name: /Aetna/ }).click();
-  await expect(page.getByLabel("Target NC")).toBeVisible();
+  await page.getByLabel("Select Aetna").check();
+  await page.getByRole("button", { name: "Review states" }).click();
+  await expect(page.getByLabel("Target NC for Aetna")).toBeVisible();
   await expect(page.getByText(/No facilities in this state yet/)).toBeVisible();
-  await expect(page.getByLabel("Target SC")).toHaveCount(0);
-  await expect(page.getByLabel("Target CO")).toHaveCount(0);
+  await expect(page.getByLabel("Target SC for Aetna")).toHaveCount(0);
+  await expect(page.getByLabel("Target CO for Aetna")).toHaveCount(0);
   // Org-level enablement/subscription is never surfaced (OPA-RETIRE).
   await expect(page.getByText(/enablement|subscription|assignment/i)).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Save targets" })).toBeDisabled();
-  await page.getByLabel("Target NC").click();
+  await page.getByLabel("Target NC for Aetna").click();
   await page.getByRole("button", { name: "Save targets" }).click();
   await expect(page.getByText("Aetna attached")).toBeVisible({ timeout: 15000 });
 
@@ -343,6 +354,98 @@ test("TS-110: the picker never offers a zero-overlap payer; proposed states = pa
   expect(target?.payer_id).toBe("pay-aetna");
   expect(target?.state).toBe("NC");
   expect(target?.status).toBe("active");
+});
+
+test("the picker is a MULTI-select: several payers reviewed together and saved in one batch", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  // Facilities in both operating states so the defaults pre-check the rows.
+  fixtures.facilities = [
+    {
+      id: "f-nc",
+      org_id: ORG_ID,
+      group_id: "g-ob",
+      name: "Kill Devil Hills Clinic",
+      state: "NC",
+      is_active: true,
+      reference_only: false,
+      created_at: "2026-06-01T00:00:00Z",
+    },
+    {
+      id: "f-co",
+      org_id: ORG_ID,
+      group_id: "g-ob",
+      name: "Denver Clinic",
+      state: "CO",
+      is_active: true,
+      reference_only: false,
+      created_at: "2026-06-01T00:00:00Z",
+    },
+  ];
+  // Aetna is already on the board for NC — the dialog must open with Aetna
+  // pre-selected so the coordinator sees what is already attached.
+  fixtures.payer_network_targets = [
+    {
+      id: "t-aetna-nc",
+      org_id: ORG_ID,
+      payer_id: "pay-aetna",
+      group_id: "g-ob",
+      state: "NC",
+      status: "active",
+      payer_issued_id: null,
+      created_at: "2026-06-15T00:00:00Z",
+    },
+  ];
+  // A second eligible payer covering BOTH operating states.
+  fixtures.payers = [
+    ...CATALOG,
+    {
+      id: "pay-cigna",
+      org_id: null,
+      name: "Cigna Healthcare",
+      payer_kind: "commercial",
+      states: ["NC", "CO"],
+      aliases: [],
+      status: "active",
+      payer_slug: "cigna",
+      avg_decision_days: null,
+      created_at: "2026-06-01T00:00:00Z",
+    },
+  ];
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/groups/g-ob/payer-network");
+  await page.getByRole("button", { name: "Attach payers", exact: true }).click({ timeout: 30000 });
+
+  // Already-attached Aetna is pre-checked; Cigna is not.
+  await expect(page.getByLabel("Select Aetna")).toBeChecked();
+  await expect(page.getByLabel("Select Cigna Healthcare")).not.toBeChecked();
+  await page.getByLabel("Select Cigna Healthcare").check();
+  await page.getByRole("button", { name: "Review 2 payers" }).click();
+
+  // One block per payer, each proposing only ITS OWN payer ∩ group states:
+  // Aetna (NC, SC) → NC (already active); Cigna (NC, CO) → NC + CO.
+  await expect(page.getByLabel("Target NC for Aetna")).toBeDisabled();
+  await expect(page.getByLabel("Target CO for Aetna")).toHaveCount(0);
+  await expect(page.getByLabel("Target NC for Cigna Healthcare")).toBeChecked();
+  await expect(page.getByLabel("Target CO for Cigna Healthcare")).toBeChecked();
+
+  // Unchecking one payer's state leaves the other payer's identical state on.
+  await page.getByLabel("Target CO for Cigna Healthcare").uncheck();
+  // Aetna is fully attached → dropped from the plan; only Cigna NC saves.
+  await page.getByRole("button", { name: "Save targets" }).click();
+  await expect(page.getByText("Cigna Healthcare attached")).toBeVisible({ timeout: 15000 });
+
+  const targetPosts = writes.filter(
+    (w) => w.method === "POST" && w.path === "payer_network_targets",
+  );
+  expect(targetPosts.map((w) => [w.body?.payer_id, w.body?.state])).toEqual([["pay-cigna", "NC"]]);
+  expect(targetPosts.every((w) => w.body?.group_id === "g-ob")).toBe(true);
+  expect(targetPosts.every((w) => w.body?.status === "active")).toBe(true);
 });
 
 test("TS-110: the CSV path — exact-header gate, per-row eligibility errors at scan time, idempotent skip-on-match commit", async ({
