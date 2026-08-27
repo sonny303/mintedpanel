@@ -91,8 +91,14 @@ WHERE case_id IN (SELECT id FROM _case_ids);
 DELETE FROM public.tasks
 WHERE case_id IN (SELECT id FROM _case_ids);
 
+-- case_generation_run_rows is ON DELETE SET NULL, but disposition='created'
+-- requires case_id IS NOT NULL (case_generation_run_rows_created_case_check).
+-- Nulling on parent delete therefore 23514's — delete those ledger rows first.
+DELETE FROM public.case_generation_run_rows
+WHERE case_id IN (SELECT id FROM _case_ids);
+
 -- Parent. Cascades: case_status_history, payer_pipeline_history, fill_sessions.
--- SET NULL: provider_documents.case_id, case_generation_run_rows.case_id.
+-- SET NULL: provider_documents.case_id.
 DELETE FROM public.credential_cases
 WHERE id IN (SELECT id FROM _case_ids);
 
