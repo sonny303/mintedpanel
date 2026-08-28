@@ -291,7 +291,7 @@ organizations
 │   └── enrollment_facts               — live = expired_at IS NULL
 ├── payers (GLOBAL catalog) + payer_contacts + payer_network_targets
 ├── payer_forms                        — GLOBAL blank payer PDFs, per SOP template
-├── credential_cases → tasks → touches
+├── credential_cases → case_facilities, tasks → touches
 └── contracts, status_configs, audit_log
 ```
 
@@ -300,6 +300,41 @@ organizations
 - **The case key is 4-part:** `UNIQUE NULLS NOT DISTINCT (provider_id,
 group_id, payer_id, state)` on `credential_cases`. Legacy NULL-group rows
   keep the 3-part behavior because NULL = NULL under that clause.
+- **A case can hold several locations.** `case_facilities` (case × facility,
+  `UNIQUE (case_id, facility_id)`, at most one `is_primary = true` per case
+  via a partial unique index) is the full set. `credential_cases.facility_id`
+  is unchanged in shape and is now a PRIMARY MIRROR of whichever row is
+  primary — every existing reader keeps working untouched.
+  `resolveCaseFacilityId` (creation-time stamp) still stamps exactly one
+  location; everything past that is additive via `src/services/cases.ts`'s
+  `addCaseFacility`/`removeCaseFacility`/`setPrimaryCaseFacility`, which keep
+  the mirror in lockstep in the same call as the child-row write. Eligibility
+  is the same rule as `setCaseFacility` (provider must be assigned to the
+  facility under the case's group), enforced app-side, not by RLS.
+  **UI:** the case Details card's old single-value Facility row
+  (`CaseFacilityField`, retired) is now `CaseLocationsSection` — every
+  location listed, primary badged (`StatusPill`), Add/Remove/Make-primary for
+  a writer, billing stays read-only. Hooks: `useCaseFacilities` (query) +
+  `useAddCaseFacility`/`useRemoveCaseFacility`/`useSetPrimaryCaseFacility`
+  (`src/hooks/useCases.ts`), keyed by `queryKeys.caseFacilities` and
+  invalidated alongside `cases`/`case` so the list and the `facility_id`
+  mirror refresh together. `setCaseFacility`/`useSetCaseFacility` (the old
+  single-value overwrite) are untouched and kept — `resolveCaseFacilityId` at
+  `/generation` still stamps through `create_case_with_tasks`' `facilityId`
+  input, not through this function, so as of this UI swap neither has a
+  caller; left in place rather than removed, since case creation is out of
+  scope for the multi-location work.
+  **Extension surface (E1.4):** `GET /api/cases/:id/context` additionally
+  serves `facilities: CaseContextFacility[]` — the same full location set,
+  org-scoped on both the `case_facilities` join row and the joined facility,
+  primary row first then alphabetical, `isPrimary` badged per row.
+  `selectedFacility` on that same response is UNCHANGED — still resolved
+  solely off `credential_cases.facility_id` and still means "the primary";
+  `facilities` is additive so the Workbench can list every location while
+  filling exactly one at a time. Mirrored in the extension's
+  `src/shared/apiTypes.ts` (optional there — an older extension against a
+  newer panel simply ignores the field, and a newer extension against an
+  older panel degrades to `selectedFacility`-only).
 - **`payer_network_targets`** = group × payer × state — "this group works with
   this payer here." Distinct from the (now largely vestigial)
   `org_payer_assignments` subscription layer.

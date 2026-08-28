@@ -6,11 +6,14 @@ import { getCaseContext, type CaseContextServiceCtx } from "./caseContext";
 
 // Minimal chainable fake of the supabase-js query builder — enough for the
 // case-context shapes (org-scoped maybeSingle case lookup, the open-tasks
-// .eq().eq().neq().order() read, the optional facility maybeSingle, the
-// touchlog .eq().order() read, and the profiles maybeSingle author
-// resolution). Records table, select columns, and filters; results consume in
-// call order, which is deterministic in getCaseContext:
-//   credential_cases -> tasks -> [facilities] -> touches -> [profiles]
+// .eq().eq().neq().order() read, the case_facilities read, the optional
+// selectedFacility maybeSingle, the touchlog .eq().order() read, and the
+// profiles maybeSingle author resolution). Records table, select columns, and
+// filters; results consume in call order, which is deterministic in
+// getCaseContext:
+//   credential_cases -> tasks -> case_facilities -> [facilities] -> touches -> [profiles]
+// case_facilities is UNCONDITIONAL (always the 3rd call) — unlike the
+// selectedFacility `facilities` read, which only fires when facility_id is set.
 interface Captured {
   table?: string;
   selectCols?: string;
@@ -116,19 +119,33 @@ describe("getCaseContext — org isolation", () => {
     expect(captures[0].selectCols).not.toContain("*");
   });
 
-  it("org-scopes the case, tasks, AND touchlog reads", async () => {
-    const { db, captures } = makeFakeDb([{ data: caseRow() }, { data: [] }, { data: [] }]);
+  it("org-scopes the case, tasks, case_facilities, AND touchlog reads", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: caseRow() },
+      { data: [] },
+      { data: [] },
+      { data: [] },
+    ]);
 
     await getCaseContext(ctxWith(db), CASE_ID);
 
-    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "tasks", "touches"]);
+    expect(captures.map((c) => c.table)).toEqual([
+      "credential_cases",
+      "tasks",
+      "case_facilities",
+      "touches",
+    ]);
     for (const cap of captures) {
       expect(cap.filters).toContainEqual(["org_id", "org-1"]);
     }
     // tasks read is case-scoped and excludes completed tasks.
     expect(captures[1].filters).toContainEqual(["case_id", CASE_ID]);
     expect(captures[1].filters).toContainEqual(["neq:status", "completed"]);
+    // case_facilities read is case-scoped, org-scoped on both the join row
+    // and the joined facility (E1.4 — never a facility outside the org).
     expect(captures[2].filters).toContainEqual(["case_id", CASE_ID]);
+    expect(captures[2].filters).toContainEqual(["facility.org_id", "org-1"]);
+    expect(captures[3].filters).toContainEqual(["case_id", CASE_ID]);
   });
 });
 
@@ -157,6 +174,37 @@ describe("getCaseContext — projection", () => {
         ],
       },
       {
+        // E1.4 — deliberately out of order (non-primary first, alphabetically
+        // later) so the assertion below proves the primary-first-then-name
+        // sort, not just pass-through.
+        data: [
+          {
+            is_primary: false,
+            facility: {
+              id: "fac-2",
+              name: "Zebra Annex",
+              street: "9 Oak St",
+              suite: null,
+              city: "Wichita",
+              state: "KS",
+              zip: "67203",
+            },
+          },
+          {
+            is_primary: true,
+            facility: {
+              id: "fac-1",
+              name: "Main Clinic",
+              street: "100 Main St",
+              suite: null,
+              city: "Wichita",
+              state: "KS",
+              zip: "67202",
+            },
+          },
+        ],
+      },
+      {
         // newest-first, mixed entry types
         data: [
           noteEntry("call the rep tomorrow", "user-9", "2026-07-06T10:00:00Z"),
@@ -181,6 +229,30 @@ describe("getCaseContext — projection", () => {
       payer: { id: "pay-1", name: "BCBS of Kansas" },
       state: "KS",
       selectedFacility: null,
+      // E1.4 — primary first, then alphabetical: proves the sort, not just
+      // pass-through of the fixture's (deliberately reversed) order.
+      facilities: [
+        {
+          id: "fac-1",
+          name: "Main Clinic",
+          street: "100 Main St",
+          suite: null,
+          city: "Wichita",
+          state: "KS",
+          zip: "67202",
+          isPrimary: true,
+        },
+        {
+          id: "fac-2",
+          name: "Zebra Annex",
+          street: "9 Oak St",
+          suite: null,
+          city: "Wichita",
+          state: "KS",
+          zip: "67203",
+          isPrimary: false,
+        },
+      ],
       openTasks: [
         {
           id: "task-1",
@@ -257,7 +329,8 @@ describe("getCaseContext — projection", () => {
           },
         ],
       },
-      { data: [] },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
@@ -293,7 +366,8 @@ describe("getCaseContext — projection", () => {
           },
         ],
       },
-      { data: [] },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
@@ -302,7 +376,12 @@ describe("getCaseContext — projection", () => {
   });
 
   it("empty reference + no tasks/touchlog entries -> empty arrays and null note/touch, no profiles read", async () => {
-    const { db, captures } = makeFakeDb([{ data: caseRow() }, { data: [] }, { data: [] }]);
+    const { db, captures } = makeFakeDb([
+      { data: caseRow() },
+      { data: [] },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
+    ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
 
@@ -311,6 +390,7 @@ describe("getCaseContext — projection", () => {
       payerPipelineState: "not_started",
       openTasks: [],
       selectedFacility: null,
+      facilities: [],
       latestNote: null,
       latestTouch: null,
     });
@@ -321,6 +401,7 @@ describe("getCaseContext — projection", () => {
     const { db } = makeFakeDb([
       { data: caseRow() },
       { data: [] },
+      { data: [] }, // case_facilities
       { data: [noteEntry("note", "user-9", "2026-07-06T10:00:00Z")] },
       { data: { full_name: null, email: "nadia@x.test" } },
     ]);
@@ -334,6 +415,7 @@ describe("getCaseContext — projection", () => {
     const { db, captures } = makeFakeDb([
       { data: caseRow() },
       { data: [] },
+      { data: [] }, // case_facilities
       { data: [noteEntry("system-ish note", null, "2026-07-06T10:00:00Z")] },
     ]);
 
@@ -351,6 +433,7 @@ describe("getCaseContext — projection", () => {
     const { db, captures } = makeFakeDb([
       { data: caseRow({ facility_id: "fac-1" }) },
       { data: [] },
+      { data: [] }, // case_facilities
       {
         data: {
           id: "fac-1",
@@ -362,7 +445,7 @@ describe("getCaseContext — projection", () => {
           zip: "67202",
         },
       },
-      { data: [] },
+      { data: [] }, // touches
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
@@ -389,8 +472,9 @@ describe("getCaseContext — projection", () => {
     const { db, captures } = makeFakeDb([
       { data: caseRow({ facility_id: "fac-other-org" }) },
       { data: [] },
+      { data: [] }, // case_facilities
       { data: null },
-      { data: [] },
+      { data: [] }, // touches
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
@@ -404,21 +488,29 @@ describe("getCaseContext — projection", () => {
     const { db, captures } = makeFakeDb([
       { data: caseRow({ facility_id: null }) },
       { data: [] },
-      { data: [] },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
     ]);
 
     const result = await getCaseContext(ctxWith(db), CASE_ID);
 
-    // Explicit, never guessed: the key is present and null, and the facilities
-    // table was never read (only case, tasks, touches).
+    // Explicit, never guessed: the key is present and null, and the
+    // selectedFacility `facilities` table was never read (case_facilities is
+    // unconditional and IS read; only the selectedFacility lookup is skipped).
     expect(result).toHaveProperty("selectedFacility", null);
-    expect(captures.map((c) => c.table)).toEqual(["credential_cases", "tasks", "touches"]);
+    expect(captures.map((c) => c.table)).toEqual([
+      "credential_cases",
+      "tasks",
+      "case_facilities",
+      "touches",
+    ]);
   });
 
   it("ignores system_event / task_update entries for both note and touch", async () => {
     const { db } = makeFakeDb([
       { data: caseRow() },
       { data: [] },
+      { data: [] }, // case_facilities
       {
         data: [
           {
@@ -447,5 +539,95 @@ describe("getCaseContext — projection", () => {
 
     expect(result?.latestNote).toBeNull();
     expect(result?.latestTouch).toBeNull();
+  });
+});
+
+describe("getCaseContext — facilities[] (E1.4)", () => {
+  it("is org-scoped on BOTH the join row and the joined facility", async () => {
+    const { db, captures } = makeFakeDb([
+      { data: caseRow() },
+      { data: [] },
+      { data: [] }, // case_facilities
+      { data: [] }, // touches
+    ]);
+
+    await getCaseContext(ctxWith(db), CASE_ID);
+
+    const cap = captures.find((c) => c.table === "case_facilities");
+    expect(cap).toBeDefined();
+    expect(cap?.filters).toContainEqual(["case_id", CASE_ID]);
+    expect(cap?.filters).toContainEqual(["org_id", "org-1"]);
+    // The embedded facility carries its own org filter — a facility outside
+    // the caller's org can never ride along on a leaked/mis-scoped join row.
+    expect(cap?.filters).toContainEqual(["facility.org_id", "org-1"]);
+    expect(cap?.selectCols).not.toContain("*");
+  });
+
+  it("drops a row whose embedded facility didn't resolve (defensive — the !inner join should already exclude it)", async () => {
+    const { db } = makeFakeDb([
+      { data: caseRow() },
+      { data: [] },
+      {
+        data: [
+          { is_primary: true, facility: null },
+          {
+            is_primary: false,
+            facility: {
+              id: "fac-1",
+              name: "Main Clinic",
+              street: null,
+              suite: null,
+              city: null,
+              state: null,
+              zip: null,
+            },
+          },
+        ],
+      },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.facilities.map((f) => f.id)).toEqual(["fac-1"]);
+  });
+
+  it("treats a missing/non-true is_primary as not primary", async () => {
+    const { db } = makeFakeDb([
+      { data: caseRow() },
+      { data: [] },
+      {
+        data: [
+          {
+            is_primary: undefined,
+            facility: {
+              id: "fac-1",
+              name: "Main Clinic",
+              street: null,
+              suite: null,
+              city: null,
+              state: null,
+              zip: null,
+            },
+          },
+        ],
+      },
+      { data: [] },
+    ]);
+
+    const result = await getCaseContext(ctxWith(db), CASE_ID);
+
+    expect(result?.facilities).toEqual([
+      {
+        id: "fac-1",
+        name: "Main Clinic",
+        street: null,
+        suite: null,
+        city: null,
+        state: null,
+        zip: null,
+        isPrimary: false,
+      },
+    ]);
   });
 });

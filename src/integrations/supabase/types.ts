@@ -4,7 +4,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5";
+    PostgrestVersion: "14.17";
   };
   public: {
     Tables: {
@@ -54,6 +54,58 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "audit_log_org_id_fkey";
+            columns: ["org_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      case_facilities: {
+        Row: {
+          case_id: string;
+          created_at: string;
+          created_by: string | null;
+          facility_id: string;
+          id: string;
+          is_primary: boolean;
+          org_id: string;
+        };
+        Insert: {
+          case_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          facility_id: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id: string;
+        };
+        Update: {
+          case_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+          facility_id?: string;
+          id?: string;
+          is_primary?: boolean;
+          org_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "case_facilities_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "credential_cases";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_facilities_facility_id_fkey";
+            columns: ["facility_id"];
+            isOneToOne: false;
+            referencedRelation: "facilities";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "case_facilities_org_id_fkey";
             columns: ["org_id"];
             isOneToOne: false;
             referencedRelation: "organizations";

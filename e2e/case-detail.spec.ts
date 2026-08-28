@@ -106,6 +106,45 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
         hours: {},
         created_at: "2026-07-01T00:00:00Z",
       },
+      {
+        id: "f-denver",
+        org_id: ORG_ID,
+        group_id: "g-yc",
+        name: "Denver Uptown Clinic",
+        street: "500 17th St",
+        suite: null,
+        city: "Denver",
+        state: "CO",
+        zip: "80202",
+        is_active: true,
+        status_id: null,
+        effective_date: null,
+        reference_only: false,
+        hours: {},
+        created_at: "2026-07-01T00:00:00Z",
+      },
+    ],
+    // E1.3 (Track B) — the provider×group assignment set caseFacilityOptions
+    // reads to compute what's eligible to add to the case.
+    provider_facility_assignments: [
+      {
+        id: "pfa-1",
+        org_id: ORG_ID,
+        provider_id: "pr-jim",
+        facility_id: "f-boulder",
+        is_primary: true,
+        start_date: "2026-07-01",
+        created_at: "2026-07-01T00:00:00Z",
+      },
+      {
+        id: "pfa-2",
+        org_id: ORG_ID,
+        provider_id: "pr-jim",
+        facility_id: "f-denver",
+        is_primary: false,
+        start_date: "2026-07-01",
+        created_at: "2026-07-01T00:00:00Z",
+      },
     ],
     payers: [
       {
@@ -156,6 +195,24 @@ function makeFixtures(over: { caseStatus?: string; approved?: boolean } = {}) {
         created_by: USER_ID,
         created_at: "2026-07-20T00:00:00Z",
         updated_at: "2026-07-24T00:00:00Z",
+      },
+    ],
+    // E1.3 (Track B) — the case's location set. Seeded with its ONE existing
+    // location (primary, matching credential_cases.facility_id's mirror) so
+    // the multi-location scenario can add a second, re-primary, and remove.
+    case_facilities: [
+      {
+        // Namespaced distinctly from the handler's `cf-${seq}` insert-id
+        // generator (below) — seq starts at 0, so an unqualified "cf-1" here
+        // would collide with the FIRST location this test adds, and two rows
+        // sharing one id makes a later `.eq("id", ...)` PATCH match both.
+        id: "cf-boulder-seed",
+        org_id: ORG_ID,
+        case_id: "case-1046",
+        facility_id: "f-boulder",
+        is_primary: true,
+        created_at: "2026-07-20T00:00:00Z",
+        created_by: USER_ID,
       },
     ],
     tasks: [
@@ -308,6 +365,14 @@ function makeHandler(fixtures: ReturnType<typeof makeFixtures>) {
     case_status_history: fixtures.case_status_history.filter((h) => h.case_id === row.id),
   });
 
+  // E1.3 (Track B) — case_facilities' select embeds `facility:facilities(...)`
+  // (getCaseFacilities); PostgREST resolves that server-side, so the mock has
+  // to synthesize it too — same reasoning as enrichCase above.
+  const enrichCaseFacility = (row: Record<string, unknown>) => ({
+    ...row,
+    facility: fixtures.facilities.find((f) => f.id === row.facility_id) ?? null,
+  });
+
   const handler = async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -340,25 +405,9 @@ function makeHandler(fixtures: ReturnType<typeof makeFixtures>) {
     const table = url.pathname.split("/rest/v1/")[1]?.split("?")[0] ?? "";
     const wantsObject = (req.headers()["accept"] ?? "").includes("vnd.pgrst.object");
 
-    if (req.method() !== "GET") {
-      const raw = req.postDataJSON() as Record<string, unknown> | Record<string, unknown>[] | null;
-      const bodies = Array.isArray(raw) ? raw : raw ? [raw] : [];
-      for (const body of bodies) writes.push({ table, method: req.method(), body });
-      if (table === "touches" && req.method() === "POST") {
-        const inserted = bodies.map((body) => {
-          const row = { id: `touch-${(seq += 1)}`, created_at: "2026-07-25T00:00:00Z", ...body };
-          (fixtures.touches as Record<string, unknown>[]).push(row);
-          return row;
-        });
-        return route.fulfill(json(wantsObject ? inserted[0] : inserted, 201));
-      }
-      const prefer = req.headers()["prefer"] ?? "";
-      if (prefer.includes("return=representation")) {
-        return route.fulfill(json(wantsObject ? {} : [{}]));
-      }
-      return route.fulfill(json(null, 201));
-    }
-
+    // Hoisted above the write branch too: the case_facilities/credential_cases
+    // write-through below matches rows by the SAME eq./in./neq. filters the
+    // read path parses (e.g. `.eq("id", target.id)` on an update/delete).
     const matchFilters = (row: Record<string, unknown>): boolean => {
       for (const [key, rawValue] of url.searchParams.entries()) {
         if (["select", "order", "limit", "offset", "on_conflict", "or"].includes(key)) continue;
@@ -378,9 +427,64 @@ function makeHandler(fixtures: ReturnType<typeof makeFixtures>) {
       return true;
     };
 
+    if (req.method() !== "GET") {
+      const raw = req.postDataJSON() as Record<string, unknown> | Record<string, unknown>[] | null;
+      const bodies = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      for (const body of bodies) writes.push({ table, method: req.method(), body });
+      if (table === "touches" && req.method() === "POST") {
+        const inserted = bodies.map((body) => {
+          const row = { id: `touch-${(seq += 1)}`, created_at: "2026-07-25T00:00:00Z", ...body };
+          (fixtures.touches as Record<string, unknown>[]).push(row);
+          return row;
+        });
+        return route.fulfill(json(wantsObject ? inserted[0] : inserted, 201));
+      }
+      // E1.3 (Track B) — case_facilities/credential_cases write-through: the
+      // Locations section's flow (add → set primary → remove → reload) reads
+      // its own writes back, so unlike most of this mock the fixtures must
+      // actually mutate, not just be recorded in `writes`.
+      if (table === "case_facilities" && req.method() === "POST") {
+        const list = fixtures.case_facilities as unknown as Record<string, unknown>[];
+        const inserted = bodies.map((body) => {
+          const row = { id: `cf-${(seq += 1)}`, created_at: "2026-08-27T00:00:00Z", ...body };
+          list.push(row);
+          return row;
+        });
+        return route.fulfill(json(wantsObject ? inserted[0] : inserted, 201));
+      }
+      if (table === "case_facilities" && req.method() === "PATCH") {
+        const list = fixtures.case_facilities as unknown as Record<string, unknown>[];
+        const matched = list.filter((r) => matchFilters(r));
+        for (const row of matched) Object.assign(row, bodies[0] ?? {});
+        return route.fulfill(json(wantsObject ? (matched[0] ?? {}) : matched));
+      }
+      if (table === "case_facilities" && req.method() === "DELETE") {
+        const list = fixtures.case_facilities as unknown as Record<string, unknown>[];
+        const matched = list.filter((r) => matchFilters(r));
+        for (const row of matched) list.splice(list.indexOf(row), 1);
+        return route.fulfill(json(wantsObject ? (matched[0] ?? {}) : matched));
+      }
+      if (table === "credential_cases" && req.method() === "PATCH") {
+        const list = fixtures.credential_cases as unknown as Record<string, unknown>[];
+        const matched = list.filter((r) => matchFilters(r));
+        for (const row of matched) Object.assign(row, bodies[0] ?? {});
+        return route.fulfill(json(wantsObject ? (matched[0] ?? {}) : matched));
+      }
+      const prefer = req.headers()["prefer"] ?? "";
+      if (prefer.includes("return=representation")) {
+        return route.fulfill(json(wantsObject ? {} : [{}]));
+      }
+      return route.fulfill(json(null, 201));
+    }
+
     const all = (fixtures as unknown as Record<string, Record<string, unknown>[]>)[table] ?? [];
     const rows = all.filter((r) => matchFilters(r));
-    const out = table === "credential_cases" ? rows.map(enrichCase) : rows;
+    const out =
+      table === "credential_cases"
+        ? rows.map(enrichCase)
+        : table === "case_facilities"
+          ? rows.map(enrichCaseFacility)
+          : rows;
     if (wantsObject) {
       if (out.length === 0) return route.fulfill(json({ code: "PGRST116" }, 406));
       return route.fulfill(json(out[0]));
@@ -534,4 +638,87 @@ test("Slice E: an approved case shows the payer-issued IDs under the payer's own
   await expect(details.getByText("Payer-issued IDs appear here after approval.")).toHaveCount(0);
   // The confirmed effective date the approval captured rides the case facts.
   await expect(details.getByText("Confirmed effective")).toBeVisible();
+});
+
+test("E1.3: Locations section — add a second location, make it primary, remove the first, and the change survives a reload", async ({
+  context,
+  page,
+}) => {
+  const fixtures = makeFixtures();
+  const { handler, writes } = makeHandler(fixtures);
+  await context.route(/\/(rest|auth)\/v1\//, handler);
+  await seedAuth(context);
+
+  await page.goto("/cases/case-1046");
+  const details = page.getByRole("region", { name: "Details" });
+
+  // Starting state: the case's one location (Boulder), badged primary.
+  await expect(details.getByText("Boulder Main St Clinic")).toBeVisible({ timeout: 30000 });
+  await expect(details.getByText("1200 Main St, Suite 4 · Boulder, CO 80301")).toBeVisible();
+  await expect(details.getByText("Primary", { exact: true })).toHaveCount(1);
+  await expect(details.getByText("Denver Uptown Clinic")).toHaveCount(0);
+
+  // ADD: the picker offers Denver (eligible under the provider's assignments,
+  // not yet on the case) — Boulder is already attached, so it's not offered.
+  await details.getByRole("button", { name: "+ Add location" }).click();
+  const addDialog = page.getByRole("dialog");
+  await expect(addDialog.getByRole("heading", { name: "Add location" })).toBeVisible();
+  await addDialog.getByRole("combobox", { name: "Location to add" }).click();
+  await expect(page.getByRole("option", { name: "Boulder Main St Clinic" })).toHaveCount(0);
+  await page.getByRole("option", { name: "Denver Uptown Clinic" }).click();
+  await addDialog.getByRole("button", { name: "Add location" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect(details.getByText("Denver Uptown Clinic")).toBeVisible();
+  await expect(details.getByText("500 17th St · Denver, CO 80202")).toBeVisible();
+  // Boulder — the case's FIRST location — stays primary; the second location
+  // added afterward does not touch it.
+  await expect(details.getByText("Primary", { exact: true })).toHaveCount(1);
+
+  // MAKE PRIMARY: re-point to Denver.
+  const denverRow = details.getByRole("listitem").filter({ hasText: "Denver Uptown Clinic" });
+  const boulderRow = details.getByRole("listitem").filter({ hasText: "Boulder Main St Clinic" });
+  await denverRow.getByRole("button", { name: "Make primary" }).click();
+  await expect(denverRow.getByText("Primary", { exact: true })).toBeVisible();
+  await expect(details.getByText("Primary", { exact: true })).toHaveCount(1);
+  await expect(boulderRow.getByRole("button", { name: "Make primary" })).toHaveCount(1);
+
+  // REMOVE: Boulder (no longer primary) comes off the case, confirmed first.
+  await boulderRow.getByRole("button", { name: "Remove" }).click();
+  const removeDialog = page.getByRole("dialog");
+  await expect(removeDialog.getByRole("heading", { name: "Remove this location?" })).toBeVisible();
+  await expect(removeDialog).toContainText('"Boulder Main St Clinic" comes off this case.');
+  await removeDialog.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect(details.getByText("Boulder Main St Clinic")).toHaveCount(0);
+  await expect(details.getByText("Denver Uptown Clinic")).toBeVisible();
+  await expect(details.getByText("Primary", { exact: true })).toHaveCount(1);
+
+  // The writes the flow actually sent: the add carried the right facility,
+  // and re-primary demoted Boulder before promoting Denver (the partial
+  // unique index's safety order) and updated the credential_cases mirror.
+  const caseFacilityInserts = writes.filter(
+    (w) => w.table === "case_facilities" && w.method === "POST",
+  );
+  expect(caseFacilityInserts).toHaveLength(1);
+  expect(caseFacilityInserts[0].body).toMatchObject({
+    case_id: "case-1046",
+    facility_id: "f-denver",
+    is_primary: false,
+  });
+  const mirrorUpdates = writes.filter(
+    (w) => w.table === "credential_cases" && w.method === "PATCH",
+  );
+  expect(mirrorUpdates.some((w) => w.body?.facility_id === "f-denver")).toBe(true);
+
+  // RELOAD: the reordered set persists — this proves the flow actually wrote
+  // through (add + set-primary + remove), not just updated client cache.
+  await page.reload();
+  const detailsAfterReload = page.getByRole("region", { name: "Details" });
+  await expect(detailsAfterReload.getByText("Denver Uptown Clinic")).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(detailsAfterReload.getByText("Boulder Main St Clinic")).toHaveCount(0);
+  await expect(detailsAfterReload.getByText("Primary", { exact: true })).toBeVisible();
 });

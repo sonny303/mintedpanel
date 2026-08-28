@@ -6,6 +6,11 @@ export const queryKeys = {
   provider: (orgId: string, id: string) => ["provider", orgId, id] as const,
   cases: (orgId: string, filters?: unknown) => ["cases", orgId, filters ?? {}] as const,
   case: (orgId: string, id: string) => ["case", orgId, id] as const,
+  // E1.3 (Track B) — a case's full location set (case_facilities, joined to
+  // facilities). Own key, own query — invalidated alongside "cases" and
+  // "case" on every add/remove/set-primary so the list and the
+  // credential_cases.facility_id mirror refresh together.
+  caseFacilities: (orgId: string, caseId: string) => ["case-facilities", orgId, caseId] as const,
   // E4.0 — the active denial/return reason vocabulary (global + own-org).
   denialReasonCodes: (orgId: string) => ["denial-reason-codes", orgId] as const,
   contract: (orgId: string, key: unknown) => ["contract", orgId, key] as const,

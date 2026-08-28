@@ -1,6 +1,6 @@
 // Editable case date on the Details card (Expected/Confirmed effective,
 // Contract executed). Pencil → date picker → save; Clear sets the column
-// null. Mirrors CaseFacilityField's inline edit pattern.
+// null. Mirrors the Details card's other inline-edit fields.
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
