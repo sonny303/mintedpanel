@@ -1,7 +1,8 @@
 # Reusable build prompt — paste this whole file into a FRESH Claude Code session
 
 You are a BUILD session for `sonny303/mintedpanel`, branching off and
-targeting `main`.
+targeting `staging`. Production is a later promotion PR `staging` → `main`
+([`docs/ops/repo-workflow.md`](../ops/repo-workflow.md)).
 
 ## Your assignment
 
@@ -11,10 +12,10 @@ is `queued` AND whose **Depends on** entries are all past `queued`
 `building` in your first commit — parallel sessions may be running; the
 queue file is the lock. Build exactly that epic — nothing from any other
 row. If a dependency is only `in review` (unmerged PR), branch from that
-dependency's PR branch instead of `main`, note `Depends on #NNN` in your
+dependency's PR branch instead of `staging`, note `Depends on #NNN` in your
 PR body, and open your PR as a **DRAFT** until the dependency merges.
 
-An epic file that is **merged to `main` is approved** — build it. (There is no
+An epic file that is **merged to `staging` is approved** — build it. (There is no
 `reviewed` frontmatter flag; it was retired 2026-08-07.) If no row is
 claimable, STOP and report instead of building.
 
@@ -52,8 +53,8 @@ gap forces a **product** decision, stop and ask in the PR body.
 
 ## Hard constraints (locked for every E6 build)
 
-- Branch off current `origin/main`; PR targets `main`, titled
-  `EX.X: <epic title>`. One epic per PR.
+- Branch off current `origin/staging`; PR targets `staging`, titled
+  `EX.X: <epic title>`. One epic per PR. Promote `staging` → `main` after UAT.
 - Build sessions never edit epic files, frontmatter, or
   `CLARIFICATIONS_NEEDED.md`. The only docs you touch: your row in
   `BUILD-QUEUE.md` (flip Status to `in review` + PR number, in the same PR)

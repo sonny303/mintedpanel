@@ -130,5 +130,5 @@ services → Supabase, no `any`, named exports, no rendered mock data, sidebar u
 ## 4 · Verification gates
 
 `npm run lint && npx tsc --noEmit && npm run test` before every PR; Playwright smoke must stay
-green. Map every FR to the diff in the PR body. Branch off `main`, target `main`, one slice at
+green. Map every FR to the diff in the PR body. Branch off `staging`, target `staging`, one slice at
 a time, never self-merge.

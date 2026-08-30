@@ -39,8 +39,9 @@ Deployed on Vercel at `https://mintedpanel.vercel.app`.
 ## How work arrives
 
 The E0–E6 redesign program is **finished**. Work now arrives as user-feedback
-waves, design handoffs, and bug fixes — not epics. Branch off `main`, PR targets
-`main`, never self-merge.
+waves, design handoffs, and bug fixes — not epics. Branch off `staging`, PR
+targets `staging`, never self-merge. Production is a later promotion PR
+`staging` → `main`. Flow: [`docs/ops/repo-workflow.md`](docs/ops/repo-workflow.md).
 
 `docs/redesign/` is historical reference (plus `BUILD-PROMPT.md` /
 `README.md` if a genuinely new feature area ever warrants an epic again).

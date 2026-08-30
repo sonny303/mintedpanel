@@ -29,8 +29,8 @@ epic. You are the independent reviewer, NOT the builder and NOT the author.
   epics, edit `CLARIFICATIONS_NEEDED.md`, or edit protected files.
 - There is no `reviewed` flag to flip — approval is the PM merging the epic PR.
 - Use a recommended model with maximum diligence (Opus) via `/model`.
-- Work on a fresh branch off `main` named `review/<epic>` and open a PR titled
-  `Review: EX.X <title>` targeting `main`.
+- Work on a fresh branch off `staging` named `review/<epic>` and open a PR titled
+  `Review: EX.X <title>` targeting `staging`.
 
 ## Review checklist — ground every claim in the repo
 

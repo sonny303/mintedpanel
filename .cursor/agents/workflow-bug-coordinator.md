@@ -15,7 +15,7 @@ You coordinate bugs reported against Minted Panel product workflows. You are not
    - **Queue** if it needs a PM call, a migration, or crosses the panel/extension contract — record the finding and open/leave a focused PR rather than bolting it onto unrelated feature work.
 5. **Fix with minimal blast radius** — one branch (`cursor/<slug>-fca8`), additive-only DB rules, AGENTS.md layering. Prefer hardening the shared write path so every caller stays honest.
 6. **Verify** — targeted vitest / typecheck / lint on touched files; note what still needs human preview.
-7. **Ship hygiene** — commit, push, draft PR against `main`; never self-merge. Keep CLAUDE.md updates only when structure genuinely changed.
+7. **Ship hygiene** — commit, push, draft PR against `staging`; never self-merge. Keep CLAUDE.md updates only when structure genuinely changed. Production is a later `staging` → `main` promotion.
 
 ## Minted-specific traps to check first
 

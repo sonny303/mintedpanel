@@ -1,19 +1,21 @@
 # Redesign Program — Workflow & Governance
 
-This directory is the source of truth for the Minted Panel redesign. Epics branch off
-`main` and target `main` (the `redesign` staging branch was retired 2026-07-21).
+This directory is the source of truth for the Minted Panel redesign. Epics branch
+off `staging` and target `staging`; production is a promotion PR `staging` →
+`main`. The historical `redesign` integration branch was retired 2026-07-21 and
+is not this lane. Flow: [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
 
 Cross-lane write/merge map (epic queue + 3M parallel lane, human-only ops):
 [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
 
 ## Roles
 
-| Role                    | Agent          | Responsibility                                                                |
-| ----------------------- | -------------- | ----------------------------------------------------------------------------- |
-| PM                      | Human (Sowmya) | Business scope, UX design system, epic approval (by merging the epic PR)      |
-| Requirements author     | ChatPRD/Devin  | Drafts epic `EX.X-*.md` files per the template                                |
-| Reviewer / Orchestrator | Devin          | Reviews and merges Claude Code build PRs into `main`                          |
-| Builder                 | Claude Code    | Spikes the epic against the code, then implements it as a PR targeting `main` |
+| Role                    | Agent          | Responsibility                                                                   |
+| ----------------------- | -------------- | -------------------------------------------------------------------------------- |
+| PM                      | Human (Sowmya) | Business scope, UX design system, epic approval (by merging the epic PR)         |
+| Requirements author     | ChatPRD/Devin  | Drafts epic `EX.X-*.md` files per the template                                   |
+| Reviewer / Orchestrator | Devin          | Reviews and merges Claude Code build PRs into `main`                             |
+| Builder                 | Claude Code    | Spikes the epic against the code, then implements it as a PR targeting `staging` |
 
 ## Directory layout
 
@@ -33,15 +35,16 @@ listens on.
 
 ## Epic lifecycle
 
-**An epic merged to `main` is an approved epic. There is no separate `reviewed`
+**An epic merged to `staging` is an approved epic. There is no separate `reviewed`
 flag** (retired 2026-08-07 — it was an out-of-band boolean that blocked build
 sessions silently and drifted from `status`; the PR state already carries the
 same meaning). The lifecycle is:
 
 1. **Draft** — authored as `docs/redesign/EX.X-<slug>.md` on a branch, opened as a PR.
 2. **Approved** — the PM merges that PR. A merged epic is buildable.
-3. **In build** — a Claude Code PR referencing the epic is open against `main`.
-4. **Done** — the build PR is merged and acceptance criteria are verified.
+3. **In build** — a Claude Code PR referencing the epic is open against `staging`.
+4. **Done** — the build PR is merged to `staging`, promoted `staging` → `main`,
+   and acceptance criteria are verified.
 
 If an epic contains contradictions or gaps that force a **product** decision, record
 the roadblock in `CLARIFICATIONS_NEEDED.md` and leave the epic unmerged. Gaps that are
@@ -80,7 +83,7 @@ cheapest simplification available.
 
 ## Build & merge gate (Claude Code PRs)
 
-PRs from Claude Code must target `main` and reference exactly one epic
+PRs from Claude Code must target `staging` and reference exactly one epic
 (e.g. `Implements e0.0`). The reviewer merges only when ALL of the following hold:
 
 1. Every numbered FR in the epic is implemented and traceable in the diff.

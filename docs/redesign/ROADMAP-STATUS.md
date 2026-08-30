@@ -80,9 +80,9 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
 | Role                  | Who            | Responsibility                                                        |
 | --------------------- | -------------- | --------------------------------------------------------------------- |
 | PM / business owner   | Sowmya (human) | Scope decisions, epic approval (merging the epic PR), stage promotion |
-| Author / orchestrator | Devin          | Epic authoring, decision records, PR gating & merges into `main`      |
+| Author / orchestrator | Devin          | Epic authoring, decision records, PR gating & merges into `staging`   |
 | Independent reviewer  | Claude Code    | Per-epic technical review per `REVIEW-HANDOFF.md`                     |
-| Builder               | Claude Code    | One implementation PR per reviewed epic, targeting `main`             |
+| Builder               | Claude Code    | One implementation PR per reviewed epic, targeting `staging`          |
 
 ## Current jobs to be done
 
@@ -92,7 +92,7 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
    reserved for trust-boundary epics and the build session spikes the rest; see
    `docs/redesign/README.md`.) Ships before the production cut.
 3. **R7 epic authoring** — platform payer-catalog administration + the platform-role hardening deferred from E6.5, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the E6 wave.
-4. **Main promotion — RESOLVED (PM decision 2026-07-21):** the `redesign` staging branch is retired. #220 was the production cut; #231 promoted the post-GA wave (#221–#230). All work now branches off `main` and PRs target `main` directly — there is no separate promotion step anymore.
+4. **`redesign` retirement — RESOLVED (PM decision 2026-07-21):** the historical `redesign` integration branch is retired. #220 was the production cut; #231 promoted the post-GA wave (#221–#230). **Git promotion lane (2026-08-30):** a new long-lived `staging` branch (not a resurrection of `redesign`) sits between feature work and `main`. Feature PRs target `staging`; production is a `staging` → `main` promotion PR. See [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md). A hosted staging _environment_ (separate Supabase + Vercel alias) is still the open post-redesign platform item above.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 6. **User-facing wiki (Devin)** — PM directive 2026-07-19: stand up a wiki and keep it updated for the content the E6 wave impacts; the app walkthrough (per-sidebar-item, journey-oriented) lives there, plus a "Where did it go?" page derived from the E6.1 retirement ledger. Suggested home is in-repo (`docs/wiki/`) so each E6.x build PR updates its own impacted pages as part of the merge, with a final sweep at E6.6 — but the home and mechanism are Devin's call. Companion artifact: the PM's E6 Training/UAT workbook (per-menu walkthroughs, journey map, automated-vs-manual coverage matrix) is maintained by the review session and can seed the walkthrough pages.
 

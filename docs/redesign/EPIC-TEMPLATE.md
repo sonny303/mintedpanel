@@ -3,7 +3,9 @@
 This is the canonical authoring template for all redesign epics. It reflects
 the structure actually delivered for E0.0–E0.4, plus the authoring rules from
 review feedback. Epics land as `docs/redesign/EX.X-<slug>.md`, on a branch, as
-a PR targeting `main` — **the PM merging that PR is what approves the epic.**
+a PR targeting `staging` — **the PM merging that PR is what approves the epic.**
+Production is a later `staging` → `main` promotion
+([`docs/ops/repo-workflow.md`](../ops/repo-workflow.md)).
 
 Two rules that keep these files short enough to stay true (2026-08-07):
 
@@ -166,10 +168,11 @@ cycle at least once; treat them as hard rules.
    `docs/redesign/uiux-component-guide.md` (component + build constraints) and
    `docs/redesign/README.md` (workflow + merge gate). Use relative links
    (`./uiux-component-guide.md`) and verify every link points at a real file.
-7. **Deliver epic docs targeting `main`**, at `docs/redesign/EX.X-<slug>.md`.
-   The `redesign` staging branch was retired 2026-07-21; opening the epic PR
-   against `main` and having the PM merge it is what approves the epic (see
-   [`README.md`](./README.md)). Current write/merge map:
+7. **Deliver epic docs targeting `staging`**, at `docs/redesign/EX.X-<slug>.md`.
+   The historical `redesign` integration branch was retired 2026-07-21 and is
+   not this lane. Opening the epic PR against `staging` and having the PM
+   merge it is what approves the epic (see [`README.md`](./README.md));
+   production is a later `staging` → `main` promotion. Current write/merge map:
    [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
 8. **Keep doing (consistently strong):** Gherkin acceptance criteria, explicit
    non-goals, scenario/seed mapping tables, locked decisions + open questions
