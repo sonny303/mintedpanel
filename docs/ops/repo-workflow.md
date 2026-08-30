@@ -8,7 +8,30 @@ manual today**.
 
 **Promotion spine (panel):** feature PRs target `staging`; UAT runs on the
 staging deploy; production promotion is a `staging` → `main` PR. Full detail:
-[`staging-promotion.md`](./staging-promotion.md).
+[`../branching.md`](../branching.md).
+
+---
+
+## Promotion flow — feature → staging → main
+
+Long-lived branches:
+
+| Branch    | Role                                                                |
+| --------- | ------------------------------------------------------------------- |
+| `main`    | Production. Vercel production + hosted prod Supabase.               |
+| `staging` | Integration / pre-prod. Bootstrap from `main` (same SHA at create). |
+
+**Do not revive the retired `redesign` branch** as a merge target.
+
+```
+feature branch  →  PR into staging  →  (CI + review)  →  merge to staging
+                                                              ↓
+                         promotion PR: staging → main  →  (CI + review)  →  merge to main
+```
+
+After merge to `staging`, promotion to `main` is a separate PM-owned PR. See
+[`docs/branching.md`](../branching.md) for branch protection bootstrap (admin
+action required as of 2026-08-30).
 
 ---
 
@@ -17,7 +40,7 @@ staging deploy; production promotion is a `staging` → `main` PR. Full detail:
 | Lane              | Who builds                           | Branch pattern                                                               | Merge                                                                                        |
 | ----------------- | ------------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `staging`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges to `staging` — **never self-merge**; promote `staging` → `main` after UAT |
-| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                     | PM merges draft PRs — **never self-merge**                                                   |
+| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36` (PR → `staging`)                                    | PM merges draft PRs to `staging` — **never self-merge**                                      |
 
 Epic lane owns roadmap features (e.g. E6.9 Form Setup). The 3M lane owns
 reliability, muda deletion, and approved simplification slices — it must not
@@ -132,14 +155,14 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 ## Quick links
 
-| Doc                                                                | Role                                                       |
-| ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                            |
-| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                                |
-| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                          |
-| [`staging-promotion.md`](./staging-promotion.md)                   | `staging` branch bootstrap + feature → staging → main flow |
-| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                                      |
-| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation          |
-| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog               |
-| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions)        |
-| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts                    |
+| Doc                                                                | Role                                                              |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [`AGENTS.md`](../../AGENTS.md)                                     | Binding coding rules for agents                                   |
+| [`docs/redesign/README.md`](../redesign/README.md)                 | Epic lifecycle + merge gate                                       |
+| [`EPIC-TEMPLATE.md`](../redesign/EPIC-TEMPLATE.md)                 | New epic skeleton                                                 |
+| [`branching.md`](../branching.md)                                  | Branching model + feature → staging → main + protection bootstrap |
+| [`3m-uat-readiness-checklist.md`](./3m-uat-readiness-checklist.md) | Hosted / UAT sign-off                                             |
+| [`3m-slice-4-sowmya-audit.md`](./3m-slice-4-sowmya-audit.md)       | Slice 4 — F1/F9/F22/F23–F26 + debt reconciliation                 |
+| [`3m-slice-5-closeout.md`](./3m-slice-5-closeout.md)               | Slice 5 — closed items + TD-49/TD-50 backlog                      |
+| [`slice-6-platform-org-spike.md`](./slice-6-platform-org-spike.md) | Platform vs org adoption (Slice 6 locked decisions)               |
+| Extension `CLAUDE.md`                                              | Extension architecture + wire contracts                           |

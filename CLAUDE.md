@@ -39,8 +39,9 @@ Deployed on Vercel at `https://mintedpanel.vercel.app`.
 ## How work arrives
 
 The E0–E6 redesign program is **finished**. Work now arrives as user-feedback
-waves, design handoffs, and bug fixes — not epics. Branch off `main`, PR targets
-`main`, never self-merge.
+waves, design handoffs, and bug fixes — not epics. Branch off `staging`, PR
+targets `staging`, then promote `staging` → `main` after UAT (see
+[`docs/branching.md`](docs/branching.md)). Never self-merge.
 
 `docs/redesign/` is historical reference (plus `BUILD-PROMPT.md` /
 `README.md` if a genuinely new feature area ever warrants an epic again).
