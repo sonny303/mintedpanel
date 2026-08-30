@@ -8,16 +8,74 @@ manual today**.
 
 ---
 
+## Promotion flow — feature → staging → main
+
+Long-lived branches:
+
+| Branch    | Role                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| `main`    | Production. Vercel production + hosted prod Supabase.                |
+| `staging` | Integration / pre-prod. Created from `main` (same SHA at bootstrap). |
+
+**Do not revive the retired `redesign` branch** as a merge target. It remains
+on the remote as history only (retired 2026-07-21, #232).
+
+### Path for every change
+
+```
+feature branch  →  PR into staging  →  (CI + review)  →  merge to staging
+                                                              ↓
+                         promotion PR: staging → main  →  (CI + review)  →  merge to main
+```
+
+1. **Branch off `staging`** (or rebase onto current `origin/staging` before
+   opening the PR). Name patterns stay lane-specific (see Two lanes below).
+2. **Open a PR targeting `staging`.** Reviewer/PM merges — **never self-merge**.
+3. **Verify on staging** (preview / UAT) before promoting.
+4. **Promote with a PR from `staging` into `main`.** Same gates; PM merges.
+   Prefer a clean fast-forward or a squash/merge PR titled
+   `promote: staging → main (<date or slice>)` — do not force-push either
+   long-lived branch.
+5. Hotfixes that must land on prod the same day still go **feature → staging →
+   main** (short-circuiting staging is not allowed). Cherry-pick into staging
+   first if the fix was started from an older `main` tip.
+
+### Branch protection (mirror rule)
+
+`staging` must carry the **same** GitHub branch-protection / ruleset settings
+as `main`. When protection on `main` changes, update `staging` in the same
+ops change.
+
+Bootstrap check (2026-08-30): both `main` and `staging` report
+`protected: false`, and the repo has **no** rulesets. The cloud-agent token
+cannot read or write the Branch protection API (`403 Resource not accessible
+by integration`). If an admin later enables protection on `main`, mirror it
+onto `staging` immediately (Settings → Branches, or
+`PUT /repos/{owner}/{repo}/branches/{branch}/protection`).
+
+### What stays out of this flow
+
+- Hosted Supabase migrations still apply manually (see Human-only ops). A
+  separate staging Supabase project / Vercel staging project is post-redesign
+  platform work — this section is the **Git** promotion path only.
+- The Chrome extension repo follows the same feature → staging → main shape
+  when its `staging` branch exists; keep panel-first for `/api` contracts.
+
+---
+
 ## Two lanes
 
-| Lane              | Who builds                           | Branch pattern                                                            | Merge                                      |
-| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------ |
-| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `main`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges — **never self-merge**  |
-| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36`                                                  | PM merges draft PRs — **never self-merge** |
+| Lane              | Who builds                           | Branch pattern                                                            | Merge                                               |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| **Epic queue**    | Claude Code (builder); Devin reviews | Feature branches targeting `staging`; epic docs as `docs/redesign/EX.X-*.md` | Reviewer/PM merges to `staging` — **never self-merge** |
+| **3M / parallel** | Cloud Agent (this engagement)        | `cursor/3m-<slice>-6f36` (PR → `staging`)                                 | PM merges draft PRs to `staging` — **never self-merge** |
 
 Epic lane owns roadmap features (e.g. E6.9 Form Setup). The 3M lane owns
 reliability, muda deletion, and approved simplification slices — it must not
 finish epic scope without an explicit carve-out.
+
+After merge to `staging`, promotion to `main` is a separate PM-owned PR (see
+Promotion flow above).
 
 Cross-repo rule: **panel-first** for `/api` contract changes; mirror types in
 the extension in a coordinated follow-up (extension `CLAUDE.md` wire contracts).
@@ -47,22 +105,26 @@ Full checklist: [`docs/redesign/README.md`](../redesign/README.md) § Build & me
 
 Summary:
 
-1. Epic approved = **epic PR already merged to `main`**. There is no `reviewed`
-   frontmatter flag (retired 2026-08-07).
+1. Epic approved = **epic PR already merged to `staging`** (then promoted to
+   `main` via the promotion PR). There is no `reviewed` frontmatter flag
+   (retired 2026-08-07).
 2. Build session opens with a ≤60-minute **spike**; enablers go in the PR body.
 3. CI: `npm run lint`, `npm run lint:epics`, `npm run test`; e2e when touched
-   surfaces have coverage. Migration dry-run job must pass.
+   surfaces have coverage. Migration dry-run job must pass. Same CI must be
+   green on the `staging` → `main` promotion PR.
 4. AGENTS.md layering and additive-migration rules hold.
 5. Failures → review comments; remediations on the **same branch**.
 
 ### 3M / Cloud Agent PRs
 
-1. One approved slice per turn; draft PR; stop for PM review.
+1. One approved slice per turn; draft PR **into `staging`**; stop for PM review.
 2. Branch name matches `cursor/3m-<slice>-6f36`.
 3. CI green on the changed repo(s). Dual-repo slices usually open **two** PRs
    (panel then extension when the API contract moves).
 4. Protected files unchanged unless the slice explicitly authorizes them.
 5. PM verifies UI/preview where the slice touches journeys; agent runs CI only.
+6. After merge to `staging`, wait for the next promotion PR into `main` (do not
+   open a second feature PR that targets `main` directly).
 
 ### CI surfaces (panel)
 
@@ -100,6 +162,8 @@ These are not agent-verifiable. Checklist:
 | Provision Vault secret `ssn_vault_key`                    | E4.4; hosted rejects ALTER DATABASE GUC; fail-closed |
 | Confirm UAT portals seeded                                | Empty registry ⇒ extension fill/capture silent no-op |
 | Merge PRs / approve epics                                 | Governance: never self-merge                         |
+| Promote `staging` → `main`                                | Explicit promotion PR; never force-push long-lived branches |
+| Mirror branch protection `main` ↔ `staging`               | Admin token required; agent gets 403 on protection API |
 | Preview / UAT sign-off                                    | AGENTS.md: no self-testing panel journeys in chat    |
 
 ---
@@ -117,11 +181,12 @@ continuing. Prefer merging the epic first, then rebasing 3M.
 
 | Item                                                     | Status                                                    |
 | -------------------------------------------------------- | --------------------------------------------------------- |
-| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge to `main` is approval |
-| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — deliver epic docs to `main`         |
-| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough  |
-| Postman `/api` collection                                | **Out of scope** for 3M                                   |
-| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules     |
+| `reviewed: true` gate                                    | **Retired** 2026-08-07 — epic merge (now via `staging`) is approval |
+| EPIC-TEMPLATE “deliver to `redesign` branch”             | **Fixed** (Slice 0) — do not target `redesign`; use `staging` → `main` |
+| Direct-to-`main` feature PRs                             | **Superseded** 2026-08-30 — feature → `staging` → `main`           |
+| Root `CONTRIBUTING.md`                                   | **Not added** — sole-author context; this file is enough           |
+| Postman `/api` collection                                | **Out of scope** for 3M                                            |
+| Historical handoff files under `docs/redesign/handoffs/` | Keep as history; banner points here for current rules              |
 
 ---
 

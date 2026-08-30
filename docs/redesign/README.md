@@ -1,7 +1,10 @@
 # Redesign Program — Workflow & Governance
 
-This directory is the source of truth for the Minted Panel redesign. Epics branch off
-`main` and target `main` (the `redesign` staging branch was retired 2026-07-21).
+This directory is the source of truth for the Minted Panel redesign. Epics branch
+off `staging` and target `staging`, then promote to `main` (see
+[`docs/ops/repo-workflow.md`](../ops/repo-workflow.md)). The old `redesign`
+staging branch was retired 2026-07-21; the current long-lived integration branch
+is `staging`.
 
 Cross-lane write/merge map (epic queue + 3M parallel lane, human-only ops):
 [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
@@ -12,8 +15,8 @@ Cross-lane write/merge map (epic queue + 3M parallel lane, human-only ops):
 | ----------------------- | -------------- | ----------------------------------------------------------------------------- |
 | PM                      | Human (Sowmya) | Business scope, UX design system, epic approval (by merging the epic PR)      |
 | Requirements author     | ChatPRD/Devin  | Drafts epic `EX.X-*.md` files per the template                                |
-| Reviewer / Orchestrator | Devin          | Reviews and merges Claude Code build PRs into `main`                          |
-| Builder                 | Claude Code    | Spikes the epic against the code, then implements it as a PR targeting `main` |
+| Reviewer / Orchestrator | Devin          | Reviews and merges Claude Code build PRs into `staging` (then promote → `main`) |
+| Builder                 | Claude Code    | Spikes the epic against the code, then implements it as a PR targeting `staging` |
 
 ## Directory layout
 
@@ -80,8 +83,10 @@ cheapest simplification available.
 
 ## Build & merge gate (Claude Code PRs)
 
-PRs from Claude Code must target `main` and reference exactly one epic
-(e.g. `Implements e0.0`). The reviewer merges only when ALL of the following hold:
+PRs from Claude Code must target `staging` and reference exactly one epic
+(e.g. `Implements e0.0`). After merge to `staging`, promote to `main` per
+[`docs/ops/repo-workflow.md`](../ops/repo-workflow.md). The reviewer merges
+only when ALL of the following hold:
 
 1. Every numbered FR in the epic is implemented and traceable in the diff.
 2. The PR body carries the spike's enabler list, and each item is satisfied or

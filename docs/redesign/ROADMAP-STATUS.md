@@ -2,12 +2,10 @@
 
 _Living status page for business review. Refreshed at least once per release
 milestone (owner: Devin, the reviewer/orchestrator). Last updated:
-**2026-07-22** (Cases page redesign #233 merged to `main`: Flat/By provider/By
-payer views with the E2.3 ranking as Flat's default sort, new globally-sequential
-immutable Case# `C-<n>` (migration `20260722120000`, applied to hosted), derived
-KPI cards on the canonical 8-state machine. Previously 2026-07-21: post-GA wave
-#221–#230 promoted in #231; `redesign` staging branch retired (#232) — all work
-now branches off and targets `main`)._
+**2026-08-30** (Git promotion path is feature → `staging` → `main`; see
+[`docs/ops/repo-workflow.md`](../ops/repo-workflow.md). Previously 2026-07-22:
+Cases page redesign #233 merged; 2026-07-21: post-GA wave #221–#230 promoted in
+#231; `redesign` staging branch retired (#232))._
 
 ```
 R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ──► R5 ✅ ──► R6 ✅ ──► R7…R10 📋
@@ -92,7 +90,11 @@ R0 ✅ ──► R1 ✅ ──► R2 ✅ ──► R3 ✅ ──► R4 ✅ ─�
    reserved for trust-boundary epics and the build session spikes the rest; see
    `docs/redesign/README.md`.) Ships before the production cut.
 3. **R7 epic authoring** — platform payer-catalog administration + the platform-role hardening deferred from E6.5, payer-contact directory, email-inbox↔touch integration, cadence rules, richer roles (PM-approved 2026-07-15); author + independent review before build. Starts after the E6 wave.
-4. **Main promotion — RESOLVED (PM decision 2026-07-21):** the `redesign` staging branch is retired. #220 was the production cut; #231 promoted the post-GA wave (#221–#230). All work now branches off `main` and PRs target `main` directly — there is no separate promotion step anymore.
+4. **`redesign` branch retirement — RESOLVED (PM decision 2026-07-21):** the
+   `redesign` staging branch is retired (#232). #220 was the production cut;
+   #231 promoted the post-GA wave (#221–#230). **Current Git path (2026-08-30):**
+   feature → `staging` → `main` — see [`docs/ops/repo-workflow.md`](../ops/repo-workflow.md).
+   Do not reopen `redesign` as a merge target.
 5. **Business ops:** rotate the shared payer-portal password found in a circulated SOP PDF (see `E1.7b-sop-worked-examples.md` data-hygiene note).
 6. **User-facing wiki (Devin)** — PM directive 2026-07-19: stand up a wiki and keep it updated for the content the E6 wave impacts; the app walkthrough (per-sidebar-item, journey-oriented) lives there, plus a "Where did it go?" page derived from the E6.1 retirement ledger. Suggested home is in-repo (`docs/wiki/`) so each E6.x build PR updates its own impacted pages as part of the merge, with a final sweep at E6.6 — but the home and mechanism are Devin's call. Companion artifact: the PM's E6 Training/UAT workbook (per-menu walkthroughs, journey map, automated-vs-manual coverage matrix) is maintained by the review session and can seed the walkthrough pages.
 
